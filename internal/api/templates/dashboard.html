@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Orca Dashboard</title>
+    <!-- Tailwind CSS for utility styling -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- HTMX for reactive, non-SPA component swaps -->
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans antialiased">
+
+<div class="max-w-5xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <header class="border-b border-slate-800 pb-6 mb-8 flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-extrabold tracking-tight text-white">Agent Orchestrator</h1>
+            <p class="text-sm text-slate-400 mt-1">Natively driven local execution matrix</p>
+        </div>
+        <!-- The Status Badge polls the server every 2 seconds via HTMX -->
+        <div id="status-badge"
+             hx-get="/web/status"
+             hx-trigger="every 2s"
+             hx-swap="outerHTML">
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-slate-800 text-slate-300 animate-pulse">
+                    Connecting...
+                </span>
+        </div>
+    </header>
+
+    <!-- Main Grid Matrix -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+        <!-- Left Panel: Target Goal Profile -->
+        <div class="md:col-span-1 bg-slate-950 border border-slate-800 p-6 rounded-xl shadow-xl h-fit">
+            <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Active Blueprint Context</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 uppercase">Target Project Path</label>
+                    <div class="text-sm font-mono text-slate-300 mt-1 break-all bg-slate-900 p-2 rounded border border-slate-800">
+                        {{.ProjectPath}}
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 uppercase">Core Objective</label>
+                    <p class="text-sm text-slate-300 mt-1 leading-relaxed bg-slate-900 p-3 rounded border border-slate-800">
+                        {{.ProjectGoal}}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Interactive Workstream -->
+        <div class="md:col-span-2 space-y-6"
+             id="workstream-container"
+             hx-get="/web/workstream"
+             hx-trigger="every 2s"
+             hx-swap="innerHTML">
+
+            <!-- Dynamic Content Snippet Injection Point -->
+            <div class="text-center py-12 text-slate-500">
+                Hydrating automation metrics pipeline...
+            </div>
+
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
