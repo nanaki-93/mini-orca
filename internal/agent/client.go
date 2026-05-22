@@ -44,7 +44,7 @@ func (c *Client) CallLMStudio(systemPrompt, userPrompt string) (string, error) {
 	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
 
 	reqBody := ChatRequest{
-		Model: "local-model", // LM Studio targets whatever model is currently active in the UI
+		Model: "qwen/qwen3-coder-30b", // LM Studio targets whatever model is currently active in the UI
 		Messages: []Message{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},

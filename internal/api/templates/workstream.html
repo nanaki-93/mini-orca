@@ -1,0 +1,105 @@
+<!-- Inside the project loop, display based on current active enum string states -->
+{{if eq .CurrentState "PROJECT_ANALYSIS"}}
+<div class="bg-slate-950 border border-blue-900/50 p-6 rounded-xl shadow-lg">
+    <h3 class="text-lg font-bold text-blue-400 mb-2">Analyzing Architecture Foundations</h3>
+    <p class="text-slate-400 text-sm">The background agent is currently consulting your local LM Studio instance to
+        extract design paradigms...</p>
+    <div class="mt-4 w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+        <div class="bg-blue-500 h-full w-2/3 animate-infinite rounded-full"></div>
+    </div>
+</div>
+{{end}}
+
+{{if eq .CurrentState "WAITING_FOR_DESIGN_APPROVAL"}}
+<div class="bg-slate-950 border border-amber-500/30 p-6 rounded-xl shadow-lg space-y-4">
+    <div class="flex justify-between items-center">
+        <h3 class="text-lg font-bold text-amber-400">Gate 1: Architectural Design Verification</h3>
+        <span class="text-xs bg-amber-500/10 text-amber-400 px-2 py-1 rounded border border-amber-500/20 font-mono">Action Required</span>
+    </div>
+
+    <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 text-sm font-mono whitespace-pre-wrap max-h-96 overflow-y-auto text-slate-300">
+        {{.Analysis}}
+    </div>
+
+    <!-- HTMX triggers an AJAX POST request without a page reload on click -->
+    <div class="flex space-x-3 pt-2">
+        <button hx-post="/api/session/approve"
+                hx-vals='{"approved": true}'
+                hx-ext='json-string'
+                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-lg transition shadow-md shadow-emerald-900/20 cursor-pointer">
+            Approve & Generate Tasks
+        </button>
+        <button hx-post="/api/session/approve"
+                hx-vals='{"approved": false}'
+                class="px-4 py-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-400 font-medium text-sm rounded-lg transition cursor-pointer">
+            Reject
+        </button>
+    </div>
+</div>
+{{end}}
+
+{{if eq .CurrentState "TECHNICAL_DESIGN"}}
+<div class="bg-slate-950 border border-indigo-900/50 p-6 rounded-xl shadow-lg">
+    <h3 class="text-lg font-bold text-indigo-400 mb-2">Compiling Granular Task Sequences</h3>
+    <p class="text-slate-400 text-sm">Parsing technical architecture specifications into atomic shell instructions and
+        execution arrays...</p>
+</div>
+{{end}}
+
+{{if eq .CurrentState "WAITING_FOR_TASK_APPROVAL"}}
+<div class="bg-slate-950 border border-amber-500/30 p-6 rounded-xl shadow-lg space-y-4">
+    <div class="flex justify-between items-center">
+        <h3 class="text-lg font-bold text-amber-400">Gate 2: Authorize Command Sequences</h3>
+        <span class="text-xs bg-amber-500/10 text-amber-400 px-2 py-1 rounded border border-amber-500/20 font-mono">Action Required</span>
+    </div>
+
+    <div class="space-y-2">
+        {{range .Tasks}}
+        <div class="flex items-center justify-between p-3 bg-slate-900 rounded-lg border border-slate-800">
+            <div class="flex items-center space-x-3">
+                <span class="text-xs font-mono px-2 py-0.5 bg-slate-800 text-slate-400 rounded border border-slate-700">{{.ID}}</span>
+                <span class="text-sm text-slate-300">{{.Description}}</span>
+            </div>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded {{if eq .Status `pending`}}bg-slate-800 text-slate-400{{else if eq .Status `success`}}bg-emerald-900/40 text-emerald-400{{else}}bg-blue-900/40 text-blue-400{{end}}">
+                {{.Status}}
+            </span>
+        </div>
+        {{end}}
+    </div>
+
+    <div class="flex space-x-3 pt-2">
+        <button hx-post="/api/session/approve" hx-vals='{"approved": true}'
+                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-lg transition shadow-md cursor-pointer">
+            Authorize Execution Loop
+        </button>
+        <button hx-post="/api/session/approve" hx-vals='{"approved": false}'
+                class="px-4 py-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-400 font-medium text-sm rounded-lg transition cursor-pointer">
+            Abort
+        </button>
+    </div>
+</div>
+{{end}}
+
+{{if eq .CurrentState "MICRO_EXECUTION"}}
+<div class="bg-slate-950 border border-emerald-900/50 p-6 rounded-xl shadow-lg space-y-4">
+    <h3 class="text-lg font-bold text-emerald-400">Executing Agent Task Pipelines</h3>
+    <div class="space-y-2">
+        {{range .Tasks}}
+        <div class="flex items-center justify-between p-3 bg-slate-900 rounded-lg border {{if eq .Status `running`}}border-emerald-500/50 bg-emerald-950/20{{else}}border-slate-800{{end}}">`
+        <span class="text-sm text-slate-300">{{.Description}}</span>
+        <span class="text-xs font-mono {{if eq .Status `running`}}text-emerald-400
+        animate-pulse{{else}}text-slate-500{{end}}">{{.Status}}</span>
+    </div>
+    {{end}}
+</div>
+</div>
+{{end}}
+
+{{if eq .CurrentState "COMPLETED"}}
+<div class="bg-emerald-950/30 border border-emerald-500/30 p-8 rounded-xl shadow-lg text-center space-y-3">
+    <div class="text-3xl">🎉</div>
+    <h3 class="text-xl font-bold text-emerald-400">Project Cycle Executed Successfully</h3>
+    <p class="text-slate-400 text-sm max-w-md mx-auto">All terminal actions, Terraform definitions, or code blocks have
+        been deployed and verified locally.</p>
+</div>
+{{end}}
