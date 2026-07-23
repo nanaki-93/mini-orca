@@ -1,197 +1,219 @@
 # Frontend Dashboard Design
 
 ## Overview
-The frontend dashboard will provide a lightweight, intuitive interface for users to interact with the orchestrator workflow. It will display real-time status updates, allow human approvals, and provide visibility into project changes.
+A lightweight frontend dashboard will be created to provide users with visibility into the project's current state, execution progress, and control over the workflow. The dashboard will support real-time monitoring and human approval workflows.
 
 ## Dashboard Features
 
-### 1. Workflow Status Overview
-- Real-time visualization of current workflow phase
-- Progress indicators for each phase
-- Timeline showing execution history
-- Status indicators (pending, in-progress, completed, failed)
+### 1. Project Overview Panel
+- Current project status (idle, planning, coding, testing, review, user approval)
+- Progress indicators for current workflow phase
+- Timeline and estimated completion time
+- Project metadata (name, description, last updated)
 
-### 2. Phase-specific Views
-Each workflow phase will have dedicated views with appropriate controls:
+### 2. Workflow Status Monitoring
+- Real-time status updates for each workflow phase
+- Visual indicators (progress bars, status icons)
+- Current agent execution details
+- Error and warning notifications
 
-#### Planning Phase View
-- Plan summary display
-- Task breakdown visualization
-- Resource allocation estimates
-- Approval/rejection controls
+### 3. Human Approval Interface
+- Approval/rejection buttons for each phase
+- Detailed view of generated artifacts (code, tests, reports)
+- Comments and feedback input fields
+- Approval history tracking
 
-#### Coding Phase View
-- Generated code display with syntax highlighting
-- Code diff view (if applicable)
-- Implementation status indicators
-- Comments and feedback section
+### 4. Configuration Management
+- Model selection interface for each workflow phase
+- Configuration persistence across sessions
+- Model version information display
 
-#### Testing Phase View
-- Test results dashboard with pass/fail indicators
-- Coverage statistics visualization
-- Failure details and logs
-- Test execution timeline
+### 5. Artifact Viewer
+- Code view with syntax highlighting
+- Test results display
+- Quality assessment reports
+- Architecture diagrams (if applicable)
 
-#### Review Phase View
-- Code quality assessment report
-- Standards compliance indicators
-- Improvement suggestions display
-- Review comments section
+### 6. Activity Log
+- Complete audit trail of all workflow actions
+- Timestamped events for each phase completion
+- User approval/rejection records
+- Error logs and system messages
 
-#### User Approval View
-- Complete implementation summary
-- All generated artifacts in one view
-- Approval/rejection workflow with comments
-- Change history and impact analysis
+## Dashboard Architecture
 
-### 3. Project Context Panel
-- Current project status and metadata
-- Recent changes and modifications
-- Configuration settings display
-- Model selection per phase
+### Technology Stack
+1. **Frontend Framework**: React.js with TypeScript for type safety and component-based architecture
+2. **UI Components**: Material-UI or Tailwind CSS for responsive design
+3. **State Management**: Redux Toolkit or Context API for state handling
+4. **Real-time Updates**: WebSocket or polling mechanism for live status updates
+5. **Data Visualization**: Chart.js or D3.js for progress visualization
 
-### 4. Navigation Controls
-- Phase navigation (back/forward buttons)
-- Approval workflow controls
-- Manual trigger for phase re-execution
-- Settings and configuration access
+### Component Structure
 
-### 5. Real-time Updates
-- Live status updates for all phases
-- Notification system for important events
-- Auto-refresh capability for status changes
-- Alert system for failed phases
+#### Main Dashboard Container
+- Header with project name and status indicators
+- Navigation sidebar for different workflow phases
+- Main content area for current view
+- Footer with configuration and system info
 
-## Technical Architecture
+#### Phase-specific Views
+1. **Planning View**
+   - Plan summary display
+   - Task breakdown visualization
+   - Approval buttons
 
-### Frontend Framework
-- React.js or Vue.js for component-based architecture
-- Material Design or Tailwind CSS for clean UI components
-- Responsive design for desktop and mobile use
+2. **Coding View**
+   - Generated code preview with syntax highlighting
+   - Code diff view (if applicable)
+   - Approval/rejection controls
 
-### Dashboard Components
+3. **Testing View**
+   - Test results dashboard
+   - Coverage statistics visualization
+   - Failure analysis display
 
-#### Status Card Component
-- Phase name and status indicator
-- Progress percentage visualization
-- Timestamps for phase start/end
-- Action buttons (approve, reject, re-run)
+4. **Review View**
+   - Quality assessment report
+   - Code standards compliance indicators
+   - Improvement suggestions
 
-#### Code Viewer Component
-- Syntax-highlighted code display
-- Line-by-line diff visualization (if applicable)
-- Copy-to-clipboard functionality
-- Code export capability
+5. **Approval View**
+   - Complete artifact summary
+   - User comments and feedback input
+   - Final approval/rejection interface
 
-#### Test Results Component
-- Pass/fail counters with visual indicators
-- Detailed test case results table
-- Coverage percentage visualization
-- Error logs and stack traces
+### Real-time Communication
 
-#### Approval Workflow Component
-- Approval/rejection buttons with comments field
-- Multi-step approval process support
-- Comments history display
-- Workflow status tracking
+#### WebSocket Integration
+- Server-side events for workflow progress updates
+- Client-side subscription to status changes
+- Real-time display of agent execution status
+
+#### Polling Alternative
+- Periodic API calls to check workflow status
+- Fallback mechanism if WebSocket connection fails
 
 ### Data Flow Architecture
 
-1. **Backend API Integration**
-   - Real-time WebSocket connections for status updates
-   - REST endpoints for approval actions
-   - Configuration management endpoints
-
-2. **State Management**
-   - Centralized state for workflow progress
-   - User preferences and configuration storage
-   - Approval history tracking
-
-3. **Real-time Updates**
-   - Server-sent events for status notifications
-   - WebSocket connections for immediate feedback
-   - Polling fallback for unreliable connections
-
-## User Experience Considerations
-
-### 1. Intuitive Navigation
-- Clear phase progression indicators
-- Visual hierarchy that guides users through workflow
-- Quick access to previous/next phases
-- Context-sensitive help and documentation
-
-### 2. Approval Workflow
-- Clear approval/rejection prompts with rationale
-- Comments section for feedback and notes
-- Approval history tracking
-- Ability to request modifications
-
-### 3. Artifact Visualization
-- Code display with syntax highlighting
-- Test results in readable format
-- Quality assessment reports with actionable insights
-- Change impact analysis
-
-### 4. Responsive Design
-- Mobile-friendly interface design
-- Tablet-optimized layout options
-- Keyboard navigation support
-- Screen reader accessibility
-
-## Dashboard Layout Structure
-
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Project Status Header                                      │
-├─────────────────────────────────────────────────────────────┤
-│  [Planning] [Coding] [Testing] [Review] [Approval]         │
-├─────────────────────────────────────────────────────────────┤
-│  ┌───────────────────┐    ┌─────────────────────────────┐ │
-│  │   Project Info    │    │      Phase Content          │ │
-│  │                   │    │                             │ │
-│  │   Current Phase:  │    │  [Current Phase Content]    │ │
-│  │   Planning        │    │                             │ │
-│  │   Status: Active  │    │                             │ │
-│  │   Progress: 65%   │    │                             │ │
-│  └───────────────────┘    └─────────────────────────────┘ │
-├─────────────────────────────────────────────────────────────┤
-│  [Approve] [Reject] [Re-run Phase] [Settings]              │
-└─────────────────────────────────────────────────────────────┘
+Frontend Dashboard ←→ API Server ←→ Workflow Orchestrator
+                                    ↓
+                              Agent Pool (Planning, Coding, Testing, Review)
 ```
 
-## Implementation Approach
+## User Experience Design
 
-### Phase 1: Core Dashboard Components
-1. Build basic status display with phase indicators
-2. Implement approval workflow components
-3. Create project context panel
+### Navigation Structure
+1. **Dashboard Home**: Overview of current project status
+2. **Workflow Timeline**: Step-by-step visualization of current process
+3. **Phase Details**: Detailed view of specific workflow phases
+4. **Configuration**: Model selection and settings management
+5. **History**: Audit trail of all completed workflows
 
-### Phase 2: Real-time Updates
-1. Add WebSocket integration for real-time status updates
-2. Implement notification system for important events
-3. Add auto-refresh capability
+### Approval Workflow Integration
+- Clear visual indication when approval is required
+- Detailed artifact display before approval options
+- Comments field for feedback on each approval decision
+- Approval history with timestamps and user information
 
-### Phase 3: Enhanced Views
-1. Create dedicated views for each workflow phase
-2. Add code visualization and testing results display
-3. Implement user approval dashboard with comments
+### Responsive Design
+- Mobile-friendly interface for on-the-go monitoring
+- Adaptive layout that works across different screen sizes
+- Touch-friendly controls for mobile users
 
-### Phase 4: Configuration Interface
-1. Build model selection interface per phase
-2. Implement configuration persistence
-3. Add settings management panel
+## Implementation Plan
+
+### Phase 1: Basic Dashboard Structure
+- Create basic dashboard layout with navigation
+- Implement project overview and status monitoring
+- Set up real-time status update mechanism
+
+### Phase 2: Workflow Integration
+- Integrate with workflow orchestrator for real-time updates
+- Implement human approval interfaces
+- Add artifact display components
+
+### Phase 3: Configuration Management
+- Add model configuration interface
+- Implement configuration persistence
+- Create settings management UI
+
+### Phase 4: Enhanced Features
+- Add activity logging and audit trail
+- Implement detailed artifact viewers
+- Add project history and reporting features
+
+## Security Considerations
+
+### Authentication and Authorization
+- User authentication system integration
+- Role-based access control for different dashboard features
+- Session management and timeout handling
+
+### Data Protection
+- Secure transmission of sensitive workflow data
+- Proper handling of approval/rejection information
+- Data encryption where appropriate
 
 ## Future Extensibility
 
-### Native App Development
-- Kotlin-based native application for mobile deployment
-- Cross-platform capabilities with React Native or Flutter
-- Offline capability for environments without constant connectivity
+### Native Application Development
+As requested, the dashboard can be extended to support native application development:
 
-### Advanced Features
-- AI-powered suggestion system for code improvements
-- Automated documentation generation
-- Integration with CI/CD pipelines
-- Multi-user collaboration capabilities
+1. **Kotlin Native Integration**: 
+   - Support for generating Kotlin code as part of the workflow
+   - Android/iOS native app development capabilities
+   - Cross-platform mobile application generation
 
-This dashboard design provides a clean, focused interface that enables users to efficiently manage the enhanced orchestrator workflow while maintaining full visibility into project changes and progress.
+2. **Native App Configuration**:
+   - Target platform selection (Android, iOS, Desktop)
+   - Framework and library preferences
+   - Build configuration management
+
+3. **Build Pipeline Integration**:
+   - Direct integration with native build systems
+   - Automated native app compilation and deployment
+   - Mobile app distribution capabilities
+
+## Technical Requirements
+
+### Backend API Endpoints
+1. `/api/workflow/status` - Current workflow status and progress
+2. `/api/workflow/approval` - Submit approval/rejection for current phase
+3. `/api/workflow/artifacts` - Retrieve generated artifacts from each phase
+4. `/api/configuration/models` - Get/set model configurations for phases
+5. `/api/workflow/history` - Retrieve workflow history and audit logs
+
+### Frontend State Management
+- Global state for current workflow status
+- Phase-specific state management for each component view
+- Approval state tracking with user comments
+- Configuration state for model selection
+
+## Sample UI Components
+
+### Status Indicator Component
+```
+[Planning] [Coding] [Testing] [Review] [User Approval]
+     ✓        ▶        ○         ○         ○
+```
+
+### Approval Card Component
+```
+[CODE APPROVAL]
+Generated function: processUserInput()
+Status: Ready for review
+Comments: [Input your feedback here]
+[APPROVE] [REJECT]
+```
+
+### Configuration Panel Component
+```
+Planning Agent Model: GPT-4
+Coding Agent Model: Claude-3
+Testing Agent Model: GPT-3.5
+Review Agent Model: Gemini-Pro
+```
+
+This dashboard design provides comprehensive visibility into the project's workflow while maintaining flexibility for future enhancements including native application development capabilities.

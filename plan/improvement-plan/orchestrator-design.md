@@ -1,200 +1,159 @@
-# Enhanced Orchestrator Design
+# Orchestrator Design for Mini-Orca Improvement
 
 ## Overview
-The orchestrator will implement a multi-agent workflow with human-in-the-loop approval at each stage. This design provides structured execution while maintaining flexibility and human oversight.
+This document outlines the design of a multi-agent workflow orchestrator for the Mini-Orca project, implementing the specified phases with configurable models and future native app capabilities.
 
-## Workflow Phases
+## Workflow Architecture
 
-### 1. Planning Phase
-**Description**: The agent prepares a comprehensive plan based on user specifications and project requirements.
+### Phase 1: Planning Phase
+- **Agent**: Planning Agent
+- **Function**: Analyze user specifications and project requirements to create a comprehensive implementation plan
+- **Output**: Detailed project plan with architecture, component breakdown, and implementation steps
+- **User Interaction**: Plan review and approval required before proceeding
 
-**Key Activities**:
-- Analyze user requirements and project context
-- Break down into specific implementation tasks
-- Create detailed execution plan with milestones
-- Generate code structure and architecture overview
+### Phase 2: Coding Phase
+- **Agent**: Code Generation Agent
+- **Function**: Generate specific code implementations based on the approved plan
+- **Output**: Target-specific function or component implementation
+- **Constraints**: Only generates one specific function at a time
 
-**Human Interaction**:
-- User reviews the plan before execution begins
-- Opportunity to approve or request modifications
-- Ability to adjust scope and priorities
+### Phase 3: Testing Phase
+- **Agent**: Test Generation Agent
+- **Function**: Create and execute tests for the generated code
+- **Output**: Test suite with coverage analysis and results
+- **Verification**: Pass/fail status and detailed test reports
 
-**Output**: 
-- Execution plan document with task breakdown
-- Estimated timeline and resource requirements
-- Code architecture specification
+### Phase 4: Review Phase
+- **Agent**: Code Review Agent
+- **Function**: Perform code quality review, security checks, and best practices validation
+- **Output**: Review report with suggestions for improvements
+- **Optional**: Can be the same agent as the planning phase
 
-### 2. Coding Phase
-**Description**: An agent generates specific functions or code components based on the approved plan.
+### Phase 5: User Approval
+- **Function**: Human review and approval of all generated changes
+- **Output**: Final confirmation or rejection of the implementation
 
-**Key Activities**:
-- Generate targeted code snippets based on plan requirements
-- Follow coding standards and project conventions
-- Implement specific functionality requested in the plan
-- Ensure code quality and maintainability
+## Model Configuration System
 
-**Human Interaction**:
-- Code is generated in isolation (single function/unit)
-- Generated code is immediately available for review
-- No automatic execution until human approval
+### Configurable Models by Phase
+1. **Planning Phase**: 
+   - Model: GPT-4, Claude, Gemini, etc.
+   - Configuration: Context window size, temperature settings, response format
 
-**Output**:
-- Generated code files or function implementations
-- Code documentation and comments
-- Test case templates (if applicable)
+2. **Coding Phase**:
+   - Model: GPT-4, Claude, CodeLLaMA, etc.
+   - Configuration: Code generation style, language support, output formatting
 
-### 3. Testing Phase
-**Description**: An agent automatically tests the generated code to ensure correctness and quality.
+3. **Testing Phase**:
+   - Model: GPT-4, Claude, TestGenAI, etc.
+   - Configuration: Test coverage requirements, test type selection (unit/integration)
 
-**Key Activities**:
-- Generate appropriate test cases for the implemented function
-- Execute tests to verify functionality
-- Report test results and coverage statistics
-- Identify potential edge cases or bugs
+4. **Review Phase**:
+   - Model: GPT-4, Claude, CodeReviewAI, etc.
+   - Configuration: Review criteria, severity levels, documentation requirements
 
-**Human Interaction**:
-- Test results are displayed for review
-- Ability to approve or request additional tests
-- Opportunity to see test coverage and failure details
+### Configuration Management
+- **Configuration Storage**: JSON/YAML files for model and parameter settings
+- **Version Control**: Track configuration changes and rollbacks
+- **User Preferences**: Allow users to select preferred models for each phase
+- **Validation**: Ensure model compatibility and configuration integrity
 
-**Output**:
-- Test execution reports
-- Coverage statistics
-- Failure analysis and suggestions
+## Dashboard Interface Requirements
 
-### 4. Review Phase
-**Description**: An agent reviews the generated code for quality, adherence to standards, and potential improvements.
+### Frontend Features
+1. **Project Overview Dashboard**
+   - Real-time status of current workflow phase
+   - Progress indicators for each stage
+   - Summary of generated artifacts
 
-**Key Activities**:
-- Code quality assessment
-- Adherence to project coding standards
-- Security and performance considerations
-- Suggested improvements or refactoring opportunities
+2. **Workflow Control Panel**
+   - Start/Stop workflow buttons
+   - Manual phase skipping capability
+   - Configuration editor for model selection
 
-**Human Interaction**:
-- Review results are presented for final approval
-- Option to request code modifications based on review findings
-- Ability to approve or reject the implementation
+3. **Artifact Viewer**
+   - Code view of generated functions
+   - Test results display with pass/fail status
+   - Review reports and suggestions
 
-**Output**:
-- Code quality report
-- Standards compliance assessment
-- Improvement suggestions
+4. **Approval System**
+   - Approval workflow for each phase
+   - Detailed change logs showing what changed between versions
+   - Reject/Approve actions with optional comments
 
-### 5. User Approval Phase
-**Description**: Human user reviews the complete implementation and approves or rejects changes.
+### Dashboard Architecture
+- **Frontend Framework**: React or Vue.js for responsive interface
+- **Real-time Updates**: WebSocket connections for live status updates
+- **State Management**: Redux or Vuex for complex dashboard state
+- **User Authentication**: Secure access to the dashboard
 
-**Key Activities**:
-- Final review of all generated artifacts
-- Approval or rejection of the complete implementation
-- Optional comments for future reference
+## Native App Generation Capability
 
-**Human Interaction**:
-- Full visibility into all generated components
-- Approval workflow with comments support
-- Ability to reject and request changes
+### Future Implementation Plan
+1. **Kotlin Code Generation**
+   - Android app structure generation
+   - iOS app structure generation (SwiftUI)
+   - Cross-platform component creation
 
-**Output**:
-- Approval/rejection status
-- Comments and feedback for future improvements
+2. **Project Configuration**
+   - Build.gradle and build.settings files
+   - App manifest and configuration files
+   - Dependency management integration
 
-## Orchestrator Architecture
+3. **Deployment Ready**
+   - Build scripts for native compilation
+   - App store submission preparation
+   - CI/CD pipeline integration
 
-### Core Components
+## System Integration Points
 
-1. **Workflow Manager**
-   - Coordinates execution across all phases
-   - Manages state transitions between phases
-   - Handles human approval workflows
-
-2. **Agent Pool**
-   - Planning agent (specialized in requirements analysis)
-   - Coding agent (specialized in code generation)
-   - Testing agent (specialized in test creation and execution)
-   - Review agent (specialized in code quality assessment)
-
-3. **State Management**
-   - Track workflow progress through all phases
-   - Maintain artifacts between phases
-   - Handle approval/rejection flows
-
-4. **Configuration Manager**
-   - Store and apply model configurations per phase
-   - Handle configuration persistence across sessions
-
-### State Management Design
-
-The orchestrator will maintain a state machine that tracks progress through workflow phases:
-
+### Data Flow
 ```
-[Initial] → [Planning] → [Coding] → [Testing] → [Review] → [User Approval] → [Complete]
+User Input → Planning Phase → Coding Phase → Testing Phase → Review Phase → User Approval → Native App Generation (Future)
 ```
 
-Each phase can be re-entered if modifications are requested, and the system maintains all intermediate artifacts.
+### State Management
+- **Workflow State**: Track current phase, completion status, artifacts generated
+- **Artifact Storage**: Persistent storage of code, tests, and reviews
+- **Change Tracking**: Version control for all generated artifacts
+- **Audit Trail**: Complete history of all changes and approvals
 
-### Approval Workflow Implementation
+## Implementation Considerations
 
-1. **Planning Approval**: User reviews and approves the execution plan
-2. **Code Review**: User examines generated code before acceptance
-3. **Test Results**: User reviews test outcomes and coverage
-4. **Quality Review**: User considers code quality assessment
-5. **Final Approval**: User approves or rejects the complete implementation
+### Reliability and Resilience
+- **Error Handling**: Graceful failure handling for each workflow phase
+- **Retry Logic**: Automatic retries for transient failures
+- **State Persistence**: Save workflow state to prevent data loss
+- **Recovery Mechanisms**: Resume interrupted workflows
 
-## Agent Responsibilities
+### Performance Optimization
+- **Parallel Processing**: Allow independent phases to run in parallel where possible
+- **Resource Management**: Efficient allocation of computational resources
+- **Caching Strategy**: Cache model responses for faster reprocessing
+- **Asynchronous Operations**: Non-blocking operations for better responsiveness
 
-### Planning Agent
-- Analyze requirements document and project specs
-- Create detailed task breakdown
-- Estimate resource allocation needs
-- Generate architecture and implementation plan
+### Security Considerations
+- **Code Sanitization**: Ensure generated code is safe for execution
+- **Access Control**: Secure dashboard access with authentication
+- **Data Protection**: Protect sensitive project information
+- **Model Validation**: Verify model configurations are valid and secure
 
-### Coding Agent
-- Generate code based on specific requirements from planning phase
-- Follow established project conventions and standards
-- Implement only the requested functionality
-- Maintain code quality and readability
+## Future Enhancement Roadmap
 
-### Testing Agent
-- Create appropriate test cases for generated functions
-- Execute tests and report results
-- Identify edge cases and potential bugs
-- Provide coverage analysis
+### Phase 1 (Immediate)
+- Implement basic workflow orchestrator with 4 phases
+- Create dashboard interface for monitoring and approval
+- Configure model selection per phase
 
-### Review Agent
-- Evaluate code quality against established standards
-- Identify potential improvements or refactoring opportunities
-- Check for security and performance considerations
-- Generate quality assessment report
+### Phase 2 (Short-term)
+- Integrate native app generation capabilities
+- Implement Android/iOS project structure generation
+- Create build and deployment automation
 
-## Configuration Handling
+### Phase 3 (Long-term)
+- Advanced code analysis and refactoring capabilities
+- Integration with CI/CD pipelines
+- Multi-user collaboration features
+- Advanced testing and quality analysis
 
-Each workflow phase can use different AI models based on specific requirements:
-
-1. **Planning Phase**: Requires analytical and planning capabilities
-2. **Coding Phase**: Requires strong code generation and understanding
-3. **Testing Phase**: Requires test case creation and execution analysis
-4. **Review Phase**: Requires code quality assessment and standards compliance
-
-## Implementation Approach
-
-1. **Phase-based Execution Engine**: Build state machine that manages workflow progression
-2. **Human Approval Integration**: Implement approval workflows with comments support
-3. **Artifact Management**: Store and pass artifacts between phases properly
-4. **Configuration Handling**: Allow model selection per phase with persistence
-5. **Error Recovery**: Handle failures in any phase and provide appropriate recovery options
-
-## Sample Workflow Execution Flow
-
-```
-1. User provides requirements
-2. Planning Agent creates detailed plan
-3. User reviews and approves plan
-4. Coding Agent generates specific function
-5. Testing Agent tests the generated code
-6. Review Agent assesses code quality
-7. User reviews all artifacts and approves/rejects
-8. If approved: Implementation is committed to project
-9. If rejected: Return to appropriate phase for modifications
-```
-
-This enhanced orchestrator design provides a robust, structured workflow that maintains human oversight while enabling automated code generation capabilities.
+This orchestrator design provides a robust foundation for managing the complete development workflow with flexibility for future enhancements including native application development capabilities.
