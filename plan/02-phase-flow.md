@@ -1,465 +1,106 @@
-# Mini-Orca v2.0 — Phase Flow & State Machine
+# Multi-Phase Workflow
 
-## 1. Phase Definitions
+## Phase 1: Planning Phase
+### Description
+The planning phase is where the orchestrator prepares a comprehensive plan based on user specifications and project context.
 
-### Phase A: PLANNING
+### Responsibilities
+- Analyze user requirements and project specs
+- Break down tasks into manageable components
+- Define technical approach and architecture decisions
+- Create detailed implementation plan
+- Generate task list for subsequent phases
 
-**Agent:** Planner  
-**Skills:** `architecture_design`, `task_breakdown`, `dependency_mapping`, `solid_principles`, `clean_code`, `business_logic_adherence`  
-**Purpose:** Analyze user specifications and project context to create an actionable implementation plan.
+### Agent Requirements
+- **Agent Type**: Planning Agent
+- **Skills**: Requirements analysis, system design, task decomposition
+- **Model Configuration**: Should use a model optimized for planning and analysis
 
-**Inputs:**
-- `project_goal` — User's description of what they want to build
-- `project_path` — Target directory
-- `existing_code` — Current project structure (if any)
-- `business_logic_file` — Optional file containing business logic specs
-- `constraints` — Optional user constraints (language, frameworks, etc.)
+### Output
+- Project plan document
+- Task breakdown with dependencies
+- Technical specifications
+- Risk assessment
 
-**Planner Output:**
-```go
-type Plan struct {
-    ID           string    `json:"id"`
-    ProjectPath  string    `json:"project_path"`
-    AtomicUnits  []Unit    `json:"atomic_units"` // Functions, structs, classes
-    Architecture string    `json:"architecture"`
-    CreatedAt    time.Time `json:"created_at"`
-}
+## Phase 2: Coding Phase
+### Description
+In this phase, a dedicated agent writes specific functions based on the plan.
 
-// Unit represents ONE atomic modification: a function, struct, or class
-type Unit struct {
-    ID            string   `json:"id"`
-    Type          UnitType `json:"type"`          // function | struct | class
-    Name          string   `json:"name"`          // e.g., "ValidateToken" or "User" or "AuthService"
-    TargetFile    string   `json:"target_file"`
-    Description   string   `json:"description"`
-    Priority      int      `json:"priority"`
-    Dependencies  []string `json:"dependencies"`  // Unit IDs
-    EstimatedSize string   `json:"estimated_size"` // small | medium | large
-}
+### Responsibilities
+- Implement specific functions as defined in the plan
+- Follow established code style and standards
+- Write clean, maintainable code
+- Handle specific technical requirements from the plan
 
-type UnitType string
+### Agent Requirements
+- **Agent Type**: Coding Agent
+- **Skills**: Programming, code generation, technical implementation
+- **Model Configuration**: Should use a model optimized for coding and code generation
 
-const (
-    UnitFunction UnitType = "function"
-    UnitStruct   UnitType = "struct"
-    UnitClass    UnitType = "class"
-)
-```
+### Output
+- Generated code files
+- Implementation of specific functions
+- Code documentation (if applicable)
 
-**User Gate:** ✅ REQUIRED — User reviews and confirms the plan in the IDE before proceeding.
+## Phase 3: Testing Phase
+### Description
+The testing phase ensures that the written code functions as expected.
 
----
+### Responsibilities
+- Create and execute tests for implemented functionality
+- Validate code against requirements and specifications
+- Identify and report issues or bugs
+- Generate test reports
 
-### Phase B: CODING
+### Agent Requirements
+- **Agent Type**: Testing Agent
+- **Skills**: Test creation, code validation, debugging
+- **Model Configuration**: Should use a model optimized for testing and validation
 
-**Agent:** Coder  
-**Skills:** `function_generation`, `struct_design`, `class_creation`, `solid_principles`, `clean_code`, `kiss_principle`, `no_repetition`  
-**Purpose:** Implement ONE atomic unit (function, struct, or class) based on the approved plan.
+### Output
+- Test results
+- Bug reports (if any)
+- Code coverage information
+- Test execution logs
 
-**Inputs:**
-- `plan` — The approved plan from Phase A
-- `next_unit` — The next atomic unit to implement
-- `current_codebase` — Current project state (files, existing units)
-- `business_logic_file` — Business logic specs (if provided)
-- `previous_feedback` — Any feedback from previous iterations
+## Phase 4: Review Phase
+### Description
+The review phase involves a quality check of the implemented code.
 
-**Coder Output:**
-```go
-type CodeOutput struct {
-    UnitID     string `json:"unit_id"`
-    UnitType   string `json:"unit_type"`   // "function" | "struct" | "class"
-    UnitName   string `json:"unit_name"`   // Name of the unit
-    TargetFile string `json:"target_file"`
-    Code       string `json:"code"`        // The complete unit code (formatted)
-    LinesAdded int    `json:"lines_added"`
-}
-```
+### Responsibilities
+- Review code quality and adherence to standards
+- Verify implementation matches requirements
+- Suggest improvements or optimizations
+- Generate review reports
 
-**User Gate:** ❌ NONE — Auto-proceeds to testing.
+### Agent Requirements
+- **Agent Type**: Review Agent (could be same as planning agent)
+- **Skills**: Code review, quality assessment, improvement suggestions
+- **Model Configuration**: Should use a model optimized for code review and analysis
 
-**Atomic Rule:** The coder outputs EXACTLY ONE unit. No multiple functions, no multiple structs.
+### Output
+- Code review report
+- Quality metrics
+- Suggestions for improvement
+- Final approval status
 
-**Loop Behavior:** If tests fail, loop back to this phase with error context.
+## Phase 5: User Review and Approval
+### Description
+This is a manual phase where users can review the implemented changes and approve or reject them.
 
----
+### Responsibilities
+- User interface for reviewing implemented changes
+- Approval/rejection workflow
+- Integration of user feedback into the system
+- Generation of final project state
 
-### Phase C: TESTING
+### User Interaction
+- Dashboard view of current state
+- Ability to approve/reject changes
+- Option to request modifications
+- Historical view of all changes
 
-**Agent:** Tester  
-**Skills:** `unit_testing`, `integration_testing`, `coverage_analysis`, `test_generation`  
-**Purpose:** Run automated tests, analyze results, and report issues.
-
-**Inputs:**
-- `code_output` — The code generated by the Coder
-- `project_path` — Target project directory
-- `test_spec` — Any test specifications from the plan
-
-**Tester Output:**
-```go
-type TestReport struct {
-    UnitID      string   `json:"unit_id"`
-    Passed      bool     `json:"passed"`
-    Tests       []Test   `json:"tests"`
-    Errors      []string `json:"errors"`
-    Warnings    []string `json:"warnings"`
-    Coverage    float64  `json:"coverage"`
-    Duration    string   `json:"duration"`
-    Suggestions []string `json:"suggestions"` // For the agent to improve
-}
-
-type Test struct {
-    Name     string `json:"name"`
-    Passed   bool   `json:"passed"`
-    Output   string `json:"output"`
-    Duration string `json:"duration"`
-}
-```
-
-**User Gate:** ❌ NONE — Auto-proceeds or loops back to Coding.
-
-**Loop Behavior:**
-- If tests pass → proceed to Phase D (Review)
-- If tests fail → loop back to Phase B (Coding) with error details
-
----
-
-### Phase D: REVIEW
-
-**Agent:** Reviewer  
-**Skills:** `style_check`, `logic_review`, `security_audit`, `solid_principles`, `clean_code`, `business_logic_adherence`  
-**Purpose:** Code review of the atomic unit — quality, style, correctness, security, and best practices.
-
-**Inputs:**
-- `code_output` — The code from Phase B
-- `test_report` — Results from Phase C
-- `plan` — The original approved plan
-- `business_logic_file` — Business logic specs (if provided)
-- `coding_standards` — Project-specific coding standards
-
-**Reviewer Output:**
-```go
-type ReviewReport struct {
-    UnitID      string   `json:"unit_id"`
-    Approved    bool     `json:"approved"`
-    Score       int      `json:"score"`    // 1-10
-    Comments    []string `json:"comments"`
-    Suggestions []string `json:"suggestions"`
-    Issues      []Issue  `json:"issues"`
-}
-
-type Issue struct {
-    Severity string `json:"severity"` // low | medium | high | critical
-    Line     int    `json:"line"`
-    Message  string `json:"message"`
-    Category string `json:"category"` // style | logic | security | performance
-}
-```
-
-**User Gate:** ❌ NONE — Auto-proceeds or loops back to Coding.
-
-**Loop Behavior:**
-- If review passes (score >= threshold) → proceed to Phase E (Human Review)
-- If review fails → loop back to Phase B (Coding) with review feedback
-
----
-
-### Phase E: HUMAN REVIEW (IDE)
-
-**Agent:** Human (Developer)  
-**Purpose:** Final review and approval of the atomic unit by the developer in the IDE.
-
-**Inputs:**
-- `code_output` — The code from Phase B
-- `test_report` — Results from Phase C
-- `review_report` — Results from Phase D
-
-**Human Actions in IDE:**
-
-| Action | Behavior |
-|--------|----------|
-| **Accept** | Write unit to file, proceed to next unit (loop back to Phase B) |
-| **Reject** | Loop back to Phase B (no feedback, just reject) |
-| **Edit Function** | Edit just the generated function, then → Testing → Review → Human Review |
-| **Edit Full File** | Edit the entire target file (with new unit inserted), then → Testing → Review → Human Review |
-
-**Loop Behavior:**
-- If accepted → Write unit to file, proceed to next unit (loop back to Phase B)
-- If rejected → Loop back to Phase B (no feedback loop)
-- If edited → Resubmit → Testing → Review → Human Review (cycle continues)
-
----
-
-## 2. Complete State Flow
-
-```
-                    ┌──────────────────────────────────────────────────┐
-                    │                    INITIALIZED                    │
-                    │  (User has entered project goal & path)           │
-                    └──────────────────────┬───────────────────────────┘
-                                           │
-                                           ▼
-                    ┌──────────────────────────────────────────────────┐
-                    │                    PLANNING                       │
-                    │  Agent: Planner                                   │
-                    │  Skills: architecture_design, task_breakdown,     │
-                    │            dependency_mapping, solid_principles,  │
-                    │            clean_code, business_logic_adherence   │
-                    │  Action: Generate implementation plan             │
-                    └──────────────────────┬───────────────────────────┘
-                                           │
-                                           ▼
-                    ┌──────────────────────────────────────────────────┐
-                    │              WAITING_FOR_PLAN_APPROVAL            │
-                    │  User reviews plan in IDE                         │
-                    │  ┌─────────────┐    ┌─────────────┐             │
-                    │  │   ACCEPT    │    │   REJECT    │             │
-                    │  └──────┬──────┘    └──────┬──────┘             │
-                    └─────────┼──────────────────┼─────────────────────┘
-                              │                  │ (re-plan with feedback)
-                              ▼                  │
-                    ┌──────────────────────┐     │
-                    │              PLANNING_APPROVED              │     │
-                    └──────────────────────┘     │
-                              │                  │
-                              ▼                  │
-                    ┌──────────────────────────────────────────────────┐
-                    │  ┌───────────────────────────────────────────┐   │
-                    │  │      LOOP: Per-Atomic-Unit Cycle           │   │
-                    │  │                                           │   │
-                    │  │  ┌──────────┐                             │   │
-  ┌───────────────┐  │  │          │                             │   │
-  │ NEXT UNIT     │◄─┘  │  CODING   │─────────────────────────────┤   │
-  │ or COMPLETED  │      │  Agent: Coder                          │   │
-  │               │      │  Skills: function_generation,          │   │
-  └───────────────┘      │  struct_design, class_creation,        │   │
-                    ┌────┤  solid_principles, clean_code,         │   │
-                    │    │  kiss_principle, no_repetition         │   │
-                    │    │  └─────────────────────────────────────┘   │
-                    │    │                                           │   │
-                    │    ▼                                           │   │
-                    │  ┌───────────────────────────────────────────┐   │
-                    │  │              TESTING                      │   │
-                    │  │  Agent: Tester                            │   │
-                    │  │  Skills: unit_testing, integration_testing,│   │
-                    │  │          coverage_analysis, test_generation│   │
-                    │  │  Action: Run tests, analyze results       │   │
-                    │  │  Gate: Auto-pass/fail                     │   │
-                    │  └────┬──────────────────────────────────────┘   │
-                    │    ┌───┴───┐                                     │
-                    │    │       │                                     │
-                    │    │Pass  │Fail (loop back to CODING)            │
-                    │    │       │                                     │
-                    │    ▼       │                                     │
-                    │  ┌───────────────────────────────────────────┐   │
-                    │  │              CODE_REVIEW                    │   │
-                    │  │  Agent: Reviewer                          │   │
-                    │  │  Skills: style_check, logic_review,       │   │
-                    │  │          security_audit, solid_principles,│   │
-                    │  │          clean_code, business_logic_...   │   │
-                    │  │  Action: Quality/style/security review    │   │
-                    │  │  Gate: Auto-pass/fail                     │   │
-                    │  └────┬──────────────────────────────────────┘   │
-                    │    ┌───┴───┐                                     │
-                    │    │       │                                     │
-                    │    │Pass  │Fail (loop back to CODING)            │
-                    │    │       │                                     │
-                    │    ▼       │                                     │
-                    │  ┌───────────────────────────────────────────┐   │
-                    │  │          WAITING_FOR_HUMAN_APPROVAL       │   │
-                    │  │  IDE: User reviews atomic unit            │   │
-                    │  │  ┌─────────────┐    ┌─────────────┐       │   │
-                    │  │  │   ACCEPT    │    │   REJECT    │       │   │
-                    │  │  │ (write to   │    │ (loop back  │       │   │
-                    │  │  │  file)      │    │  to coding) │       │   │
-                    │  │  └──────┬──────┘    └──────┬──────┘       │   │
-                    │  │         │                   │              │   │
-                    │  │  ┌──────▼──────┐  ┌────────▼────────┐     │   │
-                    │  │  │   EDIT      │  │                 │     │   │
-                    │  │  │ (edit +     │  │                 │     │   │
-                    │  │  │  resubmit)  │  │                 │     │   │
-                    │  │  └──────┬──────┘  │                 │     │   │
-                    │  │         │         │                 │     │   │
-                    │  │         ▼         ▼                 │     │   │
-                    │  │  ┌──────────────────────────────────┐ │     │   │
-                    │  │  │ TESTING → REVIEW → HUMAN REVIEW  │ │     │   │
-                    │  │  └──────────────────────────────────┘ │     │   │
-                    │  └─────────┼─────────────────────────────┘     │   │
-                    │            │                                    │   │
-                    │            ▼                                    │   │
-                    │  ┌──────────────────┐                         │   │
-                    │  │     COMMIT       │                         │   │
-                    │  │  Unit written to │                         │   │
-                    │  │  target file     │                         │   │
-                    │  └────────┬─────────┘                         │   │
-                    │           │                                    │   │
-                    └───────────┼────────────────────────────────────┘   │
-                                │                                       │
-                                ▼                                       │
-                    ┌──────────────────────────────────────────────────┐   │
-                    │                    COMPLETED                      │   │
-                    │  (All atomic units in plan have been implemented)│   │
-                    └──────────────────────────────────────────────────┘   │
-```
-
-## 3. State Machine Implementation
-
-```go
-// internal/orchestrator/phase_router.go
-
-type Phase string
-
-const (
-    PhasePlanning         Phase = "PLANNING"
-    PhasePlanningReview   Phase = "WAITING_FOR_PLAN_APPROVAL"
-    PhaseCoding           Phase = "CODING"
-    PhaseTesting          Phase = "TESTING"
-    PhaseReview           Phase = "CODE_REVIEW"
-    PhaseHumanReview      Phase = "WAITING_FOR_HUMAN_APPROVAL"
-    PhaseCompleted        Phase = "COMPLETED"
-    PhaseFailed           Phase = "FAILED"
-)
-
-type PhaseRouter struct {
-    orchestrator *Orchestrator
-    currentState Phase
-    sessionID    string
-}
-
-func (pr *PhaseRouter) Start(ctx context.Context, session *Session) error {
-    pr.currentState = PhasePlanning
-    pr.sessionID = session.ID
-    return pr.runPhase(ctx, PhasePlanning)
-}
-
-func (pr *PhaseRouter) runPhase(ctx context.Context, phase Phase) error {
-    switch phase {
-    case PhasePlanning:
-        return pr.runPlanning(ctx)
-    case PhaseCoding:
-        return pr.runCoding(ctx)
-    case PhaseTesting:
-        return pr.runTesting(ctx)
-    case PhaseReview:
-        return pr.runReview(ctx)
-    case PhaseHumanReview:
-        return pr.runHumanReview(ctx)
-    default:
-        return fmt.Errorf("unknown phase: %s", phase)
-    }
-}
-
-// runPlanning executes Phase A and waits for user approval
-func (pr *PhaseRouter) runPlanning(ctx context.Context) error {
-    plan, err := pr.orchestrator.AgentRegistry.Planner.Execute(ctx, pr.sessionID)
-    if err != nil {
-        return err
-    }
-    
-    pr.orchestrator.StateManager.UpdateState(pr.sessionID, map[string]interface{}{
-        "current_phase": PhasePlanning,
-        "plan": plan,
-    })
-    
-    select {
-    case <-ctx.Done():
-        return ctx.Err()
-    case decision := <-pr.orchestrator.HumanGate:
-        if !decision.Approved {
-            pr.orchestrator.StateManager.UpdateState(pr.sessionID, map[string]interface{}{
-                "plan_feedback": decision.Feedback,
-            })
-            return pr.runPlanning(ctx) // Retry
-        }
-    }
-    
-    pr.currentState = PhaseCoding
-    return pr.runCodingLoop(ctx)
-}
-
-// runCodingLoop manages the B→C→D→E cycle for each atomic unit
-func (pr *PhaseRouter) runCodingLoop(ctx context.Context) error {
-    for {
-        // Get next unit from plan
-        unit := pr.orchestrator.StateManager.GetNextUnit(pr.sessionID)
-        if unit == nil {
-            // All units complete
-            pr.currentState = PhaseCompleted
-            return nil
-        }
-        
-        // Phase B: Coding
-        if err := pr.runPhase(ctx, PhaseCoding); err != nil {
-            return err
-        }
-        
-        // Phase C: Testing
-        if err := pr.runPhase(ctx, PhaseTesting); err != nil {
-            continue // Loop back to coding
-        }
-        
-        // Phase D: Review
-        if err := pr.runPhase(ctx, PhaseReview); err != nil {
-            continue // Loop back to coding
-        }
-        
-        // Phase E: Human Review
-        if err := pr.runPhase(ctx, PhaseHumanReview); err != nil {
-            return err
-        }
-        
-        // Human approved, continue to next unit
-    }
-}
-```
-
-## 4. Transition Rules
-
-| From State | To State | Condition |
-|------------|----------|-----------|
-| `INITIALIZED` | `PLANNING` | Auto |
-| `PLANNING` | `WAITING_FOR_PLAN_APPROVAL` | Plan generated |
-| `WAITING_FOR_PLAN_APPROVAL` | `PLANNING_APPROVED` | User accepts |
-| `WAITING_FOR_PLAN_APPROVAL` | `PLANNING` | User rejects (with feedback) |
-| `PLANNING_APPROVED` | `CODING` | Auto |
-| `CODING` | `TESTING` | Unit generated |
-| `TESTING` | `CODING` | Tests fail |
-| `TESTING` | `CODE_REVIEW` | Tests pass |
-| `CODE_REVIEW` | `CODING` | Review fails |
-| `CODE_REVIEW` | `WAITING_FOR_HUMAN_APPROVAL` | Review passes |
-| `WAITING_FOR_HUMAN_APPROVAL` | `COMMIT` | User accepts |
-| `WAITING_FOR_HUMAN_APPROVAL` | `CODING` | User rejects |
-| `WAITING_FOR_HUMAN_APPROVAL` | `TESTING` | User edits + submits |
-| `COMMIT` | `CODING` | Auto (next unit) |
-| `CODING` | `COMPLETED` | No more units |
-
-## 5. Event System
-
-All phase transitions emit events for the frontend:
-
-```go
-type PhaseEvent struct {
-    SessionID string    `json:"session_id"`
-    Phase     Phase     `json:"phase"`
-    Action    string    `json:"action"` // "started", "completed", "failed", "waiting"
-    Data      interface{} `json:"data"`
-    Timestamp time.Time `json:"timestamp"`
-}
-```
-
-## 6. Retry & Error Handling
-
-```go
-type RetryConfig struct {
-    MaxRetries   int           `json:"max_retries"`
-    BackoffBase  time.Duration `json:"backoff_base"`    // 1s
-    BackoffMax   time.Duration `json:"backoff_max"`     // 30s
-    Exponential  bool          `json:"exponential"`     // true
-}
-
-var phaseRetryConfigs = map[Phase]RetryConfig{
-    PhaseCoding:       {MaxRetries: 3, BackoffBase: 1 * time.Second},
-    PhaseTesting:      {MaxRetries: 2, BackoffBase: 2 * time.Second},
-    PhaseReview:       {MaxRetries: 2, BackoffBase: 1 * time.Second},
-    PhaseHumanReview:  {MaxRetries: 0}, // Human decisions don't auto-retry
-}
-```
+### Output
+- Final project state
+- User approval status
+- Change logs and history
