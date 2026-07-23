@@ -17,7 +17,7 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
 - [ ] **1.1** Create `internal/model/` package structure
   - [ ] Define `Provider` interface (extensible for future providers)
   - [ ] Define `ChatRequest`, `ChatResponse`, `ModelConfig` types
-  - [ ] Create `Router` struct
+  - [ ] Create `Router` struct with phase-based config
 
 - [ ] **1.2** Implement LM Studio provider
   - [ ] `internal/model/lm_studio.go`
@@ -29,6 +29,7 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] `config.yaml` schema (LM Studio only initially)
   - [ ] Config loader (`internal/config/`)
   - [ ] Default phase configs
+  - [ ] Skills configuration
 
 - [ ] **1.4** Update existing agent calls to use the new model router
   - [ ] Modify `internal/agent/client.go` to use `model.Router`
@@ -41,9 +42,9 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
 
 ---
 
-## Milestone 2: Multi-Agent Architecture (Week 2)
+## Milestone 2: Multi-Agent Architecture with Skills (Week 2)
 
-### Goal: Split the single agent into specialized agents
+### Goal: Split the single agent into specialized agents with configurable skills
 
 ### Tasks
 
@@ -51,34 +52,47 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] Define `Agent` interface
   - [ ] Create `Registry` for agents
 
-- [ ] **2.2** Implement Planner agent
+- [ ] **2.2** Implement skills system
+  - [ ] `internal/agent/skills/skills.go` — Skill definitions
+  - [ ] `internal/agent/skills/library.go` — Predefined skills
+  - [ ] `internal/agent/skills/registry.go` — Skills registry
+  - [ ] Skills types: knowledge + tool
+  - [ ] Flat structure (hierarchical possible later)
+
+- [ ] **2.3** Implement Planner agent
   - [ ] `internal/agent/planner.go`
+  - [ ] Skills: `architecture_design`, `task_breakdown`, `dependency_mapping`, `solid_principles`, `clean_code`, `business_logic_adherence`
   - [ ] Specialized prompts for planning
   - [ ] Output: Plan with atomic units (functions, structs, classes)
 
-- [ ] **2.3** Implement Coder agent
+- [ ] **2.4** Implement Coder agent
   - [ ] `internal/agent/coder.go`
+  - [ ] Skills: `function_generation`, `struct_design`, `class_creation`, `solid_principles`, `clean_code`, `kiss_principle`, `no_repetition`
   - [ ] Specialized prompts for code generation
   - [ ] Output: ONE atomic unit per execution
 
-- [ ] **2.4** Implement Tester agent
+- [ ] **2.5** Implement Tester agent
   - [ ] `internal/agent/tester.go`
+  - [ ] Skills: `unit_testing`, `integration_testing`, `coverage_analysis`, `test_generation`
   - [ ] Specialized prompts for test analysis
   - [ ] Output: TestReport
 
-- [ ] **2.5** Implement Reviewer agent
+- [ ] **2.6** Implement Reviewer agent
   - [ ] `internal/agent/reviewer.go`
+  - [ ] Skills: `style_check`, `logic_review`, `security_audit`, `solid_principles`, `clean_code`, `business_logic_adherence`
   - [ ] Specialized prompts for code review
   - [ ] Output: ReviewReport
 
-- [ ] **2.6** Create prompt templates
+- [ ] **2.7** Create prompt templates
   - [ ] `internal/agent/prompts/planner.go`
   - [ ] `internal/agent/prompts/coder.go`
   - [ ] `internal/agent/prompts/tester.go`
   - [ ] `internal/agent/prompts/reviewer.go`
+  - [ ] Skills integrated into prompts
 
 ### Deliverables
 - 4 specialized agents
+- Skills system (flat, configurable)
 - Prompt templates for each phase
 - Agents can be configured with different models
 
@@ -86,7 +100,7 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
 
 ## Milestone 3: Language-Agnostic Tool Executor (Week 2)
 
-### Goal: Redesign tools to be language-agnostic with auto-detection
+### Goal: Redesign tools to be language-agnostic with auto-detection and git integration
 
 ### Tasks
 
@@ -94,15 +108,18 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] `executor.go` — Main executor with auto-detection
   - [ ] `shell.go` — Universal shell command executor
   - [ ] `file_ops.go` — Atomic file operations (ONE unit at a time)
+  - [ ] `git_ops.go` — Git integration (add, commit, diff, status)
+  - [ ] `formatter.go` — Code formatting (per-language)
   - [ ] `project_types.go` — Project type detection
 
 - [ ] **3.2** Implement project type detection
-  - [ ] Detect: Go, Kotlin, Java, Rust, TypeScript, Python, etc.
+  - [ ] Detect: Go, Kotlin, Java, Rust, TypeScript, Python
   - [ ] `DetectProjectType(path string) ProjectType`
 
 - [ ] **3.3** Implement language-specific executors
   - [ ] `go_executor.go` — `go test`, `go fmt`, `go build`
   - [ ] `kotlin_executor.go` — `./gradlew test`, `ktlint`
+  - [ ] `java_executor.go` — `./gradlew test`, `spotless`
   - [ ] `rust_executor.go` — `cargo test`, `cargo fmt`
   - [ ] `typescript_executor.go` — `npx jest`, `npx prettier`
   - [ ] `python_executor.go` — `pytest`, `black`
@@ -114,20 +131,32 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] `ReadFile()` — Read file content
   - [ ] All operations target ONE atomic unit
 
-- [ ] **3.5** Update daemon to use new tool executor
+- [ ] **3.5** Implement Git operations
+  - [ ] `GitAdd(path string)` — Add file to git
+  - [ ] `GitCommit(message string)` — Commit changes
+  - [ ] `GitDiff(path string)` — Show diff
+  - [ ] `GitStatus()` — Show git status
+
+- [ ] **3.6** Implement code formatting
+  - [ ] `FormatCode(path string)` — Format using language formatter
+  - [ ] Auto-format after code generation
+
+- [ ] **3.7** Update daemon to use new tool executor
   - [ ] `cmd/daemon/main.go`
   - [ ] Wire up language-agnostic executor
 
 ### Deliverables
 - Language-agnostic tool executor
 - Auto-detection of project type
+- Git integration (add, commit, diff, status)
+- Code formatting
 - Atomic file operations (one function/struct/class at a time)
 
 ---
 
 ## Milestone 4: Orchestrator & State Machine (Week 3)
 
-### Goal: Build the new orchestrator with the 5-phase flow
+### Goal: Build the new orchestrator with the 5-phase flow and human gates
 
 ### Tasks
 
@@ -135,6 +164,7 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] `orchestrator.go` — Main orchestrator struct
   - [ ] `phase_router.go` — Phase management
   - [ ] `human_gate.go` — User approval handling
+  - [ ] `insertion_manager.go` — Standalone function insertion
 
 - [ ] **4.2** Define new state models
   - [ ] `internal/state/session.go`
@@ -145,40 +175,56 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] Planning → PlanningReview → Coding → Testing → Review → HumanReview
   - [ ] Auto-loops for Coding ↔ Testing ↔ Review
   - [ ] Human gates at Planning and HumanReview
+  - [ ] Separate Reject (loop to Coding) vs Edit (Testing → Review → HumanReview)
 
-- [ ] **4.4** Implement retry logic
+- [ ] **4.4** Implement standalone function insertion
+  - [ ] `InsertFunction(path, functionCode, insertionPoint)`
+  - [ ] Always goes through Testing → Review
+  - [ ] Insertion point: before/after specific function
+
+- [ ] **4.5** Implement retry logic
   - [ ] Configurable retries per phase
   - [ ] Exponential backoff
   - [ ] Error handling and recovery
 
-- [ ] **4.5** Update state store
+- [ ] **4.6** Update state store
   - [ ] Enhance `internal/state/store.go` for new models
   - [ ] Add session history tracking
   - [ ] Add plan persistence
 
-- [ ] **4.6** Update daemon entry point
+- [ ] **4.7** Update daemon entry point
   - [ ] Wire up new orchestrator
   - [ ] Keep backward compatibility with v1 states
 
 ### Deliverables
 - Working 5-phase orchestrator
 - Human-in-the-loop at Planning and HumanReview
+- Standalone function insertion
 - Retry logic for failed phases
 
 ---
 
-## Milestone 5: HTMX Frontend Enhancement (Week 4)
+## Milestone 5: IDE-like HTMX Frontend (Week 4)
 
-### Goal: Enhance the existing HTMX dashboard with new features
+### Goal: Enhance the existing HTMX dashboard into an IDE-like interface
 
 ### Tasks
 
 - [ ] **5.1** Create new template structure
   - [ ] `internal/api/templates/base.html` — Base layout
+  - [ ] `internal/api/templates/ide.html` — Main IDE page
   - [ ] `internal/api/templates/components/` — Reusable components
   - [ ] `internal/api/templates/phases/` — Phase-specific views
+  - [ ] `internal/api/templates/editors/` — Editor components
 
-- [ ] **5.2** Build phase-specific templates
+- [ ] **5.2** Build IDE layout
+  - [ ] File tree component
+  - [ ] Code editor (single function + full file)
+  - [ ] Phase tracker
+  - [ ] Activity log
+  - [ ] Header bar (project info, model config, git status)
+
+- [ ] **5.3** Build phase-specific templates
   - [ ] `phases/planning.html` — Planning in progress
   - [ ] `phases/planning-review.html` — Plan approval with Alpine.js
   - [ ] `phases/coding.html` — Code display
@@ -186,33 +232,51 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] `phases/review.html` — Review report
   - [ ] `phases/human-review.html` — Human approval
 
-- [ ] **5.3** Build components
+- [ ] **5.4** Build editor templates
+  - [ ] `editors/code-editor.html` — Function editor
+  - [ ] `editors/full-file-editor.html` — Full file editor
+  - [ ] `editors/standalone-function.html` — Standalone function writer
+  - [ ] `editors/insertion-picker.html` — Insertion point picker
+
+- [ ] **5.5** Build components
+  - [ ] `components/file-tree.html` — File tree
   - [ ] `components/phase-tracker.html` — Phase progress
   - [ ] `components/activity-log.html` — Activity feed
   - [ ] `components/header.html` — Header bar
-  - [ ] `components/sidebar.html` — Session sidebar
 
-- [ ] **5.4** Enhance API handlers
-  - [ ] `api/handlers/session.go` — Session CRUD
+- [ ] **5.6** Enhance API handlers
+  - [ ] `api/handlers/project.go` — Project management
   - [ ] `api/handlers/approve.go` — Approval handling
-  - [ ] `api/handlers/config.go` — Model config
+  - [ ] `api/handlers/config.go` — Model/skills config
+  - [ ] `api/handlers/insertion.go` — Function insertion
   - [ ] Add HTMX partial rendering endpoints
 
-- [ ] **5.5** Add Alpine.js interactivity
+- [ ] **5.7** Add Alpine.js interactivity
   - [ ] Model configuration panel
   - [ ] Session controls (pause/resume/stop)
   - [ ] Feedback input fields
+  - [ ] Insertion picker radio buttons
 
-- [ ] **5.6** Polish & UX
+- [ ] **5.8** Skills Management UI
+  - [ ] Skills library view (search, filter, enable/disable)
+  - [ ] Add/Edit skill dialog (name, description, type, priority, prompt template)
+  - [ ] Agent-skill association view (checkboxes per agent)
+  - [ ] Bulk actions (reset to defaults, export, import)
+  - [ ] API endpoints: CRUD for skills, agent-skill mappings
+  - [ ] Alpine.js interactivity for skills management
+
+- [ ] **5.9** Polish & UX
   - [ ] Loading states
   - [ ] Error handling
   - [ ] Responsive design
 
 ### Deliverables
-- Enhanced HTMX dashboard
+- IDE-like HTMX dashboard
+- File tree + code editor
 - Phase-specific views
+- Standalone function writer + insertion
+- Skills management UI (add/edit/remove skills, associate with agents)
 - Model configuration UI
-- Responsive design
 
 ---
 
@@ -266,13 +330,20 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
 
 - [ ] All 5 phases work correctly with human gates
 - [ ] Each phase can use a different model/provider
-- [ ] HTMX dashboard shows real-time phase progress
-- [ ] Code review UI displays generated code
+- [ ] IDE dashboard shows real-time phase progress
+- [ ] Code review UI displays generated code with edit options
 - [ ] Retry logic handles failures gracefully
 - [ ] Configuration is fully customizable via YAML
 - [ ] Tool executor auto-detects project types
 - [ ] Each agent modifies exactly ONE function/struct/class
+- [ ] Standalone function writer works correctly
+- [ ] Skills management UI allows adding/editing/removing skills
+- [ ] Skills can be associated with agents via checkbox UI
+- [ ] Skills can be exported/imported as JSON config
+- [ ] Dark theme by default, extensible for more themes
+- [ ] Git integration works (add, commit, diff)
 - [ ] No authentication required (local environment)
+- [ ] Dark theme by default, extensible for more themes
 
 ---
 
@@ -307,13 +378,51 @@ models:
       provider: "lm-studio"
       model: "qwen/qwen3-coder-30b"
       temperature: 0.2
+
+agents:
+  planner:
+    skills:
+      - solid_principles
+      - clean_code
+      - kiss_principle
+      - business_logic_adherence
+      - architecture_design
+      - task_breakdown
+      - dependency_mapping
+  
+  coder:
+    skills:
+      - solid_principles
+      - clean_code
+      - kiss_principle
+      - no_repetition
+      - function_generation
+      - struct_design
+      - class_creation
+  
+  tester:
+    skills:
+      - clean_code
+      - unit_testing
+      - integration_testing
+      - coverage_analysis
+      - test_generation
+  
+  reviewer:
+    skills:
+      - solid_principles
+      - clean_code
+      - business_logic_adherence
+      - style_check
+      - logic_review
+      - security_audit
 EOF
 
 # 3. Start daemon
 go run cmd/daemon/main.go
 
-# 4. Open dashboard
-open http://localhost:8080/dashboard
+# 4. Open IDE dashboard
+open http://localhost:8080/ide
 
-# 5. Enter project goal → Review plan → Approve → Watch agents work!
+# 5. Enter project goal → Review plan → Approve → Code in IDE → Accept/Reject
 ```

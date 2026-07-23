@@ -3,64 +3,88 @@
 ## 1. High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      HTMX FRONTEND LAYER                             │
-│  ┌─────────────────┐    ┌─────────────────┐    ┌────────────────┐  │
-│  │  Dashboard Page  │    │  Code Review    │    │  Config Panel  │  │
-│  │  (Server Render) │    │  (HTMX swap)    │    │  (Alpine.js)   │  │
-│  └────────┬─────────┘    └────────┬────────┘    └────────┬───────┘  │
-│           │                       │                       │          │
-│           └───────────────────────┼───────────────────────┘          │
-│                          HTMX + JSON REST API                       │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────────────┐
-│                        DAEMON LAYER                                  │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                    API Server (Go)                            │   │
-│  │  - REST endpoints for session management                     │   │
-│  │  - Server-side HTML rendering (HTMX templates)               │   │
-│  │  - No authentication (local environment)                     │   │
-│  └──────────────────────────────┬───────────────────────────────┘   │
-│                                 │                                   │
-│  ┌──────────────────────────────▼───────────────────────────────┐   │
-│  │               Orchestrator Engine                            │   │
-│  │  - Phase Router (manages A→B→C→D→E flow)                    │   │
-│  │  - Human Gate Manager (handles user approvals)               │   │
-│  │  - State Manager (persistent state store)                    │   │
-│  └──────────────────────────────┬───────────────────────────────┘   │   │
-│                                 │                                   │
-│  ┌──────────────────────────────▼───────────────────────────────┐   │
-│  │              Agent Registry                                  │   │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │   │
-│  │  │ Planner  │ │  Coder   │ │  Tester  │ │ Reviewer │       │   │
-│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘       │   │
-│  └──────────────────────────────┬───────────────────────────────┘   │   │
-│                                 │                                   │
-│  ┌──────────────────────────────▼───────────────────────────────┐   │
-│  │              Model Router                                    │   │
-│  │  ┌──────────────────────────────────────────────────────┐    │   │
-│  │  │  Provider Interface (extensible)                     │    │   │
-│  │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐          │    │   │
-│  │  │  │ LM Studio│  │ Ollama   │  │ OpenAI   │ (future)│    │   │
-│  │  │  └──────────┘  └──────────┘  └──────────┘          │    │   │
-│  │  └──────────────────────────────────────────────────────┘    │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │        LANGUAGE-AGNOSTIC TOOL EXECUTOR                       │   │
-│  │  - Auto-detect project type (Go, Kotlin, Rust, TS, etc.)     │   │
-│  │  - Shell commands (universal)                                │   │
-│  │  - File operations (read/write/append ONE unit)              │   │
-│  │  - Build & test commands (project-specific)                  │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │              State Store                                     │   │
-│  │  - JSON file                                                 │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                    IDE-LIKE HTMX FRONTEND                                        │
+│                                                                                  │
+│  ┌──────────────┐  ┌──────────────────────────────────────────────────────────┐  │
+│  │  FILE TREE   │  │  MAIN WORKSPACE (IDE-like)                                │  │
+│  │              │  │                                                           │  │
+│  │  📁 src/     │  │  ┌─────────────────────────────────────────────────────┐  │  │
+│  │  📁 auth/    │  │  │  Code Editor (single function OR full file)          │  │  │
+│  │  📁 models/  │  │  │                                                     │  │  │
+│  │  📄 main.go  │  │  │  func ValidateToken(token string) bool {            │  │  │
+│  │  📄 user.go  │  │  │      // generated code...                           │  │  │
+│  │  📄 ...      │  │  │  }                                                  │  │  │
+│  │              │  │  │                                                     │  │  │
+│  │  [Insert]    │  │  │  [Edit Function] [Edit Full File] [Submit]          │  │  │
+│  │  [Write Fn]  │  │  └─────────────────────────────────────────────────────┘  │  │
+│  └──────────────┘  │                                                           │  │
+│                    │  ┌─────────────────────────────────────────────────────┐  │  │
+│                    │  │  Phase Tracker: [Plan] → [Code] → [Test] → [Rev] → [Human] │  │
+│                    │  └─────────────────────────────────────────────────────┘  │  │
+│                    │                                                           │  │
+│                    │  ┌─────────────────────────────────────────────────────┐  │  │
+│                    │  │  Activity Log (scrollable)                          │  │  │
+│                    │  │  [12:34] Planning started                           │  │  │
+│                    │  │  [12:35] Plan generated                             │  │  │
+│                    │  │  [12:36] Code generated: ValidateToken              │  │  │
+│                    │  └─────────────────────────────────────────────────────┘  │  │
+│                    └───────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────────────────┐  │
+│  │  HEADER: Project Path | Goal | Model Config | Git Status | [New Session]    │  │
+│  └──────────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                            │ REST API
+┌───────────────────────────▼───────────────────────────────────────────────────────┐
+│                        ORCHESTRATOR DAEMON                                         │
+│                                                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │                    API Server (Go)                                          │  │
+│  │  - REST endpoints for session management                                   │  │
+│  │  - Server-side HTML rendering (HTMX templates)                             │  │
+│  │  - No authentication (local environment)                                   │  │
+│  └──────────────────────────────┬─────────────────────────────────────────────┘  │  │
+│                                 │                                                 │  │
+│  ┌──────────────────────────────▼─────────────────────────────────────────────┐  │
+│  │               Orchestrator Engine                                          │  │
+│  │  - Phase Router (manages A→B→C→D→E flow)                                  │  │  │
+│  │  - Human Gate Manager (handles user approvals)                             │  │  │
+│  │  - State Manager (persistent state store)                                  │  │  │
+│  │  - Insertion Manager (handles standalone function insertion)               │  │  │
+│  └──────────────────────────────┬─────────────────────────────────────────────┘  │  │
+│                                 │                                                 │  │
+│  ┌──────────────────────────────▼─────────────────────────────────────────────┐  │
+│  │              Agent Registry                                                │  │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐                     │  │  │
+│  │  │ Planner  │ │  Coder   │ │  Tester  │ │ Reviewer │                     │  │  │
+│  │  │ +Skills  │ │ +Skills  │ │ +Skills  │ │ +Skills  │                     │  │  │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘                     │  │  │
+│  └──────────────────────────────┬─────────────────────────────────────────────┘  │  │
+│                                 │                                                 │  │
+│  ┌──────────────────────────────▼─────────────────────────────────────────────┐  │
+│  │              Model Router                                                  │  │
+│  │  ┌────────────────────────────────────────────────────────────────────┐    │  │  │
+│  │  │  Provider Interface (extensible)                                   │    │  │  │
+│  │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐         │    │  │  │
+│  │  │  │ LM Studio│  │ Ollama   │  │ OpenAI   │  │ Anthropic│ (future)│    │  │  │
+│  │  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘         │    │  │  │
+│  │  └────────────────────────────────────────────────────────────────────┘    │  │  │
+│  └─────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │        LANGUAGE-AGNOSTIC TOOL EXECUTOR                                     │  │
+│  │  - Auto-detect project type (Go, Kotlin, Java, Rust, TS, Python)          │  │  │
+│  │  - Shell commands, file ops, build/test/run                               │  │  │
+│  │  - Git integration (add, commit, diff, status)                            │  │  │
+│  │  - Code formatting (per-language formatters)                              │  │  │
+│  │  - Atomic modifications: ONE function/struct/class at a time              │  │  │
+│  └────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │              State Store                                                   │  │
+│  │  - JSON file                                                               │  │
+│  └────────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 2. Component Design
@@ -86,7 +110,7 @@ type HumanDecision struct {
 
 ### 2.2 Agent Registry (`internal/agent/`)
 
-Each agent is a struct with its own prompt, model config, and execution logic.
+Each agent is a struct with its own prompt, model config, and set of skills.
 
 ```go
 type Agent interface {
@@ -94,23 +118,27 @@ type Agent interface {
 }
 
 type PlannerAgent struct {
-    Model model.Config
-    Prompt PromptTemplate
+    Model   model.Config
+    Prompt  PromptTemplate
+    Skills  []Skill   // Configurable skills for this agent
 }
 
 type CoderAgent struct {
-    Model model.Config
-    Prompt PromptTemplate
+    Model   model.Config
+    Prompt  PromptTemplate
+    Skills  []Skill   // Configurable skills for this agent
 }
 
 type TesterAgent struct {
-    Model model.Config
-    Prompt PromptTemplate
+    Model   model.Config
+    Prompt  PromptTemplate
+    Skills  []Skill   // Configurable skills for this agent
 }
 
 type ReviewerAgent struct {
-    Model model.Config
-    Prompt PromptTemplate
+    Model   model.Config
+    Prompt  PromptTemplate
+    Skills  []Skill   // Configurable skills for this agent
 }
 ```
 
@@ -143,6 +171,9 @@ type Executor struct {
     
     // File operations (atomic: one function/struct/class at a time)
     FileOps *FileOpsExecutor
+    
+    // Git operations
+    Git *GitExecutor
     
     // Auto-detected project executors
     projectType ProjectType
@@ -188,6 +219,9 @@ func DetectProjectType(projectPath string) ProjectType {
        exists(filepath.Join(projectPath, "build.gradle")) {
         return ProjectKotlin
     }
+    if exists(filepath.Join(projectPath, "pom.xml")) {
+        return ProjectJava
+    }
     if exists(filepath.Join(projectPath, "Cargo.toml")) {
         return ProjectRust
     }
@@ -204,25 +238,26 @@ func DetectProjectType(projectPath string) ProjectType {
 
 ## 3. Data Flow
 
-### 3.1 Session Lifecycle
+### 3.1 Session Lifecycle (Single Project)
 
 ```
-1. User creates session via dashboard
-   └─> POST /api/sessions
+1. User initializes project via IDE
+   └─> POST /api/project
    └─> State: INITIALIZED
 
 2. Planner runs (Phase A)
    └─> State: PLANNING
    └─> State: WAITING_FOR_PLAN_APPROVAL
 
-3. User approves plan
-   └─> POST /api/sessions/{id}/approve
+3. User approves plan in IDE
+   └─> POST /api/project/approve
    └─> State: PLANNING_APPROVED
 
 4. Coding loop (Phase B→C→D→E)
    └─> For each atomic unit (function/struct/class):
        - CODING → TESTING → REVIEW → HUMAN_REVIEW
        - If rejected: loop back to CODING
+       - If edited: TESTING → REVIEW → HUMAN_REVIEW
        - If accepted: next unit
 
 5. Session completed
@@ -314,29 +349,162 @@ models:
       temperature: 0.2
       max_tokens: 4096
 
+# Agent Skills Configuration
+agents:
+  planner:
+    skills:
+      - architecture_design
+      - task_breakdown
+      - dependency_mapping
+      - solid_principles
+      - clean_code
+      - business_logic_adherence
+  
+  coder:
+    skills:
+      - function_generation
+      - struct_design
+      - class_creation
+      - solid_principles
+      - clean_code
+      - kiss_principle
+      - no_repetition
+  
+  tester:
+    skills:
+      - unit_testing
+      - integration_testing
+      - coverage_analysis
+      - test_generation
+  
+  reviewer:
+    skills:
+      - style_check
+      - logic_review
+      - security_audit
+      - solid_principles
+      - clean_code
+      - business_logic_adherence
+
+# Skills Library (predefined skills with descriptions)
+skills:
+  solid_principles:
+    description: "Follow SOLID principles (Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion)"
+    type: knowledge
+    
+  clean_code:
+    description: "Write clean, readable, maintainable code with meaningful names and proper structure"
+    type: knowledge
+    
+  kiss_principle:
+    description: "Keep It Simple, Stupid - prefer simple solutions over complex ones"
+    type: knowledge
+    
+  no_repetition:
+    description: "Avoid code duplication - extract common patterns into reusable components"
+    type: knowledge
+    
+  business_logic_adherence:
+    description: "Always follow the business logic defined in the business_logic.md file"
+    type: knowledge
+    requires_file: "business_logic.md"
+    
+  architecture_design:
+    description: "Design system architecture with clear module boundaries and dependencies"
+    type: knowledge
+    
+  task_breakdown:
+    description: "Break down complex requirements into manageable atomic units (functions, structs, classes)"
+    type: knowledge
+    
+  dependency_mapping:
+    description: "Map and manage dependencies between components"
+    type: knowledge
+    
+  function_generation:
+    description: "Generate well-structured functions with proper signatures and documentation"
+    type: knowledge
+    
+  struct_design:
+    description: "Design appropriate data structures with proper fields and methods"
+    type: knowledge
+    
+  class_creation:
+    description: "Create well-encapsulated classes with proper constructors and methods"
+    type: knowledge
+    
+  unit_testing:
+    description: "Write comprehensive unit tests for individual functions and methods"
+    type: knowledge
+    
+  integration_testing:
+    description: "Write integration tests that verify component interactions"
+    type: knowledge
+    
+  coverage_analysis:
+    description: "Analyze test coverage and identify gaps"
+    type: knowledge
+    
+  test_generation:
+    description: "Generate test cases based on function signatures and business logic"
+    type: knowledge
+    
+  style_check:
+    description: "Check code style consistency and adherence to language conventions"
+    type: knowledge
+    
+  logic_review:
+    description: "Review code logic for correctness, edge cases, and potential bugs"
+    type: knowledge
+    
+  security_audit:
+    description: "Review code for security vulnerabilities and best practices"
+    type: knowledge
+
 tools:
   shell_timeout: 30s
   git_enabled: true
-  auto_detect_project: true  # Auto-detect Go, Kotlin, Rust, TS, Python, etc.
+  auto_detect_project: true  # Auto-detect Go, Kotlin, Java, Rust, TS, Python, etc.
+  code_formatting: true      # Auto-format code after generation
   
   # Language-specific settings (optional overrides)
   languages:
     go:
       test_runner: "go test ./..."
       format_runner: "go fmt ./..."
+      build_runner: "go build ./..."
     kotlin:
       test_runner: "./gradlew test"
       format_runner: "./gradlew ktlintFormat"
+      build_runner: "./gradlew build"
+    java:
+      test_runner: "./gradlew test"
+      format_runner: "./gradlew spotlessApply"
+      build_runner: "./gradlew build"
     rust:
       test_runner: "cargo test"
       format_runner: "cargo fmt"
+      build_runner: "cargo build"
     typescript:
       test_runner: "npx jest"
       format_runner: "npx prettier --write"
+      build_runner: "npx tsc"
+    python:
+      test_runner: "pytest"
+      format_runner: "black ."
+      build_runner: "python -m py_compile"
 
 state:
   store_type: "json"
   json_path: "~/.local/share/mini-orca"
+
+# Theme configuration (dark by default, extensible)
+theme:
+  default: "dark"
+  available:
+    - "dark"
+    # - "light"      # Future
+    # - "high-contrast" # Future
 ```
 
 ## 5. Directory Structure (After Refactor)
@@ -358,7 +526,10 @@ mini-orca/
 │   │   ├── planner.go           # Planner agent
 │   │   ├── coder.go             # Coder agent
 │   │   ├── tester.go            # Tester agent
-│   │   └── reviewer.go          # Reviewer agent
+│   │   ├── reviewer.go          # Reviewer agent
+│   │   └── skills/              # NEW: Skills system
+│   │       ├── skills.go        # Skill definitions
+│   │       └── library.go       # Predefined skills
 │   ├── model/                   # NEW: Model abstraction
 │   │   ├── router.go            # Provider router
 │   │   ├── provider.go          # Provider interface
@@ -372,21 +543,36 @@ mini-orca/
 │   │   ├── executor.go          # Main executor
 │   │   ├── shell.go             # Shell commands
 │   │   ├── file_ops.go          # Atomic file operations
+│   │   ├── git_ops.go           # Git integration
+│   │   ├── formatter.go         # Code formatting
 │   │   └── project_types.go     # Project detection & executors
 │   │       ├── go_executor.go
 │   │       ├── kotlin_executor.go
+│   │       ├── java_executor.go
 │   │       ├── rust_executor.go
-│   │       └── typescript_executor.go
+│   │       ├── typescript_executor.go
+│   │       └── python_executor.go
 │   └── api/
 │       ├── router.go
 │       ├── handlers/
-│       │   ├── session.go
-│       │   ├── approve.go
-│       │   └── config.go
+│       │   ├── project.go       # Project management
+│       │   ├── approve.go       # Approval handling
+│       │   ├── config.go        # Model/skills config
+│       │   └── insertion.go     # Standalone function insertion
 │       └── templates/
-│           ├── dashboard.html   # HTMX dashboard
-│           ├── workstream.html  # Phase content
-│           └── ...
+│           ├── base.html        # Base layout
+│           ├── ide.html         # IDE dashboard
+│           ├── components/
+│           │   ├── file-tree.html
+│           │   ├── phase-tracker.html
+│           │   └── activity-log.html
+│           └── phases/
+│               ├── planning.html
+│               ├── planning-review.html
+│               ├── coding.html
+│               ├── testing.html
+│               ├── review.html
+│               └── human-review.html
 ├── config.yaml                  # NEW: Default config
 ├── go.mod
 └── go.sum
@@ -398,12 +584,15 @@ mini-orca/
 |-----------|------|------|-------|
 | State Machine | `internal/operation/engine.go` | `internal/orchestrator/` | Extract to new package |
 | Agent | `internal/agent/client.go` | `internal/agent/*.go` | Split into specialized agents |
+| Skills | None | `internal/agent/skills/` | NEW: Configurable skills system |
 | Model | Hardcoded in client.go | `internal/model/` | Interface-first, LM Studio only initially |
 | API | `internal/api/*.go` | `internal/api/handlers/` | Split handlers |
-| Frontend | HTMX templates (keep) | `internal/api/templates/` | Enhance with Alpine.js |
+| Frontend | HTMX templates (keep) | `internal/api/templates/` | Enhance to IDE-like layout |
 | State Store | JSON file | JSON file (keep) | No SQLite needed |
 | Tools | Language-specific | Language-agnostic | Auto-detect + universal shell |
 | Auth | None | None | Local environment |
+| Git | None | `internal/tools/git_ops.go` | NEW: Git integration |
+| Formatting | None | `internal/tools/formatter.go` | NEW: Code formatting |
 
 ## 7. Dependencies
 
