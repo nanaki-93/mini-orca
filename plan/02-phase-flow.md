@@ -5,12 +5,14 @@
 ### Phase A: PLANNING
 
 **Agent:** Planner  
+**Skills:** `architecture_design`, `task_breakdown`, `dependency_mapping`, `solid_principles`, `clean_code`, `business_logic_adherence`  
 **Purpose:** Analyze user specifications and project context to create an actionable implementation plan.
 
 **Inputs:**
 - `project_goal` — User's description of what they want to build
 - `project_path` — Target directory
 - `existing_code` — Current project structure (if any)
+- `business_logic_file` — Optional file containing business logic specs
 - `constraints` — Optional user constraints (language, frameworks, etc.)
 
 **Planner Output:**
@@ -44,19 +46,21 @@ const (
 )
 ```
 
-**User Gate:** ✅ REQUIRED — User reviews and confirms the plan before proceeding.
+**User Gate:** ✅ REQUIRED — User reviews and confirms the plan in the IDE before proceeding.
 
 ---
 
 ### Phase B: CODING
 
 **Agent:** Coder  
+**Skills:** `function_generation`, `struct_design`, `class_creation`, `solid_principles`, `clean_code`, `kiss_principle`, `no_repetition`  
 **Purpose:** Implement ONE atomic unit (function, struct, or class) based on the approved plan.
 
 **Inputs:**
 - `plan` — The approved plan from Phase A
 - `next_unit` — The next atomic unit to implement
 - `current_codebase` — Current project state (files, existing units)
+- `business_logic_file` — Business logic specs (if provided)
 - `previous_feedback` — Any feedback from previous iterations
 
 **Coder Output:**
@@ -66,7 +70,7 @@ type CodeOutput struct {
     UnitType   string `json:"unit_type"`   // "function" | "struct" | "class"
     UnitName   string `json:"unit_name"`   // Name of the unit
     TargetFile string `json:"target_file"`
-    Code       string `json:"code"`        // The complete unit code
+    Code       string `json:"code"`        // The complete unit code (formatted)
     LinesAdded int    `json:"lines_added"`
 }
 ```
@@ -82,6 +86,7 @@ type CodeOutput struct {
 ### Phase C: TESTING
 
 **Agent:** Tester  
+**Skills:** `unit_testing`, `integration_testing`, `coverage_analysis`, `test_generation`  
 **Purpose:** Run automated tests, analyze results, and report issues.
 
 **Inputs:**
@@ -92,13 +97,13 @@ type CodeOutput struct {
 **Tester Output:**
 ```go
 type TestReport struct {
-    UnitID     string   `json:"unit_id"`
-    Passed     bool     `json:"passed"`
-    Tests      []Test   `json:"tests"`
-    Errors     []string `json:"errors"`
-    Warnings   []string `json:"warnings"`
-    Coverage   float64  `json:"coverage"`
-    Duration   string   `json:"duration"`
+    UnitID      string   `json:"unit_id"`
+    Passed      bool     `json:"passed"`
+    Tests       []Test   `json:"tests"`
+    Errors      []string `json:"errors"`
+    Warnings    []string `json:"warnings"`
+    Coverage    float64  `json:"coverage"`
+    Duration    string   `json:"duration"`
     Suggestions []string `json:"suggestions"` // For the agent to improve
 }
 
@@ -120,13 +125,15 @@ type Test struct {
 
 ### Phase D: REVIEW
 
-**Agent:** Reviewer (can be same as Planner)  
+**Agent:** Reviewer  
+**Skills:** `style_check`, `logic_review`, `security_audit`, `solid_principles`, `clean_code`, `business_logic_adherence`  
 **Purpose:** Code review of the atomic unit — quality, style, correctness, security, and best practices.
 
 **Inputs:**
 - `code_output` — The code from Phase B
 - `test_report` — Results from Phase C
 - `plan` — The original approved plan
+- `business_logic_file` — Business logic specs (if provided)
 - `coding_standards` — Project-specific coding standards
 
 **Reviewer Output:**
@@ -156,29 +163,29 @@ type Issue struct {
 
 ---
 
-### Phase E: HUMAN REVIEW
+### Phase E: HUMAN REVIEW (IDE)
 
 **Agent:** Human (Developer)  
-**Purpose:** Final review and approval of the atomic unit by the developer.
+**Purpose:** Final review and approval of the atomic unit by the developer in the IDE.
 
 **Inputs:**
 - `code_output` — The code from Phase B
 - `test_report` — Results from Phase C
 - `review_report` — Results from Phase D
 
-**Human Decision:**
-```go
-type HumanDecision struct {
-    Approved bool   `json:"approved"`
-    Feedback string `json:"feedback"` // Optional feedback for regeneration
-}
-```
+**Human Actions in IDE:**
 
-**User Gate:** ✅ REQUIRED — User must explicitly accept or reject.
+| Action | Behavior |
+|--------|----------|
+| **Accept** | Write unit to file, proceed to next unit (loop back to Phase B) |
+| **Reject** | Loop back to Phase B (no feedback, just reject) |
+| **Edit Function** | Edit just the generated function, then → Testing → Review → Human Review |
+| **Edit Full File** | Edit the entire target file (with new unit inserted), then → Testing → Review → Human Review |
 
 **Loop Behavior:**
 - If accepted → Write unit to file, proceed to next unit (loop back to Phase B)
-- If rejected → Loop back to Phase B with user feedback
+- If rejected → Loop back to Phase B (no feedback loop)
+- If edited → Resubmit → Testing → Review → Human Review (cycle continues)
 
 ---
 
@@ -194,13 +201,16 @@ type HumanDecision struct {
                     ┌──────────────────────────────────────────────────┐
                     │                    PLANNING                       │
                     │  Agent: Planner                                   │
+                    │  Skills: architecture_design, task_breakdown,     │
+                    │            dependency_mapping, solid_principles,  │
+                    │            clean_code, business_logic_adherence   │
                     │  Action: Generate implementation plan             │
                     └──────────────────────┬───────────────────────────┘
                                            │
                                            ▼
                     ┌──────────────────────────────────────────────────┐
                     │              WAITING_FOR_PLAN_APPROVAL            │
-                    │  User reviews plan                                │
+                    │  User reviews plan in IDE                         │
                     │  ┌─────────────┐    ┌─────────────┐             │
                     │  │   ACCEPT    │    │   REJECT    │             │
                     │  └──────┬──────┘    └──────┬──────┘             │
@@ -220,14 +230,18 @@ type HumanDecision struct {
   ┌───────────────┐  │  │          │                             │   │
   │ NEXT UNIT     │◄─┘  │  CODING   │─────────────────────────────┤   │
   │ or COMPLETED  │      │  Agent: Coder                          │   │
-  └───────────────┘      │  Action: Write ONE function/struct/class │   │
-                    ┌────┤  Gate: None                            │   │
+  │               │      │  Skills: function_generation,          │   │
+  └───────────────┘      │  struct_design, class_creation,        │   │
+                    ┌────┤  solid_principles, clean_code,         │   │
+                    │    │  kiss_principle, no_repetition         │   │
                     │    │  └─────────────────────────────────────┘   │
                     │    │                                           │   │
                     │    ▼                                           │   │
                     │  ┌───────────────────────────────────────────┐   │
                     │  │              TESTING                      │   │
                     │  │  Agent: Tester                            │   │
+                    │  │  Skills: unit_testing, integration_testing,│   │
+                    │  │          coverage_analysis, test_generation│   │
                     │  │  Action: Run tests, analyze results       │   │
                     │  │  Gate: Auto-pass/fail                     │   │
                     │  └────┬──────────────────────────────────────┘   │
@@ -239,6 +253,9 @@ type HumanDecision struct {
                     │  ┌───────────────────────────────────────────┐   │
                     │  │              CODE_REVIEW                    │   │
                     │  │  Agent: Reviewer                          │   │
+                    │  │  Skills: style_check, logic_review,       │   │
+                    │  │          security_audit, solid_principles,│   │
+                    │  │          clean_code, business_logic_...   │   │
                     │  │  Action: Quality/style/security review    │   │
                     │  │  Gate: Auto-pass/fail                     │   │
                     │  └────┬──────────────────────────────────────┘   │
@@ -249,26 +266,39 @@ type HumanDecision struct {
                     │    ▼       │                                     │
                     │  ┌───────────────────────────────────────────┐   │
                     │  │          WAITING_FOR_HUMAN_APPROVAL       │   │
-                    │  │  User reviews atomic unit                 │   │
+                    │  │  IDE: User reviews atomic unit            │   │
                     │  │  ┌─────────────┐    ┌─────────────┐       │   │
                     │  │  │   ACCEPT    │    │   REJECT    │       │   │
+                    │  │  │ (write to   │    │ (loop back  │       │   │
+                    │  │  │  file)      │    │  to coding) │       │   │
                     │  │  └──────┬──────┘    └──────┬──────┘       │   │
-                    │  └─────────┼──────────────────┼───────────────┘
-                    │            │                  │
-                    │            ▼                  │
-                    │  ┌──────────────────┐        │
-                    │  │     COMMIT       │        │
-                    │  │  Unit written to │        │
-                    │  │  target file     │        │
-                    │  └────────┬─────────┘        │
-                    │           │                  │
-                    └───────────┼──────────────────┘
-                                │
-                                ▼
-                    ┌──────────────────────────────────────────────────┐
-                    │                    COMPLETED                      │
-                    │  (All atomic units in plan have been implemented)│
-                    └──────────────────────────────────────────────────┘
+                    │  │         │                   │              │   │
+                    │  │  ┌──────▼──────┐  ┌────────▼────────┐     │   │
+                    │  │  │   EDIT      │  │                 │     │   │
+                    │  │  │ (edit +     │  │                 │     │   │
+                    │  │  │  resubmit)  │  │                 │     │   │
+                    │  │  └──────┬──────┘  │                 │     │   │
+                    │  │         │         │                 │     │   │
+                    │  │         ▼         ▼                 │     │   │
+                    │  │  ┌──────────────────────────────────┐ │     │   │
+                    │  │  │ TESTING → REVIEW → HUMAN REVIEW  │ │     │   │
+                    │  │  └──────────────────────────────────┘ │     │   │
+                    │  └─────────┼─────────────────────────────┘     │   │
+                    │            │                                    │   │
+                    │            ▼                                    │   │
+                    │  ┌──────────────────┐                         │   │
+                    │  │     COMMIT       │                         │   │
+                    │  │  Unit written to │                         │   │
+                    │  │  target file     │                         │   │
+                    │  └────────┬─────────┘                         │   │
+                    │           │                                    │   │
+                    └───────────┼────────────────────────────────────┘   │
+                                │                                       │
+                                ▼                                       │
+                    ┌──────────────────────────────────────────────────┐   │
+                    │                    COMPLETED                      │   │
+                    │  (All atomic units in plan have been implemented)│   │
+                    └──────────────────────────────────────────────────┘   │
 ```
 
 ## 3. State Machine Implementation
@@ -398,6 +428,7 @@ func (pr *PhaseRouter) runCodingLoop(ctx context.Context) error {
 | `CODE_REVIEW` | `WAITING_FOR_HUMAN_APPROVAL` | Review passes |
 | `WAITING_FOR_HUMAN_APPROVAL` | `COMMIT` | User accepts |
 | `WAITING_FOR_HUMAN_APPROVAL` | `CODING` | User rejects |
+| `WAITING_FOR_HUMAN_APPROVAL` | `TESTING` | User edits + submits |
 | `COMMIT` | `CODING` | Auto (next unit) |
 | `CODING` | `COMPLETED` | No more units |
 

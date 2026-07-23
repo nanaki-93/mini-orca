@@ -2,7 +2,7 @@
 
 ## Overview
 
-This folder contains the complete plan to evolve **mini-orca** from a basic single-agent orchestrator into a **multi-agent, multi-phase, configurable orchestration platform** with a lightweight HTMX frontend.
+This folder contains the complete plan to evolve **mini-orca** from a basic single-agent orchestrator into a **multi-agent, multi-phase, configurable IDE-like orchestration platform** with a lightweight HTMX frontend.
 
 ---
 
@@ -21,42 +21,88 @@ This folder contains the complete plan to evolve **mini-orca** from a basic sing
 ## Target State (v2.0)
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    LIGHT HTMX FRONTEND DASHBOARD                     │
-│  (HTMX + Alpine.js + TailwindCSS)                                   │
-│  - Real-time state visualization                                    │
-│  - Per-phase code review UI                                         │
-│  - Model configuration panel                                        │
-│  - Session management & history                                     │
-└────────────────────────┬────────────────────────────────────────────┘
-                         │ REST API
-┌────────────────────────▼────────────────────────────────────────────┐
-│                        ORCHESTRATOR DAEMON                           │
-│                                                                      │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐           │
-│  │ PLANNER  │→│ CODER    │→│ TESTER   │→│ REVIEWER │           │
-│  │ Agent    │  │ Agent    │  │ Agent    │  │ Agent    │           │
-│  │ (config) │  │ (config) │  │ (config) │  │ (config) │           │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘           │
-│         │              │              │              │              │
-│         ▼              ▼              ▼              ▼              │
-│  ┌──────────────────────────────────────────────────────────┐       │
-│  │              HUMAN REVIEW GATE                           │       │
-│  │        (Accept / Reject / Request Changes)               │       │
-│  └──────────────────────────────────────────────────────────┘       │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────┐       │
-│  │         MODEL ROUTER (LM Studio first, extensible)       │       │
-│  │  - Provider interface (ready for Ollama, OpenAI, etc.)   │       │
-│  │  - Per-phase model, temperature, max_tokens              │       │
-│  └──────────────────────────────────────────────────────────┘       │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────┐       │
-│  │         LANGUAGE-AGNOSTIC TOOL EXECUTOR                  │       │
-│  │  - Detect project type automatically                     │       │
-│  │  - Shell commands, file ops, build/test/run              │       │
-│  └──────────────────────────────────────────────────────────┘       │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                    IDE-LIKE HTMX FRONTEND                                        │
+│                                                                                  │
+│  ┌──────────────┐  ┌──────────────────────────────────────────────────────────┐  │
+│  │  FILE TREE   │  │  MAIN WORKSPACE (IDE-like)                                │  │
+│  │              │  │                                                           │  │
+│  │  📁 src/     │  │  ┌─────────────────────────────────────────────────────┐  │  │
+│  │  📁 auth/    │  │  │  Code Editor (single function OR full file)          │  │  │
+│  │  📁 models/  │  │  │                                                     │  │  │
+│  │  📄 main.go  │  │  │  func ValidateToken(token string) bool {            │  │  │
+│  │  📄 user.go  │  │  │      // generated code...                           │  │  │
+│  │  📄 ...      │  │  │  }                                                  │  │  │
+│  │              │  │  │                                                     │  │  │
+│  │  [Insert]    │  │  │  [Edit Function] [Edit Full File] [Submit]          │  │  │
+│  │  [Write Fn]  │  │  └─────────────────────────────────────────────────────┘  │  │
+│  └──────────────┘  │                                                           │  │
+│                    │  ┌─────────────────────────────────────────────────────┐  │  │
+│                    │  │  Phase Tracker: [Plan] → [Code] → [Test] → [Rev] → [Human] │  │
+│                    │  └─────────────────────────────────────────────────────┘  │  │
+│                    │                                                           │  │
+│                    │  ┌─────────────────────────────────────────────────────┐  │  │
+│                    │  │  Activity Log (scrollable)                          │  │  │
+│                    │  │  [12:34] Planning started                           │  │  │
+│                    │  │  [12:35] Plan generated                             │  │  │
+│                    │  │  [12:36] Code generated: ValidateToken              │  │  │
+│                    │  └─────────────────────────────────────────────────────┘  │  │
+│                    └───────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────────────────┐  │
+│  │  HEADER: Project Path | Goal | Model Config | Git Status | [New Session]    │  │
+│  └──────────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                            │ REST API
+┌───────────────────────────▼───────────────────────────────────────────────────────┐
+│                        ORCHESTRATOR DAEMON                                         │
+│                                                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │                    API Server (Go)                                          │  │
+│  │  - REST endpoints for session management                                   │  │
+│  │  - Server-side HTML rendering (HTMX templates)                             │  │
+│  │  - No authentication (local environment)                                   │  │
+│  └──────────────────────────────┬─────────────────────────────────────────────┘  │  │
+│                                 │                                                 │  │
+│  ┌──────────────────────────────▼─────────────────────────────────────────────┐  │
+│  │               Orchestrator Engine                                          │  │
+│  │  - Phase Router (manages A→B→C→D→E flow)                                  │  │  │
+│  │  - Human Gate Manager (handles user approvals)                             │  │  │
+│  │  - State Manager (persistent state store)                                  │  │  │
+│  │  - Insertion Manager (handles standalone function insertion)               │  │  │
+│  └──────────────────────────────┬─────────────────────────────────────────────┘  │  │
+│                                 │                                                 │  │
+│  ┌──────────────────────────────▼─────────────────────────────────────────────┐  │
+│  │              Agent Registry                                                │  │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐                     │  │  │
+│  │  │ Planner  │ │  Coder   │ │  Tester  │ │ Reviewer │                     │  │  │
+│  │  │ +Skills  │ │ +Skills  │ │ +Skills  │ │ +Skills  │                     │  │  │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘                     │  │  │
+│  └──────────────────────────────┬─────────────────────────────────────────────┘  │  │
+│                                 │                                                 │  │
+│  ┌──────────────────────────────▼─────────────────────────────────────────────┐  │
+│  │              Model Router                                                  │  │
+│  │  ┌────────────────────────────────────────────────────────────────────┐    │  │  │
+│  │  │  Provider Interface (extensible)                                   │    │  │  │
+│  │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐         │    │  │  │
+│  │  │  │ LM Studio│  │ Ollama   │  │ OpenAI   │  │ Anthropic│ (future)│    │  │  │
+│  │  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘         │    │  │  │
+│  │  └────────────────────────────────────────────────────────────────────┘    │  │  │
+│  └─────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │        LANGUAGE-AGNOSTIC TOOL EXECUTOR                                     │  │
+│  │  - Auto-detect project type (Go, Kotlin, Java, Rust, TS, Python)          │  │  │
+│  │  - Shell commands, file ops, build/test/run                               │  │  │
+│  │  - Git integration (add, commit, diff, status)                            │  │  │
+│  │  - Code formatting (per-language formatters)                              │  │  │
+│  │  - Atomic modifications: ONE function/struct/class at a time              │  │  │
+│  └────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                  │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │              State Store                                                   │  │
+│  │  - JSON file                                                               │  │
+│  └────────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -64,55 +110,57 @@ This folder contains the complete plan to evolve **mini-orca** from a basic sing
 ## Phase Flow (5 Stages)
 
 ```
-User Input
+User Input (Goal + Project Path)
     │
     ▼
-┌─────────────────────────────────────────────────────────────┐
-│  STAGE A — PLANNING                                         │
-│  Agent: Planner                                               │
-│  Action: Analyze user specs + project context → generate plan │
-│  Gate:  User reviews & CONFIRMS the plan                     │
-│  ▼                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│  STAGE A — PLANNING                                                                  │
+│  Agent: Planner (with Skills: architecture, task_breakdown, dependency_mapping)      │
+│  Action: Analyze user specs + business logic file → generate plan with atomic units │
+│  Gate:  User reviews and CONFIRMS the plan                                           │
+│  ▼                                                                                   │
+└──────────────────────────────────────────────────────────────────────────────────────┘
     │ (confirmed)
     ▼
-┌─────────────────────────────────────────────────────────────┐
-│  STAGE B — CODING                                           │
-│  Agent: Coder                                                 │
-│  Action: Write ONE function / struct / class                 │
-│  Gate:  Auto-pass (no user gate here)                        │
-│  ▼                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│  STAGE B — CODING                                                                    │
+│  Agent: Coder (with Skills: function_generation, struct_design, class_creation)      │
+│  Action: Write ONE function / struct / class based on the approved plan              │
+│  Gate:  Auto-pass → Testing                                                          │
+│  ▼                                                                                   │
+└──────────────────────────────────────────────────────────────────────────────────────┘
     │
     ▼
-┌─────────────────────────────────────────────────────────────┐
-│  STAGE C — TESTING                                          │
-│  Agent: Tester                                                │
-│  Action: Run tests, analyze results, report issues            │
-│  Gate:  Auto-pass or fail (loop back to Coding if fails)     │
-│  ▼                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│  STAGE C — TESTING                                                                   │
+│  Agent: Tester (with Skills: unit_testing, integration_testing, coverage_analysis)   │
+│  Action: Run tests, analyze results, report issues                                   │
+│  Gate:  Auto-pass or fail (loop back to Coding if fails)                             │
+│  ▼                                                                                   │
+└──────────────────────────────────────────────────────────────────────────────────────┘
     │ (tests pass)
     ▼
-┌─────────────────────────────────────────────────────────────┐
-│  STAGE D — REVIEW                                           │
-│  Agent: Reviewer (can be same as Planner)                    │
-│  Action: Code review — quality, style, correctness           │
-│  Gate:  Pass or fail (loop back to Coding if fails)         │
-│  ▼                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│  STAGE D — REVIEW                                                                    │
+│  Agent: Reviewer (with Skills: style_check, logic_review, security_audit)            │
+│  Action: Code review — quality, style, correctness, SOLID, clean code                │
+│  Gate:  Pass or fail (loop back to Coding if fails)                                  │
+│  ▼                                                                                   │
+└──────────────────────────────────────────────────────────────────────────────────────┘
     │ (review passes)
     ▼
-┌─────────────────────────────────────────────────────────────┐
-│  STAGE E — HUMAN REVIEW                                     │
-│  Human: Developer                                             │
-│  Action: Review final code, accept or reject                 │
-│  Gate:  Accept → commit & continue; Reject → loop back      │
-│  ▼                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│  STAGE E — HUMAN REVIEW (IDE)                                                        │
+│  Human: Developer                                                                    │
+│  Action: Review final code in IDE editor, accept or reject                           │
+│          - Accept → commit to file, continue to next unit                            │
+│          - Reject → loop back to Coding (no feedback loop)                           │
+│          - Edit → modify code, resubmit → Testing → Review → Human Review           │
+│  ▼                                                                                   │
+└──────────────────────────────────────────────────────────────────────────────────────┘
     │ (accepted)
     ▼
-  Next function/struct/class (loop B→C→D→E) or COMPLETED
+  Next atomic unit (loop B→C→D→E) or COMPLETED
 ```
 
 ---
@@ -121,14 +169,21 @@ User Input
 
 | Feature | Description |
 |---------|-------------|
-| **HTMX Frontend** | Lightweight, no build step, server-rendered templates with HTMX for interactivity |
-| **Configurable Models** | Each phase (Planner, Coder, Tester, Reviewer) can use a different model |
+| **IDE-like HTMX Frontend** | File tree + code editor + phase tracker — all via HTMX, no build step |
+| **Configurable Agent Skills** | Each agent has a unique, configurable set of skills (tools + knowledge) |
+| **Skills Library** | Predefined skills: SOLID, Clean Code, KISS, No Repetition, Business Logic |
+| **Configurable Models** | Each phase uses a different model (LM Studio first, interface for others) |
 | **Multi-Agent Architecture** | Dedicated agents for each phase with specialized prompts |
-| **LM Studio First** | Starts with LM Studio, but interface is built for easy provider extension |
-| **Language-Agnostic Tools** | Tool executor detects project type and runs appropriate commands |
+| **LM Studio First** | Starts with LM Studio, interface built for easy provider extension |
+| **Language-Agnostic Tools** | Auto-detects project type, runs appropriate commands |
 | **Atomic Modifications** | Each agent modifies exactly ONE function, struct, or class per cycle |
-| **No Authentication** | Local-only environment, no auth overhead |
-| **Native Kotlin Future** | Architecture designed to support a Kotlin-native client (see `kotlin-native.md`) |
+| **Git Integration** | Built-in git add, commit, diff, status |
+| **Standalone Function Writer** | Write a function outside the flow, insert into any file at any position |
+| **Single Project** | One project at a time (no multi-session) |
+| **No Authentication** | Local environment only |
+| **Dark Theme** | Dark theme by default, extensible for more themes |
+| **Formatted Code** | Code is auto-formatted by language-specific formatters |
+| **Native Kotlin Future** | Architecture designed to support a Kotlin-native client |
 
 ---
 
@@ -139,9 +194,10 @@ plan/
 ├── README.md                  ← This file (overview)
 ├── 01-architecture.md         ← System architecture & component design
 ├── 02-phase-flow.md           ← Detailed phase flow & state machine
-├── 03-model-config.md         ← Model configuration system (LM Studio + extensible interface)
-├── 04-dashboard.md            ← HTMX frontend design
-├── 05-implementation-plan.md  ← Step-by-step implementation roadmap
+├── 03-agent-skills.md         ← NEW: Agent skills system (tools + knowledge)
+├── 04-model-config.md         ← Model configuration system (LM Studio + extensible)
+├── 05-ide-dashboard.md        ← REWRITTEN: IDE-like HTMX frontend
+├── 06-implementation-plan.md  ← Updated: Step-by-step implementation roadmap
 └── kotlin-native.md           ← Future: Kotlin native app plan
 ```
 
@@ -153,8 +209,8 @@ plan/
 # 1. Start the daemon with model config
 mini-orca daemon --config config.yaml
 
-# 2. Open the dashboard
-open http://localhost:8080/dashboard
+# 2. Open the IDE dashboard
+open http://localhost:8080/ide
 
-# 3. Enter your project goal → Review plan → Approve → Watch agents work!
+# 3. Enter your project goal → Review plan → Approve → Code in IDE → Accept/Reject
 ```
