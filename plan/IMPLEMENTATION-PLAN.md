@@ -9,12 +9,12 @@
 |-----------|--------|----------|
 | **1. Model Abstraction & LM Studio** | ✅ Complete | 75% (3/4 tasks) |
 | **2. Multi-Agent Architecture with Skills** | ✅ Complete | 100% (7/7 tasks) |
-| **3. Language-Agnostic Tool Executor** | ⏳ Pending | 0% |
+| **3. Language-Agnostic Tool Executor** | ✅ Complete | 100% (7/7 tasks) |
 | **4. Orchestrator & State Machine** | ⏳ Pending | 0% |
 | **5. IDE-like HTMX Frontend** | ⏳ Pending | 0% |
 | **6. Polish & Kotlin Future** | ⏳ Pending | 0% |
 
-**Last Updated:** Implementation in progress
+**Last Updated:** Milestone 3 completed — all builds passing
 
 ---
 
@@ -200,57 +200,66 @@ mini-orca/
 
 ---
 
-### Milestone 3: Language-Agnostic Tool Executor (Week 2-3)
+### Milestone 3: Language-Agnostic Tool Executor (Week 2-3) ✅ COMPLETED
 **Goal:** Redesign tools to be language-agnostic with auto-detection and git integration
 
 #### Tasks
-- [ ] **3.1** Create `internal/tools/` package structure
-  - [ ] `executor.go` — Main executor with auto-detection
-  - [ ] `shell.go` — Universal shell command executor
-  - [ ] `file_ops.go` — Atomic file operations (ONE unit at a time)
-  - [ ] `git_ops.go` — Git integration (add, commit, diff, status)
-  - [ ] `formatter.go` — Code formatting (per-language)
-  - [ ] `project_types.go` — Project type detection
+- [x] **3.1** Create `internal/tools/` package structure
+  - [x] `executor.go` — Main executor with auto-detection
+  - [x] `shell.go` — Universal shell command executor
+  - [x] `file_ops.go` — Atomic file operations (ONE unit at a time)
+  - [x] `git_ops.go` — Git integration (add, commit, diff, status)
+  - [x] `formatter.go` — Code formatting (per-language)
+  - [x] `project_types.go` — Project type detection
 
-- [ ] **3.2** Implement project type detection
-  - [ ] Detect: Go, Kotlin, Java, Rust, TypeScript, Python
-  - [ ] `DetectProjectType(path string) ProjectType`
+- [x] **3.2** Implement project type detection
+  - [x] Detect: Go, Kotlin, Java, Rust, TypeScript, Python
+  - [x] `DetectProjectType(path string) ProjectType`
 
-- [ ] **3.3** Implement language-specific executors
-  - [ ] `go_executor.go` — `go test`, `go fmt`, `go build`
-  - [ ] `kotlin_executor.go` — `./gradlew test`, `ktlint`
-  - [ ] `java_executor.go` — `./gradlew test`, `spotless`
-  - [ ] `rust_executor.go` — `cargo test`, `cargo fmt`
-  - [ ] `typescript_executor.go` — `npx jest`, `npx prettier`
-  - [ ] `python_executor.go` — `pytest`, `black`
+- [x] **3.3** Implement language-specific executors
+  - [x] `executor.go` — Unified executor with per-language dispatch
+    - [x] Go: `go test`, `go fmt`, `go build`
+    - [x] Kotlin: `./gradlew test`, `ktlint`
+    - [x] Java: `./gradlew test`, `spotless`
+    - [x] Rust: `cargo test`, `cargo fmt`
+    - [x] TypeScript: `npx jest`, `npx prettier`
+    - [x] Python: `pytest`, `black`
 
-- [ ] **3.4** Implement atomic file operations
-  - [ ] `AppendFunctionToFile()` — Append ONE function
-  - [ ] `WriteStructToFile()` — Write ONE struct
-  - [ ] `WriteClassToFile()` — Write ONE class
-  - [ ] `ReadFile()` — Read file content
-  - [ ] All operations target ONE atomic unit
+- [x] **3.4** Implement atomic file operations
+  - [x] `AppendFunctionToFile()` — Append ONE function
+  - [x] `WriteStructToFile()` — Write ONE struct
+  - [x] `WriteClassToFile()` — Write ONE class
+  - [x] `ReadFile()` — Read file content
+  - [x] `ReplaceFunction()` — Replace existing function
+  - [x] All operations target ONE atomic unit
+  - [x] Atomic writes (temp file + rename)
 
-- [ ] **3.5** Implement Git operations
-  - [ ] `GitAdd(path string)` — Add file to git
-  - [ ] `GitCommit(message string)` — Commit changes
-  - [ ] `GitDiff(path string)` — Show diff
-  - [ ] `GitStatus()` — Show git status
+- [x] **3.5** Implement Git operations
+  - [x] `GitAdd(path string)` — Add file to git
+  - [x] `GitCommit(message string)` — Commit changes
+  - [x] `GitDiff(path string)` — Show diff
+  - [x] `GitStatus()` — Show git status
+  - [x] `GitLog(n int)` — Show last n commits
+  - [x] `GitBranch()` — Get current branch
+  - [x] `CommitAtomicUnit()` — Commit with unit ID tag
 
-- [ ] **3.6** Implement code formatting
-  - [ ] `FormatCode(path string)` — Format using language formatter
-  - [ ] Auto-format after code generation
+- [x] **3.6** Implement code formatting
+  - [x] `FormatFile(path string)` — Format using language formatter
+  - [x] `FormatAll()` — Format all source files
+  - [x] `FormatAfterCode()` — Auto-format after code generation
 
-- [ ] **3.7** Update daemon to use new tool executor
-  - [ ] `cmd/daemon/main.go`
-  - [ ] Wire up language-agnostic executor
+- [x] **3.7** Update daemon to use new tool executor
+  - [x] `cmd/daemon/main.go` — Wire up language-agnostic executor
+  - [x] Initialize shell, file, git, and formatter tools
+  - [x] Display capabilities on startup
 
 #### Deliverables
-- Language-agnostic tool executor
-- Auto-detection of project type
-- Git integration (add, commit, diff, status)
-- Code formatting
-- Atomic file operations (one function/struct/class at a time)
+- ✅ Language-agnostic tool executor
+- ✅ Auto-detection of project type (6 languages)
+- ✅ Git integration (add, commit, diff, status, log, branch)
+- ✅ Code formatting (per-language)
+- ✅ Atomic file operations (one function/struct/class at a time)
+- ✅ Shell executor with timeout and context support
 
 ---
 
