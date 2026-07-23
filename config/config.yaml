@@ -1,0 +1,67 @@
+models:
+  active_provider: "lm-studio"
+  providers:
+    lm-studio:
+      base_url: "http://127.0.0.1:1234"
+  phases:
+    planning:
+      provider: "lm-studio"
+      model: "qwen/qwen3-coder-30b"
+      temperature: 0.3
+      max_tokens: 8192
+    coding:
+      provider: "lm-studio"
+      model: "qwen/qwen3-coder-30b"
+      temperature: 0.1
+      max_tokens: 8192
+    testing:
+      provider: "lm-studio"
+      model: "qwen/qwen3-coder-30b"
+      temperature: 0.2
+      max_tokens: 8192
+    review:
+      provider: "lm-studio"
+      model: "qwen/qwen3-coder-30b"
+      temperature: 0.2
+      max_tokens: 8192
+
+agents:
+  planner:
+    skills:
+      - solid_principles
+      - clean_code
+      - kiss_principle
+      - business_logic_adherence
+      - architecture_design
+      - task_breakdown
+      - dependency_mapping
+
+  coder:
+    skills:
+      - solid_principles
+      - clean_code
+      - kiss_principle
+      - no_repetition
+      - function_generation
+      - struct_design
+      - class_creation
+
+  tester:
+    skills:
+      - clean_code
+      - unit_testing
+      - integration_testing
+      - coverage_analysis
+      - test_generation
+
+  reviewer:
+    skills:
+      - solid_principles
+      - clean_code
+      - business_logic_adherence
+      - style_check
+      - logic_review
+      - security_audit
+
+server:
+  port: 8080
