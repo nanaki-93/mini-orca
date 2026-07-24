@@ -95,6 +95,13 @@ function appData() {
             document.body.addEventListener('htmx:beforeRequest', (event) => {
                 this.loading = true;
             });
+            
+            // Re-evaluate Alpine.js in HTMX-loaded content
+            document.body.addEventListener('htmx:afterSettle', (event) => {
+                if (window.Alpine) {
+                    window.Alpine.initTree(event.detail.target);
+                }
+            });
         },
         
         // Session Management

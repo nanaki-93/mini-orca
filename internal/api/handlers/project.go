@@ -27,19 +27,30 @@ func NewProjectHandler(orch *orchestrator.Orchestrator, store *state.Store) *Pro
 func (h *ProjectHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	session := h.orchestrator.GetSession()
 	
+	planInfo := map[string]interface{}{
+		"id":               "",
+		"status":           "",
+		"atomic_units":     0,
+		"completed_units":  0,
+		"pending_units":    0,
+	}
+	if session.Plan != nil {
+		planInfo = map[string]interface{}{
+			"id":               session.Plan.ID,
+			"status":           session.Plan.Status,
+			"atomic_units":     len(session.Plan.AtomicUnits),
+			"completed_units":  len(session.Plan.GetCompletedUnits()),
+			"pending_units":    len(session.Plan.GetPendingUnits()),
+		}
+	}
+	
 	response := map[string]interface{}{
 		"session_id": session.ID,
 		"name":       session.Name,
 		"phase":      session.Phase,
 		"created_at": session.CreatedAt,
 		"updated_at": session.UpdatedAt,
-		"plan": map[string]interface{}{
-			"id":               session.Plan.ID,
-			"status":           session.Plan.Status,
-			"atomic_units":     len(session.Plan.AtomicUnits),
-			"completed_units":  len(session.Plan.GetCompletedUnits()),
-			"pending_units":    len(session.Plan.GetPendingUnits()),
-		},
+		"plan":       planInfo,
 	}
 	
 	w.Header().Set("Content-Type", "application/json")

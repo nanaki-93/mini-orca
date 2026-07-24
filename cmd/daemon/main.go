@@ -2,10 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"mini-orca/internal/agent"
@@ -123,9 +127,13 @@ func main() {
 	// Register HTTP handlers
 	mux := http.NewServeMux()
 
-	// Static files
-	mux.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.FS(templates.StaticFS))))
-	mux.Handle("/js/", http.StripPrefix("/js/", http.FileServer(http.FS(templates.StaticFS))))
+	// Static files — custom handler that maps URL paths to embedded FS paths
+	mux.Handle("/css/", http.StripPrefix("/css/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serveStatic(w, r, templates.StaticFS, "static/css")
+	})))
+	mux.Handle("/js/", http.StripPrefix("/js/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serveStatic(w, r, templates.StaticFS, "static/js")
+	})))
 
 	// Templates
 	mux.HandleFunc("/ide", func(w http.ResponseWriter, r *http.Request) {
@@ -183,7 +191,7 @@ func main() {
 	mux.HandleFunc("/api/templates/main-view", func(w http.ResponseWriter, r *http.Request) {
 		// Render phase-specific template based on current session phase
 		session := orch.GetSession()
-		templateName := fmt.Sprintf("phases/%s.html", session.Phase)
+		templateName := fmt.Sprintf("%s.html", session.Phase)
 		t, _ := templates.ParsePartial("phases", templateName)
 		if t != nil {
 			t.Execute(w, map[string]string{
@@ -254,4 +262,40 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"status":"ok","version":"2.0.0","milestones":{"model_abstraction":"complete","multi_agent":"complete","tools":"complete","orchestrator":"complete","frontend":"complete"}}`)
+}
+
+// serveStatic serves a file from the embedded FS with the given prefix.
+// For example, serveStatic(w, r, StaticFS, "css") with URL path "styles.css"
+// will serve the file at "css/styles.css" from StaticFS.
+func serveStatic(w http.ResponseWriter, r *http.Request, fsys fs.FS, prefix string) {
+	// Determine content type from file extension
+	ext := filepath.Ext(r.URL.Path)
+	if ext != "" {
+		if ct := mime.TypeByExtension(ext); ct != "" {
+			w.Header().Set("Content-Type", ct)
+		}
+	}
+
+	// Build the full path in the embedded FS
+	path := filepath.Join(prefix, r.URL.Path)
+
+	// Open and serve the file
+	f, err := fsys.Open(path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	if _, err := io.Copy(w, f); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

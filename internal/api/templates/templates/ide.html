@@ -4,7 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mini-Orca IDE</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'orca-dark': '#111827',
+                        'orca-panel': '#1f2937',
+                        'orca-border': '#374151',
+                        'orca-accent': '#22d3ee',
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
+    <script src="/js/app.js" defer></script>
     <script src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js" defer></script>
     <link rel="stylesheet" href="/css/styles.css">
 </head>
@@ -29,18 +46,45 @@
         <main class="flex h-[calc(100vh-64px)]">
             <!-- Sidebar -->
             <aside class="w-64 bg-gray-800 border-r border-gray-700 overflow-y-auto">
-                <!-- File Tree Component -->
-                <div id="file-tree" class="p-2">
-                    <div class="text-sm font-semibold text-gray-300 mb-2 px-2">📁 Files</div>
-                    <div hx-get="/api/templates/file-tree" hx-trigger="load" id="file-tree-content"></div>
+                <!-- File Tree Component (inlined for Alpine.js access) -->
+                <div class="p-4 bg-gray-800 border-b border-gray-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-sm font-semibold text-gray-300">📁 Project Files</h2>
+                        <button @click="refreshFiles()" class="text-xs text-cyan-400 hover:text-cyan-300">🔄 Refresh</button>
+                    </div>
+                    <div id="file-tree-content" class="space-y-1">
+                        <div class="text-xs text-gray-400 px-2 py-1">Loading files...</div>
+                    </div>
                 </div>
             </aside>
             
             <!-- Main Content -->
             <div class="flex-1 flex flex-col overflow-hidden">
-                <!-- Phase Tracker Component -->
-                <div id="phase-tracker" class="p-4 bg-gray-800 border-b border-gray-700">
-                    <div hx-get="/api/templates/phase-tracker" hx-trigger="load"></div>
+                <!-- Phase Tracker Component (inlined for Alpine.js access) -->
+                <div class="p-4 bg-gray-800 border-b border-gray-700">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-sm font-semibold text-gray-300">📊 Phase Progress</h2>
+                        <span class="text-xs text-gray-400" x-text="'Phase: ' + (session?.phase || 'unknown')"></span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <template x-for="(phase, index) in phases" :key="phase.id">
+                            <div class="flex items-center">
+                                <div class="flex flex-col items-center">
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                                         :class="{
+                                             'bg-green-500': phase.status === 'completed',
+                                             'bg-cyan-500': phase.status === 'current',
+                                             'bg-gray-600': phase.status === 'pending',
+                                             'bg-red-500': phase.status === 'error'
+                                         }"
+                                         x-text="phase.icon">
+                                    </div>
+                                    <span class="text-xs mt-1 text-gray-400" x-text="phase.name"></span>
+                                </div>
+                                <div x-show="index < phases.length - 1" class="w-8 h-0.5 bg-gray-600"></div>
+                            </div>
+                        </template>
+                    </div>
                 </div>
                 
                 <!-- Dynamic Content Area -->
@@ -56,10 +100,49 @@
             </div>
         </main>
         
-        <!-- Modals -->
-        <div id="modal-container"></div>
+        <!-- Config Modal -->
+        <div x-show="showConfigModal" @click.away="showConfigModal = false" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="display: none;">
+            <div class="bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-cyan-400">⚙️ Configuration</h2>
+                    <button @click="showConfigModal = false" class="text-gray-400 hover:text-gray-300">✕</button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Model Configuration</label>
+                        <div class="bg-gray-900 p-4 rounded-lg">
+                            <p class="text-sm text-gray-400">Model settings will appear here</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-2">
+                        <button @click="showConfigModal = false" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm">Cancel</button>
+                        <button @click="saveConfig(config); showConfigModal = false" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded text-sm">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Skills Modal -->
+        <div x-show="showSkillsModal" @click.away="showSkillsModal = false" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="display: none;">
+            <div class="bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-cyan-400">🛠️ Skills Management</h2>
+                    <button @click="showSkillsModal = false" class="text-gray-400 hover:text-gray-300">✕</button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Available Skills</label>
+                        <div class="bg-gray-900 p-4 rounded-lg">
+                            <p class="text-sm text-gray-400">Skills list will appear here</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-2">
+                        <button @click="showSkillsModal = false" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    
-    <script src="/js/app.js"></script>
+
 </body>
 </html>

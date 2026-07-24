@@ -69,6 +69,7 @@ func NewSession(id, name, description, projectDir string) *Session {
 		Description: description,
 		ProjectDir:  projectDir,
 		Phase:       PhasePlanning,
+		Plan:        NewPlan(id, id, ""),
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		History:     []Event{},
