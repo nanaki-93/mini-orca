@@ -2,14 +2,12 @@
 
 ## 1. Overview
 
-The frontend is an **IDE-like dashboard** built with HTMX, Alpine.js, and TailwindCSS. It provides:
+The frontend is an **IDE-like dashboard** built with **HTMX and TailwindCSS** only — zero client-side JS frameworks. All interactivity comes from server-side rendering + HTMX DOM updates.
 
 - **File tree** — Navigate project structure
 - **Code editor** — View/edit generated code (single function or full file)
 - **Phase tracker** — Visual indicator of current phase
 - **Activity log** — Scrollable log of agent actions
-- **Standalone function writer** — Write functions outside the normal flow
-- **Insertion tool** — Insert functions into any file at any position
 
 **No build step, no npm, no bundler** — pure Go templates with HTMX for DOM updates.
 
@@ -40,7 +38,7 @@ The frontend is an **IDE-like dashboard** built with HTMX, Alpine.js, and Tailwi
 │  │  │ 📝 Write Function │  │  │  │  │                                          │ │ │  │
 │  │  └───────────────────┘  │  │  │  │  [Edit Function] [Edit Full File]        │ │ │  │
 │  │  ┌───────────────────┐  │  │  │  │  [Submit]  [Cancel]                      │ │ │  │
-│  │  │ 📎 Insert Function│  │  │  │  └──────────────────────────────────────────┘ │ │  │
+│  │  │ 📝 Write Function │  │  │  │  └──────────────────────────────────────────┘ │ │  │
 │  │  └───────────────────┘  │  │  └──────────────────────────────────────────────┘ │  │
 │  │                         │  │                                                   │  │
 │  │  ─────────────────────  │  │  ┌──────────────────────────────────────────────┐ │  │
@@ -71,15 +69,14 @@ internal/api/templates/
 ├── base.html                    ← Base layout (header, sidebar, main)
 ├── ide.html                     ← Main IDE page
 ├── components/
-│   ├── header.html              ← Header bar (project info, model config, git status)
+│   ├── header.html              ← Header bar (project info, model config)
 │   ├── sidebar.html             ← Left sidebar (file tree, session info)
 │   ├── file-tree.html           ← File tree component
 │   ├── phase-tracker.html       ← Phase progress indicator
 │   └── activity-log.html        ← Activity feed
 ├── editors/
 │   ├── code-editor.html         ← Code editor (function or full file)
-│   ├── standalone-function.html ← Standalone function writer
-│   └── insertion-picker.html    ← Insertion point picker
+│   └── full-file-editor.html    ← Full file editor
 └── phases/
     ├── planning.html            ← Planning phase view
     ├── planning-review.html     ← Waiting for plan approval
@@ -126,16 +123,10 @@ internal/api/templates/
     
     <!-- Action Buttons -->
     <div class="mt-4 pt-4 border-t border-slate-800 space-y-2">
-        <button hx-get="/web/standalone-function"
+        <button hx-get="/web/edit/function"
                 hx-target="#main-content"
                 class="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition cursor-pointer">
             📝 Write Function
-        </button>
-        
-        <button hx-get="/web/insert-function"
-                hx-target="#main-content"
-                class="w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition cursor-pointer">
-            📎 Insert Function
         </button>
     </div>
 </div>
@@ -229,154 +220,7 @@ internal/api/templates/
 
 ---
 
-## 6. Standalone Function Writer
-
-```html
-<!-- internal/api/templates/editors/standalone-function.html -->
-<div class="space-y-4">
-    <h2 class="text-lg font-semibold text-white">Write Standalone Function</h2>
-    <p class="text-sm text-slate-400">
-        Write a function outside the normal flow. After writing, click a file in the file tree
-        to insert it at a specific position.
-    </p>
-    
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <label class="text-sm font-medium text-slate-300 block mb-2">Function Name</label>
-        <input id="function-name"
-               type="text"
-               placeholder="e.g., ValidateToken"
-               class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm 
-                      text-slate-300 focus:outline-none focus:border-blue-500">
-    </div>
-    
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <label class="text-sm font-medium text-slate-300 block mb-2">Function Code</label>
-        <textarea id="function-code"
-                  name="code"
-                  placeholder="Write your function here..."
-                  class="w-full h-64 bg-slate-950 border border-slate-800 rounded-lg p-4 
-                         text-sm text-slate-300 font-mono resize-none focus:outline-none 
-                         focus:border-blue-500"
-                  spellcheck="false"></textarea>
-    </div>
-    
-    <div class="flex justify-end gap-3">
-        <button hx-post="/api/project/standalone-function/save"
-                hx-include="#function-name, #function-code"
-                class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition cursor-pointer">
-            Save Function
-        </button>
-    </div>
-    
-    <!-- Instructions -->
-    <div class="bg-blue-950/20 border border-blue-800/30 rounded-lg p-4">
-        <h4 class="text-sm font-semibold text-blue-400 mb-2">Next Steps:</h4>
-        <ol class="text-sm text-blue-300 space-y-1 list-decimal list-inside">
-            <li>Save the function above</li>
-            <li>Click a file in the file tree</li>
-            <li>Choose where to insert the function</li>
-            <li>Submit → Testing → Review → Human Review</li>
-        </ol>
-    </div>
-</div>
-```
-
----
-
-## 7. Insertion Picker
-
-```html
-<!-- internal/api/templates/editors/insertion-picker.html -->
-<div class="space-y-4">
-    <h2 class="text-lg font-semibold text-white">Insert Function into File</h2>
-    <p class="text-sm text-slate-400">
-        Select the file and insertion point for your standalone function.
-    </p>
-    
-    <!-- File Selection -->
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <label class="text-sm font-medium text-slate-300 block mb-2">Target File</label>
-        <select id="target-file"
-                hx-get="/api/project/files"
-                hx-trigger="load"
-                class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm 
-                       text-slate-300 focus:outline-none focus:border-blue-500">
-            {{ range .Files }}
-                <option value="{{ .Path }}">{{ .Path }}</option>
-            {{ end }}
-        </select>
-    </div>
-    
-    <!-- Insertion Point Selection -->
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <label class="text-sm font-medium text-slate-300 block mb-2">Insertion Point</label>
-        <div class="space-y-2">
-            <label class="flex items-center gap-3 p-3 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
-                <input type="radio" name="insertion_point" value="before_first" class="text-blue-500">
-                <span class="text-sm text-slate-300">A. Insert before the first function</span>
-            </label>
-            
-            <label class="flex items-center gap-3 p-3 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
-                <input type="radio" name="insertion_point" value="after_last" class="text-blue-500">
-                <span class="text-sm text-slate-300">B. Insert after the last function</span>
-            </label>
-            
-            <label class="flex items-center gap-3 p-3 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
-                <input type="radio" name="insertion_point" value="around" class="text-blue-500">
-                <span class="text-sm text-slate-300">C. Insert before/after a specific function</span>
-            </label>
-        </div>
-    </div>
-    
-    <!-- Specific Function Selection (shown when C is selected) -->
-    <div id="specific-function-selector"
-         x-show="selectedPoint === 'around'"
-         class="bg-slate-900 border border-slate-800 rounded-lg p-4 hidden">
-        <label class="text-sm font-medium text-slate-300 block mb-2">
-            Select Reference Function
-        </label>
-        <select id="reference-function"
-                class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm 
-                       text-slate-300 focus:outline-none focus:border-blue-500">
-            {{ range .Functions }}
-                <option value="{{ .Name }}">{{ .Name }} (line {{ .Line }})</option>
-            {{ end }}
-        </select>
-        
-        <label class="text-sm font-medium text-slate-300 block mt-3 mb-2">
-            Position Relative to Reference
-        </label>
-        <div class="flex gap-3">
-            <button type="button"
-                    class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition cursor-pointer">
-                Before
-            </button>
-            <button type="button"
-                    class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition cursor-pointer">
-                After
-            </button>
-        </div>
-    </div>
-    
-    <!-- Action Buttons -->
-    <div class="flex justify-end gap-3">
-        <button hx-get="/web/file-tree"
-                hx-target="#sidebar"
-                class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer">
-            Cancel
-        </button>
-        <button hx-post="/api/project/insert/function"
-                hx-include="#target-file, #function-code, #insertion_point, #reference-function"
-                class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition cursor-pointer">
-            Insert & Submit
-        </button>
-    </div>
-</div>
-```
-
----
-
-## 8. Phase-Specific Views
+## 6. Phase-Specific Views
 
 ### 8.1 Planning Phase
 
@@ -557,15 +401,13 @@ POST /api/project/approve           → Approve/reject plan or unit (JSON)
 // Code Editing
 POST /api/project/edit/function     → Edit single function (JSON)
 POST /api/project/edit/file         → Edit full file (JSON)
-POST /api/project/standalone-function/save → Save standalone function (JSON)
-POST /api/project/insert/function   → Insert function into file (JSON)
 
 // UI Rendering (HTMX)
 GET  /web/ide                       → Main IDE page (HTML)
 GET  /web/phase/:phase              → Phase content partial (HTML)
 GET  /web/file-tree                 → File tree partial (HTML)
-GET  /web/standalone-function       → Standalone function writer (HTML)
-GET  /web/insert-function           → Insertion picker (HTML)
+GET  /web/edit/function             → Function editor (HTML)
+GET  /web/edit/file                 → Full file editor (HTML)
 GET  /web/session/:id/activity      → Activity log partial (HTML)
 
 // Configuration
@@ -588,8 +430,8 @@ POST   /api/config/skills/import      → Import skills config (JSON)
 GET  /web/ide                       → Main IDE page (HTML)
 GET  /web/phase/:phase              → Phase content partial (HTML)
 GET  /web/file-tree                 → File tree partial (HTML)
-GET  /web/standalone-function       → Standalone function writer (HTML)
-GET  /web/insert-function           → Insertion picker (HTML)
+GET  /web/edit/function             → Function editor (HTML)
+GET  /web/edit/file                 → Full file editor (HTML)
 GET  /web/session/:id/activity      → Activity log partial (HTML)
 GET  /web/config/skills             → Skills management page (HTML)
 GET  /web/config/skills/new         → New skill form (HTML partial)
@@ -875,259 +717,230 @@ POST   /api/config/skills/export      → Export skills config (JSON)
 POST   /api/config/skills/import      → Import skills config (JSON)
 ```
 
-### 11.5 Skills Management JavaScript (Alpine.js)
+### 11.5 Skills Management — HTMX-Only Approach
+
+**No Alpine.js. No client-side state. Everything server-rendered.**
+
+#### 11.5.1 Search — HTMX with debounce
 
 ```html
-<!-- internal/api/templates/config/skills.html -->
-<div x-data="skillsManager()" class="space-y-6">
-    <!-- Search and Add -->
-    <div class="flex items-center gap-3">
-        <input type="text" 
-               x-model="searchQuery"
-               placeholder="🔍 Search skills..."
-               class="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm 
-                      text-slate-300 focus:outline-none focus:border-blue-500">
-        <button @click="showAddDialog = true"
-                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition cursor-pointer">
-            + Add New Skill
-        </button>
-    </div>
-    
-    <!-- Knowledge Skills List -->
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-6">
-        <h3 class="text-md font-semibold text-white mb-4">📚 Knowledge Skills</h3>
-        <div class="space-y-2">
-            <template x-for="skill in filteredKnowledgeSkills" :key="skill.id">
-                <div class="flex items-center justify-between p-3 rounded-lg bg-slate-950 border border-slate-800">
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm font-medium text-slate-200" x-text="skill.name"></span>
-                            <span class="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400">knowledge</span>
-                        </div>
-                        <p class="text-xs text-slate-400 mt-1" x-text="skill.description"></p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" 
-                               x-model="skill.enabled"
-                               @change="updateSkill(skill)"
-                               class="text-blue-500">
-                        <button @click="editSkill(skill)"
-                                class="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition cursor-pointer">
-                            ✏️
-                        </button>
-                        <button @click="deleteSkill(skill.id)"
-                                class="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-red-400 transition cursor-pointer">
-                            🗑️
-                        </button>
-                    </div>
-                </div>
-            </template>
-        </div>
-    </div>
-    
-    <!-- Tool Skills List -->
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-6">
-        <h3 class="text-md font-semibold text-white mb-4">🔧 Tool Skills</h3>
-        <div class="space-y-2">
-            <template x-for="skill in filteredToolSkills" :key="skill.id">
-                <div class="flex items-center justify-between p-3 rounded-lg bg-slate-950 border border-slate-800">
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm font-medium text-slate-200" x-text="skill.name"></span>
-                            <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">tool</span>
-                        </div>
-                        <p class="text-xs text-slate-400 mt-1" x-text="skill.description"></p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" 
-                               x-model="skill.enabled"
-                               @change="updateSkill(skill)"
-                               class="text-blue-500">
-                        <button @click="editSkill(skill)"
-                                class="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition cursor-pointer">
-                            ✏️
-                        </button>
-                        <button @click="deleteSkill(skill.id)"
-                                class="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-red-400 transition cursor-pointer">
-                            🗑️
-                        </button>
-                    </div>
-                </div>
-            </template>
-        </div>
-    </div>
-    
-    <!-- Agent Skill Assignments -->
-    <div class="bg-slate-900 border border-slate-800 rounded-lg p-6">
-        <h3 class="text-md font-semibold text-white mb-4">🤖 Agent Skill Assignments</h3>
-        <template x-for="agent in agents" :key="agent.name">
-            <div class="mb-4 last:mb-0">
-                <h4 class="text-sm font-semibold text-blue-400 mb-2">🤖 <span x-text="agent.name"></span></h4>
-                <div class="grid grid-cols-2 gap-2">
-                    <template x-for="skill in agent.skills" :key="skill.id">
-                        <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
-                            <input type="checkbox" 
-                                   :value="skill.id"
-                                   :name="'agent-' + agent.name"
-                                   x-model="agent.skillIds"
-                                   @change="updateAgentSkills(agent)"
-                                   class="text-blue-500">
-                            <span class="text-xs text-slate-300" x-text="skill.name"></span>
-                        </label>
-                    </template>
-                </div>
-            </div>
-        </template>
-    </div>
-    
-    <!-- Bulk Actions -->
-    <div class="flex justify-end gap-3">
-        <button @click="resetDefaults()"
-                class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer">
-            ↩️ Reset to Defaults
-        </button>
-        <button @click="exportConfig()"
-                class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer">
-            📥 Export
-        </button>
-        <button @click="importConfig()"
-                class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer">
-            📤 Import
-        </button>
-        <button @click="saveAll()"
-                class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition cursor-pointer">
-            💾 Save All
-        </button>
-    </div>
-    
-    <!-- Add/Edit Skill Dialog -->
-    <div x-show="showAddDialog || editingSkill"
-         x-transition
-         class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center"
-         @click.self="closeDialog()">
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <template x-if="editingSkill">
-                <div x-html="editSkillHtml"></div>
-            </template>
-            <template x-if="showAddDialog && !editingSkill">
-                <div x-html="addSkillHtml"></div>
-            </template>
-        </div>
-    </div>
+<!-- Search bar -->
+<div class="flex items-center gap-3">
+    <input type="text" 
+           name="search"
+           id="skill-search"
+           placeholder="🔍 Search skills..."
+           class="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm 
+                  text-slate-300 focus:outline-none focus:border-blue-500"
+           hx-get="/api/config/skills/render"
+           hx-target="#skills-list"
+           hx-trigger="input changed delay:300ms, search from:body"
+           hx-vals='js:{search: document.getElementById("skill-search").value}'
+           hx-indicator="#skills-list">
+    <button hx-get="/web/config/skills/new"
+            hx-target="#main-content"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition cursor-pointer">
+        + Add New Skill
+    </button>
 </div>
 
-<script>
-function skillsManager() {
-    return {
-        searchQuery: '',
-        skills: [],
-        agents: [],
-        showAddDialog: false,
-        editingSkill: null,
-        editSkillHtml: '',
+<!-- Skills list — re-rendered by HTMX on search -->
+<div id="skills-list">
+    <!-- Server renders the full list with search filter applied -->
+</div>
+```
+
+#### 11.5.2 Toggle enable/disable — HTMX checkbox
+
+```html
+<!-- Individual skill row -->
+<div class="flex items-center justify-between p-3 rounded-lg bg-slate-950 border border-slate-800">
+    <div>
+        <span class="text-sm font-medium text-slate-200">{{ .Name }}</span>
+        <p class="text-xs text-slate-400 mt-1">{{ .Description }}</p>
+    </div>
+    <div class="flex items-center gap-2">
+        <input type="checkbox" 
+               {{ if .Enabled }}checked{{ end }}
+               hx-post="/api/config/skills/{{ .ID }}/toggle"
+               hx-target="#skills-list"
+               hx-trigger="change"
+               hx-indicator="#skills-list"
+               class="text-blue-500">
+        <button hx-get="/web/config/skills/{{ .ID }}/edit"
+                hx-target="#main-content"
+                class="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition cursor-pointer">
+            ✏️
+        </button>
+        <button hx-post="/api/config/skills/{{ .ID }}/delete"
+                hx-target="#skills-list"
+                hx-trigger="click"
+                hx-confirm="Delete this skill?"
+                hx-indicator="#skills-list"
+                class="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-red-400 transition cursor-pointer">
+            🗑️
+        </button>
+    </div>
+</div>
+```
+
+#### 11.5.3 Add/Edit Skill — HTMX swap into overlay
+
+```html
+<!-- Add skill button opens form in main content area -->
+<button hx-get="/web/config/skills/new"
+        hx-target="#main-content"
+        class="px-4 py-2 bg-blue-600 ...">
+    + Add New Skill
+</button>
+
+<!-- Edit skill form (server-rendered partial) -->
+<!-- internal/api/templates/config/skill-editor.html -->
+<div class="space-y-4">
+    <h2 class="text-lg font-semibold text-white">{{ if .IsNew }}Add New Skill{{ else }}Edit Skill{{ end }}</h2>
+    
+    <form hx-post="/api/config/skills"
+          hx-target="#main-content"
+          hx-swap="innerHTML"
+          hx-indicator="#skill-form-indicator">
         
-        get filteredKnowledgeSkills() {
-            return this.skills
-                .filter(s => s.type === 'knowledge')
-                .filter(s => !this.searchQuery || s.name.toLowerCase().includes(this.searchQuery.toLowerCase()))
-                .sort((a, b) => a.priority - b.priority);
-        },
+        <input name="name" value="{{ .Skill.Name }}" placeholder="Skill name" ...>
+        <input name="description" value="{{ .Skill.Description }}" placeholder="Description" ...>
         
-        get filteredToolSkills() {
-            return this.skills
-                .filter(s => s.type === 'tool')
-                .filter(s => !this.searchQuery || s.name.toLowerCase().includes(this.searchQuery.toLowerCase()))
-                .sort((a, b) => a.priority - b.priority);
-        },
+        <select name="type" class="...">
+            <option value="knowledge" {{ if eq .Skill.Type "knowledge" }}selected{{ end }}>📚 Knowledge</option>
+            <option value="tool" {{ if eq .Skill.Type "tool" }}selected{{ end }}>🔧 Tool</option>
+        </select>
         
-        async init() {
-            await this.loadSkills();
-            await this.loadAgents();
-        },
+        {{ if eq .Skill.Type "knowledge" }}
+            <textarea name="prompt_template" ...>{{ .Skill.PromptTemplate }}</textarea>
+        {{ end }}
         
-        async loadSkills() {
-            const resp = await fetch('/api/config/skills');
-            this.skills = await resp.json();
-        },
+        {{ if eq .Skill.Type "tool" }}
+            <input name="tool_name" value="{{ .Skill.ToolName }}" ...>
+        {{ end }}
         
-        async loadAgents() {
-            const resp = await fetch('/api/config/skills/agents');
-            this.agents = await resp.json();
-        },
-        
-        async updateSkill(skill) {
-            await fetch(`/api/config/skills/${skill.id}`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(skill)
-            });
-        },
-        
-        async deleteSkill(id) {
-            if (confirm('Delete this skill?')) {
-                await fetch(`/api/config/skills/${id}`, {method: 'DELETE'});
-                await this.loadSkills();
-            }
-        },
-        
-        editSkill(skill) {
-            this.editingSkill = skill;
-            // Fetch the edit form HTML
-            fetch(`/web/config/skills/${skill.id}/edit`)
-                .then(r => r.text())
-                .then(html => { this.editSkillHtml = html; });
-        },
-        
-        closeDialog() {
-            this.showAddDialog = false;
-            this.editingSkill = null;
-            this.editSkillHtml = '';
-        },
-        
-        async saveAll() {
-            await Promise.all(this.skills.map(s => this.updateSkill(s)));
-            await Promise.all(this.agents.map(a => this.updateAgentSkills(a)));
-            alert('All changes saved!');
-        },
-        
-        async resetDefaults() {
-            if (confirm('Reset all skills to defaults?')) {
-                await fetch('/api/config/skills/reset', {method: 'POST'});
-                await this.loadSkills();
-                await this.loadAgents();
-            }
-        },
-        
-        async exportConfig() {
-            const resp = await fetch('/api/config/skills/export');
-            const blob = await resp.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'mini-orca-skills.json';
-            a.click();
-        },
-        
-        async importConfig() {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.json';
-            input.onchange = async (e) => {
-                const file = e.target.files[0];
-                const formData = new FormData();
-                formData.append('file', file);
-                await fetch('/api/config/skills/import', {
-                    method: 'POST',
-                    body: formData
-                });
-                await this.loadSkills();
-                await this.loadAgents();
-            };
-            input.click();
-        }
-    }
-}
-</script>
+        <div class="flex justify-end gap-3">
+            <button type="button"
+                    hx-get="/web/config/skills"
+                    hx-target="#main-content"
+                    class="px-4 py-2 bg-slate-800 ...">
+                Cancel
+            </button>
+            <button type="submit" class="px-6 py-2 bg-blue-600 ...">
+                {{ if .IsNew }}Add Skill{{ else }}Save Changes{{ end }}
+            </button>
+        </div>
+    </form>
+</div>
+```
+
+#### 11.5.4 Agent Skill Assignments — HTMX checkboxes
+
+```html
+<!-- Agent skill assignments (server-rendered) -->
+<div class="bg-slate-900 border border-slate-800 rounded-lg p-6">
+    <h3 class="text-md font-semibold text-white mb-4">🤖 Agent Skill Assignments</h3>
+    
+    {{ range .Agents }}
+        <div class="mb-4 last:mb-0">
+            <h4 class="text-sm font-semibold text-blue-400 mb-2">🤖 {{ .Name }}</h4>
+            <div class="grid grid-cols-2 gap-2">
+                {{ range .AvailableSkills }}
+                    <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
+                        <input type="checkbox"
+                               name="agent-{{ .Name }}-skill-{{ .ID }}"
+                               value="{{ .ID }}"
+                               {{ if in .AssignedAgentIDs .AgentName }}checked{{ end }}
+                               hx-post="/api/config/skills/agents/toggle"
+                               hx-vals='js:{agent: "{{ .Name }}", skill_id: {{ .ID }}}'
+                               hx-target="#agent-assignments-{{ .Name }}"
+                               hx-trigger="change"
+                               hx-indicator="#agent-assignments-{{ .Name }}"
+                               class="text-blue-500">
+                        <span class="text-xs text-slate-300">{{ .Name }}</span>
+                    </label>
+                {{ end }}
+            </div>
+        </div>
+    {{ end }}
+</div>
+```
+
+#### 11.5.5 Bulk Actions — HTMX POST endpoints
+
+```html
+<!-- Bulk actions bar -->
+<div class="flex justify-end gap-3">
+    <button hx-post="/api/config/skills/reset"
+            hx-target="#main-content"
+            hx-trigger="click"
+            hx-confirm="Reset all skills to defaults?"
+            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer">
+        ↩️ Reset to Defaults
+    </button>
+    <button hx-post="/api/config/skills/export"
+            hx-vals='{}'
+            hx-include='[]'
+            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer">
+        📥 Export
+    </button>
+    <button hx-get="/web/config/skills/import"
+            hx-target="#main-content"
+            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer">
+        📤 Import
+    </button>
+    <button hx-post="/api/config/skills/save-all"
+            hx-target="#main-content"
+            hx-trigger="click"
+            class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition cursor-pointer">
+        💾 Save All
+    </button>
+</div>
+```
+
+#### 11.5.6 Import Skill Form
+
+```html
+<!-- internal/api/templates/config/skill-import.html -->
+<div class="space-y-4">
+    <h2 class="text-lg font-semibold text-white">Import Skills Config</h2>
+    <p class="text-sm text-slate-400">Upload a JSON file exported from Mini-Orca.</p>
+    
+    <form hx-post="/api/config/skills/import"
+          hx-encoding="multipart/form-data"
+          hx-target="#main-content"
+          hx-swap="innerHTML">
+        <input type="file" name="file" accept=".json" class="...">
+        <div class="flex justify-end gap-3 mt-4">
+            <button type="button"
+                    hx-get="/web/config/skills"
+                    hx-target="#main-content"
+                    class="px-4 py-2 bg-slate-800 ...">
+                Cancel
+            </button>
+            <button type="submit" class="px-6 py-2 bg-blue-600 ...">
+                Import
+            </button>
+        </div>
+    </form>
+</div>
+```
+
+#### 11.5.7 Why this is simpler than Alpine.js
+
+| Concern | Alpine.js approach | HTMX-only approach |
+|---------|-------------------|-------------------|
+| Search filtering | `x-model` + computed getter | Server renders filtered list |
+| Toggle enable/disable | `x-model` + `@change` handler | `hx-post` on checkbox change |
+| CRUD operations | Custom JS functions + fetch() | `hx-post`/`hx-put`/`hx-delete` |
+| Dialogs | `x-show` + template rendering | Server-rendered partial swap |
+| Agent assignments | `x-model` + computed arrays | Server renders checkboxes |
+| Export/Import | Blob + fetch API | Server handles file I/O |
+| State management | Client-side reactive data | Server is source of truth |
+| JavaScript code | ~150 lines | **0 lines** |
+
+**Key principle:** Every interaction triggers a server request. The server returns the updated HTML fragment. HTMX swaps it in. No client-side state to manage, no reactivity bugs, no framework to debug.
 ```
 
 ---
@@ -1138,18 +951,37 @@ The HTMX dashboard is responsive by design using TailwindCSS:
 
 - **Desktop:** Full 3-column layout (file tree + editor + activity log)
 - **Tablet:** Sidebar collapses, main content expands
-- **Mobile:** Single column, hamburger menu for sidebar
+- **Mobile:** Single column, sidebar toggle via HTMX
 
 ```html
-<!-- Example responsive sidebar -->
+<!-- Desktop sidebar (always visible on large screens) -->
 <aside class="hidden lg:block w-80 bg-slate-950 border-r border-slate-800 p-4">
-    <!-- Desktop sidebar -->
+    <!-- File tree, session info, etc. -->
 </aside>
 
-<aside class="lg:hidden fixed inset-0 z-50 bg-slate-950 transform 
-              transition-transform duration-300"
-       x-show="sidebarOpen"
-       x-transition>
-    <!-- Mobile sidebar -->
+<!-- Mobile sidebar (toggled via HTMX swap) -->
+<aside id="mobile-sidebar"
+       class="lg:hidden fixed inset-0 z-50 bg-slate-950 transform 
+              transition-transform duration-300 -translate-x-full"
+       hx-get="/web/sidebar/mobile"
+       hx-trigger="mobileSidebarOpen from:body"
+       hx-swap="innerHTML"
+       hx-target="#mobile-sidebar">
+    <!-- Mobile sidebar content -->
 </aside>
+
+<!-- Mobile toggle button (shown only on small screens) -->
+<button class="lg:hidden fixed top-4 left-4 z-40 p-2 bg-slate-800 rounded-lg"
+        onclick="document.dispatchEvent(new CustomEvent('mobileSidebarOpen'))">
+    ☰
+</button>
+
+<!-- Close button inside mobile sidebar -->
+<button hx-get="/web/ide"
+        hx-target="#main-content"
+        onclick="document.dispatchEvent(new CustomEvent('mobileSidebarClose'))"
+        class="p-2 text-slate-400 hover:text-white">✕</button>
+```
+
+**Note:** No Alpine.js `x-show` needed. Mobile sidebar uses a simple CSS class toggle via vanilla JS event dispatching, or can be fully server-driven with HTMX.
 ```

@@ -49,7 +49,7 @@ This folder contains the complete plan to evolve **mini-orca** from a basic sing
 │                    │  └─────────────────────────────────────────────────────┘  │  │
 │                    └───────────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────────────────────────────┐  │
-│  │  HEADER: Project Path | Goal | Model Config | Git Status | [New Session]    │  │
+│  │  HEADER: Project Path | Goal | Model Config | [New Session]              │  │
 │  └──────────────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────────────┘
                             │ REST API
@@ -68,7 +68,6 @@ This folder contains the complete plan to evolve **mini-orca** from a basic sing
 │  │  - Phase Router (manages A→B→C→D→E flow)                                  │  │  │
 │  │  - Human Gate Manager (handles user approvals)                             │  │  │
 │  │  - State Manager (persistent state store)                                  │  │  │
-│  │  - Insertion Manager (handles standalone function insertion)               │  │  │
 │  └──────────────────────────────┬─────────────────────────────────────────────┘  │  │
 │                                 │                                                 │  │
 │  ┌──────────────────────────────▼─────────────────────────────────────────────┐  │
@@ -93,9 +92,9 @@ This folder contains the complete plan to evolve **mini-orca** from a basic sing
 │  │        LANGUAGE-AGNOSTIC TOOL EXECUTOR                                     │  │
 │  │  - Auto-detect project type (Go, Kotlin, Java, Rust, TS, Python)          │  │  │
 │  │  - Shell commands, file ops, build/test/run                               │  │  │
-│  │  - Git integration (add, commit, diff, status)                            │  │  │
 │  │  - Code formatting (per-language formatters)                              │  │  │
 │  │  - Atomic modifications: ONE function/struct/class at a time              │  │  │
+│  │  - Error display when LM Studio is unreachable                            │  │  │
 │  └────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                  │
 │  ┌────────────────────────────────────────────────────────────────────────────┐  │
@@ -169,7 +168,8 @@ User Input (Goal + Project Path)
 
 | Feature | Description |
 |---------|-------------|
-| **IDE-like HTMX Frontend** | File tree + code editor + phase tracker — all via HTMX, no build step |
+| **IDE-like HTMX Frontend** | File tree + code editor + phase tracker — all via HTMX, no build step, zero client-side JS frameworks |
+| **No Alpine.js** | All interactivity via HTMX + server-side rendering. Cleaner architecture, simpler debugging. |
 | **Configurable Agent Skills** | Each agent has a unique, configurable set of skills (tools + knowledge) |
 | **Skills Library** | Predefined skills: SOLID, Clean Code, KISS, No Repetition, Business Logic |
 | **Configurable Models** | Each phase uses a different model (LM Studio first, interface for others) |
@@ -177,8 +177,6 @@ User Input (Goal + Project Path)
 | **LM Studio First** | Starts with LM Studio, interface built for easy provider extension |
 | **Language-Agnostic Tools** | Auto-detects project type, runs appropriate commands |
 | **Atomic Modifications** | Each agent modifies exactly ONE function, struct, or class per cycle |
-| **Git Integration** | Built-in git add, commit, diff, status |
-| **Standalone Function Writer** | Write a function outside the flow, insert into any file at any position |
 | **Single Project** | One project at a time (no multi-session) |
 | **No Authentication** | Local environment only |
 | **Dark Theme** | Dark theme by default, extensible for more themes |

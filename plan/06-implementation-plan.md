@@ -100,7 +100,7 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
 
 ## Milestone 3: Language-Agnostic Tool Executor (Week 2)
 
-### Goal: Redesign tools to be language-agnostic with auto-detection and git integration
+### Goal: Redesign tools to be language-agnostic with auto-detection
 
 ### Tasks
 
@@ -108,7 +108,6 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] `executor.go` — Main executor with auto-detection
   - [ ] `shell.go` — Universal shell command executor
   - [ ] `file_ops.go` — Atomic file operations (ONE unit at a time)
-  - [ ] `git_ops.go` — Git integration (add, commit, diff, status)
   - [ ] `formatter.go` — Code formatting (per-language)
   - [ ] `project_types.go` — Project type detection
 
@@ -131,24 +130,17 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] `ReadFile()` — Read file content
   - [ ] All operations target ONE atomic unit
 
-- [ ] **3.5** Implement Git operations
-  - [ ] `GitAdd(path string)` — Add file to git
-  - [ ] `GitCommit(message string)` — Commit changes
-  - [ ] `GitDiff(path string)` — Show diff
-  - [ ] `GitStatus()` — Show git status
-
-- [ ] **3.6** Implement code formatting
+- [ ] **3.5** Implement code formatting
   - [ ] `FormatCode(path string)` — Format using language formatter
   - [ ] Auto-format after code generation
 
-- [ ] **3.7** Update daemon to use new tool executor
+- [ ] **3.6** Update daemon to use new tool executor
   - [ ] `cmd/daemon/main.go`
   - [ ] Wire up language-agnostic executor
 
 ### Deliverables
 - Language-agnostic tool executor
 - Auto-detection of project type
-- Git integration (add, commit, diff, status)
 - Code formatting
 - Atomic file operations (one function/struct/class at a time)
 
@@ -164,7 +156,6 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] `orchestrator.go` — Main orchestrator struct
   - [ ] `phase_router.go` — Phase management
   - [ ] `human_gate.go` — User approval handling
-  - [ ] `insertion_manager.go` — Standalone function insertion
 
 - [ ] **4.2** Define new state models
   - [ ] `internal/state/session.go`
@@ -177,12 +168,7 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] Human gates at Planning and HumanReview
   - [ ] Separate Reject (loop to Coding) vs Edit (Testing → Review → HumanReview)
 
-- [ ] **4.4** Implement standalone function insertion
-  - [ ] `InsertFunction(path, functionCode, insertionPoint)`
-  - [ ] Always goes through Testing → Review
-  - [ ] Insertion point: before/after specific function
-
-- [ ] **4.5** Implement retry logic
+- [ ] **4.4** Implement retry logic
   - [ ] Configurable retries per phase
   - [ ] Exponential backoff
   - [ ] Error handling and recovery
@@ -199,7 +185,6 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
 ### Deliverables
 - Working 5-phase orchestrator
 - Human-in-the-loop at Planning and HumanReview
-- Standalone function insertion
 - Retry logic for failed phases
 
 ---
@@ -222,11 +207,11 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] Code editor (single function + full file)
   - [ ] Phase tracker
   - [ ] Activity log
-  - [ ] Header bar (project info, model config, git status)
+  - [ ] Header bar (project info, model config)
 
 - [ ] **5.3** Build phase-specific templates
   - [ ] `phases/planning.html` — Planning in progress
-  - [ ] `phases/planning-review.html` — Plan approval with Alpine.js
+  - [ ] `phases/planning-review.html` — Plan approval (HTMX form)
   - [ ] `phases/coding.html` — Code display
   - [ ] `phases/testing.html` — Test results
   - [ ] `phases/review.html` — Review report
@@ -235,8 +220,6 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
 - [ ] **5.4** Build editor templates
   - [ ] `editors/code-editor.html` — Function editor
   - [ ] `editors/full-file-editor.html` — Full file editor
-  - [ ] `editors/standalone-function.html` — Standalone function writer
-  - [ ] `editors/insertion-picker.html` — Insertion point picker
 
 - [ ] **5.5** Build components
   - [ ] `components/file-tree.html` — File tree
@@ -248,22 +231,22 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
   - [ ] `api/handlers/project.go` — Project management
   - [ ] `api/handlers/approve.go` — Approval handling
   - [ ] `api/handlers/config.go` — Model/skills config
-  - [ ] `api/handlers/insertion.go` — Function insertion
   - [ ] Add HTMX partial rendering endpoints
 
-- [ ] **5.7** Add Alpine.js interactivity
-  - [ ] Model configuration panel
-  - [ ] Session controls (pause/resume/stop)
-  - [ ] Feedback input fields
-  - [ ] Insertion picker radio buttons
+- [ ] **5.7** HTMX interactivity (no client-side JS frameworks)
+  - [ ] Model configuration panel (HTMX forms)
+  - [ ] Session controls (pause/resume/stop via `hx-post`)
+  - [ ] Feedback input fields (HTMX form submission)
+  - [ ] Search with debounce (`hx-trigger="input changed delay:300ms"`)
+  - [ ] Mobile sidebar (CSS class toggle, no Alpine)
 
-- [ ] **5.8** Skills Management UI
-  - [ ] Skills library view (search, filter, enable/disable)
-  - [ ] Add/Edit skill dialog (name, description, type, priority, prompt template)
-  - [ ] Agent-skill association view (checkboxes per agent)
-  - [ ] Bulk actions (reset to defaults, export, import)
+- [ ] **5.8** Skills Management UI (HTMX-first, server-rendered)
+  - [ ] Skills library view (server-rendered list, HTMX search)
+  - [ ] Add/Edit skill form (server-rendered partial, HTMX swap)
+  - [ ] Agent-skill association view (server-rendered checkboxes)
+  - [ ] Bulk actions: reset, export, import (HTMX POST endpoints)
   - [ ] API endpoints: CRUD for skills, agent-skill mappings
-  - [ ] Alpine.js interactivity for skills management
+  - [ ] Zero client-side JS — all state on the server
 
 - [ ] **5.9** Polish & UX
   - [ ] Loading states
@@ -274,7 +257,6 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
 - IDE-like HTMX dashboard
 - File tree + code editor
 - Phase-specific views
-- Standalone function writer + insertion
 - Skills management UI (add/edit/remove skills, associate with agents)
 - Model configuration UI
 
@@ -336,25 +318,18 @@ This document outlines the step-by-step implementation plan to evolve mini-orca 
 - [ ] Configuration is fully customizable via YAML
 - [ ] Tool executor auto-detects project types
 - [ ] Each agent modifies exactly ONE function/struct/class
-- [ ] Standalone function writer works correctly
 - [ ] Skills management UI allows adding/editing/removing skills
 - [ ] Skills can be associated with agents via checkbox UI
 - [ ] Skills can be exported/imported as JSON config
 - [ ] Dark theme by default, extensible for more themes
-- [ ] Git integration works (add, commit, diff)
 - [ ] No authentication required (local environment)
-- [ ] Dark theme by default, extensible for more themes
 
 ---
 
 ## Quick Start Commands (After Implementation)
 
 ```bash
-# 1. Clone and setup
-git clone <repo>
-cd mini-orca
-
-# 2. Configure LM Studio
+# 1. Configure LM Studio
 cat > config.yaml << EOF
 models:
   active_provider: "lm-studio"
@@ -418,11 +393,11 @@ agents:
       - security_audit
 EOF
 
-# 3. Start daemon
+# 2. Start daemon
 go run cmd/daemon/main.go
 
-# 4. Open IDE dashboard
+# 3. Open IDE dashboard
 open http://localhost:8080/ide
 
-# 5. Enter project goal → Review plan → Approve → Code in IDE → Accept/Reject
+# 4. Enter project goal → Review plan → Approve → Code in IDE → Accept/Reject
 ```
