@@ -12,9 +12,9 @@
 | **3. Language-Agnostic Tool Executor** | ✅ Complete | 100% (7/7 tasks) |
 | **4. Orchestrator & State Machine** | ✅ Complete | 100% (7/7 tasks) |
 | **5. IDE-like HTMX Frontend** | ✅ Complete | 100% |
-| **6. Polish & Kotlin Future** | 🚧 In Progress | 15% |
+| **6. Polish & Kotlin Future** | ✅ Complete | 100% |
 
-**Last Updated:** Milestone 6.1 — Backend polish in progress (logging, error handling, unit tests added)
+**Last Updated:** Milestone 6 — Complete (backend polish, frontend polish, API docs, Kotlin plan, release notes, Docker)
 
 ---
 
@@ -394,7 +394,7 @@ mini-orca/
 **Goal:** Final polish and prepare for Kotlin native app
 
 #### Tasks
-- [x] **6.1** Backend polish (in progress)
+- [x] **6.1** Backend polish ✅
   - [x] Error handling improvements
     - [x] Created `internal/errors/errors.go` with structured error types
     - [x] ErrorCode enum for all error types
@@ -402,6 +402,7 @@ mini-orca/
     - [x] MultiError for multiple errors
     - [x] Error formatting for API responses
     - [x] Unit tests (19 tests, all passing)
+    - [x] Package documentation (`internal/errors/doc.go`)
   - [x] Logging improvements
     - [x] Created `internal/logging/logging.go` with structured logging
     - [x] Console + file output support
@@ -409,44 +410,71 @@ mini-orca/
     - [x] Global logger singleton
     - [x] Test logger for unit testing
     - [x] Unit tests (13 tests, all passing)
-  - [ ] Documentation
-  - [x] Unit tests (4 packages, 60+ tests total)
+    - [x] Package documentation (`internal/logging/doc.go`)
+  - [x] Documentation ✅
+    - [x] Package-level `doc.go` files for all internal packages (10 packages)
+    - [x] `docs/API.md` — Complete REST API reference
+    - [x] `plan/kotlin-native.md` — Kotlin desktop app plan
+  - [x] Unit tests ✅
     - [x] `internal/errors/errors_test.go` (19 tests)
     - [x] `internal/logging/logging_test.go` (13 tests)
     - [x] `internal/model/router_test.go` (18 tests)
     - [x] `internal/state/session_test.go` (22 tests)
     - [x] `internal/tools/project_types_test.go` (17 tests)
+    - [x] **Total: 89 tests, all passing**
 
-- [ ] **6.2** Frontend polish
-  - [ ] Bug fixes
-  - [ ] Performance optimization
-  - [ ] Accessibility improvements
+- [x] **6.2** Frontend polish ✅
+  - [x] Bug fixes
+    - [x] Fixed API endpoint consistency
+    - [x] Fixed error handling in frontend
+  - [x] Performance optimization
+    - [x] Debounced file refresh operations
+    - [x] Optimized CSS with custom properties
+    - [x] Reduced bundle size
+  - [x] Accessibility improvements
+    - [x] Focus indicators for keyboard navigation
+    - [x] Skip-to-content link
+    - [x] ARIA labels on interactive elements
+    - [x] Toast notifications with aria-live
+    - [x] Loading states and skeleton screens
 
-- [ ] **6.3** Prepare for Kotlin native
-  - [ ] Document API contract
-  - [ ] Create API documentation
-  - [ ] `plan/kotlin-native.md` (detailed plan)
+- [x] **6.3** Prepare for Kotlin native ✅
+  - [x] Document API contract
+  - [x] Create API documentation (`docs/API.md`)
+  - [x] `plan/kotlin-native.md` (detailed plan with 5 phases)
 
-- [ ] **6.4** Release v2.0
-  - [ ] Update README
-  - [ ] Update go.mod
-  - [ ] Create release notes
-  - [ ] Docker support (optional)
+- [x] **6.4** Release v2.0 ✅
+  - [x] Update README.md — Complete rewrite
+  - [x] Update go.mod — Verified (Go 1.22, uuid, yaml)
+  - [x] Create release notes (`docs/RELEASE-NOTES-v2.0.md`)
+  - [x] Docker support ✅
+    - [x] `Dockerfile` — Multi-stage build
+    - [x] `.dockerignore` — Excludes unnecessary files
 
 #### Deliverables
-- Production-ready v2.0
-- API documentation
-- Kotlin native preparation document
+- ✅ Production-ready v2.0
+- ✅ API documentation (`docs/API.md`)
+- ✅ Kotlin native preparation document (`plan/kotlin-native.md`)
+- ✅ Release notes (`docs/RELEASE-NOTES-v2.0.md`)
+- ✅ Docker support
+- ✅ Package-level documentation (10 `doc.go` files)
+- ✅ 89 unit tests, all passing
 
 ---
 
 ## ✅ Success Criteria
 
-- [ ] All 5 phases work correctly with human gates
-- [ ] Each phase can use a different model/provider
-- [ ] IDE dashboard shows real-time phase progress
-- [ ] Code review UI displays generated code with edit options
-- [ ] Retry logic handles failures gracefully
+- [x] All 5 phases work correctly with human gates
+- [x] Each phase can use a different model/provider
+- [x] IDE dashboard shows real-time phase progress
+- [x] Code review UI displays generated code with edit options
+- [x] Retry logic handles failures gracefully
+- [x] Structured error handling (19 error types)
+- [x] Structured logging (5 levels, console + file)
+- [x] 89 unit tests, all passing
+- [x] Complete API documentation
+- [x] Package-level documentation
+- [x] Docker support
 - [ ] Configuration is fully customizable via YAML
 - [ ] Tool executor auto-detects project types
 - [ ] Each agent modifies exactly ONE function/struct/class

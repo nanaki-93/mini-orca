@@ -1,0 +1,23 @@
+# Build artifacts
+*.exe
+*.exe.sha256
+*.tar
+*.tar.gz
+
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+plan/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test coverage
+coverage.out
+coverage.html

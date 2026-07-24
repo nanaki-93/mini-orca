@@ -1,393 +1,270 @@
-# Mini-Orca — Future: Kotlin Native App
+# Mini-Orca Kotlin Native Desktop App
+
+> Plan for converting Mini-Orca to a native Kotlin desktop application
+
+---
 
 ## Overview
 
-This document outlines the plan to create a **native Kotlin desktop application** for Mini-Orca. This would be a separate client that connects to the Go daemon via REST APIs.
-
-**Note:** No authentication is needed — this is a local-only environment.
+This document outlines the plan for creating a native Kotlin desktop application for Mini-Orca, replacing the web-based frontend with a native UI.
 
 ---
 
-## 1. Architecture Overview
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      KOTLIN NATIVE APP                               │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │                   Jetpack Compose UI                          │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │  │
-│  │  │Dashboard │  │ CodeView │  │ TestView │  │ ConfigView   │  │  │
-│  │  └──────────┘  └──────────┘  └──────────┘  └──────────────┘  │  │
-│  └───────────────────────────┬───────────────────────────────────┘  │
-│                              │                                      │
-│  ┌───────────────────────────▼───────────────────────────────────┐  │
-│  │                   Presentation Layer                          │  │
-│  │  - ViewModels (StateFlow)                                     │  │
-│  │  - UI State management                                        │  │
-│  └───────────────────────────┬───────────────────────────────────┘  │
-│                              │                                      │
-│  ┌───────────────────────────▼───────────────────────────────────┐  │
-│  │                   Domain Layer                                │  │
-│  │  - UseCases                                                   │  │
-│  │  - Repository interfaces                                      │  │
-│  └───────────────────────────┬───────────────────────────────────┘  │
-│                              │                                      │
-│  ┌───────────────────────────▼───────────────────────────────────┐  │
-│  │                   Data Layer                                  │  │
-│  │  - API Client (Ktor)                                          │  │
-│  │  - Local storage (DataStore)                                  │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │ REST API (no auth)
-┌───────────────────────────▼─────────────────────────────────────────┐
-│                     MINI-ORCA DAEMON (Go)                            │
-│                     (unauthenticated, local-only)                    │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│          Kotlin Desktop App             │
+│  ┌───────────┐  ┌────────────────────┐  │
+│  │  Jetpack  │  │  Compose Desktop   │  │
+│  │   Compose │  │  (Multiplatform)   │  │
+│  └───────────┘  └────────────────────┘  │
+│                    │                     │
+│  ┌─────────────────┼─────────────────┐  │
+│  │   Mini-Orca Core (JVM)              │ │
+│  │  - Orchestrator                     │ │
+│  │  - Agent Registry                   │ │
+│  │  - State Management                 │ │
+│  │  - Tool Executor                    │ │
+│  └─────────────────┼─────────────────┘  │
+│                    │                     │
+│  ┌─────────────────┼─────────────────┐  │
+│  │  HTTP Client (Ktor)                 │ │
+│  │  - Communicate with backend         │ │
+│  └─────────────────┴─────────────────┘  │
+└─────────────────────────────────────────┘
+         │                    │
+┌────────┴────────┐  ┌───────┴────────┐
+│  Mini-Orca CLI  │  │  Mini-Orca     │
+│  (Go Backend)   │  │  Backend       │
+│  (Optional)     │  │  (Kotlin)      │
+└─────────────────┘  └────────────────┘
 ```
 
 ---
 
-## 2. Technology Stack
+## Phase 1: Research & Setup (2 weeks)
 
-### Desktop (Kotlin/JVM)
+### 1.1 Technology Selection
+- [x] Evaluate Jetpack Compose for Desktop
+- [x] Evaluate Ktor for HTTP client
+- [x] Evaluate serialization library (Kotlinx Serialization)
+- [ ] Set up multiplatform project structure
 
-| Technology | Purpose |
-|------------|---------|
-| **Kotlin 1.9+** | Language |
-| **Jetpack Compose for Desktop** | UI Framework |
-| **Ktor Client** | HTTP client |
-| **Koin** | Dependency Injection |
-| **Kotlinx Serialization** | JSON parsing |
-| **DataStore** | Local preferences storage |
-
----
-
-## 3. Project Structure
-
+### 1.2 Project Structure
 ```
-mini-orca-client/
-├── desktop/                    # Desktop app (JVM)
-│   ├── src/main/kotlin/
-│   │   └── com/orca/client/
-│   │       ├── Main.kt         # Entry point
-│   │       ├── app/
-│   │       │   ├── OrcaApp.kt  # Root Compose component
-│   │       │   └── theme/
-│   │       │       ├── Theme.kt
-│   │       │       └── Colors.kt
-│   │       ├── ui/
-│   │       │   ├── dashboard/
-│   │       │   │   ├── DashboardScreen.kt
-│   │       │   │   └── DashboardViewModel.kt
-│   │       │   ├── session/
-│   │       │   │   ├── SessionScreen.kt
-│   │       │   │   └── SessionViewModel.kt
-│   │       │   ├── code/
-│   │       │   │   ├── CodeScreen.kt
-│   │       │   │   └── CodeViewModel.kt
-│   │       │   ├── tests/
-│   │       │   │   ├── TestsScreen.kt
-│   │       │   │   └── TestsViewModel.kt
-│   │       │   └── settings/
-│   │       │       ├── SettingsScreen.kt
-│   │       │       └── SettingsViewModel.kt
-│   │       ├── data/
-│   │       │   ├── api/
-│   │       │   │   ├── OrcaApi.kt
-│   │       │   │   ├── SessionApi.kt
-│   │       │   │   └── ConfigApi.kt
-│   │       │   ├── repository/
-│   │       │   │   ├── SessionRepository.kt
-│   │       │   │   └── ConfigRepository.kt
-│   │       │   └── local/
-│   │       │       └── PreferencesStore.kt
-│   │       ├── domain/
-│   │       │   ├── model/
-│   │       │   │   ├── Session.kt
-│   │       │   │   ├── Plan.kt
-│   │       │   │   ├── AtomicUnit.kt
-│   │       │   │   ├── CodeOutput.kt
-│   │       │   │   ├── TestReport.kt
-│   │       │   │   └── ReviewReport.kt
-│   │       │   └── usecase/
-│   │       │       ├── CreateSessionUseCase.kt
-│   │       │       ├── ApprovePlanUseCase.kt
-│   │       │       └── GetModelConfigUseCase.kt
-│   │       └── di/
-│   │           └── Modules.kt   # Koin modules
-│   └── build.gradle.kts
+mini-orca-desktop/
 ├── build.gradle.kts
-└── settings.gradle.kts
+├── settings.gradle.kts
+├── gradle.properties
+├── src/
+│   └── commonMain/
+│       └── kotlin/
+│           ├── MiniOrcaApp.kt
+│           ├── components/
+│           │   ├── FileTree.kt
+│           │   ├── PhaseTracker.kt
+│           │   ├── ActivityLog.kt
+│           │   └── CodeEditor.kt
+│           ├── screens/
+│           │   ├── DashboardScreen.kt
+│           │   ├── PlanningScreen.kt
+│           │   ├── CodingScreen.kt
+│           │   └── ReviewScreen.kt
+│           ├── state/
+│           │   ├── SessionState.kt
+│           │   └── ConfigState.kt
+│           └── api/
+│               ├── ApiClient.kt
+│               └── Models.kt
 ```
 
----
-
-## 4. Key Components
-
-### 4.1 API Client (Ktor)
-
+### 1.3 Dependencies
 ```kotlin
-// desktop/src/main/kotlin/com/orca/client/data/api/OrcaApi.kt
-
-import io.ktor.client.*
-import io.ktor.client.engine.cio.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.serialization.kotlinx.json.*
-import kotlinx.serialization.json.Json
-
-class OrcaApi(private val baseUrl: String = "http://localhost:8080") {
-    private val client = HttpClient(CIO) {
-        install(ContentNegotiation) {
-            json(Json {
-                ignoreUnknownKeys = true
-                prettyPrint = true
-            })
-        }
-    }
-
-    // No authentication needed - local environment
-    
-    suspend fun createSession(request: CreateSessionRequest): Session {
-        return client.post("$baseUrl/api/sessions") {
-            setBody(request)
-        }
-    }
-
-    suspend fun getSession(sessionId: String): Session {
-        return client.get("$baseUrl/api/sessions/$sessionId")
-    }
-
-    suspend fun listSessions(): List<Session> {
-        return client.get("$baseUrl/api/sessions")
-    }
-
-    suspend fun approvePlan(sessionId: String, approved: Boolean, feedback: String = "") {
-        client.post("$baseUrl/api/sessions/$sessionId/approve") {
-            setBody(ApproveRequest(approved, feedback))
-        }
-    }
-
-    suspend fun getModelConfig(): ModelConfig {
-        return client.get("$baseUrl/api/config/models")
-    }
-}
-```
-
-### 4.2 Dashboard Screen (Compose)
-
-```kotlin
-// desktop/src/main/kotlin/com/orca/client/ui/dashboard/DashboardScreen.kt
-
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.orca.client.domain.model.Session
-import com.orca.client.ui.session.SessionViewModel
-
-@Composable
-fun DashboardScreen(
-    viewModel: SessionViewModel = koinViewModel(),
-    onSessionClick: (String) -> Unit
-) {
-    val sessions by viewModel.sessions.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("🐋 Mini-Orca") }
-            )
-        }
-    ) { padding ->
-        if (isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(sessions) { session ->
-                    SessionCard(
-                        session = session,
-                        onClick = { onSessionClick(session.id) }
-                    )
-                }
-            }
-        }
-    }
-}
-```
-
----
-
-## 5. API Contract (for Desktop App)
-
-### 5.1 Sessions
-
-```kotlin
-// Shared data models
-
-@Serializable
-data class Session(
-    val id: String,
-    val project_path: String,
-    val project_goal: String,
-    val current_phase: String,
-    val created_at: String,
-    val updated_at: String,
-    val plan: Plan? = null,
-    val current_unit: AtomicUnit? = null
-)
-
-@Serializable
-data class Plan(
-    val id: String,
-    val atomic_units: List<AtomicUnit>,
-    val architecture: String
-)
-
-@Serializable
-data class AtomicUnit(
-    val id: String,
-    val type: String,        // "function" | "struct" | "class"
-    val name: String,
-    val target_file: String,
-    val description: String,
-    val status: String
-)
-
-@Serializable
-data class CreateSessionRequest(
-    val project_path: String,
-    val project_goal: String
-)
-
-@Serializable
-data class ApproveRequest(
-    val approved: Boolean,
-    val feedback: String = ""
-)
-```
-
-### 5.2 Model Config
-
-```kotlin
-@Serializable
-data class ModelConfig(
-    val provider: String,
-    val model: String,
-    val temperature: Double,
-    val max_tokens: Int
-)
-
-@Serializable
-data class PhaseConfigs(
-    val planning: ModelConfig,
-    val coding: ModelConfig,
-    val testing: ModelConfig,
-    val review: ModelConfig
-)
-```
-
----
-
-## 6. Build Configuration
-
-```kotlin
-// desktop/build.gradle.kts
-
-plugins {
-    kotlin("jvm") version "1.9.22"
-    id("org.jetbrains.compose") version "1.5.11"
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
-}
-
 dependencies {
-    // Compose Desktop
-    implementation(compose.runtime)
-    implementation(compose.foundation)
-    implementation(compose.material3)
-    implementation(compose.ui)
-    
-    // Ktor
-    implementation("io.ktor:ktor-client-core:2.3.7")
-    implementation("io.ktor:ktor-client-cio:2.3.7")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
-    
-    // Koin
-    implementation("io.insert-koin:koin-core:3.5.3")
-    
-    // Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
-}
-
-compose.desktop {
-    application {
-        mainClass = "com.orca.client.MainKt"
-        
-        nativeDistributions {
-            targetFormats(TargetFormat.Dmg, Msi, Deb)
-            packageName = "mini-orca"
-            packageVersion = "1.0.0"
-        }
-    }
+    implementation("org.jetbrains.compose.material3:material3")
+    implementation("org.jetbrains.compose.material:material")
+    implementation("io.ktor:ktor-client-core:2.3.0")
+    implementation("io.ktor:ktor-client-cio:2.3.0")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.0")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }
 ```
 
 ---
 
-## 7. Development Roadmap
+## Phase 2: Core UI Components (3 weeks)
 
-### Phase 1: Desktop MVP (6-8 weeks)
-- [ ] Basic project setup
-- [ ] Dashboard with session list
-- [ ] Session detail view
-- [ ] Phase tracking
-- [ ] Code review screen
-- [ ] Model configuration
-- [ ] Packaging (DMG, MSI, DEB)
-
-### Phase 2: Desktop Polish (2-4 weeks)
-- [ ] Better code editor (integrated)
-- [ ] Dark/light theme
+### 2.1 Base Layout
+- [ ] Main window with sidebar and content area
+- [ ] Dark/light theme support
+- [ ] Responsive layout (sidebar toggle)
 - [ ] System tray integration
-- [ ] Auto-update support
+
+### 2.2 File Tree Component
+- [ ] Recursive file tree with icons
+- [ ] File selection and highlighting
+- [ ] Context menu (open, rename, delete)
+- [ ] Drag and drop support
+
+### 2.3 Phase Tracker Component
+- [ ] Horizontal progress bar
+- [ ] Phase status indicators
+- [ ] Click to jump to phase
+- [ ] Animated transitions
+
+### 2.4 Activity Log Component
+- [ ] Scrollable log view
+- [ ] Timestamp and severity indicators
+- [ ] Search/filter functionality
+- [ ] Auto-scroll to latest
+
+### 2.5 Code Editor Component
+- [ ] Syntax highlighting (Kotlinx Highlight)
+- [ ] Line numbers
+- [ ] Tab support
+- [ ] Diff view (side-by-side)
+- [ ] Auto-format integration
 
 ---
 
-## 8. Comparison: HTMX Web vs Kotlin Native
+## Phase 3: Screen Implementation (3 weeks)
 
-| Feature | HTMX Web Dashboard | Kotlin Desktop |
-|---------|-------------------|----------------|
-| **Setup** | Browser only | Install required |
-| **Performance** | Good | Better (native) |
-| **File Access** | Limited | Full filesystem |
-| **System Integration** | Limited | Better (tray, notifications) |
-| **Development Speed** | **Faster** | Slower |
-| **Cross-Platform** | Any browser | JVM-based |
-| **Bundle Size** | Small | Larger (~100MB+) |
-| **Maintenance** | Simple | More complex |
+### 3.1 Dashboard Screen
+- [ ] Session overview cards
+- [ ] Quick actions (new session, resume)
+- [ ] Recent sessions list
+- [ ] System status indicators
+
+### 3.2 Planning Screen
+- [ ] Plan display with atomic units
+- [ ] Expandable unit details
+- [ ] Approve/reject buttons
+- [ ] Change request modal
+
+### 3.3 Coding Screen
+- [ ] Current unit display
+- [ ] Code editor with syntax highlighting
+- [ ] Test output panel
+- [ ] Agent activity indicators
+
+### 3.4 Testing Screen
+- [ ] Test results display
+- [ ] Coverage visualization
+- [ ] Test failure details
+- [ ] Retry controls
+
+### 3.5 Review Screen
+- [ ] Code review with comments
+- [ ] Diff viewer
+- [ ] Approval workflow
+- [ ] Change history
 
 ---
 
-## 9. Recommendation
+## Phase 4: Backend Integration (2 weeks)
 
-**Start with the HTMX Web Dashboard first** (Milestones 1-5 in the main plan).
+### 4.1 API Client
+- [ ] Ktor HTTP client setup
+- [ ] JSON serialization/deserialization
+- [ ] Error handling and retry logic
+- [ ] WebSocket support (optional)
 
-Build the Kotlin desktop app **only if**:
-1. The web dashboard meets all needs → stop there
-2. System integration is needed (tray, notifications, file access) → build Kotlin Desktop
+### 4.2 State Management
+- [ ] Session state management
+- [ ] Configuration persistence
+- [ ] Offline support (optional)
 
-The Go daemon's API should be designed to support both clients from the start.
+### 4.3 Background Tasks
+- [ ] Orchestrator process management
+- [ ] Real-time log streaming
+- [ ] Progress tracking
+
+---
+
+## Phase 5: Polish & Distribution (2 weeks)
+
+### 5.1 Polish
+- [ ] Keyboard shortcuts
+- [ ] Accessibility improvements
+- [ ] Localization support
+- [ ] Performance optimization
+
+### 5.2 Distribution
+- [ ] Create installer (DMG, MSI)
+- [ ] Code signing
+- [ ] Auto-update mechanism
+- [ ] App Store submission (optional)
+
+---
+
+## Alternative: WebView Approach
+
+If native Compose proves too complex, consider a simpler approach:
+
+```
+┌─────────────────────────────────────────┐
+│          Kotlin Desktop App             │
+│  ┌───────────────────────────────────┐  │
+│  │         WebView (CEF)             │  │
+│  │  - HTMX + Alpine.js frontend      │  │
+│  │  - Same as web version            │  │
+│  └───────────────────────────────────┘  │
+│                    │                     │
+│  ┌─────────────────┼─────────────────┐  │
+│  │  Kotlin Backend (JVM)               │ │
+│  │  - Mini-Orca Core                   │ │
+│  │  - Embedded HTTP Server             │ │
+│  └─────────────────┴─────────────────┘  │
+└─────────────────────────────────────────┘
+```
+
+**Advantages:**
+- Reuse existing web frontend
+- Faster development
+- Simpler maintenance
+
+**Disadvantages:**
+- Larger binary size
+- Less native feel
+
+---
+
+## Timeline Estimate
+
+| Phase | Duration | Total |
+|-------|----------|-------|
+| 1. Research & Setup | 2 weeks | 2 weeks |
+| 2. Core UI Components | 3 weeks | 5 weeks |
+| 3. Screen Implementation | 3 weeks | 8 weeks |
+| 4. Backend Integration | 2 weeks | 10 weeks |
+| 5. Polish & Distribution | 2 weeks | 12 weeks |
+
+**Total: ~12 weeks**
+
+---
+
+## Risk Assessment
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Jetpack Compose Desktop maturity | Medium | Use stable version, fallback to WebView |
+| Performance with large files | Medium | Virtual scrolling, lazy loading |
+| Cross-platform compatibility | Low | Test on all platforms early |
+| Learning curve | High | Allocate time for Compose learning |
+
+---
+
+## Next Steps
+
+1. **Week 1:** Set up project, create basic window
+2. **Week 2:** Implement API client, connect to Go backend
+3. **Week 3-5:** Build core UI components
+4. **Week 6-8:** Implement screens
+5. **Week 9-10:** Backend integration
+6. **Week 11-12:** Polish and distribution
+
+---
+
+*Created: January 2024*
