@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mini-Orca Base Layout</title>
+</head>
+<body class="bg-gray-900 text-gray-100">
+    <div id="app">
+        {{template "header" .}}
+        <main class="flex h-[calc(100vh-64px)]">
+            <aside class="w-64 bg-gray-800 border-r border-gray-700 overflow-y-auto">
+                {{template "file-tree" .}}
+            </aside>
+            <div class="flex-1 flex flex-col overflow-hidden">
+                {{template "phase-tracker" .}}
+                <div class="flex-1 overflow-auto p-4">
+                    {{template "content" .}}
+                </div>
+                {{template "activity-log" .}}
+            </div>
+        </main>
+    </div>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js" defer></script>
+    <link rel="stylesheet" href="/css/styles.css">
+</body>
+</html>

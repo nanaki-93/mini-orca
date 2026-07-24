@@ -11,10 +11,10 @@
 | **2. Multi-Agent Architecture with Skills** | ✅ Complete | 100% (7/7 tasks) |
 | **3. Language-Agnostic Tool Executor** | ✅ Complete | 100% (7/7 tasks) |
 | **4. Orchestrator & State Machine** | ✅ Complete | 100% (7/7 tasks) |
-| **5. IDE-like HTMX Frontend** | ⏳ Pending | 0% |
+| **5. IDE-like HTMX Frontend** | 🚧 In Progress | 90% |
 | **6. Polish & Kotlin Future** | ⏳ Pending | 0% |
 
-**Last Updated:** Milestone 4 completed — all builds passing
+**Last Updated:** Milestone 5 — 90% complete (all templates, handlers, and UI components built, build passing)
 
 ---
 
@@ -315,64 +315,64 @@ mini-orca/
 **Goal:** Create the HTMX-based dashboard with real-time monitoring
 
 #### Tasks
-- [ ] **5.1** Create new template structure
-  - [ ] `internal/api/templates/base.html` — Base layout
-  - [ ] `internal/api/templates/ide.html` — Main IDE page
-  - [ ] `internal/api/templates/components/` — Reusable components
-  - [ ] `internal/api/templates/phases/` — Phase-specific views
+- [x] **5.1** Create new template structure
+  - [x] `internal/api/templates/base.html` — Base layout
+  - [x] `internal/api/templates/ide.html` — Main IDE page
+  - [x] `internal/api/templates/components/` — Reusable components
+  - [x] `internal/api/templates/phases/` — Phase-specific views
 
-- [ ] **5.2** Build IDE layout
-  - [ ] File tree component
-  - [ ] Code editor (single function + full file)
-  - [ ] Phase tracker
-  - [ ] Activity log
-  - [ ] Header bar (project info, model config, git status)
+- [x] **5.2** Build IDE layout
+  - [x] File tree component
+  - [x] Code editor (single function + full file)
+  - [x] Phase tracker
+  - [x] Activity log
+  - [x] Header bar (project info, model config, git status)
 
-- [ ] **5.3** Build phase-specific templates
-  - [ ] `phases/planning.html` — Planning in progress
-  - [ ] `phases/planning-review.html` — Plan approval with Alpine.js
-  - [ ] `phases/coding.html` — Code display
-  - [ ] `phases/testing.html` — Test results
-  - [ ] `phases/review.html` — Review report
-  - [ ] `phases/human-review.html` — Human approval
+- [x] **5.3** Build phase-specific templates
+  - [x] `phases/planning.html` — Planning in progress
+  - [x] `phases/planning-review.html` — Plan approval with Alpine.js
+  - [x] `phases/coding.html` — Code display
+  - [x] `phases/testing.html` — Test results
+  - [x] `phases/review.html` — Review report
+  - [x] `phases/human-review.html` — Human approval
 
-- [ ] **5.4** Build editor templates
-  - [ ] `editors/code-editor.html` — Function editor
-  - [ ] `editors/full-file-editor.html` — Full file editor
-  - [ ] `editors/standalone-function.html` — Standalone function writer
-  - [ ] `editors/insertion-picker.html` — Insertion point picker
+- [x] **5.4** Build editor templates
+  - [x] `editors/code-editor.html` — Function editor
+  - [x] `editors/full-file-editor.html` — Full file editor
+  - [x] `editors/standalone-function.html` — Standalone function writer
+  - [x] `editors/insertion-picker.html` — Insertion point picker
 
-- [ ] **5.5** Build components
-  - [ ] `components/file-tree.html` — File tree
-  - [ ] `components/phase-tracker.html` — Phase progress
-  - [ ] `components/activity-log.html` — Activity feed
-  - [ ] `components/header.html` — Header bar
+- [x] **5.5** Build components
+  - [x] `components/file-tree.html` — File tree
+  - [x] `components/phase-tracker.html` — Phase progress
+  - [x] `components/activity-log.html` — Activity feed
+  - [x] `components/header.html` — Header bar
 
-- [ ] **5.6** Enhance API handlers
-  - [ ] `api/handlers/project.go` — Project management
-  - [ ] `api/handlers/approve.go` — Approval handling
-  - [ ] `api/handlers/config.go` — Model/skills config
-  - [ ] `api/handlers/insertion.go` — Function insertion
-  - [ ] Add HTMX partial rendering endpoints
+- [x] **5.6** Enhance API handlers
+  - [x] `api/handlers/project.go` — Project management
+  - [x] `api/handlers/approve.go` — Approval handling
+  - [x] `api/handlers/config.go` — Model/skills config
+  - [x] `api/handlers/insertion.go` — Function insertion
+  - [x] Add HTMX partial rendering endpoints
 
-- [ ] **5.7** Add Alpine.js interactivity
-  - [ ] Model configuration panel
-  - [ ] Session controls (pause/resume/stop)
-  - [ ] Feedback input fields
-  - [ ] Insertion picker radio buttons
+- [x] **5.7** Add Alpine.js interactivity
+  - [x] Model configuration panel
+  - [x] Session controls (pause/resume/stop)
+  - [x] Feedback input fields
+  - [x] Insertion picker radio buttons
 
-- [ ] **5.8** Skills Management UI
-  - [ ] Skills library view (search, filter, enable/disable)
-  - [ ] Add/Edit skill dialog (name, description, type, priority, prompt template)
-  - [ ] Agent-skill association view (checkboxes per agent)
-  - [ ] Bulk actions (reset to defaults, export, import)
-  - [ ] API endpoints: CRUD for skills, agent-skill mappings
-  - [ ] Alpine.js interactivity for skills management
+- [x] **5.8** Skills Management UI
+  - [x] Skills library view (search, filter, enable/disable)
+  - [x] Add/Edit skill dialog (name, description, type, priority, prompt template)
+  - [x] Agent-skill association view (checkboxes per agent)
+  - [x] Bulk actions (reset to defaults, export, import)
+  - [x] API endpoints: CRUD for skills, agent-skill mappings
+  - [x] Alpine.js interactivity for skills management
 
-- [ ] **5.9** Polish & UX
-  - [ ] Loading states
-  - [ ] Error handling
-  - [ ] Responsive design
+- [x] **5.9** Polish & UX
+  - [x] Loading states
+  - [x] Error handling
+  - [x] Responsive design
 
 #### Deliverables
 - IDE-like HTMX dashboard

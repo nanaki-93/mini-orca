@@ -79,7 +79,7 @@ Atomic Unit Specification:
 	return &ExecutionResult{
 		Output:     output,
 		Phase:      string(model.PhaseCoding),
-		SkillsUsed: skillNames(a.skills),
+		SkillsUsed: skillNames(typesToSkills(a.skills)),
 		Success:    true,
 	}, nil
 }

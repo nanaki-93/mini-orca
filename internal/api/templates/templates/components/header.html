@@ -1,0 +1,14 @@
+<header class="bg-gray-800 border-b border-gray-700 h-16 flex items-center justify-between px-4">
+    <div class="flex items-center space-x-4">
+        <h1 class="text-xl font-bold text-cyan-400">Mini-Orca IDE</h1>
+        <span class="text-sm text-gray-400" x-text="session?.name || 'No session'"></span>
+    </div>
+    <div class="flex items-center space-x-4">
+        <button @click="showConfigModal = true" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+            ⚙️ Config
+        </button>
+        <button @click="toggleDarkMode()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+            <span x-text="darkMode ? '☀️' : '🌙'"></span>
+        </button>
+    </div>
+</header>

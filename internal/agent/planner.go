@@ -89,7 +89,7 @@ User Requirements:
 	return &ExecutionResult{
 		Output:     output,
 		Phase:      string(model.PhasePlanning),
-		SkillsUsed: skillNames(a.skills),
+		SkillsUsed: skillNames(typesToSkills(a.skills)),
 		Success:    true,
 	}, nil
 }

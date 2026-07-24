@@ -1,0 +1,23 @@
+<div class="bg-gray-800 rounded-lg p-4" x-data="{ functionCode: '', functionName: '' }">
+    <h3 class="text-sm font-semibold text-gray-300 mb-4">📝 Standalone Function Writer</h3>
+    <div class="space-y-4">
+        <div>
+            <label class="block text-xs text-gray-400 mb-1">Function Name</label>
+            <input x-model="functionName" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm" 
+                   placeholder="e.g., CalculateTotal">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-400 mb-1">Function Code</label>
+            <textarea x-model="functionCode" class="w-full h-64 bg-gray-900 border border-gray-700 rounded p-3 text-sm font-mono" 
+                      placeholder="Enter function code..."></textarea>
+        </div>
+        <div class="flex space-x-2">
+            <button @click="insertFunction()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
+                📥 Insert Function
+            </button>
+            <button @click="generateWithAI()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-sm">
+                🤖 Generate with AI
+            </button>
+        </div>
+    </div>
+</div>

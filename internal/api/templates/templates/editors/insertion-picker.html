@@ -1,0 +1,34 @@
+<div class="bg-gray-800 rounded-lg p-4" x-data="{ insertionPoint: 'append', referenceFunction: '' }">
+    <h3 class="text-sm font-semibold text-gray-300 mb-4">📍 Insertion Point Picker</h3>
+    <div class="space-y-4">
+        <div>
+            <label class="block text-xs text-gray-400 mb-2">Insert Position</label>
+            <div class="space-y-2">
+                <label class="flex items-center space-x-2">
+                    <input type="radio" x-model="insertionPoint" value="before" class="text-cyan-600">
+                    <span class="text-sm text-gray-300">Before a function</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="radio" x-model="insertionPoint" value="after" class="text-cyan-600">
+                    <span class="text-sm text-gray-300">After a function</span>
+                </label>
+                <label class="flex items-center space-x-2">
+                    <input type="radio" x-model="insertionPoint" value="append" class="text-cyan-600">
+                    <span class="text-sm text-gray-300">Append to file</span>
+                </label>
+            </div>
+        </div>
+        <div x-show="insertionPoint !== 'append'">
+            <label class="block text-xs text-gray-400 mb-1">Reference Function</label>
+            <select class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm">
+                <option>Select a function...</option>
+                {{range .Functions}}
+                <option>{{.}}</option>
+                {{end}}
+            </select>
+        </div>
+        <button @click="confirmInsertion()" class="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
+            ✅ Confirm Insertion
+        </button>
+    </div>
+</div>

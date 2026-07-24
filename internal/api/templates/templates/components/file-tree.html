@@ -1,0 +1,11 @@
+<div class="p-4 bg-gray-800 border-b border-gray-700">
+    <div class="flex items-center justify-between mb-2">
+        <h2 class="text-sm font-semibold text-gray-300">📁 Project Files</h2>
+        <button @click="refreshFiles()" class="text-xs text-cyan-400 hover:text-cyan-300">
+            🔄 Refresh
+        </button>
+    </div>
+    <div id="file-tree-content" class="space-y-1">
+        <div class="text-xs text-gray-400 px-2 py-1">Loading files...</div>
+    </div>
+</div>

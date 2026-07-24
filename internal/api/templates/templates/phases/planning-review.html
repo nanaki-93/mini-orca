@@ -1,0 +1,24 @@
+<div class="space-y-4" x-data="{ showDetails: false }">
+    <div class="bg-gray-800 rounded-lg p-6">
+        <h2 class="text-lg font-semibold text-yellow-400 mb-4">👁️ Planning Review</h2>
+        <p class="text-gray-300 mb-4">Review the generated plan and approve or request changes.</p>
+        
+        <div class="mb-4">
+            <button @click="showDetails = !showDetails" class="text-sm text-cyan-400 hover:text-cyan-300">
+                <span x-text="showDetails ? 'Hide' : 'Show'">Show</span> Plan Details
+            </button>
+            <div x-show="showDetails" class="mt-2 text-sm text-gray-400 font-mono bg-gray-900 p-3 rounded">
+                {{.PlanDetails}}
+            </div>
+        </div>
+        
+        <div class="flex space-x-4">
+            <button @click="approvePlan()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm">
+                ✅ Approve Plan
+            </button>
+            <button @click="requestChanges()" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm">
+                🔄 Request Changes
+            </button>
+        </div>
+    </div>
+</div>

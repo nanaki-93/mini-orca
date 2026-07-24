@@ -1,0 +1,18 @@
+<div class="bg-gray-800 rounded-lg p-4">
+    <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-semibold text-gray-300">Full File Editor</h3>
+        <div class="space-x-2">
+            <button @click="saveFile()" class="px-2 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-xs">
+                💾 Save
+            </button>
+            <button @click="formatFile()" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs">
+                🎨 Format
+            </button>
+        </div>
+    </div>
+    <textarea x-model="fullCode" class="w-full h-96 bg-gray-900 border border-gray-700 rounded p-3 text-sm font-mono" 
+              placeholder="Enter full file content..."></textarea>
+    <div class="mt-2 text-xs text-gray-400">
+        File: {{.FilePath}} | Lines: {{.LineCount}}
+    </div>
+</div>

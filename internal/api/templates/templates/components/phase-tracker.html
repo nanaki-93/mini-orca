@@ -1,0 +1,25 @@
+<div class="p-4 bg-gray-800 border-b border-gray-700">
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-300">📊 Phase Progress</h2>
+        <span class="text-xs text-gray-400" x-text="'Phase: ' + (session?.phase || 'unknown')"></span>
+    </div>
+    <div class="flex items-center space-x-2">
+        <template x-for="(phase, index) in phases" :key="phase.id">
+            <div class="flex items-center">
+                <div class="flex flex-col items-center">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                         :class="{
+                             'bg-green-500': phase.status === 'completed',
+                             'bg-cyan-500': phase.status === 'current',
+                             'bg-gray-600': phase.status === 'pending',
+                             'bg-red-500': phase.status === 'error'
+                         }"
+                         x-text="phase.icon">
+                    </div>
+                    <span class="text-xs mt-1 text-gray-400" x-text="phase.name"></span>
+                </div>
+                <div x-show="index < phases.length - 1" class="w-8 h-0.5 bg-gray-600"></div>
+            </div>
+        </template>
+    </div>
+</div>

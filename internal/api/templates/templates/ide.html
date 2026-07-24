@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini-Orca IDE</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js" defer></script>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body x-data="appData()" :class="{ 'dark': darkMode }">
+    <div id="app" class="min-h-screen bg-gray-900 text-gray-100">
+        <!-- Header Component -->
+        <header id="header" class="bg-gray-800 border-b border-gray-700 h-16 flex items-center justify-between px-4">
+            <div class="flex items-center space-x-4">
+                <h1 class="text-xl font-bold text-cyan-400">Mini-Orca IDE</h1>
+                <span class="text-sm text-gray-400" x-text="session?.name || 'No session'"></span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button @click="showConfigModal = true" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+                    ⚙️ Config
+                </button>
+                <button @click="toggleDarkMode()" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+                    <span x-text="darkMode ? '☀️' : '🌙'"></span>
+                </button>
+            </div>
+        </header>
+        
+        <main class="flex h-[calc(100vh-64px)]">
+            <!-- Sidebar -->
+            <aside class="w-64 bg-gray-800 border-r border-gray-700 overflow-y-auto">
+                <!-- File Tree Component -->
+                <div id="file-tree" class="p-2">
+                    <div class="text-sm font-semibold text-gray-300 mb-2 px-2">📁 Files</div>
+                    <div hx-get="/api/templates/file-tree" hx-trigger="load" id="file-tree-content"></div>
+                </div>
+            </aside>
+            
+            <!-- Main Content -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+                <!-- Phase Tracker Component -->
+                <div id="phase-tracker" class="p-4 bg-gray-800 border-b border-gray-700">
+                    <div hx-get="/api/templates/phase-tracker" hx-trigger="load"></div>
+                </div>
+                
+                <!-- Dynamic Content Area -->
+                <div id="content" class="flex-1 overflow-auto p-4">
+                    <div id="main-view" hx-get="/api/templates/main-view" hx-trigger="load"></div>
+                </div>
+                
+                <!-- Activity Log Component -->
+                <div id="activity-log" class="h-48 bg-gray-950 border-t border-gray-700 overflow-y-auto p-2 text-sm font-mono">
+                    <div class="text-gray-400">Activity log will appear here...</div>
+                    <div hx-get="/api/templates/activity-log" hx-trigger="load" id="activity-log-content"></div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Modals -->
+        <div id="modal-container"></div>
+    </div>
+    
+    <script src="/js/app.js"></script>
+</body>
+</html>

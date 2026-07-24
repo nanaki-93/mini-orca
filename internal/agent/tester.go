@@ -85,7 +85,7 @@ Code to Test:
 	return &ExecutionResult{
 		Output:     output,
 		Phase:      string(model.PhaseTesting),
-		SkillsUsed: skillNames(a.skills),
+		SkillsUsed: skillNames(typesToSkills(a.skills)),
 		Success:    true,
 	}, nil
 }
