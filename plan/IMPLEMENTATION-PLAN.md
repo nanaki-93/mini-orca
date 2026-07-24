@@ -7,14 +7,14 @@
 
 | Milestone | Status | Progress |
 |-----------|--------|----------|
-| **1. Model Abstraction & LM Studio** | ✅ Complete | 75% (3/4 tasks) |
+| **1. Model Abstraction & LM Studio** | ✅ Complete | 100% (4/4 tasks) |
 | **2. Multi-Agent Architecture with Skills** | ✅ Complete | 100% (7/7 tasks) |
 | **3. Language-Agnostic Tool Executor** | ✅ Complete | 100% (7/7 tasks) |
 | **4. Orchestrator & State Machine** | ✅ Complete | 100% (7/7 tasks) |
-| **5. IDE-like HTMX Frontend** | 🚧 In Progress | 90% |
-| **6. Polish & Kotlin Future** | ⏳ Pending | 0% |
+| **5. IDE-like HTMX Frontend** | ✅ Complete | 100% |
+| **6. Polish & Kotlin Future** | 🚧 In Progress | 15% |
 
-**Last Updated:** Milestone 5 — 90% complete (all templates, handlers, and UI components built, build passing)
+**Last Updated:** Milestone 6.1 — Backend polish in progress (logging, error handling, unit tests added)
 
 ---
 
@@ -41,6 +41,12 @@ mini-orca/
 │   └── cli/
 │       └── main.go              # CLI interface (optional)
 ├── internal/
+│   ├── errors/
+│   │   ├── errors.go            # Structured error types
+│   │   └── errors_test.go       # Error tests
+│   ├── logging/
+│   │   ├── logging.go           # Structured logging
+│   │   └── logging_test.go      # Logging tests
 │   ├── api/
 │   │   ├── handlers/
 │   │   │   ├── project.go       # Project management
@@ -388,11 +394,28 @@ mini-orca/
 **Goal:** Final polish and prepare for Kotlin native app
 
 #### Tasks
-- [ ] **6.1** Backend polish
-  - [ ] Error handling improvements
-  - [ ] Logging improvements
+- [x] **6.1** Backend polish (in progress)
+  - [x] Error handling improvements
+    - [x] Created `internal/errors/errors.go` with structured error types
+    - [x] ErrorCode enum for all error types
+    - [x] Helper functions: IsNotFound, IsRetryable, IsTerminal
+    - [x] MultiError for multiple errors
+    - [x] Error formatting for API responses
+    - [x] Unit tests (19 tests, all passing)
+  - [x] Logging improvements
+    - [x] Created `internal/logging/logging.go` with structured logging
+    - [x] Console + file output support
+    - [x] Log levels (DEBUG, INFO, WARN, ERROR, FATAL)
+    - [x] Global logger singleton
+    - [x] Test logger for unit testing
+    - [x] Unit tests (13 tests, all passing)
   - [ ] Documentation
-  - [ ] Unit tests
+  - [x] Unit tests (4 packages, 60+ tests total)
+    - [x] `internal/errors/errors_test.go` (19 tests)
+    - [x] `internal/logging/logging_test.go` (13 tests)
+    - [x] `internal/model/router_test.go` (18 tests)
+    - [x] `internal/state/session_test.go` (22 tests)
+    - [x] `internal/tools/project_types_test.go` (17 tests)
 
 - [ ] **6.2** Frontend polish
   - [ ] Bug fixes

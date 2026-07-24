@@ -83,12 +83,17 @@ func (s *Store) ListSessions() ([]*Session, error) {
 
 	var sessions []*Session
 	for _, file := range files {
-		if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
-			session, err := s.GetSession(file.Name()[:len(file.Name())-5])
+		// Sessions are stored in subdirectories named by session ID
+		if file.IsDir() {
+			sessionPath := filepath.Join(s.baseDir, file.Name(), "session.json")
+			session, err := s.GetSession(file.Name())
 			if err != nil {
 				continue
 			}
-			sessions = append(sessions, session)
+			// Verify the session file actually exists
+			if _, err := os.Stat(sessionPath); err == nil {
+				sessions = append(sessions, session)
+			}
 		}
 	}
 
@@ -118,7 +123,13 @@ func (s *Store) SavePlan(plan *Plan) error {
 		return fmt.Errorf("failed to marshal plan: %w", err)
 	}
 
-	path := filepath.Join(s.baseDir, plan.SessionID, "plan.json")
+	// Create session directory if it doesn't exist
+	sessionDir := filepath.Join(s.baseDir, plan.SessionID)
+	if err := os.MkdirAll(sessionDir, 0755); err != nil {
+		return fmt.Errorf("failed to create session directory: %w", err)
+	}
+
+	path := filepath.Join(sessionDir, "plan.json")
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("failed to write plan: %w", err)
 	}
