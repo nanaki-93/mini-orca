@@ -200,7 +200,7 @@ func (p *LMStudioProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResp
         bytes.NewBuffer(jsonBody),
     )
     if err != nil {
-        return nil, fmt.Errorf("LM Studio request failed: %w", err)
+        return nil, fmt.Errorf("LM Studio is unreachable at %s — is the server running? %w", p.BaseURL, err)
     }
     defer resp.Body.Close()
     

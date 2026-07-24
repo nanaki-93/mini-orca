@@ -31,7 +31,7 @@
 │                    │  └─────────────────────────────────────────────────────┘  │  │
 │                    └───────────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────────────────────────────┐  │
-│  │  HEADER: Project Path | Goal | Model Config | Git Status | [New Session]    │  │
+│  │  HEADER: Project Path | Goal | Model Config | [New Session]              │  │
 │  └──────────────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────────────┘
                             │ REST API
@@ -50,7 +50,6 @@
 │  │  - Phase Router (manages A→B→C→D→E flow)                                  │  │  │
 │  │  - Human Gate Manager (handles user approvals)                             │  │  │
 │  │  - State Manager (persistent state store)                                  │  │  │
-│  │  - Insertion Manager (handles standalone function insertion)               │  │  │
 │  └──────────────────────────────┬─────────────────────────────────────────────┘  │  │
 │                                 │                                                 │  │
 │  ┌──────────────────────────────▼─────────────────────────────────────────────┐  │
@@ -75,9 +74,9 @@
 │  │        LANGUAGE-AGNOSTIC TOOL EXECUTOR                                     │  │
 │  │  - Auto-detect project type (Go, Kotlin, Java, Rust, TS, Python)          │  │  │
 │  │  - Shell commands, file ops, build/test/run                               │  │  │
-│  │  - Git integration (add, commit, diff, status)                            │  │  │
 │  │  - Code formatting (per-language formatters)                              │  │  │
 │  │  - Atomic modifications: ONE function/struct/class at a time              │  │  │
+│  │  - Error display when LM Studio is unreachable                            │  │  │
 │  └────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                  │
 │  ┌────────────────────────────────────────────────────────────────────────────┐  │
@@ -171,9 +170,6 @@ type Executor struct {
     
     // File operations (atomic: one function/struct/class at a time)
     FileOps *FileOpsExecutor
-    
-    // Git operations
-    Git *GitExecutor
     
     // Auto-detected project executors
     projectType ProjectType
@@ -463,7 +459,6 @@ skills:
 
 tools:
   shell_timeout: 30s
-  git_enabled: true
   auto_detect_project: true  # Auto-detect Go, Kotlin, Java, Rust, TS, Python, etc.
   code_formatting: true      # Auto-format code after generation
   
@@ -496,7 +491,7 @@ tools:
 
 state:
   store_type: "json"
-  json_path: "~/.local/share/mini-orca"
+  json_path: "~/.mini-orca"
 
 # Theme configuration (dark by default, extensible)
 theme:
@@ -543,8 +538,7 @@ mini-orca/
 │   │   ├── executor.go          # Main executor
 │   │   ├── shell.go             # Shell commands
 │   │   ├── file_ops.go          # Atomic file operations
-│   │   ├── git_ops.go           # Git integration
-│   │   ├── formatter.go         # Code formatting
+│   │   └── formatter.go         # Code formatting
 │   │   └── project_types.go     # Project detection & executors
 │   │       ├── go_executor.go
 │   │       ├── kotlin_executor.go
@@ -557,8 +551,7 @@ mini-orca/
 │       ├── handlers/
 │       │   ├── project.go       # Project management
 │       │   ├── approve.go       # Approval handling
-│       │   ├── config.go        # Model/skills config
-│       │   └── insertion.go     # Standalone function insertion
+│       │   └── config.go        # Model/skills config
 │       └── templates/
 │           ├── base.html        # Base layout
 │           ├── ide.html         # IDE dashboard
@@ -590,8 +583,6 @@ mini-orca/
 | Frontend | HTMX templates (keep) | `internal/api/templates/` | Enhance to IDE-like layout |
 | State Store | JSON file | JSON file (keep) | No SQLite needed |
 | Tools | Language-specific | Language-agnostic | Auto-detect + universal shell |
-| Auth | None | None | Local environment |
-| Git | None | `internal/tools/git_ops.go` | NEW: Git integration |
 | Formatting | None | `internal/tools/formatter.go` | NEW: Code formatting |
 
 ## 7. Dependencies
@@ -602,5 +593,5 @@ mini-orca/
 
 ### Frontend (HTMX - existing)
 - HTMX.org (already used)
-- Alpine.js (lightweight JS for interactivity)
 - TailwindCSS (already used)
+- **Zero client-side JS frameworks** — all interactivity via HTMX + server-side rendering

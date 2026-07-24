@@ -287,7 +287,7 @@ type Issue struct {
                     │            │                                    │   │
                     │            ▼                                    │   │
                     │  ┌──────────────────┐                         │   │
-                    │  │     COMMIT       │                         │   │
+                    │  │   UNIT APPROVED  │                         │   │
                     │  │  Unit written to │                         │   │
                     │  │  target file     │                         │   │
                     │  └────────┬─────────┘                         │   │
@@ -426,10 +426,10 @@ func (pr *PhaseRouter) runCodingLoop(ctx context.Context) error {
 | `TESTING` | `CODE_REVIEW` | Tests pass |
 | `CODE_REVIEW` | `CODING` | Review fails |
 | `CODE_REVIEW` | `WAITING_FOR_HUMAN_APPROVAL` | Review passes |
-| `WAITING_FOR_HUMAN_APPROVAL` | `COMMIT` | User accepts |
+| `WAITING_FOR_HUMAN_APPROVAL` | `UNIT_APPROVED` | User accepts |
 | `WAITING_FOR_HUMAN_APPROVAL` | `CODING` | User rejects |
 | `WAITING_FOR_HUMAN_APPROVAL` | `TESTING` | User edits + submits |
-| `COMMIT` | `CODING` | Auto (next unit) |
+| `UNIT_APPROVED` | `CODING` | Auto (next unit) |
 | `CODING` | `COMPLETED` | No more units |
 
 ## 5. Event System

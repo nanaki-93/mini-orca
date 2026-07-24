@@ -26,7 +26,6 @@ type Skill struct {
     Name        string       `json:"name"`         // Human-readable name
     Description string       `json:"description"`  // What this skill does
     Type        SkillType    `json:"type"`         // knowledge | tool
-    Enabled     bool         `json:"enabled"`      // Whether this skill is active
     Priority    int          `json:"priority"`     // Order of application (lower = first)
     
     // For knowledge skills
@@ -376,18 +375,28 @@ Your task: Review the generated code and provide a detailed assessment.
 // internal/agent/skills/skills.go
 
 type SkillsRegistry struct {
-    library map[string]Skill  // Skill ID -> Skill definition
-    enabled map[string]bool   // Skill ID -> enabled status
+    library    map[string]Skill        // Skill ID -> Skill definition
+    agentSkills map[string][]string     // Agent type -> list of assigned skill IDs
 }
 
-func (r *SkillsRegistry) GetEnabledSkills(agentType string) []Skill {
-    // Return enabled skills for the given agent type
-    // ...
+func (r *SkillsRegistry) GetSkillsForAgent(agentType string) []Skill {
+    // Return skills assigned to the given agent type
+    skillIDs := r.agentSkills[agentType]
+    var skills []Skill
+    for _, id := range skillIDs {
+        if skill, exists := r.library[id]; exists {
+            skills = append(skills, skill)
+        }
+    }
+    return skills
 }
 
 func (r *SkillsRegistry) GetSkillPrompt(skillID string) string {
     // Get the prompt template for a knowledge skill
-    // ...
+    if skill, exists := r.library[skillID]; exists {
+        return skill.PromptTemplate
+    }
+    return ""
 }
 ```
 
@@ -403,11 +412,11 @@ type PlannerAgent struct {
 }
 
 func (a *PlannerAgent) Execute(ctx context.Context, input Input) (*Plan, error) {
-    // Get enabled skills
-    enabledSkills := a.Skills.GetEnabledSkills("planner")
+    // Get skills assigned to this agent
+    agentSkills := a.Skills.GetSkillsForAgent("planner")
     
     // Build prompt with skill descriptions
-    prompt := a.buildPrompt(input, enabledSkills)
+    prompt := a.buildPrompt(input, agentSkills)
     
     // Execute with model
     response, err := a.Model.Execute(ctx, prompt)
@@ -428,7 +437,7 @@ func (a *PlannerAgent) buildPrompt(input Input, skills []Skill) string {
     prompt := "You are an expert software architect.\n\n"
     
     // Add skill prompts
-    for _, skill := range skills {
+    for _, skill := range agentSkills {
         if skill.Type == SkillKnowledge {
             skillPrompt := a.Skills.GetSkillPrompt(skill.ID)
             prompt += skillPrompt + "\n\n"
@@ -444,22 +453,42 @@ func (a *PlannerAgent) buildPrompt(input Input, skills []Skill) string {
 
 ---
 
-## 6. Configuring Skills
+## 6. Skills Management
 
-### 6.1 Enable/Disable Skills
+### 6.1 Add/Edit/Delete Skills
 
-```yaml
-# config.yaml - Enable/disable skills per agent
-agents:
-  planner:
-    skills:
-      - solid_principles: enabled: true
-      - clean_code: enabled: true
-      - kiss_principle: enabled: false  # Disabled for this agent
-      - business_logic_adherence: enabled: true
+Skills are managed through the IDE's Skills Management UI or via API endpoints:
+
+```
+GET    /api/config/skills             → List all skills (JSON)
+POST   /api/config/skills             → Create new skill (JSON)
+GET    /api/config/skills/:id         → Get single skill (JSON)
+PUT    /api/config/skills/:id         → Update skill (JSON)
+DELETE /api/config/skills/:id         → Delete skill (JSON)
 ```
 
-### 6.2 Add Custom Skills
+Each skill has:
+- `name` — Human-readable name
+- `description` — What this skill does
+- `type` — `knowledge` (prompt guidelines) or `tool` (executable capability)
+- `priority` — Order of application (lower = first)
+- `prompt_template` — For knowledge skills: text inserted into agent prompt
+- `tool_name` — For tool skills: identifier the executor recognizes
+
+### 6.2 Assign Skills to Agents
+
+Skills are assigned to agents via the IDE's Skills Management UI or API:
+
+```
+GET    /api/config/skills/agents      → List all agent-skill mappings (JSON)
+PUT    /api/config/skills/agents      → Update agent-skill mappings (JSON)
+```
+
+Each agent has a list of skill IDs. Assigning a skill to an agent includes it in that agent's prompt (for knowledge skills) or makes it available for execution (for tool skills).
+
+### 6.3 Add Custom Skills
+
+Custom skills can be added through the UI or directly in `config.yaml`:
 
 ```yaml
 # Add custom skills to the library
@@ -477,7 +506,7 @@ skills:
       - Prefer Z
 ```
 
-### 6.3 Skill Priority
+### 6.4 Skill Priority
 
 Skills are applied in priority order (lower number = applied first):
 
@@ -520,12 +549,10 @@ This would allow:
 - Different priority levels for sub-skills
 - More granular control
 
----
-
 ## 8. Skills Validation
 
 ```go
-// Validate that all enabled skills exist in the library
+// Validate that all assigned skills exist in the library
 func (r *SkillsRegistry) Validate(agentSkills []string) error {
     for _, skillID := range agentSkills {
         if _, exists := r.library[skillID]; !exists {
@@ -533,23 +560,5 @@ func (r *SkillsRegistry) Validate(agentSkills []string) error {
         }
     }
     return nil
-}
-
-// Check for conflicting skills
-func (r *SkillsRegistry) CheckConflicts(agentSkills []string) []string {
-    conflicts := []string{}
-    
-    // Example: business_logic_adherence should always be enabled if present
-    // If disabled, warn the user
-    for _, skillID := range agentSkills {
-        if skillID == "business_logic_adherence" {
-            if !r.enabled[skillID] {
-                conflicts = append(conflicts, 
-                    "business_logic_adherence is disabled - business logic may be ignored")
-            }
-        }
-    }
-    
-    return conflicts
 }
 ```
