@@ -7,8 +7,8 @@ Milestone 1: Model Abstraction & LM Studio Provider
 Implement Name() and IsStreamingSupported() helper methods.
 
 ## Checklist
-- [ ] Implement `Name()` → returns `"lm-studio"`
-- [ ] Implement `IsStreamingSupported()` → returns `false` (v1)
+- [x] Implement `Name()` → returns `"lm-studio"`
+- [x] Implement `IsStreamingSupported()` → returns `false` (v1)
 
 ## Dependencies
 - Task 1.2.1
@@ -17,6 +17,4 @@ Implement Name() and IsStreamingSupported() helper methods.
 - Helper methods on LMStudioProvider
 
 ## Status
-- [ ] Not Started
-- [ ] In Progress
-- [ ] Done
+- [x] Done

@@ -1,12 +1,14 @@
 package model
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"time"
 )
 
 // LMStudioProvider implements the Provider interface for LM Studio.
@@ -19,7 +21,7 @@ type LMStudioProvider struct {
 func NewLMStudioProvider(baseURL string) *LMStudioProvider {
 	return &LMStudioProvider{
 		baseURL:    baseURL,
-		httpClient: http.DefaultClient,
+		httpClient: &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
@@ -76,4 +78,58 @@ func (p *LMStudioProvider) ListModels(ctx context.Context) ([]Model, error) {
 
 	log.Printf("[lm-studio] listed %d models", len(models))
 	return models, nil
+}
+
+// Chat sends a chat completion request to LM Studio.
+func (p *LMStudioProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
+	if req.Stream {
+		return nil, fmt.Errorf("streaming not yet supported")
+	}
+
+	url := fmt.Sprintf("%s/v1/chat/completions", p.baseURL)
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		log.Printf("[lm-studio] failed to marshal request: %v", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		log.Printf("[lm-studio] failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.httpClient.Do(request)
+	if err != nil {
+		log.Printf("[lm-studio] request failed: %v", err)
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		log.Printf("[lm-studio] unexpected status code: %d, body: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var chatResp ChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		log.Printf("[lm-studio] failed to decode response: %v", err)
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	log.Printf("[lm-studio] chat completed, model: %s, tokens: %d", chatResp.Model, chatResp.Usage.TotalTokens)
+	return &chatResp, nil
+}
+
+// Name returns the name of the provider.
+func (p *LMStudioProvider) Name() string {
+	return "lm-studio"
+}
+
+// IsStreamingSupported returns whether the provider supports streaming responses.
+func (p *LMStudioProvider) IsStreamingSupported() bool {
+	return false
 }
