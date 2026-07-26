@@ -80,11 +80,20 @@ type PhaseConfig struct {
 	MaxTokens   int     `json:"max_tokens,omitempty"`
 }
 
+// AgentConfig holds configuration for an agent in the orchestrator
+type AgentConfig struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Phase       Phase  `json:"phase"`
+	ModelConfig `json:"model_config"`
+}
+
 // Config is the top-level configuration for the model subsystem
 type Config struct {
 	ActiveProvider string                    `json:"active_provider"`
 	Providers      map[string]ProviderConfig `json:"providers"`
 	Phases         map[Phase]PhaseConfig     `json:"phases"`
+	Agents         map[string]AgentConfig    `json:"agents"`
 }
 
 // ProviderNotFoundError is returned when a provider is not found
