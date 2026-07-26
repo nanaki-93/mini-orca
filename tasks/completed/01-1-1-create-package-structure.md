@@ -7,16 +7,16 @@ Milestone 1: Model Abstraction & LM Studio Provider
 Create the directory structure for the model abstraction layer.
 
 ## Checklist
-- [x] Create `internal/model/` directory
-- [x] Create `internal/model/router.go` file
-- [x] Create `internal/model/provider.go` file
-- [x] Create `internal/model/types.go` file
+- [x] Create `../../internal/model` directory
+- [x] Create `../../internal/model/router.go` file
+- [x] Create `../../internal/model/provider.go` file
+- [x] Create `../../internal/model/types.go` file
 
 ## Dependencies
 - None (first task of M1)
 
 ## Deliverables
-- `internal/model/` directory with 4 files
+- `../../internal/model` directory with 4 files
 
 ## Status
 - [x] Done

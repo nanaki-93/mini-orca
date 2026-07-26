@@ -7,11 +7,11 @@ Milestone 1: Model Abstraction & LM Studio Provider
 Define the Provider interface in `internal/model/provider.go`.
 
 ## Checklist
-- [ ] Define `Provider` interface with methods:
-  - `ListModels(ctx context.Context) ([]Model, error)`
-  - `Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error)`
-  - `Name() string`
-  - `IsStreamingSupported() bool` (optional, for future)
+- [x] Define `Provider` interface with methods:
+  - [x] `ListModels(ctx context.Context) ([]Model, error)`
+  - [x] `Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error)`
+  - [x] `Name() string`
+  - [x] `IsStreamingSupported() bool` (optional, for future)
 
 ## Dependencies
 - Task 1.1.2
@@ -20,6 +20,4 @@ Define the Provider interface in `internal/model/provider.go`.
 - `internal/model/provider.go` with Provider interface
 
 ## Status
-- [ ] Not Started
-- [ ] In Progress
-- [ ] Done
+- [x] Done

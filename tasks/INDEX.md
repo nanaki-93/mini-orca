@@ -14,7 +14,7 @@ Each task is a standalone markdown file in the `tasks/` directory with:
 
 | # | File | Description |
 |---|------|-------------|
-| 1.1.1 | `01-1-1-create-package-structure.md` | Create `internal/model/` directory structure |
+| 1.1.1 | `completed/01-1-1-create-package-structure.md` | Create `internal/model/` directory structure |
 | 1.1.2 | `01-1-2-define-types.md` | Define all core types (Provider, Model, Config, etc.) |
 | 1.1.3 | `01-1-3-define-provider-interface.md` | Define Provider interface |
 | 1.1.4 | `01-1-4-create-router.md` | Create Router struct with phase-based config |
@@ -191,7 +191,7 @@ Each task is a standalone markdown file in the `tasks/` directory with:
 ## Quick Reference by Dependency
 
 ### Start Here (no dependencies)
-- `01-1-1-create-package-structure.md`
+- `completed/01-1-1-create-package-structure.md`
 - `01-4-1-audit-existing-llm-calls.md`
 
 ### After Milestone 1

@@ -111,6 +111,51 @@ func (r *Router) RouteChat(ctx context.Context, phase string, messages []ChatMes
 	return provider.Chat(ctx, req)
 }
 
+// GetPhaseConfig returns the PhaseConfig for a given phase.
+// Returns an error if the phase is not configured.
+func (r *Router) GetPhaseConfig(phase string) (*PhaseConfig, error) {
+	config := r.GetDefaultConfig(phase)
+	if config.Provider == "" && config.ModelID == "" {
+		return nil, fmt.Errorf("phase %q not configured", phase)
+	}
+	return &PhaseConfig{
+		ModelConfig: config,
+	}, nil
+}
+
+// Chat routes a chat request to the appropriate provider based on the phase.
+// It uses the phase-based default config if available, otherwise falls back to the active provider.
+func (r *Router) Chat(phase string, messages []ChatMessage) (*ChatResponse, error) {
+	// Get phase-specific config
+	config := r.GetDefaultConfig(phase)
+
+	// If no phase config, use active provider
+	if config.Provider == "" {
+		provider, err := r.GetActiveProvider()
+		if err != nil {
+			return nil, err
+		}
+		config.Provider = provider.Name()
+	}
+
+	// Get the provider
+	provider, err := r.GetProvider(config.Provider)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build the request
+	req := ChatRequest{
+		Model:       config.ModelID,
+		Messages:    messages,
+		Temperature: config.Temperature,
+		MaxTokens:   config.MaxTokens,
+	}
+
+	// Send the request
+	return provider.Chat(context.Background(), req)
+}
+
 // RouteListModels routes a model listing request to the active provider.
 func (r *Router) RouteListModels(ctx context.Context) ([]Model, error) {
 	provider, err := r.GetActiveProvider()
