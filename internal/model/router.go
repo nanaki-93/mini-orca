@@ -81,33 +81,12 @@ func (r *Router) SetActiveProvider(name string) error {
 // RouteChat routes a chat request to the appropriate provider based on the phase.
 // It uses the phase-based default config if available, otherwise falls back to the active provider.
 func (r *Router) RouteChat(ctx context.Context, phase string, messages []ChatMessage) (*ChatResponse, error) {
-	// Get phase-specific config
-	config := r.GetDefaultConfig(phase)
-
-	// If no phase config, use active provider
-	if config.Provider == "" {
-		provider, err := r.GetActiveProvider()
-		if err != nil {
-			return nil, err
-		}
-		config.Provider = provider.Name()
-	}
-
-	// Get the provider
-	provider, err := r.GetProvider(config.Provider)
+	provider, config, err := r.resolveProviderAndConfig(phase)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build the request
-	req := ChatRequest{
-		Model:       config.ModelID,
-		Messages:    messages,
-		Temperature: config.Temperature,
-		MaxTokens:   config.MaxTokens,
-	}
-
-	// Send the request
+	req := r.buildChatRequest(config, messages)
 	return provider.Chat(ctx, req)
 }
 
@@ -118,42 +97,52 @@ func (r *Router) GetPhaseConfig(phase string) (*PhaseConfig, error) {
 	if config.Provider == "" && config.ModelID == "" {
 		return nil, fmt.Errorf("phase %q not configured", phase)
 	}
-	return &PhaseConfig{
-		ModelConfig: config,
-	}, nil
+	return &PhaseConfig{ModelConfig: config}, nil
 }
 
 // Chat routes a chat request to the appropriate provider based on the phase.
 // It uses the phase-based default config if available, otherwise falls back to the active provider.
+// Uses context.Background() for the underlying provider call.
 func (r *Router) Chat(phase string, messages []ChatMessage) (*ChatResponse, error) {
-	// Get phase-specific config
-	config := r.GetDefaultConfig(phase)
-
-	// If no phase config, use active provider
-	if config.Provider == "" {
-		provider, err := r.GetActiveProvider()
-		if err != nil {
-			return nil, err
-		}
-		config.Provider = provider.Name()
-	}
-
-	// Get the provider
-	provider, err := r.GetProvider(config.Provider)
+	provider, config, err := r.resolveProviderAndConfig(phase)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build the request
-	req := ChatRequest{
+	req := r.buildChatRequest(config, messages)
+	return provider.Chat(context.Background(), req)
+}
+
+// resolveProviderAndConfig returns the provider and config for a given phase.
+// If no phase-specific config exists, it falls back to the active provider.
+func (r *Router) resolveProviderAndConfig(phase string) (Provider, ModelConfig, error) {
+	config := r.GetDefaultConfig(phase)
+
+	// If no phase config, use active provider
+	if config.Provider == "" {
+		activeProvider, err := r.GetActiveProvider()
+		if err != nil {
+			return nil, ModelConfig{}, err
+		}
+		config.Provider = activeProvider.Name()
+	}
+
+	provider, err := r.GetProvider(config.Provider)
+	if err != nil {
+		return nil, ModelConfig{}, err
+	}
+
+	return provider, config, nil
+}
+
+// buildChatRequest creates a ChatRequest from a ModelConfig and messages.
+func (r *Router) buildChatRequest(config ModelConfig, messages []ChatMessage) ChatRequest {
+	return ChatRequest{
 		Model:       config.ModelID,
 		Messages:    messages,
 		Temperature: config.Temperature,
 		MaxTokens:   config.MaxTokens,
 	}
-
-	// Send the request
-	return provider.Chat(context.Background(), req)
 }
 
 // RouteListModels routes a model listing request to the active provider.
