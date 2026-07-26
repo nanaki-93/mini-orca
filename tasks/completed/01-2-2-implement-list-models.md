@@ -7,10 +7,10 @@ Milestone 1: Model Abstraction & LM Studio Provider
 Implement ListModels method that calls LM Studio's /v1/models endpoint.
 
 ## Checklist
-- [ ] Implement `ListModels()` that calls `GET /v1/models`
-- [ ] Parse JSON response into `[]Model`
-- [ ] Handle HTTP errors and malformed responses
-- [ ] Add logging for debugging
+- [x] Implement `ListModels()` that calls `GET /v1/models`
+- [x] Parse JSON response into `[]Model`
+- [x] Handle HTTP errors and malformed responses
+- [x] Add logging for debugging
 
 ## Dependencies
 - Task 1.2.1, Task 1.1.2
@@ -19,6 +19,4 @@ Implement ListModels method that calls LM Studio's /v1/models endpoint.
 - Working ListModels implementation
 
 ## Status
-- [ ] Not Started
-- [ ] In Progress
-- [ ] Done
+- [x] Done
