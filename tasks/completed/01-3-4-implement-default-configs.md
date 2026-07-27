@@ -7,9 +7,9 @@ Milestone 1: Model Abstraction & LM Studio Provider
 Implement default configuration helpers in `internal/config/default.go`.
 
 ## Checklist
-- [ ] Create `DefaultPhaseConfigs()` → returns map of phase → default PhaseModelConfig
-- [ ] Create `DefaultAgentConfigs()` → returns default agent configs with skill lists
-- [ ] Create `DefaultSkills()` → returns predefined skill definitions
+- [x] Create `DefaultPhaseConfigs()` → returns map of phase → default PhaseModelConfig
+- [x] Create `DefaultAgentConfigs()` → returns default agent configs with skill lists
+- [x] Create `DefaultSkills()` → returns predefined skill definitions
 
 ## Dependencies
 - Task 1.3.2
@@ -18,6 +18,4 @@ Implement default configuration helpers in `internal/config/default.go`.
 - `internal/config/default.go` with default config helpers
 
 ## Status
-- [ ] Not Started
-- [ ] In Progress
-- [ ] Done
+- [x] Done
