@@ -1,75 +1,60 @@
 package config
 
-import (
-	"github.com/nanaki-93/mini-orca/internal/model"
-)
-
 // DefaultProviderURL is the default LM Studio URL.
 const DefaultProviderURL = "http://localhost:1234"
-
-// DefaultModelID is the default model ID when none is specified.
-const DefaultModelID = ""
-
-// DefaultTemperature is the default temperature for chat completions.
-const DefaultTemperature float32 = 0.7
-
-// DefaultMaxTokens is the default max tokens for chat completions.
-const DefaultMaxTokens = 4096
 
 // Default returns a Config with sensible defaults.
 func Default() *Config {
 	return &Config{
-		Config: model.Config{
+		Models: ModelsConfig{
 			ActiveProvider: "lm-studio",
-			Providers: map[string]model.ProviderConfig{
+			Providers: map[string]ProviderConfig{
 				"lm-studio": {
-					Name:    "lm-studio",
 					BaseURL: DefaultProviderURL,
 				},
 			},
-			Phases: map[model.Phase]model.PhaseConfig{
-				model.PhasePlanning: {
-					ModelConfig: model.ModelConfig{
-						Provider: "lm-studio",
-						ModelID:  DefaultModelID,
-					},
-					Temperature: DefaultTemperature,
-					MaxTokens:   DefaultMaxTokens,
+			Phases: map[string]PhaseModelConfig{
+				"planning": {
+					Provider:    "lm-studio",
+					Model:       "",
+					Temperature: 0.7,
+					MaxTokens:   4096,
 				},
-				model.PhaseCoding: {
-					ModelConfig: model.ModelConfig{
-						Provider: "lm-studio",
-						ModelID:  DefaultModelID,
-					},
-					Temperature: DefaultTemperature,
-					MaxTokens:   DefaultMaxTokens,
+				"coding": {
+					Provider:    "lm-studio",
+					Model:       "",
+					Temperature: 0.7,
+					MaxTokens:   4096,
 				},
-				model.PhaseTesting: {
-					ModelConfig: model.ModelConfig{
-						Provider: "lm-studio",
-						ModelID:  DefaultModelID,
-					},
-					Temperature: DefaultTemperature,
-					MaxTokens:   DefaultMaxTokens,
+				"testing": {
+					Provider:    "lm-studio",
+					Model:       "",
+					Temperature: 0.7,
+					MaxTokens:   4096,
 				},
-				model.PhaseReview: {
-					ModelConfig: model.ModelConfig{
-						Provider: "lm-studio",
-						ModelID:  DefaultModelID,
-					},
-					Temperature: DefaultTemperature,
-					MaxTokens:   DefaultMaxTokens,
+				"review": {
+					Provider:    "lm-studio",
+					Model:       "",
+					Temperature: 0.7,
+					MaxTokens:   4096,
 				},
-				model.PhaseHumanReview: {
-					ModelConfig: model.ModelConfig{
-						Provider: "lm-studio",
-						ModelID:  DefaultModelID,
-					},
-					Temperature: DefaultTemperature,
-					MaxTokens:   DefaultMaxTokens,
+				"human_review": {
+					Provider:    "lm-studio",
+					Model:       "",
+					Temperature: 0.7,
+					MaxTokens:   4096,
 				},
 			},
-			Agents: make(map[string]model.AgentConfig),
+		},
+		Agents: AgentsConfig{
+			Planner:  AgentConfig{Skills: []string{}},
+			Coder:    AgentConfig{Skills: []string{}},
+			Tester:   AgentConfig{Skills: []string{}},
+			Reviewer: AgentConfig{Skills: []string{}},
+		},
+		Skills: SkillsConfig{
+			Knowledge: make(map[string]string),
+			Tools:     make(map[string]string),
 		},
 	}
 }
