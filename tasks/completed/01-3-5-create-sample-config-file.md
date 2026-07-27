@@ -7,9 +7,9 @@ Milestone 1: Model Abstraction & LM Studio Provider
 Create an example configuration file.
 
 ## Checklist
-- [ ] Create `config.example.yaml` with full example
-- [ ] Include all phases, agents, and skills
-- [ ] Add comments explaining each section
+- [x] Create `config.example.yaml` with full example
+- [x] Include all phases, agents, and skills
+- [x] Add comments explaining each section
 
 ## Dependencies
 - Task 1.3.2, Task 1.3.4
@@ -18,6 +18,4 @@ Create an example configuration file.
 - `config.example.yaml`
 
 ## Status
-- [ ] Not Started
-- [ ] In Progress
-- [ ] Done
+- [x] Done
