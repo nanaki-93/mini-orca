@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/nanaki-93/mini-orca/internal/model"
@@ -39,5 +40,5 @@ func (c *Client) ListModels() ([]model.Model, error) {
 		return nil, fmt.Errorf("agent client: router not configured")
 	}
 
-	return c.router.RouteListModels(nil)
+	return c.router.RouteListModels(context.Background())
 }

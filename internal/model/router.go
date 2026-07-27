@@ -97,7 +97,11 @@ func (r *Router) GetPhaseConfig(phase string) (*PhaseConfig, error) {
 	if config.Provider == "" && config.ModelID == "" {
 		return nil, fmt.Errorf("phase %q not configured", phase)
 	}
-	return &PhaseConfig{ModelConfig: config}, nil
+	return &PhaseConfig{
+		ModelConfig: config,
+		Temperature: config.Temperature,
+		MaxTokens:   config.MaxTokens,
+	}, nil
 }
 
 // Chat routes a chat request to the appropriate provider based on the phase.
