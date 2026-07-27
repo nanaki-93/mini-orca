@@ -7,9 +7,9 @@ Milestone 1: Model Abstraction & LM Studio Provider
 Create the directory structure for the configuration system.
 
 ## Checklist
-- [ ] Create `internal/config/` directory
-- [ ] Create `internal/config/config.go`
-- [ ] Create `internal/config/default.go`
+- [x] Create `internal/config/` directory
+- [x] Create `internal/config/config.go`
+- [x] Create `internal/config/default.go`
 
 ## Dependencies
 - Task 1.1.4
@@ -18,6 +18,4 @@ Create the directory structure for the configuration system.
 - `internal/config/` directory with 2 files
 
 ## Status
-- [ ] Not Started
-- [ ] In Progress
-- [ ] Done
+- [x] Done
