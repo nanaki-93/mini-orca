@@ -134,3 +134,8 @@ func (p *projectDetectorExecutor) WriteFile(path string, data []byte, perm uint3
 func (p *projectDetectorExecutor) Format(ctx context.Context, content []byte, language string) ([]byte, error) {
 	return p.formatter.Format(ctx, content, language)
 }
+
+// FormatCode formats the code file at the given path.
+func (p *projectDetectorExecutor) FormatCode(path string) error {
+	return p.formatter.FormatCode(path)
+}

@@ -25,6 +25,9 @@ type Executor interface {
 
 	// Format formats code content using the appropriate formatter.
 	Format(ctx context.Context, content []byte, language string) ([]byte, error)
+
+	// FormatCode formats the code file at the given path.
+	FormatCode(path string) error
 }
 
 // ShellResult holds the output from a shell command execution.

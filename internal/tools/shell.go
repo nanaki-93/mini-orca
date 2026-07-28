@@ -147,6 +147,11 @@ func (s *shellExecutor) Format(ctx context.Context, content []byte, language str
 	return nil, fmt.Errorf("shell: Format not implemented")
 }
 
+// FormatCode formats the code file at the given path.
+func (s *shellExecutor) FormatCode(path string) error {
+	return fmt.Errorf("shell: FormatCode not implemented")
+}
+
 // Execute runs a command with the given arguments and timeout, returning a structured result.
 func (s *shellExecutor) Execute(cmd string, args []string, timeout time.Duration) (*ExecResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -210,6 +215,11 @@ func (s *safeShellExecutor) DetectProjectType(dirPath string) (*ProjectInfo, err
 // Format formats code content using the appropriate formatter.
 func (s *safeShellExecutor) Format(ctx context.Context, content []byte, language string) ([]byte, error) {
 	return s.shell.Format(ctx, content, language)
+}
+
+// FormatCode formats the code file at the given path.
+func (s *safeShellExecutor) FormatCode(path string) error {
+	return s.shell.FormatCode(path)
 }
 
 // Execute runs a command with the given arguments and timeout, returning a structured result.
