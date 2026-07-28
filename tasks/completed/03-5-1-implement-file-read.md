@@ -21,4 +21,4 @@ Implement file reading functionality.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done
