@@ -22,4 +22,4 @@ Implement appending a function to a file.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

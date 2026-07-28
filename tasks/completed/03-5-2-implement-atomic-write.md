@@ -22,4 +22,4 @@ Implement atomic file write using temp file + rename.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

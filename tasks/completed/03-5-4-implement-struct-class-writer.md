@@ -21,4 +21,4 @@ Implement writing structs and classes to files.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

@@ -21,4 +21,4 @@ Implement batch file update helper.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done
