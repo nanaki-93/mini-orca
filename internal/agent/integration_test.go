@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +10,7 @@ import (
 	"github.com/nanaki-93/mini-orca/internal/model"
 )
 
-func TestClient_FullFlow_Generate(t *testing.T) {
+func TestClient_FullFlow_Execute(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
 			var req model.ChatRequest
@@ -47,22 +48,22 @@ func TestClient_FullFlow_Generate(t *testing.T) {
 	})
 
 	client := NewClient(router)
-	result, err := client.Generate("planning", []model.ChatMessage{{Role: "user", Content: "Plan this"}})
+	client.name = "test-agent"
+	client.phase = model.PhasePlanning
+
+	result, err := client.Execute(context.Background(), "Plan this")
 	if err != nil {
-		t.Fatalf("Generate failed: %v", err)
+		t.Fatalf("Execute failed: %v", err)
 	}
 
-	if result.ID != "full-flow-1" {
-		t.Errorf("expected full-flow-1, got %s", result.ID)
+	if result.Output != "Agent response!" {
+		t.Errorf("expected 'Agent response!', got %s", result.Output)
 	}
-	if result.Model != "agent-model" {
-		t.Errorf("expected agent-model, got %s", result.Model)
+	if result.Phase != "planning" {
+		t.Errorf("expected phase 'planning', got %s", result.Phase)
 	}
-	if len(result.Choices) != 1 {
-		t.Fatalf("expected 1 choice, got %d", len(result.Choices))
-	}
-	if result.Choices[0].Message.Content != "Agent response!" {
-		t.Errorf("expected 'Agent response!', got %s", result.Choices[0].Message.Content)
+	if result.Metadata["model"] != "agent-model" {
+		t.Errorf("expected model 'agent-model', got %s", result.Metadata["model"])
 	}
 }
 
@@ -88,6 +89,8 @@ func TestClient_FullFlow_ListModels(t *testing.T) {
 	router.RegisterProvider(provider)
 
 	client := NewClient(router)
+	client.name = "test-agent"
+
 	models, err := client.ListModels()
 	if err != nil {
 		t.Fatalf("ListModels failed: %v", err)
@@ -142,22 +145,129 @@ func TestClient_FullFlow_MultiplePhases(t *testing.T) {
 	})
 
 	client := NewClient(router)
+	client.name = "test-agent"
 
 	// Test planning phase
-	result, err := client.Generate("planning", []model.ChatMessage{{Role: "user", Content: "Plan"}})
+	client.phase = model.PhasePlanning
+	result, err := client.Execute(context.Background(), "Plan")
 	if err != nil {
-		t.Fatalf("planning Generate failed: %v", err)
+		t.Fatalf("planning Execute failed: %v", err)
 	}
-	if result.Model != "planning-model" {
-		t.Errorf("expected planning-model, got %s", result.Model)
+	if result.Metadata["model"] != "planning-model" {
+		t.Errorf("expected planning-model, got %s", result.Metadata["model"])
 	}
 
 	// Test coding phase
-	result, err = client.Generate("coding", []model.ChatMessage{{Role: "user", Content: "Code"}})
+	client.phase = model.PhaseCoding
+	result, err = client.Execute(context.Background(), "Code")
 	if err != nil {
-		t.Fatalf("coding Generate failed: %v", err)
+		t.Fatalf("coding Execute failed: %v", err)
 	}
-	if result.Model != "coding-model" {
-		t.Errorf("expected coding-model, got %s", result.Model)
+	if result.Metadata["model"] != "coding-model" {
+		t.Errorf("expected coding-model, got %s", result.Metadata["model"])
+	}
+}
+
+func TestRegistry_RegisterAndGet(t *testing.T) {
+	registry := NewRegistry()
+	client := NewClient(nil)
+	client.name = "test-agent"
+
+	if err := registry.Register("test-agent", client); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	got, err := registry.Get("test-agent")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if got.Name() != "test-agent" {
+		t.Errorf("expected test-agent, got %s", got.Name())
+	}
+}
+
+func TestRegistry_RegisterDuplicate(t *testing.T) {
+	registry := NewRegistry()
+	client := NewClient(nil)
+	client.name = "test-agent"
+
+	_ = registry.Register("test-agent", client)
+	err := registry.Register("test-agent", client)
+	if err == nil {
+		t.Fatal("expected error for duplicate registration")
+	}
+}
+
+func TestRegistry_List(t *testing.T) {
+	registry := NewRegistry()
+
+	client1 := NewClient(nil)
+	client1.name = "agent-1"
+	_ = registry.Register("agent-1", client1)
+
+	client2 := NewClient(nil)
+	client2.name = "agent-2"
+	_ = registry.Register("agent-2", client2)
+
+	names := registry.List()
+	if len(names) != 2 {
+		t.Errorf("expected 2 agent names, got %d", len(names))
+	}
+	if names[0] != "agent-1" && names[1] != "agent-1" {
+		t.Errorf("expected agent-1 in names, got %v", names)
+	}
+	if names[0] != "agent-2" && names[1] != "agent-2" {
+		t.Errorf("expected agent-2 in names, got %v", names)
+	}
+}
+
+func TestAgentResult_Metadata(t *testing.T) {
+	result := &AgentResult{
+		Output:   "test output",
+		Phase:    "planning",
+		Metadata: map[string]string{"key": "value"},
+	}
+
+	if result.Output != "test output" {
+		t.Errorf("expected 'test output', got %s", result.Output)
+	}
+	if result.Phase != "planning" {
+		t.Errorf("expected phase 'planning', got %s", result.Phase)
+	}
+	if result.Metadata["key"] != "value" {
+		t.Errorf("expected value for key, got %s", result.Metadata["key"])
+	}
+}
+
+func TestRegistry_NameMismatch(t *testing.T) {
+	registry := NewRegistry()
+	client := NewClient(nil)
+	client.name = "actual-name"
+
+	err := registry.Register("different-name", client)
+	if err == nil {
+		t.Fatal("expected error for name mismatch")
+	}
+}
+
+func TestDefaultAgentNames(t *testing.T) {
+	names := DefaultAgentNames()
+	expected := []string{"planner", "coder", "tester", "reviewer"}
+
+	if len(names) != len(expected) {
+		t.Errorf("expected %d default agent names, got %d", len(expected), len(names))
+	}
+
+	for _, name := range expected {
+		found := false
+		for _, n := range names {
+			if n == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %q in default agent names", name)
+		}
 	}
 }
