@@ -21,4 +21,4 @@ Implement the universal shell command executor.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

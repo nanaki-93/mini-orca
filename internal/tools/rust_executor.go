@@ -13,7 +13,7 @@ type rustExecutor struct {
 // NewRustExecutor creates a new Rust executor instance.
 func NewRustExecutor() *rustExecutor {
 	return &rustExecutor{
-		shell: NewShellExecutor(),
+		shell: NewSafeShellExecutor(),
 	}
 }
 

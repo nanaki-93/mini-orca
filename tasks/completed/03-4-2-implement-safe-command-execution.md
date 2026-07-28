@@ -21,4 +21,4 @@ Add safety features to command execution.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

@@ -14,7 +14,7 @@ type pythonExecutor struct {
 // NewPythonExecutor creates a new Python executor instance.
 func NewPythonExecutor() *pythonExecutor {
 	return &pythonExecutor{
-		shell: NewShellExecutor(),
+		shell: NewSafeShellExecutor(),
 	}
 }
 
