@@ -25,4 +25,4 @@ Define project type enums and structs.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

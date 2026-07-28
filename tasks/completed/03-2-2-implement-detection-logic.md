@@ -26,4 +26,4 @@ Implement project type detection based on build files.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done
