@@ -13,7 +13,7 @@ type typescriptExecutor struct {
 // NewTypeScriptExecutor creates a new TypeScript executor instance.
 func NewTypeScriptExecutor() *typescriptExecutor {
 	return &typescriptExecutor{
-		shell: NewShellExecutor(),
+		shell: NewSafeShellExecutor(),
 	}
 }
 

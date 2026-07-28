@@ -14,12 +14,9 @@ type fileOpsExecutor struct {
 // NewFileOpsExecutor creates a new file operations executor instance.
 func NewFileOpsExecutor() Executor {
 	return &fileOpsExecutor{
-		shell: NewShellExecutor(),
+		shell: NewSafeShellExecutor(),
 	}
 }
-
-// _ ensures NewShellExecutor is used.
-var _ = NewShellExecutor
 
 // ReadFile reads the content of a file at the given path.
 func (f *fileOpsExecutor) ReadFile(path string) ([]byte, error) {
@@ -53,3 +50,6 @@ func (f *fileOpsExecutor) DetectProjectType(dirPath string) (*ProjectInfo, error
 func (f *fileOpsExecutor) Format(ctx context.Context, content []byte, language string) ([]byte, error) {
 	return f.shell.Format(ctx, content, language)
 }
+
+// _ ensures NewSafeShellExecutor is used.
+var _ = NewSafeShellExecutor

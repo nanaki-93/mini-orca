@@ -14,7 +14,7 @@ type goExecutor struct {
 // NewGoExecutor creates a new Go executor instance.
 func NewGoExecutor() *goExecutor {
 	return &goExecutor{
-		shell: NewShellExecutor(),
+		shell: NewSafeShellExecutor(),
 	}
 }
 
