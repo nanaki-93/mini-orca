@@ -21,4 +21,4 @@ Implement code formatting that delegates to language-specific formatters.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

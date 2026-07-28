@@ -7,9 +7,9 @@ Milestone 3: Language-Agnostic Tool Executor
 Wire formatting into the code generation workflow.
 
 ## Checklist
-- [ ] Auto-format after code generation
-- [ ] Auto-format after test failures (if needed)
-- [ ] Report formatting changes
+- [x] Auto-format after code generation
+- [x] Auto-format after test failures (if needed)
+- [x] Report formatting changes
 
 ## Dependencies
 - Task 3.6.1
@@ -20,4 +20,4 @@ Wire formatting into the code generation workflow.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

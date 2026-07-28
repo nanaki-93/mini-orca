@@ -72,6 +72,11 @@ func (f *fileOpsExecutor) Format(ctx context.Context, content []byte, language s
 	return f.shell.Format(ctx, content, language)
 }
 
+// FormatCode formats the code file at the given path.
+func (f *fileOpsExecutor) FormatCode(path string) error {
+	return f.shell.FormatCode(path)
+}
+
 // WriteFileAtomic writes content to a file atomically using temp file + rename.
 func (f *fileOpsExecutor) WriteFileAtomic(path string, content string) error {
 	// Create parent directories if needed
