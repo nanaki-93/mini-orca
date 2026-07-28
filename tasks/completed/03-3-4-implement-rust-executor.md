@@ -22,4 +22,4 @@ Create the Rust-specific executor.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done
