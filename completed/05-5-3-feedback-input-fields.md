@@ -7,10 +7,10 @@ Milestone 5: IDE-like HTMX Frontend
 Implement feedback input with HTMX submission.
 
 ## Checklist
-- [ ] Textarea for feedback
-- [ ] HTMX form submission
-- [ ] Show feedback history
-- [ ] Character limit with counter
+- [x] Textarea for feedback
+- [x] HTMX form submission
+- [x] Show feedback history
+- [x] Character limit with counter
 
 ## Dependencies
 - Task 5.1.2
@@ -21,4 +21,4 @@ Implement feedback input with HTMX submission.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

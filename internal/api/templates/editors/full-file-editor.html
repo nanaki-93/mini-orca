@@ -1,35 +1,22 @@
-{{ define "code-editor" }}
-<div id="code-editor" class="h-full flex flex-col bg-dark-900">
-
-    <!-- Editor Tabs -->
-    <div id="editor-tabs" class="flex items-center bg-dark-800 border-b border-dark-600 overflow-x-auto shrink-0">
-        {{ template "editor-tabs" . }}
-    </div>
+{{ define "full-file-editor" }}
+<div id="full-file-editor" class="h-full flex flex-col bg-dark-900">
 
     <!-- Editor Toolbar -->
     <div id="editor-toolbar" class="flex items-center justify-between px-4 py-2 bg-dark-800 border-b border-dark-600 shrink-0">
         <div class="flex items-center gap-2">
-            <!-- View Toggle -->
-            <div class="flex items-center bg-dark-700 rounded-md p-0.5">
-                <button
-                    id="btn-function-view"
-                    class="px-3 py-1 text-xs rounded-sm transition-colors {{ if eq .View "function" }}bg-dark-600 text-accent{{ else }}text-text-secondary hover:text-text-primary{{ end }}"
-                    onclick="switchView('function')"
-                >
-                    Function
-                </button>
-                <button
-                    id="btn-full-view"
-                    class="px-3 py-1 text-xs rounded-sm transition-colors {{ if eq .View "full" }}bg-dark-600 text-accent{{ else }}text-text-secondary hover:text-text-primary{{ end }}"
-                    onclick="switchView('full')"
-                >
-                    Full File
-                </button>
+            <!-- File Path -->
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-dark-700 rounded-md">
+                <svg class="w-3.5 h-3.5 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
+                </svg>
+                <span id="editor-path" class="text-xs text-text-primary truncate max-w-md">
+                    {{ .FilePath }}
+                </span>
             </div>
 
-            <!-- File Path -->
-            <span id="editor-path" class="text-xs text-text-secondary truncate max-w-md">
-                {{ .FilePath }}
+            <!-- Language Badge -->
+            <span class="px-2 py-0.5 text-[10px] font-medium rounded bg-dark-600 text-text-secondary">
+                {{ .Language }}
             </span>
         </div>
 
@@ -43,10 +30,10 @@
                 <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
                 </svg>
-                <span id="edit-label">Edit</span>
+                <span>Edit</span>
             </button>
 
-            <!-- Save Button (HTMX Form) -->
+            <!-- Save Button -->
             <button
                 id="btn-save"
                 class="hidden flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent hover:bg-accent-hover text-dark-900 font-medium rounded-md transition-colors"
@@ -55,7 +42,7 @@
                 <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
                 </svg>
-                Save
+                <span>Save</span>
             </button>
 
             <!-- Cancel Button -->
@@ -64,7 +51,7 @@
                 class="hidden flex items-center gap-1.5 px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-text-primary rounded-md transition-colors"
                 onclick="cancelEdit()"
             >
-                Cancel
+                <span>Cancel</span>
             </button>
         </div>
     </div>
@@ -116,7 +103,7 @@
         </div>
         <div class="flex items-center gap-4">
             <span id="file-encoding">UTF-8</span>
-            <span id="file-language">{{ .Language }}</span>
+            <span id="line-count">{{ .LineCount }} lines</span>
         </div>
     </div>
 </div>
@@ -135,7 +122,6 @@
 <script>
     // Editor state
     let isEditMode = false;
-    let currentView = '{{ .View }}';
     let originalContent = '';
 
     // Syntax highlighting (CSS-based)
@@ -190,21 +176,6 @@
 
         // Update code display with syntax highlighting
         codeDisplay.innerHTML = highlightSyntax(textarea.value, '{{ .Language }}');
-    }
-
-    // Switch between function and full file views
-    function switchView(view) {
-        currentView = view;
-        document.getElementById('btn-function-view').className =
-            `px-3 py-1 text-xs rounded-sm transition-colors ${view === 'function' ? 'bg-dark-600 text-accent' : 'text-text-secondary hover:text-text-primary'}`;
-        document.getElementById('btn-full-view').className =
-            `px-3 py-1 text-xs rounded-sm transition-colors ${view === 'full' ? 'bg-dark-600 text-accent' : 'text-text-secondary hover:text-text-primary'}`;
-
-        // Load appropriate content via HTMX
-        htmx.ajax('GET', `/api/files/view?path={{ .FilePath }}&view=${view}`, {
-            target: '#editor-content',
-            swap: 'innerHTML'
-        });
     }
 
     // Toggle edit mode
@@ -321,20 +292,3 @@
     .text-green-400 { color: #4ade80; }
     .text-orange-400 { color: #fb923c; }
 </style>
-
-{{ define "editor-tabs" }}
-{{ range .Tabs }}
-<div
-    class="flex items-center gap-2 px-4 py-2 text-xs cursor-pointer border-r border-dark-600 hover:bg-dark-700 transition-colors {{ if eq $.CurrentTab .Path }}bg-dark-700 text-accent border-b-2 border-b-accent{{ else }}text-text-secondary{{ end }}"
-    onclick="switchTab('{{ .Path }}')"
-    hx-get="/api/files/view"
-    hx-vals='{"path": "{{ .Path }}"}'
-    hx-target="#editor-content"
->
-    <span class="truncate max-w-[120px]">{{ .Name }}</span>
-    {{ if .Modified }}
-    <span class="w-2 h-2 rounded-full bg-yellow-500 shrink-0"></span>
-    {{ end }}
-</div>
-{{ end }}
-{{ end }}

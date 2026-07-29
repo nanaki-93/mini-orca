@@ -7,11 +7,11 @@ Milestone 5: IDE-like HTMX Frontend
 Implement session control buttons with HTMX.
 
 ## Checklist
-- [ ] Pause button → `hx-post /api/sessions/:id/pause`
-- [ ] Resume button → `hx-post /api/sessions/:id/resume`
-- [ ] Stop button → `hx-post /api/sessions/:id/stop`
-- [ ] Disable buttons based on session state
-- [ ] Show confirmation for stop
+- [x] Pause button → `hx-post /api/sessions/:id/pause`
+- [x] Resume button → `hx-post /api/sessions/:id/resume`
+- [x] Stop button → `hx-post /api/sessions/:id/stop`
+- [x] Disable buttons based on session state
+- [x] Show confirmation for stop
 
 ## Dependencies
 - Task 5.2.5
@@ -22,4 +22,4 @@ Implement session control buttons with HTMX.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

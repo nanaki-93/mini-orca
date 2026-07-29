@@ -7,12 +7,12 @@ Milestone 5: IDE-like HTMX Frontend
 Create the model configuration panel.
 
 ## Checklist
-- [ ] Create config panel component
-- [ ] Dropdown for provider selection
-- [ ] Input for model name
-- [ ] Slider for temperature
-- [ ] HTMX form to save
-- [ ] Server-side validation
+- [x] Create config panel component
+- [x] Dropdown for provider selection
+- [x] Input for model name
+- [x] Slider for temperature
+- [x] HTMX form to save
+- [x] Server-side validation
 
 ## Dependencies
 - Task 5.1.2
@@ -23,4 +23,4 @@ Create the model configuration panel.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done
