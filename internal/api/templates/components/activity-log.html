@@ -1,0 +1,359 @@
+{{ define "activity-log" }}
+<div id="activity-log" class="w-full h-full flex flex-col">
+    <!-- Log Header -->
+    <div class="px-4 py-2 bg-dark-800 border-b border-dark-600 flex items-center justify-between shrink-0">
+        <h3 class="text-sm font-semibold text-text-primary">Activity Log</h3>
+        <div class="flex items-center gap-2">
+            <!-- Auto-scroll Toggle -->
+            <button
+                id="btn-auto-scroll"
+                class="flex items-center gap-1.5 px-2 py-1 text-xs bg-dark-700 hover:bg-dark-600 text-text-primary rounded-md transition-colors {{ if .AutoScroll }}ring-1 ring-accent{{ end }}"
+                onclick="toggleAutoScroll()"
+            >
+                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                </svg>
+                <span id="auto-scroll-label">Auto</span>
+            </button>
+
+            <!-- Clear Button -->
+            <button
+                class="flex items-center gap-1.5 px-2 py-1 text-xs bg-dark-700 hover:bg-red-900/50 text-text-primary hover:text-red-400 rounded-md transition-colors"
+                onclick="clearLog()"
+            >
+                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                Clear
+            </button>
+
+            <!-- Entry Count -->
+            <span class="text-xs text-text-secondary">
+                {{ len .Entries }} entries
+            </span>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="px-4 py-2 bg-dark-800/50 border-b border-dark-600 flex items-center gap-2 shrink-0 overflow-x-auto">
+        <!-- Filter by Phase -->
+        <select
+            id="filter-phase"
+            class="px-2 py-1 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent"
+            onchange="filterLog()"
+        >
+            <option value="all">All Phases</option>
+            {{ range .Phases }}
+            <option value="{{ lower . }}">{{ title . }}</option>
+            {{ end }}
+        </select>
+
+        <!-- Filter by Type -->
+        <select
+            id="filter-type"
+            class="px-2 py-1 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent"
+            onchange="filterLog()"
+        >
+            <option value="all">All Types</option>
+            <option value="llm">LLM Call</option>
+            <option value="file">File Op</option>
+            <option value="test">Test</option>
+            <option value="review">Review</option>
+            <option value="system">System</option>
+        </select>
+
+        <!-- Filter by Status -->
+        <select
+            id="filter-status"
+            class="px-2 py-1 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent"
+            onchange="filterLog()"
+        >
+            <option value="all">All Status</option>
+            <option value="success">Success</option>
+            <option value="error">Error</option>
+            <option value="pending">Pending</option>
+            <option value="running">Running</option>
+        </select>
+
+        <!-- Search -->
+        <div class="flex-1 relative">
+            <input
+                id="log-search"
+                type="text"
+                placeholder="Search logs..."
+                class="w-full px-3 py-1 pl-8 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent"
+                oninput="filterLog()"
+            />
+            <svg class="w-3.5 h-3.5 text-text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Log Entries -->
+    <div id="log-entries" class="flex-1 overflow-y-auto font-mono text-xs">
+        {{ if .Entries }}
+            {{ range $index, $entry := .Entries }}
+                {{ template "log-entry" $entry }}
+            {{ end }}
+        {{ else }}
+            <div class="flex flex-col items-center justify-center h-full text-text-secondary">
+                <svg class="w-12 h-12 mb-3 opacity-50" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                </svg>
+                <span class="text-sm">No activity yet</span>
+                <span class="text-xs mt-1 opacity-70">Logs will appear as the agent works</span>
+            </div>
+        {{ end }}
+    </div>
+
+    <!-- Log Footer -->
+    <div class="px-4 py-1.5 bg-dark-800 border-t border-dark-600 flex items-center justify-between text-xs text-text-secondary shrink-0">
+        <div class="flex items-center gap-4">
+            <span id="log-stats">
+                {{ with getStats .Entries }}
+                    <span class="text-green-400">{{ .Success }} success</span>
+                    <span class="mx-1">·</span>
+                    <span class="text-red-400">{{ .Error }} error</span>
+                    <span class="mx-1">·</span>
+                    <span class="text-blue-400">{{ .Running }} running</span>
+                {{ end }}
+            </span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span id="log-timestamp">{{ now }}</span>
+        </div>
+    </div>
+</div>
+
+<!-- Log Entry Template -->
+{{ define "log-entry" }}
+<div
+    class="log-entry flex items-start gap-3 px-4 py-2 border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors cursor-pointer {{ logTypeClass .Type }} {{ logStatusClass .Status }}"
+    data-phase="{{ .Phase }}"
+    data-type="{{ .Type }}"
+    data-status="{{ .Status }}"
+    data-timestamp="{{ .Timestamp }}"
+    onclick="toggleEntryDetails(this)"
+>
+    <!-- Status Icon -->
+    <div class="log-status-icon shrink-0 mt-0.5">
+        {{ if eq .Status "success" }}
+            <svg class="w-3.5 h-3.5 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+            </svg>
+        {{ else if eq .Status "error" }}
+            <svg class="w-3.5 h-3.5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+        {{ else if eq .Status "running" }}
+            <svg class="w-3.5 h-3.5 text-blue-500 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        {{ else }}
+            <div class="w-3.5 h-3.5 rounded-full border-2 border-dark-600"></div>
+        {{ end }}
+    </div>
+
+    <!-- Content -->
+    <div class="flex-1 min-w-0">
+        <!-- Header -->
+        <div class="flex items-center gap-2">
+            <!-- Phase Badge -->
+            <span class="log-phase-badge px-1.5 py-0.5 text-[10px] font-medium rounded bg-dark-600 text-text-secondary">
+                {{ title .Phase }}
+            </span>
+
+            <!-- Type Badge -->
+            <span class="log-type-badge px-1.5 py-0.5 text-[10px] font-medium rounded {{ typeBadgeClass .Type }}">
+                {{ title .Type }}
+            </span>
+
+            <!-- Timestamp -->
+            <span class="log-timestamp text-text-secondary">{{ .Timestamp }}</span>
+
+            <!-- Duration -->
+            {{ if .Duration }}
+            <span class="log-duration text-text-secondary">({{ .Duration }})</span>
+            {{ end }}
+        </div>
+
+        <!-- Action Message -->
+        <div class="log-action mt-0.5 text-text-primary break-words {{ if eq .Status "error" }}text-red-400{{ end }}">
+            {{ .Action }}
+        </div>
+
+        <!-- Details (collapsible) -->
+        <div class="log-details hidden mt-2 p-2 bg-dark-700/50 rounded-md border border-dark-600">
+            {{ if .Details }}
+                <pre class="text-text-secondary whitespace-pre-wrap">{{ .Details }}</pre>
+            {{ end }}
+            {{ if .Metadata }}
+                <div class="mt-2 flex flex-wrap gap-2">
+                    {{ range $key, $value := .Metadata }}
+                    <span class="px-2 py-0.5 text-[10px] bg-dark-600 rounded text-text-secondary">
+                        {{ $key }}: {{ $value }}
+                    </span>
+                    {{ end }}
+                </div>
+            {{ end }}
+        </div>
+    </div>
+
+    <!-- Expand/Collapse Icon -->
+    <div class="log-expand-icon shrink-0 mt-1 text-text-secondary">
+        <svg class="w-3.5 h-3.5 transition-transform" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+        </svg>
+    </div>
+</div>
+{{ end }}
+
+<script>
+    let autoScroll = true;
+
+    function toggleAutoScroll() {
+        autoScroll = !autoScroll;
+        const btn = document.getElementById('btn-auto-scroll');
+        const label = document.getElementById('auto-scroll-label');
+
+        if (autoScroll) {
+            btn.classList.add('ring-1', 'ring-accent');
+            label.textContent = 'Auto';
+            scrollToBottom();
+        } else {
+            btn.classList.remove('ring-1', 'ring-accent');
+            label.textContent = 'Manual';
+        }
+    }
+
+    function scrollToBottom() {
+        if (!autoScroll) return;
+
+        const container = document.getElementById('log-entries');
+        requestAnimationFrame(() => {
+            container.scrollTop = container.scrollHeight;
+        });
+    }
+
+    function toggleEntryDetails(element) {
+        const details = element.querySelector('.log-details');
+        const icon = element.querySelector('.log-expand-icon svg');
+
+        if (details.classList.contains('hidden')) {
+            details.classList.remove('hidden');
+            icon.style.transform = 'rotate(180deg)';
+        } else {
+            details.classList.add('hidden');
+            icon.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    function filterLog() {
+        const phaseFilter = document.getElementById('filter-phase').value;
+        const typeFilter = document.getElementById('filter-type').value;
+        const statusFilter = document.getElementById('filter-status').value;
+        const searchQuery = document.getElementById('log-search').value.toLowerCase();
+
+        const entries = document.querySelectorAll('.log-entry');
+        let visibleCount = 0;
+
+        entries.forEach(entry => {
+            const phase = entry.dataset.phase;
+            const type = entry.dataset.type;
+            const status = entry.dataset.status;
+            const action = entry.querySelector('.log-action')?.textContent.toLowerCase() || '';
+
+            let visible = true;
+
+            if (phaseFilter !== 'all' && phase !== phaseFilter) visible = false;
+            if (typeFilter !== 'all' && type !== typeFilter) visible = false;
+            if (statusFilter !== 'all' && status !== statusFilter) visible = false;
+            if (searchQuery && !action.includes(searchQuery)) visible = false;
+
+            entry.style.display = visible ? 'flex' : 'none';
+            if (visible) visibleCount++;
+        });
+
+        // Update entry count
+        const countEl = document.querySelector('#activity-log .flex-1 > span:last-child');
+        if (countEl) {
+            countEl.textContent = `${visibleCount} entries shown`;
+        }
+    }
+
+    function clearLog() {
+        if (confirm('Clear all activity logs?')) {
+            const container = document.getElementById('log-entries');
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full text-text-secondary">
+                    <svg class="w-12 h-12 mb-3 opacity-50" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="text-sm">No activity yet</span>
+                    <span class="text-xs mt-1 opacity-70">Logs will appear as the agent works</span>
+                </div>
+            `;
+        }
+    }
+
+    function addLogEntry(entry) {
+        const container = document.getElementById('log-entries');
+        const template = document.createElement('template');
+        template.innerHTML = `{{ template "log-entry" . }}`;
+
+        // In production, this would use server-rendered HTML via HTMX
+        scrollToBottom();
+    }
+
+    // Listen for HTMX events to add new entries
+    document.addEventListener('htmx:afterRequest', (event) => {
+        if (event.detail.target.id === 'activity-log' || event.detail.target.closest('#activity-log')) {
+            scrollToBottom();
+        }
+    });
+
+    // Auto-scroll on load
+    document.addEventListener('DOMContentLoaded', () => {
+        if (autoScroll) {
+            scrollToBottom();
+        }
+    });
+</script>
+
+<style>
+    /* Type-based color coding */
+    .type-llm { border-left: 2px solid #a78bfa; }
+    .type-file { border-left: 2px solid #60a5fa; }
+    .type-test { border-left: 2px solid #4ade80; }
+    .type-review { border-left: 2px solid #fbbf24; }
+    .type-system { border-left: 2px solid #6b7280; }
+
+    /* Type badges */
+    .badge-llm { background-color: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+    .badge-file { background-color: rgba(96, 165, 250, 0.15); color: #60a5fa; }
+    .badge-test { background-color: rgba(74, 222, 128, 0.15); color: #4ade80; }
+    .badge-review { background-color: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    .badge-system { background-color: rgba(107, 114, 128, 0.15); color: #9ca3af; }
+
+    /* Status-based styling */
+    .status-error { background-color: rgba(239, 68, 68, 0.05); }
+    .status-running { background-color: rgba(59, 130, 246, 0.05); }
+
+    /* Log entry hover */
+    .log-entry {
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .log-entry:last-child {
+        border-bottom: none;
+    }
+
+    /* Scrollbar */
+    #log-entries {
+        scrollbar-width: thin;
+        scrollbar-color: var(--bg-tertiary) var(--bg-secondary);
+    }
+</style>
+{{ end }}

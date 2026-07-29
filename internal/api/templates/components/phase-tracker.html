@@ -1,0 +1,272 @@
+{{ define "phase-tracker" }}
+<div id="phase-tracker" class="w-full">
+    <div class="px-4 py-3 bg-dark-800 border-b border-dark-600">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-text-primary">Development Phases</h3>
+            <span id="phase-status" class="text-xs text-text-secondary">
+                Phase {{ .CurrentPhase }} of {{ len .Phases }}
+            </span>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="flex items-center gap-1">
+            {{ $totalPhases := len .Phases }}
+            {{ $phaseWidth := div 100 $totalPhases }}
+
+            {{ range $index, $phase := .Phases }}
+                {{ $isLast := eq $index (sub $totalPhases 1) }}
+                {{ $phaseName := lower $phase.Name }}
+                {{ $phaseState := phaseState $phase.Status }}
+
+                <!-- Phase Node -->
+                <div
+                    class="phase-node flex-1 cursor-pointer group relative"
+                    data-phase="{{ $phaseName }}"
+                    data-status="{{ $phaseState }}"
+                    onclick="showPhaseDetails('{{ $phaseName }}')"
+                    hx-get="/api/phases/details"
+                    hx-vals='{"phase": "{{ $phaseName }}"}'
+                    hx-target="#phase-details-panel"
+                    hx-swap="innerHTML"
+                >
+                    <!-- Phase Indicator -->
+                    <div class="flex flex-col items-center">
+                        <!-- Status Circle -->
+                        <div class="phase-circle w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all {{ phaseClass $phaseState }} group-hover:scale-110">
+                            {{ if eq $phaseState "completed" }}
+                                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                            {{ else if eq $phaseState "failed" }}
+                                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                </svg>
+                            {{ else if eq $phaseState "in-progress" }}
+                                <div class="w-2.5 h-2.5 rounded-full bg-current animate-pulse"></div>
+                            {{ else if eq $phaseState "waiting" }}
+                                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                                </svg>
+                            {{ else }}
+                                <div class="w-2 h-2 rounded-full bg-current"></div>
+                            {{ end }}
+                        </div>
+
+                        <!-- Phase Label -->
+                        <span class="phase-label mt-2 text-xs font-medium truncate max-w-[80px] text-center {{ phaseLabelClass $phaseState }}">
+                            {{ title $phase.Name }}
+                        </span>
+
+                        <!-- Retry Count Badge -->
+                        {{ if gt $phase.Retries 0 }}
+                        <div class="phase-retry-badge absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                            {{ $phase.Retries }}
+                        </div>
+                        {{ end }}
+
+                        <!-- Tooltip -->
+                        <div class="phase-tooltip hidden group-hover:flex absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-700 text-text-primary text-xs rounded-md px-3 py-2 whitespace-nowrap z-50 shadow-lg border border-dark-600">
+                            <div class="flex flex-col gap-0.5">
+                                <span class="font-semibold">{{ title $phase.Name }}</span>
+                                <span class="text-text-secondary capitalize">Status: {{ $phaseState }}</span>
+                                {{ if gt $phase.Retries 0 }}
+                                <span class="text-text-secondary">Retries: {{ $phase.Retries }}/{{ $phase.MaxRetries }}</span>
+                                {{ end }}
+                                {{ if $phase.StartTime }}
+                                <span class="text-text-secondary">Started: {{ $phase.StartTime }}</span>
+                                {{ end }}
+                            </div>
+                            <div class="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-dark-700"></div>
+                        </div>
+                    </div>
+
+                    <!-- Connector Line -->
+                    {{ if not $isLast }}
+                    <div class="phase-connector absolute top-4 left-[50%] w-[calc(100%-2rem)] h-0.5 -translate-x-1/2 {{ phaseConnectorClass $phaseState }}">
+                        <div class="phase-connector-progress h-full bg-current transition-all duration-500" style="width: {{ phaseProgress $phaseState }}%"></div>
+                    </div>
+                    {{ end }}
+                </div>
+            {{ end }}
+        </div>
+
+        <!-- Current Phase Info -->
+        <div id="current-phase-info" class="mt-3 p-3 bg-dark-700/50 rounded-md border border-dark-600">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="phase-indicator-dot w-2 h-2 rounded-full {{ currentPhaseDotClass .CurrentPhaseStatus }}"></div>
+                    <div>
+                        <span class="text-sm font-medium text-text-primary">{{ title .CurrentPhaseName }}</span>
+                        {{ if .CurrentPhaseMessage }}
+                        <span class="block text-xs text-text-secondary mt-0.5">{{ .CurrentPhaseMessage }}</span>
+                        {{ end }}
+                    </div>
+                </div>
+                {{ if eq .CurrentPhaseStatus "in-progress" }}
+                <button
+                    class="px-3 py-1 text-xs bg-dark-600 hover:bg-dark-500 text-text-primary rounded-md transition-colors"
+                    hx-post="/api/phases/retry"
+                    hx-vals='{"phase": "{{ lower .CurrentPhaseName }}"}'
+                    hx-target="#phase-status"
+                >
+                    Retry
+                </button>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase Details Panel (populated via HTMX) -->
+    <div id="phase-details-panel" class="hidden">
+        <!-- Details loaded here -->
+    </div>
+</div>
+
+<script>
+    function showPhaseDetails(phaseName) {
+        // Highlight selected phase
+        document.querySelectorAll('.phase-node').forEach(node => {
+            node.classList.remove('ring-2', 'ring-accent', 'ring-offset-2', 'ring-offset-dark-800');
+        });
+
+        const selectedNode = document.querySelector(`[data-phase="${phaseName}"]`);
+        if (selectedNode) {
+            selectedNode.classList.add('ring-2', 'ring-accent', 'ring-offset-2', 'ring-offset-dark-800');
+        }
+
+        // Show panel
+        const panel = document.getElementById('phase-details-panel');
+        panel.classList.remove('hidden');
+        panel.classList.add('border-t', 'border-dark-600', 'bg-dark-800');
+    }
+
+    function updatePhaseStatus(phaseData) {
+        const node = document.querySelector(`[data-phase="${phaseData.name}"]`);
+        if (!node) return;
+
+        node.dataset.status = phaseData.status;
+
+        // Update circle
+        const circle = node.querySelector('.phase-circle');
+        circle.className = `phase-circle w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${phaseClass(phaseData.status)}`;
+
+        // Update label
+        const label = node.querySelector('.phase-label');
+        label.className = `phase-label mt-2 text-xs font-medium truncate max-w-[80px] text-center ${phaseLabelClass(phaseData.status)}`;
+
+        // Update connector
+        updateConnectors();
+    }
+
+    function updateConnectors() {
+        document.querySelectorAll('.phase-node').forEach((node, index, nodes) => {
+            const connector = node.querySelector('.phase-connector');
+            if (!connector) return;
+
+            const nextNode = nodes[index + 1];
+            if (!nextNode) return;
+
+            const nextStatus = nextNode.dataset.status;
+            connector.className = `phase-connector absolute top-4 left-[50%] w-[calc(100%-2rem)] h-0.5 -translate-x-1/2 ${phaseConnectorClass(nextStatus)}`;
+        });
+    }
+
+    function phaseClass(status) {
+        const classes = {
+            'pending': 'border-dark-600 text-dark-600',
+            'waiting': 'border-yellow-500 text-yellow-500',
+            'in-progress': 'border-blue-500 text-blue-500 ring-2 ring-blue-500/30',
+            'completed': 'border-green-500 text-green-500',
+            'failed': 'border-red-500 text-red-500'
+        };
+        return classes[status] || classes['pending'];
+    }
+
+    function phaseLabelClass(status) {
+        const classes = {
+            'pending': 'text-dark-600',
+            'waiting': 'text-yellow-500',
+            'in-progress': 'text-blue-500 font-bold',
+            'completed': 'text-green-500',
+            'failed': 'text-red-500'
+        };
+        return classes[status] || classes['pending'];
+    }
+
+    function phaseConnectorClass(status) {
+        const classes = {
+            'pending': 'border-dark-600',
+            'waiting': 'border-yellow-500',
+            'in-progress': 'border-blue-500',
+            'completed': 'border-green-500',
+            'failed': 'border-red-500'
+        };
+        return classes[status] || classes['pending'];
+    }
+
+    function phaseProgress(status) {
+        const progress = {
+            'pending': 0,
+            'waiting': 25,
+            'in-progress': 75,
+            'completed': 100,
+            'failed': 50
+        };
+        return progress[status] || 0;
+    }
+
+    function currentPhaseDotClass(status) {
+        const classes = {
+            'pending': 'bg-dark-600',
+            'waiting': 'bg-yellow-500',
+            'in-progress': 'bg-blue-500 animate-pulse',
+            'completed': 'bg-green-500',
+            'failed': 'bg-red-500'
+        };
+        return classes[status] || classes['pending'];
+    }
+
+    // Listen for HTMX events to update phase status
+    document.addEventListener('htmx:afterRequest', (event) => {
+        if (event.detail.target.id === 'phase-status' || event.detail.target.closest('#phase-tracker')) {
+            // Refresh phase tracker
+            htmx.ajax('GET', '/api/phases/status', {
+                target: '#phase-tracker',
+                swap: 'innerHTML'
+            });
+        }
+    });
+</script>
+
+<style>
+    .phase-node {
+        position: relative;
+    }
+
+    .phase-circle {
+        z-index: 10;
+        background-color: var(--bg-secondary);
+    }
+
+    .phase-connector {
+        z-index: 1;
+    }
+
+    .phase-connector-progress {
+        transition: width 0.5s ease-in-out;
+    }
+
+    .phase-retry-badge {
+        z-index: 20;
+        position: absolute;
+    }
+
+    .phase-tooltip {
+        display: none;
+    }
+
+    .phase-node:hover .phase-tooltip {
+        display: flex;
+    }
+</style>
+{{ end }}
