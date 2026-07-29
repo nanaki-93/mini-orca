@@ -20,4 +20,4 @@ Keep v1 API endpoints working alongside v2.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

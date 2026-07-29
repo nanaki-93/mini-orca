@@ -14,6 +14,7 @@ type Config struct {
 	Agents AgentsConfig `json:"agents" yaml:"agents"`
 	Skills SkillsConfig `json:"skills" yaml:"skills"`
 	Retry  RetryConfig  `json:"retry" yaml:"retry"`
+	API    APIConfig    `json:"api" yaml:"api"`
 }
 
 // ModelsConfig holds model-related configuration.
@@ -64,6 +65,16 @@ type RetryConfig struct {
 	BackoffMax  int `json:"backoff_max" yaml:"backoff_max"`
 }
 
+// APIConfig holds API-related configuration.
+type APIConfig struct {
+	// DefaultVersion is the default API version to use.
+	DefaultVersion string `json:"default_version" yaml:"default_version"`
+	// DeprecatedVersions lists API versions that are deprecated but still supported.
+	DeprecatedVersions []string `json:"deprecated_versions" yaml:"deprecated_versions"`
+	// EnabledVersions lists API versions that are enabled.
+	EnabledVersions []string `json:"enabled_versions" yaml:"enabled_versions"`
+}
+
 // applyDefaults ensures all nested maps and slices are initialized.
 func (c *Config) applyDefaults() {
 	if c.Models.Providers == nil {
@@ -98,6 +109,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Retry.BackoffMax == 0 {
 		c.Retry.BackoffMax = 30000
+	}
+	if c.API.DefaultVersion == "" {
+		c.API.DefaultVersion = "v1"
+	}
+	if len(c.API.DeprecatedVersions) == 0 {
+		c.API.DeprecatedVersions = []string{"v1"}
+	}
+	if len(c.API.EnabledVersions) == 0 {
+		c.API.EnabledVersions = []string{"v1", "v2"}
 	}
 }
 
