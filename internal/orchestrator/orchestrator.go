@@ -37,6 +37,7 @@ type Orchestrator struct {
 	config         *config.Config
 	currentPhase   Phase
 	currentSession *Session
+	historyTracker *HistoryTracker
 	ctx            context.Context
 	cancel         context.CancelFunc
 	humanGate      *HumanGate
@@ -94,16 +95,34 @@ func (o *Orchestrator) runPlanning(goal string) error {
 		o.stateStore = state.NewStore(session)
 	}
 
+	// Initialize history tracker
+	if o.historyTracker == nil {
+		o.historyTracker = NewHistoryTracker(o.currentSession.ID, o.stateStore)
+	}
+
 	// Update session status to running
 	if err := o.stateStore.UpdatePhaseStatus(state.PhasePlanning, state.SessionStatusRunning); err != nil {
 		return fmt.Errorf("planning phase: failed to update session status: %w", err)
 	}
 
 	// Call planner agent with goal
-	result, err := o.runPlannerAgent(goal)
+	var err error
+	var plannerResult *agent.AgentResult
+	start := time.Now()
+	err = WithRetry(func() error {
+		res, agentErr := o.runPlannerAgent(goal)
+		if agentErr != nil {
+			return fmt.Errorf("planner agent failed: %w", agentErr)
+		}
+		plannerResult = res
+		return nil
+	}, o.config.Retry.MaxRetries, o.config.Retry.BackoffBase, o.config.Retry.BackoffMax)
 	if err != nil {
+		o.historyTracker.LogLLMCall("planner", goal, "", time.Since(start), err)
 		return fmt.Errorf("planning phase: planner execution failed: %w", err)
 	}
+	result := plannerResult
+	o.historyTracker.LogLLMCall("planner", goal, truncateString(result.Output, 500), time.Since(start), nil)
 
 	// Parse plan output into structured plan
 	plan, err := parsePlanOutput(result.Output, goal, o.currentSession.ID)
@@ -125,15 +144,18 @@ func (o *Orchestrator) runPlanning(goal string) error {
 		CompletedAt: time.Now(),
 		Status:      state.PhaseStatusCompleted,
 		Output:      result.Output,
+		RetryCount:  o.config.Retry.MaxRetries,
 	}
-	if err := o.stateStore.AddPhaseHistory(history); err != nil {
+	if err := o.stateStore.SavePhaseHistory(history); err != nil {
 		return fmt.Errorf("planning phase: failed to add phase history: %w", err)
 	}
 
 	// Transition to PlanningReview phase
 	if err := o.transitionTo(PhasePlanningReview); err != nil {
+		o.historyTracker.LogPhaseTransition(PhasePlanning, PhasePlanningReview)
 		return fmt.Errorf("planning phase: failed to transition to planning review: %w", err)
 	}
+	o.historyTracker.LogPhaseTransition(PhasePlanning, PhasePlanningReview)
 
 	// Request human approval
 	if err := o.requestHumanApproval(plan); err != nil {
@@ -348,7 +370,10 @@ func formatPlanForReview(plan *state.Plan) string {
 // and transitions to the Testing phase.
 func (o *Orchestrator) runCoding() error {
 	// Get the plan from state store
-	plan := o.stateStore.GetPlan()
+	plan, err := o.stateStore.GetPlanBySession(o.currentSession.ID)
+	if err != nil {
+		return fmt.Errorf("coding phase: %w", err)
+	}
 	if plan == nil {
 		return fmt.Errorf("coding phase: no plan found in state store")
 	}
@@ -365,10 +390,22 @@ func (o *Orchestrator) runCoding() error {
 	}
 
 	// Call coder agent with unit details
-	result, err := o.runCoderAgent(unit)
+	var coderResult *agent.AgentResult
+	start := time.Now()
+	err = WithRetry(func() error {
+		res, agentErr := o.runCoderAgent(unit)
+		if agentErr != nil {
+			return fmt.Errorf("coder agent failed: %w", agentErr)
+		}
+		coderResult = res
+		return nil
+	}, o.config.Retry.MaxRetries, o.config.Retry.BackoffBase, o.config.Retry.BackoffMax)
 	if err != nil {
+		o.historyTracker.LogLLMCall("coder", fmt.Sprintf("Unit: %s", unit.Name), "", time.Since(start), err)
 		return fmt.Errorf("coding phase: coder execution failed: %w", err)
 	}
+	result := coderResult
+	o.historyTracker.LogLLMCall("coder", fmt.Sprintf("Unit: %s", unit.Name), truncateString(result.Output, 500), time.Since(start), nil)
 
 	// Extract code from agent output
 	code, targetFile, err := o.extractCodeFromResult(result.Output, unit)
@@ -378,8 +415,10 @@ func (o *Orchestrator) runCoding() error {
 
 	// Execute atomic file operation (write ONE unit)
 	if err := o.writeFileAtomic(targetFile, code); err != nil {
+		o.historyTracker.LogFileOperation("write", targetFile, err)
 		return fmt.Errorf("coding phase: failed to write file: %w", err)
 	}
+	o.historyTracker.LogFileOperation("write", targetFile, nil)
 
 	// Format code
 	if err := o.formatCode(targetFile); err != nil {
@@ -394,6 +433,11 @@ func (o *Orchestrator) runCoding() error {
 		return fmt.Errorf("coding phase: failed to update unit status to completed: %w", err)
 	}
 
+	// Persist unit code to state store
+	if err := o.stateStore.SaveUnitCode(o.currentSession.ID, unit.ID, code); err != nil {
+		return fmt.Errorf("coding phase: failed to save unit code: %w", err)
+	}
+
 	// Add phase history
 	history := &state.PhaseHistory{
 		ID:          fmt.Sprintf("history-%d", time.Now().UnixNano()),
@@ -403,15 +447,18 @@ func (o *Orchestrator) runCoding() error {
 		CompletedAt: time.Now(),
 		Status:      state.PhaseStatusCompleted,
 		Output:      fmt.Sprintf("Unit %s completed: %s", unit.ID, unit.Name),
+		RetryCount:  o.config.Retry.MaxRetries,
 	}
-	if err := o.stateStore.AddPhaseHistory(history); err != nil {
+	if err := o.stateStore.SavePhaseHistory(history); err != nil {
 		return fmt.Errorf("coding phase: failed to add phase history: %w", err)
 	}
 
 	// Transition to Testing phase
 	if err := o.transitionTo(PhaseTesting); err != nil {
+		o.historyTracker.LogPhaseTransition(PhaseCoding, PhaseTesting)
 		return fmt.Errorf("coding phase: failed to transition to testing: %w", err)
 	}
+	o.historyTracker.LogPhaseTransition(PhaseCoding, PhaseTesting)
 
 	return nil
 }
@@ -621,8 +668,12 @@ func sanitizeFilename(name string) string {
 // It runs language-specific tests, captures test output, calls the tester agent
 // to analyze results, and transitions to Review (if pass) or Coding (if fail).
 func (o *Orchestrator) runTesting() error {
+	var err error
 	// Get the plan from state store
-	plan := o.stateStore.GetPlan()
+	plan, err := o.stateStore.GetPlanBySession(o.currentSession.ID)
+	if err != nil {
+		return fmt.Errorf("testing phase: %w", err)
+	}
 	if plan == nil {
 		return fmt.Errorf("testing phase: no plan found in state store")
 	}
@@ -633,7 +684,15 @@ func (o *Orchestrator) runTesting() error {
 	}
 
 	// Run language-specific tests and capture output
-	testOutput, err := o.runTests()
+	var testOutput string
+	err = WithRetry(func() error {
+		out, testErr := o.runTests()
+		if testErr != nil {
+			return fmt.Errorf("test execution failed: %w", testErr)
+		}
+		testOutput = out
+		return nil
+	}, 1, o.config.Retry.BackoffBase, o.config.Retry.BackoffMax)
 	if err != nil {
 		// Tests may have failed, but we still want to analyze the output
 		fmt.Printf("Warning: test execution returned error: %v\n", err)
@@ -643,9 +702,38 @@ func (o *Orchestrator) runTesting() error {
 	code := o.getLastCompletedCode(plan)
 
 	// Call tester agent to analyze test results
-	report, err := o.runTesterAgent(code, testOutput)
+	var testerReport *TestReport
+	start := time.Now()
+	err = WithRetry(func() error {
+		res, agentErr := o.runTesterAgent(code, testOutput)
+		if agentErr != nil {
+			return fmt.Errorf("tester agent failed: %w", agentErr)
+		}
+		testerReport = res
+		return nil
+	}, o.config.Retry.MaxRetries, o.config.Retry.BackoffBase, o.config.Retry.BackoffMax)
 	if err != nil {
+		o.historyTracker.LogLLMCall("tester", truncateString(code, 500), "", time.Since(start), err)
 		return fmt.Errorf("testing phase: tester agent execution failed: %w", err)
+	}
+	report := testerReport
+	o.historyTracker.LogLLMCall("tester", truncateString(code, 500), truncateString(report.Summary, 500), time.Since(start), nil)
+
+	// Persist test results to state store
+	testResult := &state.TestResult{
+		ID:          fmt.Sprintf("test-result-%d", time.Now().UnixNano()),
+		SessionID:   o.currentSession.ID,
+		UnitID:      plan.Units[len(plan.Units)-1].ID, // Associate with last unit
+		TestOutput:  testOutput,
+		Passed:      report.Passed,
+		Failures:    report.Failures,
+		Suggestions: report.Suggestions,
+		Coverage:    report.Coverage,
+		Summary:     report.Summary,
+		ExecutedAt:  time.Now(),
+	}
+	if err := o.stateStore.SaveTestResult(testResult); err != nil {
+		return fmt.Errorf("testing phase: failed to save test results: %w", err)
 	}
 
 	// Add phase history
@@ -657,8 +745,9 @@ func (o *Orchestrator) runTesting() error {
 		CompletedAt: time.Now(),
 		Status:      state.PhaseStatusCompleted,
 		Output:      fmt.Sprintf("Test report: passed=%t, summary=%s", report.Passed, report.Summary),
+		RetryCount:  o.config.Retry.MaxRetries,
 	}
-	if err := o.stateStore.AddPhaseHistory(history); err != nil {
+	if err := o.stateStore.SavePhaseHistory(history); err != nil {
 		return fmt.Errorf("testing phase: failed to add phase history: %w", err)
 	}
 
@@ -666,13 +755,17 @@ func (o *Orchestrator) runTesting() error {
 	if report.Passed {
 		// Pass → transition to Review
 		if err := o.transitionTo(PhaseReview); err != nil {
+			o.historyTracker.LogPhaseTransition(PhaseTesting, PhaseReview)
 			return fmt.Errorf("testing phase: failed to transition to review: %w", err)
 		}
+		o.historyTracker.LogPhaseTransition(PhaseTesting, PhaseReview)
 	} else {
 		// Fail → transition to Coding with feedback
 		if err := o.transitionToCodingWithFeedback(plan, report); err != nil {
+			o.historyTracker.LogPhaseTransition(PhaseTesting, PhaseCoding)
 			return fmt.Errorf("testing phase: failed to transition to coding with feedback: %w", err)
 		}
+		o.historyTracker.LogPhaseTransition(PhaseTesting, PhaseCoding)
 	}
 
 	return nil
@@ -804,8 +897,12 @@ func (o *Orchestrator) resetLastCompletedUnit(plan *state.Plan) error {
 // It calls the reviewer agent to analyze the code, parses the review report,
 // and transitions to HumanReview (if pass) or Coding (if fail).
 func (o *Orchestrator) runReview() error {
+	var err error
 	// Get the plan from state store
-	plan := o.stateStore.GetPlan()
+	plan, err := o.stateStore.GetPlanBySession(o.currentSession.ID)
+	if err != nil {
+		return fmt.Errorf("review phase: %w", err)
+	}
 	if plan == nil {
 		return fmt.Errorf("review phase: no plan found in state store")
 	}
@@ -822,9 +919,37 @@ func (o *Orchestrator) runReview() error {
 	}
 
 	// Call reviewer agent with code and plan
-	report, err := o.runReviewerAgent(code, plan)
+	var reviewerReport *ReviewReport
+	start := time.Now()
+	err = WithRetry(func() error {
+		res, agentErr := o.runReviewerAgent(code, plan)
+		if agentErr != nil {
+			return fmt.Errorf("reviewer agent failed: %w", agentErr)
+		}
+		reviewerReport = res
+		return nil
+	}, o.config.Retry.MaxRetries, o.config.Retry.BackoffBase, o.config.Retry.BackoffMax)
 	if err != nil {
+		o.historyTracker.LogLLMCall("reviewer", truncateString(code, 500), "", time.Since(start), err)
 		return fmt.Errorf("review phase: reviewer agent execution failed: %w", err)
+	}
+	report := reviewerReport
+	o.historyTracker.LogLLMCall("reviewer", truncateString(code, 500), truncateString(report.Summary, 500), time.Since(start), nil)
+
+	// Persist review report to state store
+	reviewReport := &state.ReviewReportEntry{
+		ID:             fmt.Sprintf("review-report-%d", time.Now().UnixNano()),
+		SessionID:      o.currentSession.ID,
+		UnitID:         plan.Units[len(plan.Units)-1].ID, // Associate with last unit
+		Issues:         report.Issues,
+		Suggestions:    report.Suggestions,
+		Score:          report.Score,
+		Recommendation: report.Recommendation,
+		Summary:        report.Summary,
+		ReviewedAt:     time.Now(),
+	}
+	if err := o.stateStore.SaveReviewReport(reviewReport); err != nil {
+		return fmt.Errorf("review phase: failed to save review report: %w", err)
 	}
 
 	// Add phase history
@@ -836,8 +961,9 @@ func (o *Orchestrator) runReview() error {
 		CompletedAt: time.Now(),
 		Status:      state.PhaseStatusCompleted,
 		Output:      fmt.Sprintf("Review score: %d, recommendation: %s", report.Score, report.Recommendation),
+		RetryCount:  o.config.Retry.MaxRetries,
 	}
-	if err := o.stateStore.AddPhaseHistory(history); err != nil {
+	if err := o.stateStore.SavePhaseHistory(history); err != nil {
 		return fmt.Errorf("review phase: failed to add phase history: %w", err)
 	}
 
@@ -845,13 +971,17 @@ func (o *Orchestrator) runReview() error {
 	if o.isReviewPassing(report) {
 		// Pass → transition to HumanReview
 		if err := o.transitionTo(PhaseHumanReview); err != nil {
+			o.historyTracker.LogPhaseTransition(PhaseReview, PhaseHumanReview)
 			return fmt.Errorf("review phase: failed to transition to human review: %w", err)
 		}
+		o.historyTracker.LogPhaseTransition(PhaseReview, PhaseHumanReview)
 	} else {
 		// Fail → transition to Coding with feedback
 		if err := o.transitionToCodingWithReviewFeedback(plan, report); err != nil {
+			o.historyTracker.LogPhaseTransition(PhaseReview, PhaseCoding)
 			return fmt.Errorf("review phase: failed to transition to coding with feedback: %w", err)
 		}
+		o.historyTracker.LogPhaseTransition(PhaseReview, PhaseCoding)
 	}
 
 	return nil
@@ -976,7 +1106,10 @@ type ReviewReport struct {
 // and transitions to Completed (if approved) or Coding (if edit requested).
 func (o *Orchestrator) runHumanReview() error {
 	// Get the plan from state store
-	plan := o.stateStore.GetPlan()
+	plan, err := o.stateStore.GetPlanBySession(o.currentSession.ID)
+	if err != nil {
+		return fmt.Errorf("human review phase: %w", err)
+	}
 	if plan == nil {
 		return fmt.Errorf("human review phase: no plan found in state store")
 	}
@@ -1014,7 +1147,7 @@ func (o *Orchestrator) runHumanReview() error {
 		Status:      state.PhaseStatusCompleted,
 		Output:      fmt.Sprintf("Human response: action=%s, feedback=%s", response.Action, response.Feedback),
 	}
-	if err := o.stateStore.AddPhaseHistory(history); err != nil {
+	if err := o.stateStore.SavePhaseHistory(history); err != nil {
 		return fmt.Errorf("human review phase: failed to add phase history: %w", err)
 	}
 
@@ -1023,13 +1156,17 @@ func (o *Orchestrator) runHumanReview() error {
 	case "approve":
 		// Approve → transition to Completed
 		if err := o.transitionToCompleted(); err != nil {
+			o.historyTracker.LogPhaseTransition(PhaseHumanReview, "completed")
 			return fmt.Errorf("human review phase: failed to transition to completed: %w", err)
 		}
+		o.historyTracker.LogPhaseTransition(PhaseHumanReview, "completed")
 	case "edit":
 		// Edit → transition to Coding with feedback
 		if err := o.transitionToCodingWithHumanFeedback(plan, response.Feedback); err != nil {
+			o.historyTracker.LogPhaseTransition(PhaseHumanReview, PhaseCoding)
 			return fmt.Errorf("human review phase: failed to transition to coding with feedback: %w", err)
 		}
+		o.historyTracker.LogPhaseTransition(PhaseHumanReview, PhaseCoding)
 	default:
 		return fmt.Errorf("human review phase: unexpected action %q", response.Action)
 	}
@@ -1098,6 +1235,13 @@ func (o *Orchestrator) transitionToCompleted() error {
 
 	// Mark session as completed
 	o.currentPhase = "completed"
+
+	// Persist history
+	if o.historyTracker != nil {
+		if err := o.historyTracker.PersistToStore(); err != nil {
+			return fmt.Errorf("human review phase: failed to persist history: %w", err)
+		}
+	}
 
 	return nil
 }

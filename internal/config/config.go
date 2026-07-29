@@ -13,6 +13,7 @@ type Config struct {
 	Models ModelsConfig `json:"models" yaml:"models"`
 	Agents AgentsConfig `json:"agents" yaml:"agents"`
 	Skills SkillsConfig `json:"skills" yaml:"skills"`
+	Retry  RetryConfig  `json:"retry" yaml:"retry"`
 }
 
 // ModelsConfig holds model-related configuration.
@@ -56,6 +57,13 @@ type SkillsConfig struct {
 	Tools     map[string]string `json:"tools" yaml:"tools"`
 }
 
+// RetryConfig holds retry-related configuration.
+type RetryConfig struct {
+	MaxRetries  int `json:"max_retries" yaml:"max_retries"`
+	BackoffBase int `json:"backoff_base" yaml:"backoff_base"`
+	BackoffMax  int `json:"backoff_max" yaml:"backoff_max"`
+}
+
 // applyDefaults ensures all nested maps and slices are initialized.
 func (c *Config) applyDefaults() {
 	if c.Models.Providers == nil {
@@ -81,6 +89,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Agents.Reviewer.Skills == nil {
 		c.Agents.Reviewer.Skills = []string{}
+	}
+	if c.Retry.MaxRetries == 0 {
+		c.Retry.MaxRetries = 3
+	}
+	if c.Retry.BackoffBase == 0 {
+		c.Retry.BackoffBase = 1000
+	}
+	if c.Retry.BackoffMax == 0 {
+		c.Retry.BackoffMax = 30000
 	}
 }
 

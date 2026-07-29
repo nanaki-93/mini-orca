@@ -169,6 +169,52 @@ type PhaseHistory struct {
 	RetryCount int
 }
 
+// TestResult represents the result of a test execution for a plan unit.
+type TestResult struct {
+	// ID is the unique identifier for the test result.
+	ID string
+	// SessionID is the ID of the session this test result belongs to.
+	SessionID string
+	// UnitID is the ID of the unit this test result is for.
+	UnitID string
+	// TestOutput is the raw output from the test execution.
+	TestOutput string
+	// Passed indicates whether the tests passed.
+	Passed bool
+	// Failures are the list of test failures.
+	Failures []string
+	// Suggestions are the suggestions from the tester agent.
+	Suggestions []string
+	// Coverage is the code coverage percentage.
+	Coverage string
+	// Summary is a summary of the test results.
+	Summary string
+	// ExecutedAt is when the tests were executed.
+	ExecutedAt time.Time
+}
+
+// ReviewReportEntry represents the result of a code review for a plan unit.
+type ReviewReportEntry struct {
+	// ID is the unique identifier for the review report.
+	ID string
+	// SessionID is the ID of the session this review report belongs to.
+	SessionID string
+	// UnitID is the ID of the unit this review report is for.
+	UnitID string
+	// Issues are the issues found during review.
+	Issues []string
+	// Suggestions are the suggestions from the reviewer agent.
+	Suggestions []string
+	// Score is the review score (0-100).
+	Score int
+	// Recommendation is the reviewer's recommendation.
+	Recommendation string
+	// Summary is a summary of the review.
+	Summary string
+	// ReviewedAt is when the review was performed.
+	ReviewedAt time.Time
+}
+
 // Session represents a single execution session within the pipeline.
 type Session struct {
 	// ID is the unique identifier for the session (UUID).
@@ -193,6 +239,10 @@ type Session struct {
 	AtomicUnits []AtomicUnit
 	// History contains the execution history of each phase.
 	History []PhaseHistory
+	// TestResults contains the test results for each unit.
+	TestResults []TestResult
+	// ReviewReports contains the review reports for each unit.
+	ReviewReports []ReviewReportEntry
 	// Error contains any error that occurred during the session.
 	Error string
 }
