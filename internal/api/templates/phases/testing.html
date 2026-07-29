@@ -1,0 +1,404 @@
+{{ define "testing-phase" }}
+<div id="testing-phase" class="w-full h-full flex flex-col bg-dark-900">
+    <!-- Phase Header -->
+    <div class="px-6 py-3 bg-dark-800 border-b border-dark-600 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+                <svg class="w-5 h-5 text-orange-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-base font-semibold text-text-primary">Testing Phase</h2>
+                <p class="text-xs text-text-secondary">Running tests and analyzing results</p>
+            </div>
+        </div>
+
+        <!-- Test Status -->
+        <div class="flex items-center gap-3">
+            {{ if eq .Status "running" }}
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-md">
+                <div class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                <span class="text-xs text-blue-400">Tests Running</span>
+            </div>
+            {{ else if eq .Status "passed" }}
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-md">
+                <svg class="w-4 h-4 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+                <span class="text-xs text-green-400 font-medium">All Tests Passed</span>
+            </div>
+            {{ else if eq .Status "failed" }}
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-md">
+                <svg class="w-4 h-4 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+                <span class="text-xs text-red-400 font-medium">{{ .FailedTests }} Failed</span>
+            </div>
+            {{ end }}
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 overflow-hidden flex">
+        <!-- Left Panel: Test Info & Coverage -->
+        <div class="w-80 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0 overflow-y-auto">
+            <!-- Test Command -->
+            <div class="p-4 border-b border-dark-600">
+                <h3 class="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">Test Command</h3>
+                <div class="p-3 bg-dark-900 border border-dark-600 rounded-lg">
+                    <code class="text-xs text-green-400 font-mono break-all">{{ .TestCommand }}</code>
+                </div>
+            </div>
+
+            <!-- Coverage Stats -->
+            <div class="p-4 border-b border-dark-600">
+                <h3 class="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">Coverage</h3>
+                <div class="space-y-3">
+                    <!-- Overall Coverage -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-text-secondary">Overall</span>
+                        <span class="text-xs font-medium text-text-primary">{{ .OverallCoverage }}%</span>
+                    </div>
+                    <div class="w-full h-2 bg-dark-600 rounded-full overflow-hidden">
+                        <div class="coverage-bar h-full transition-all duration-500" style="width: {{ .OverallCoverage }}%; background-color: {{ coverageColor .OverallCoverage }};"></div>
+                    </div>
+
+                    <!-- Detailed Coverage -->
+                    <div class="space-y-2 pt-2">
+                        {{ range .CoverageDetails }}
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-text-secondary">{{ .Name }}</span>
+                            <span class="text-xs text-text-primary">{{ .Percentage }}%</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-dark-600 rounded-full overflow-hidden">
+                            <div class="coverage-detail h-full transition-all duration-500" style="width: {{ .Percentage }}%; background-color: {{ coverageColor .Percentage }};"></div>
+                        </div>
+                        {{ end }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Results Summary -->
+            <div class="p-4 border-b border-dark-600">
+                <h3 class="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">Results Summary</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="p-3 bg-dark-700/50 border border-dark-600 rounded-lg text-center">
+                        <div class="text-lg font-semibold text-text-primary">{{ .TotalTests }}</div>
+                        <div class="text-[10px] text-text-secondary uppercase">Total</div>
+                    </div>
+                    <div class="p-3 bg-dark-700/50 border border-dark-600 rounded-lg text-center">
+                        <div class="text-lg font-semibold text-green-500">{{ .PassedTests }}</div>
+                        <div class="text-[10px] text-text-secondary uppercase">Passed</div>
+                    </div>
+                    <div class="p-3 bg-dark-700/50 border border-dark-600 rounded-lg text-center">
+                        <div class="text-lg font-semibold text-red-500">{{ .FailedTests }}</div>
+                        <div class="text-[10px] text-text-secondary uppercase">Failed</div>
+                    </div>
+                    <div class="p-3 bg-dark-700/50 border border-dark-600 rounded-lg text-center">
+                        <div class="text-lg font-semibold text-yellow-500">{{ .SkippedTests }}</div>
+                        <div class="text-[10px] text-text-secondary uppercase">Skipped</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tester Agent Analysis -->
+            <div class="p-4 flex-1">
+                <h3 class="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">Agent Analysis</h3>
+                {{ if .AgentAnalysis }}
+                <div class="p-3 bg-dark-700/50 border border-dark-600 rounded-lg">
+                    <div class="flex items-start gap-2 mb-2">
+                        <div class="w-6 h-6 rounded-md bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0">
+                            <svg class="w-3.5 h-3.5 text-purple-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-xs text-text-primary leading-relaxed">{{ .AgentAnalysis }}</p>
+                        </div>
+                    </div>
+                    {{ if .Recommendations }}
+                    <div class="mt-3 pt-3 border-t border-dark-600">
+                        <span class="text-[10px] text-text-secondary uppercase tracking-wider">Recommendations:</span>
+                        <ul class="mt-1.5 space-y-1">
+                            {{ range .Recommendations }}
+                            <li class="flex items-start gap-1.5">
+                                <svg class="w-3 h-3 text-yellow-500 mt-0.5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                </svg>
+                                <span class="text-xs text-text-secondary">{{ . }}</span>
+                            </li>
+                            {{ end }}
+                        </ul>
+                    </div>
+                    {{ end }}
+                </div>
+                {{ else }}
+                <div class="p-3 bg-dark-700/30 border border-dark-600/50 rounded-lg text-center">
+                    <p class="text-xs text-text-secondary">Analysis will appear after tests complete</p>
+                </div>
+                {{ end }}
+            </div>
+        </div>
+
+        <!-- Right Panel: Test Output -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Output Header -->
+            <div class="flex items-center justify-between px-4 py-2 bg-dark-800 border-b border-dark-600 shrink-0">
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="text-xs text-text-secondary">Test Output</span>
+                    {{ if .Status }}
+                    <span class="text-xs text-text-secondary">· {{ .Status }}</span>
+                    {{ end }}
+                </div>
+                <div class="flex items-center gap-2">
+                    <button
+                        class="p-1.5 text-text-secondary hover:text-text-primary hover:bg-dark-700 rounded-md transition-colors"
+                        onclick="clearOutput()"
+                        title="Clear output"
+                    >
+                        <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                    <button
+                        class="p-1.5 text-text-secondary hover:text-text-primary hover:bg-dark-700 rounded-md transition-colors"
+                        onclick="copyOutput()"
+                        title="Copy output"
+                    >
+                        <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
+                            <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
+                        </svg>
+                    </button>
+                    <button
+                        class="p-1.5 text-text-secondary hover:text-text-primary hover:bg-dark-700 rounded-md transition-colors"
+                        onclick="scrollToBottom()"
+                        title="Scroll to bottom"
+                    >
+                        <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 10.293a1 1 0 010 1.414l-6 6a1 1 0 01-1.414 0l-6-6a1 1 0 111.414-1.414L9 14.586V3a1 1 0 012 0v11.586l4.293-4.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Test Output (Scrollable) -->
+            <div id="test-output" class="flex-1 overflow-auto bg-dark-900 p-4 font-mono text-xs">
+                {{ if eq .Status "running" }}
+                <!-- Running Status -->
+                <div class="flex flex-col items-center justify-center h-full">
+                    <div class="relative mb-6">
+                        <div class="w-16 h-16 rounded-full border-4 border-orange-500/20"></div>
+                        <div class="absolute inset-0 w-16 h-16 rounded-full border-4 border-transparent border-t-orange-500 border-r-orange-500 animate-spin"></div>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <svg class="w-7 h-7 text-orange-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <h4 class="text-base font-medium text-text-primary mb-2">Running Tests...</h4>
+                    <p class="text-sm text-text-secondary text-center max-w-md">
+                        Executing test suite and collecting coverage data
+                    </p>
+                    {{ if .EstimatedTimeRemaining }}
+                    <p class="text-xs text-text-secondary mt-3">Estimated time: {{ .EstimatedTimeRemaining }}</p>
+                    {{ end }}
+                </div>
+                {{ else }}
+                <!-- Test Output Content -->
+                <div id="output-content" class="whitespace-pre-wrap text-text-primary">
+                    {{ .TestOutput }}
+                </div>
+
+                <!-- Failed Tests Detail -->
+                {{ if gt .FailedTests 0 }}
+                <div class="mt-4 p-4 bg-red-500/5 border border-red-500/20 rounded-lg">
+                    <h4 class="text-sm font-medium text-red-400 mb-3">Failed Tests</h4>
+                    <div class="space-y-2">
+                        {{ range .FailedTestsList }}
+                        <details class="group">
+                            <summary class="cursor-pointer flex items-center gap-2 text-xs text-red-400 hover:text-red-300">
+                                <svg class="w-3 h-3 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                </svg>
+                                <span>{{ .Name }}</span>
+                                <span class="text-text-secondary ml-auto">({{ .Duration }})</span>
+                            </summary>
+                            <div class="mt-2 ml-5 p-2 bg-dark-800 rounded border border-dark-600">
+                                <pre class="text-xs text-red-300 whitespace-pre-wrap">{{ .Error }}</pre>
+                            </div>
+                        </details>
+                        {{ end }}
+                    </div>
+                </div>
+                {{ end }}
+
+                <!-- Pass Status -->
+                {{ if eq .Status "passed" }}
+                <div class="mt-4 p-4 bg-green-500/5 border border-green-500/20 rounded-lg text-center">
+                    <svg class="w-8 h-8 text-green-500 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    <h4 class="text-sm font-medium text-green-400">All {{ .TotalTests }} Tests Passed</h4>
+                    <p class="text-xs text-text-secondary mt-1">Coverage: {{ .OverallCoverage }}%</p>
+                </div>
+                {{ end }}
+                {{ end }}
+            </div>
+
+            <!-- Output Footer -->
+            <div class="px-4 py-2 bg-dark-800 border-t border-dark-600 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-text-secondary">{{ .OutputLines }} lines</span>
+                    <span class="text-xs text-text-secondary">Duration: {{ .TestDuration }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    {{ if and (eq .Status "failed") .CanRetry }}
+                    <button
+                        class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-text-primary rounded-md transition-colors"
+                        hx-post="/api/phases/retry"
+                        hx-vals='{"phase": "testing"}'
+                        hx-target="#testing-phase"
+                        hx-swap="outerHTML"
+                    >
+                        Retry Tests
+                    </button>
+                    {{ end }}
+                    {{ if and (eq .Status "passed") .CanContinue }}
+                    <button
+                        class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-500 text-white font-medium rounded-md transition-colors"
+                        hx-post="/api/phases/continue"
+                        hx-vals='{"phase": "testing"}'
+                        hx-target="#testing-phase"
+                        hx-swap="outerHTML"
+                    >
+                        Continue
+                    </button>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-scroll to bottom for live output
+    function scrollToBottom() {
+        const output = document.getElementById('test-output');
+        if (output) {
+            output.scrollTop = output.scrollHeight;
+        }
+    }
+
+    function clearOutput() {
+        const content = document.getElementById('output-content');
+        if (content) {
+            content.innerHTML = '';
+        }
+    }
+
+    function copyOutput() {
+        const content = document.getElementById('output-content');
+        if (content) {
+            navigator.clipboard.writeText(content.textContent).then(() => {
+                // Show brief confirmation
+                const btn = event.currentTarget;
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<svg class="w-3.5 h-3.5 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                }, 2000);
+            });
+        }
+    }
+
+    // Auto-refresh testing status
+    function refreshTestingStatus() {
+        htmx.ajax('GET', '/api/phases/status?phase=testing', {
+            target: '#testing-phase',
+            swap: 'innerHTML'
+        });
+    }
+
+    // Refresh every 2 seconds during testing
+    const testingInterval = setInterval(() => {
+        const phaseContainer = document.getElementById('testing-phase');
+        if (phaseContainer) {
+            refreshTestingStatus();
+            scrollToBottom();
+        } else {
+            clearInterval(testingInterval);
+        }
+    }, 2000);
+
+    // Listen for HTMX events to stop polling
+    document.addEventListener('htmx:afterRequest', (event) => {
+        if (event.detail.target.id === 'testing-phase' || event.detail.target.closest('#testing-phase')) {
+            const statusEl = document.querySelector('[data-phase="testing"]');
+            if (statusEl && (statusEl.dataset.status === 'passed' || statusEl.dataset.status === 'failed')) {
+                clearInterval(testingInterval);
+            }
+        }
+    });
+
+    // Coverage color helper
+    function coverageColor(percentage) {
+        if (percentage >= 80) return '#22c55e';
+        if (percentage >= 60) return '#eab308';
+        if (percentage >= 40) return '#f97316';
+        return '#ef4444';
+    }
+
+    // Initialize scroll on load
+    document.addEventListener('DOMContentLoaded', () => {
+        scrollToBottom();
+    });
+</script>
+
+<style>
+    /* Coverage bar colors */
+    .coverage-high { background-color: #22c55e; }
+    .coverage-medium { background-color: #eab308; }
+    .coverage-low { background-color: #f97316; }
+    .coverage-critical { background-color: #ef4444; }
+
+    /* Custom scrollbar */
+    #test-output::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    #test-output::-webkit-scrollbar-track {
+        background: var(--bg-secondary);
+    }
+
+    #test-output::-webkit-scrollbar-thumb {
+        background: var(--bg-tertiary);
+        border-radius: 4px;
+    }
+
+    #test-output::-webkit-scrollbar-thumb:hover {
+        background: var(--border-color);
+    }
+
+    /* Details/Summary styling */
+    details summary::-webkit-details-marker {
+        display: none;
+    }
+
+    details summary::before {
+        content: '▸';
+        display: inline-block;
+        width: 1em;
+        margin-left: -1em;
+        color: var(--text-secondary);
+    }
+
+    details[open] summary::before {
+        content: '▾';
+    }
+</style>
+{{ end }}
