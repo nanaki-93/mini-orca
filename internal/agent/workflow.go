@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/internal/agent/prompts"
+	"github.com/nanaki-93/mini-orca/internal/agent/skills"
+	"github.com/nanaki-93/mini-orca/internal/model"
 	"github.com/nanaki-93/mini-orca/internal/tools"
 )
 
@@ -42,14 +44,10 @@ type Workflow struct {
 	formatter    Formatter
 }
 
-// NewWorkflow creates a new workflow with the given router and skills registry.
-func NewWorkflow(router interface {
-	DetectProjectType(dirPath string) (*tools.ProjectInfo, error)
-}, registry interface {
-	GetForAgent(agent string) []interface{}
-}) *Workflow {
+// NewWorkflow creates a new workflow with the given router, skills registry, and tool executor.
+func NewWorkflow(router *model.Router, registry *skills.SkillsRegistry, executor tools.ToolExecutor) *Workflow {
 	return &Workflow{
-		orchestrator: NewOrchestrator(nil, nil), // Placeholder - would be properly initialized in production
+		orchestrator: NewOrchestrator(router, registry, executor),
 		formatter:    tools.NewFormatterExecutor(),
 	}
 }

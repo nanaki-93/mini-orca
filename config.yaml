@@ -1,0 +1,98 @@
+# Mini-Orca Configuration Example
+# This file demonstrates all available configuration options.
+
+# ─── Models ───────────────────────────────────────────────────────────────────
+# Configure LLM providers and phase-specific model settings.
+
+models:
+  # Default provider used when no phase override is set
+  active_provider: "lm-studio"
+
+  # Available LLM providers
+  providers:
+    lm-studio:
+      base_url: "http://localhost:1234"
+      api_key: ""  # Only required for remote providers (OpenAI, etc.)
+
+  # Phase-specific model configurations
+  phases:
+    planning:
+      provider: "lm-studio"
+      model: ""       # Leave empty to use the provider's default model
+      temperature: 0.3
+      max_tokens: 4096
+    coding:
+      provider: "lm-studio"
+      model: ""
+      temperature: 0.7
+      max_tokens: 8192
+    testing:
+      provider: "lm-studio"
+      model: ""
+      temperature: 0.5
+      max_tokens: 4096
+    review:
+      provider: "lm-studio"
+      model: ""
+      temperature: 0.3
+      max_tokens: 4096
+    human_review:
+      provider: "lm-studio"
+      model: ""
+      temperature: 0.0
+      max_tokens: 4096
+
+# ─── Agents ───────────────────────────────────────────────────────────────────
+# Configure the orchestrator agents with their skills and optional model overrides.
+
+agents:
+  planner:
+    skills:
+      - task_breakdown
+      - context_analysis
+      - plan_generation
+    model: ""  # Optional: override the default model for this agent
+
+  coder:
+    skills:
+      - code_generation
+      - refactoring
+      - debugging
+    model: ""  # Optional: override the default model for this agent
+
+  tester:
+    skills:
+      - test_generation
+      - edge_case_detection
+      - validation
+    model: ""  # Optional: override the default model for this agent
+
+  reviewer:
+    skills:
+      - code_review
+      - security_check
+      - best_practices
+    model: ""  # Optional: override the default model for this agent
+
+# ─── Skills ───────────────────────────────────────────────────────────────────
+# Define available skills (knowledge base) and tools.
+
+skills:
+  knowledge:
+    task_breakdown: "Break down complex tasks into manageable subtasks"
+    context_analysis: "Analyze project context and requirements"
+    plan_generation: "Generate structured execution plans"
+    code_generation: "Generate clean, well-documented code"
+    refactoring: "Refactor code for clarity and maintainability"
+    debugging: "Debug and fix issues in code"
+    test_generation: "Generate comprehensive unit and integration tests"
+    edge_case_detection: "Identify and handle edge cases"
+    validation: "Validate code against requirements and standards"
+    code_review: "Review code for quality and correctness"
+    security_check: "Identify potential security vulnerabilities"
+    best_practices: "Enforce coding best practices and patterns"
+
+  tools:
+    formatter: "Format code according to project standards"
+    linter: "Lint code for style and correctness"
+    test_runner: "Execute test suites"

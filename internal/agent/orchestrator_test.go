@@ -15,7 +15,7 @@ func TestNewOrchestrator(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
 
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 	if orch == nil {
 		t.Fatal("expected non-nil orchestrator")
 	}
@@ -30,7 +30,7 @@ func TestNewOrchestrator(t *testing.T) {
 func TestOrchestrator_RunPlanner_EmptyGoal(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	_, err := orch.RunPlanner("")
 	if err == nil {
@@ -40,7 +40,7 @@ func TestOrchestrator_RunPlanner_EmptyGoal(t *testing.T) {
 
 func TestOrchestrator_RunPlanner_NoRouter(t *testing.T) {
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(nil, registry)
+	orch := NewOrchestrator(nil, registry, nil)
 
 	_, err := orch.RunPlanner("test goal")
 	if err == nil {
@@ -51,7 +51,7 @@ func TestOrchestrator_RunPlanner_NoRouter(t *testing.T) {
 func TestOrchestrator_RunCoder_EmptyTitle(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	_, err := orch.RunCoder(prompts.PlanUnit{
 		Title:       "",
@@ -65,7 +65,7 @@ func TestOrchestrator_RunCoder_EmptyTitle(t *testing.T) {
 func TestOrchestrator_RunCoder_EmptyDescription(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	_, err := orch.RunCoder(prompts.PlanUnit{
 		Title:       "Test",
@@ -78,7 +78,7 @@ func TestOrchestrator_RunCoder_EmptyDescription(t *testing.T) {
 
 func TestOrchestrator_RunCoder_NoRouter(t *testing.T) {
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(nil, registry)
+	orch := NewOrchestrator(nil, registry, nil)
 
 	_, err := orch.RunCoder(prompts.PlanUnit{
 		Title:       "Test",
@@ -92,7 +92,7 @@ func TestOrchestrator_RunCoder_NoRouter(t *testing.T) {
 func TestOrchestrator_RunTester_EmptyCode(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	_, err := orch.RunTester("", "test results")
 	if err == nil {
@@ -103,7 +103,7 @@ func TestOrchestrator_RunTester_EmptyCode(t *testing.T) {
 func TestOrchestrator_RunTester_EmptyResults(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	_, err := orch.RunTester("code", "")
 	if err == nil {
@@ -113,7 +113,7 @@ func TestOrchestrator_RunTester_EmptyResults(t *testing.T) {
 
 func TestOrchestrator_RunTester_NoRouter(t *testing.T) {
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(nil, registry)
+	orch := NewOrchestrator(nil, registry, nil)
 
 	_, err := orch.RunTester("code", "test results")
 	if err == nil {
@@ -124,7 +124,7 @@ func TestOrchestrator_RunTester_NoRouter(t *testing.T) {
 func TestOrchestrator_RunReviewer_EmptyCode(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	_, err := orch.RunReviewer("", "plan")
 	if err == nil {
@@ -135,7 +135,7 @@ func TestOrchestrator_RunReviewer_EmptyCode(t *testing.T) {
 func TestOrchestrator_RunReviewer_EmptyPlan(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	_, err := orch.RunReviewer("code", "")
 	if err == nil {
@@ -145,7 +145,7 @@ func TestOrchestrator_RunReviewer_EmptyPlan(t *testing.T) {
 
 func TestOrchestrator_RunReviewer_NoRouter(t *testing.T) {
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(nil, registry)
+	orch := NewOrchestrator(nil, registry, nil)
 
 	_, err := orch.RunReviewer("code", "plan")
 	if err == nil {
@@ -189,7 +189,7 @@ func TestOrchestrator_RunPlanner_FullFlow(t *testing.T) {
 	})
 
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	result, err := orch.RunPlanner("Build a REST API for user management")
 	if err != nil {
@@ -249,7 +249,7 @@ func TestOrchestrator_RunCoder_FullFlow(t *testing.T) {
 	})
 
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	result, err := orch.RunCoder(prompts.PlanUnit{
 		Title:        "Create User struct",
@@ -307,7 +307,7 @@ func TestOrchestrator_RunTester_FullFlow(t *testing.T) {
 	})
 
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	result, err := orch.RunTester(
 		"package user\n\ntype User struct {\n\tID string\n}",
@@ -379,7 +379,7 @@ func TestOrchestrator_RunReviewer_FullFlow(t *testing.T) {
 	})
 
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	result, err := orch.RunReviewer(
 		"package user\n\ntype User struct {\n\tID string\n}",
@@ -457,7 +457,7 @@ func TestOrchestrator_RunCoder_WithDependencies(t *testing.T) {
 	})
 
 	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry)
+	orch := NewOrchestrator(router, registry, nil)
 
 	result, err := orch.RunCoder(prompts.PlanUnit{
 		Title:        "Create User struct",
