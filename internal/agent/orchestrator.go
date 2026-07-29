@@ -8,6 +8,7 @@ import (
 	"github.com/nanaki-93/mini-orca/internal/agent/prompts"
 	"github.com/nanaki-93/mini-orca/internal/agent/skills"
 	"github.com/nanaki-93/mini-orca/internal/model"
+	"github.com/nanaki-93/mini-orca/internal/tools"
 )
 
 // Orchestrator coordinates the execution of agents in the multi-agent system.
@@ -15,13 +16,15 @@ import (
 type Orchestrator struct {
 	router   *model.Router
 	registry *skills.SkillsRegistry
+	executor tools.ToolExecutor
 }
 
-// NewOrchestrator creates a new orchestrator with the given router and skills registry.
-func NewOrchestrator(router *model.Router, registry *skills.SkillsRegistry) *Orchestrator {
+// NewOrchestrator creates a new orchestrator with the given router, skills registry, and tool executor.
+func NewOrchestrator(router *model.Router, registry *skills.SkillsRegistry, executor tools.ToolExecutor) *Orchestrator {
 	return &Orchestrator{
 		router:   router,
 		registry: registry,
+		executor: executor,
 	}
 }
 

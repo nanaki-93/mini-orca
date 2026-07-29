@@ -5,12 +5,14 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/nanaki-93/mini-orca/internal/agent"
 	"github.com/nanaki-93/mini-orca/internal/agent/skills"
 	"github.com/nanaki-93/mini-orca/internal/config"
 	"github.com/nanaki-93/mini-orca/internal/model"
+	"github.com/nanaki-93/mini-orca/internal/tools"
 )
 
 func main() {
@@ -34,6 +36,12 @@ func main() {
 	// Initialize skills registry and register config skills
 	registry := initSkillsRegistry(cfg)
 
+	// Detect project type and create tool executor
+	projectInfo, executor := initToolExecutor()
+
+	// Initialize orchestrator with router, registry, and executor
+	orchestrator := agent.NewOrchestrator(router, registry, executor)
+
 	// Initialize all agents with their skill sets
 	planner := agent.NewPlannerAgent(router, registry)
 	planner.SetSkills(cfg.Agents.Planner.Skills)
@@ -52,6 +60,19 @@ func main() {
 	log.Printf("Active provider: %s", cfg.Models.ActiveProvider)
 	log.Printf("Registered providers: %v", router.ListProviders())
 	log.Printf("Configured phases: %d", len(cfg.Models.Phases))
+
+	// Log project type and executor
+	if projectInfo != nil {
+		log.Printf("Detected project type: %s (root: %s)", projectInfo.Type, projectInfo.RootDir)
+	} else {
+		log.Println("Project type: generic (unknown) - using shell-only executor")
+	}
+	if executor != nil {
+		log.Printf("Tool executor initialized successfully")
+	}
+	if orchestrator != nil {
+		log.Println("Orchestrator initialized with executor")
+	}
 
 	// Log registered agents and their skills
 	log.Printf("Agent: %s (%s) — skills: %v", planner.Name(), planner.Description(), planner.GetSkills())
@@ -174,6 +195,36 @@ func initSkillsRegistry(cfg *config.Config) *skills.SkillsRegistry {
 	log.Printf("Skills registry initialized with %d skills from config", totalSkills)
 
 	return registry
+}
+
+// initToolExecutor detects the project type at the current directory and creates
+// the appropriate ToolExecutor for the detected project type.
+func initToolExecutor() (*tools.ProjectInfo, tools.ToolExecutor) {
+	// Detect project type starting from current directory
+	detector := tools.NewProjectDetectorExecutor()
+	currentDir, err := os.Getwd()
+	if err != nil {
+		log.Printf("Warning: failed to get current directory: %v", err)
+		currentDir = "."
+	}
+
+	projectInfo, err := detector.DetectProjectType(currentDir)
+	if err != nil {
+		// If project type detection fails, try parent directories
+		log.Printf("Warning: failed to detect project type in %s: %v", currentDir, err)
+		projectInfo, err = detector.DetectProjectType(filepath.Dir(currentDir))
+		if err != nil {
+			log.Printf("Warning: failed to detect project type in parent directory: %v", err)
+			log.Println("Using generic executor (shell-only)")
+			return nil, tools.NewExecutor(&tools.ProjectInfo{Type: tools.ProjectTypeUnknown, RootDir: currentDir})
+		}
+	}
+
+	log.Printf("Detected project type: %s", projectInfo.Type)
+
+	// Create ToolExecutor based on detected project type
+	executor := tools.NewExecutor(projectInfo)
+	return projectInfo, executor
 }
 
 // waitForShutdown blocks until a SIGINT or SIGTERM signal is received.
