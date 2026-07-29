@@ -46,15 +46,11 @@
                 <span id="edit-label">Edit</span>
             </button>
 
-            <!-- Save Button -->
+            <!-- Save Button (HTMX Form) -->
             <button
                 id="btn-save"
                 class="hidden flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent hover:bg-accent-hover text-dark-900 font-medium rounded-md transition-colors"
-                hx-post="/api/files/save"
-                hx-vals='json'
-                hx-vals='{"path": "{{ .FilePath }}", "content": "document.getElementById('editor-textarea').value"}'
-                hx-target="#save-status"
-                hx-swap="innerHTML"
+                onclick="submitChanges()"
             >
                 <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
@@ -76,21 +72,38 @@
     <!-- Save Status -->
     <div id="save-status" class="hidden px-4 py-1 text-xs"></div>
 
+    <!-- Hidden HTMX Form for saving -->
+    <form id="save-form"
+          hx-post="/api/files/save"
+          hx-encoding="application/json"
+          hx-target="#save-status"
+          hx-swap="innerHTML"
+          hx-indicator="#loading-indicator"
+          class="hidden">
+        <input type="hidden" id="save-file-path" name="path" value="{{ .FilePath }}">
+        <input type="hidden" id="save-content" name="content" value="">
+    </form>
+
     <!-- Editor Content -->
     <div id="editor-content" class="flex-1 overflow-auto relative">
         <!-- View Mode -->
         <div id="view-mode" class="editor-view">
-            <div id="line-numbers" class="line-numbers bg-dark-800 text-text-secondary text-xs font-mono text-right select-none pr-3 py-4 sticky left-0"></div>
-            <pre id="code-display" class="code-display pl-4 py-4 font-mono text-sm whitespace-pre overflow-x-auto"></pre>
+            <div class="flex h-full">
+                <!-- Line Numbers -->
+                <div id="line-numbers" class="line-numbers bg-dark-800 text-text-secondary text-xs font-mono text-right select-none pr-3 py-4 sticky left-0 border-r border-dark-600"></div>
+                <!-- Code Display -->
+                <pre id="code-display" class="code-display flex-1 pl-4 py-4 font-mono text-sm whitespace-pre overflow-x-auto"></pre>
+            </div>
         </div>
 
-        <!-- Edit Mode -->
+        <!-- Edit Mode (Textarea) -->
         <div id="edit-mode" class="hidden h-full">
             <textarea
                 id="editor-textarea"
                 class="w-full h-full bg-dark-900 text-text-primary font-mono text-sm p-4 resize-none focus:outline-none"
                 spellcheck="false"
                 onchange="updateLineNumbers()"
+                oninput="updateLineNumbers()"
             ></textarea>
         </div>
     </div>
@@ -131,7 +144,9 @@
         let escaped = code
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
 
         // Common syntax highlighting patterns
         const patterns = [
@@ -208,6 +223,25 @@
         updateLineNumbers();
     }
 
+    // Submit changes via HTMX form
+    function submitChanges() {
+        const textarea = document.getElementById('editor-textarea');
+        const filePath = document.getElementById('save-file-path');
+        const contentInput = document.getElementById('save-content');
+        const saveStatus = document.getElementById('save-status');
+
+        // Update form values
+        contentInput.value = textarea.value;
+        filePath.value = '{{ .FilePath }}';
+
+        // Show save status
+        saveStatus.classList.remove('hidden');
+        saveStatus.innerHTML = '<span class="text-blue-400">Saving...</span>';
+
+        // Trigger HTMX form submission
+        htmx.trigger('#save-form', 'hx:post');
+    }
+
     // Cancel edit
     function cancelEdit() {
         isEditMode = false;
@@ -256,7 +290,6 @@
         left: 0;
         z-index: 10;
         min-width: 3rem;
-        border-right: 1px solid var(--border-color);
     }
 
     .line-numbers > div {

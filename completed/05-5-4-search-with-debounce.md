@@ -7,10 +7,10 @@ Milestone 5: IDE-like HTMX Frontend
 Implement file tree search with HTMX debounce.
 
 ## Checklist
-- [ ] Search input in file tree
-- [ ] `hx-trigger="input changed delay:300ms"`
-- [ ] `hx-get /api/files?search=...`
-- [ ] Replace file tree results
+- [x] Search input in file tree
+- [x] `hx-trigger="input changed delay:300ms"`
+- [x] `hx-get /api/files?search=...`
+- [x] Replace file tree results
 
 ## Dependencies
 - Task 5.2.1
@@ -21,4 +21,4 @@ Implement file tree search with HTMX debounce.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

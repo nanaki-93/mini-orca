@@ -1,0 +1,216 @@
+{{ define "model-config-panel" }}
+<div id="model-config-panel" class="w-full">
+    <div class="p-4">
+        <!-- Panel Header -->
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-text-primary">Model Configuration</h3>
+            <button
+                class="p-1.5 text-text-secondary hover:text-text-primary hover:bg-dark-700 rounded-md transition-colors"
+                onclick="toggleModelConfigPanel()"
+            >
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- HTMX Form -->
+        <form
+            id="model-config-form"
+            hx-post="/api/models/config"
+            hx-encoding="application/json"
+            hx-target="#model-config-status"
+            hx-swap="innerHTML"
+            hx-indicator="#model-config-loading"
+        >
+            <!-- Provider Selection -->
+            <div class="mb-4">
+                <label for="config-provider" class="block text-xs text-text-secondary mb-1.5">Provider</label>
+                <select
+                    id="config-provider"
+                    name="provider"
+                    class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                    onchange="onProviderChange()"
+                >
+                    {{ range .Providers }}
+                    <option value="{{ .Name }}" {{ if eq .Name .SelectedProvider }}selected{{ end }}>
+                        {{ .Name }}
+                    </option>
+                    {{ end }}
+                </select>
+            </div>
+
+            <!-- Model Name Input -->
+            <div class="mb-4">
+                <label for="config-model" class="block text-xs text-text-secondary mb-1.5">Model</label>
+                <input
+                    type="text"
+                    id="config-model"
+                    name="model"
+                    value="{{ .SelectedModel }}"
+                    placeholder="Leave empty for default"
+                    class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent placeholder-text-secondary/50"
+                />
+            </div>
+
+            <!-- Temperature Slider -->
+            <div class="mb-4">
+                <div class="flex items-center justify-between mb-1.5">
+                    <label for="config-temperature" class="text-xs text-text-secondary">Temperature</label>
+                    <span id="temperature-value" class="text-xs text-text-primary font-medium">{{ .SelectedTemperature }}</span>
+                </div>
+                <input
+                    type="range"
+                    id="config-temperature"
+                    name="temperature"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value="{{ .SelectedTemperature }}"
+                    class="w-full h-1.5 bg-dark-600 rounded-full appearance-none cursor-pointer accent-accent"
+                    oninput="updateTemperatureValue(this.value)"
+                />
+                <div class="flex items-center justify-between mt-1">
+                    <span class="text-[10px] text-text-secondary/50">0.0 (precise)</span>
+                    <span class="text-[10px] text-text-secondary/50">2.0 (creative)</span>
+                </div>
+            </div>
+
+            <!-- Max Tokens Input -->
+            <div class="mb-4">
+                <label for="config-max-tokens" class="block text-xs text-text-secondary mb-1.5">Max Tokens</label>
+                <input
+                    type="number"
+                    id="config-max-tokens"
+                    name="max_tokens"
+                    value="{{ .SelectedMaxTokens }}"
+                    min="1"
+                    max="128000"
+                    class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                />
+            </div>
+
+            <!-- Base URL Input -->
+            <div class="mb-4">
+                <label for="config-base-url" class="block text-xs text-text-secondary mb-1.5">Base URL</label>
+                <input
+                    type="url"
+                    id="config-base-url"
+                    name="base_url"
+                    value="{{ .SelectedBaseURL }}"
+                    placeholder="http://localhost:1234"
+                    class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent placeholder-text-secondary/50"
+                />
+            </div>
+
+            <!-- API Key Input -->
+            <div class="mb-6">
+                <label for="config-api-key" class="block text-xs text-text-secondary mb-1.5">API Key</label>
+                <input
+                    type="password"
+                    id="config-api-key"
+                    name="api_key"
+                    value="{{ .SelectedAPIKey }}"
+                    placeholder="Enter API key (optional)"
+                    class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent placeholder-text-secondary/50"
+                />
+                <p class="text-[10px] text-text-secondary/50 mt-1">Only required for remote providers (OpenAI, Anthropic, etc.)</p>
+            </div>
+
+            <!-- Save Button -->
+            <button
+                type="submit"
+                class="w-full px-4 py-2 text-xs bg-accent hover:bg-accent-hover text-dark-900 font-medium rounded-md transition-colors"
+            >
+                Save Configuration
+            </button>
+
+            <!-- Save Status -->
+            <div id="model-config-status" class="mt-2 text-xs"></div>
+        </form>
+
+        <!-- Loading Indicator -->
+        <div id="model-config-loading" class="hidden htmx-indicator">
+            <div class="flex items-center justify-center gap-2 py-2 text-text-secondary">
+                <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Saving...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Toggle panel visibility
+    function toggleModelConfigPanel() {
+        const panel = document.getElementById('model-config-panel');
+        panel.classList.toggle('hidden');
+    }
+
+    // Update temperature display value
+    function updateTemperatureValue(value) {
+        document.getElementById('temperature-value').textContent = parseFloat(value).toFixed(1);
+    }
+
+    // Handle provider change - update base URL and API key fields
+    function onProviderChange() {
+        const providerSelect = document.getElementById('config-provider');
+        const selectedProvider = providerSelect.value;
+
+        // Provider-specific defaults could be loaded here via HTMX
+        // For now, just update the form context
+        console.log('Provider changed to:', selectedProvider);
+    }
+
+    // Temperature slider initial sync
+    document.addEventListener('DOMContentLoaded', () => {
+        const slider = document.getElementById('config-temperature');
+        if (slider) {
+            const label = document.getElementById('temperature-value');
+            if (label) {
+                label.textContent = parseFloat(slider.value).toFixed(1);
+            }
+        }
+    });
+</script>
+
+<style>
+    /* Range slider styling */
+    input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background-color: var(--accent);
+        cursor: pointer;
+        border: 2px solid var(--bg-secondary);
+        transition: transform 0.15s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+        transform: scale(1.2);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background-color: var(--accent);
+        cursor: pointer;
+        border: 2px solid var(--bg-secondary);
+        transition: transform 0.15s ease;
+    }
+
+    input[type="range"]::-moz-range-thumb:hover {
+        transform: scale(1.2);
+    }
+
+    /* Input focus transitions */
+    input:focus, select:focus {
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+</style>
+{{ end }}

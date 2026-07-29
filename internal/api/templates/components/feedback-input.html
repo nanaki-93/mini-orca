@@ -1,0 +1,143 @@
+{{ define "feedback-input" }}
+<div id="feedback-input" class="w-full">
+    <!-- Feedback Input Form -->
+    <div class="p-4 border-b border-dark-600">
+        <h3 class="text-sm font-semibold text-text-primary mb-3">Add Feedback</h3>
+
+        <form
+            id="feedback-form"
+            hx-post="/api/sessions/{{ .SessionID }}/feedback"
+            hx-encoding="application/json"
+            hx-target="#feedback-history"
+            hx-swap="beforeend"
+            hx-on::after-request="resetFeedbackForm()"
+        >
+            <!-- Feedback Textarea -->
+            <div class="mb-3">
+                <textarea
+                    id="feedback-text"
+                    name="feedback"
+                    rows="3"
+                    maxlength="2000"
+                    placeholder="Provide feedback on the current phase or output..."
+                    class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-none placeholder-text-secondary/50"
+                    oninput="updateCharCounter()"
+                ></textarea>
+                <!-- Character Counter -->
+                <div class="flex items-center justify-between mt-1">
+                    <span class="text-[10px] text-text-secondary">Optional feedback for the agent</span>
+                    <span id="char-counter" class="text-[10px] text-text-secondary">
+                        0/2000
+                    </span>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button
+                type="submit"
+                class="w-full px-4 py-2 text-xs bg-accent hover:bg-accent-hover text-dark-900 font-medium rounded-md transition-colors"
+            >
+                Submit Feedback
+            </button>
+        </form>
+    </div>
+
+    <!-- Feedback History -->
+    <div class="p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-text-primary">Feedback History</h3>
+            <span class="text-xs text-text-secondary">{{ len .Feedbacks }} entries</span>
+        </div>
+
+        <div id="feedback-history" class="space-y-2 max-h-64 overflow-y-auto">
+            {{ if .Feedbacks }}
+                {{ range .Feedbacks }}
+                    {{ template "feedback-entry" . }}
+                {{ end }}
+            {{ else }}
+                <div class="flex flex-col items-center justify-center py-6 text-text-secondary">
+                    <svg class="w-8 h-8 mb-2 opacity-50" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="text-xs">No feedback yet</span>
+                </div>
+            {{ end }}
+        </div>
+    </div>
+</div>
+
+<!-- Feedback Entry Template -->
+{{ define "feedback-entry" }}
+<div class="feedback-entry p-3 bg-dark-700/50 border border-dark-600 rounded-md">
+    <div class="flex items-start justify-between gap-2">
+        <!-- Content -->
+        <div class="flex-1 min-w-0">
+            <p class="text-xs text-text-primary break-words">{{ .Content }}</p>
+        </div>
+        <!-- Timestamp -->
+        <span class="text-[10px] text-text-secondary shrink-0 whitespace-nowrap">
+            {{ .Timestamp }}
+        </span>
+    </div>
+</div>
+{{ end }}
+
+<script>
+    // Update character counter
+    function updateCharCounter() {
+        const textarea = document.getElementById('feedback-text');
+        const counter = document.getElementById('char-counter');
+        const length = textarea.value.length;
+        const max = textarea.maxLength;
+
+        counter.textContent = `${length}/${max}`;
+
+        // Color warning near limit
+        if (length > max * 0.9) {
+            counter.classList.add('text-yellow-400');
+            counter.classList.remove('text-text-secondary');
+        } else {
+            counter.classList.remove('text-yellow-400');
+            counter.classList.add('text-text-secondary');
+        }
+    }
+
+    // Reset form after submission
+    function resetFeedbackForm() {
+        const textarea = document.getElementById('feedback-text');
+        const counter = document.getElementById('char-counter');
+
+        textarea.value = '';
+        counter.textContent = '0/2000';
+        counter.classList.remove('text-yellow-400');
+        counter.classList.add('text-text-secondary');
+    }
+
+    // Auto-scroll feedback history on new entries
+    document.addEventListener('htmx:afterRequest', (event) => {
+        if (event.detail.target.id === 'feedback-input' || event.detail.target.closest('#feedback-input')) {
+            const container = document.getElementById('feedback-history');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+    });
+</script>
+
+<style>
+    /* Scrollbar styling */
+    #feedback-history {
+        scrollbar-width: thin;
+        scrollbar-color: var(--bg-tertiary) var(--bg-secondary);
+    }
+
+    /* Feedback entry hover */
+    .feedback-entry {
+        transition: background-color 0.15s ease;
+    }
+
+    .feedback-entry:hover {
+        background-color: rgba(33, 38, 45, 0.8);
+    }
+</style>
+{{ end }}
