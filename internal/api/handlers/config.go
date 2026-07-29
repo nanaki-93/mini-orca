@@ -1,0 +1,392 @@
+// Package handlers provides HTTP handlers for the Mini-Orca REST API.
+package handlers
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"sync"
+
+	"github.com/nanaki-93/mini-orca/internal/config"
+)
+
+// ─── Request/Response Types ──────────────────────────────────────────────────
+
+// ConfigUpdateRequest represents the request body for updating configuration.
+type ConfigUpdateRequest struct {
+	// Models holds model-related configuration updates.
+	Models *config.ModelsConfig `json:"models,omitempty"`
+	// Agents holds agent-related configuration updates.
+	Agents *config.AgentsConfig `json:"agents,omitempty"`
+	// Skills holds skill-related configuration updates.
+	Skills *config.SkillsConfig `json:"skills,omitempty"`
+	// Retry holds retry-related configuration updates.
+	Retry *config.RetryConfig `json:"retry,omitempty"`
+	// API holds API-related configuration updates.
+	API *config.APIConfig `json:"api,omitempty"`
+}
+
+// ConfigResponse represents the response body for configuration data.
+type ConfigResponse struct {
+	// Models holds model-related configuration.
+	Models config.ModelsConfig `json:"models"`
+	// Agents holds agent-related configuration.
+	Agents config.AgentsConfig `json:"agents"`
+	// Skills holds skill-related configuration.
+	Skills config.SkillsConfig `json:"skills"`
+	// Retry holds retry-related configuration.
+	Retry config.RetryConfig `json:"retry"`
+	// API holds API-related configuration.
+	API config.APIConfig `json:"api"`
+}
+
+// ModelListResponse represents the response body for listing available models.
+type ModelListResponse struct {
+	// ActiveProvider is the currently active provider.
+	ActiveProvider string `json:"active_provider"`
+	// Providers lists all available providers.
+	Providers map[string]config.ProviderConfig `json:"providers"`
+	// Phases lists model configurations per phase.
+	Phases map[string]config.PhaseModelConfig `json:"phases"`
+}
+
+// PhaseConfigResponse represents the response body for phase configurations.
+type PhaseConfigResponse struct {
+	// Phases maps phase names to their model configurations.
+	Phases map[string]config.PhaseModelConfig `json:"phases"`
+}
+
+// ─── Store ────────────────────────────────────────────────────────────────────
+
+// ConfigStore provides thread-safe access to application configuration.
+type ConfigStore struct {
+	mu   sync.RWMutex
+	cfg  *config.Config
+	path string // config file path for persistence
+}
+
+// NewConfigStore creates a new ConfigStore with the given configuration and file path.
+func NewConfigStore(cfg *config.Config, path string) *ConfigStore {
+	return &ConfigStore{
+		cfg:  cfg,
+		path: path,
+	}
+}
+
+// GetConfig returns a copy of the current configuration.
+func (s *ConfigStore) GetConfig() *config.Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return copyConfig(s.cfg)
+}
+
+// UpdateConfig applies updates to the configuration and persists to disk.
+func (s *ConfigStore) UpdateConfig(req *ConfigUpdateRequest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.applyUpdates(req); err != nil {
+		return err
+	}
+
+	if err := s.cfg.Validate(); err != nil {
+		return fmt.Errorf("config update failed validation: %w", err)
+	}
+
+	// Persist to disk
+	if s.path != "" {
+		if err := s.cfg.Save(s.path); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// LoadConfig loads configuration from the file path.
+func LoadConfig(path string) (*config.Config, error) {
+	return config.LoadConfig(path)
+}
+
+// applyUpdates applies the configuration updates to the store's config.
+func (s *ConfigStore) applyUpdates(req *ConfigUpdateRequest) error {
+	if req == nil {
+		return nil
+	}
+
+	if req.Models != nil {
+		if err := s.updateModels(req.Models); err != nil {
+			return err
+		}
+	}
+
+	if req.Agents != nil {
+		if err := s.updateAgents(req.Agents); err != nil {
+			return err
+		}
+	}
+
+	if req.Skills != nil {
+		if err := s.updateSkills(req.Skills); err != nil {
+			return err
+		}
+	}
+
+	if req.Retry != nil {
+		if err := s.updateRetry(req.Retry); err != nil {
+			return err
+		}
+	}
+
+	if req.API != nil {
+		if err := s.updateAPI(req.API); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// updateModels applies model configuration updates.
+func (s *ConfigStore) updateModels(models *config.ModelsConfig) error {
+	if models.ActiveProvider != "" {
+		if _, ok := models.Providers[models.ActiveProvider]; !ok {
+			return fmt.Errorf("models: active_provider %q not found in providers", models.ActiveProvider)
+		}
+		s.cfg.Models.ActiveProvider = models.ActiveProvider
+	}
+
+	if models.Providers != nil {
+		for name, provider := range models.Providers {
+			if provider.BaseURL == "" {
+				return fmt.Errorf("models: provider %q base_url is required", name)
+			}
+			s.cfg.Models.Providers[name] = provider
+		}
+	}
+
+	if models.Phases != nil {
+		for name, phase := range models.Phases {
+			s.cfg.Models.Phases[name] = phase
+		}
+	}
+
+	return nil
+}
+
+// updateAgents applies agent configuration updates.
+func (s *ConfigStore) updateAgents(agents *config.AgentsConfig) error {
+	if agents.Planner.Skills != nil {
+		s.cfg.Agents.Planner.Skills = agents.Planner.Skills
+	}
+	if agents.Planner.Model != "" {
+		s.cfg.Agents.Planner.Model = agents.Planner.Model
+	}
+
+	if agents.Coder.Skills != nil {
+		s.cfg.Agents.Coder.Skills = agents.Coder.Skills
+	}
+	if agents.Coder.Model != "" {
+		s.cfg.Agents.Coder.Model = agents.Coder.Model
+	}
+
+	if agents.Tester.Skills != nil {
+		s.cfg.Agents.Tester.Skills = agents.Tester.Skills
+	}
+	if agents.Tester.Model != "" {
+		s.cfg.Agents.Tester.Model = agents.Tester.Model
+	}
+
+	if agents.Reviewer.Skills != nil {
+		s.cfg.Agents.Reviewer.Skills = agents.Reviewer.Skills
+	}
+	if agents.Reviewer.Model != "" {
+		s.cfg.Agents.Reviewer.Model = agents.Reviewer.Model
+	}
+
+	return nil
+}
+
+// updateSkills applies skill configuration updates.
+func (s *ConfigStore) updateSkills(skills *config.SkillsConfig) error {
+	if skills.Knowledge != nil {
+		for name, desc := range skills.Knowledge {
+			s.cfg.Skills.Knowledge[name] = desc
+		}
+	}
+
+	if skills.Tools != nil {
+		for name, desc := range skills.Tools {
+			s.cfg.Skills.Tools[name] = desc
+		}
+	}
+
+	return nil
+}
+
+// updateRetry applies retry configuration updates.
+func (s *ConfigStore) updateRetry(retry *config.RetryConfig) error {
+	if retry.MaxRetries > 0 {
+		s.cfg.Retry.MaxRetries = retry.MaxRetries
+	}
+	if retry.BackoffBase > 0 {
+		s.cfg.Retry.BackoffBase = retry.BackoffBase
+	}
+	if retry.BackoffMax > 0 {
+		s.cfg.Retry.BackoffMax = retry.BackoffMax
+	}
+
+	return nil
+}
+
+// updateAPI applies API configuration updates.
+func (s *ConfigStore) updateAPI(api *config.APIConfig) error {
+	if api.DefaultVersion != "" {
+		s.cfg.API.DefaultVersion = api.DefaultVersion
+	}
+	if api.DeprecatedVersions != nil {
+		s.cfg.API.DeprecatedVersions = api.DeprecatedVersions
+	}
+	if api.EnabledVersions != nil {
+		s.cfg.API.EnabledVersions = api.EnabledVersions
+	}
+
+	return nil
+}
+
+// copyConfig creates a deep copy of the configuration.
+func copyConfig(cfg *config.Config) *config.Config {
+	if cfg == nil {
+		return nil
+	}
+
+	cfgCopy := *cfg
+
+	// Deep copy providers
+	cfgCopy.Models.Providers = make(map[string]config.ProviderConfig)
+	for k, v := range cfg.Models.Providers {
+		cfgCopy.Models.Providers[k] = v
+	}
+
+	// Deep copy phases
+	cfgCopy.Models.Phases = make(map[string]config.PhaseModelConfig)
+	for k, v := range cfg.Models.Phases {
+		cfgCopy.Models.Phases[k] = v
+	}
+
+	// Deep copy agent skills
+	cfgCopy.Agents.Planner.Skills = make([]string, len(cfg.Agents.Planner.Skills))
+	copy(cfgCopy.Agents.Planner.Skills, cfg.Agents.Planner.Skills)
+	cfgCopy.Agents.Coder.Skills = make([]string, len(cfg.Agents.Coder.Skills))
+	copy(cfgCopy.Agents.Coder.Skills, cfg.Agents.Coder.Skills)
+	cfgCopy.Agents.Tester.Skills = make([]string, len(cfg.Agents.Tester.Skills))
+	copy(cfgCopy.Agents.Tester.Skills, cfg.Agents.Tester.Skills)
+	cfgCopy.Agents.Reviewer.Skills = make([]string, len(cfg.Agents.Reviewer.Skills))
+	copy(cfgCopy.Agents.Reviewer.Skills, cfg.Agents.Reviewer.Skills)
+
+	// Deep copy skills knowledge
+	cfgCopy.Skills.Knowledge = make(map[string]string)
+	for k, v := range cfg.Skills.Knowledge {
+		cfgCopy.Skills.Knowledge[k] = v
+	}
+
+	// Deep copy skills tools
+	cfgCopy.Skills.Tools = make(map[string]string)
+	for k, v := range cfg.Skills.Tools {
+		cfgCopy.Skills.Tools[k] = v
+	}
+
+	// Deep copy API versions
+	cfgCopy.API.DeprecatedVersions = make([]string, len(cfg.API.DeprecatedVersions))
+	copy(cfgCopy.API.DeprecatedVersions, cfg.API.DeprecatedVersions)
+	cfgCopy.API.EnabledVersions = make([]string, len(cfg.API.EnabledVersions))
+	copy(cfgCopy.API.EnabledVersions, cfg.API.EnabledVersions)
+
+	return &cfgCopy
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
+// ConfigHandler manages HTTP handlers for configuration operations.
+type ConfigHandler struct {
+	// configStore provides access to application configuration.
+	configStore *ConfigStore
+}
+
+// NewConfigHandler creates a new ConfigHandler instance.
+func NewConfigHandler(configStore *ConfigStore) *ConfigHandler {
+	return &ConfigHandler{
+		configStore: configStore,
+	}
+}
+
+// GetConfig handles GET /api/config
+// Returns the current configuration.
+func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := h.configStore.GetConfig()
+
+	writeJSON(w, http.StatusOK, ConfigResponse{
+		Models: cfg.Models,
+		Agents: cfg.Agents,
+		Skills: cfg.Skills,
+		Retry:  cfg.Retry,
+		API:    cfg.API,
+	})
+}
+
+// UpdateConfig handles PUT /api/config
+// Updates the configuration with the provided values.
+func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
+	var req ConfigUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.configStore.UpdateConfig(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "updated",
+		"message": "configuration updated successfully",
+	})
+}
+
+// ListModels handles GET /api/config/models
+// Returns available providers and phase-specific model configurations.
+func (h *ConfigHandler) ListModels(w http.ResponseWriter, r *http.Request) {
+	cfg := h.configStore.GetConfig()
+
+	writeJSON(w, http.StatusOK, ModelListResponse{
+		ActiveProvider: cfg.Models.ActiveProvider,
+		Providers:      cfg.Models.Providers,
+		Phases:         cfg.Models.Phases,
+	})
+}
+
+// GetPhaseConfigs handles GET /api/config/phases
+// Returns the model configurations for each phase.
+func (h *ConfigHandler) GetPhaseConfigs(w http.ResponseWriter, r *http.Request) {
+	cfg := h.configStore.GetConfig()
+
+	writeJSON(w, http.StatusOK, PhaseConfigResponse{
+		Phases: cfg.Models.Phases,
+	})
+}
+
+// ─── Config File Utilities ────────────────────────────────────────────────────
+
+// ConfigExists checks if a config file exists at the given path.
+func ConfigExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// DefaultConfigPath returns the default configuration file path.
+func DefaultConfigPath() string {
+	return "config.yaml"
+}

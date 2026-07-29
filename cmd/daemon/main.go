@@ -14,6 +14,7 @@ import (
 	"github.com/nanaki-93/mini-orca/internal/agent"
 	"github.com/nanaki-93/mini-orca/internal/agent/skills"
 	"github.com/nanaki-93/mini-orca/internal/api"
+	"github.com/nanaki-93/mini-orca/internal/api/handlers"
 	"github.com/nanaki-93/mini-orca/internal/config"
 	"github.com/nanaki-93/mini-orca/internal/model"
 	"github.com/nanaki-93/mini-orca/internal/orchestrator"
@@ -54,6 +55,23 @@ func main() {
 	// Initialize API stores and handlers
 	sessionStore := api.NewSessionStore()
 	gateStore := api.NewGateStore()
+
+	// Initialize project store
+	projectStore := handlers.NewProjectStore()
+
+	// Initialize template engine
+	templatesPath := "internal/api/templates"
+	templateEngine, err := handlers.NewTemplateEngine(templatesPath)
+	if err != nil {
+		log.Printf("Warning: failed to initialize template engine: %v", err)
+		templateEngine = nil
+	}
+
+	// Initialize HTMX render handler
+	var htmxRenderHandler *handlers.HTMXRenderHandler
+	if templateEngine != nil {
+		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, sessionStore, projectStore)
+	}
 
 	// Initialize orchestrator with router, registry, and executor
 	agentOrchestrator := agent.NewOrchestrator(router, skillsRegistry, executor)
@@ -112,7 +130,7 @@ func main() {
 	}
 
 	// Start HTTP server with all API endpoints
-	server := startHTTPServer(agentOrchestrator, store, sessionStore, gateStore, cfg.API)
+	server := startHTTPServer(agentOrchestrator, store, sessionStore, gateStore, projectStore, htmxRenderHandler, cfg.API)
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
@@ -317,6 +335,8 @@ func startHTTPServer(
 	store *state.Store,
 	sessionStore *api.SessionStore,
 	gateStore *api.GateStore,
+	projectStore *handlers.ProjectStore,
+	htmxRenderHandler *handlers.HTMXRenderHandler,
 	apiConfig config.APIConfig,
 ) *http.Server {
 	mux := http.NewServeMux()
@@ -381,6 +401,33 @@ func startHTTPServer(
 			sessionHandler.GetSessionStatus(w, r)
 		}
 	})
+
+	// Register project routes
+	projectHandler := handlers.NewProjectHandler(projectStore)
+	mux.HandleFunc("GET /api/projects", projectHandler.ListProjects)
+	mux.HandleFunc("POST /api/projects", projectHandler.CreateProject)
+	mux.HandleFunc("GET /api/projects/", func(w http.ResponseWriter, r *http.Request) {
+		// Route to appropriate project handler
+		parts := splitPath(r.URL.Path)
+		if len(parts) >= 5 {
+			action := parts[4]
+			switch action {
+			case "files":
+				projectHandler.ListFiles(w, r)
+			}
+		}
+	})
+	mux.HandleFunc("GET /api/projects//files/", func(w http.ResponseWriter, r *http.Request) {
+		projectHandler.GetFileContent(w, r)
+	})
+
+	// Register HTMX render endpoints
+	if htmxRenderHandler != nil {
+		mux.HandleFunc("GET /api/render/phase/", htmxRenderHandler.RenderPhase)
+		mux.HandleFunc("GET /api/render/file-tree", htmxRenderHandler.RenderFileTree)
+		mux.HandleFunc("GET /api/render/activity-log", htmxRenderHandler.RenderActivityLog)
+		mux.HandleFunc("GET /api/render/phase-tracker", htmxRenderHandler.RenderPhaseTracker)
+	}
 
 	// Wrap with version middleware for backward compatibility
 	versionMiddleware := api.NewVersionMiddleware(apiConfig, log.Printf)
