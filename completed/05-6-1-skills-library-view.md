@@ -7,11 +7,11 @@ Milestone 5: IDE-like HTMX Frontend
 Create the skills library view.
 
 ## Checklist
-- [ ] Create `internal/api/templates/components/skills-library.html`
-- [ ] Server-rendered list of all available skills
-- [ ] Group by category (Design, Coding, Testing, Review)
-- [ ] Show skill description
-- [ ] HTMX search/filter
+- [x] Create `internal/api/templates/components/skills-library.html`
+- [x] Server-rendered list of all available skills
+- [x] Group by category (Design, Coding, Testing, Review)
+- [x] Show skill description
+- [x] HTMX search/filter
 
 ## Dependencies
 - Task 5.1.2
@@ -22,4 +22,4 @@ Create the skills library view.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

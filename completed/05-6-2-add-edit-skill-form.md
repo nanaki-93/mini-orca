@@ -7,11 +7,11 @@ Milestone 5: IDE-like HTMX Frontend
 Create the add/edit skill form.
 
 ## Checklist
-- [ ] Create `internal/api/templates/components/skill-form.html`
-- [ ] Server-rendered form partial
-- [ ] Fields: name, type, description, prompt template
-- [ ] HTMX form submission
-- [ ] Validation errors displayed inline
+- [x] Create `internal/api/templates/components/skill-form.html`
+- [x] Server-rendered form partial
+- [x] Fields: name, type, description, prompt template
+- [x] HTMX form submission
+- [x] Validation errors displayed inline
 
 ## Dependencies
 - Task 5.6.1
@@ -22,4 +22,4 @@ Create the add/edit skill form.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done
