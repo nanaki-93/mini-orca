@@ -1,28 +1,16 @@
 {{ define "mobile-sidebar" }}
 <div id="mobile-sidebar" class="w-full">
-    <!-- Hamburger Menu Button -->
-    <button
-        id="hamburger-btn"
-        class="flex items-center justify-center w-8 h-8 text-text-primary hover:bg-dark-700 rounded-md transition-colors"
-        onclick="toggleMobileSidebar()"
-        aria-label="Toggle sidebar"
-    >
-        <svg id="hamburger-icon" class="w-5 h-5 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
-        </svg>
-    </button>
-
     <!-- Sidebar Overlay -->
     <div
         id="sidebar-overlay"
-        class="hidden fixed inset-0 bg-black/50 z-30 transition-opacity duration-200"
+        class="hidden fixed inset-0 bg-black/60 z-40 transition-opacity duration-200"
         onclick="toggleMobileSidebar()"
     ></div>
 
     <!-- Sidebar Panel -->
     <div
         id="sidebar-panel"
-        class="fixed top-0 left-0 h-full w-72 bg-dark-800 border-r border-dark-600 z-40 transform -translate-x-full transition-transform duration-200 ease-in-out overflow-y-auto"
+        class="fixed top-0 left-0 h-full w-[85vw] max-w-[18rem] bg-dark-800 border-r border-dark-600 z-50 transform -translate-x-full transition-transform duration-200 ease-in-out overflow-y-auto shadow-2xl"
     >
         <!-- Sidebar Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b border-dark-600">
@@ -89,25 +77,29 @@
 </div>
 
 <script>
-    // Toggle mobile sidebar visibility
-    function toggleMobileSidebar() {
-        const panel = document.getElementById('sidebar-panel');
-        const overlay = document.getElementById('sidebar-overlay');
-        const icon = document.getElementById('hamburger-icon');
-        const isClosed = panel.classList.contains('-translate-x-full');
+    // Toggle mobile sidebar visibility (if not already defined in base.html)
+    if (typeof toggleMobileSidebar !== 'function') {
+        function toggleMobileSidebar() {
+            const panel = document.getElementById('sidebar-panel');
+            const overlay = document.getElementById('sidebar-overlay');
+            const isClosed = panel.classList.contains('-translate-x-full');
 
-        if (isClosed) {
-            // Open sidebar
-            panel.classList.remove('-translate-x-full');
-            panel.classList.add('translate-x-0');
-            overlay.classList.remove('hidden');
-            icon.style.transform = 'rotate(90deg)';
-        } else {
-            // Close sidebar
-            panel.classList.remove('translate-x-0');
-            panel.classList.add('-translate-x-full');
-            overlay.classList.add('hidden');
-            icon.style.transform = 'rotate(0deg)';
+            if (isClosed) {
+                // Open sidebar
+                panel.classList.remove('-translate-x-full');
+                panel.classList.add('translate-x-0');
+                overlay.classList.remove('hidden');
+                overlay.classList.add('opacity-100');
+                document.body.classList.add('overflow-hidden');
+            } else {
+                // Close sidebar
+                panel.classList.remove('translate-x-0');
+                panel.classList.add('-translate-x-full');
+                overlay.classList.remove('opacity-100');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => overlay.classList.add('hidden'), 200);
+                document.body.classList.remove('overflow-hidden');
+            }
         }
     }
 
@@ -115,7 +107,7 @@
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             const panel = document.getElementById('sidebar-panel');
-            if (!panel.classList.contains('-translate-x-full')) {
+            if (panel && !panel.classList.contains('-translate-x-full')) {
                 toggleMobileSidebar();
             }
         }
@@ -124,17 +116,21 @@
 
 <style>
     /* Prevent body scroll when sidebar is open */
-    body.sidebar-open {
+    body.sidebar-open,
+    body.overflow-hidden {
         overflow: hidden;
     }
 
     /* Smooth transitions for sidebar */
     #sidebar-panel {
         will-change: transform;
+        -webkit-overflow-scrolling: touch;
     }
 
     #sidebar-overlay {
         will-change: opacity;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
     }
 
     /* Sidebar scrollbar styling */
@@ -143,16 +139,28 @@
     }
 
     #sidebar-panel::-webkit-scrollbar-track {
-        background: var(--bg-secondary);
+        background: transparent;
     }
 
     #sidebar-panel::-webkit-scrollbar-thumb {
-        background: var(--bg-tertiary);
+        background: var(--border-color);
         border-radius: 3px;
     }
 
     #sidebar-panel::-webkit-scrollbar-thumb:hover {
-        background: var(--border-color);
+        background: var(--text-secondary);
+    }
+
+    /* Touch optimizations for mobile sidebar */
+    @media (hover: none) and (pointer: coarse) {
+        #sidebar-panel .tree-item,
+        #sidebar-panel .btn {
+            min-height: 2.75rem;
+        }
+
+        #sidebar-panel .tree-item:active {
+            background-color: var(--bg-tertiary);
+        }
     }
 </style>
 {{ end }}

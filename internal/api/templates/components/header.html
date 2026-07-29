@@ -77,11 +77,12 @@
                 hx-post="/api/session/pause"
                 hx-target="#header-bar"
                 hx-swap="outerHTML"
+                hx-disabled-elt="this"
             >
-                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <svg class="w-3.5 h-3.5 btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
                 </svg>
-                <span class="hidden sm:inline">Pause</span>
+                <span class="hidden sm:inline btn-text">Pause</span>
             </button>
             {{ else if eq .SessionStatus "paused" }}
             <button
@@ -90,11 +91,12 @@
                 hx-post="/api/session/resume"
                 hx-target="#header-bar"
                 hx-swap="outerHTML"
+                hx-disabled-elt="this"
             >
-                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <svg class="w-3.5 h-3.5 btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
                 </svg>
-                <span class="hidden sm:inline">Resume</span>
+                <span class="hidden sm:inline btn-text">Resume</span>
             </button>
             {{ else }}
             <button
@@ -103,11 +105,12 @@
                 hx-post="/api/session/start"
                 hx-target="#header-bar"
                 hx-swap="outerHTML"
+                hx-disabled-elt="this"
             >
-                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <svg class="w-3.5 h-3.5 btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
                 </svg>
-                <span class="hidden sm:inline">Start</span>
+                <span class="hidden sm:inline btn-text">Start</span>
             </button>
             {{ end }}
 
@@ -120,11 +123,12 @@
                 hx-target="#header-bar"
                 hx-swap="outerHTML"
                 hx-confirm="Are you sure you want to stop the session?"
+                hx-disabled-elt="this"
             >
-                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <svg class="w-3.5 h-3.5 btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/>
                 </svg>
-                <span class="hidden sm:inline">Stop</span>
+                <span class="hidden sm:inline btn-text">Stop</span>
             </button>
         </div>
 

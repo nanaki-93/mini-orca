@@ -53,12 +53,9 @@
                 <!-- Applying Changes Indicator -->
                 {{ if eq .Status "coding" }}
                 <div class="mt-3 flex items-center gap-2 p-2.5 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                    <div class="relative">
-                        <div class="w-4 h-4 rounded-full border-2 border-blue-500/20"></div>
-                        <div class="absolute inset-0 w-4 h-4 rounded-full border-2 border-transparent border-t-blue-500 animate-spin"></div>
-                    </div>
+                    <div class="loading-spinner sm accent"></div>
                     <div>
-                        <span class="text-xs font-medium text-blue-400">Applying changes...</span>
+                        <span class="text-xs font-medium text-blue-400">Generating code...</span>
                         {{ if .CurrentFile }}
                         <p class="text-[10px] text-text-secondary mt-0.5">Writing: {{ .CurrentFile }}</p>
                         {{ end }}
@@ -179,6 +176,18 @@
                     <p class="text-xs text-text-secondary mt-3">Estimated time: {{ .EstimatedTimeRemaining }}</p>
                     {{ end }}
                 </div>
+                {{ else if eq .Status "applying" }}
+                <!-- Code Applying State -->
+                <div class="h-full flex flex-col items-center justify-center p-8">
+                    <div class="loading-spinner xl warning mb-6"></div>
+                    <h4 class="text-lg font-medium text-text-primary mb-2">Applying changes...</h4>
+                    <p class="text-sm text-text-secondary text-center max-w-md">
+                        Writing code to files and running validations
+                    </p>
+                    {{ if .CurrentFile }}
+                    <p class="text-xs text-text-secondary mt-3">Current file: <code class="px-1.5 py-0.5 bg-dark-700 rounded">{{ .CurrentFile }}</code></p>
+                    {{ end }}
+                </div>
                 {{ else }}
                 <!-- Code Display with Syntax Highlighting -->
                 <div class="flex h-full">
@@ -208,6 +217,7 @@
                         hx-vals='{"phase": "coding"}'
                         hx-target="#coding-phase"
                         hx-swap="outerHTML"
+                        hx-disabled-elt="this"
                     >
                         Continue to Next Unit
                     </button>
@@ -219,6 +229,7 @@
                         hx-vals='{"phase": "coding", "unit": "{{ .CurrentUnitID }}"}'
                         hx-target="#coding-phase"
                         hx-swap="outerHTML"
+                        hx-disabled-elt="this"
                     >
                         Skip Unit
                     </button>
