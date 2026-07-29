@@ -1,0 +1,309 @@
+{{ define "bulk-actions" }}
+<div id="bulk-actions" class="w-full">
+    <!-- Action Buttons -->
+    <div class="p-4 border-b border-dark-600">
+        <div class="flex items-center gap-2">
+            <!-- Reset Button -->
+            <button
+                class="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-dark-700 hover:bg-red-500/10 hover:text-red-400 text-text-primary border border-dark-600 hover:border-red-500/30 rounded-md transition-colors"
+                onclick="showConfirmDialog('reset')"
+            >
+                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+                Reset
+            </button>
+
+            <!-- Export Button -->
+            <button
+                class="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-dark-700 hover:bg-accent/10 hover:text-accent text-text-primary border border-dark-600 hover:border-accent/30 rounded-md transition-colors"
+                hx-post="/api/skills/export"
+                hx-encoding="multipart/form-data"
+                hx-target="#bulk-actions-status"
+                hx-swap="none"
+                hx-on::after-request="handleExportResponse(event)"
+            >
+                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+                Export
+            </button>
+
+            <!-- Import Button -->
+            <div class="relative">
+                <button
+                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-dark-700 hover:bg-green-500/10 hover:text-green-400 text-text-primary border border-dark-600 hover:border-green-500/30 rounded-md transition-colors"
+                    onclick="toggleImportDropdown()"
+                >
+                    <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 8.414V15a1 1 0 11-2 0V8.414L4.293 6.707A1 1 0 014 6V3z" clip-rule="evenodd"/>
+                        <path fill-rule="evenodd" d="M4 14a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    Import
+                </button>
+
+                <!-- Import Dropdown -->
+                <div id="import-dropdown" class="hidden absolute right-0 top-full mt-1 w-64 bg-dark-800 border border-dark-600 rounded-md shadow-lg z-10 p-3">
+                    <p class="text-xs text-text-secondary mb-2">Select JSON file to import:</p>
+
+                    <!-- File Input -->
+                    <form
+                        id="import-form"
+                        hx-post="/api/skills/import"
+                        hx-encoding="multipart/form-data"
+                        hx-target="#bulk-actions-status"
+                        hx-swap="innerHTML"
+                        hx-on::after-request="handleImportResponse(event)"
+                    >
+                        <input
+                            type="file"
+                            id="import-file"
+                            name="file"
+                            accept=".json"
+                            class="hidden"
+                            onchange="validateImportFile(this)"
+                        />
+
+                        <!-- File Info -->
+                        <div id="import-file-info" class="hidden mb-2 p-2 bg-dark-700 rounded-md">
+                            <div class="flex items-center gap-2">
+                                <svg class="w-3.5 h-3.5 text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
+                                </svg>
+                                <span id="import-file-name" class="text-xs text-text-primary truncate flex-1"></span>
+                                <button
+                                    type="button"
+                                    class="text-text-secondary hover:text-text-primary"
+                                    onclick="clearImportFile()"
+                                >
+                                    <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Import Button -->
+                        <button
+                            type="submit"
+                            id="import-submit"
+                            class="w-full px-3 py-1.5 text-xs bg-accent hover:bg-accent-hover text-dark-900 font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled
+                        >
+                            Import Skills
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="bulk-actions-status" class="mt-2 text-xs"></div>
+    </div>
+
+    <!-- Confirmation Dialog -->
+    <div id="confirm-dialog" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+        <div class="bg-dark-800 border border-dark-600 rounded-lg shadow-xl w-80 p-4">
+            <!-- Dialog Icon -->
+            <div class="flex items-center justify-center w-10 h-10 rounded-full bg-red-500/10 mx-auto mb-3">
+                <svg class="w-5 h-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+
+            <!-- Dialog Content -->
+            <h3 id="confirm-title" class="text-sm font-semibold text-text-primary text-center mb-2">Confirm Action</h3>
+            <p id="confirm-message" class="text-xs text-text-secondary text-center mb-4">Are you sure you want to proceed?</p>
+
+            <!-- Dialog Actions -->
+            <div class="flex items-center gap-2">
+                <button
+                    class="flex-1 px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-text-primary rounded-md transition-colors"
+                    onclick="hideConfirmDialog()"
+                >
+                    Cancel
+                </button>
+                <button
+                    id="confirm-action"
+                    class="flex-1 px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
+                >
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Toggle import dropdown visibility
+    function toggleImportDropdown() {
+        const dropdown = document.getElementById('import-dropdown');
+        dropdown.classList.toggle('hidden');
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('import-dropdown');
+        const importBtn = e.target.closest('[onclick*="toggleImportDropdown"]');
+        if (!importBtn && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
+
+    // Validate imported file
+    function validateImportFile(input) {
+        const fileInfo = document.getElementById('import-file-info');
+        const fileName = document.getElementById('import-file-name');
+        const submitBtn = document.getElementById('import-submit');
+
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+
+            // Validate file type
+            if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+                setStatus('bulk-actions-status', 'error', 'Please select a valid JSON file');
+                input.value = '';
+                return;
+            }
+
+            // Show file info
+            fileInfo.classList.remove('hidden');
+            fileName.textContent = file.name;
+            submitBtn.disabled = false;
+        } else {
+            fileInfo.classList.add('hidden');
+            submitBtn.disabled = true;
+        }
+    }
+
+    // Clear imported file
+    function clearImportFile() {
+        const input = document.getElementById('import-file');
+        const fileInfo = document.getElementById('import-file-info');
+        const submitBtn = document.getElementById('import-submit');
+
+        input.value = '';
+        fileInfo.classList.add('hidden');
+        submitBtn.disabled = true;
+    }
+
+    // Handle import response
+    function handleImportResponse(event) {
+        // Close dropdown after import
+        document.getElementById('import-dropdown').classList.add('hidden');
+        clearImportFile();
+
+        // Reload skills library
+        htmx.ajax('GET', '/api/skills', {
+            target: '#skills-results',
+            swap: 'innerHTML'
+        });
+    }
+
+    // Handle export response (download file)
+    function handleExportResponse(event) {
+        const detail = event.detail;
+        if (detail.xhr) {
+            const blob = detail.xhr.response;
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'skills-export.json';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+    }
+
+    // Show confirmation dialog
+    function showConfirmDialog(action) {
+        const dialog = document.getElementById('confirm-dialog');
+        const title = document.getElementById('confirm-title');
+        const message = document.getElementById('confirm-message');
+        const confirmBtn = document.getElementById('confirm-action');
+
+        // Set dialog content based on action
+        if (action === 'reset') {
+            title.textContent = 'Reset Skills Library';
+            message.textContent = 'This will restore all skills to their default configuration. This action cannot be undone.';
+            confirmBtn.onclick = () => executeReset();
+        }
+
+        dialog.classList.remove('hidden');
+    }
+
+    // Hide confirmation dialog
+    function hideConfirmDialog() {
+        const dialog = document.getElementById('confirm-dialog');
+        dialog.classList.add('hidden');
+    }
+
+    // Execute reset action
+    function executeReset() {
+        hideConfirmDialog();
+
+        // POST to reset endpoint
+        htmx.ajax('POST', '/api/skills/reset', {
+            target: '#bulk-actions-status',
+            swap: 'innerHTML',
+            indicator: '#bulk-actions-status'
+        });
+
+        // Reload skills library after reset
+        setTimeout(() => {
+            htmx.ajax('GET', '/api/skills', {
+                target: '#skills-results',
+                swap: 'innerHTML'
+            });
+        }, 500);
+    }
+
+    // Set status message
+    function setStatus(targetId, type, message) {
+        const target = document.getElementById(targetId);
+        if (!target) return;
+
+        const colorClass = type === 'error' ? 'text-red-400' : 'text-green-400';
+        target.innerHTML = `<span class="${colorClass}">${message}</span>`;
+
+        // Auto-clear after 3 seconds
+        setTimeout(() => {
+            target.innerHTML = '';
+        }, 3000);
+    }
+
+    // Close dialog on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            hideConfirmDialog();
+        }
+    });
+</script>
+
+<style>
+    /* Dialog animation */
+    #confirm-dialog {
+        animation: fadeIn 0.15s ease;
+    }
+
+    #confirm-dialog > div {
+        animation: scaleIn 0.15s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes scaleIn {
+        from { transform: scale(0.95); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+
+    /* File input styling */
+    #import-file::file-selector-button {
+        display: none;
+    }
+</style>
+{{ end }}

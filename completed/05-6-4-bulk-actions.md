@@ -7,10 +7,10 @@ Milestone 5: IDE-like HTMX Frontend
 Implement bulk skill actions.
 
 ## Checklist
-- [ ] Reset button → `hx-post /api/skills/reset`
-- [ ] Export button → `hx-post /api/skills/export` (download JSON)
-- [ ] Import button → `hx-post /api/skills/import` (file upload)
-- [ ] Confirmation dialogs (CSS/HTMX only)
+- [x] Reset button → `hx-post /api/skills/reset`
+- [x] Export button → `hx-post /api/skills/export` (download JSON)
+- [x] Import button → `hx-post /api/skills/import` (file upload)
+- [x] Confirmation dialogs (CSS/HTMX only)
 
 ## Dependencies
 - Task 5.6.2
@@ -21,4 +21,4 @@ Implement bulk skill actions.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done
