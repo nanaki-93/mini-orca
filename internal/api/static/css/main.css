@@ -1448,6 +1448,590 @@ legend {
 }
 
 /* ---------------------------------------------------------------------------
+   12b. Loading States
+   --------------------------------------------------------------------------- */
+
+/* ── Global Loading Overlay ─────────────────────────────────────────── */
+.global-loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-overlay);
+    background-color: rgba(13, 17, 23, 0.7);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--transition-base), visibility var(--transition-base);
+    pointer-events: none;
+}
+
+.global-loading-overlay.is-active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.global-loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.global-loading-spinner .spinner-ring {
+    width: 3rem;
+    height: 3rem;
+    border: 3px solid transparent;
+    border-top-color: var(--accent);
+    border-right-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.global-loading-spinner .spinner-ring-secondary {
+    position: absolute;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 3px solid transparent;
+    border-bottom-color: var(--accent-hover);
+    border-left-color: var(--accent-hover);
+    border-radius: 50%;
+    animation: spin 1.2s linear infinite reverse;
+}
+
+.global-loading-text {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    font-weight: var(--font-weight-medium);
+}
+
+/* ── Inline Loading Spinner ─────────────────────────────────────────── */
+.loading-spinner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loading-spinner.sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 2px;
+}
+
+.loading-spinner.md {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-width: 2px;
+}
+
+.loading-spinner.lg {
+    width: 2rem;
+    height: 2rem;
+    border-width: 3px;
+}
+
+.loading-spinner.xl {
+    width: 3rem;
+    height: 3rem;
+    border-width: 4px;
+}
+
+.loading-spinner::before {
+    content: '';
+    width: 100%;
+    height: 100%;
+    border: currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: block;
+}
+
+.loading-spinner.accent { color: var(--accent); }
+.loading-spinner.success { color: var(--success); }
+.loading-spinner.warning { color: var(--warning); }
+.loading-spinner.error { color: var(--error); }
+.loading-spinner.muted { color: var(--text-muted); }
+
+/* ── Button Loading State ───────────────────────────────────────────── */
+.btn.is-loading {
+    pointer-events: none;
+    opacity: 0.85;
+    position: relative;
+}
+
+.btn.is-loading .btn-icon,
+.btn.is-loading .btn-text {
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.btn.is-loading::before {
+    content: '';
+    position: absolute;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+.btn.is-loading.btn-sm::before {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-width: 1.5px;
+}
+
+.btn.is-loading.btn-lg::before {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-width: 2.5px;
+}
+
+.btn.is-loading.btn-primary::before {
+    border-color: var(--text-inverse);
+    border-right-color: transparent;
+}
+
+.btn.is-loading.btn-secondary::before {
+    border-color: var(--text-primary);
+    border-right-color: transparent;
+}
+
+.btn.is-loading.btn-danger::before {
+    border-color: var(--text-inverse);
+    border-right-color: transparent;
+}
+
+.btn.is-loading.btn-success::before {
+    border-color: var(--text-inverse);
+    border-right-color: transparent;
+}
+
+.btn.is-loading.btn-ghost::before {
+    border-color: var(--text-secondary);
+    border-right-color: transparent;
+}
+
+/* ── Skeleton Screens ───────────────────────────────────────────────── */
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+}
+
+.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.04) 50%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+/* Skeleton Variants */
+.skeleton-circle {
+    border-radius: var(--radius-full);
+}
+
+.skeleton-rect {
+    border-radius: var(--radius-md);
+}
+
+.skeleton-rounded {
+    border-radius: var(--radius-lg);
+}
+
+/* Skeleton Sizes */
+.skeleton-sm { height: 0.75rem; }
+.skeleton-md { height: 1rem; }
+.skeleton-lg { height: 1.25rem; }
+.skeleton-xl { height: 1.5rem; }
+.skeleton-block { height: 6rem; }
+.skeleton-card { height: 12rem; }
+
+/* Skeleton Widths */
+.skeleton-w-25 { width: 25%; }
+.skeleton-w-50 { width: 50%; }
+.skeleton-w-75 { width: 75%; }
+.skeleton-w-full { width: 100%; }
+
+/* Skeleton Text Lines */
+.skeleton-text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.skeleton-text .skeleton-line {
+    height: 0.875rem;
+    background-color: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    position: relative;
+    overflow: hidden;
+}
+
+.skeleton-text .skeleton-line::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.04) 50%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+.skeleton-text .skeleton-line.w-100 { width: 100%; }
+.skeleton-text .skeleton-line.w-75 { width: 75%; }
+.skeleton-text .skeleton-line.w-50 { width: 50%; }
+.skeleton-text .skeleton-line.w-25 { width: 25%; }
+
+/* Skeleton Card */
+.skeleton-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.skeleton-card .skeleton-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.skeleton-card .skeleton-avatar {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--radius-full);
+}
+
+.skeleton-card .skeleton-title {
+    height: 1rem;
+    width: 60%;
+}
+
+.skeleton-card .skeleton-description {
+    height: 0.75rem;
+    width: 90%;
+}
+
+.skeleton-card .skeleton-footer {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: auto;
+}
+
+.skeleton-card .skeleton-button {
+    height: 2rem;
+    width: 5rem;
+    border-radius: var(--radius-md);
+}
+
+/* Skeleton Table */
+.skeleton-table {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.skeleton-table .skeleton-row {
+    display: flex;
+    gap: var(--space-4);
+    padding: var(--space-3);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-md);
+}
+
+.skeleton-table .skeleton-cell {
+    flex: 1;
+    height: 1rem;
+}
+
+.skeleton-table .skeleton-cell.wide { flex: 2; }
+.skeleton-table .skeleton-cell.narrow { flex: 0.5; }
+
+/* Skeleton Phase Node */
+.skeleton-phase-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3);
+}
+
+.skeleton-phase-circle {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--radius-full);
+}
+
+.skeleton-phase-label {
+    height: 0.75rem;
+    width: 4rem;
+}
+
+.skeleton-phase-subtitle {
+    height: 0.625rem;
+    width: 5rem;
+}
+
+/* Skeleton Code Editor */
+.skeleton-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--bg-primary);
+}
+
+.skeleton-editor-header {
+    height: 2.5rem;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: var(--space-2) var(--space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.skeleton-editor-header .skeleton-file-tab {
+    height: 1.5rem;
+    width: 12rem;
+    border-radius: var(--radius-md);
+}
+
+.skeleton-editor-body {
+    flex: 1;
+    display: flex;
+    padding: var(--space-4);
+    gap: var(--space-4);
+}
+
+.skeleton-editor-line-numbers {
+    width: 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.skeleton-editor-line-numbers .skeleton-line {
+    height: 0.875rem;
+    width: 1.5rem;
+    background-color: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+}
+
+.skeleton-editor-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.skeleton-editor-content .skeleton-line {
+    height: 0.875rem;
+    background-color: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+}
+
+/* Skeleton Activity Log */
+.skeleton-log {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.skeleton-log-entry {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-md);
+}
+
+.skeleton-log-entry .skeleton-icon {
+    width: 1rem;
+    height: 1rem;
+    border-radius: var(--radius-full);
+}
+
+.skeleton-log-entry .skeleton-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.skeleton-log-entry .skeleton-badge {
+    height: 0.625rem;
+    width: 3rem;
+    border-radius: var(--radius-full);
+}
+
+.skeleton-log-entry .skeleton-message {
+    height: 0.75rem;
+    width: 80%;
+    border-radius: var(--radius-sm);
+}
+
+.skeleton-log-entry .skeleton-time {
+    height: 0.625rem;
+    width: 4rem;
+    border-radius: var(--radius-sm);
+}
+
+/* Skeleton Grid */
+.skeleton-grid {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.skeleton-grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.skeleton-grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+.skeleton-grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+.skeleton-grid-item {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.skeleton-grid-item .skeleton-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.skeleton-grid-item .skeleton-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-md);
+}
+
+.skeleton-grid-item .skeleton-title {
+    height: 1rem;
+    width: 70%;
+}
+
+.skeleton-grid-item .skeleton-description {
+    height: 0.75rem;
+    width: 90%;
+}
+
+.skeleton-grid-item .skeleton-footer {
+    margin-top: auto;
+    display: flex;
+    gap: var(--space-2);
+}
+
+.skeleton-grid-item .skeleton-button {
+    height: 1.75rem;
+    width: 4rem;
+    border-radius: var(--radius-md);
+}
+
+/* ── Loading State Utilities ────────────────────────────────────────── */
+.loading-hidden {
+    visibility: hidden;
+}
+
+.loading-fade-in {
+    animation: fadeIn var(--transition-slow) ease-out;
+}
+
+.loading-slide-up {
+    animation: slideInUp var(--transition-slow) ease-out;
+}
+
+/* ── Phase-Specific Loading ─────────────────────────────────────────── */
+.phase-loading-overlay {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(13, 17, 23, 0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    z-index: 10;
+    border-radius: inherit;
+}
+
+.phase-loading-overlay .phase-loading-text {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.phase-loading-overlay .phase-loading-subtext {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* Phase progress bar animation */
+@keyframes progressPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.phase-progress-loading {
+    animation: progressPulse 2s ease-in-out infinite;
+}
+
+/* ── Empty State Loading ────────────────────────────────────────────── */
+.empty-state-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-12);
+    gap: var(--space-4);
+}
+
+.empty-state-loading .empty-spinner {
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 3px solid var(--bg-tertiary);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.empty-state-loading .empty-text {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+}
+
+.empty-state-loading .empty-subtext {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------------------
    13. File Tree Styles
    --------------------------------------------------------------------------- */
 /* Tree Container */
@@ -4087,6 +4671,413 @@ legend {
 
     .code-editor-content {
         font-size: 10pt;
+    }
+
+    .line-numbers {
+        display: none;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   23. Enhanced Responsive Design (Mobile & Tablet)
+   --------------------------------------------------------------------------- */
+
+/* ── Mobile Header Adjustments (< 768px) ─────────────────────────── */
+@media (max-width: 767px) {
+    /* Hide non-essential header elements on mobile */
+    .header-session-id,
+    .header-model-info,
+    .header-token-usage,
+    .header-phase-progress {
+        display: none !important;
+    }
+
+    /* Compact header layout on mobile */
+    #app-header {
+        height: 3.5rem;
+        padding: 0 0.5rem;
+    }
+
+    /* Mobile header brand */
+    .header-brand {
+        gap: 0.5rem;
+    }
+
+    .header-brand-text {
+        font-size: 0.875rem;
+    }
+
+    /* Mobile header actions */
+    .header-actions {
+        gap: 0.25rem;
+    }
+
+    .header-actions .btn {
+        padding: 0.375rem;
+        min-width: 2rem;
+        min-height: 2rem;
+    }
+
+    /* Hide text labels on mobile buttons */
+    .header-actions .btn .btn-text,
+    .header-actions .btn span:not(.btn-icon) {
+        display: none;
+    }
+
+    /* Footer adjustments on mobile */
+    #app-footer {
+        height: 2rem;
+        padding: 0 0.5rem;
+        font-size: 0.625rem;
+    }
+
+    /* Hide less important footer elements */
+    .footer-status-indicator,
+    .footer-version {
+        display: none;
+    }
+}
+
+/* ── Mobile Font Sizes (< 768px) ─────────────────────────────────── */
+@media (max-width: 767px) {
+    /* Base font size adjustments for readability */
+    body {
+        font-size: 14px;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    /* Heading sizes */
+    h1 {
+        font-size: 1.5rem;
+        line-height: 1.2;
+    }
+
+    h2 {
+        font-size: 1.25rem;
+        line-height: 1.3;
+    }
+
+    h3 {
+        font-size: 1rem;
+        line-height: 1.4;
+    }
+
+    h4 {
+        font-size: 0.875rem;
+    }
+
+    /* Body text */
+    p, span, div, a {
+        font-size: 0.875rem;
+    }
+
+    /* Small text */
+    .text-xs {
+        font-size: 0.75rem;
+    }
+
+    .text-sm {
+        font-size: 0.8125rem;
+    }
+
+    /* Code editor text */
+    .code-editor-content {
+        font-size: 0.8125rem;
+        line-height: 1.5;
+    }
+
+    .line-numbers {
+        font-size: 0.6875rem;
+        width: 2.5rem;
+    }
+
+    /* Table text */
+    table {
+        font-size: 0.75rem;
+    }
+
+    th, td {
+        padding: 0.375rem 0.5rem;
+    }
+}
+
+/* ── Tablet Font Sizes (768px - 1023px) ─────────────────────────── */
+@media (min-width: 768px) and (max-width: 1023px) {
+    body {
+        font-size: 14px;
+    }
+
+    h1 {
+        font-size: 1.75rem;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    h3 {
+        font-size: 1.125rem;
+    }
+
+    .code-editor-content {
+        font-size: 0.8125rem;
+    }
+}
+
+/* ── Touch Target Sizes ──────────────────────────────────────────── */
+@media (hover: none) and (pointer: coarse) {
+    /* Minimum touch target size: 44x44px (Apple HIG) */
+    .btn,
+    .tree-item,
+    .code-editor-tab,
+    .log-entry,
+    .phase-node,
+    select,
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"] {
+        min-height: 2.75rem;
+        min-width: 2.75rem;
+    }
+
+    /* Larger tap targets for icon-only buttons */
+    .btn-icon-only,
+    .icon-btn {
+        width: 2.75rem;
+        height: 2.75rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Remove hover effects on touch devices */
+    .btn:hover:not(:disabled),
+    .tree-item:hover,
+    .phase-node:hover,
+    .code-editor-tab:hover {
+        transform: none;
+        background-color: transparent;
+    }
+
+    /* Show active/pressed states instead */
+    .btn:active:not(:disabled),
+    .tree-item:active,
+    .phase-node:active {
+        transform: scale(0.97);
+        opacity: 0.8;
+    }
+
+    /* Prevent zoom on input focus for iOS */
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="url"],
+    textarea,
+    select {
+        font-size: 16px !important;
+    }
+}
+
+/* ── Mobile Sidebar Enhancements ─────────────────────────────────── */
+@media (max-width: 767px) {
+    /* Mobile menu button */
+    #mobile-menu-toggle {
+        animation: slideInLeft 0.3s ease;
+    }
+
+    @keyframes slideInLeft {
+        from {
+            transform: translateX(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    /* Sidebar overlay */
+    #sidebar-overlay {
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+
+    /* Sidebar panel */
+    #app-sidebar {
+        width: 85vw;
+        max-width: 18rem;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Sidebar close button */
+    .sidebar-close-btn {
+        display: flex;
+    }
+
+    /* Mobile sidebar content padding */
+    #app-sidebar .p-4 {
+        padding: 1rem;
+    }
+
+    #app-sidebar .p-6 {
+        padding: 1.25rem;
+    }
+}
+
+/* ── Safe Area Insets (Notch Devices) ────────────────────────────── */
+@supports (padding: max(0px)) {
+    .app-shell {
+        padding-top: max(var(--space-4), env(safe-area-inset-top));
+        padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
+        padding-left: max(var(--space-4), env(safe-area-inset-left));
+        padding-right: max(var(--space-4), env(safe-area-inset-right));
+    }
+
+    #app-header {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    #app-footer {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* Mobile menu button safe area */
+    #mobile-menu-toggle {
+        top: max(0.75rem, env(safe-area-inset-top));
+        left: max(0.75rem, env(safe-area-inset-left));
+    }
+}
+
+/* ── Landscape Orientation (Mobile) ──────────────────────────────── */
+@media (max-height: 500px) and (orientation: landscape) {
+    /* Compact header in landscape */
+    #app-header {
+        height: 2.5rem;
+    }
+
+    /* Compact footer in landscape */
+    #app-footer {
+        height: 1.5rem;
+    }
+
+    /* Hide non-essential elements */
+    .header-session-id,
+    .header-model-info,
+    .header-token-usage,
+    .header-phase-progress {
+        display: none !important;
+    }
+
+    /* Mobile menu button stays visible */
+    #mobile-menu-toggle {
+        top: 0.5rem;
+        left: 0.5rem;
+    }
+
+    /* Sidebar in landscape */
+    #app-sidebar {
+        width: 70vw;
+        max-width: 16rem;
+    }
+
+    /* Reduce phase tracker size in landscape */
+    .phase-nodes {
+        flex-direction: row;
+        padding: 0.5rem;
+    }
+
+    .phase-circle {
+        width: 1.5rem;
+        height: 1.5rem;
+    }
+
+    .phase-label {
+        font-size: 0.625rem;
+    }
+}
+
+/* ── High DPI / Retina Display Optimizations ─────────────────────── */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    /* Smoother borders */
+    * {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+    }
+
+    /* Sharper icons */
+    svg {
+        shape-rendering: geometricPrecision;
+    }
+}
+
+/* ── Reduced Motion Preferences ──────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* Keep essential animations for accessibility */
+    .spinner-ring,
+    .spinner-ring-secondary,
+    .animate-spin {
+        animation-duration: 1s !important;
+    }
+}
+
+/* ── Dark Mode Support (System Preference) ───────────────────────── */
+@media (prefers-color-scheme: light) {
+    /* Override dark theme for users who prefer light mode */
+    :root {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f6f8fa;
+        --bg-tertiary: #eaeef2;
+        --border-color: #d0d7de;
+        --text-primary: #1f2328;
+        --text-secondary: #656d76;
+    }
+}
+
+/* ── Print Styles (Mobile Optimized) ─────────────────────────────── */
+@media print {
+    body {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+        font-size: 10pt;
+    }
+
+    /* Hide interactive elements */
+    #mobile-menu-toggle,
+    #sidebar-overlay,
+    #app-sidebar,
+    #app-header,
+    #app-footer,
+    .btn,
+    .modal-overlay,
+    .toast-container,
+    .global-loading-overlay {
+        display: none !important;
+    }
+
+    /* Show main content only */
+    #app-main {
+        padding: 0;
+        overflow: visible;
+    }
+
+    /* Print-friendly code blocks */
+    .code-editor-content {
+        font-size: 9pt;
+        font-family: 'Courier New', monospace;
     }
 
     .line-numbers {

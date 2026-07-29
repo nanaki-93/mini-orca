@@ -82,14 +82,33 @@
         {{ block "header" . }}{{ end }}
     </header>
 
+    <!-- Mobile Sidebar Toggle (visible only on mobile) -->
+    <button
+        id="mobile-menu-toggle"
+        class="fixed top-3 left-3 z-50 flex items-center justify-center w-10 h-10 bg-dark-800 border border-dark-600 rounded-lg shadow-lg sm:hidden hover:bg-dark-700 transition-colors"
+        onclick="toggleMobileSidebar()"
+        aria-label="Toggle navigation menu"
+    >
+        <svg id="menu-icon" class="w-5 h-5 text-text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+        </svg>
+    </button>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div
+        id="sidebar-overlay"
+        class="fixed inset-0 bg-black/60 z-40 hidden sm:hidden transition-opacity duration-200"
+        onclick="toggleMobileSidebar()"
+    ></div>
+
     <div class="flex flex-1 overflow-hidden">
-        <!-- Sidebar -->
-        <aside id="app-sidebar" class="w-64 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0 overflow-y-auto">
+        <!-- Sidebar (hidden on mobile, visible on desktop) -->
+        <aside id="app-sidebar" class="sm:w-64 w-72 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0 overflow-y-auto transform -translate-x-full sm:translate-x-0 transition-transform duration-200 ease-in-out fixed sm:relative top-0 left-0 h-full z-40">
             {{ block "sidebar" . }}{{ end }}
         </aside>
 
         <!-- Main Content -->
-        <main id="app-main" class="flex-1 overflow-auto bg-dark-900">
+        <main id="app-main" class="flex-1 overflow-auto bg-dark-900 min-h-[calc(100vh-7rem)] sm:min-h-[calc(100vh-5.5rem)]">
             {{ block "main" . }}{{ end }}
         </main>
     </div>
@@ -99,6 +118,652 @@
         {{ block "footer" . }}{{ end }}
     </footer>
 
+    <!-- Global Loading Overlay -->
+    <div id="global-loading" class="global-loading-overlay">
+        <div class="global-loading-spinner relative">
+            <div class="spinner-ring"></div>
+            <div class="spinner-ring-secondary"></div>
+        </div>
+        <span class="global-loading-text">Loading...</span>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
     {{ block "scripts" . }}{{ end }}
+
+    <!-- Global HTMX Loading Handlers -->
+    <script>
+        // Global loading overlay management
+        const globalLoading = {
+            overlay: document.getElementById('global-loading'),
+            activeRequests: 0,
+            debounceTimer: null,
+            minDisplayTime: 300, // Minimum time to show loading (ms)
+            startTime: null,
+
+            show(message) {
+                this.activeRequests++;
+                if (this.overlay) {
+                    this.startTime = Date.now();
+                    if (message) {
+                        const textEl = this.overlay.querySelector('.global-loading-text');
+                        if (textEl) textEl.textContent = message;
+                    }
+                    this.overlay.classList.add('is-active');
+                }
+            },
+
+            hide() {
+                this.activeRequests = Math.max(0, this.activeRequests - 1);
+                if (this.activeRequests <= 0 && this.overlay) {
+                    // Ensure minimum display time
+                    if (this.startTime && (Date.now() - this.startTime) < this.minDisplayTime) {
+                        setTimeout(() => this.hideImmediately(), this.minDisplayTime - (Date.now() - this.startTime));
+                    } else {
+                        this.hideImmediately();
+                    }
+                }
+            },
+
+            hideImmediately() {
+                if (this.overlay) {
+                    this.overlay.classList.remove('is-active');
+                }
+                this.activeRequests = 0;
+            }
+        };
+
+        // HTMX Event Listeners
+        document.addEventListener('htmx:beforeRequest', (event) => {
+            const config = event.detail.requestConfig;
+            const method = config ? config.verb?.toUpperCase() : '';
+
+            // Show loading for mutations (POST, PUT, DELETE, PATCH)
+            if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+                globalLoading.show('Processing...');
+            }
+            // Show loading for slow GET requests (> 500ms)
+            else if (method === 'GET') {
+                globalLoading.show('Loading...');
+            }
+        });
+
+        document.addEventListener('htmx:afterRequest', (event) => {
+            globalLoading.hide();
+        });
+
+        document.addEventListener('htmx:beforeOnLoad', (event) => {
+            globalLoading.show('Loading...');
+        });
+
+        document.addEventListener('htmx:afterOnLoad', (event) => {
+            globalLoading.hide();
+        });
+
+        document.addEventListener('htmx:configRequest', (event) => {
+            // Add loading indicator to buttons
+            const button = event.detail.elt;
+            if (button.classList.contains('btn')) {
+                button.classList.add('is-loading');
+                // Store original content for restoration
+                if (!button.dataset.originalContent) {
+                    button.dataset.originalContent = button.innerHTML;
+                }
+            }
+        });
+
+        document.addEventListener('htmx:afterRequest', (event) => {
+            const button = event.detail.elt;
+            if (button && button.classList.contains('btn')) {
+                button.classList.remove('is-loading');
+                // Restore original content if needed
+                if (button.dataset.originalContent) {
+                    button.innerHTML = button.dataset.originalContent;
+                    delete button.dataset.originalContent;
+                }
+            }
+        });
+
+        // Button loading helper
+        function setLoading(button, isLoading) {
+            if (!button) return;
+
+            if (isLoading) {
+                button.classList.add('is-loading');
+                button.disabled = true;
+                // Store original disabled state
+                if (!button.dataset.originalDisabled) {
+                    button.dataset.originalDisabled = button.disabled;
+                }
+            } else {
+                button.classList.remove('is-loading');
+                button.disabled = button.dataset.originalDisabled === 'true';
+                delete button.dataset.originalDisabled;
+            }
+        }
+
+        // Phase-specific loading helper
+        function showPhaseLoading(phaseId, message) {
+            const container = document.getElementById(phaseId);
+            if (!container) return;
+
+            // Remove existing loading overlay
+            const existing = container.querySelector('.phase-loading-overlay');
+            if (existing) existing.remove();
+
+            const overlay = document.createElement('div');
+            overlay.className = 'phase-loading-overlay';
+            overlay.innerHTML = `
+                <div class="loading-spinner md accent"></div>
+                <span class="phase-loading-text">${message || 'Processing...'}</span>
+                <span class="phase-loading-subtext">Please wait</span>
+            `;
+            container.style.position = 'relative';
+            container.appendChild(overlay);
+        }
+
+        function hidePhaseLoading(phaseId) {
+            const container = document.getElementById(phaseId);
+            if (!container) return;
+
+            const overlay = container.querySelector('.phase-loading-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+
+        // Show skeleton screens for initial load
+        function showSkeleton(containerId, type = 'card') {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            let skeletonHTML = '';
+            switch (type) {
+                case 'card':
+                    skeletonHTML = `
+                        <div class="skeleton-card">
+                            <div class="skeleton-header">
+                                <div class="skeleton skeleton-circle skeleton-avatar"></div>
+                                <div class="skeleton skeleton-title"></div>
+                            </div>
+                            <div class="skeleton skeleton-description"></div>
+                            <div class="skeleton skeleton-description w-75"></div>
+                            <div class="skeleton-footer">
+                                <div class="skeleton skeleton-button"></div>
+                                <div class="skeleton skeleton-button"></div>
+                            </div>
+                        </div>
+                    `;
+                    break;
+                case 'table':
+                    skeletonHTML = `
+                        <div class="skeleton-table">
+                            ${Array(5).fill('<div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell wide"></div><div class="skeleton-cell narrow"></div></div>').join('')}
+                        </div>
+                    `;
+                    break;
+                case 'grid':
+                    skeletonHTML = `
+                        <div class="skeleton-grid skeleton-grid-cols-3">
+                            ${Array(6).fill(`
+                                <div class="skeleton-grid-item">
+                                    <div class="skeleton-header">
+                                        <div class="skeleton skeleton-icon"></div>
+                                        <div class="skeleton skeleton-title"></div>
+                                    </div>
+                                    <div class="skeleton skeleton-description"></div>
+                                    <div class="skeleton-footer">
+                                        <div class="skeleton skeleton-button"></div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+                case 'editor':
+                    skeletonHTML = `
+                        <div class="skeleton-editor">
+                            <div class="skeleton-editor-header">
+                                <div class="skeleton skeleton-file-tab"></div>
+                            </div>
+                            <div class="skeleton-editor-body">
+                                <div class="skeleton-editor-line-numbers">
+                                    ${Array(20).fill('<div class="skeleton-line"></div>').join('')}
+                                </div>
+                                <div class="skeleton-editor-content">
+                                    ${Array(20).fill('<div class="skeleton-line"></div>').join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    break;
+                case 'log':
+                    skeletonHTML = `
+                        <div class="skeleton-log">
+                            ${Array(8).fill(`
+                                <div class="skeleton-log-entry">
+                                    <div class="skeleton skeleton-icon"></div>
+                                    <div class="skeleton-content">
+                                        <div class="skeleton skeleton-badge"></div>
+                                        <div class="skeleton skeleton-message"></div>
+                                    </div>
+                                    <div class="skeleton skeleton-time"></div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+            }
+
+            container.innerHTML = skeletonHTML;
+        }
+
+        // Hide skeleton screens
+        function hideSkeleton(containerId) {
+            // Just remove skeleton class, content will be replaced by HTMX
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.classList.remove('skeleton-active');
+            }
+        }
+
+        // Auto-hide global loading after timeout (safety net)
+        setTimeout(() => {
+            globalLoading.hideImmediately();
+        }, 30000); // 30 second safety net
+    </script>
+
+    <!-- Error Handling & Toast Notifications -->
+    <script>
+        // ─── Toast Notification System ─────────────────────────────────────────────
+        const Toast = {
+            container: document.getElementById('toast-container'),
+            toasts: [],
+            maxToasts: 5,
+            defaultDuration: 5000,
+
+            show(message, type = 'info', title = null, duration = null) {
+                // Limit concurrent toasts
+                if (this.toasts.length >= this.maxToasts) {
+                    this.remove(this.toasts[0].id);
+                }
+
+                const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                const toastDuration = duration || this.defaultDuration;
+
+                const icons = {
+                    success: `<svg class="w-5 h-5 toast-icon success" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>`,
+                    error: `<svg class="w-5 h-5 toast-icon error" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>`,
+                    warning: `<svg class="w-5 h-5 toast-icon warning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>`,
+                    info: `<svg class="w-5 h-5 toast-icon info" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>`
+                };
+
+                const toastHTML = `
+                    <div id="${id}" class="toast" role="alert" aria-live="assertive">
+                        <div class="flex items-start gap-3 flex-1">
+                            ${icons[type] || icons.info}
+                            <div class="toast-content min-w-0">
+                                ${title ? `<div class="toast-title">${title}</div>` : ''}
+                                <div class="toast-message">${message}</div>
+                            </div>
+                        </div>
+                        <button class="toast-close" onclick="Toast.remove('${id}')" aria-label="Close">
+                            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                        <div class="toast-progress" style="animation-duration: ${toastDuration}ms;"></div>
+                    </div>
+                `;
+
+                this.container.insertAdjacentHTML('beforeend', toastHTML);
+
+                const toastEl = document.getElementById(id);
+                const toastData = { id, element: toastEl, timer: null };
+                this.toasts.push(toastData);
+
+                // Auto-remove after duration
+                toastData.timer = setTimeout(() => {
+                    this.remove(id);
+                }, toastDuration);
+
+                return id;
+            },
+
+            remove(id) {
+                const toastIndex = this.toasts.findIndex(t => t.id === id);
+                if (toastIndex === -1) return;
+
+                const toastData = this.toasts[toastIndex];
+                const toastEl = toastData.element;
+
+                // Clear timeout
+                if (toastData.timer) {
+                    clearTimeout(toastData.timer);
+                }
+
+                // Animate out
+            toastEl.classList.add('toast-out');
+
+            // Remove after animation
+            setTimeout(() => {
+                if (toastEl.parentNode) {
+                    toastEl.parentNode.removeChild(toastEl);
+                }
+            }, 150);
+
+            // Remove from array
+            this.toasts.splice(toastIndex, 1);
+        },
+
+        success(message, title = 'Success', duration = null) {
+            return this.show(message, 'success', title, duration);
+        },
+
+        error(message, title = 'Error', duration = null) {
+            return this.show(message, 'error', title, duration);
+        },
+
+        warning(message, title = 'Warning', duration = null) {
+            return this.show(message, 'warning', title, duration);
+        },
+
+        info(message, title = 'Info', duration = null) {
+            return this.show(message, 'info', title, duration);
+        }
+    };
+
+    // ─── HTMX Error Handling ───────────────────────────────────────────────────
+    document.addEventListener('htmx:responseError', (event) => {
+        const response = event.detail.xhr;
+        const requestConfig = event.detail.requestConfig;
+        const method = requestConfig ? requestConfig.verb?.toUpperCase() : '';
+        const path = event.detail.target?.id || 'unknown';
+
+        let errorMessage = 'An error occurred while processing your request.';
+        let errorTitle = 'Request Failed';
+
+        try {
+            const errorData = JSON.parse(response.responseText);
+            errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+            // Use status text as fallback
+            if (response.statusText) {
+                errorMessage = response.statusText;
+            }
+        }
+
+        // Determine error type and title
+        switch (response.status) {
+            case 400:
+                errorTitle = 'Bad Request';
+                break;
+            case 401:
+                errorTitle = 'Unauthorized';
+                Toast.error(errorMessage, errorTitle);
+                return;
+            case 403:
+                errorTitle = 'Forbidden';
+                break;
+            case 404:
+                errorTitle = 'Not Found';
+                errorMessage = 'The requested resource was not found.';
+                break;
+            case 409:
+                errorTitle = 'Conflict';
+                break;
+            case 422:
+                errorTitle = 'Validation Error';
+                break;
+            case 429:
+                errorTitle = 'Too Many Requests';
+                errorMessage = 'Please wait a moment and try again.';
+                break;
+            case 500:
+                errorTitle = 'Server Error';
+                errorMessage = 'An internal server error occurred. Please try again later.';
+                break;
+            case 502:
+                errorTitle = 'Bad Gateway';
+                errorMessage = 'The server received an invalid response.';
+                break;
+            case 503:
+                errorTitle = 'Service Unavailable';
+                errorMessage = 'The server is temporarily unavailable. Please try again later.';
+                break;
+            default:
+                if (response.status >= 500) {
+                    errorTitle = 'Server Error';
+                } else if (response.status >= 400) {
+                    errorTitle = 'Client Error';
+                }
+        }
+
+        Toast.error(errorMessage, errorTitle);
+
+        // Add retry button to the failed element if it has a retryable class
+        const target = event.detail.target;
+        if (target && target.classList.contains('retryable')) {
+            addRetryButton(target, event.detail.requestConfig);
+        }
+    });
+
+    // ─── Connection Error Handling ─────────────────────────────────────────────
+    document.addEventListener('htmx:connectionError', (event) => {
+        Toast.error(
+            'Connection to server lost. Please check your network and try again.',
+            'Connection Lost',
+            10000 // Longer duration for connection errors
+        );
+
+        // Show retry button on retryable elements
+        const target = event.detail.target;
+        if (target && target.classList.contains('retryable')) {
+            addRetryButton(target, event.detail.requestConfig);
+        }
+    });
+
+    // ─── Timeout Error Handling ────────────────────────────────────────────────
+    document.addEventListener('htmx:timeout', (event) => {
+        Toast.warning(
+            'The request took too long to complete. Please try again.',
+            'Request Timeout',
+            8000
+        );
+
+        const target = event.detail.target;
+        if (target && target.classList.contains('retryable')) {
+            addRetryButton(target, event.detail.requestConfig);
+        }
+    });
+
+    // ─── Retry Button Helper ───────────────────────────────────────────────────
+    function addRetryButton(target, requestConfig) {
+        // Check if retry button already exists
+        if (target.querySelector('.retry-button')) {
+            return;
+        }
+
+        const retryBtn = document.createElement('button');
+        retryBtn.className = 'retry-button mt-3 px-4 py-2 text-sm bg-dark-700 hover:bg-dark-600 text-text-primary rounded-md transition-colors flex items-center gap-2';
+        retryBtn.innerHTML = `
+            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+            </svg>
+            Retry Request
+        `;
+
+        retryBtn.addEventListener('click', () => {
+            retryBtn.disabled = true;
+            retryBtn.innerHTML = `
+                <svg class="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Retrying...
+            `;
+
+            // Re-execute the failed request
+            if (requestConfig && requestConfig.verb) {
+                const htmxConfig = {
+                    verb: requestConfig.verb.toUpperCase(),
+                    headers: requestConfig.headers || {},
+                    target: target.id || null,
+                    swap: requestConfig.swap || 'innerHTML',
+                    values: requestConfig.parameters || {}
+                };
+
+                // Use htmx.ajax to retry
+                if (window.htmx) {
+                    htmx.ajax(
+                        requestConfig.verb.toUpperCase(),
+                        requestConfig.pathInfo || requestConfig.unidentifiedUrl,
+                        htmxConfig
+                    ).finally(() => {
+                        retryBtn.remove();
+                    });
+                }
+            }
+        });
+
+        target.appendChild(retryBtn);
+    }
+
+    // ─── Graceful Degradation ──────────────────────────────────────────────────
+    const GracefulDegradation = {
+        // Show error fallback for a container
+        showError(containerId, message, retryCallback = null) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const errorHTML = `
+                <div class="error-fallback p-6 text-center">
+                    <svg class="w-12 h-12 text-error mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                    <h3 class="text-lg font-medium text-text-primary mb-2">Something went wrong</h3>
+                    <p class="text-sm text-text-secondary mb-4">${message}</p>
+                    ${retryCallback ? `
+                        <button class="px-4 py-2 text-sm bg-dark-700 hover:bg-dark-600 text-text-primary rounded-md transition-colors flex items-center gap-2 mx-auto"
+                                onclick="${retryCallback}()">
+                            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                            </svg>
+                            Try Again
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+
+            container.innerHTML = errorHTML;
+        },
+
+        // Show offline banner
+        showOfflineBanner() {
+            if (document.getElementById('offline-banner')) return;
+
+            const banner = document.createElement('div');
+            banner.id = 'offline-banner';
+            banner.className = 'fixed top-0 left-0 right-0 z-50 bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-2 flex items-center justify-center gap-2';
+            banner.innerHTML = `
+                <svg class="w-4 h-4 text-yellow-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+                <span class="text-sm text-yellow-500">You are offline. Some features may be unavailable.</span>
+            `;
+            document.body.appendChild(banner);
+        },
+
+        hideOfflineBanner() {
+            const banner = document.getElementById('offline-banner');
+            if (banner) {
+                banner.remove();
+            }
+        }
+    };
+
+    // ─── Online/Offline Detection ──────────────────────────────────────────────
+    window.addEventListener('online', () => {
+        GracefulDegradation.hideOfflineBanner();
+        Toast.success('Connection restored', 'Back Online');
+    });
+
+    window.addEventListener('offline', () => {
+        GracefulDegradation.showOfflineBanner();
+        Toast.warning('Connection lost. You are now offline.', 'Offline Mode');
+    });
+
+    // Set initial state
+    if (!navigator.onLine) {
+        GracefulDegradation.showOfflineBanner();
+    }
+
+    // ─── Global Error Handler ──────────────────────────────────────────────────
+    window.addEventListener('error', (event) => {
+        console.error('Global error:', event.error);
+        Toast.error(
+            event.error?.message || 'An unexpected error occurred.',
+            'JavaScript Error'
+        );
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+        console.error('Unhandled promise rejection:', event.reason);
+        Toast.error(
+            event.reason?.message || 'An unexpected error occurred.',
+            'Promise Rejection'
+        );
+    });
+
+    // ─── Mobile Sidebar Toggle ───────────────────────────────────────────────
+    function toggleMobileSidebar() {
+        const sidebar = document.getElementById('app-sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        const icon = document.getElementById('menu-icon');
+        const isClosed = sidebar.classList.contains('-translate-x-full');
+
+        if (isClosed) {
+            // Open sidebar
+            sidebar.classList.remove('-translate-x-full');
+            sidebar.classList.add('translate-x-0');
+            overlay.classList.remove('hidden');
+            overlay.classList.add('opacity-100');
+            icon.innerHTML = `<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>`;
+            document.body.classList.add('overflow-hidden');
+        } else {
+            // Close sidebar
+            sidebar.classList.remove('translate-x-0');
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.remove('opacity-100');
+            overlay.classList.add('opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 200);
+            icon.innerHTML = `<path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>`;
+            document.body.classList.remove('overflow-hidden');
+        }
+    }
+
+    // Close sidebar on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const sidebar = document.getElementById('app-sidebar');
+            if (!sidebar.classList.contains('-translate-x-full')) {
+                toggleMobileSidebar();
+            }
+        }
+    });
+
+    // ─── Utility Functions ─────────────────────────────────────────────────────
+    // Expose to global scope for inline onclick handlers
+    window.Toast = Toast;
+    window.GracefulDegradation = GracefulDegradation;
+    window.addRetryButton = addRetryButton;
+    window.setLoading = setLoading;
+    window.showPhaseLoading = showPhaseLoading;
+    window.hidePhaseLoading = hidePhaseLoading;
+    window.showSkeleton = showSkeleton;
+    window.hideSkeleton = hideSkeleton;
+    window.toggleMobileSidebar = toggleMobileSidebar;
+    </script>
 </body>
 </html>

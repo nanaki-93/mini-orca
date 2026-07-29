@@ -242,6 +242,7 @@
                         hx-vals='{"phase": "review"}'
                         hx-target="#review-phase"
                         hx-swap="outerHTML"
+                        hx-disabled-elt="this"
                     >
                         Auto-Fix Issues
                     </button>
@@ -252,6 +253,7 @@
                         hx-target="#review-phase"
                         hx-swap="outerHTML"
                         hx-confirm="Approve this code and proceed?"
+                        hx-disabled-elt="this"
                     >
                         Approve & Continue
                     </button>
@@ -263,6 +265,7 @@
                         hx-target="#review-phase"
                         hx-swap="outerHTML"
                         hx-confirm="Reject and send back for fixes?"
+                        hx-disabled-elt="this"
                     >
                         Send for Revision
                     </button>

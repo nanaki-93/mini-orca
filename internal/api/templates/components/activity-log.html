@@ -1,5 +1,5 @@
 {{ define "activity-log" }}
-<div id="activity-log" class="w-full h-full flex flex-col">
+<div id="activity-log" class="w-full h-full flex flex-col retryable">
     <!-- Log Header -->
     <div class="px-4 py-2 bg-dark-800 border-b border-dark-600 flex items-center justify-between shrink-0">
         <h3 class="text-sm font-semibold text-text-primary">Activity Log</h3>
@@ -39,10 +39,10 @@
         <!-- Filter by Phase -->
         <select
             id="filter-phase"
-            class="px-2 py-1 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent"
+            class="px-2 py-1.5 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent min-w-[4rem]"
             onchange="filterLog()"
         >
-            <option value="all">All Phases</option>
+            <option value="all">All</option>
             {{ range .Phases }}
             <option value="{{ lower . }}">{{ title . }}</option>
             {{ end }}
@@ -51,28 +51,28 @@
         <!-- Filter by Type -->
         <select
             id="filter-type"
-            class="px-2 py-1 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent"
+            class="px-2 py-1.5 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent min-w-[4rem]"
             onchange="filterLog()"
         >
-            <option value="all">All Types</option>
-            <option value="llm">LLM Call</option>
-            <option value="file">File Op</option>
+            <option value="all">All</option>
+            <option value="llm">LLM</option>
+            <option value="file">File</option>
             <option value="test">Test</option>
             <option value="review">Review</option>
-            <option value="system">System</option>
+            <option value="system">Sys</option>
         </select>
 
         <!-- Filter by Status -->
         <select
             id="filter-status"
-            class="px-2 py-1 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent"
+            class="px-2 py-1.5 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent min-w-[4rem]"
             onchange="filterLog()"
         >
-            <option value="all">All Status</option>
-            <option value="success">Success</option>
-            <option value="error">Error</option>
-            <option value="pending">Pending</option>
-            <option value="running">Running</option>
+            <option value="all">All</option>
+            <option value="success">✓</option>
+            <option value="error">✗</option>
+            <option value="pending">⏳</option>
+            <option value="running">⟳</option>
         </select>
 
         <!-- Search -->

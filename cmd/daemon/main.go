@@ -429,11 +429,25 @@ func startHTTPServer(
 		mux.HandleFunc("GET /api/render/phase-tracker", htmxRenderHandler.RenderPhaseTracker)
 	}
 
+	// Initialize error handler
+	templatesPath := "internal/api/templates"
+	errorHandler, err := api.NewErrorHandler(templatesPath)
+	if err != nil {
+		log.Printf("Warning: failed to initialize error handler: %v", err)
+		errorHandler = nil
+	}
+
+	// Wrap with error handler middleware
+	var handler http.Handler = mux
+	if errorHandler != nil {
+		handler = errorHandler.Next(handler)
+	}
+
 	// Wrap with version middleware for backward compatibility
 	versionMiddleware := api.NewVersionMiddleware(apiConfig, log.Printf)
 	server := &http.Server{
 		Addr:         ":8080",
-		Handler:      versionMiddleware.Next(mux),
+		Handler:      versionMiddleware.Next(handler),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
