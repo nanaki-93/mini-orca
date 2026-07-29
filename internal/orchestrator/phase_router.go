@@ -80,13 +80,16 @@ type PhaseRouter struct {
 	currentPhase Phase
 	// session stores the current session state.
 	session *state.Session
+	// orchestrator is the orchestrator instance for phase handlers.
+	orchestrator *Orchestrator
 }
 
-// NewPhaseRouter creates a new PhaseRouter instance.
-func NewPhaseRouter(session *state.Session) *PhaseRouter {
+// NewPhaseRouter creates a new PhaseRouter instance with the given session and orchestrator.
+func NewPhaseRouter(session *state.Session, orchestrator *Orchestrator) *PhaseRouter {
 	return &PhaseRouter{
-		transitions: validTransitions,
-		session:     session,
+		transitions:  validTransitions,
+		session:      session,
+		orchestrator: orchestrator,
 	}
 }
 
