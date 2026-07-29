@@ -1,17 +1,23 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/internal/agent"
 	"github.com/nanaki-93/mini-orca/internal/agent/skills"
+	"github.com/nanaki-93/mini-orca/internal/api"
 	"github.com/nanaki-93/mini-orca/internal/config"
 	"github.com/nanaki-93/mini-orca/internal/model"
+	"github.com/nanaki-93/mini-orca/internal/orchestrator"
+	"github.com/nanaki-93/mini-orca/internal/state"
 	"github.com/nanaki-93/mini-orca/internal/tools"
 )
 
@@ -34,25 +40,35 @@ func main() {
 	}
 
 	// Initialize skills registry and register config skills
-	registry := initSkillsRegistry(cfg)
+	skillsRegistry := initSkillsRegistry(cfg)
 
 	// Detect project type and create tool executor
 	projectInfo, executor := initToolExecutor()
 
-	// Initialize orchestrator with router, registry, and executor
-	orchestrator := agent.NewOrchestrator(router, registry, executor)
+	// Initialize agent registry and register agents
+	agentRegistry := initAgentRegistry(router)
 
-	// Initialize all agents with their skill sets
-	planner := agent.NewPlannerAgent(router, registry)
+	// Initialize state store
+	store := initStateStore(projectInfo)
+
+	// Initialize API stores and handlers
+	sessionStore := api.NewSessionStore()
+	gateStore := api.NewGateStore()
+
+	// Initialize orchestrator with router, registry, and executor
+	agentOrchestrator := agent.NewOrchestrator(router, skillsRegistry, executor)
+
+	// Create agents for logging purposes
+	planner := agent.NewPlannerAgent(router, skillsRegistry)
 	planner.SetSkills(cfg.Agents.Planner.Skills)
 
-	coder := agent.NewCoderAgent(router, registry)
+	coder := agent.NewCoderAgent(router, skillsRegistry)
 	coder.SetSkills(cfg.Agents.Coder.Skills)
 
-	tester := agent.NewTesterAgent(router, registry)
+	tester := agent.NewTesterAgent(router, skillsRegistry)
 	tester.SetSkills(cfg.Agents.Tester.Skills)
 
-	reviewer := agent.NewReviewerAgent(router, registry)
+	reviewer := agent.NewReviewerAgent(router, skillsRegistry)
 	reviewer.SetSkills(cfg.Agents.Reviewer.Skills)
 
 	// Log successful startup
@@ -70,7 +86,7 @@ func main() {
 	if executor != nil {
 		log.Printf("Tool executor initialized successfully")
 	}
-	if orchestrator != nil {
+	if agentOrchestrator != nil {
 		log.Println("Orchestrator initialized with executor")
 	}
 
@@ -79,6 +95,9 @@ func main() {
 	log.Printf("Agent: %s (%s) — skills: %v", coder.Name(), coder.Description(), coder.GetSkills())
 	log.Printf("Agent: %s (%s) — skills: %v", tester.Name(), tester.Description(), tester.GetSkills())
 	log.Printf("Agent: %s (%s) — skills: %v", reviewer.Name(), reviewer.Description(), reviewer.GetSkills())
+
+	// Log registered agents from registry
+	log.Printf("Registered agents: %v", agentRegistry.List())
 
 	// List available models
 	listClient := agent.NewClient(router)
@@ -92,9 +111,20 @@ func main() {
 		}
 	}
 
+	// Start HTTP server with all API endpoints
+	server := startHTTPServer(agentOrchestrator, store, sessionStore, gateStore, cfg.API)
+
 	// Wait for shutdown signal
 	quit := waitForShutdown()
 	log.Printf("Received signal %v, shutting down...", quit)
+
+	// Shutdown HTTP server
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("HTTP server shutdown error: %v", err)
+	}
+
 	log.Println("Shutdown complete")
 }
 
@@ -227,6 +257,157 @@ func initToolExecutor() (*tools.ProjectInfo, tools.ToolExecutor) {
 	return projectInfo, executor
 }
 
+// initAgentRegistry creates an agent registry and registers all agents that implement the Agent interface.
+func initAgentRegistry(router *model.Router) *agent.Registry {
+	registry := agent.NewRegistry()
+
+	// Create and register planner agent
+	planner := agent.NewPlannerAgent(router, nil)
+	if err := registry.Register(planner.Name(), planner); err != nil {
+		log.Printf("Warning: failed to register planner agent: %v", err)
+	}
+
+	// Create and register coder agent
+	coder := agent.NewCoderAgent(router, nil)
+	if err := registry.Register(coder.Name(), coder); err != nil {
+		log.Printf("Warning: failed to register coder agent: %v", err)
+	}
+
+	log.Printf("Agent registry initialized with %d agents", len(registry.List()))
+	return registry
+}
+
+// initStateStore creates a state store with a new session.
+func initStateStore(projectInfo *tools.ProjectInfo) *state.Store {
+	currentDir, _ := os.Getwd()
+	if currentDir == "" {
+		currentDir = "."
+	}
+
+	projectType := "unknown"
+	if projectInfo != nil {
+		projectType = string(projectInfo.Type)
+	}
+
+	session := &state.Session{
+		ID:            generateSessionID(),
+		Goal:          "",
+		ProjectPath:   currentDir,
+		ProjectType:   projectType,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+		CurrentPhase:  state.PhasePlanning,
+		Status:        state.SessionStatusPending,
+		Plan:          nil,
+		AtomicUnits:   nil,
+		History:       nil,
+		TestResults:   nil,
+		ReviewReports: nil,
+		Error:         "",
+	}
+
+	store := state.NewStore(session)
+	log.Printf("State store initialized for session: %s", session.ID)
+	return store
+}
+
+// startHTTPServer creates and starts the HTTP server with all API endpoints.
+func startHTTPServer(
+	agentOrchestrator *agent.Orchestrator,
+	store *state.Store,
+	sessionStore *api.SessionStore,
+	gateStore *api.GateStore,
+	apiConfig config.APIConfig,
+) *http.Server {
+	mux := http.NewServeMux()
+
+	// Health check endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	// Status endpoint
+	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"running","agents":["planner","coder","tester","reviewer"]}`))
+	})
+
+	// Create phase router for session lifecycle
+	currentSession := &state.Session{
+		ID:           "default",
+		CurrentPhase: state.PhasePlanning,
+		Status:       state.SessionStatusPending,
+	}
+	phaseRouter := orchestrator.NewPhaseRouter(currentSession, nil)
+
+	// Initialize API handlers
+	sessionHandler := api.NewSessionHandler(sessionStore, gateStore, phaseRouter)
+	gateHandler := api.NewGateHandler(gateStore, phaseRouter)
+
+	// Register session routes
+	mux.HandleFunc("POST /api/sessions", sessionHandler.CreateSession)
+	mux.HandleFunc("GET /api/sessions", sessionHandler.ListSessions)
+	mux.HandleFunc("GET /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
+		sessionHandler.GetSessionStatus(w, r)
+	})
+	mux.HandleFunc("POST /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
+		// Route to appropriate lifecycle handler
+		parts := splitPath(r.URL.Path)
+		if len(parts) >= 5 {
+			action := parts[4]
+			switch action {
+			case "start":
+				sessionHandler.StartSession(w, r)
+			case "pause":
+				sessionHandler.PauseSession(w, r)
+			case "resume":
+				sessionHandler.ResumeSession(w, r)
+			case "stop":
+				sessionHandler.StopSession(w, r)
+			case "gate":
+				gateHandler.RespondToGate(w, r)
+			}
+		}
+	})
+
+	// Register gate status route
+	mux.HandleFunc("GET /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
+		if len(splitPath(r.URL.Path)) >= 5 && splitPath(r.URL.Path)[4] == "gate" {
+			gateHandler.GetGateStatus(w, r)
+		} else {
+			sessionHandler.GetSessionStatus(w, r)
+		}
+	})
+
+	// Wrap with version middleware for backward compatibility
+	versionMiddleware := api.NewVersionMiddleware(apiConfig, log.Printf)
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      versionMiddleware.Next(mux),
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		log.Printf("HTTP server starting on %s", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server error: %v", err)
+		}
+	}()
+
+	return server
+}
+
+// generateSessionID generates a simple session ID.
+func generateSessionID() string {
+	return fmt.Sprintf("session-%d", time.Now().UnixNano())
+}
+
 // waitForShutdown blocks until a SIGINT or SIGTERM signal is received.
 func waitForShutdown() os.Signal {
 	sigChan := make(chan os.Signal, 1)
@@ -235,4 +416,55 @@ func waitForShutdown() os.Signal {
 	sig := <-sigChan
 	signal.Stop(sigChan)
 	return sig
+}
+
+// splitPath splits a URL path into its components.
+func splitPath(path string) []string {
+	if path == "/" {
+		return []string{""}
+	}
+	path = cleanPath(path)
+	if path[0] == '/' {
+		path = path[1:]
+	}
+	if path == "" {
+		return []string{""}
+	}
+	return split(path, '/')
+}
+
+// cleanPath removes redundant slashes from the path.
+func cleanPath(path string) string {
+	if path == "" {
+		return "/"
+	}
+	if path[0] != '/' {
+		path = "/" + path
+	}
+	n := len(path)
+	for i := 1; i < n-1; {
+		if path[i] == '/' && path[i+1] == '/' {
+			path = path[:i+1] + path[i+2:]
+			n--
+		} else {
+			i++
+		}
+	}
+	return path
+}
+
+// split splits a string by a separator into a slice of substrings.
+func split(s string, sep rune) []string {
+	var result []string
+	var current []rune
+	for _, r := range s {
+		if r == sep {
+			result = append(result, string(current))
+			current = nil
+		} else {
+			current = append(current, r)
+		}
+	}
+	result = append(result, string(current))
+	return result
 }

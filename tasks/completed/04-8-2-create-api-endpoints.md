@@ -26,4 +26,4 @@ Create all session and gate API endpoints.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done

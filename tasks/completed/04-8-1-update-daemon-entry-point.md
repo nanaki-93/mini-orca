@@ -26,4 +26,4 @@ Wire up the orchestrator in the daemon entry point.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done
