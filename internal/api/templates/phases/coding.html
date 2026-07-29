@@ -1,0 +1,294 @@
+{{ define "coding-phase" }}
+<div id="coding-phase" class="w-full h-full flex flex-col bg-dark-900">
+    <!-- Phase Header -->
+    <div class="px-6 py-3 bg-dark-800 border-b border-dark-600 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+                <svg class="w-5 h-5 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-base font-semibold text-text-primary">Coding Phase</h2>
+                <p class="text-xs text-text-secondary">Implementing execution units</p>
+            </div>
+        </div>
+
+        <!-- Unit Progress -->
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-text-secondary">Unit</span>
+                <span class="text-xs font-medium text-text-primary">{{ .CurrentUnitNumber }}/{{ .TotalUnits }}</span>
+            </div>
+            <div class="w-32 h-1.5 bg-dark-600 rounded-full overflow-hidden">
+                <div class="coding-progress h-full bg-green-500 transition-all duration-500" style="width: {{ .ProgressPercent }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 overflow-hidden flex">
+        <!-- Left Panel: Unit Info & Queue -->
+        <div class="w-80 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0 overflow-y-auto">
+            <!-- Current Unit -->
+            <div class="p-4 border-b border-dark-600">
+                <h3 class="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">Current Unit</h3>
+                <div class="p-3 bg-dark-700/50 border border-dark-600 rounded-lg">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-6 h-6 rounded-md bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+                            <span class="text-xs font-medium text-green-500">{{ .CurrentUnitNumber }}</span>
+                        </div>
+                        <span class="text-sm font-medium text-text-primary">{{ .CurrentUnitName }}</span>
+                    </div>
+                    <p class="text-xs text-text-secondary leading-relaxed">{{ .CurrentUnitDescription }}</p>
+                    {{ if .CurrentUnitFiles }}
+                    <div class="mt-2 flex flex-wrap gap-1">
+                        {{ range .CurrentUnitFiles }}
+                        <span class="px-1.5 py-0.5 text-[10px] bg-dark-600 text-text-secondary rounded">{{ . }}</span>
+                        {{ end }}
+                    </div>
+                    {{ end }}
+                </div>
+
+                <!-- Applying Changes Indicator -->
+                {{ if eq .Status "coding" }}
+                <div class="mt-3 flex items-center gap-2 p-2.5 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                    <div class="relative">
+                        <div class="w-4 h-4 rounded-full border-2 border-blue-500/20"></div>
+                        <div class="absolute inset-0 w-4 h-4 rounded-full border-2 border-transparent border-t-blue-500 animate-spin"></div>
+                    </div>
+                    <div>
+                        <span class="text-xs font-medium text-blue-400">Applying changes...</span>
+                        {{ if .CurrentFile }}
+                        <p class="text-[10px] text-text-secondary mt-0.5">Writing: {{ .CurrentFile }}</p>
+                        {{ end }}
+                    </div>
+                </div>
+                {{ end }}
+            </div>
+
+            <!-- File Operations Progress -->
+            <div class="p-4 border-b border-dark-600">
+                <h3 class="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">File Operations</h3>
+                <div class="space-y-2">
+                    {{ range $index, $op := .FileOperations }}
+                    <div class="flex items-center gap-2">
+                        {{ if eq $op.Status "completed" }}
+                            <svg class="w-3.5 h-3.5 text-green-500 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        {{ else if eq $op.Status "running" }}
+                            <div class="w-3.5 h-3.5 shrink-0">
+                                <div class="w-3.5 h-3.5 rounded-full border-2 border-blue-500/20"></div>
+                                <div class="absolute inset-0 w-3.5 h-3.5 rounded-full border-2 border-transparent border-t-blue-500 animate-spin"></div>
+                            </div>
+                        {{ else }}
+                            <div class="w-3.5 h-3.5 rounded-full border-2 border-dark-600 shrink-0"></div>
+                        {{ end }}
+                        <span class="text-xs {{ if eq $op.Status "completed" }}text-text-secondary{{ else if eq $op.Status "running" }}text-text-primary{{ else }}text-text-secondary{{ end }}">{{ $op.File }}</span>
+                        {{ if eq $op.Status "running" }}
+                        <span class="ml-auto text-[10px] text-blue-400 animate-pulse">Writing...</span>
+                        {{ end }}
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+
+            <!-- Next Units in Queue -->
+            <div class="p-4 flex-1">
+                <h3 class="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">Up Next ({{ len .NextUnits }})</h3>
+                <div class="space-y-2">
+                    {{ range $index, $unit := .NextUnits }}
+                    <div class="p-2.5 bg-dark-700/30 border border-dark-600/50 rounded-lg">
+                        <div class="flex items-center gap-2">
+                            <div class="w-5 h-5 rounded-full bg-dark-600 flex items-center justify-center shrink-0">
+                                <span class="text-[10px] text-text-secondary">{{ add $index 2 }}</span>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-xs text-text-primary truncate">{{ $unit.Name }}</p>
+                                {{ if $unit.Files }}
+                                <p class="text-[10px] text-text-secondary">{{ len $unit.Files }} file(s)</p>
+                                {{ end }}
+                            </div>
+                        </div>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Code Editor -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Editor Header -->
+            <div class="flex items-center justify-between px-4 py-2 bg-dark-800 border-b border-dark-600 shrink-0">
+                <div class="flex items-center gap-3">
+                    <!-- File Tab -->
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-dark-700 rounded-md">
+                        <svg class="w-3.5 h-3.5 text-text-secondary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
+                        </svg>
+                        <span class="text-xs text-text-primary">{{ .CurrentFile }}</span>
+                    </div>
+
+                    <!-- Language Badge -->
+                    {{ if .Language }}
+                    <span class="px-2 py-0.5 text-[10px] font-medium rounded bg-dark-600 text-text-secondary">{{ .Language }}</span>
+                    {{ end }}
+                </div>
+
+                <!-- Status -->
+                <div class="flex items-center gap-2">
+                    {{ if eq .Status "coding" }}
+                    <div class="flex items-center gap-1.5 px-2 py-1 bg-blue-500/10 border border-blue-500/20 rounded-md">
+                        <div class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
+                        <span class="text-[10px] text-blue-400">Generating code...</span>
+                    </div>
+                    {{ else if eq .Status "applying" }}
+                    <div class="flex items-center gap-1.5 px-2 py-1 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
+                        <div class="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></div>
+                        <span class="text-[10px] text-yellow-400">Applying changes...</span>
+                    </div>
+                    {{ else }}
+                    <div class="flex items-center gap-1.5 px-2 py-1 bg-green-500/10 border border-green-500/20 rounded-md">
+                        <div class="w-1.5 h-1.5 rounded-full bg-green-500"></div>
+                        <span class="text-[10px] text-green-400">Completed</span>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+
+            <!-- Code Display -->
+            <div class="flex-1 overflow-auto relative">
+                {{ if eq .Status "coding" }}
+                <!-- Code Generation Animation -->
+                <div class="h-full flex flex-col items-center justify-center p-8">
+                    <div class="relative mb-6">
+                        <div class="w-20 h-20 rounded-full border-4 border-green-500/20"></div>
+                        <div class="absolute inset-0 w-20 h-20 rounded-full border-4 border-transparent border-t-green-500 border-r-green-500 animate-spin"></div>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <svg class="w-8 h-8 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <h4 class="text-lg font-medium text-text-primary mb-2">Generating code for {{ .CurrentUnitName }}...</h4>
+                    <p class="text-sm text-text-secondary text-center max-w-md">
+                        The AI is writing clean, well-documented code for this unit
+                    </p>
+                    {{ if .EstimatedTimeRemaining }}
+                    <p class="text-xs text-text-secondary mt-3">Estimated time: {{ .EstimatedTimeRemaining }}</p>
+                    {{ end }}
+                </div>
+                {{ else }}
+                <!-- Code Display with Syntax Highlighting -->
+                <div class="flex h-full">
+                    <!-- Line Numbers -->
+                    <div class="line-numbers bg-dark-800 text-text-secondary text-xs font-mono text-right select-none pr-3 py-4 sticky left-0 border-r border-dark-600">
+                        {{ range $i, $line := codeLines .GeneratedCode }}
+                        <div>{{ add $i 1 }}</div>
+                        {{ end }}
+                    </div>
+                    <!-- Code Content -->
+                    <pre class="code-content flex-1 p-4 font-mono text-sm whitespace-pre overflow-x-auto text-text-primary">{{ .GeneratedCode }}</pre>
+                </div>
+                {{ end }}
+            </div>
+
+            <!-- Editor Footer -->
+            <div class="px-4 py-2 bg-dark-800 border-t border-dark-600 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-text-secondary">{{ .GeneratedLines }} lines</span>
+                    <span class="text-xs text-text-secondary">{{ .GeneratedSize }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    {{ if and (eq .Status "completed") .CanContinue }}
+                    <button
+                        class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-500 text-white font-medium rounded-md transition-colors"
+                        hx-post="/api/phases/continue"
+                        hx-vals='{"phase": "coding"}'
+                        hx-target="#coding-phase"
+                        hx-swap="outerHTML"
+                    >
+                        Continue to Next Unit
+                    </button>
+                    {{ end }}
+                    {{ if .CanSkip }}
+                    <button
+                        class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-text-primary rounded-md transition-colors"
+                        hx-post="/api/phases/skip"
+                        hx-vals='{"phase": "coding", "unit": "{{ .CurrentUnitID }}"}'
+                        hx-target="#coding-phase"
+                        hx-swap="outerHTML"
+                    >
+                        Skip Unit
+                    </button>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-refresh coding status
+    function refreshCodingStatus() {
+        htmx.ajax('GET', '/api/phases/status?phase=coding', {
+            target: '#coding-phase',
+            swap: 'innerHTML'
+        });
+    }
+
+    // Refresh every 3 seconds during coding
+    const codingInterval = setInterval(() => {
+        const phaseContainer = document.getElementById('coding-phase');
+        if (phaseContainer) {
+            refreshCodingStatus();
+        } else {
+            clearInterval(codingInterval);
+        }
+    }, 3000);
+
+    // Listen for HTMX events to stop polling
+    document.addEventListener('htmx:afterRequest', (event) => {
+        if (event.detail.target.id === 'coding-phase' || event.detail.target.closest('#coding-phase')) {
+            const statusEl = document.querySelector('[data-phase="coding"]');
+            if (statusEl && statusEl.dataset.status === 'completed') {
+                clearInterval(codingInterval);
+            }
+        }
+    });
+
+    // Update progress bar
+    function updateProgress(percent) {
+        const bar = document.querySelector('.coding-progress');
+        if (bar) {
+            bar.style.width = percent + '%';
+        }
+    }
+</script>
+
+<style>
+    .line-numbers {
+        position: sticky;
+        left: 0;
+        z-index: 10;
+        min-width: 3rem;
+    }
+
+    .line-numbers > div {
+        padding: 0 0.75rem 0 0;
+        line-height: 1.6;
+    }
+
+    .code-content {
+        line-height: 1.6;
+    }
+
+    /* Syntax highlighting colors */
+    .text-purple-400 { color: #c084fc; }
+    .text-blue-400 { color: #60a5fa; }
+    .text-yellow-300 { color: #fde047; }
+    .text-green-400 { color: #4ade80; }
+    .text-orange-400 { color: #fb923c; }
+</style>
+{{ end }}
