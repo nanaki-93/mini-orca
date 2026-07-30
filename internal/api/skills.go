@@ -11,6 +11,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/internal/agent"
 	"github.com/nanaki-93/mini-orca/internal/agent/skills"
+	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
 )
 
 // SkillRequest represents the request body for creating or updating a skill.
@@ -330,28 +331,28 @@ func (h *SkillsHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) CreateSkill(w http.ResponseWriter, r *http.Request) {
 	var req SkillRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid request body")
+		WriteAppError(w, apperrors.BadRequest("invalid request body", "The request body could not be parsed as JSON.", err))
 		return
 	}
 
 	if req.Name == "" {
-		WriteError(w, http.StatusBadRequest, "name is required")
+		WriteAppError(w, apperrors.BadRequest("name is required", "A skill name must be provided.", nil))
 		return
 	}
 
 	if req.Type == "" {
-		WriteError(w, http.StatusBadRequest, "type is required")
+		WriteAppError(w, apperrors.BadRequest("type is required", "A skill type must be provided.", nil))
 		return
 	}
 
 	if req.Category == "" {
-		WriteError(w, http.StatusBadRequest, "category is required")
+		WriteAppError(w, apperrors.BadRequest("category is required", "A skill category must be provided.", nil))
 		return
 	}
 
 	skill, err := h.store.RegisterSkill(req)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
+		WriteAppError(w, apperrors.BadRequest("skill registration failed", "Failed to register new skill: "+err.Error(), err))
 		return
 	}
 
@@ -370,36 +371,36 @@ func (h *SkillsHandler) CreateSkill(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 	skillName := extractSkillID(r.URL.Path)
 	if skillName == "" {
-		WriteError(w, http.StatusBadRequest, "skill ID is required")
+		WriteAppError(w, apperrors.BadRequest("skill ID is required", "A skill ID must be provided in the URL.", nil))
 		return
 	}
 
 	// Check if skill exists
 	_, err := h.store.GetSkill(skillName)
 	if err != nil {
-		WriteError(w, http.StatusNotFound, err.Error())
+		WriteAppError(w, apperrors.NotFound("skill not found", "The specified skill could not be found.", err))
 		return
 	}
 
 	var req SkillRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid request body")
+		WriteAppError(w, apperrors.BadRequest("invalid request body", "The request body could not be parsed as JSON.", err))
 		return
 	}
 
 	if req.Type == "" {
-		WriteError(w, http.StatusBadRequest, "type is required")
+		WriteAppError(w, apperrors.BadRequest("type is required", "A skill type must be provided.", nil))
 		return
 	}
 
 	if req.Category == "" {
-		WriteError(w, http.StatusBadRequest, "category is required")
+		WriteAppError(w, apperrors.BadRequest("category is required", "A skill category must be provided.", nil))
 		return
 	}
 
 	updatedSkill, err := h.store.RegisterSkill(req)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
+		WriteAppError(w, apperrors.BadRequest("skill update failed", "Failed to update skill: "+err.Error(), err))
 		return
 	}
 
@@ -418,12 +419,12 @@ func (h *SkillsHandler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 	skillName := extractSkillID(r.URL.Path)
 	if skillName == "" {
-		WriteError(w, http.StatusBadRequest, "skill ID is required")
+		WriteAppError(w, apperrors.BadRequest("skill ID is required", "A skill ID must be provided in the URL.", nil))
 		return
 	}
 
 	if err := h.store.DeleteSkill(skillName); err != nil {
-		WriteError(w, http.StatusNotFound, err.Error())
+		WriteAppError(w, apperrors.NotFound("skill not found", "Could not delete skill: "+err.Error(), err))
 		return
 	}
 
@@ -448,26 +449,26 @@ func (h *SkillsHandler) ExportSkills(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) ImportSkills(w http.ResponseWriter, r *http.Request) {
 	// Parse multipart form
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB limit
-		WriteError(w, http.StatusBadRequest, "invalid form data")
+		WriteAppError(w, apperrors.BadRequest("invalid form data", "Failed to parse multipart form data.", err))
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "file is required")
+		WriteAppError(w, apperrors.BadRequest("file is required", "Please upload a skill export file.", err))
 		return
 	}
 	defer file.Close()
 
 	if header.Size == 0 {
-		WriteError(w, http.StatusBadRequest, "file is empty")
+		WriteAppError(w, apperrors.BadRequest("file is empty", "The uploaded file is empty.", nil))
 		return
 	}
 
 	// Decode JSON
 	var imported map[string]skills.Skill
 	if err := json.NewDecoder(file).Decode(&imported); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid JSON format")
+		WriteAppError(w, apperrors.BadRequest("invalid JSON format", "The uploaded file is not a valid skills JSON.", err))
 		return
 	}
 
@@ -484,20 +485,20 @@ func (h *SkillsHandler) ImportSkills(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) GetAgentSkills(w http.ResponseWriter, r *http.Request) {
 	agentName := extractAgentID(r.URL.Path)
 	if agentName == "" {
-		WriteError(w, http.StatusBadRequest, "agent ID is required")
+		WriteAppError(w, apperrors.BadRequest("agent ID is required", "An agent ID must be provided in the URL.", nil))
 		return
 	}
 
 	// Check if agent exists
 	_, err := h.agentRegistry.Get(agentName)
 	if err != nil {
-		WriteError(w, http.StatusNotFound, err.Error())
+		WriteAppError(w, apperrors.NotFound("agent not found", "The specified agent could not be found.", err))
 		return
 	}
 
 	assignedSkills, err := h.store.GetAgentSkills(agentName)
 	if err != nil {
-		WriteError(w, http.StatusNotFound, err.Error())
+		WriteAppError(w, apperrors.NotFound("skills not found", "Could not retrieve skills for the specified agent.", err))
 		return
 	}
 
@@ -521,25 +522,25 @@ func (h *SkillsHandler) GetAgentSkills(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) SetAgentSkills(w http.ResponseWriter, r *http.Request) {
 	agentName := extractAgentID(r.URL.Path)
 	if agentName == "" {
-		WriteError(w, http.StatusBadRequest, "agent ID is required")
+		WriteAppError(w, apperrors.BadRequest("agent ID is required", "An agent ID must be provided in the URL.", nil))
 		return
 	}
 
 	// Check if agent exists
 	_, err := h.agentRegistry.Get(agentName)
 	if err != nil {
-		WriteError(w, http.StatusNotFound, err.Error())
+		WriteAppError(w, apperrors.NotFound("agent not found", "The specified agent could not be found.", err))
 		return
 	}
 
 	var req AgentSkillsUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid request body")
+		WriteAppError(w, apperrors.BadRequest("invalid request body", "The request body could not be parsed as JSON.", err))
 		return
 	}
 
 	if err := h.store.SetAgentSkills(agentName, req.Skills); err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
+		WriteAppError(w, apperrors.BadRequest("agent skills update failed", "Failed to update skills for the agent: "+err.Error(), err))
 		return
 	}
 

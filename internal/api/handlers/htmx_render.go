@@ -4,7 +4,6 @@ package handlers
 import (
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,6 +13,8 @@ import (
 	"unicode"
 
 	"github.com/nanaki-93/mini-orca/internal/api"
+	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
+	"github.com/nanaki-93/mini-orca/internal/logging"
 	"github.com/nanaki-93/mini-orca/internal/state"
 )
 
@@ -242,12 +243,12 @@ func (te *TemplateEngine) loadTemplates() error {
 
 	// Collect component templates
 	if err := collectTemplates(filepath.Join(te.basePath, "components")); err != nil {
-		log.Printf("Warning: failed to collect components: %v", err)
+		logging.Warn("Failed to collect components", "error", err)
 	}
 
 	// Collect phase templates
 	if err := collectTemplates(filepath.Join(te.basePath, "phases")); err != nil {
-		log.Printf("Warning: failed to collect phases: %v", err)
+		logging.Warn("Failed to collect phases", "error", err)
 	}
 
 	if len(allTemplatePaths) == 0 {
@@ -728,7 +729,7 @@ func (te *TemplateEngine) RenderMain(w http.ResponseWriter, contentTemplate stri
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := baseTmpl.ExecuteTemplate(w, "base", data); err != nil {
-		log.Printf("Error rendering page: %v", err)
+		logging.Error("Error rendering page", "error", err)
 		http.Error(w, "failed to render page", http.StatusInternalServerError)
 		return
 	}
@@ -768,7 +769,7 @@ func NewHTMXRenderHandler(
 func (h *HTMXRenderHandler) RenderPhase(w http.ResponseWriter, r *http.Request) {
 	phase := extractPhaseFromPath(r.URL.Path)
 	if phase == "" {
-		api.WriteError(w, http.StatusBadRequest, "phase is required")
+		api.WriteAppError(w, apperrors.BadRequest("phase is required", "A phase name must be provided.", nil))
 		return
 	}
 
@@ -815,7 +816,7 @@ func (h *HTMXRenderHandler) RenderPhase(w http.ResponseWriter, r *http.Request) 
 
 	rendered, err := h.templateEngine.RenderPhasePartial(phase, data)
 	if err != nil {
-		api.WriteError(w, http.StatusInternalServerError, err.Error())
+		api.WriteAppError(w, apperrors.Internal("template rendering failed", "Failed to render the phase component.", err))
 		return
 	}
 
@@ -830,7 +831,7 @@ func (h *HTMXRenderHandler) RenderFileTree(w http.ResponseWriter, r *http.Reques
 	// Get project data
 	projects := h.projectStore.ListProjects()
 	if len(projects) == 0 {
-		api.WriteError(w, http.StatusBadRequest, "no project opened")
+		api.WriteAppError(w, apperrors.BadRequest("no project opened", "No project is currently open.", nil))
 		return
 	}
 
@@ -839,7 +840,7 @@ func (h *HTMXRenderHandler) RenderFileTree(w http.ResponseWriter, r *http.Reques
 	// List files from the project store
 	entries, err := h.projectStore.ListProjectFiles(project.ID, "")
 	if err != nil {
-		api.WriteError(w, http.StatusInternalServerError, err.Error())
+		api.WriteAppError(w, apperrors.Internal("file listing failed", "Failed to list project files.", err))
 		return
 	}
 
@@ -863,7 +864,7 @@ func (h *HTMXRenderHandler) RenderFileTree(w http.ResponseWriter, r *http.Reques
 
 	rendered, err := h.templateEngine.RenderComponentPartial("file-tree", data)
 	if err != nil {
-		api.WriteError(w, http.StatusInternalServerError, err.Error())
+		api.WriteAppError(w, apperrors.Internal("template rendering failed", "Failed to render the file tree component.", err))
 		return
 	}
 
@@ -878,7 +879,7 @@ func (h *HTMXRenderHandler) RenderActivityLog(w http.ResponseWriter, r *http.Req
 	// Get session data
 	sessions := h.sessionStore.ListSessions()
 	if len(sessions) == 0 {
-		api.WriteError(w, http.StatusBadRequest, "no active session")
+		api.WriteAppError(w, apperrors.BadRequest("no active session", "No active session found. Please start a new session.", nil))
 		return
 	}
 
@@ -919,7 +920,7 @@ func (h *HTMXRenderHandler) RenderActivityLog(w http.ResponseWriter, r *http.Req
 
 	rendered, err := h.templateEngine.RenderComponentPartial("activity-log", data)
 	if err != nil {
-		api.WriteError(w, http.StatusInternalServerError, err.Error())
+		api.WriteAppError(w, apperrors.Internal("template rendering failed", "Failed to render the activity log component.", err))
 		return
 	}
 
@@ -934,7 +935,7 @@ func (h *HTMXRenderHandler) RenderPhaseTracker(w http.ResponseWriter, r *http.Re
 	// Get session data
 	sessions := h.sessionStore.ListSessions()
 	if len(sessions) == 0 {
-		api.WriteError(w, http.StatusBadRequest, "no active session")
+		api.WriteAppError(w, apperrors.BadRequest("no active session", "No active session found. Please start a new session.", nil))
 		return
 	}
 
@@ -1012,7 +1013,7 @@ func (h *HTMXRenderHandler) RenderPhaseTracker(w http.ResponseWriter, r *http.Re
 
 	rendered, err := h.templateEngine.RenderComponentPartial("phase-tracker", data)
 	if err != nil {
-		api.WriteError(w, http.StatusInternalServerError, err.Error())
+		api.WriteAppError(w, apperrors.Internal("template rendering failed", "Failed to render the phase tracker component.", err))
 		return
 	}
 

@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/internal/logging"
 )
 
 // LMStudioProvider implements the Provider interface for LM Studio.
@@ -44,26 +45,26 @@ func (p *LMStudioProvider) ListModels(ctx context.Context) ([]Model, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		log.Printf("[lm-studio] failed to create request: %v", err)
+		logging.Error("Failed to create request", "provider", "lm-studio", "error", err)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		log.Printf("[lm-studio] request failed: %v", err)
+		logging.Error("Request failed", "provider", "lm-studio", "error", err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		log.Printf("[lm-studio] unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+		logging.Error("Unexpected status code", "provider", "lm-studio", "status", resp.StatusCode, "body", string(body))
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	var listResp listModelsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
-		log.Printf("[lm-studio] failed to decode response: %v", err)
+		logging.Error("Failed to decode response", "provider", "lm-studio", "error", err)
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
@@ -76,7 +77,7 @@ func (p *LMStudioProvider) ListModels(ctx context.Context) ([]Model, error) {
 		})
 	}
 
-	log.Printf("[lm-studio] listed %d models", len(models))
+	logging.Info("Listed models", "provider", "lm-studio", "count", len(models))
 	return models, nil
 }
 
@@ -90,37 +91,37 @@ func (p *LMStudioProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResp
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		log.Printf("[lm-studio] failed to marshal request: %v", err)
+		logging.Error("Failed to marshal request", "provider", "lm-studio", "error", err)
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		log.Printf("[lm-studio] failed to create request: %v", err)
+		logging.Error("Failed to create request", "provider", "lm-studio", "error", err)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.httpClient.Do(request)
 	if err != nil {
-		log.Printf("[lm-studio] request failed: %v", err)
+		logging.Error("Request failed", "provider", "lm-studio", "error", err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		log.Printf("[lm-studio] unexpected status code: %d, body: %s", resp.StatusCode, string(respBody))
+		logging.Error("Unexpected status code", "provider", "lm-studio", "status", resp.StatusCode, "body", string(respBody))
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	var chatResp ChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		log.Printf("[lm-studio] failed to decode response: %v", err)
+		logging.Error("Failed to decode response", "provider", "lm-studio", "error", err)
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	log.Printf("[lm-studio] chat completed, model: %s, tokens: %d", chatResp.Model, chatResp.Usage.TotalTokens)
+	logging.Info("Chat completed", "provider", "lm-studio", "model", chatResp.Model, "tokens", chatResp.Usage.TotalTokens)
 	return &chatResp, nil
 }
 

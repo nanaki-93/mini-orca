@@ -10,6 +10,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/internal/api"
 	"github.com/nanaki-93/mini-orca/internal/config"
+	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
 )
 
 // ─── Request/Response Types ──────────────────────────────────────────────────
@@ -310,12 +311,12 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	var req ConfigUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.WriteError(w, http.StatusBadRequest, "invalid request body")
+		api.WriteAppError(w, apperrors.BadRequest("invalid request body", "The request body could not be parsed as JSON.", err))
 		return
 	}
 
 	if err := h.configStore.UpdateConfig(&req); err != nil {
-		api.WriteError(w, http.StatusBadRequest, err.Error())
+		api.WriteAppError(w, apperrors.BadRequest("config update failed", "Failed to update configuration: "+err.Error(), err))
 		return
 	}
 

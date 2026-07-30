@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/internal/api"
+	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
 )
 
 // ─── Request/Response Types ──────────────────────────────────────────────────
@@ -544,18 +545,18 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	var req ProjectCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.WriteError(w, http.StatusBadRequest, "invalid request body")
+		api.WriteAppError(w, apperrors.BadRequest("invalid request body", "The request body could not be parsed as JSON.", err))
 		return
 	}
 
 	if req.Path == "" {
-		api.WriteError(w, http.StatusBadRequest, "path is required")
+		api.WriteAppError(w, apperrors.BadRequest("path is required", "The project path must be provided.", nil))
 		return
 	}
 
 	project, err := h.projectStore.CreateProject(req.Name, req.Path, req.Type)
 	if err != nil {
-		api.WriteError(w, http.StatusBadRequest, err.Error())
+		api.WriteAppError(w, apperrors.BadRequest("project creation failed", "Failed to create or open project: "+err.Error(), err))
 		return
 	}
 
@@ -575,7 +576,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	projectID := api.ExtractProjectID(r.URL.Path)
 	if projectID == "" {
-		api.WriteError(w, http.StatusBadRequest, "project ID is required")
+		api.WriteAppError(w, apperrors.BadRequest("project ID is required", "A project ID must be provided in the URL.", nil))
 		return
 	}
 
@@ -585,7 +586,7 @@ func (h *ProjectHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 	entries, err := h.projectStore.ListProjectFiles(projectID, relativePath)
 	if err != nil {
-		api.WriteError(w, http.StatusNotFound, err.Error())
+		api.WriteAppError(w, apperrors.NotFound("project files not found", "Could not list files for the specified project.", err))
 		return
 	}
 
@@ -601,7 +602,7 @@ func (h *ProjectHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	projectID := api.ExtractProjectID(r.URL.Path)
 	if projectID == "" {
-		api.WriteError(w, http.StatusBadRequest, "project ID is required")
+		api.WriteAppError(w, apperrors.BadRequest("project ID is required", "A project ID must be provided in the URL.", nil))
 		return
 	}
 
@@ -609,7 +610,7 @@ func (h *ProjectHandler) GetFileContent(w http.ResponseWriter, r *http.Request) 
 	// Expected format: /api/projects/{id}/files/{path}
 	filePath := api.ExtractSubPath(r.URL.Path, "/api/projects/"+projectID+"/files")
 	if filePath == "" {
-		api.WriteError(w, http.StatusBadRequest, "file path is required")
+		api.WriteAppError(w, apperrors.BadRequest("file path is required", "Please specify a file path within the project.", nil))
 		return
 	}
 
@@ -619,7 +620,13 @@ func (h *ProjectHandler) GetFileContent(w http.ResponseWriter, r *http.Request) 
 		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "escapes") {
 			status = http.StatusBadRequest
 		}
-		api.WriteError(w, status, err.Error())
+
+		errType := apperrors.TypeNotFound
+		if status == http.StatusBadRequest {
+			errType = apperrors.TypeBadRequest
+		}
+
+		api.WriteAppError(w, apperrors.New(errType, err.Error(), "Failed to retrieve file content.", status, err))
 		return
 	}
 

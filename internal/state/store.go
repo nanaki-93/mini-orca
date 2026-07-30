@@ -60,6 +60,19 @@ func (s *Store) GetSession(id string) (*Session, error) {
 	return s.copySessionData(session), nil
 }
 
+// ListSessions returns a list of all sessions in the store.
+func (s *Store) ListSessions() []*Session {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	sessions := make([]*Session, 0, len(s.sessions))
+	for _, session := range s.sessions {
+		sessions = append(sessions, s.copySessionData(session))
+	}
+
+	return sessions
+}
+
 // SavePlan saves a plan to the store.
 func (s *Store) SavePlan(plan *Plan) error {
 	if plan == nil {
@@ -380,29 +393,33 @@ func (s *Store) copySessionData(session *Session) *Session {
 		return nil
 	}
 
-	copy := *session
+	sessCopy := *session
 	if session.Plan != nil {
 		planCopy := s.copyPlanData(session.Plan)
-		copy.Plan = planCopy
+		sessCopy.Plan = planCopy
 	}
 	if session.AtomicUnits != nil {
 		unitsCopy := make([]AtomicUnit, len(session.AtomicUnits))
-		copy.AtomicUnits = append(unitsCopy, session.AtomicUnits...)
+		copy(unitsCopy, session.AtomicUnits)
+		sessCopy.AtomicUnits = unitsCopy
 	}
 	if session.History != nil {
 		historyCopy := make([]PhaseHistory, len(session.History))
-		copy.History = append(historyCopy, session.History...)
+		copy(historyCopy, session.History)
+		sessCopy.History = historyCopy
 	}
 	if session.TestResults != nil {
 		testResultsCopy := make([]TestResult, len(session.TestResults))
-		copy.TestResults = append(testResultsCopy, session.TestResults...)
+		copy(testResultsCopy, session.TestResults)
+		sessCopy.TestResults = testResultsCopy
 	}
 	if session.ReviewReports != nil {
 		reviewReportsCopy := make([]ReviewReportEntry, len(session.ReviewReports))
-		copy.ReviewReports = append(reviewReportsCopy, session.ReviewReports...)
+		copy(reviewReportsCopy, session.ReviewReports)
+		sessCopy.ReviewReports = reviewReportsCopy
 	}
 
-	return &copy
+	return &sessCopy
 }
 
 // copyPlanData creates a deep copy of plan data for safe read access.
@@ -411,11 +428,12 @@ func (s *Store) copyPlanData(plan *Plan) *Plan {
 		return nil
 	}
 
-	copy := *plan
+	planCopy := *plan
 	if plan.Units != nil {
 		unitsCopy := make([]PlanUnit, len(plan.Units))
-		copy.Units = append(unitsCopy, plan.Units...)
+		copy(unitsCopy, plan.Units)
+		planCopy.Units = unitsCopy
 	}
 
-	return &copy
+	return &planCopy
 }
