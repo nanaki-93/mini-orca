@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the agent-skill association UI.
 
 ## Checklist
-- [x] Create `internal/api/templates/components/agent-skills.html`
+- [x] Create `../../internal/api/templates/components/agent-skills.html`
 - [x] Show each agent's assigned skills
 - [x] Checkbox list for adding/removing skills
 - [x] HTMX form submission

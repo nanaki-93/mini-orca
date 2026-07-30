@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the review phase view.
 
 ## Checklist
-- [ ] Create `internal/api/templates/phases/review.html`
+- [ ] Create `../../internal/api/templates/phases/review.html`
 - [ ] Show review report
 - [ ] List issues by severity
 - [ ] Show reviewer suggestions
@@ -18,7 +18,7 @@ Create the review phase view.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/templates/phases/review.html`
+- `../../internal/api/templates/phases/review.html`
 
 ## Status
 - [ ] Not Started

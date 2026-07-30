@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create base CSS styles.
 
 ## Checklist
-- [ ] Create `internal/api/static/css/main.css`
+- [ ] Create `../../internal/api/static/css/main.css`
 - [ ] CSS variables for theming
 - [ ] Dark theme defaults
 - [ ] Layout grid/flexbox definitions
@@ -17,7 +17,7 @@ Create base CSS styles.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/static/css/main.css`
+- `../../internal/api/static/css/main.css`
 
 ## Status
 - [ ] Not Started

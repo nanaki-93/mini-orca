@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the code editor component.
 
 ## Checklist
-- [ ] Create `internal/api/templates/editors/code-editor.html`
+- [ ] Create `../../internal/api/templates/editors/code-editor.html`
 - [ ] Display code with syntax highlighting
 - [ ] Use simple CSS-based highlighting (no JS library)
 - [ ] Show line numbers
@@ -18,7 +18,7 @@ Create the code editor component.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/templates/editors/code-editor.html`
+- `../../internal/api/templates/editors/code-editor.html`
 
 ## Status
 - [ ] Not Started

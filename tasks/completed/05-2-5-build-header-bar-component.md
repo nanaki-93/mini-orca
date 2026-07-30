@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the header bar component.
 
 ## Checklist
-- [ ] Create `internal/api/templates/components/header.html`
+- [ ] Create `../../internal/api/templates/components/header.html`
 - [ ] Project name and path
 - [ ] Current phase indicator
 - [ ] Model info (provider, model name)
@@ -18,7 +18,7 @@ Create the header bar component.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/templates/components/header.html`
+- `../../internal/api/templates/components/header.html`
 
 ## Status
 - [ ] Not Started

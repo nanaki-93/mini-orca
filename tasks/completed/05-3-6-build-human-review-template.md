@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the human review view.
 
 ## Checklist
-- [ ] Create `internal/api/templates/phases/human-review.html`
+- [ ] Create `../../internal/api/templates/phases/human-review.html`
 - [ ] Show final code
 - [ ] Show all review feedback
 - [ ] Approve button
@@ -18,7 +18,7 @@ Create the human review view.
 - Task 5.2.2
 
 ## Deliverables
-- `internal/api/templates/phases/human-review.html`
+- `../../internal/api/templates/phases/human-review.html`
 
 ## Status
 - [ ] Not Started

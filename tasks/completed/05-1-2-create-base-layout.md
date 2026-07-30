@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the base HTML layout with dark theme.
 
 ## Checklist
-- [ ] Create `internal/api/templates/base.html`
+- [ ] Create `../../internal/api/templates/base.html`
 - [ ] Define HTML5 doctype, charset, viewport
 - [ ] Include CSS (Tailwind via CDN for dev, or embedded)
 - [ ] Include HTMX via CDN
@@ -18,7 +18,7 @@ Create the base HTML layout with dark theme.
 - Task 5.1.1
 
 ## Deliverables
-- `internal/api/templates/base.html`
+- `../../internal/api/templates/base.html`
 
 ## Status
 - [ ] Not Started

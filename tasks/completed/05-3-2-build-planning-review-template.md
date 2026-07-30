@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the planning review view with approve/reject.
 
 ## Checklist
-- [ ] Create `internal/api/templates/phases/planning-review.html`
+- [ ] Create `../../internal/api/templates/phases/planning-review.html`
 - [ ] Display full plan
 - [ ] Show atomic units as cards
 - [ ] Show dependencies graph (simple text-based)
@@ -19,7 +19,7 @@ Create the planning review view with approve/reject.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/templates/phases/planning-review.html`
+- `../../internal/api/templates/phases/planning-review.html`
 
 ## Status
 - [ ] Not Started

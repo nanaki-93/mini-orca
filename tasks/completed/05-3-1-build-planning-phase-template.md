@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the planning phase view.
 
 ## Checklist
-- [ ] Create `internal/api/templates/phases/planning.html`
+- [ ] Create `../../internal/api/templates/phases/planning.html`
 - [ ] Show "Planning in progress..." with spinner
 - [ ] Show goal description
 - [ ] Show estimated time
@@ -17,7 +17,7 @@ Create the planning phase view.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/templates/phases/planning.html`
+- `../../internal/api/templates/phases/planning.html`
 
 ## Status
 - [ ] Not Started

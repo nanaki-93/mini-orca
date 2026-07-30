@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the testing phase view.
 
 ## Checklist
-- [ ] Create `internal/api/templates/phases/testing.html`
+- [ ] Create `../../internal/api/templates/phases/testing.html`
 - [ ] Show test command being run
 - [ ] Show test output (scrollable)
 - [ ] Show coverage percentage
@@ -18,7 +18,7 @@ Create the testing phase view.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/templates/phases/testing.html`
+- `../../internal/api/templates/phases/testing.html`
 
 ## Status
 - [ ] Not Started

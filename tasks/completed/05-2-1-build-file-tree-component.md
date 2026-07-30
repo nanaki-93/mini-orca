@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the file tree component.
 
 ## Checklist
-- [ ] Create `internal/api/templates/components/file-tree.html`
+- [ ] Create `../../internal/api/templates/components/file-tree.html`
 - [ ] Recursive file tree display
 - [ ] Expand/collapse folders (HTMX or CSS-only)
 - [ ] Highlight current file
@@ -18,7 +18,7 @@ Create the file tree component.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/templates/components/file-tree.html`
+- `../../internal/api/templates/components/file-tree.html`
 
 ## Status
 - [ ] Not Started

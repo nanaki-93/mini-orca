@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create approval-related API handlers.
 
 ## Checklist
-- [ ] Create `internal/api/handlers/approve.go`
+- [ ] Create `../../internal/api/handlers/approve.go`
 - [ ] `POST /api/sessions/:id/gate` — Respond to human gate
 - [ ] `GET /api/sessions/:id/gate` — Get current gate
 - [ ] Validate response format
@@ -17,7 +17,7 @@ Create approval-related API handlers.
 - Task 4.4.1, Task 4.3.2
 
 ## Deliverables
-- `internal/api/handlers/approve.go`
+- `../../internal/api/handlers/approve.go`
 
 ## Status
 - [ ] Not Started

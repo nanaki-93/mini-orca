@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the coding phase view.
 
 ## Checklist
-- [ ] Create `internal/api/templates/phases/coding.html`
+- [ ] Create `../../internal/api/templates/phases/coding.html`
 - [ ] Show current unit being coded
 - [ ] Show generated code in editor
 - [ ] Show "Applying changes..." indicator
@@ -18,7 +18,7 @@ Create the coding phase view.
 - Task 5.2.2
 
 ## Deliverables
-- `internal/api/templates/phases/coding.html`
+- `../../internal/api/templates/phases/coding.html`
 
 ## Status
 - [ ] Not Started
