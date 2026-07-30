@@ -424,6 +424,18 @@ func startHTTPServer(
 		mux.HandleFunc("GET /api/render/phase-tracker", htmxRenderHandler.RenderPhaseTracker)
 	}
 
+	// Register main page
+	if htmxRenderHandler != nil {
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// Only handle the root path, let other routes handle their own paths
+			if r.URL.Path == "/" {
+				htmxRenderHandler.RenderMainPage(w, r)
+			} else {
+				http.NotFound(w, r)
+			}
+		})
+	}
+
 	// Initialize error handler
 	templatesPath := "internal/api/templates"
 	errorHandler, err := api.NewErrorHandler(templatesPath)

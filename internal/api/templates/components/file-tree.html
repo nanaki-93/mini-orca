@@ -5,6 +5,7 @@
     </div>
     {{ template "tree-root" . }}
 </div>
+{{ end }}
 
 {{ define "tree-root" }}
 {{ range . }}
@@ -175,4 +176,3 @@
     .file-icon-sh { color: #89e051; }
     .file-icon-git { color: #f05032; }
 </style>
-{{ end }}
