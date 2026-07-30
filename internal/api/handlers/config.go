@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/nanaki-93/mini-orca/internal/api"
 	"github.com/nanaki-93/mini-orca/internal/config"
 )
 
@@ -296,7 +297,7 @@ func NewConfigHandler(configStore *ConfigStore) *ConfigHandler {
 func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := h.configStore.GetConfig()
 
-	writeJSON(w, http.StatusOK, ConfigResponse{
+	api.WriteJSON(w, http.StatusOK, ConfigResponse{
 		Models: cfg.Models,
 		Agents: cfg.Agents,
 		Skills: cfg.Skills,
@@ -309,16 +310,16 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	var req ConfigUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		api.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if err := h.configStore.UpdateConfig(&req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		api.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	api.WriteJSON(w, http.StatusOK, map[string]string{
 		"status":  "updated",
 		"message": "configuration updated successfully",
 	})
@@ -329,7 +330,7 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 func (h *ConfigHandler) ListModels(w http.ResponseWriter, r *http.Request) {
 	cfg := h.configStore.GetConfig()
 
-	writeJSON(w, http.StatusOK, ModelListResponse{
+	api.WriteJSON(w, http.StatusOK, ModelListResponse{
 		ActiveProvider: cfg.Models.ActiveProvider,
 		Providers:      cfg.Models.Providers,
 		Phases:         cfg.Models.Phases,
@@ -341,7 +342,7 @@ func (h *ConfigHandler) ListModels(w http.ResponseWriter, r *http.Request) {
 func (h *ConfigHandler) GetPhaseConfigs(w http.ResponseWriter, r *http.Request) {
 	cfg := h.configStore.GetConfig()
 
-	writeJSON(w, http.StatusOK, PhaseConfigResponse{
+	api.WriteJSON(w, http.StatusOK, PhaseConfigResponse{
 		Phases: cfg.Models.Phases,
 	})
 }

@@ -370,7 +370,7 @@ func startHTTPServer(
 	mux.HandleFunc("POST /api/sessions", sessionHandler.CreateSession)
 	mux.HandleFunc("GET /api/sessions", sessionHandler.ListSessions)
 	mux.HandleFunc("GET /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
-		parts := splitPath(r.URL.Path)
+		parts := api.SplitPath(r.URL.Path)
 		if len(parts) >= 5 && parts[4] == "gate" {
 			gateHandler.GetGateStatus(w, r)
 		} else {
@@ -379,7 +379,7 @@ func startHTTPServer(
 	})
 	mux.HandleFunc("POST /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
 		// Route to appropriate lifecycle handler
-		parts := splitPath(r.URL.Path)
+		parts := api.SplitPath(r.URL.Path)
 		if len(parts) >= 5 {
 			action := parts[4]
 			switch action {
@@ -403,7 +403,7 @@ func startHTTPServer(
 	mux.HandleFunc("POST /api/projects", projectHandler.CreateProject)
 	mux.HandleFunc("GET /api/projects/", func(w http.ResponseWriter, r *http.Request) {
 		// Route to appropriate project handler
-		parts := splitPath(r.URL.Path)
+		parts := api.SplitPath(r.URL.Path)
 		if len(parts) >= 5 {
 			action := parts[4]
 			switch action {
@@ -415,6 +415,10 @@ func startHTTPServer(
 	mux.HandleFunc("GET /api/projects/files/", func(w http.ResponseWriter, r *http.Request) {
 		projectHandler.GetFileContent(w, r)
 	})
+
+	// Static files
+	fs := http.FileServer(http.Dir("internal/api/static"))
+	mux.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	// Register HTMX render endpoints
 	if htmxRenderHandler != nil {
@@ -478,59 +482,7 @@ func generateSessionID() string {
 func waitForShutdown() os.Signal {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
 	sig := <-sigChan
 	signal.Stop(sigChan)
 	return sig
-}
-
-// splitPath splits a URL path into its components.
-func splitPath(path string) []string {
-	if path == "/" {
-		return []string{""}
-	}
-	path = cleanPath(path)
-	if path[0] == '/' {
-		path = path[1:]
-	}
-	if path == "" {
-		return []string{""}
-	}
-	return split(path, '/')
-}
-
-// cleanPath removes redundant slashes from the path.
-func cleanPath(path string) string {
-	if path == "" {
-		return "/"
-	}
-	if path[0] != '/' {
-		path = "/" + path
-	}
-	n := len(path)
-	for i := 1; i < n-1; {
-		if path[i] == '/' && path[i+1] == '/' {
-			path = path[:i+1] + path[i+2:]
-			n--
-		} else {
-			i++
-		}
-	}
-	return path
-}
-
-// split splits a string by a separator into a slice of substrings.
-func split(s string, sep rune) []string {
-	var result []string
-	var current []rune
-	for _, r := range s {
-		if r == sep {
-			result = append(result, string(current))
-			current = nil
-		} else {
-			current = append(current, r)
-		}
-	}
-	result = append(result, string(current))
-	return result
 }

@@ -1,10 +1,73 @@
-{{ define "content" }}
-<div id="ide-app">
-    <header id="ide-header">
-        <!-- IDE Header -->
-    </header>
-    <main id="ide-main">
-        <!-- IDE Main Content -->
-    </main>
+{{ define "header" }}
+    {{ template "header-bar" . }}
+{{ end }}
+
+{{ define "sidebar" }}
+    {{ template "file-tree" . }}
+{{ end }}
+
+{{ define "main" }}
+<div id="ide-container" class="h-full flex flex-col">
+    <!-- Main Content Area -->
+    <div class="flex-1 flex overflow-hidden">
+        <!-- Editor/Main View Area -->
+        <div id="editor-container" class="flex-1 flex flex-col bg-dark-900 border-r border-dark-600">
+            <div id="file-content" class="flex-1 overflow-auto">
+                <div class="flex flex-col items-center justify-center h-full text-text-secondary opacity-50">
+                    <svg class="w-16 h-16 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p class="text-lg">Select a file to view its content</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity/Phase Info Panel (Right Sidebar) -->
+        <div id="info-panel" class="w-80 bg-dark-800 flex flex-col overflow-hidden shrink-0">
+            <!-- Phase Tracker -->
+            <div id="phase-tracker-container" class="h-1/2 border-b border-dark-600 overflow-y-auto"
+                 hx-get="/api/render/phase-tracker"
+                 hx-trigger="load, every 5s"
+                 hx-swap="innerHTML">
+                <div class="p-4 text-text-secondary text-sm">Loading phase tracker...</div>
+            </div>
+
+            <!-- Activity Log -->
+            <div id="activity-log-container" class="h-1/2 overflow-y-auto"
+                 hx-get="/api/render/activity-log"
+                 hx-trigger="load, every 3s"
+                 hx-swap="innerHTML">
+                <div class="p-4 text-text-secondary text-sm">Loading activity log...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Bar / Bottom Panel -->
+    <div id="status-bar" class="h-8 bg-dark-800 border-t border-dark-600 flex items-center justify-between px-4 shrink-0 text-[10px] text-text-secondary">
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                <span>Daemon Connected</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span>Phase:</span>
+                <span class="text-text-primary font-medium">{{ title .CurrentPhaseName }}</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div id="loading-indicator" class="htmx-indicator flex items-center gap-1.5">
+                <svg class="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Loading...</span>
+            </div>
+            <span>Mini-Orca v0.1.0</span>
+        </div>
+    </div>
 </div>
+{{ end }}
+
+{{ define "footer" }}
+    <!-- Custom footer if needed -->
 {{ end }}

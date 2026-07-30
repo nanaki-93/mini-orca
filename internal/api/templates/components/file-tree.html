@@ -3,12 +3,12 @@
     <div class="px-3 py-2 text-xs font-semibold text-text-secondary uppercase tracking-wider">
         Explorer
     </div>
-    {{ template "tree-root" . }}
+    {{ template "tree-root" (dict "Items" .RootItems "CurrentPath" .CurrentPath) }}
 </div>
 {{ end }}
 
 {{ define "tree-root" }}
-{{ range . }}
+{{ range .Items }}
     {{ if .IsDir }}
         {{ template "tree-folder" (dict "Item" . "Depth" 0 "CurrentPath" $.CurrentPath) }}
     {{ else }}

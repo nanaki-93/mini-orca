@@ -4,6 +4,7 @@ package handlers
 import (
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/nanaki-93/mini-orca/internal/api"
 	"github.com/nanaki-93/mini-orca/internal/state"
 )
 
@@ -217,82 +219,55 @@ func NewTemplateEngine(basePath string) (*TemplateEngine, error) {
 
 // loadTemplates loads all embedded templates from disk.
 func (te *TemplateEngine) loadTemplates() error {
-	// Load root-level templates (base, ide, etc.)
-	rootFiles, err := os.ReadDir(te.basePath)
-	if err != nil {
-		return fmt.Errorf("read root dir: %w", err)
-	}
+	var allTemplatePaths []string
 
-	var rootTemplatePaths []string
-	for _, entry := range rootFiles {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".html") {
-			rootTemplatePaths = append(rootTemplatePaths, filepath.Join(te.basePath, entry.Name()))
-		}
-	}
-
-	if len(rootTemplatePaths) > 0 {
-		funcs := te.funcMap()
-		tmpl, err := template.New("").Funcs(funcs).ParseFiles(rootTemplatePaths...)
+	// Helper to collect templates from a directory
+	collectTemplates := func(dir string) error {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			return fmt.Errorf("parse root templates: %w", err)
+			return err
 		}
-		te.mu.Lock()
-		for _, t := range tmpl.Templates() {
-			if t != nil {
-				name := t.Name()
-				te.templates[name] = t
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".html") {
+				allTemplatePaths = append(allTemplatePaths, filepath.Join(dir, entry.Name()))
 			}
 		}
-		te.mu.Unlock()
-	}
-
-	// Load component templates
-	if err := te.loadDir("components"); err != nil {
-		return fmt.Errorf("load components: %w", err)
-	}
-
-	// Load phase templates
-	if err := te.loadDir("phases"); err != nil {
-		return fmt.Errorf("load phases: %w", err)
-	}
-
-	return nil
-}
-
-// loadDir loads all HTML templates from a subdirectory.
-func (te *TemplateEngine) loadDir(dirName string) error {
-	dirPath := filepath.Join(te.basePath, dirName)
-
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return fmt.Errorf("read dir %q: %w", dirPath, err)
-	}
-
-	var templatePaths []string
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".html") {
-			templatePaths = append(templatePaths, filepath.Join(dirPath, entry.Name()))
-		}
-	}
-
-	if len(templatePaths) == 0 {
 		return nil
 	}
 
-	// Parse all templates together to share function maps
+	// Collect root-level templates
+	if err := collectTemplates(te.basePath); err != nil {
+		return fmt.Errorf("collect root: %w", err)
+	}
+
+	// Collect component templates
+	if err := collectTemplates(filepath.Join(te.basePath, "components")); err != nil {
+		log.Printf("Warning: failed to collect components: %v", err)
+	}
+
+	// Collect phase templates
+	if err := collectTemplates(filepath.Join(te.basePath, "phases")); err != nil {
+		log.Printf("Warning: failed to collect phases: %v", err)
+	}
+
+	if len(allTemplatePaths) == 0 {
+		return fmt.Errorf("no templates found in %s", te.basePath)
+	}
+
+	// Parse all templates together
 	funcs := te.funcMap()
-	tmpls, err := template.New("").Funcs(funcs).ParseFiles(templatePaths...)
+	tmpl, err := template.New("").Funcs(funcs).ParseFiles(allTemplatePaths...)
 	if err != nil {
-		return fmt.Errorf("parse templates: %w", err)
+		return fmt.Errorf("parse all templates: %w", err)
 	}
 
 	te.mu.Lock()
 	defer te.mu.Unlock()
-
-	// Iterate over all parsed templates
-	for _, t := range tmpls.Templates() {
+	for _, t := range tmpl.Templates() {
 		if t != nil {
 			name := t.Name()
+			// Only store the base name as the template name for easy lookup
+			// if it's a full path, but ParseFiles already uses base names.
 			te.templates[name] = t
 		}
 	}
@@ -735,8 +710,8 @@ func (te *TemplateEngine) RenderComponentPartial(name string, data interface{}) 
 	return buf.String(), nil
 }
 
-// RenderMain renders the main page with the given content template.
-func (te *TemplateEngine) RenderMain(w http.ResponseWriter, contentTemplate string) {
+// RenderMain renders the main page with the given content template and data.
+func (te *TemplateEngine) RenderMain(w http.ResponseWriter, contentTemplate string, data map[string]interface{}) {
 	te.mu.RLock()
 	baseTmpl, ok := te.templates["base"]
 	te.mu.RUnlock()
@@ -746,10 +721,14 @@ func (te *TemplateEngine) RenderMain(w http.ResponseWriter, contentTemplate stri
 		return
 	}
 
+	if data == nil {
+		data = make(map[string]interface{})
+	}
+	data["Content"] = contentTemplate
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := baseTmpl.ExecuteTemplate(w, "base", map[string]interface{}{
-		"Content": contentTemplate,
-	}); err != nil {
+	if err := baseTmpl.ExecuteTemplate(w, "base", data); err != nil {
+		log.Printf("Error rendering page: %v", err)
 		http.Error(w, "failed to render page", http.StatusInternalServerError)
 		return
 	}
@@ -789,7 +768,7 @@ func NewHTMXRenderHandler(
 func (h *HTMXRenderHandler) RenderPhase(w http.ResponseWriter, r *http.Request) {
 	phase := extractPhaseFromPath(r.URL.Path)
 	if phase == "" {
-		writeError(w, http.StatusBadRequest, "phase is required")
+		api.WriteError(w, http.StatusBadRequest, "phase is required")
 		return
 	}
 
@@ -836,7 +815,7 @@ func (h *HTMXRenderHandler) RenderPhase(w http.ResponseWriter, r *http.Request) 
 
 	rendered, err := h.templateEngine.RenderPhasePartial(phase, data)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		api.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -851,7 +830,7 @@ func (h *HTMXRenderHandler) RenderFileTree(w http.ResponseWriter, r *http.Reques
 	// Get project data
 	projects := h.projectStore.ListProjects()
 	if len(projects) == 0 {
-		writeError(w, http.StatusBadRequest, "no project opened")
+		api.WriteError(w, http.StatusBadRequest, "no project opened")
 		return
 	}
 
@@ -860,7 +839,7 @@ func (h *HTMXRenderHandler) RenderFileTree(w http.ResponseWriter, r *http.Reques
 	// List files from the project store
 	entries, err := h.projectStore.ListProjectFiles(project.ID, "")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		api.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -884,7 +863,7 @@ func (h *HTMXRenderHandler) RenderFileTree(w http.ResponseWriter, r *http.Reques
 
 	rendered, err := h.templateEngine.RenderComponentPartial("file-tree", data)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		api.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -899,7 +878,7 @@ func (h *HTMXRenderHandler) RenderActivityLog(w http.ResponseWriter, r *http.Req
 	// Get session data
 	sessions := h.sessionStore.ListSessions()
 	if len(sessions) == 0 {
-		writeError(w, http.StatusBadRequest, "no active session")
+		api.WriteError(w, http.StatusBadRequest, "no active session")
 		return
 	}
 
@@ -940,7 +919,7 @@ func (h *HTMXRenderHandler) RenderActivityLog(w http.ResponseWriter, r *http.Req
 
 	rendered, err := h.templateEngine.RenderComponentPartial("activity-log", data)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		api.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -955,7 +934,7 @@ func (h *HTMXRenderHandler) RenderPhaseTracker(w http.ResponseWriter, r *http.Re
 	// Get session data
 	sessions := h.sessionStore.ListSessions()
 	if len(sessions) == 0 {
-		writeError(w, http.StatusBadRequest, "no active session")
+		api.WriteError(w, http.StatusBadRequest, "no active session")
 		return
 	}
 
@@ -1033,7 +1012,7 @@ func (h *HTMXRenderHandler) RenderPhaseTracker(w http.ResponseWriter, r *http.Re
 
 	rendered, err := h.templateEngine.RenderComponentPartial("phase-tracker", data)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		api.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -1047,7 +1026,7 @@ func (h *HTMXRenderHandler) RenderPhaseTracker(w http.ResponseWriter, r *http.Re
 // extractPhaseFromPath extracts the phase name from the URL path.
 // Expected format: /api/render/phase/{phase}
 func extractPhaseFromPath(path string) string {
-	parts := splitPath(path)
+	parts := api.SplitPath(path)
 	if len(parts) < 4 {
 		return ""
 	}
@@ -1097,7 +1076,74 @@ func getCurrentPhaseInfo(session *state.Session) (string, string) {
 
 // RenderMainPage renders the main IDE page.
 func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Request) {
-	h.templateEngine.RenderMain(w, "ide")
+	data := make(map[string]interface{})
+
+	// Get session data
+	sessions := h.sessionStore.ListSessions()
+	if len(sessions) > 0 {
+		session := sessions[0]
+		data["SessionID"] = session.ID
+		data["Goal"] = session.Goal
+		data["SessionStatus"] = string(session.Status)
+
+		currentPhaseName, currentPhaseStatus := getCurrentPhaseInfo(session)
+		data["CurrentPhaseName"] = currentPhaseName
+		data["CurrentPhaseStatus"] = currentPhaseStatus
+		data["PhaseProgress"] = getPhaseProgress(session.Status)
+	} else {
+		data["SessionID"] = "no-active-session"
+		data["CurrentPhaseName"] = "Idle"
+		data["CurrentPhaseStatus"] = "pending"
+		data["PhaseProgress"] = 0
+	}
+
+	// Get project data
+	projects := h.projectStore.ListProjects()
+	if len(projects) > 0 {
+		project := projects[0]
+		data["ProjectName"] = project.Name
+		data["ProjectPath"] = project.Path
+
+		// List initial files for the tree
+		entries, err := h.projectStore.ListProjectFiles(project.ID, "")
+		if err == nil {
+			items := make([]FileSystemItem, 0, len(entries))
+			for _, entry := range entries {
+				items = append(items, FileSystemItem{
+					Name:  entry.Name,
+					Path:  entry.Path,
+					IsDir: entry.IsDir,
+					Size:  entry.Size,
+				})
+			}
+			data["RootItems"] = items
+		}
+	} else {
+		data["ProjectName"] = "No Project"
+		data["ProjectPath"] = "Please open or create a project"
+		data["RootItems"] = []FileSystemItem{}
+	}
+	data["CurrentPath"] = ""
+
+	// Placeholder for model info
+	data["ModelName"] = "gpt-4o"
+	data["ProviderName"] = "OpenAI"
+
+	h.templateEngine.RenderMain(w, "ide", data)
+}
+
+// getPhaseProgress returns a progress percentage based on session status.
+func getPhaseProgress(status state.SessionStatus) int {
+	switch status {
+	case state.SessionStatusCompleted:
+		return 100
+	case state.SessionStatusRunning:
+		return 45
+	case state.SessionStatusPending:
+		return 0
+	default:
+		return 0
+	}
 }
 
 // lower converts a string to lowercase.

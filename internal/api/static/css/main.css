@@ -103,6 +103,23 @@
 }
 
 /* ---------------------------------------------------------------------------
+   HTMX Indicators
+   --------------------------------------------------------------------------- */
+.htmx-indicator {
+    opacity: 0;
+    transition: opacity 200ms ease-in;
+    display: none;
+}
+.htmx-request .htmx-indicator {
+    opacity: 1;
+    display: flex;
+}
+.htmx-request.htmx-indicator {
+    opacity: 1;
+    display: flex;
+}
+
+/* ---------------------------------------------------------------------------
    2. Dark Theme (Default)
    --------------------------------------------------------------------------- */
 html,

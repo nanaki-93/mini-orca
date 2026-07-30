@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/internal/api"
 )
 
 // ─── Request/Response Types ──────────────────────────────────────────────────
@@ -531,7 +533,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, ProjectListResponse{
+	api.WriteJSON(w, http.StatusOK, ProjectListResponse{
 		Projects: summaries,
 		Total:    len(summaries),
 	})
@@ -542,22 +544,22 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	var req ProjectCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		api.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Path == "" {
-		writeError(w, http.StatusBadRequest, "path is required")
+		api.WriteError(w, http.StatusBadRequest, "path is required")
 		return
 	}
 
 	project, err := h.projectStore.CreateProject(req.Name, req.Path, req.Type)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		api.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, ProjectResponse{
+	api.WriteJSON(w, http.StatusCreated, ProjectResponse{
 		ID:        project.ID,
 		Name:      project.Name,
 		Path:      project.Path,
@@ -571,23 +573,23 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 // ListFiles handles GET /api/projects/:id/files
 // Returns a list of files and directories in the project.
 func (h *ProjectHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
-	projectID := extractProjectID(r.URL.Path)
+	projectID := api.ExtractProjectID(r.URL.Path)
 	if projectID == "" {
-		writeError(w, http.StatusBadRequest, "project ID is required")
+		api.WriteError(w, http.StatusBadRequest, "project ID is required")
 		return
 	}
 
 	// Extract optional subdirectory path from the URL
 	// Expected format: /api/projects/{id}/files or /api/projects/{id}/files/{subpath}
-	relativePath := extractSubPath(r.URL.Path, "/api/projects/"+projectID+"/files")
+	relativePath := api.ExtractSubPath(r.URL.Path, "/api/projects/"+projectID+"/files")
 
 	entries, err := h.projectStore.ListProjectFiles(projectID, relativePath)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		api.WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, FileListResponse{
+	api.WriteJSON(w, http.StatusOK, FileListResponse{
 		Files:       entries,
 		Total:       len(entries),
 		ProjectPath: projectID,
@@ -597,17 +599,17 @@ func (h *ProjectHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 // GetFileContent handles GET /api/projects/:id/files/:path
 // Returns the content of a file in the project.
 func (h *ProjectHandler) GetFileContent(w http.ResponseWriter, r *http.Request) {
-	projectID := extractProjectID(r.URL.Path)
+	projectID := api.ExtractProjectID(r.URL.Path)
 	if projectID == "" {
-		writeError(w, http.StatusBadRequest, "project ID is required")
+		api.WriteError(w, http.StatusBadRequest, "project ID is required")
 		return
 	}
 
 	// Extract file path from the URL
 	// Expected format: /api/projects/{id}/files/{path}
-	filePath := extractSubPath(r.URL.Path, "/api/projects/"+projectID+"/files")
+	filePath := api.ExtractSubPath(r.URL.Path, "/api/projects/"+projectID+"/files")
 	if filePath == "" {
-		writeError(w, http.StatusBadRequest, "file path is required")
+		api.WriteError(w, http.StatusBadRequest, "file path is required")
 		return
 	}
 
@@ -617,107 +619,9 @@ func (h *ProjectHandler) GetFileContent(w http.ResponseWriter, r *http.Request) 
 		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "escapes") {
 			status = http.StatusBadRequest
 		}
-		writeError(w, status, err.Error())
+		api.WriteError(w, status, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, content)
-}
-
-// ─── Path Extraction ──────────────────────────────────────────────────────────
-
-// extractProjectID extracts the project ID from the URL path.
-// Expected format: /api/projects/{id}...
-func extractProjectID(path string) string {
-	parts := splitPath(path)
-	if len(parts) < 3 {
-		return ""
-	}
-	// parts: ["", "api", "projects", "{id}", ...]
-	return parts[3]
-}
-
-// extractSubPath extracts the sub-path after a known prefix.
-// For example, given path="/api/projects/123/files/src/main.go" and
-// prefix="/api/projects/123/files", it returns "src/main.go".
-func extractSubPath(path, prefix string) string {
-	if !strings.HasPrefix(path, prefix) {
-		return ""
-	}
-
-	subPath := strings.TrimPrefix(path, prefix)
-	subPath = strings.TrimPrefix(subPath, "/")
-	return subPath
-}
-
-// splitPath splits a URL path into its components.
-func splitPath(path string) []string {
-	if path == "/" {
-		return []string{""}
-	}
-	path = cleanPath(path)
-	if path[0] == '/' {
-		path = path[1:]
-	}
-	if path == "" {
-		return []string{""}
-	}
-	return split(path, '/')
-}
-
-// cleanPath removes redundant slashes from the path.
-func cleanPath(path string) string {
-	if path == "" {
-		return "/"
-	}
-	if path[0] != '/' {
-		path = "/" + path
-	}
-	n := len(path)
-	for i := 1; i < n-1; {
-		if path[i] == '/' && path[i+1] == '/' {
-			path = path[:i+1] + path[i+2:]
-			n--
-		} else {
-			i++
-		}
-	}
-	return path
-}
-
-// split splits a string by a separator into a slice of substrings.
-func split(s string, sep rune) []string {
-	var result []string
-	var current []rune
-	for _, r := range s {
-		if r == sep {
-			result = append(result, string(current))
-			current = nil
-		} else {
-			current = append(current, r)
-		}
-	}
-	result = append(result, string(current))
-	return result
-}
-
-// ─── HTTP Helpers ─────────────────────────────────────────────────────────────
-
-// writeJSON writes a JSON response to the HTTP writer.
-func writeJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-// writeError writes an error JSON response to the HTTP writer.
-func writeError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(ErrorResponse{Error: message})
-}
-
-// ErrorResponse represents an error response body.
-type ErrorResponse struct {
-	Error string `json:"error"`
+	api.WriteJSON(w, http.StatusOK, content)
 }
