@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/internal/orchestrator"
@@ -67,7 +69,7 @@ type SessionSummary struct {
 
 // SessionStore provides access to sessions by ID.
 type SessionStore struct {
-	mu       interface{}
+	mu       sync.RWMutex
 	sessions map[string]*state.Session
 }
 
@@ -88,7 +90,9 @@ func (s *SessionStore) CreateSession(goal, projectPath, projectType string) (*st
 		return nil, fmt.Errorf("session: project_path is required")
 	}
 
-	sessions := make(map[string]*state.Session)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	sessionID := fmt.Sprintf("session-%d", time.Now().UnixNano())
 
 	session := &state.Session{
@@ -108,8 +112,7 @@ func (s *SessionStore) CreateSession(goal, projectPath, projectType string) (*st
 		Error:         "",
 	}
 
-	sessions[sessionID] = session
-	_ = sessions
+	s.sessions[sessionID] = session
 	return session, nil
 }
 
@@ -119,13 +122,15 @@ func (s *SessionStore) GetSession(id string) (*state.Session, error) {
 		return nil, fmt.Errorf("session: ID is required")
 	}
 
-	sessions := make(map[string]*state.Session)
-	_, ok := sessions[id]
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	session, ok := s.sessions[id]
 	if !ok {
 		return nil, fmt.Errorf("session: %q not found", id)
 	}
 
-	return nil, nil
+	return copySession(session), nil
 }
 
 // UpdateSessionStatus updates the status and phase of a session.
@@ -134,25 +139,68 @@ func (s *SessionStore) UpdateSessionStatus(id string, status state.SessionStatus
 		return fmt.Errorf("session: ID is required")
 	}
 
-	sessions := make(map[string]*state.Session)
-	_, ok := sessions[id]
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[id]
 	if !ok {
 		return fmt.Errorf("session: %q not found", id)
 	}
 
-	_ = status
-	_ = phase
+	session.Status = status
+	session.CurrentPhase = phase
+	session.UpdatedAt = time.Now()
+
 	return nil
 }
 
 // ListSessions returns all sessions.
 func (s *SessionStore) ListSessions() []*state.Session {
-	sessions := make(map[string]*state.Session)
-	result := make([]*state.Session, 0, len(sessions))
-	for _, session := range sessions {
-		result = append(result, session)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]*state.Session, 0, len(s.sessions))
+	for _, session := range s.sessions {
+		result = append(result, copySession(session))
 	}
+
+	// Sort by creation time, newest first
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
+
 	return result
+}
+
+// copySession creates a deep copy of a Session.
+func copySession(s *state.Session) *state.Session {
+	if s == nil {
+		return nil
+	}
+
+	copy := *s
+	if s.Plan != nil {
+		planCopy := *s.Plan
+		copy.Plan = &planCopy
+	}
+	if s.AtomicUnits != nil {
+		unitsCopy := make([]state.AtomicUnit, len(s.AtomicUnits))
+		copy.AtomicUnits = append(unitsCopy, s.AtomicUnits...)
+	}
+	if s.History != nil {
+		historyCopy := make([]state.PhaseHistory, len(s.History))
+		copy.History = append(historyCopy, s.History...)
+	}
+	if s.TestResults != nil {
+		testResultsCopy := make([]state.TestResult, len(s.TestResults))
+		copy.TestResults = append(testResultsCopy, s.TestResults...)
+	}
+	if s.ReviewReports != nil {
+		reviewReportsCopy := make([]state.ReviewReportEntry, len(s.ReviewReports))
+		copy.ReviewReports = append(reviewReportsCopy, s.ReviewReports...)
+	}
+
+	return &copy
 }
 
 // SessionHandler manages HTTP handlers for session lifecycle operations.
@@ -179,27 +227,27 @@ func NewSessionHandler(sessionStore *SessionStore, gateStore *GateStore, router 
 func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	var req SessionCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Goal == "" {
-		writeError(w, http.StatusBadRequest, "goal is required")
+		WriteError(w, http.StatusBadRequest, "goal is required")
 		return
 	}
 
 	if req.ProjectPath == "" {
-		writeError(w, http.StatusBadRequest, "project_path is required")
+		WriteError(w, http.StatusBadRequest, "project_path is required")
 		return
 	}
 
 	session, err := h.sessionStore.CreateSession(req.Goal, req.ProjectPath, req.ProjectType)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, SessionResponse{
+	WriteJSON(w, http.StatusCreated, SessionResponse{
 		ID:           session.ID,
 		Goal:         session.Goal,
 		ProjectPath:  session.ProjectPath,
@@ -214,19 +262,19 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 // GetSessionStatus handles GET /api/sessions/:id
 // Returns the current status of the specified session.
 func (h *SessionHandler) GetSessionStatus(w http.ResponseWriter, r *http.Request) {
-	sessionID := extractSessionID(r.URL.Path)
+	sessionID := ExtractSessionID(r.URL.Path)
 	if sessionID == "" {
-		writeError(w, http.StatusBadRequest, "session ID is required")
+		WriteError(w, http.StatusBadRequest, "session ID is required")
 		return
 	}
 
 	session, err := h.sessionStore.GetSession(sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, SessionResponse{
+	WriteJSON(w, http.StatusOK, SessionResponse{
 		ID:           session.ID,
 		Goal:         session.Goal,
 		ProjectPath:  session.ProjectPath,
@@ -242,29 +290,29 @@ func (h *SessionHandler) GetSessionStatus(w http.ResponseWriter, r *http.Request
 // StartSession handles POST /api/sessions/:id/start
 // Transitions the session from pending to running.
 func (h *SessionHandler) StartSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := extractSessionID(r.URL.Path)
+	sessionID := ExtractSessionID(r.URL.Path)
 	if sessionID == "" {
-		writeError(w, http.StatusBadRequest, "session ID is required")
+		WriteError(w, http.StatusBadRequest, "session ID is required")
 		return
 	}
 
 	session, err := h.sessionStore.GetSession(sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	if session.Status != state.SessionStatusPending {
-		writeError(w, http.StatusConflict, "session is not in pending state")
+		WriteError(w, http.StatusConflict, "session is not in pending state")
 		return
 	}
 
 	if err := h.sessionStore.UpdateSessionStatus(sessionID, state.SessionStatusRunning, state.PhasePlanning); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	WriteJSON(w, http.StatusOK, map[string]string{
 		"status":     "started",
 		"session_id": sessionID,
 		"phase":      string(state.PhasePlanning),
@@ -274,29 +322,29 @@ func (h *SessionHandler) StartSession(w http.ResponseWriter, r *http.Request) {
 // PauseSession handles POST /api/sessions/:id/pause
 // Transitions the session from running to paused.
 func (h *SessionHandler) PauseSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := extractSessionID(r.URL.Path)
+	sessionID := ExtractSessionID(r.URL.Path)
 	if sessionID == "" {
-		writeError(w, http.StatusBadRequest, "session ID is required")
+		WriteError(w, http.StatusBadRequest, "session ID is required")
 		return
 	}
 
 	session, err := h.sessionStore.GetSession(sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	if session.Status != state.SessionStatusRunning {
-		writeError(w, http.StatusConflict, "session is not in running state")
+		WriteError(w, http.StatusConflict, "session is not in running state")
 		return
 	}
 
 	if err := h.sessionStore.UpdateSessionStatus(sessionID, state.SessionStatusPaused, session.CurrentPhase); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	WriteJSON(w, http.StatusOK, map[string]string{
 		"status":     "paused",
 		"session_id": sessionID,
 	})
@@ -305,29 +353,29 @@ func (h *SessionHandler) PauseSession(w http.ResponseWriter, r *http.Request) {
 // ResumeSession handles POST /api/sessions/:id/resume
 // Transitions the session from paused to running.
 func (h *SessionHandler) ResumeSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := extractSessionID(r.URL.Path)
+	sessionID := ExtractSessionID(r.URL.Path)
 	if sessionID == "" {
-		writeError(w, http.StatusBadRequest, "session ID is required")
+		WriteError(w, http.StatusBadRequest, "session ID is required")
 		return
 	}
 
 	session, err := h.sessionStore.GetSession(sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	if session.Status != state.SessionStatusPaused {
-		writeError(w, http.StatusConflict, "session is not in paused state")
+		WriteError(w, http.StatusConflict, "session is not in paused state")
 		return
 	}
 
 	if err := h.sessionStore.UpdateSessionStatus(sessionID, state.SessionStatusRunning, session.CurrentPhase); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	WriteJSON(w, http.StatusOK, map[string]string{
 		"status":     "resumed",
 		"session_id": sessionID,
 	})
@@ -336,29 +384,29 @@ func (h *SessionHandler) ResumeSession(w http.ResponseWriter, r *http.Request) {
 // StopSession handles POST /api/sessions/:id/stop
 // Transitions the session to completed or cancelled state.
 func (h *SessionHandler) StopSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := extractSessionID(r.URL.Path)
+	sessionID := ExtractSessionID(r.URL.Path)
 	if sessionID == "" {
-		writeError(w, http.StatusBadRequest, "session ID is required")
+		WriteError(w, http.StatusBadRequest, "session ID is required")
 		return
 	}
 
 	session, err := h.sessionStore.GetSession(sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	if session.Status == state.SessionStatusCompleted || session.Status == state.SessionStatusCancelled {
-		writeError(w, http.StatusConflict, "session is already in terminal state")
+		WriteError(w, http.StatusConflict, "session is already in terminal state")
 		return
 	}
 
 	if err := h.sessionStore.UpdateSessionStatus(sessionID, state.SessionStatusCompleted, session.CurrentPhase); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	WriteJSON(w, http.StatusOK, map[string]string{
 		"status":     "stopped",
 		"session_id": sessionID,
 	})
@@ -380,7 +428,7 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, SessionListResponse{
+	WriteJSON(w, http.StatusOK, SessionListResponse{
 		Sessions: summaries,
 		Total:    len(summaries),
 	})

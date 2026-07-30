@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -175,13 +176,11 @@ func (s *SkillsStore) SearchSkills(query string) []skills.Skill {
 		return results
 	}
 
-	query = lowercase(query)
+	query = strings.ToLower(query)
 	var results []skills.Skill
 	for _, skill := range s.skills {
-		if lowercase(skill.Name) == query ||
-			lowercase(skill.Description) == query ||
-			lowercase(skill.Name) == query ||
-			lowercase(skill.Description) == query {
+		if strings.ToLower(skill.Name) == query ||
+			strings.ToLower(skill.Description) == query {
 			results = append(results, skill)
 		}
 	}
@@ -320,7 +319,7 @@ func (h *SkillsHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 		total += len(skills)
 	}
 
-	writeJSON(w, http.StatusOK, SkillListResponse{
+	WriteJSON(w, http.StatusOK, SkillListResponse{
 		Skills: response,
 		Total:  total,
 	})
@@ -331,32 +330,32 @@ func (h *SkillsHandler) ListSkills(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) CreateSkill(w http.ResponseWriter, r *http.Request) {
 	var req SkillRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Name == "" {
-		writeError(w, http.StatusBadRequest, "name is required")
+		WriteError(w, http.StatusBadRequest, "name is required")
 		return
 	}
 
 	if req.Type == "" {
-		writeError(w, http.StatusBadRequest, "type is required")
+		WriteError(w, http.StatusBadRequest, "type is required")
 		return
 	}
 
 	if req.Category == "" {
-		writeError(w, http.StatusBadRequest, "category is required")
+		WriteError(w, http.StatusBadRequest, "category is required")
 		return
 	}
 
 	skill, err := h.store.RegisterSkill(req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, SkillResponse{
+	WriteJSON(w, http.StatusCreated, SkillResponse{
 		Name:           skill.Name,
 		Type:           string(skill.Type),
 		Category:       string(skill.Category),
@@ -371,40 +370,40 @@ func (h *SkillsHandler) CreateSkill(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 	skillName := extractSkillID(r.URL.Path)
 	if skillName == "" {
-		writeError(w, http.StatusBadRequest, "skill ID is required")
+		WriteError(w, http.StatusBadRequest, "skill ID is required")
 		return
 	}
 
 	// Check if skill exists
 	_, err := h.store.GetSkill(skillName)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	var req SkillRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Type == "" {
-		writeError(w, http.StatusBadRequest, "type is required")
+		WriteError(w, http.StatusBadRequest, "type is required")
 		return
 	}
 
 	if req.Category == "" {
-		writeError(w, http.StatusBadRequest, "category is required")
+		WriteError(w, http.StatusBadRequest, "category is required")
 		return
 	}
 
 	updatedSkill, err := h.store.RegisterSkill(req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, SkillResponse{
+	WriteJSON(w, http.StatusOK, SkillResponse{
 		Name:           updatedSkill.Name,
 		Type:           string(updatedSkill.Type),
 		Category:       string(updatedSkill.Category),
@@ -419,16 +418,16 @@ func (h *SkillsHandler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 	skillName := extractSkillID(r.URL.Path)
 	if skillName == "" {
-		writeError(w, http.StatusBadRequest, "skill ID is required")
+		WriteError(w, http.StatusBadRequest, "skill ID is required")
 		return
 	}
 
 	if err := h.store.DeleteSkill(skillName); err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, SkillDeleteResponse{
+	WriteJSON(w, http.StatusOK, SkillDeleteResponse{
 		Message: fmt.Sprintf("skill %q deleted successfully", skillName),
 	})
 }
@@ -449,32 +448,32 @@ func (h *SkillsHandler) ExportSkills(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) ImportSkills(w http.ResponseWriter, r *http.Request) {
 	// Parse multipart form
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB limit
-		writeError(w, http.StatusBadRequest, "invalid form data")
+		WriteError(w, http.StatusBadRequest, "invalid form data")
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "file is required")
+		WriteError(w, http.StatusBadRequest, "file is required")
 		return
 	}
 	defer file.Close()
 
 	if header.Size == 0 {
-		writeError(w, http.StatusBadRequest, "file is empty")
+		WriteError(w, http.StatusBadRequest, "file is empty")
 		return
 	}
 
 	// Decode JSON
 	var imported map[string]skills.Skill
 	if err := json.NewDecoder(file).Decode(&imported); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON format")
+		WriteError(w, http.StatusBadRequest, "invalid JSON format")
 		return
 	}
 
 	count := h.store.ImportSkills(imported)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"message":  fmt.Sprintf("imported %d new skills", count),
 		"imported": count,
 	})
@@ -485,20 +484,20 @@ func (h *SkillsHandler) ImportSkills(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) GetAgentSkills(w http.ResponseWriter, r *http.Request) {
 	agentName := extractAgentID(r.URL.Path)
 	if agentName == "" {
-		writeError(w, http.StatusBadRequest, "agent ID is required")
+		WriteError(w, http.StatusBadRequest, "agent ID is required")
 		return
 	}
 
 	// Check if agent exists
 	_, err := h.agentRegistry.Get(agentName)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	assignedSkills, err := h.store.GetAgentSkills(agentName)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
@@ -514,7 +513,7 @@ func (h *SkillsHandler) GetAgentSkills(w http.ResponseWriter, r *http.Request) {
 		response.AvailableSkills = append(response.AvailableSkills, skillToResponse(skill))
 	}
 
-	writeJSON(w, http.StatusOK, response)
+	WriteJSON(w, http.StatusOK, response)
 }
 
 // SetAgentSkills handles PUT /api/agents/:id/skills
@@ -522,29 +521,29 @@ func (h *SkillsHandler) GetAgentSkills(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) SetAgentSkills(w http.ResponseWriter, r *http.Request) {
 	agentName := extractAgentID(r.URL.Path)
 	if agentName == "" {
-		writeError(w, http.StatusBadRequest, "agent ID is required")
+		WriteError(w, http.StatusBadRequest, "agent ID is required")
 		return
 	}
 
 	// Check if agent exists
 	_, err := h.agentRegistry.Get(agentName)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
+		WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
 	var req AgentSkillsUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if err := h.store.SetAgentSkills(agentName, req.Skills); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"message":    fmt.Sprintf("agent %q skills updated", agentName),
 		"agent_name": agentName,
 		"skills":     req.Skills,
@@ -557,7 +556,7 @@ func (h *SkillsHandler) SetAgentSkills(w http.ResponseWriter, r *http.Request) {
 func (h *SkillsHandler) ResetSkills(w http.ResponseWriter, r *http.Request) {
 	h.store.ResetSkills()
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"message":  "skills reset to defaults",
 		"reset_at": time.Now(),
 	})
@@ -578,8 +577,8 @@ func skillToResponse(s skills.Skill) SkillResponse {
 // extractSkillID extracts the skill ID from the URL path.
 // Expected format: /api/skills/{id} or /api/skills/{id}/...
 func extractSkillID(path string) string {
-	parts := splitPath(path)
-	if len(parts) < 3 {
+	parts := SplitPath(path)
+	if len(parts) < 4 {
 		return ""
 	}
 	// parts: ["", "api", "skills", "{id}"]
@@ -592,8 +591,8 @@ func extractSkillID(path string) string {
 // extractAgentID extracts the agent ID from the URL path.
 // Expected format: /api/agents/{id}/...
 func extractAgentID(path string) string {
-	parts := splitPath(path)
-	if len(parts) < 3 {
+	parts := SplitPath(path)
+	if len(parts) < 4 {
 		return ""
 	}
 	// parts: ["", "api", "agents", "{id}"]
@@ -601,17 +600,4 @@ func extractAgentID(path string) string {
 		return ""
 	}
 	return parts[3]
-}
-
-// lowercase converts a string to lowercase.
-func lowercase(s string) string {
-	var result []rune
-	for _, r := range s {
-		if r >= 'A' && r <= 'Z' {
-			result = append(result, r+32)
-		} else {
-			result = append(result, r)
-		}
-	}
-	return string(result)
 }
