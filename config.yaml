@@ -96,3 +96,11 @@ skills:
     formatter: "Format code according to project standards"
     linter: "Lint code for style and correctness"
     test_runner: "Execute test suites"
+
+# ─── Retry ────────────────────────────────────────────────────────────────────
+# Configure retry behavior for failed operations.
+
+retry:
+  max_retries: 3
+  backoff_base: 1000   # ms - base delay for exponential backoff
+  backoff_max: 30000   # ms - maximum delay between retries
