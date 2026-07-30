@@ -25,7 +25,7 @@
         <!-- Activity/Phase Info Panel (Right Sidebar) -->
         <div id="info-panel" class="w-80 bg-dark-800 flex flex-col overflow-hidden shrink-0">
             <!-- Phase Tracker -->
-            <div id="phase-tracker-container" class="h-1/2 border-b border-dark-600 overflow-y-auto"
+            <div id="phase-tracker-container" class="h-1/2 border-b border-dark-600 overflow-y-auto no-global-loading"
                  hx-get="/api/render/phase-tracker"
                  hx-trigger="load, every 5s"
                  hx-swap="innerHTML">
@@ -33,7 +33,7 @@
             </div>
 
             <!-- Activity Log -->
-            <div id="activity-log-container" class="h-1/2 overflow-y-auto"
+            <div id="activity-log-container" class="h-1/2 overflow-y-auto no-global-loading"
                  hx-get="/api/render/activity-log"
                  hx-trigger="load, every 3s"
                  hx-swap="innerHTML">
