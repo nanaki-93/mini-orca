@@ -23,8 +23,6 @@ type ConfigUpdateRequest struct {
 	Skills *config.SkillsConfig `json:"skills,omitempty"`
 	// Retry holds retry-related configuration updates.
 	Retry *config.RetryConfig `json:"retry,omitempty"`
-	// API holds API-related configuration updates.
-	API *config.APIConfig `json:"api,omitempty"`
 }
 
 // ConfigResponse represents the response body for configuration data.
@@ -37,8 +35,6 @@ type ConfigResponse struct {
 	Skills config.SkillsConfig `json:"skills"`
 	// Retry holds retry-related configuration.
 	Retry config.RetryConfig `json:"retry"`
-	// API holds API-related configuration.
-	API config.APIConfig `json:"api"`
 }
 
 // ModelListResponse represents the response body for listing available models.
@@ -140,12 +136,6 @@ func (s *ConfigStore) applyUpdates(req *ConfigUpdateRequest) error {
 		}
 	}
 
-	if req.API != nil {
-		if err := s.updateAPI(req.API); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -241,21 +231,6 @@ func (s *ConfigStore) updateRetry(retry *config.RetryConfig) error {
 	return nil
 }
 
-// updateAPI applies API configuration updates.
-func (s *ConfigStore) updateAPI(api *config.APIConfig) error {
-	if api.DefaultVersion != "" {
-		s.cfg.API.DefaultVersion = api.DefaultVersion
-	}
-	if api.DeprecatedVersions != nil {
-		s.cfg.API.DeprecatedVersions = api.DeprecatedVersions
-	}
-	if api.EnabledVersions != nil {
-		s.cfg.API.EnabledVersions = api.EnabledVersions
-	}
-
-	return nil
-}
-
 // copyConfig creates a deep copy of the configuration.
 func copyConfig(cfg *config.Config) *config.Config {
 	if cfg == nil {
@@ -298,12 +273,6 @@ func copyConfig(cfg *config.Config) *config.Config {
 		cfgCopy.Skills.Tools[k] = v
 	}
 
-	// Deep copy API versions
-	cfgCopy.API.DeprecatedVersions = make([]string, len(cfg.API.DeprecatedVersions))
-	copy(cfgCopy.API.DeprecatedVersions, cfg.API.DeprecatedVersions)
-	cfgCopy.API.EnabledVersions = make([]string, len(cfg.API.EnabledVersions))
-	copy(cfgCopy.API.EnabledVersions, cfg.API.EnabledVersions)
-
 	return &cfgCopy
 }
 
@@ -332,7 +301,6 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		Agents: cfg.Agents,
 		Skills: cfg.Skills,
 		Retry:  cfg.Retry,
-		API:    cfg.API,
 	})
 }
 

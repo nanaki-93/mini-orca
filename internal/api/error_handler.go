@@ -90,7 +90,7 @@ func (eh *ErrorHandler) generateErrorID() string {
 // Next returns an http.Handler that wraps the provided handler with error handling.
 func (eh *ErrorHandler) Next(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Create a custom response writer to capture status codes
+		// Create a custom response writer to capture status codes and buffer body
 		rw := &errorResponseWriter{
 			ResponseWriter: w,
 			status:         http.StatusOK,
@@ -99,14 +99,34 @@ func (eh *ErrorHandler) Next(next http.Handler) http.Handler {
 		// Serve the request
 		next.ServeHTTP(rw, r)
 
-		// Handle error status codes
+		// Handle error status codes only if the handler didn't write body content.
+		// If the handler wrote a body, flush it to the client.
 		switch rw.status {
 		case http.StatusNotFound:
-			eh.handleNotFound(w, r)
+			if !rw.bodyWritten {
+				eh.handleNotFound(w, r)
+			} else {
+				w.WriteHeader(rw.status)
+				w.Write(rw.body)
+			}
 		case http.StatusInternalServerError:
-			eh.handleInternalServerError(w, r)
+			if !rw.bodyWritten {
+				eh.handleInternalServerError(w, r)
+			} else {
+				w.WriteHeader(rw.status)
+				w.Write(rw.body)
+			}
 		case http.StatusMethodNotAllowed:
-			eh.handleMethodNotAllowed(w, r)
+			if !rw.bodyWritten {
+				eh.handleMethodNotAllowed(w, r)
+			} else {
+				w.WriteHeader(rw.status)
+				w.Write(rw.body)
+			}
+		default:
+			// Success response — flush the buffered body
+			w.WriteHeader(http.StatusOK)
+			w.Write(rw.body)
 		}
 	})
 }
@@ -116,7 +136,6 @@ func (eh *ErrorHandler) handleNotFound(w http.ResponseWriter, r *http.Request) {
 	// Check if this is an HTMX request
 	if isHTMXRequest(r) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, `
 			<div class="error-fallback p-6 text-center">
 				<svg class="w-12 h-12 text-error mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -143,12 +162,13 @@ func (eh *ErrorHandler) handleNotFound(w http.ResponseWriter, r *http.Request) {
 
 	if tmpl, ok := eh.templates["404.html"]; ok {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusNotFound)
 		if err := tmpl.ExecuteTemplate(w, "404.html", data); err != nil {
-			http.Error(w, "404 - Page Not Found", http.StatusNotFound)
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			fmt.Fprint(w, "404 - Page Not Found")
 		}
 	} else {
-		http.Error(w, "404 - Page Not Found", http.StatusNotFound)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprint(w, "404 - Page Not Found")
 	}
 }
 
@@ -157,7 +177,6 @@ func (eh *ErrorHandler) handleInternalServerError(w http.ResponseWriter, r *http
 	// Check if this is an HTMX request
 	if isHTMXRequest(r) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `
 			<div class="error-fallback p-6 text-center">
 				<svg class="w-12 h-12 text-error mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -184,12 +203,13 @@ func (eh *ErrorHandler) handleInternalServerError(w http.ResponseWriter, r *http
 
 	if tmpl, ok := eh.templates["500.html"]; ok {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusInternalServerError)
 		if err := tmpl.ExecuteTemplate(w, "500.html", data); err != nil {
-			http.Error(w, "500 - Internal Server Error", http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			fmt.Fprint(w, "500 - Internal Server Error")
 		}
 	} else {
-		http.Error(w, "500 - Internal Server Error", http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprint(w, "500 - Internal Server Error")
 	}
 }
 
@@ -197,7 +217,6 @@ func (eh *ErrorHandler) handleInternalServerError(w http.ResponseWriter, r *http
 func (eh *ErrorHandler) handleMethodNotAllowed(w http.ResponseWriter, r *http.Request) {
 	if isHTMXRequest(r) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusMethodNotAllowed)
 		fmt.Fprintf(w, `
 			<div class="error-fallback p-6 text-center">
 				<svg class="w-12 h-12 text-warning mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -215,33 +234,36 @@ func (eh *ErrorHandler) handleMethodNotAllowed(w http.ResponseWriter, r *http.Re
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusMethodNotAllowed)
 	fmt.Fprintf(w, `<h1>405 Method Not Allowed</h1><p>The method %s is not allowed for this endpoint.</p>`, r.Method)
 }
 
-// errorResponseWriter wraps http.ResponseWriter to capture status codes.
+// errorResponseWriter wraps http.ResponseWriter to capture status codes
+// and buffer body content, allowing the ErrorHandler to intercept error responses.
 type errorResponseWriter struct {
 	http.ResponseWriter
-	status  int
-	written bool
+	status        int
+	headerWritten bool
+	bodyWritten   bool
+	body          []byte
 }
 
-// WriteHeader captures the status code.
+// WriteHeader captures the status code without writing it to the underlying writer.
 func (ew *errorResponseWriter) WriteHeader(status int) {
-	if !ew.written {
+	if !ew.headerWritten {
+		ew.headerWritten = true
 		ew.status = status
-		ew.written = true
-		ew.ResponseWriter.WriteHeader(status)
 	}
 }
 
-// Write captures writes and defaults to 200 if not set.
+// Write captures body content in a buffer instead of writing it immediately.
 func (ew *errorResponseWriter) Write(b []byte) (int, error) {
-	if !ew.written {
+	if !ew.headerWritten {
+		ew.headerWritten = true
 		ew.status = http.StatusOK
-		ew.written = true
 	}
-	return ew.ResponseWriter.Write(b)
+	ew.bodyWritten = true
+	ew.body = append(ew.body, b...)
+	return len(b), nil
 }
 
 // isHTMXRequest checks if the request is an HTMX request.

@@ -130,7 +130,7 @@ func main() {
 	}
 
 	// Start HTTP server with all API endpoints
-	server := startHTTPServer(agentOrchestrator, store, sessionStore, gateStore, projectStore, htmxRenderHandler, cfg.API)
+	server := startHTTPServer(agentOrchestrator, store, sessionStore, gateStore, projectStore, htmxRenderHandler)
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
@@ -337,7 +337,6 @@ func startHTTPServer(
 	gateStore *api.GateStore,
 	projectStore *handlers.ProjectStore,
 	htmxRenderHandler *handlers.HTMXRenderHandler,
-	apiConfig config.APIConfig,
 ) *http.Server {
 	mux := http.NewServeMux()
 
@@ -371,7 +370,12 @@ func startHTTPServer(
 	mux.HandleFunc("POST /api/sessions", sessionHandler.CreateSession)
 	mux.HandleFunc("GET /api/sessions", sessionHandler.ListSessions)
 	mux.HandleFunc("GET /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
-		sessionHandler.GetSessionStatus(w, r)
+		parts := splitPath(r.URL.Path)
+		if len(parts) >= 5 && parts[4] == "gate" {
+			gateHandler.GetGateStatus(w, r)
+		} else {
+			sessionHandler.GetSessionStatus(w, r)
+		}
 	})
 	mux.HandleFunc("POST /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
 		// Route to appropriate lifecycle handler
@@ -393,15 +397,6 @@ func startHTTPServer(
 		}
 	})
 
-	// Register gate status route
-	mux.HandleFunc("GET /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
-		if len(splitPath(r.URL.Path)) >= 5 && splitPath(r.URL.Path)[4] == "gate" {
-			gateHandler.GetGateStatus(w, r)
-		} else {
-			sessionHandler.GetSessionStatus(w, r)
-		}
-	})
-
 	// Register project routes
 	projectHandler := handlers.NewProjectHandler(projectStore)
 	mux.HandleFunc("GET /api/projects", projectHandler.ListProjects)
@@ -417,7 +412,7 @@ func startHTTPServer(
 			}
 		}
 	})
-	mux.HandleFunc("GET /api/projects//files/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/projects/files/", func(w http.ResponseWriter, r *http.Request) {
 		projectHandler.GetFileContent(w, r)
 	})
 
@@ -443,11 +438,9 @@ func startHTTPServer(
 		handler = errorHandler.Next(handler)
 	}
 
-	// Wrap with version middleware for backward compatibility
-	versionMiddleware := api.NewVersionMiddleware(apiConfig, log.Printf)
 	server := &http.Server{
 		Addr:         ":8080",
-		Handler:      versionMiddleware.Next(handler),
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
