@@ -217,6 +217,35 @@ func NewTemplateEngine(basePath string) (*TemplateEngine, error) {
 
 // loadTemplates loads all embedded templates from disk.
 func (te *TemplateEngine) loadTemplates() error {
+	// Load root-level templates (base, ide, etc.)
+	rootFiles, err := os.ReadDir(te.basePath)
+	if err != nil {
+		return fmt.Errorf("read root dir: %w", err)
+	}
+
+	var rootTemplatePaths []string
+	for _, entry := range rootFiles {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".html") {
+			rootTemplatePaths = append(rootTemplatePaths, filepath.Join(te.basePath, entry.Name()))
+		}
+	}
+
+	if len(rootTemplatePaths) > 0 {
+		funcs := te.funcMap()
+		tmpl, err := template.New("").Funcs(funcs).ParseFiles(rootTemplatePaths...)
+		if err != nil {
+			return fmt.Errorf("parse root templates: %w", err)
+		}
+		te.mu.Lock()
+		for _, t := range tmpl.Templates() {
+			if t != nil {
+				name := t.Name()
+				te.templates[name] = t
+			}
+		}
+		te.mu.Unlock()
+	}
+
 	// Load component templates
 	if err := te.loadDir("components"); err != nil {
 		return fmt.Errorf("load components: %w", err)
@@ -494,6 +523,177 @@ func (te *TemplateEngine) funcMap() template.FuncMap {
 			}
 			return dict, nil
 		},
+		"agentIconClass": func(name string) string {
+			switch name {
+			case "planner":
+				return "bg-blue-500/20 text-blue-400"
+			case "coder":
+				return "bg-green-500/20 text-green-400"
+			case "tester":
+				return "bg-yellow-500/20 text-yellow-400"
+			case "reviewer":
+				return "bg-purple-500/20 text-purple-400"
+			default:
+				return "bg-dark-600 text-text-secondary"
+			}
+		},
+		"agentIcon": func(name string) string {
+			switch name {
+			case "planner":
+				return `<svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 9.5A3.5 3.5 0 005.5 13H9v2.586l-1.293-1.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 15.586V13h2.5a4.5 4.5 0 10-.616-8.958 4.002 4.002 0 10-7.753 1.977A3.5 3.5 0 002 9.5zm9 3.5H9V8a1 1 0 012 0v5z" clip-rule="evenodd"/></svg>`
+			case "coder":
+				return `<svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M13.5 2a2 2 0 012 2v12a2 2 0 01-2 2h-7a2 2 0 01-2-2V4a2 2 0 012-2h7zm0 2h-7v12h7V4zM7 7a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5A.5.5 0 017 7zm0 2.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zm0 2.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z" clip-rule="evenodd"/></svg>`
+			case "tester":
+				return `<svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.5.5 0 000-1H3.999A.5.5 0 003.5 15v3a.5.5 0 00.5.5h3a.5.5 0 00.5-.5v-2.433l.311.312a7.5 7.5 0 0012.548-3.362.5.5 0 00-.049-.586l-.002-.001zM10 4a6 6 0 100 12A6 6 0 0010 4z" clip-rule="evenodd"/></svg>`
+			case "reviewer":
+				return `<svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/><path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>`
+			default:
+				return `<svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>`
+			}
+		},
+		"humanName": func(name string) string {
+			switch name {
+			case "planner":
+				return "Planner"
+			case "coder":
+				return "Coder"
+			case "tester":
+				return "Tester"
+			case "reviewer":
+				return "Reviewer"
+			default:
+				return title(name)
+			}
+		},
+		"categoryBadgeClass": func(cat string) string {
+			switch cat {
+			case "knowledge":
+				return "badge-knowledge"
+			case "tool":
+				return "badge-tool"
+			default:
+				return "badge-default"
+			}
+		},
+		"curlyOpen":  func() string { return "{{" },
+		"curlyClose": func() string { return "}}" },
+		"default": func(val, fallback interface{}) interface{} {
+			if val == nil {
+				return fallback
+			}
+			return val
+		},
+		"scoreColor": func(p int) string {
+			if p >= 80 {
+				return "#22c55e"
+			}
+			if p >= 60 {
+				return "#eab308"
+			}
+			if p >= 40 {
+				return "#f97316"
+			}
+			return "#ef4444"
+		},
+		"totalIssues": func(issues []interface{}) int { return len(issues) },
+		"countBySeverity": func(issues []interface{}, severity string) int {
+			count := 0
+			for _, issue := range issues {
+				if m, ok := issue.(map[string]interface{}); ok {
+					if s, ok := m["severity"].(string); ok && s == severity {
+						count++
+					}
+				}
+			}
+			return count
+		},
+		"filterBySeverity": func(issues []interface{}, severity string) []interface{} {
+			result := []interface{}{}
+			for _, issue := range issues {
+				if m, ok := issue.(map[string]interface{}); ok {
+					if s, ok := m["severity"].(string); ok && s == severity {
+						result = append(result, issue)
+					}
+				}
+			}
+			return result
+		},
+		"isSkillAssigned": func(skillName string, skills []string) bool {
+			for _, s := range skills {
+				if s == skillName {
+					return true
+				}
+			}
+			return false
+		},
+		"phaseBorderClass": func(s string) string {
+			switch s {
+			case "completed":
+				return "border-green-500"
+			case "failed":
+				return "border-red-500"
+			case "in-progress":
+				return "border-blue-500"
+			case "waiting":
+				return "border-yellow-500"
+			default:
+				return "border-dark-600"
+			}
+		},
+		"phaseDotClass": func(s string) string {
+			switch s {
+			case "completed":
+				return "bg-green-500"
+			case "failed":
+				return "bg-red-500"
+			case "in-progress":
+				return "bg-blue-500 animate-pulse"
+			case "waiting":
+				return "bg-yellow-500"
+			default:
+				return "bg-dark-600"
+			}
+		},
+		"phaseProgressClass": func(s string) string {
+			switch s {
+			case "completed":
+				return "bg-green-500"
+			case "failed":
+				return "bg-red-500"
+			case "in-progress":
+				return "bg-blue-500"
+			case "waiting":
+				return "bg-yellow-500"
+			default:
+				return "bg-dark-600"
+			}
+		},
+		"phaseTextClass": func(s string) string {
+			switch s {
+			case "completed":
+				return "text-green-500"
+			case "failed":
+				return "text-red-500"
+			case "in-progress":
+				return "text-blue-500 font-bold"
+			case "waiting":
+				return "text-yellow-500"
+			default:
+				return "text-text-secondary"
+			}
+		},
+		"coverageColor": func(p int) string {
+			if p >= 80 {
+				return "#22c55e"
+			}
+			if p >= 60 {
+				return "#eab308"
+			}
+			if p >= 40 {
+				return "#f97316"
+			}
+			return "#ef4444"
+		},
 	}
 }
 
@@ -533,6 +733,26 @@ func (te *TemplateEngine) RenderComponentPartial(name string, data interface{}) 
 	}
 
 	return buf.String(), nil
+}
+
+// RenderMain renders the main page with the given content template.
+func (te *TemplateEngine) RenderMain(w http.ResponseWriter, contentTemplate string) {
+	te.mu.RLock()
+	baseTmpl, ok := te.templates["base"]
+	te.mu.RUnlock()
+
+	if !ok {
+		http.Error(w, "base template not found", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := baseTmpl.ExecuteTemplate(w, "base", map[string]interface{}{
+		"Content": contentTemplate,
+	}); err != nil {
+		http.Error(w, "failed to render page", http.StatusInternalServerError)
+		return
+	}
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -873,6 +1093,11 @@ func getCurrentPhaseInfo(session *state.Session) (string, string) {
 	default:
 		return "Unknown", "pending"
 	}
+}
+
+// RenderMainPage renders the main IDE page.
+func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Request) {
+	h.templateEngine.RenderMain(w, "ide")
 }
 
 // lower converts a string to lowercase.
