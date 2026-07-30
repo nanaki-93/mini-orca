@@ -178,6 +178,16 @@
 
         // HTMX Event Listeners
         document.addEventListener('htmx:beforeRequest', (event) => {
+            const elt = event.detail.elt;
+
+            // Skip loading for polling or elements that explicitly disable it
+            if (elt) {
+                const trigger = elt.getAttribute('hx-trigger') || '';
+                if (trigger.includes('every') || elt.classList.contains('no-global-loading')) {
+                    return;
+                }
+            }
+
             const config = event.detail.requestConfig;
             const method = config ? config.verb?.toUpperCase() : '';
 
@@ -185,21 +195,13 @@
             if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
                 globalLoading.show('Processing...');
             }
-            // Show loading for slow GET requests (> 500ms)
+            // Show loading for standard GET requests
             else if (method === 'GET') {
                 globalLoading.show('Loading...');
             }
         });
 
         document.addEventListener('htmx:afterRequest', (event) => {
-            globalLoading.hide();
-        });
-
-        document.addEventListener('htmx:beforeOnLoad', (event) => {
-            globalLoading.show('Loading...');
-        });
-
-        document.addEventListener('htmx:afterOnLoad', (event) => {
             globalLoading.hide();
         });
 

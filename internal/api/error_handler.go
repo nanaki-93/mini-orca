@@ -124,8 +124,8 @@ func (eh *ErrorHandler) Next(next http.Handler) http.Handler {
 				w.Write(rw.body)
 			}
 		default:
-			// Success response — flush the buffered body
-			w.WriteHeader(http.StatusOK)
+			// Success or other unhandled response — flush the buffered body
+			w.WriteHeader(rw.status)
 			w.Write(rw.body)
 		}
 	})
