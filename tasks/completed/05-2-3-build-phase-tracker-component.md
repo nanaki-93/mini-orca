@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the phase tracker component.
 
 ## Checklist
-- [ ] Create `internal/api/templates/components/phase-tracker.html`
+- [ ] Create `../../internal/api/templates/components/phase-tracker.html`
 - [ ] Horizontal progress bar with phases
 - [ ] Color coding: pending, in-progress, completed, failed, waiting
 - [ ] Show current phase prominently
@@ -18,7 +18,7 @@ Create the phase tracker component.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/templates/components/phase-tracker.html`
+- `../../internal/api/templates/components/phase-tracker.html`
 
 ## Status
 - [ ] Not Started

@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the activity log component.
 
 ## Checklist
-- [ ] Create `internal/api/templates/components/activity-log.html`
+- [ ] Create `../../internal/api/templates/components/activity-log.html`
 - [ ] Scrollable log panel
 - [ ] Show timestamp, phase, action, status
 - [ ] Color-code by type (LLM call, file op, test, review)
@@ -18,7 +18,7 @@ Create the activity log component.
 - Task 5.1.2
 
 ## Deliverables
-- `internal/api/templates/components/activity-log.html`
+- `../../internal/api/templates/components/activity-log.html`
 
 ## Status
 - [ ] Not Started

@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create project management API handlers.
 
 ## Checklist
-- [ ] Create `internal/api/handlers/project.go`
+- [ ] Create `../../internal/api/handlers/project.go`
 - [ ] `GET /api/projects` — List projects
 - [ ] `POST /api/projects` — Create/open project
 - [ ] `GET /api/projects/:id/files` — List files
@@ -17,7 +17,7 @@ Create project management API handlers.
 - Task 3.2.2
 
 ## Deliverables
-- `internal/api/handlers/project.go`
+- `../../internal/api/handlers/project.go`
 
 ## Status
 - [ ] Not Started

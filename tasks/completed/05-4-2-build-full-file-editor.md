@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the full file editor component.
 
 ## Checklist
-- [x] Create `internal/api/templates/editors/full-file-editor.html`
+- [x] Create `../../internal/api/templates/editors/full-file-editor.html`
 - [x] Display entire file
 - [x] Full editing mode
 - [x] Save button (HTMX POST)

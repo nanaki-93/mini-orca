@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create configuration API handlers.
 
 ## Checklist
-- [ ] Create `internal/api/handlers/config.go`
+- [ ] Create `../../internal/api/handlers/config.go`
 - [ ] `GET /api/config` — Get current config
 - [ ] `PUT /api/config` — Update config
 - [ ] `GET /api/config/models` — List available models
@@ -17,7 +17,7 @@ Create configuration API handlers.
 - Task 1.3.3
 
 ## Deliverables
-- `internal/api/handlers/config.go`
+- `../../internal/api/handlers/config.go`
 
 ## Status
 - [ ] Not Started

@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create the function-level editor component.
 
 ## Checklist
-- [x] Create `internal/api/templates/editors/code-editor.html`
+- [x] Create `../../internal/api/templates/editors/code-editor.html`
 - [x] Display single function
 - [x] Editable textarea mode
 - [x] Syntax highlighting

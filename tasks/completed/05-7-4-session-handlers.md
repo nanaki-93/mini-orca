@@ -7,7 +7,7 @@ Milestone 5: IDE-like HTMX Frontend
 Create session management API handlers.
 
 ## Checklist
-- [ ] Create `internal/api/handlers/session.go`
+- [ ] Create `../../internal/api/handlers/session.go`
 - [ ] `GET /api/sessions` — List sessions
 - [ ] `GET /api/sessions/:id` — Get session details
 - [ ] `POST /api/sessions` — Create session
@@ -22,7 +22,7 @@ Create session management API handlers.
 - Task 4.8.2
 
 ## Deliverables
-- `internal/api/handlers/session.go`
+- `../../internal/api/handlers/session.go`
 
 ## Status
 - [ ] Not Started
