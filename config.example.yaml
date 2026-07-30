@@ -104,3 +104,17 @@ retry:
   max_retries: 3
   backoff_base: 1000   # ms - base delay for exponential backoff
   backoff_max: 30000   # ms - maximum delay between retries
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+# Configure structured logging.
+
+logging:
+  level: "info"         # debug, info, warn, error
+  format: "json"        # json or text
+  filename: ""          # Optional: path to log file (default: stdout)
+  sensitive_keys:       # Optional: list of keys to redact from logs
+    - "password"
+    - "secret"
+    - "api_key"
+    - "token"
+    - "authorization"

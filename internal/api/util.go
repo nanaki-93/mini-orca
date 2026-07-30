@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
 )
 
 // ErrorResponse represents an error response body.
+// Deprecated: use apperrors.Error instead
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -20,9 +23,35 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 // WriteError writes an error JSON response to the HTTP writer.
 func WriteError(w http.ResponseWriter, status int, message string) {
+	// For backward compatibility, we create an AppError
+	errType := apperrors.TypeInternal
+	switch status {
+	case http.StatusNotFound:
+		errType = apperrors.TypeNotFound
+	case http.StatusBadRequest:
+		errType = apperrors.TypeBadRequest
+	case http.StatusUnauthorized:
+		errType = apperrors.TypeUnauthorized
+	case http.StatusForbidden:
+		errType = apperrors.TypeForbidden
+	case http.StatusConflict:
+		errType = apperrors.TypeConflict
+	}
+
+	appErr := apperrors.New(errType, message, message, status, nil)
+	WriteAppError(w, appErr)
+}
+
+// WriteAppError writes a centralized error to the HTTP writer.
+func WriteAppError(w http.ResponseWriter, err error) {
+	appErr, ok := apperrors.AsError(err)
+	if !ok {
+		appErr = apperrors.Internal("unhandled error", "", err)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(ErrorResponse{Error: message})
+	w.WriteHeader(appErr.Code)
+	json.NewEncoder(w).Encode(appErr)
 }
 
 // SplitPath splits a URL path into its components.

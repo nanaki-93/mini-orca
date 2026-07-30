@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/nanaki-93/mini-orca/internal/logging"
 )
 
 // formatterExecutor implements code formatting for the Executor interface.
@@ -149,7 +150,7 @@ func (f *formatterExecutor) findProjectRoot(filePath string) (string, error) {
 // formatGoFile formats a Go file using gofmt.
 func (f *formatterExecutor) formatGoFile(path string) error {
 	if _, err := exec.LookPath("gofmt"); err != nil {
-		log.Printf("formatter: gofmt not installed, skipping formatting for %s", path)
+		logging.Warn("Formatter not installed", "formatter", "gofmt", "path", path)
 		return nil
 	}
 
@@ -163,7 +164,7 @@ func (f *formatterExecutor) formatGoFile(path string) error {
 // formatKotlinFile formats a Kotlin file using ktlint.
 func (f *formatterExecutor) formatKotlinFile(path string) error {
 	if _, err := exec.LookPath("ktlint"); err != nil {
-		log.Printf("formatter: ktlint not installed, skipping formatting for %s", path)
+		logging.Warn("Formatter not installed", "formatter", "ktlint", "path", path)
 		return nil
 	}
 
@@ -177,7 +178,7 @@ func (f *formatterExecutor) formatKotlinFile(path string) error {
 // formatJavaFile formats a Java file using google-java-format.
 func (f *formatterExecutor) formatJavaFile(path string) error {
 	if _, err := exec.LookPath("google-java-format"); err != nil {
-		log.Printf("formatter: google-java-format not installed, skipping formatting for %s", path)
+		logging.Warn("Formatter not installed", "formatter", "google-java-format", "path", path)
 		return nil
 	}
 
@@ -191,7 +192,7 @@ func (f *formatterExecutor) formatJavaFile(path string) error {
 // formatRustFile formats a Rust file using rustfmt.
 func (f *formatterExecutor) formatRustFile(path string) error {
 	if _, err := exec.LookPath("rustfmt"); err != nil {
-		log.Printf("formatter: rustfmt not installed, skipping formatting for %s", path)
+		logging.Warn("Formatter not installed", "formatter", "rustfmt", "path", path)
 		return nil
 	}
 
@@ -205,7 +206,7 @@ func (f *formatterExecutor) formatRustFile(path string) error {
 // formatTypeScriptFile formats a TypeScript file using prettier.
 func (f *formatterExecutor) formatTypeScriptFile(path string) error {
 	if _, err := exec.LookPath("npx"); err != nil {
-		log.Printf("formatter: npx not installed, skipping formatting for %s", path)
+		logging.Warn("Formatter not installed", "formatter", "npx", "path", path)
 		return nil
 	}
 
@@ -219,7 +220,7 @@ func (f *formatterExecutor) formatTypeScriptFile(path string) error {
 // formatPythonFile formats a Python file using black.
 func (f *formatterExecutor) formatPythonFile(path string) error {
 	if _, err := exec.LookPath("black"); err != nil {
-		log.Printf("formatter: black not installed, skipping formatting for %s", path)
+		logging.Warn("Formatter not installed", "formatter", "black", "path", path)
 		return nil
 	}
 

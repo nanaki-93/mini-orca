@@ -10,10 +10,19 @@ import (
 
 // Config is the top-level configuration struct.
 type Config struct {
-	Models ModelsConfig `json:"models" yaml:"models"`
-	Agents AgentsConfig `json:"agents" yaml:"agents"`
-	Skills SkillsConfig `json:"skills" yaml:"skills"`
-	Retry  RetryConfig  `json:"retry" yaml:"retry"`
+	Models  ModelsConfig  `json:"models" yaml:"models"`
+	Agents  AgentsConfig  `json:"agents" yaml:"agents"`
+	Skills  SkillsConfig  `json:"skills" yaml:"skills"`
+	Retry   RetryConfig   `json:"retry" yaml:"retry"`
+	Logging LoggingConfig `json:"logging" yaml:"logging"`
+}
+
+// LoggingConfig holds configuration for the logger.
+type LoggingConfig struct {
+	Level         string   `json:"level" yaml:"level"`
+	Format        string   `json:"format" yaml:"format"`
+	Filename      string   `json:"filename" yaml:"filename"`
+	SensitiveKeys []string `json:"sensitive_keys" yaml:"sensitive_keys"`
 }
 
 // ModelsConfig holds model-related configuration.
@@ -98,6 +107,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Retry.BackoffMax == 0 {
 		c.Retry.BackoffMax = 30000
+	}
+	if c.Logging.Level == "" {
+		c.Logging.Level = "info"
+	}
+	if c.Logging.Format == "" {
+		c.Logging.Format = "json"
 	}
 }
 

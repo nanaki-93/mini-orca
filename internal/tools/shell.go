@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/internal/logging"
 )
 
 // DefaultTimeout is the default timeout for command execution.
@@ -93,7 +94,7 @@ func (s *safeShellExecutor) isCommandAllowed(cmd string) bool {
 
 // logCommand logs the executed command for audit trail.
 func (s *safeShellExecutor) logCommand(cmd string, args []string) {
-	log.Printf("[safe-shell] Executing: %s %s", cmd, strings.Join(args, " "))
+	logging.Info("Executing command", "provider", "safe-shell", "cmd", cmd, "args", args)
 }
 
 // Shell executes a shell command with the given arguments and returns the result.
@@ -178,7 +179,7 @@ func (s *safeShellExecutor) Shell(ctx context.Context, command string, args ...s
 
 	// Check for dangerous commands
 	if s.isDangerousCommand(command, args) {
-		log.Printf("[safe-shell] Blocked dangerous command: %s %s", command, strings.Join(args, " "))
+		logging.Warn("Blocked dangerous command", "provider", "safe-shell", "cmd", command, "args", args)
 		return nil, fmt.Errorf("safe-shell: dangerous command blocked: %s %s", command, strings.Join(args, " "))
 	}
 

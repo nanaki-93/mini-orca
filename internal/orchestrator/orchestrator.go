@@ -630,21 +630,25 @@ func extractCodeBlocks(output string) []codeBlock {
 
 	// Split by triple backticks
 	parts := strings.Split(output, "```")
-	for i := 0; i < len(parts)-1; i += 2 {
-		// First part is the language specifier
-		language := strings.TrimSpace(parts[i])
+	// parts[0] is text before first ```
+	// parts[1] is content between first and second ```
+	// ...
+	for i := 1; i < len(parts); i += 2 {
+		content := parts[i]
+		lines := strings.SplitN(content, "\n", 2)
+		language := "go"
+		code := content
+		if len(lines) > 1 {
+			language = strings.TrimSpace(lines[0])
+			code = lines[1]
+		}
 		if language == "" {
-			language = "go" // Default to Go
+			language = "go"
 		}
-
-		// Second part is the content
-		content := strings.TrimSpace(parts[i+1])
-		if content != "" {
-			blocks = append(blocks, codeBlock{
-				Language: language,
-				Content:  content,
-			})
-		}
+		blocks = append(blocks, codeBlock{
+			Language: language,
+			Content:  strings.TrimSpace(code),
+		})
 	}
 
 	return blocks
@@ -658,10 +662,17 @@ func sanitizeFilename(name string) string {
 		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' {
 			sb.WriteRune(ch)
 		} else {
-			sb.WriteString("_")
+			sb.WriteRune('_')
 		}
 	}
-	return sb.String()
+
+	// Convert to lowercase and replace multiple underscores
+	result := strings.ToLower(sb.String())
+	for strings.Contains(result, "__") {
+		result = strings.ReplaceAll(result, "__", "_")
+	}
+
+	return strings.Trim(result, "_")
 }
 
 // runTesting executes the testing phase of the pipeline.

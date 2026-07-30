@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
 	"github.com/nanaki-93/mini-orca/internal/orchestrator"
 )
 
@@ -77,13 +78,13 @@ func NewGateHandler(gateStore *GateStore, router *orchestrator.PhaseRouter) *Gat
 func (h *GateHandler) GetGateStatus(w http.ResponseWriter, r *http.Request) {
 	sessionID := ExtractSessionID(r.URL.Path)
 	if sessionID == "" {
-		WriteError(w, http.StatusBadRequest, "session ID is required")
+		WriteAppError(w, apperrors.BadRequest("session ID is required", "A session ID must be provided in the URL.", nil))
 		return
 	}
 
 	gate, ok := h.gateStore.GetGate(sessionID)
 	if !ok {
-		WriteError(w, http.StatusNotFound, "gate not found for session")
+		WriteAppError(w, apperrors.NotFound("gate not found", "No active approval gate found for this session.", nil))
 		return
 	}
 
@@ -104,29 +105,29 @@ func (h *GateHandler) GetGateStatus(w http.ResponseWriter, r *http.Request) {
 func (h *GateHandler) RespondToGate(w http.ResponseWriter, r *http.Request) {
 	sessionID := ExtractSessionID(r.URL.Path)
 	if sessionID == "" {
-		WriteError(w, http.StatusBadRequest, "session ID is required")
+		WriteAppError(w, apperrors.BadRequest("session ID is required", "A session ID must be provided in the URL.", nil))
 		return
 	}
 
 	gate, ok := h.gateStore.GetGate(sessionID)
 	if !ok {
-		WriteError(w, http.StatusNotFound, "gate not found for session")
+		WriteAppError(w, apperrors.NotFound("gate not found", "No active approval gate found for this session.", nil))
 		return
 	}
 
 	var req GateResponseRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid request body")
+		WriteAppError(w, apperrors.BadRequest("invalid request body", "The request body could not be parsed as JSON.", err))
 		return
 	}
 
 	if req.Action == "" {
-		WriteError(w, http.StatusBadRequest, "action is required")
+		WriteAppError(w, apperrors.BadRequest("action is required", "A response action (e.g., 'approve', 'reject') is required.", nil))
 		return
 	}
 
 	if err := gate.Respond(req.Action, req.Feedback); err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
+		WriteAppError(w, apperrors.BadRequest("gate response failed", "Failed to process gate response: "+err.Error(), err))
 		return
 	}
 
@@ -136,7 +137,7 @@ func (h *GateHandler) RespondToGate(w http.ResponseWriter, r *http.Request) {
 		if len(validTransitions) > 0 {
 			nextPhase := validTransitions[0]
 			if err := h.router.TransitionTo(nextPhase); err != nil {
-				WriteError(w, http.StatusConflict, "phase transition failed: "+err.Error())
+				WriteAppError(w, apperrors.Conflict("phase transition failed", "Could not transition to the next phase: "+err.Error(), err))
 				return
 			}
 		}

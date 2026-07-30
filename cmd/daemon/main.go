@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +15,7 @@ import (
 	"github.com/nanaki-93/mini-orca/internal/api"
 	"github.com/nanaki-93/mini-orca/internal/api/handlers"
 	"github.com/nanaki-93/mini-orca/internal/config"
+	"github.com/nanaki-93/mini-orca/internal/logging"
 	"github.com/nanaki-93/mini-orca/internal/model"
 	"github.com/nanaki-93/mini-orca/internal/orchestrator"
 	"github.com/nanaki-93/mini-orca/internal/state"
@@ -26,18 +26,29 @@ func main() {
 	// Load configuration
 	cfg, err := loadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logging.Error("Failed to load config", "error", err)
+		os.Exit(1)
 	}
+
+	// Initialize logger
+	logging.Init(logging.Config{
+		Level:         cfg.Logging.Level,
+		Format:        cfg.Logging.Format,
+		Filename:      cfg.Logging.Filename,
+		SensitiveKeys: cfg.Logging.SensitiveKeys,
+	})
 
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Invalid configuration: %v", err)
+		logging.Error("Invalid configuration", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize router
 	router, err := initRouter(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize router: %v", err)
+		logging.Error("Failed to initialize router", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize skills registry and register config skills
@@ -63,7 +74,7 @@ func main() {
 	templatesPath := "internal/api/templates"
 	templateEngine, err := handlers.NewTemplateEngine(templatesPath)
 	if err != nil {
-		log.Printf("Warning: failed to initialize template engine: %v", err)
+		logging.Warn("Failed to initialize template engine", "error", err)
 		templateEngine = nil
 	}
 
@@ -90,42 +101,43 @@ func main() {
 	reviewer.SetSkills(cfg.Agents.Reviewer.Skills)
 
 	// Log successful startup
-	log.Println("Mini-Orca daemon started successfully")
-	log.Printf("Active provider: %s", cfg.Models.ActiveProvider)
-	log.Printf("Registered providers: %v", router.ListProviders())
-	log.Printf("Configured phases: %d", len(cfg.Models.Phases))
+	logging.Info("Mini-Orca daemon started successfully")
+	logging.Info("Startup config",
+		"active_provider", cfg.Models.ActiveProvider,
+		"registered_providers", router.ListProviders(),
+		"configured_phases", len(cfg.Models.Phases))
 
 	// Log project type and executor
 	if projectInfo != nil {
-		log.Printf("Detected project type: %s (root: %s)", projectInfo.Type, projectInfo.RootDir)
+		logging.Info("Project info", "type", projectInfo.Type, "root_dir", projectInfo.RootDir)
 	} else {
-		log.Println("Project type: generic (unknown) - using shell-only executor")
+		logging.Info("Project type: generic (unknown) - using shell-only executor")
 	}
 	if executor != nil {
-		log.Printf("Tool executor initialized successfully")
+		logging.Info("Tool executor initialized successfully")
 	}
 	if agentOrchestrator != nil {
-		log.Println("Orchestrator initialized with executor")
+		logging.Info("Orchestrator initialized with executor")
 	}
 
 	// Log registered agents and their skills
-	log.Printf("Agent: %s (%s) — skills: %v", planner.Name(), planner.Description(), planner.GetSkills())
-	log.Printf("Agent: %s (%s) — skills: %v", coder.Name(), coder.Description(), coder.GetSkills())
-	log.Printf("Agent: %s (%s) — skills: %v", tester.Name(), tester.Description(), tester.GetSkills())
-	log.Printf("Agent: %s (%s) — skills: %v", reviewer.Name(), reviewer.Description(), reviewer.GetSkills())
+	logging.Info("Agent registered", "name", planner.Name(), "description", planner.Description(), "skills", planner.GetSkills())
+	logging.Info("Agent registered", "name", coder.Name(), "description", coder.Name(), "skills", coder.GetSkills())
+	logging.Info("Agent registered", "name", tester.Name(), "description", tester.Description(), "skills", tester.GetSkills())
+	logging.Info("Agent registered", "name", reviewer.Name(), "description", reviewer.Description(), "skills", reviewer.GetSkills())
 
 	// Log registered agents from registry
-	log.Printf("Registered agents: %v", agentRegistry.List())
+	logging.Info("Registered agents from registry", "agents", agentRegistry.List())
 
 	// List available models
 	listClient := agent.NewClient(router)
 	models, err := listClient.ListModels()
 	if err != nil {
-		log.Printf("Warning: failed to list models: %v", err)
+		logging.Warn("Failed to list models", "error", err)
 	} else {
-		log.Printf("Available models: %d", len(models))
+		logging.Info("Available models", "count", len(models))
 		for _, m := range models {
-			log.Printf("  - %s (owned by: %s)", m.ID, m.OwnedBy)
+			logging.Debug("Model detail", "id", m.ID, "owned_by", m.OwnedBy)
 		}
 	}
 
@@ -134,16 +146,16 @@ func main() {
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
-	log.Printf("Received signal %v, shutting down...", quit)
+	logging.Info("Received shutdown signal", "signal", quit)
 
 	// Shutdown HTTP server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
+		logging.Error("HTTP server shutdown error", "error", err)
 	}
 
-	log.Println("Shutdown complete")
+	logging.Info("Shutdown complete")
 }
 
 // loadConfig reads configuration from the specified path or uses defaults.
@@ -156,13 +168,13 @@ func loadConfig() (*config.Config, error) {
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("Config file %s not found, using defaults", configPath)
+			logging.Info("Config file not found, using defaults", "path", configPath)
 			return config.Default(), nil
 		}
 		return nil, err
 	}
 
-	log.Printf("Loaded config from %s", configPath)
+	logging.Info("Loaded config", "path", configPath)
 	return cfg, nil
 }
 
@@ -177,7 +189,7 @@ func initRouter(cfg *config.Config) (*model.Router, error) {
 			return nil, fmt.Errorf("create provider %q: %w", name, err)
 		}
 		router.RegisterProvider(provider)
-		log.Printf("Registered provider: %s (base_url: %s)", name, providerCfg.BaseURL)
+		logging.Info("Registered provider", "name", name, "base_url", providerCfg.BaseURL)
 	}
 
 	// Set phase-specific model configurations
@@ -223,7 +235,7 @@ func initSkillsRegistry(cfg *config.Config) *skills.SkillsRegistry {
 			PromptTemplate: description,
 		}
 		if err := registry.Register(s); err != nil {
-			log.Printf("Warning: failed to register knowledge skill %q: %v", name, err)
+			logging.Warn("Failed to register knowledge skill", "name", name, "error", err)
 		}
 	}
 
@@ -235,12 +247,12 @@ func initSkillsRegistry(cfg *config.Config) *skills.SkillsRegistry {
 			PromptTemplate: description,
 		}
 		if err := registry.Register(s); err != nil {
-			log.Printf("Warning: failed to register tool skill %q: %v", name, err)
+			logging.Warn("Failed to register tool skill", "name", name, "error", err)
 		}
 	}
 
 	totalSkills := len(cfg.Skills.Knowledge) + len(cfg.Skills.Tools)
-	log.Printf("Skills registry initialized with %d skills from config", totalSkills)
+	logging.Info("Skills registry initialized", "count", totalSkills)
 
 	return registry
 }
@@ -252,23 +264,23 @@ func initToolExecutor() (*tools.ProjectInfo, tools.ToolExecutor) {
 	detector := tools.NewProjectDetectorExecutor()
 	currentDir, err := os.Getwd()
 	if err != nil {
-		log.Printf("Warning: failed to get current directory: %v", err)
+		logging.Warn("Failed to get current directory", "error", err)
 		currentDir = "."
 	}
 
 	projectInfo, err := detector.DetectProjectType(currentDir)
 	if err != nil {
 		// If project type detection fails, try parent directories
-		log.Printf("Warning: failed to detect project type in %s: %v", currentDir, err)
+		logging.Warn("Failed to detect project type", "dir", currentDir, "error", err)
 		projectInfo, err = detector.DetectProjectType(filepath.Dir(currentDir))
 		if err != nil {
-			log.Printf("Warning: failed to detect project type in parent directory: %v", err)
-			log.Println("Using generic executor (shell-only)")
+			logging.Warn("Failed to detect project type in parent directory", "error", err)
+			logging.Info("Using generic executor (shell-only)")
 			return nil, tools.NewExecutor(&tools.ProjectInfo{Type: tools.ProjectTypeUnknown, RootDir: currentDir})
 		}
 	}
 
-	log.Printf("Detected project type: %s", projectInfo.Type)
+	logging.Info("Detected project type", "type", projectInfo.Type)
 
 	// Create ToolExecutor based on detected project type
 	executor := tools.NewExecutor(projectInfo)
@@ -282,16 +294,16 @@ func initAgentRegistry(router *model.Router) *agent.Registry {
 	// Create and register planner agent
 	planner := agent.NewPlannerAgent(router, nil)
 	if err := registry.Register(planner.Name(), planner); err != nil {
-		log.Printf("Warning: failed to register planner agent: %v", err)
+		logging.Warn("Failed to register planner agent", "error", err)
 	}
 
 	// Create and register coder agent
 	coder := agent.NewCoderAgent(router, nil)
 	if err := registry.Register(coder.Name(), coder); err != nil {
-		log.Printf("Warning: failed to register coder agent: %v", err)
+		logging.Warn("Failed to register coder agent", "error", err)
 	}
 
-	log.Printf("Agent registry initialized with %d agents", len(registry.List()))
+	logging.Info("Agent registry initialized", "count", len(registry.List()))
 	return registry
 }
 
@@ -325,7 +337,7 @@ func initStateStore(projectInfo *tools.ProjectInfo) *state.Store {
 	}
 
 	store := state.NewStore(session)
-	log.Printf("State store initialized for session: %s", session.ID)
+	logging.Info("State store initialized", "session_id", session.ID)
 	return store
 }
 
@@ -444,7 +456,7 @@ func startHTTPServer(
 	templatesPath := "internal/api/templates"
 	errorHandler, err := api.NewErrorHandler(templatesPath)
 	if err != nil {
-		log.Printf("Warning: failed to initialize error handler: %v", err)
+		logging.Warn("Failed to initialize error handler", "error", err)
 		errorHandler = nil
 	}
 
@@ -464,9 +476,10 @@ func startHTTPServer(
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("HTTP server starting on %s", server.Addr)
+		logging.Info("HTTP server starting", "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server error: %v", err)
+			logging.Error("HTTP server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
