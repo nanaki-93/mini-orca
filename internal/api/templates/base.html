@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Mini-Orca AI Development Assistant">
     <title>{{ .Title }} - Mini-Orca</title>
 
     <!-- Tailwind CSS (CDN for dev) -->
@@ -29,9 +30,103 @@
 
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <script>
+        // HTMX Global Configuration for Performance
+        htmx.config.globalSwapStyle = 'none';
+        htmx.config.requestTimeout = 10000;
+        htmx.config.disableElementWithAttribute = 'hx-disable';
+        htmx.config.selfRequestsOnly = true;
+        htmx.config.scrollBehavior = 'instant';
+
+        // ─── HTMX Batch Requests ─────────────────────────────────────────────
+        // Batch multiple rapid requests into a single server call
+        const HTMXBatcher = {
+            pending: new Map(),
+            batchWindow: 50, // ms to wait before sending batched request
+
+            addToBatch(key, config) {
+                if (!this.pending.has(key)) {
+                    this.pending.set(key, []);
+                    // Schedule batch processing
+                    setTimeout(() => this.processBatch(key), this.batchWindow);
+                }
+                this.pending.get(key).push(config);
+            },
+
+            processBatch(key) {
+                const configs = this.pending.get(key);
+                if (configs && configs.length > 0) {
+                    // Send the latest config (most relevant)
+                    const latest = configs[configs.length - 1];
+                    if (latest.elt && latest.elt.requestConfig) {
+                        htmx.invokeCallAction(latest.elt, 'htmx:configRequest', latest);
+                    }
+                }
+                this.pending.delete(key);
+            }
+        };
+
+        // Debounce utility for search/filter inputs
+        function debounceHTMX(element, delay = 300) {
+            let timeout;
+            element.addEventListener('input', function() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    htmx.trigger(element, 'do-search');
+                }, delay);
+            });
+            element.addEventListener('do-search', function() {
+                htmx.trigger(element.parentElement, 'htmx:configRequest', {
+                    elt: element,
+                    requestConfig: { verb: 'GET', target: element }
+                });
+                htmx.ajax('GET', element.closest('[hx-get]').getAttribute('hx-get'), {
+                    target: element.closest('[hx-target]').getAttribute('hx-target'),
+                    swap: 'innerHTML',
+                    values: new FormData(element.closest('form'))
+                });
+            });
+        }
+    </script>
 
     <!-- Custom CSS Variables for Dark Theme -->
     <style>
+        /* Screen Reader Only - Visible to assistive tech, hidden visually */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+
+        /* Skip Navigation Link */
+        .skip-link {
+            position: absolute;
+            top: -100%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
+            padding: 0.75rem 1.5rem;
+            background-color: var(--accent);
+            color: var(--text-inverse, #0d1117);
+            font-weight: 600;
+            border-radius: 0.375rem;
+            text-decoration: none;
+            transition: top 0.2s ease;
+            font-size: 0.875rem;
+        }
+
+        .skip-link:focus {
+            top: 0.5rem;
+            outline: 3px solid var(--accent-hover, #79c0ff);
+            outline-offset: 2px;
+        }
+
         :root {
             --bg-primary: #0d1117;
             --bg-secondary: #161b22;
@@ -90,6 +185,8 @@
         class="fixed top-3 left-3 z-50 flex items-center justify-center w-10 h-10 bg-dark-800 border border-dark-600 rounded-lg shadow-lg sm:hidden hover:bg-dark-700 transition-colors"
         onclick="toggleMobileSidebar()"
         aria-label="Toggle navigation menu"
+        aria-expanded="false"
+        aria-controls="sidebar-overlay"
     >
         <svg id="menu-icon" class="w-5 h-5 text-text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
@@ -101,27 +198,28 @@
         id="sidebar-overlay"
         class="fixed inset-0 bg-black/60 z-40 hidden sm:hidden transition-opacity duration-200"
         onclick="toggleMobileSidebar()"
+        role="presentation"
     ></div>
 
     <div class="flex flex-1 overflow-hidden">
         <!-- Sidebar (hidden on mobile, visible on desktop) -->
-        <aside id="app-sidebar" class="sm:w-64 w-72 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0 overflow-y-auto transform -translate-x-full sm:translate-x-0 transition-transform duration-200 ease-in-out fixed sm:relative top-0 left-0 h-full z-40">
+        <aside id="app-sidebar" class="sm:w-64 w-72 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0 overflow-y-auto transform -translate-x-full sm:translate-x-0 transition-transform duration-200 ease-in-out fixed sm:relative top-0 left-0 h-full z-40" role="complementary" aria-label="File tree and navigation">
             {{ block "sidebar" . }}{{ end }}
         </aside>
 
         <!-- Main Content -->
-        <main id="app-main" class="flex-1 overflow-auto bg-dark-900 min-h-[calc(100vh-7rem)] sm:min-h-[calc(100vh-5.5rem)]">
+        <main id="app-main" class="flex-1 overflow-auto bg-dark-900 min-h-[calc(100vh-7rem)] sm:min-h-[calc(100vh-5.5rem)]" role="main" tabindex="-1">
             {{ block "main" . }}{{ end }}
         </main>
     </div>
 
     <!-- Footer -->
-    <footer id="app-footer" class="h-8 bg-dark-800 border-t border-dark-600 flex items-center px-4 shrink-0">
+    <footer id="app-footer" class="h-8 bg-dark-800 border-t border-dark-600 flex items-center px-4 shrink-0" role="contentinfo">
         {{ block "footer" . }}{{ end }}
     </footer>
 
     <!-- Global Loading Overlay -->
-    <div id="global-loading" class="global-loading-overlay">
+    <div id="global-loading" class="global-loading-overlay" role="status" aria-live="polite" aria-label="Loading">
         <div class="global-loading-spinner relative">
             <div class="spinner-ring"></div>
             <div class="spinner-ring-secondary"></div>
@@ -130,12 +228,103 @@
     </div>
 
     <!-- Toast Notification Container -->
-    <div id="toast-container" class="toast-container"></div>
+    <div id="toast-container" class="toast-container" role="region" aria-label="Notifications"></div>
+
+    <!-- Screen Reader Announcements (Live Regions) -->
+    <div id="sr-announcements" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+    <div id="sr-alerts" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
 
     {{ block "scripts" . }}{{ end }}
 
     <!-- Global HTMX Loading Handlers -->
     <script>
+        // ─── Screen Reader Announcer ─────────────────────────────────────
+        const ScreenReader = {
+            polite: document.getElementById('sr-announcements'),
+            assertive: document.getElementById('sr-alerts'),
+
+            announce(message, priority = 'polite') {
+                const target = priority === 'assertive' ? this.assertive : this.polite;
+                if (!target) return;
+                target.textContent = '';
+                setTimeout(() => {
+                    target.textContent = message;
+                }, 100);
+            },
+
+            announceStatus(message) {
+                this.announce(message, 'polite');
+            },
+
+            announceAlert(message) {
+                this.announce(message, 'assertive');
+            }
+        };
+
+        // ─── Focus Management ────────────────────────────────────────────
+        const FocusManager = {
+            lastFocusedElement: null,
+
+            saveFocus() {
+                this.lastFocusedElement = document.activeElement;
+            },
+
+            restoreFocus() {
+                if (this.lastFocusedElement && document.body.contains(this.lastFocusedElement)) {
+                    this.lastFocusedElement.focus();
+                    this.lastFocusedElement = null;
+                }
+            },
+
+            trapFocus(container) {
+                const focusableElements = container.querySelectorAll(
+                    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                );
+
+                const firstFocusable = focusableElements[0];
+                const lastFocusable = focusableElements[focusableElements.length - 1];
+
+                function handleKeyDown(e) {
+                    if (e.key === 'Tab') {
+                        if (e.shiftKey) {
+                            if (document.activeElement === firstFocusable) {
+                                e.preventDefault();
+                                lastFocusable.focus();
+                            }
+                        } else {
+                            if (document.activeElement === lastFocusable) {
+                                e.preventDefault();
+                                firstFocusable.focus();
+                            }
+                        }
+                    }
+                    if (e.key === 'Escape') {
+                        container.dispatchEvent(new CustomEvent('close-focus-trap'));
+                    }
+                }
+
+                container.addEventListener('keydown', handleKeyDown);
+                container.addEventListener('close-focus-trap', () => {
+                    container.removeEventListener('keydown', handleKeyDown);
+                });
+
+                if (firstFocusable) {
+                    firstFocusable.focus();
+                }
+
+                return function releaseFocus() {
+                    container.removeEventListener('keydown', handleKeyDown);
+                };
+            },
+
+            focusElement(element) {
+                if (element) {
+                    element.focus();
+                    element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        };
+
         // Global loading overlay management
         const globalLoading = {
             overlay: document.getElementById('global-loading'),
@@ -757,6 +946,109 @@
         }
     });
 
+    // ─── Phase History Cache ─────────────────────────────────────────────────
+    // Smart cache with ETag support to avoid unnecessary DOM updates
+    const PhaseHistoryCache = {
+        lastSnapshot: null,
+        lastETag: null,
+        lastFetchTime: 0,
+        cacheDuration: 3000, // 3 seconds cache TTL for polling (reduced from 5s)
+        updateCount: 0,
+
+        // Generate a snapshot key from the response data (lightweight)
+        snapshotKey(data) {
+            if (!data) return null;
+            // Only track phase states, not activity count (less volatile)
+            const phases = data.querySelectorAll('.phase-node');
+            if (!phases?.length) return null;
+            const phaseStates = Array.from(phases).map(p => {
+                const status = p.className.match(/phase-(pending|waiting|in-progress|completed|failed)/);
+                return status ? status[1] : 'unknown';
+            }).join('-');
+            return phaseStates;
+        },
+
+        // Check if cache is still valid
+        isValid() {
+            return this.lastSnapshot !== null &&
+                   (Date.now() - this.lastFetchTime) < this.cacheDuration;
+        },
+
+        // Check if response is actually different from cache
+        isDifferent(newSnapshot, newETag) {
+            if (!newSnapshot || !newETag) return true;
+            // Skip update if snapshot is identical
+            if (newSnapshot === this.lastSnapshot && newETag === this.lastETag) {
+                this.updateCount++;
+                if (this.updateCount > 10) {
+                    // After 10+ identical updates, invalidate cache
+                    this.invalidate();
+                }
+                return false;
+            }
+            this.updateCount = 0;
+            return true;
+        },
+
+        // Cache a snapshot
+        cache(snapshot, etag) {
+            this.lastSnapshot = snapshot;
+            this.lastETag = etag;
+            this.lastFetchTime = Date.now();
+        },
+
+        // Get cached snapshot
+        get() {
+            return this.isValid() ? this.lastSnapshot : null;
+        },
+
+        // Invalidate cache
+        invalidate() {
+            this.lastSnapshot = null;
+            this.lastETag = null;
+            this.lastFetchTime = 0;
+            this.updateCount = 0;
+        }
+    };
+
+    // HTMX event listeners for phase history caching
+    document.addEventListener('htmx:beforeSwap', (event) => {
+        const target = event.detail.target;
+        const xhr = event.detail.xhr;
+        const requestPath = xhr?.requestURL || '';
+
+        // Cache dashboard responses with ETag support
+        if (requestPath.includes('/api/render/dashboard') && target) {
+            const snapshotKey = PhaseHistoryCache.snapshotKey(target);
+            const etag = xhr?.getResponseHeader('ETag') || snapshotKey;
+
+            if (snapshotKey && PhaseHistoryCache.isDifferent(snapshotKey, etag)) {
+                PhaseHistoryCache.cache(snapshotKey, etag);
+            } else if (snapshotKey) {
+                // Update fetch time even if same content
+                PhaseHistoryCache.lastFetchTime = Date.now();
+            }
+        }
+    });
+
+    // Smart polling: skip updates when content hasn't changed
+    document.addEventListener('htmx:beforeRequest', (event) => {
+        const elt = event.detail.elt;
+        const trigger = elt?.getAttribute('hx-trigger') || '';
+
+        // For polling requests to dashboard, check cache first
+        if (trigger.includes('every') && elt?.getAttribute('hx-get')?.includes('/api/render/dashboard')) {
+            if (PhaseHistoryCache.isValid()) {
+                // Skip this request - content hasn't changed
+                event.preventDefault();
+                elt.setAttribute('hx-disabled', 'true');
+                setTimeout(() => {
+                    elt.removeAttribute('hx-disabled');
+                }, 100);
+            }
+        }
+    });
+
     // ─── Utility Functions ─────────────────────────────────────────────────────
     // Expose to global scope for inline onclick handlers
     window.Toast = Toast;
@@ -768,6 +1060,9 @@
     window.showSkeleton = showSkeleton;
     window.hideSkeleton = hideSkeleton;
     window.toggleMobileSidebar = toggleMobileSidebar;
+    window.PhaseHistoryCache = PhaseHistoryCache;
+    window.ScreenReader = ScreenReader;
+    window.FocusManager = FocusManager;
     </script>
 </body>
 </html>

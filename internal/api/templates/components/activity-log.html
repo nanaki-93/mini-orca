@@ -82,7 +82,7 @@
                 type="text"
                 placeholder="Search logs..."
                 class="w-full px-3 py-1 pl-8 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent"
-                oninput="filterLog()"
+                oninput="debounceFilterLog()"
             />
             <svg class="w-3.5 h-3.5 text-text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
@@ -213,6 +213,15 @@
 
 <script>
     let autoScroll = true;
+    let filterTimeout = null;
+
+    // Debounced filter function for search input
+    function debounceFilterLog() {
+        if (filterTimeout) {
+            clearTimeout(filterTimeout);
+        }
+        filterTimeout = setTimeout(filterLog, 200);
+    }
 
     function toggleAutoScroll() {
         autoScroll = !autoScroll;
@@ -240,14 +249,19 @@
 
     function toggleEntryDetails(element) {
         const details = element.querySelector('.log-details');
+        const button = element.querySelector('.log-expand-btn');
         const icon = element.querySelector('.log-expand-icon svg');
 
         if (details.classList.contains('hidden')) {
             details.classList.remove('hidden');
             icon.style.transform = 'rotate(180deg)';
+            if (button) button.setAttribute('aria-expanded', 'true');
+            if (button) button.setAttribute('aria-label', 'Collapse log details');
         } else {
             details.classList.add('hidden');
             icon.style.transform = 'rotate(0deg)';
+            if (button) button.setAttribute('aria-expanded', 'false');
+            if (button) button.setAttribute('aria-label', 'Expand log details');
         }
     }
 
@@ -281,6 +295,11 @@
         const countEl = document.querySelector('#activity-log .flex-1 > span:last-child');
         if (countEl) {
             countEl.textContent = `${visibleCount} entries shown`;
+        }
+
+        // Announce filter results to screen readers
+        if (typeof ScreenReader !== 'undefined') {
+            ScreenReader.announceStatus(`${visibleCount} entries visible${searchQuery ? ` for "${searchQuery}"` : ''}`);
         }
     }
 

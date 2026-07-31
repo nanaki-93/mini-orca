@@ -3,33 +3,32 @@
     <div class="px-3 py-2 text-xs font-semibold text-text-secondary uppercase tracking-wider">
         Explorer
     </div>
-    {{ template "tree-root" (dict "Items" .RootItems "CurrentPath" .CurrentPath) }}
+    <!-- Truly lazy-loaded: only render first level, load children on demand -->
+    {{ range .RootItems }}
+        {{ if .IsDir }}
+            {{ template "tree-folder-lazy" (dict "Item" . "Depth" 0 "CurrentPath" .CurrentPath) }}
+        {{ else }}
+            {{ template "tree-file" (dict "Item" . "Depth" 0 "CurrentPath" .CurrentPath) }}
+        {{ end }}
+    {{ end }}
 </div>
 {{ end }}
 
-{{ define "tree-root" }}
-{{ range .Items }}
-    {{ if .IsDir }}
-        {{ template "tree-folder" (dict "Item" . "Depth" 0 "CurrentPath" $.CurrentPath) }}
-    {{ else }}
-        {{ template "tree-file" (dict "Item" . "Depth" 0 "CurrentPath" $.CurrentPath) }}
-    {{ end }}
-{{ end }}
-{{ end }}
-
-{{ define "tree-folder" }}
+{{ define "tree-folder-lazy" }}
 {{ $item := .Item }}
 {{ $depth := .Depth }}
 {{ $currentPath := .CurrentPath }}
-<div class="tree-folder" data-path="{{ $item.Path }}">
+<div class="tree-folder" data-path="{{ $item.Path }}" data-loaded="false">
     <div
         class="tree-item flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none"
         style="padding-left: calc(0.75rem + {{ $depth }} * 1rem)"
         onclick="toggleFolder(this)"
         hx-get="/api/tree/expand"
         hx-params="none"
-        hx-target="#folder-children-{{ $item.Name }}-{{ $depth }}"
+        hx-vals='{"path": "{{ $item.Path }}"}'
+        hx-target="#folder-children-{{ md5 $item.Path }}"
         hx-swap="innerHTML"
+        hx-trigger="click once"
     >
         <svg class="tree-chevron w-4 h-4 text-text-secondary shrink-0 transition-transform"
              xmlns="http://www.w3.org/2000/svg"
@@ -45,14 +44,8 @@
         </svg>
         <span class="text-text-primary">{{ $item.Name }}</span>
     </div>
-    <div id="folder-children-{{ $item.Name }}-{{ $depth }}" class="tree-folder-children overflow-hidden transition-all duration-150">
-        {{ range $item.Children }}
-            {{ if .IsDir }}
-                {{ template "tree-folder" (dict "Item" . "Depth" (add $depth 1) "CurrentPath" $currentPath) }}
-            {{ else }}
-                {{ template "tree-file" (dict "Item" . "Depth" (add $depth 1) "CurrentPath" $currentPath) }}
-            {{ end }}
-        {{ end }}
+    <div id="folder-children-{{ md5 $item.Path }}" class="tree-folder-children overflow-hidden transition-all duration-150">
+        <!-- Children loaded lazily via HTMX -->
     </div>
 </div>
 {{ end }}
