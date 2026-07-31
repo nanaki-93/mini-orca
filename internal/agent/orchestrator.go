@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/nanaki-93/mini-orca/internal/agent/prompts"
-	"github.com/nanaki-93/mini-orca/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/internal/model"
-	"github.com/nanaki-93/mini-orca/internal/tools"
+	"github.com/nanaki-93/mini-orca/v2/internal/agent/prompts"
+	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
+	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
 
 // Orchestrator coordinates the execution of agents in the multi-agent system.

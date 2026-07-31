@@ -1,5 +1,7 @@
 # mini-orca
 
+**Version**: 2.0.0
+
 Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LLM agents to plan, code, test, and review your project tasks autonomously.
 
 ## Features
@@ -12,6 +14,7 @@ Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LL
 - **Robust Error Handling**: Centralized error management with user-friendly messages.
 - **Extensible Skills**: Easily add new knowledge and tool skills to your agents via configuration.
 - **LLM Provider Agnostic**: Supports multiple providers (e.g., LM Studio) with phase-specific model overrides.
+- **Docker Support**: Containerized deployment with Docker and Docker Compose.
 
 ## Architecture
 
@@ -76,6 +79,23 @@ Start the daemon:
 
 Access the IDE at `http://localhost:8080`.
 
+### Docker
+
+Run Mini-Orca with Docker:
+
+```bash
+# Build and run with Docker
+make docker-build
+make docker-run
+
+# Or use docker-compose
+docker compose up -d --build
+
+# Access the IDE at http://localhost:8080
+```
+
+See [DOCKER.md](DOCKER.md) for detailed Docker documentation.
+
 ## Configuration
 
 Configuration is managed via `config.yaml`. See [CONFIG.md](CONFIG.md) for a detailed reference and [config.example.yaml](config.example.yaml) for a full example.
@@ -84,6 +104,10 @@ Configuration is managed via `config.yaml`. See [CONFIG.md](CONFIG.md) for a det
 
 Detailed API information is available in [API.md](API.md).
 
+## Docker Documentation
+
+Docker setup and usage is documented in [DOCKER.md](DOCKER.md).
+
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
@@ -91,3 +115,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 ## License
 
 MIT
+
+## Release Notes
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for v2.0 release notes.

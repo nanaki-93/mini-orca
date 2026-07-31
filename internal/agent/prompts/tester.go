@@ -3,7 +3,7 @@ package prompts
 import (
 	"fmt"
 
-	"github.com/nanaki-93/mini-orca/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
 // BuildTesterPrompt constructs the full chat message list for the tester agent.

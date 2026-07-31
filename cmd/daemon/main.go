@@ -10,16 +10,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/internal/agent"
-	"github.com/nanaki-93/mini-orca/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/internal/api"
-	"github.com/nanaki-93/mini-orca/internal/api/handlers"
-	"github.com/nanaki-93/mini-orca/internal/config"
-	"github.com/nanaki-93/mini-orca/internal/logging"
-	"github.com/nanaki-93/mini-orca/internal/model"
-	"github.com/nanaki-93/mini-orca/internal/orchestrator"
-	"github.com/nanaki-93/mini-orca/internal/state"
-	"github.com/nanaki-93/mini-orca/internal/tools"
+	"github.com/nanaki-93/mini-orca/v2/internal/agent"
+	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	"github.com/nanaki-93/mini-orca/v2/internal/api/handlers"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
+	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/orchestrator"
+	"github.com/nanaki-93/mini-orca/v2/internal/state"
+	"github.com/nanaki-93/mini-orca/v2/internal/tools"
+	"github.com/nanaki-93/mini-orca/v2/internal/version"
 )
 
 func main() {
@@ -357,14 +358,14 @@ func startHTTPServer(
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		_, _ = w.Write([]byte(`{"status":"ok","version":"` + version.Version + `"}`))
 	})
 
 	// Status endpoint
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"running","agents":["planner","coder","tester","reviewer"]}`))
+		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","agents":["planner","coder","tester","reviewer"]}`))
 	})
 
 	// Create phase router for session lifecycle

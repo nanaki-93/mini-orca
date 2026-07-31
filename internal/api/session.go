@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
-	"github.com/nanaki-93/mini-orca/internal/orchestrator"
-	"github.com/nanaki-93/mini-orca/internal/state"
+	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
+	"github.com/nanaki-93/mini-orca/v2/internal/orchestrator"
+	"github.com/nanaki-93/mini-orca/v2/internal/state"
 )
 
 // SessionCreateRequest represents the request body for creating a new session.

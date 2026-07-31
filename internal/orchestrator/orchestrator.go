@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/internal/agent"
-	"github.com/nanaki-93/mini-orca/internal/agent/prompts"
-	"github.com/nanaki-93/mini-orca/internal/config"
-	"github.com/nanaki-93/mini-orca/internal/model"
-	"github.com/nanaki-93/mini-orca/internal/state"
-	"github.com/nanaki-93/mini-orca/internal/tools"
+	"github.com/nanaki-93/mini-orca/v2/internal/agent"
+	"github.com/nanaki-93/mini-orca/v2/internal/agent/prompts"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/state"
+	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
 
 // Session represents a single execution session within the pipeline.

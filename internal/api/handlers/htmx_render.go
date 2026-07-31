@@ -14,10 +14,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/nanaki-93/mini-orca/internal/api"
-	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
-	"github.com/nanaki-93/mini-orca/internal/logging"
-	"github.com/nanaki-93/mini-orca/internal/state"
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
+	"github.com/nanaki-93/mini-orca/v2/internal/state"
 )
 
 // ─── Template Data Types ─────────────────────────────────────────────────────

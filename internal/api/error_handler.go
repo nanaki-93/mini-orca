@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
+	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
 )
 
 // ErrorHandler provides HTTP error handling with template-based error pages.

@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/nanaki-93/mini-orca/internal/logging"
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
 // formatterExecutor implements code formatting for the Executor interface.

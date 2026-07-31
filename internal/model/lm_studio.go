@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/internal/logging"
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
 // LMStudioProvider implements the Provider interface for LM Studio.

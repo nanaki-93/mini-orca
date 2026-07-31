@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/internal/state"
+	"github.com/nanaki-93/mini-orca/v2/internal/state"
 )
 
 // Phase represents a stage in the development pipeline.
