@@ -1,0 +1,364 @@
+{{ define "project-modal" }}
+<!-- Project Modal Overlay -->
+<div id="project-modal" class="hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby="project-modal-title">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/60" onclick="closeProjectModal()"></div>
+
+    <!-- Modal Panel -->
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="relative bg-dark-800 border border-dark-600 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-dark-600">
+                <h2 id="project-modal-title" class="text-lg font-semibold text-text-primary">Open Project</h2>
+                <button
+                    class="p-1.5 text-text-secondary hover:text-text-primary hover:bg-dark-700 rounded-md transition-colors"
+                    onclick="closeProjectModal()"
+                    aria-label="Close modal"
+                >
+                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="px-6 py-5">
+                <p class="text-sm text-text-secondary mb-5">
+                    Select a directory to open as a project. The project type will be auto-detected.
+                </p>
+
+                <!-- Project Path Input -->
+                <div class="space-y-4">
+                    <div>
+                        <label for="project-path" class="block text-sm font-medium text-text-primary mb-1.5">
+                            Project Path
+                        </label>
+                        <div class="flex gap-2">
+                            <input
+                                type="text"
+                                id="project-path"
+                                name="path"
+                                placeholder="/path/to/your/project"
+                                class="flex-1 px-3 py-2.5 text-sm bg-dark-700 border border-dark-600 text-text-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-secondary/50"
+                                autocomplete="off"
+                            />
+                            <button
+                                type="button"
+                                class="px-4 py-2.5 text-sm bg-dark-700 hover:bg-dark-600 text-text-primary border border-dark-600 rounded-lg transition-colors flex items-center gap-2"
+                                onclick="browseDirectory()"
+                                title="Select a directory (requires Chrome/Edge/Safari)"
+                            >
+                                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M5.5 2A2.5 2.5 0 003 4.5v11A2.5 2.5 0 005.5 18h9a2.5 2.5 0 002.5-2.5V9.82a2.5 2.5 0 00-.73-1.77L12.77 5.5A2.5 2.5 0 0011 4.78V4.5A2.5 2.5 0 008.5 2h-3z" clip-rule="evenodd"/>
+                                </svg>
+                                Browse
+                            </button>
+                        </div>
+                        <p class="mt-1.5 text-xs text-text-secondary">
+                            Enter an absolute path (e.g., <code class="text-accent">~/projects/my-app</code> or <code class="text-accent">/Users/me/project</code>)
+                        </p>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            class="text-xs text-accent hover:text-accent-hover transition-colors flex items-center gap-1"
+                            onclick="useCurrentDir()"
+                        >
+                            <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .125.05.245.14.335l2.5 2.5a.75.75 0 001.06-1.06L11 10.25V5z" clip-rule="evenodd"/>
+                            </svg>
+                            Use current directory
+                        </button>
+                    </div>
+
+                    <!-- Optional: Project Name -->
+                    <div>
+                        <label for="project-name" class="block text-sm font-medium text-text-primary mb-1.5">
+                            Project Name <span class="text-text-secondary font-normal">(optional)</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="project-name"
+                            name="name"
+                            placeholder="Auto-detected from directory name"
+                            class="w-full px-3 py-2.5 text-sm bg-dark-700 border border-dark-600 text-text-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-secondary/50"
+                            autocomplete="off"
+                        />
+                    </div>
+
+                    <!-- Project Type (auto-detected, shown for info) -->
+                    <div>
+                        <label for="project-type" class="block text-sm font-medium text-text-primary mb-1.5">
+                            Project Type <span class="text-text-secondary font-normal">(auto-detected)</span>
+                        </label>
+                        <select
+                            id="project-type"
+                            name="type"
+                            class="w-full px-3 py-2.5 text-sm bg-dark-700 border border-dark-600 text-text-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                        >
+                            <option value="">Auto-detect</option>
+                            <option value="go">Go</option>
+                            <option value="python">Python</option>
+                            <option value="typescript">TypeScript</option>
+                            <option value="rust">Rust</option>
+                            <option value="java">Java</option>
+                            <option value="kotlin">Kotlin</option>
+                            <option value="unknown">Unknown</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Error message area -->
+                <div id="project-error" class="hidden mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <div class="flex items-start gap-2">
+                        <svg class="w-4 h-4 text-red-400 mt-0.5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                        </svg>
+                        <span id="project-error-message" class="text-sm text-red-400"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex items-center justify-end gap-3 px-6 py-4 bg-dark-900/50 border-t border-dark-600">
+                <button
+                    type="button"
+                    class="px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+                    onclick="closeProjectModal()"
+                >
+                    Cancel
+                </button>
+                <button
+                    id="btn-open-project"
+                    type="button"
+                    class="px-5 py-2 text-sm bg-accent hover:bg-accent-hover text-dark-900 font-medium rounded-lg transition-colors flex items-center gap-2"
+                    onclick="openProject()"
+                >
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h10a1 1 0 011 1v1.09L11.38 6.13a2.5 2.5 0 011.24 4.297l.846 3.383A1.5 1.5 0 0111.028 15H6.972a1.5 1.5 0 01-1.438-1.19l-.846-3.383a2.5 2.5 0 011.24-4.297L4 5.09V4zm2 2v.75a.5.5 0 00.846.354l4-3A.5.5 0 0011 6V6H5z" clip-rule="evenodd"/>
+                    </svg>
+                    Open Project
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Project Modal Functions
+    function openProjectModal() {
+        const modal = document.getElementById('project-modal');
+        modal.classList.remove('hidden');
+        // Focus the path input
+        setTimeout(() => {
+            document.getElementById('project-path').focus();
+        }, 100);
+        // Hide any previous errors
+        hideProjectError();
+    }
+
+    function closeProjectModal() {
+        const modal = document.getElementById('project-modal');
+        modal.classList.add('hidden');
+        // Clear form
+        document.getElementById('project-path').value = '';
+        document.getElementById('project-name').value = '';
+        document.getElementById('project-type').value = '';
+    }
+
+    async function browseDirectory() {
+        // Try File System Access API first (Chrome, Edge, Safari 16.4+)
+        if (window.showDirectoryPicker) {
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                const dirName = dirHandle.name;
+                
+                // We can't get the full absolute path from the File System Access API,
+                // but we can use the directory name and hope it resolves from cwd
+                // For now, set the name and let the user confirm or adjust
+                document.getElementById('project-path').value = dirName;
+                if (!document.getElementById('project-name').value) {
+                    document.getElementById('project-name').value = dirName;
+                }
+                return;
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.warn('File System Access API failed, falling back to file input:', err);
+                }
+            }
+        }
+
+        // Fallback: Use a file input for directory selection
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.webkitdirectory = true;
+        input.directory = true;
+        input.multiple = true;
+        input.onchange = function(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                // Get the root directory name from the first file's relative path
+                const filePath = files[0].webkitRelativePath;
+                const rootDir = filePath.substring(0, filePath.indexOf('/'));
+                
+                // Show a message that user needs to provide full path
+                document.getElementById('project-path').value = rootDir;
+                if (!document.getElementById('project-name').value) {
+                    document.getElementById('project-name').value = rootDir;
+                }
+                
+                // Show helpful hint
+                showProjectError(
+                    'Selected: ' + rootDir + '. Please enter the full absolute path in the path field (e.g., ~/projects/' + rootDir + ')',
+                    true
+                );
+            }
+        };
+        input.click();
+    }
+
+    async function openProject() {
+        let path = document.getElementById('project-path').value.trim();
+        const name = document.getElementById('project-name').value.trim();
+        const type = document.getElementById('project-type').value;
+
+        if (!path) {
+            showProjectError('Please enter a project path.');
+            document.getElementById('project-path').focus();
+            return;
+        }
+
+        // Expand ~ to home directory
+        if (path.startsWith('~/') || path === '~') {
+            try {
+                const homeDir = await new Promise((resolve, reject) => {
+                    fetch('/api/system/info').then(r => r.json()).then(data => {
+                        resolve(data.home_dir || process.env.HOME || '');
+                    }).catch(() => {
+                        // Fallback: try to get home dir from the server
+                        resolve('');
+                    });
+                });
+                if (homeDir) {
+                    path = path.replace('~', homeDir);
+                }
+            } catch (e) {
+                // If we can't get home dir, just continue with ~ - server will handle it
+            }
+        }
+
+        const btn = document.getElementById('btn-open-project');
+        const originalContent = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `
+            <svg class="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Opening...
+        `;
+
+        try {
+            const response = await fetch('/api/projects', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: name || '',
+                    path: path,
+                    type: type || '',
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.user_message || data.message || 'Failed to open project');
+            }
+
+            // Close modal
+            closeProjectModal();
+
+            // Show success toast
+            Toast.success('Project "' + data.name + '" opened successfully (' + data.file_count + ' files)', 'Project Opened');
+
+            // Reload the page to reflect the new project
+            setTimeout(() => {
+                location.reload();
+            }, 500);
+
+        } catch (error) {
+            showProjectError(error.message || 'Failed to open project. Please check the path and try again.');
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+        }
+    }
+
+    function useCurrentDir() {
+        // Ask the server for the current working directory
+        fetch('/api/system/info')
+            .then(r => r.json())
+            .then(data => {
+                if (data.cwd) {
+                    document.getElementById('project-path').value = data.cwd;
+                    document.getElementById('project-name').value = data.cwd.split('/').pop() || data.cwd;
+                } else {
+                    showProjectError('Could not determine current directory. Please enter the path manually.');
+                }
+            })
+            .catch(() => {
+                showProjectError('Could not determine current directory. Please enter the path manually.');
+            });
+    }
+
+    function showProjectError(message, isWarning) {
+        const errorDiv = document.getElementById('project-error');
+        const errorMessage = document.getElementById('project-error-message');
+        const svgIcon = errorDiv.querySelector('svg');
+        
+        errorMessage.textContent = message;
+        errorDiv.classList.remove('hidden');
+        
+        if (isWarning) {
+            errorDiv.classList.remove('bg-red-500/10', 'border-red-500/20');
+            errorDiv.classList.add('bg-yellow-500/10', 'border-yellow-500/20');
+            if (svgIcon) {
+                svgIcon.classList.remove('text-red-400');
+                svgIcon.classList.add('text-yellow-400');
+            }
+        } else {
+            errorDiv.classList.remove('bg-yellow-500/10', 'border-yellow-500/20');
+            errorDiv.classList.add('bg-red-500/10', 'border-red-500/20');
+            if (svgIcon) {
+                svgIcon.classList.remove('text-yellow-400');
+                svgIcon.classList.add('text-red-400');
+            }
+        }
+    }
+
+    function hideProjectError() {
+        const errorDiv = document.getElementById('project-error');
+        errorDiv.classList.add('hidden');
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('project-modal');
+            if (!modal.classList.contains('hidden')) {
+                closeProjectModal();
+            }
+        }
+    });
+
+    // Make functions globally accessible
+    window.openProjectModal = openProjectModal;
+    window.closeProjectModal = closeProjectModal;
+    window.browseDirectory = browseDirectory;
+    window.openProject = openProject;
+    window.useCurrentDir = useCurrentDir;
+</script>
+{{ end }}
