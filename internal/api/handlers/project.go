@@ -140,8 +140,8 @@ func (s *ProjectStore) CreateProject(name, projectPath, projectType string) (*Pr
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Validate the path exists
-	absPath, err := filepath.Abs(projectPath)
+	// Resolve the path - try multiple strategies for robustness
+	absPath, err := resolveProjectPath(projectPath)
 	if err != nil {
 		return nil, fmt.Errorf("project: failed to resolve path %q: %w", projectPath, err)
 	}
@@ -501,6 +501,51 @@ func isBinary(content []byte) bool {
 		}
 	}
 	return false
+}
+
+// resolveProjectPath attempts to resolve a project path using multiple strategies.
+// It handles absolute paths, relative paths, and common shorthand notations.
+func resolveProjectPath(projectPath string) (string, error) {
+	// Strategy 1: If it's already an absolute path, use it directly
+	if filepath.IsAbs(projectPath) {
+		absPath, err := filepath.Abs(projectPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to make path absolute: %w", err)
+		}
+		return absPath, nil
+	}
+
+	// Strategy 2: Try as-is (relative to current directory)
+	absPath, err := filepath.Abs(projectPath)
+	if err == nil {
+		if info, statErr := os.Stat(absPath); statErr == nil && info.IsDir() {
+			return absPath, nil
+		}
+	}
+
+	// Strategy 3: Try common home directory shorthands
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		// Replace ~ with home directory
+		if strings.HasPrefix(projectPath, "~/") {
+			tildePath := filepath.Join(homeDir, projectPath[2:])
+			if info, statErr := os.Stat(tildePath); statErr == nil && info.IsDir() {
+				return tildePath, nil
+			}
+		}
+		// Also try ~ alone (home directory)
+		if projectPath == "~" {
+			return homeDir, nil
+		}
+	}
+
+	// Strategy 4: Try with ./ prefix
+	if info, statErr := os.Stat("./" + projectPath); statErr == nil && info.IsDir() {
+		absPath, _ := filepath.Abs("./" + projectPath)
+		return absPath, nil
+	}
+
+	return "", fmt.Errorf("path %q could not be resolved to an existing directory", projectPath)
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────

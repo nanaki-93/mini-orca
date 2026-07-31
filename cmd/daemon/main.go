@@ -430,6 +430,10 @@ func startHTTPServer(
 		projectHandler.GetFileContent(w, r)
 	})
 
+	// System info endpoint
+	systemHandler := handlers.NewSystemHandler()
+	mux.HandleFunc("GET /api/system/info", systemHandler.GetSystemInfo)
+
 	// Static files
 	fs := http.FileServer(http.Dir("internal/api/static"))
 	mux.Handle("/static/", http.StripPrefix("/static/", fs))
