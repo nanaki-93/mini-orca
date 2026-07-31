@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/internal/state"
+	"github.com/nanaki-93/mini-orca/v2/internal/state"
 )
 
 func TestHistoryTracker(t *testing.T) {

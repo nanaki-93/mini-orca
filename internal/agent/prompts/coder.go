@@ -3,7 +3,7 @@ package prompts
 import (
 	"fmt"
 
-	"github.com/nanaki-93/mini-orca/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
 // PlanUnit represents an atomic unit of work to be implemented by the coder.

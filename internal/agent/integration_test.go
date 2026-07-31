@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
 func TestClient_FullFlow_Execute(t *testing.T) {

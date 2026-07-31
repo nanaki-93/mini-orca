@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
+	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
 )
 
 // ErrorResponse represents an error response body.

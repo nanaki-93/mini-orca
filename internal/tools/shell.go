@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/internal/logging"
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
 // DefaultTimeout is the default timeout for command execution.

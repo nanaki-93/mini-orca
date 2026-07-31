@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
 
 func TestLoadConfigExample(t *testing.T) {

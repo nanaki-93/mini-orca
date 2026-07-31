@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/internal/state"
+	"github.com/nanaki-93/mini-orca/v2/internal/state"
 )
 
 // HistoryEvent represents a single event in the session history.

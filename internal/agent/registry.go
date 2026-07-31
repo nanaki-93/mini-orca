@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/nanaki-93/mini-orca/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
 // Registry manages the lifecycle and lookup of agents in the multi-agent system.

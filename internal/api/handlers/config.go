@@ -8,9 +8,9 @@ import (
 	"os"
 	"sync"
 
-	"github.com/nanaki-93/mini-orca/internal/api"
-	"github.com/nanaki-93/mini-orca/internal/config"
-	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
 )
 
 // ─── Request/Response Types ──────────────────────────────────────────────────

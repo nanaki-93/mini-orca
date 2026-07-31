@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/internal/agent"
-	"github.com/nanaki-93/mini-orca/internal/agent/skills"
-	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
+	"github.com/nanaki-93/mini-orca/v2/internal/agent"
+	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
+	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
 )
 
 // SkillRequest represents the request body for creating or updating a skill.

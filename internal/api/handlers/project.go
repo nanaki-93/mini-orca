@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/internal/api"
-	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
 )
 
 // ─── Request/Response Types ──────────────────────────────────────────────────

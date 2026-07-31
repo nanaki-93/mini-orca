@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
+	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
 // TestReport represents the output of a testing phase.

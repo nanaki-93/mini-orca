@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
 func TestNewClient(t *testing.T) {

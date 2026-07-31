@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  mini-orca:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_DATE=${BUILD_DATE:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}
+        - VCS_REF=${VCS_REF:-$(git rev-parse --short HEAD)}
+    image: mini-orca:latest
+    container_name: mini-orca
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount config file (optional)
+      - ./config.yaml:/app/config.yaml:ro
+      # Mount projects directory (optional)
+      - ./projects:/app/projects:rw
+      # Mount logs directory (optional)
+      - ./logs:/app/logs:rw
+    environment:
+      # Configuration file path (optional, defaults to config.yaml)
+      - MINI_ORCA_CONFIG=/app/config.yaml
+      # Log level (optional, defaults to info)
+      - MINI_ORCA_LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - mini-orca-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  # Optional: LM Studio provider (for local LLM)
+  lm-studio:
+    image: ghcr.io/lmstudio-community/lmstudio:latest
+    container_name: lm-studio
+    restart: unless-stopped
+    ports:
+      - "1234:1234"
+    volumes:
+      - lm-studio-data:/root/.cache/lm-studio
+    networks:
+      - mini-orca-network
+    profiles:
+      - with-llm
+
+volumes:
+  lm-studio-data:
+
+networks:
+  mini-orca-network:
+    driver: bridge

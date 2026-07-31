@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	apperrors "github.com/nanaki-93/mini-orca/internal/errors"
-	"github.com/nanaki-93/mini-orca/internal/orchestrator"
+	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
+	"github.com/nanaki-93/mini-orca/v2/internal/orchestrator"
 )
 
 // GateResponseRequest represents the request body for responding to a human gate.
