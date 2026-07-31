@@ -223,6 +223,9 @@
         const message = document.getElementById('confirm-message');
         const confirmBtn = document.getElementById('confirm-action');
 
+        // Save focus before opening dialog
+        FocusManager.saveFocus();
+
         // Set dialog content based on action
         if (action === 'reset') {
             title.textContent = 'Reset Skills Library';
@@ -231,12 +234,35 @@
         }
 
         dialog.classList.remove('hidden');
+
+        // Trap focus in dialog
+        if (typeof FocusManager !== 'undefined') {
+            FocusManager.trapFocus(dialog);
+        }
+
+        // Focus the confirm button
+        setTimeout(() => confirmBtn.focus(), 100);
+
+        // Announce to screen readers
+        if (typeof ScreenReader !== 'undefined') {
+            ScreenReader.announceAlert('Confirmation dialog opened');
+        }
     }
 
     // Hide confirmation dialog
     function hideConfirmDialog() {
         const dialog = document.getElementById('confirm-dialog');
         dialog.classList.add('hidden');
+
+        // Restore focus
+        if (typeof FocusManager !== 'undefined') {
+            FocusManager.restoreFocus();
+        }
+
+        // Announce to screen readers
+        if (typeof ScreenReader !== 'undefined') {
+            ScreenReader.announceStatus('Dialog closed');
+        }
     }
 
     // Execute reset action
@@ -275,7 +301,9 @@
 
     // Close dialog on Escape key
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
+        const dialog = document.getElementById('confirm-dialog');
+        if (dialog && !dialog.classList.contains('hidden') && e.key === 'Escape') {
+            e.preventDefault();
             hideConfirmDialog();
         }
     });

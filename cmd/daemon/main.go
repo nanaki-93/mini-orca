@@ -81,7 +81,8 @@ func main() {
 	// Initialize HTMX render handler
 	var htmxRenderHandler *handlers.HTMXRenderHandler
 	if templateEngine != nil {
-		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, sessionStore, projectStore)
+		cache := api.NewResponseCache(10 * time.Second)
+		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, sessionStore, projectStore, cache)
 	}
 
 	// Initialize orchestrator with router, registry, and executor
@@ -436,8 +437,7 @@ func startHTTPServer(
 	if htmxRenderHandler != nil {
 		mux.HandleFunc("GET /api/render/phase/", htmxRenderHandler.RenderPhase)
 		mux.HandleFunc("GET /api/render/file-tree", htmxRenderHandler.RenderFileTree)
-		mux.HandleFunc("GET /api/render/activity-log", htmxRenderHandler.RenderActivityLog)
-		mux.HandleFunc("GET /api/render/phase-tracker", htmxRenderHandler.RenderPhaseTracker)
+		mux.HandleFunc("GET /api/render/dashboard", htmxRenderHandler.RenderDashboard)
 	}
 
 	// Register main page

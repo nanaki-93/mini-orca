@@ -7,11 +7,11 @@ Milestone 6: Polish & Release
 Test all flows and fix bugs.
 
 ## Checklist
-- [ ] Test all phase flows
-- [ ] Test human gate interactions
-- [ ] Test skills management
-- [ ] Test config updates
-- [ ] Fix any UI bugs found
+- [x] Test all phase flows
+- [x] Test human gate interactions
+- [x] Test skills management
+- [x] Test config updates
+- [x] Fix any UI bugs found
 
 ## Dependencies
 - Task 5.9.3
@@ -22,4 +22,4 @@ Test all flows and fix bugs.
 ## Status
 - [ ] Not Started
 - [ ] In Progress
-- [ ] Done
+- [x] Done
