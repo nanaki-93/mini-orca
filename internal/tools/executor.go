@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
 // Executor defines the interface for executing tools and operations.
@@ -250,4 +253,34 @@ func newPythonToolExecutor(info *ProjectInfo) *pythonToolExecutor {
 
 func (p *pythonToolExecutor) FormatCode(path string) error {
 	return p.pythonExecutor.FormatCode()
+}
+
+// InitToolExecutor detects the project type at the current directory and creates
+// the appropriate ToolExecutor for the detected project type.
+func InitToolExecutor() (*ProjectInfo, ToolExecutor) {
+	// Detect project type starting from current directory
+	detector := NewProjectDetectorExecutor()
+	currentDir, err := os.Getwd()
+	if err != nil {
+		logging.Warn("Failed to get current directory", "error", err)
+		currentDir = "."
+	}
+
+	projectInfo, err := detector.DetectProjectType(currentDir)
+	if err != nil {
+		// If project type detection fails, try parent directories
+		logging.Warn("Failed to detect project type", "dir", currentDir, "error", err)
+		projectInfo, err = detector.DetectProjectType(filepath.Dir(currentDir))
+		if err != nil {
+			logging.Warn("Failed to detect project type in parent directory", "error", err)
+			logging.Info("Using generic executor (shell-only)")
+			return nil, NewExecutor(&ProjectInfo{Type: ProjectTypeUnknown, RootDir: currentDir})
+		}
+	}
+
+	logging.Info("Detected project type", "type", projectInfo.Type)
+
+	// Create ToolExecutor based on detected project type
+	executor := NewExecutor(projectInfo)
+	return projectInfo, executor
 }

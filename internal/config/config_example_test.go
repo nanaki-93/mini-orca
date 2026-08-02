@@ -21,7 +21,7 @@ func TestLoadConfigExample(t *testing.T) {
 		t.Fatalf("write temp file: %v", err)
 	}
 
-	cfg, err := config.LoadConfig(examplePath)
+	cfg, err := config.LoadFromYAML(examplePath)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestLoadConfigExample(t *testing.T) {
 }
 
 func TestLoadConfigNotExists(t *testing.T) {
-	_, err := config.LoadConfig("nonexistent.yaml")
+	_, err := config.LoadFromYAML("nonexistent.yaml")
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
 	}
@@ -66,7 +66,7 @@ func TestLoadConfigInvalidYAML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := config.LoadConfig(tmpPath)
+	_, err := config.LoadFromYAML(tmpPath)
 	if err == nil {
 		t.Fatal("expected error for invalid YAML")
 	}
@@ -81,7 +81,7 @@ func TestSaveAndReload(t *testing.T) {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	loaded, err := config.LoadConfig(tmpPath)
+	loaded, err := config.LoadFromYAML(tmpPath)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}

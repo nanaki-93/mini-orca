@@ -105,7 +105,7 @@ func (s *ConfigStore) UpdateConfig(req *ConfigUpdateRequest) error {
 
 // LoadConfig loads configuration from the file path.
 func LoadConfig(path string) (*config.Config, error) {
-	return config.LoadConfig(path)
+	return config.LoadFromYAML(path)
 }
 
 // applyUpdates applies the configuration updates to the store's config.

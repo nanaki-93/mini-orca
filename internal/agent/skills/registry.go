@@ -3,6 +3,9 @@ package skills
 import (
 	"fmt"
 	"sync"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
 // SkillsRegistry manages the lifecycle and lookup of skills in the multi-agent system.
@@ -85,4 +88,38 @@ func agentToCategory(agentName string) SkillCategory {
 	default:
 		return Principles
 	}
+}
+
+// InitSkillsRegistry creates a skills registry and registers all skills from the config.
+func InitSkillsRegistry(cfg *config.Config) *SkillsRegistry {
+	registry := NewSkillsRegistry()
+
+	// Register knowledge skills from config
+	for name, description := range cfg.Skills.Knowledge {
+		s := Skill{
+			Name:           name,
+			Type:           Knowledge,
+			PromptTemplate: description,
+		}
+		if err := registry.Register(s); err != nil {
+			logging.Warn("Failed to register knowledge skill", "name", name, "error", err)
+		}
+	}
+
+	// Register tool skills from config
+	for name, description := range cfg.Skills.Tools {
+		s := Skill{
+			Name:           name,
+			Type:           Tool,
+			PromptTemplate: description,
+		}
+		if err := registry.Register(s); err != nil {
+			logging.Warn("Failed to register tool skill", "name", name, "error", err)
+		}
+	}
+
+	totalSkills := len(cfg.Skills.Knowledge) + len(cfg.Skills.Tools)
+	logging.Info("Skills registry initialized", "count", totalSkills)
+
+	return registry
 }

@@ -3,8 +3,12 @@ package state
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
+	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
 
 // Store manages the state of the orchestrator pipeline.
@@ -455,4 +459,42 @@ func (s *Store) copyPlanData(plan *Plan) *Plan {
 	}
 
 	return &planCopy
+}
+
+// InitStateStore creates a state store with a new session.
+func InitStateStore(projectInfo *tools.ProjectInfo) *Store {
+	currentDir, _ := os.Getwd()
+	if currentDir == "" {
+		currentDir = "."
+	}
+
+	projectType := "unknown"
+	if projectInfo != nil {
+		projectType = string(projectInfo.Type)
+	}
+
+	session := &Session{
+		ID:            generateSessionID(),
+		Goal:          "",
+		ProjectPath:   currentDir,
+		ProjectType:   projectType,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+		CurrentPhase:  PhaseCoding,
+		Status:        SessionStatusPending,
+		AtomicUnits:   nil,
+		History:       nil,
+		TestResults:   nil,
+		ReviewReports: nil,
+		Error:         "",
+	}
+
+	store := NewStore(session)
+	logging.Info("State store initialized", "session_id", session.ID)
+	return store
+}
+
+// generateSessionID generates a simple session ID.
+func generateSessionID() string {
+	return fmt.Sprintf("session-%d", time.Now().UnixNano())
 }
