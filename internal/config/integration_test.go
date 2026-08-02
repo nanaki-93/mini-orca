@@ -28,7 +28,7 @@ models:
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadConfig(configPath)
+	cfg, err := LoadFromYAML(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestSaveAndReload_KeepData(t *testing.T) {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	loaded, err := LoadConfig(path)
+	loaded, err := LoadFromYAML(path)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}

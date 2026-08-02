@@ -30,7 +30,7 @@ models:
 	}
 
 	t.Run("Valid YAML", func(t *testing.T) {
-		cfg, err := LoadConfig(configPath)
+		cfg, err := LoadFromYAML(configPath)
 		if err != nil {
 			t.Fatalf("failed to load config: %v", err)
 		}
@@ -53,7 +53,7 @@ models:
 	})
 
 	t.Run("Non-existent file", func(t *testing.T) {
-		_, err := LoadConfig("non-existent.yaml")
+		_, err := LoadFromYAML("non-existent.yaml")
 		if err == nil {
 			t.Error("expected error for non-existent file")
 		}
@@ -62,7 +62,7 @@ models:
 	t.Run("Invalid YAML", func(t *testing.T) {
 		invalidPath := filepath.Join(tmpDir, "invalid.yaml")
 		os.WriteFile(invalidPath, []byte("invalid: yaml: :"), 0644)
-		_, err := LoadConfig(invalidPath)
+		_, err := LoadFromYAML(invalidPath)
 		if err == nil {
 			t.Error("expected error for invalid YAML")
 		}
@@ -168,7 +168,7 @@ func TestSaveLoadJSON(t *testing.T) {
 		t.Fatalf("failed to save: %v", err)
 	}
 
-	loaded, err := Load(path)
+	loaded, err := LoadFromJSON(path)
 	if err != nil {
 		t.Fatalf("failed to load: %v", err)
 	}

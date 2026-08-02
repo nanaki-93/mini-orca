@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -25,7 +23,7 @@ import (
 
 func main() {
 	// Load configuration
-	cfg, err := loadConfig()
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		logging.Error("Failed to load config", "error", err)
 		os.Exit(1)
@@ -46,23 +44,23 @@ func main() {
 	}
 
 	// Initialize router
-	router, err := initRouter(cfg)
+	router, err := model.InitRouter(cfg)
 	if err != nil {
 		logging.Error("Failed to initialize router", "error", err)
 		os.Exit(1)
 	}
 
 	// Initialize skills registry and register config skills
-	skillsRegistry := initSkillsRegistry(cfg)
+	skillsRegistry := skills.InitSkillsRegistry(cfg)
 
 	// Detect project type and create tool executor
-	projectInfo, executor := initToolExecutor()
+	projectInfo, executor := tools.InitToolExecutor()
 
 	// Initialize agent registry and register agents
-	agentRegistry := initAgentRegistry(router)
+	agentRegistry := agent.InitAgentRegistry(router)
 
 	// Initialize state store
-	store := initStateStore(projectInfo)
+	store := state.InitStateStore(projectInfo)
 
 	// Initialize API stores and handlers
 	sessionStore := api.NewSessionStore()
@@ -167,182 +165,6 @@ func main() {
 	}
 
 	logging.Info("Shutdown complete")
-}
-
-// loadConfig reads configuration from the specified path or uses defaults.
-func loadConfig() (*config.Config, error) {
-	configPath := "config.yaml"
-	if p := os.Getenv("MINI_ORCA_CONFIG"); p != "" {
-		configPath = p
-	}
-
-	cfg, err := config.LoadConfig(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			logging.Info("Config file not found, using defaults", "path", configPath)
-			return config.Default(), nil
-		}
-		return nil, err
-	}
-
-	logging.Info("Loaded config", "path", configPath)
-	return cfg, nil
-}
-
-// initRouter creates and configures the model router from the provided config.
-func initRouter(cfg *config.Config) (*model.Router, error) {
-	router := model.NewRouter()
-
-	// Register providers from config
-	for name, providerCfg := range cfg.Models.Providers {
-		provider, err := createProvider(name, providerCfg)
-		if err != nil {
-			return nil, fmt.Errorf("create provider %q: %w", name, err)
-		}
-		router.RegisterProvider(provider)
-		logging.Info("Registered provider", "name", name, "base_url", providerCfg.BaseURL)
-	}
-
-	// Set phase-specific model configurations
-	for phase, phaseCfg := range cfg.Models.Phases {
-		modelCfg := model.ModelConfig{
-			Provider:    phaseCfg.Provider,
-			ModelID:     phaseCfg.Model,
-			Temperature: phaseCfg.Temperature,
-			MaxTokens:   phaseCfg.MaxTokens,
-		}
-		router.SetDefaultConfig(string(phase), modelCfg)
-	}
-
-	// Set active provider
-	if cfg.Models.ActiveProvider != "" {
-		if err := router.SetActiveProvider(cfg.Models.ActiveProvider); err != nil {
-			return nil, fmt.Errorf("set active provider: %w", err)
-		}
-	}
-
-	return router, nil
-}
-
-// createProvider creates a provider instance from its configuration.
-func createProvider(name string, cfg config.ProviderConfig) (model.Provider, error) {
-	switch name {
-	case "lm-studio":
-		return model.NewLMStudioProvider(cfg.BaseURL), nil
-	default:
-		return nil, fmt.Errorf("unsupported provider: %s", name)
-	}
-}
-
-// initSkillsRegistry creates a skills registry and registers all skills from the config.
-func initSkillsRegistry(cfg *config.Config) *skills.SkillsRegistry {
-	registry := skills.NewSkillsRegistry()
-
-	// Register knowledge skills from config
-	for name, description := range cfg.Skills.Knowledge {
-		s := skills.Skill{
-			Name:           name,
-			Type:           skills.Knowledge,
-			PromptTemplate: description,
-		}
-		if err := registry.Register(s); err != nil {
-			logging.Warn("Failed to register knowledge skill", "name", name, "error", err)
-		}
-	}
-
-	// Register tool skills from config
-	for name, description := range cfg.Skills.Tools {
-		s := skills.Skill{
-			Name:           name,
-			Type:           skills.Tool,
-			PromptTemplate: description,
-		}
-		if err := registry.Register(s); err != nil {
-			logging.Warn("Failed to register tool skill", "name", name, "error", err)
-		}
-	}
-
-	totalSkills := len(cfg.Skills.Knowledge) + len(cfg.Skills.Tools)
-	logging.Info("Skills registry initialized", "count", totalSkills)
-
-	return registry
-}
-
-// initToolExecutor detects the project type at the current directory and creates
-// the appropriate ToolExecutor for the detected project type.
-func initToolExecutor() (*tools.ProjectInfo, tools.ToolExecutor) {
-	// Detect project type starting from current directory
-	detector := tools.NewProjectDetectorExecutor()
-	currentDir, err := os.Getwd()
-	if err != nil {
-		logging.Warn("Failed to get current directory", "error", err)
-		currentDir = "."
-	}
-
-	projectInfo, err := detector.DetectProjectType(currentDir)
-	if err != nil {
-		// If project type detection fails, try parent directories
-		logging.Warn("Failed to detect project type", "dir", currentDir, "error", err)
-		projectInfo, err = detector.DetectProjectType(filepath.Dir(currentDir))
-		if err != nil {
-			logging.Warn("Failed to detect project type in parent directory", "error", err)
-			logging.Info("Using generic executor (shell-only)")
-			return nil, tools.NewExecutor(&tools.ProjectInfo{Type: tools.ProjectTypeUnknown, RootDir: currentDir})
-		}
-	}
-
-	logging.Info("Detected project type", "type", projectInfo.Type)
-
-	// Create ToolExecutor based on detected project type
-	executor := tools.NewExecutor(projectInfo)
-	return projectInfo, executor
-}
-
-// initAgentRegistry creates an agent registry and registers all agents that implement the Agent interface.
-func initAgentRegistry(router *model.Router) *agent.Registry {
-	registry := agent.NewRegistry()
-
-	// Create and register coder agent
-	coder := agent.NewCoderAgent(router, nil)
-	if err := registry.Register(coder.Name(), coder); err != nil {
-		logging.Warn("Failed to register coder agent", "error", err)
-	}
-
-	logging.Info("Agent registry initialized", "count", len(registry.List()))
-	return registry
-}
-
-// initStateStore creates a state store with a new session.
-func initStateStore(projectInfo *tools.ProjectInfo) *state.Store {
-	currentDir, _ := os.Getwd()
-	if currentDir == "" {
-		currentDir = "."
-	}
-
-	projectType := "unknown"
-	if projectInfo != nil {
-		projectType = string(projectInfo.Type)
-	}
-
-	session := &state.Session{
-		ID:            generateSessionID(),
-		Goal:          "",
-		ProjectPath:   currentDir,
-		ProjectType:   projectType,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
-		CurrentPhase:  state.PhaseCoding,
-		Status:        state.SessionStatusPending,
-		AtomicUnits:   nil,
-		History:       nil,
-		TestResults:   nil,
-		ReviewReports: nil,
-		Error:         "",
-	}
-
-	store := state.NewStore(session)
-	logging.Info("State store initialized", "session_id", session.ID)
-	return store
 }
 
 // startHTTPServer creates and starts the HTTP server with all API endpoints.
@@ -491,11 +313,6 @@ func startHTTPServer(
 	}()
 
 	return server
-}
-
-// generateSessionID generates a simple session ID.
-func generateSessionID() string {
-	return fmt.Sprintf("session-%d", time.Now().UnixNano())
 }
 
 // waitForShutdown blocks until a SIGINT or SIGTERM signal is received.

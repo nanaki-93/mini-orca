@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
@@ -81,4 +82,18 @@ func (r *Registry) FromConfig(cfg model.AgentConfig, router *model.Router) error
 // DefaultAgentNames returns the names of the four pre-registered default agents.
 func DefaultAgentNames() []string {
 	return []string{"planner", "coder", "tester", "reviewer"}
+}
+
+// InitAgentRegistry creates an agent registry and registers all agents that implement the Agent interface.
+func InitAgentRegistry(router *model.Router) *Registry {
+	registry := NewRegistry()
+
+	// Create and register coder agent
+	coder := NewCoderAgent(router, nil)
+	if err := registry.Register(coder.Name(), coder); err != nil {
+		logging.Warn("Failed to register coder agent", "error", err)
+	}
+
+	logging.Info("Agent registry initialized", "count", len(registry.List()))
+	return registry
 }

@@ -3,6 +3,9 @@ package model
 import (
 	"context"
 	"fmt"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
 // Router routes requests to the appropriate LLM provider based on phase or explicit config.
@@ -156,4 +159,49 @@ func (r *Router) RouteListModels(ctx context.Context) ([]Model, error) {
 		return nil, err
 	}
 	return provider.ListModels(ctx)
+}
+
+// InitRouter creates and configures the model router from the provided config.
+func InitRouter(cfg *config.Config) (*Router, error) {
+	router := NewRouter()
+
+	// Register providers from config
+	for name, providerCfg := range cfg.Models.Providers {
+		provider, err := createProvider(name, providerCfg)
+		if err != nil {
+			return nil, fmt.Errorf("create provider %q: %w", name, err)
+		}
+		router.RegisterProvider(provider)
+		logging.Info("Registered provider", "name", name, "base_url", providerCfg.BaseURL)
+	}
+
+	// Set phase-specific model configurations
+	for phase, phaseCfg := range cfg.Models.Phases {
+		modelCfg := ModelConfig{
+			Provider:    phaseCfg.Provider,
+			ModelID:     phaseCfg.Model,
+			Temperature: phaseCfg.Temperature,
+			MaxTokens:   phaseCfg.MaxTokens,
+		}
+		router.SetDefaultConfig(string(phase), modelCfg)
+	}
+
+	// Set active provider
+	if cfg.Models.ActiveProvider != "" {
+		if err := router.SetActiveProvider(cfg.Models.ActiveProvider); err != nil {
+			return nil, fmt.Errorf("set active provider: %w", err)
+		}
+	}
+
+	return router, nil
+}
+
+// createProvider creates a provider instance from its configuration.
+func createProvider(name string, cfg config.ProviderConfig) (Provider, error) {
+	switch name {
+	case "lm-studio":
+		return NewLMStudioProvider(cfg.BaseURL), nil
+	default:
+		return nil, fmt.Errorf("unsupported provider: %s", name)
+	}
 }

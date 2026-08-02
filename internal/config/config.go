@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 	"gopkg.in/yaml.v3"
 )
 
@@ -112,8 +113,28 @@ func (c *Config) applyDefaults() {
 	}
 }
 
-// LoadConfig reads configuration from a YAML file and applies defaults for missing fields.
-func LoadConfig(path string) (*Config, error) {
+// LoadConfig reads configuration from the specified path or uses defaults.
+func LoadConfig() (*Config, error) {
+	configPath := "config.yaml"
+	if p := os.Getenv("MINI_ORCA_CONFIG"); p != "" {
+		configPath = p
+	}
+
+	cfg, err := LoadFromYAML(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logging.Info("Config file not found, using defaults", "path", configPath)
+			return Default(), nil
+		}
+		return nil, err
+	}
+
+	logging.Info("Loaded config", "path", configPath)
+	return cfg, nil
+}
+
+// LoadFromYAML reads configuration from a YAML file and applies defaults for missing fields.
+func LoadFromYAML(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -131,8 +152,8 @@ func LoadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// Load reads configuration from a JSON file.
-func Load(path string) (*Config, error) {
+// LoadFromJSON reads configuration from a JSON file.
+func LoadFromJSON(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
