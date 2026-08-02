@@ -6,7 +6,7 @@ import (
 
 // Agent defines the interface that all agents in the multi-agent system must implement.
 // This abstraction enables polymorphism and dependency inversion,
-// allowing different agent types (planning, coding, testing, etc.) to be swapped
+// allowing different agent types (coding, testing, etc.) to be swapped
 // without modifying the orchestrator or other dependents.
 type Agent interface {
 	// Name returns the agent's identifier.

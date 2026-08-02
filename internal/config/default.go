@@ -6,12 +6,6 @@ const DefaultProviderURL = "http://localhost:1234"
 // DefaultPhaseConfigs returns a map of phase names to their default PhaseModelConfig.
 func DefaultPhaseConfigs() map[string]PhaseModelConfig {
 	return map[string]PhaseModelConfig{
-		"planning": {
-			Provider:    "lm-studio",
-			Model:       "",
-			Temperature: 0.7,
-			MaxTokens:   4096,
-		},
 		"coding": {
 			Provider:    "lm-studio",
 			Model:       "",
@@ -42,9 +36,6 @@ func DefaultPhaseConfigs() map[string]PhaseModelConfig {
 // DefaultAgentConfigs returns default agent configurations with predefined skill lists.
 func DefaultAgentConfigs() AgentsConfig {
 	return AgentsConfig{
-		Planner: AgentConfig{
-			Skills: []string{"task_breakdown", "context_analysis", "plan_generation"},
-		},
 		Coder: AgentConfig{
 			Skills: []string{"code_generation", "refactoring", "debugging"},
 		},

@@ -9,7 +9,7 @@ import (
 // It manages provider registration, model selection, and phase-based defaults.
 type Router struct {
 	providers map[string]Provider    // providerName -> Provider instance
-	defaults  map[string]ModelConfig // key (e.g., "phase:planning") -> default config
+	defaults  map[string]ModelConfig // key (e.g., "phase:coding") -> default config
 	active    string                 // Currently active provider name
 }
 
@@ -31,7 +31,7 @@ func (r *Router) RegisterProvider(p Provider) {
 }
 
 // SetDefaultConfig sets the default model configuration for a given key.
-// Keys can be phase names (e.g., "planning", "coding") or custom identifiers.
+// Keys can be phase names (e.g., "coding") or custom identifiers.
 func (r *Router) SetDefaultConfig(key string, config ModelConfig) {
 	r.defaults[key] = config
 }

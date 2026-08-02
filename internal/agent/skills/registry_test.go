@@ -134,7 +134,6 @@ func TestSkillsRegistry_GetForAgent(t *testing.T) {
 		expectedCat   SkillCategory
 		expectedCount int
 	}{
-		{"planner", Design, 3},
 		{"coder", Coding, 3},
 		{"tester", Testing, 4},
 		{"reviewer", Review, 3},
@@ -165,17 +164,17 @@ func TestSkillsRegistry_ThreadSafety(t *testing.T) {
 
 	// Concurrent reads
 	go func() {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_, _ = registry.Get("solid_principles")
 			_ = registry.GetByCategory(Design)
-			_ = registry.GetForAgent("planner")
+			_ = registry.GetForAgent("coding")
 		}
 		done <- true
 	}()
 
 	// Concurrent writes
 	go func() {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			skill := Skill{
 				Name:           "dynamic_skill",
 				Type:           Knowledge,

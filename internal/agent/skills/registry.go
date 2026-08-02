@@ -76,8 +76,6 @@ func (r *SkillsRegistry) GetForAgent(agentName string) []Skill {
 // agentToCategory maps an agent name to its primary skill category.
 func agentToCategory(agentName string) SkillCategory {
 	switch agentName {
-	case "planner":
-		return Design
 	case "coder":
 		return Coding
 	case "tester":

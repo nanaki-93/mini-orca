@@ -41,7 +41,7 @@ func TestClient_Execute_EmptyInput(t *testing.T) {
 	router := model.NewRouter()
 	client := NewClient(router)
 	client.name = "test-agent"
-	client.phase = model.PhasePlanning
+	client.phase = model.PhaseCoding
 	_, err := client.Execute(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error for empty input")

@@ -12,141 +12,6 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
-// TestPlannerAgent_PromptBuilding verifies that the planner agent builds prompts
-// correctly with and without skills.
-func TestPlannerAgent_PromptBuilding(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				t.Fatalf("failed to decode request: %v", err)
-				return
-			}
-
-			if len(req.Messages) == 0 {
-				t.Fatal("expected at least one message in request")
-			}
-
-			content := req.Messages[0].Content
-			// Verify the prompt contains the goal marker
-			if !strings.Contains(content, "Goal:") {
-				t.Error("expected prompt to contain 'Goal:' marker")
-			}
-			if !strings.Contains(content, "Build a REST API") {
-				t.Error("expected prompt to contain goal description")
-			}
-
-			resp := model.ChatResponse{
-				ID:      "planner-prompt-1",
-				Object:  "chat.completion",
-				Created: 1234567890,
-				Model:   "planning-model",
-				Choices: []model.ChatChoice{
-					{
-						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "Plan generated"},
-						FinishReason: "stop",
-					},
-				},
-				Usage: model.ChatUsage{PromptTokens: 10, CompletionTokens: 10, TotalTokens: 20},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("planning", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "planning-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewPlannerAgent(router, registry)
-
-	_, err := agent.Execute(context.Background(), "Build a REST API for user management")
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-}
-
-// TestPlannerAgent_SkillsInPrompt verifies that skills are correctly included
-// in the planner's prompt when skills are set.
-func TestPlannerAgent_SkillsInPrompt(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				t.Fatalf("failed to decode request: %v", err)
-				return
-			}
-
-			content := req.Messages[0].Content
-
-			// Verify that skill descriptions are included in the prompt
-			if !strings.Contains(content, "Goal:") {
-				t.Error("expected prompt to contain 'Goal:' marker")
-			}
-			if !strings.Contains(content, "REST API") {
-				t.Error("expected prompt to contain goal content")
-			}
-
-			resp := model.ChatResponse{
-				ID:      "planner-prompt-2",
-				Object:  "chat.completion",
-				Created: 1234567890,
-				Model:   "planning-model",
-				Choices: []model.ChatChoice{
-					{
-						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "Plan with skills"},
-						FinishReason: "stop",
-					},
-				},
-				Usage: model.ChatUsage{PromptTokens: 20, CompletionTokens: 15, TotalTokens: 35},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("planning", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "planning-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewPlannerAgent(router, registry)
-
-	// Set planner-specific skills
-	agent.SetSkills([]string{"task_breakdown", "context_analysis", "plan_generation"})
-
-	_, err := agent.Execute(context.Background(), "Build a REST API for user management")
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	// Verify skills are set
-	if len(agent.GetSkills()) != 3 {
-		t.Errorf("expected 3 skills, got %d", len(agent.GetSkills()))
-	}
-}
-
 // TestCoderAgent_PromptBuilding verifies that the coder agent builds prompts
 // correctly with atomic unit descriptions.
 func TestCoderAgent_PromptBuilding(t *testing.T) {
@@ -586,7 +451,7 @@ func TestAgent_EmptySkillsFallback(t *testing.T) {
 
 	// Create an empty registry (no skills registered)
 	registry := skills.NewSkillsRegistry()
-	agent := NewPlannerAgent(router, registry)
+	agent := NewCoderAgent(router, registry)
 
 	// Don't set any skills - should use fallback
 	_, err := agent.Execute(context.Background(), "Build a REST API")
@@ -655,17 +520,17 @@ func TestAgent_SkillsRegistryIntegration(t *testing.T) {
 
 	// Register planner-specific skills
 	_ = registry.Register(skills.Skill{
-		Name:           "task_breakdown",
+		Name:           "code_generation",
 		Type:           skills.Knowledge,
-		PromptTemplate: "Break down complex tasks into manageable subtasks",
+		PromptTemplate: "Generate clean, well-documented code",
 	})
 	_ = registry.Register(skills.Skill{
-		Name:           "architecture_design",
+		Name:           "refactoring",
 		Type:           skills.Knowledge,
-		PromptTemplate: "Design scalable system architecture",
+		PromptTemplate: "Refactor code for clarity and maintainability",
 	})
 
-	agent := NewPlannerAgent(router, registry)
+	agent := NewCoderAgent(router, registry)
 
 	// Set skills from the registry
 	agent.SetSkills([]string{"task_breakdown", "architecture_design"})

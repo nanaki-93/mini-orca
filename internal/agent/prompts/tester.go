@@ -28,7 +28,7 @@ func BuildTesterPrompt(code string, testResults string, skills []string) ([]mode
 
 // buildTesterSystemMessage constructs the system prompt with role, skill templates, analysis framework, and constraints.
 func buildTesterSystemMessage(skills []string) string {
-	var sb testerPromptBuilder
+	var sb promptBuilder
 
 	// Role definition
 	sb.AppendLine("You are an expert QA tester and code reviewer. Your job is to analyze code, test results, and coverage reports to identify failures, suggest improvements, and ensure code quality.")
@@ -106,7 +106,7 @@ func buildTesterSystemMessage(skills []string) string {
 
 // buildTesterUserMessage constructs the user prompt with code, test results, and coverage report.
 func buildTesterUserMessage(code string, testResults string) string {
-	var sb testerPromptBuilder
+	var sb promptBuilder
 
 	sb.AppendLine("## Code to Test")
 	sb.AppendLine("```go")
@@ -123,19 +123,4 @@ func buildTesterUserMessage(code string, testResults string) string {
 	sb.AppendLine("Based on the code and test results above, provide a comprehensive analysis following the framework in the system instructions.")
 
 	return sb.String()
-}
-
-// testerPromptBuilder is a simple helper for building multi-line prompt strings.
-type testerPromptBuilder struct {
-	lines []string
-}
-
-// AppendLine adds a line to the tester prompt builder.
-func (b *testerPromptBuilder) AppendLine(line string) {
-	b.lines = append(b.lines, line)
-}
-
-// String returns the built prompt as a single string.
-func (b *testerPromptBuilder) String() string {
-	return joinLines(b.lines)
 }

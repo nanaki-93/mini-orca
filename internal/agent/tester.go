@@ -126,10 +126,10 @@ func extractLines(content, header string) []string {
 	// Split by newlines and extract bullet points
 	for _, line := range strings.Split(afterHeader, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "- ") {
-			lines = append(lines, strings.TrimPrefix(line, "- "))
-		} else if strings.HasPrefix(line, "* ") {
-			lines = append(lines, strings.TrimPrefix(line, "* "))
+		if after, ok := strings.CutPrefix(line, "- "); ok {
+			lines = append(lines, after)
+		} else if after0, ok0 := strings.CutPrefix(line, "* "); ok0 {
+			lines = append(lines, after0)
 		}
 	}
 
@@ -144,16 +144,16 @@ func extractCoverage(content string) string {
 		if idx != -1 {
 			// Extract next few characters after pattern
 			after := content[idx+len(pattern):]
-			var coverage string
+			var coverage strings.Builder
 			for _, ch := range after {
 				if ch >= '0' && ch <= '9' || ch == '.' || ch == '%' {
-					coverage += string(ch)
-				} else if len(coverage) > 0 {
+					coverage.WriteString(string(ch))
+				} else if len(coverage.String()) > 0 {
 					break
 				}
 			}
-			if coverage != "" {
-				return coverage
+			if coverage.String() != "" {
+				return coverage.String()
 			}
 		}
 	}

@@ -874,7 +874,7 @@ func (h *HTMXRenderHandler) RenderFileTree(w http.ResponseWriter, r *http.Reques
 		ProjectPath: project.Path,
 	}
 
-	rendered, err := h.templateEngine.RenderComponentPartial("file-tree", data)
+	rendered, err := h.templateEngine.RenderComponentPartial("file-tree.html", data)
 	if err != nil {
 		api.WriteAppError(w, apperrors.Internal("template rendering failed", "Failed to render the file tree component.", err))
 		return

@@ -16,11 +16,6 @@ models:
 
   # Phase-specific model configurations
   phases:
-    planning:
-      provider: "lm-studio"
-      model: ""       # Leave empty to use the provider's default model
-      temperature: 0.3
-      max_tokens: 4096
     coding:
       provider: "lm-studio"
       model: ""
@@ -46,13 +41,6 @@ models:
 # Configure the orchestrator agents with their skills and optional model overrides.
 
 agents:
-  planner:
-    skills:
-      - task_breakdown
-      - context_analysis
-      - plan_generation
-    model: ""  # Optional: override the default model for this agent
-
   coder:
     skills:
       - code_generation
@@ -104,3 +92,17 @@ retry:
   max_retries: 3
   backoff_base: 1000   # ms - base delay for exponential backoff
   backoff_max: 30000   # ms - maximum delay between retries
+
+# ─── Lxogging ──────────────────────────────────────────────────────────────────
+# Configure structured logging.
+
+logging:
+  level: "info"         # debug, info, warn, error
+  format: "json"        # json or text
+  filename: ""          # Optional: path to log file (default: stdout)
+  sensitive_keys: # Optional: list of keys to redact from logs
+    - "password"
+    - "secret"
+    - "api_key"
+    - "token"
+    - "authorization"

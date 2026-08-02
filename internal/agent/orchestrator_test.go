@@ -27,27 +27,6 @@ func TestNewOrchestrator(t *testing.T) {
 	}
 }
 
-func TestOrchestrator_RunPlanner_EmptyGoal(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
-
-	_, err := orch.RunPlanner("")
-	if err == nil {
-		t.Fatal("expected error for empty goal, got nil")
-	}
-}
-
-func TestOrchestrator_RunPlanner_NoRouter(t *testing.T) {
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(nil, registry, nil)
-
-	_, err := orch.RunPlanner("test goal")
-	if err == nil {
-		t.Fatal("expected error for nil router, got nil")
-	}
-}
-
 func TestOrchestrator_RunCoder_EmptyTitle(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
@@ -150,66 +129,6 @@ func TestOrchestrator_RunReviewer_NoRouter(t *testing.T) {
 	_, err := orch.RunReviewer("code", "plan")
 	if err == nil {
 		t.Fatal("expected error for nil router, got nil")
-	}
-}
-
-func TestOrchestrator_RunPlanner_FullFlow(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
-				ID:      "planner-1",
-				Object:  "chat.completion",
-				Created: 1234567890,
-				Model:   "planning-model",
-				Choices: []model.ChatChoice{
-					{
-						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "1. **Setup Project**\n   Description: Initialize the Go module and project structure\n   Dependencies: None\n\n2. **Implement Core Logic**\n   Description: Implement the main business logic\n   Dependencies: 1"},
-						FinishReason: "stop",
-					},
-				},
-				Usage: model.ChatUsage{PromptTokens: 50, CompletionTokens: 80, TotalTokens: 130},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("planning", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "planning-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
-
-	result, err := orch.RunPlanner("Build a REST API for user management")
-	if err != nil {
-		t.Fatalf("RunPlanner failed: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if result.Output == "" {
-		t.Error("expected non-empty output")
-	}
-	if result.Phase != "planning" {
-		t.Errorf("expected phase 'planning', got %s", result.Phase)
-	}
-	if result.Metadata == nil {
-		t.Error("expected non-nil metadata")
-	}
-	if result.Metadata["model"] == "" {
-		t.Error("expected model in metadata")
 	}
 }
 

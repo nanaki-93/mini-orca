@@ -28,7 +28,7 @@ func BuildReviewerPrompt(code string, plan string, skills []string) ([]model.Cha
 
 // buildReviewerSystemMessage constructs the system prompt with role, skill templates, review checklist, and constraints.
 func buildReviewerSystemMessage(skills []string) string {
-	var sb reviewerPromptBuilder
+	var sb promptBuilder
 
 	// Role definition
 	sb.AppendLine("You are an expert code reviewer and quality assurance specialist. Your job is to review code against the original plan/spec, identify issues, suggest improvements, and provide a quality score.")
@@ -123,7 +123,7 @@ func buildReviewerSystemMessage(skills []string) string {
 
 // buildReviewerUserMessage constructs the user prompt with code, plan/spec, and previous feedback.
 func buildReviewerUserMessage(code string, plan string) string {
-	var sb reviewerPromptBuilder
+	var sb promptBuilder
 
 	sb.AppendLine("## Code to Review")
 	sb.AppendLine("```go")
@@ -140,19 +140,4 @@ func buildReviewerUserMessage(code string, plan string) string {
 	sb.AppendLine("Review the code against the plan/spec above. Identify issues, suggest improvements, and provide a quality score and recommendation.")
 
 	return sb.String()
-}
-
-// reviewerPromptBuilder is a simple helper for building multi-line prompt strings.
-type reviewerPromptBuilder struct {
-	lines []string
-}
-
-// AppendLine adds a line to the reviewer prompt builder.
-func (b *reviewerPromptBuilder) AppendLine(line string) {
-	b.lines = append(b.lines, line)
-}
-
-// String returns the built prompt as a single string.
-func (b *reviewerPromptBuilder) String() string {
-	return joinLines(b.lines)
 }

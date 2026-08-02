@@ -71,6 +71,19 @@ func main() {
 	// Initialize project store
 	projectStore := handlers.NewProjectStore()
 
+	// Auto-create project from state store session
+	if store != nil {
+		session := store.GetCurrentSession()
+		if session != nil && session.ProjectPath != "" {
+			project, err := projectStore.CreateProject("", session.ProjectPath, session.ProjectType)
+			if err != nil {
+				logging.Warn("Failed to auto-create project from state store", "error", err)
+			} else {
+				logging.Info("Auto-created project from state store", "project_id", project.ID, "project_name", project.Name, "project_path", project.Path)
+			}
+		}
+	}
+
 	// Initialize template engine
 	templatesPath := "internal/api/templates"
 	templateEngine, err := handlers.NewTemplateEngine(templatesPath)
@@ -90,9 +103,6 @@ func main() {
 	agentOrchestrator := agent.NewOrchestrator(router, skillsRegistry, executor)
 
 	// Create agents for logging purposes
-	planner := agent.NewPlannerAgent(router, skillsRegistry)
-	planner.SetSkills(cfg.Agents.Planner.Skills)
-
 	coder := agent.NewCoderAgent(router, skillsRegistry)
 	coder.SetSkills(cfg.Agents.Coder.Skills)
 
@@ -123,7 +133,6 @@ func main() {
 	}
 
 	// Log registered agents and their skills
-	logging.Info("Agent registered", "name", planner.Name(), "description", planner.Description(), "skills", planner.GetSkills())
 	logging.Info("Agent registered", "name", coder.Name(), "description", coder.Name(), "skills", coder.GetSkills())
 	logging.Info("Agent registered", "name", tester.Name(), "description", tester.Description(), "skills", tester.GetSkills())
 	logging.Info("Agent registered", "name", reviewer.Name(), "description", reviewer.Description(), "skills", reviewer.GetSkills())
@@ -293,12 +302,6 @@ func initToolExecutor() (*tools.ProjectInfo, tools.ToolExecutor) {
 func initAgentRegistry(router *model.Router) *agent.Registry {
 	registry := agent.NewRegistry()
 
-	// Create and register planner agent
-	planner := agent.NewPlannerAgent(router, nil)
-	if err := registry.Register(planner.Name(), planner); err != nil {
-		logging.Warn("Failed to register planner agent", "error", err)
-	}
-
 	// Create and register coder agent
 	coder := agent.NewCoderAgent(router, nil)
 	if err := registry.Register(coder.Name(), coder); err != nil {
@@ -328,9 +331,8 @@ func initStateStore(projectInfo *tools.ProjectInfo) *state.Store {
 		ProjectType:   projectType,
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
-		CurrentPhase:  state.PhasePlanning,
+		CurrentPhase:  state.PhaseCoding,
 		Status:        state.SessionStatusPending,
-		Plan:          nil,
 		AtomicUnits:   nil,
 		History:       nil,
 		TestResults:   nil,
@@ -365,13 +367,13 @@ func startHTTPServer(
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","agents":["planner","coder","tester","reviewer"]}`))
+		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","agents":["coder","tester","reviewer"]}`))
 	})
 
 	// Create phase router for session lifecycle
 	currentSession := &state.Session{
 		ID:           "default",
-		CurrentPhase: state.PhasePlanning,
+		CurrentPhase: state.PhaseCoding,
 		Status:       state.SessionStatusPending,
 	}
 	phaseRouter := orchestrator.NewPhaseRouter(currentSession, nil)

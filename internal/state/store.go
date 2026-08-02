@@ -19,13 +19,20 @@ type Store struct {
 
 // NewStore creates a new Store instance with the given session.
 func NewStore(session *Session) *Store {
-	return &Store{
+	store := &Store{
 		sessions:      make(map[string]*Session),
 		plans:         make(map[string]*Plan),
 		histories:     make(map[string][]PhaseHistory),
 		testResults:   make(map[string][]TestResult),
 		reviewReports: make(map[string][]ReviewReportEntry),
 	}
+
+	// Save the initial session if provided
+	if session != nil {
+		store.SaveSession(session)
+	}
+
+	return store
 }
 
 // SaveSession saves a session to the store.
@@ -71,6 +78,18 @@ func (s *Store) ListSessions() []*Session {
 	}
 
 	return sessions
+}
+
+// GetCurrentSession returns the first session in the store, or nil if none exist.
+func (s *Store) GetCurrentSession() *Session {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, session := range s.sessions {
+		return s.copySessionData(session)
+	}
+
+	return nil
 }
 
 // SavePlan saves a plan to the store.

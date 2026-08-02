@@ -34,8 +34,8 @@ func TestLoadConfigExample(t *testing.T) {
 		t.Errorf("expected 1 provider, got %d", len(cfg.Models.Providers))
 	}
 
-	if len(cfg.Models.Phases) != 5 {
-		t.Errorf("expected 5 phases, got %d", len(cfg.Models.Phases))
+	if len(cfg.Models.Phases) != 4 {
+		t.Errorf("expected 4 phases, got %d", len(cfg.Models.Phases))
 	}
 
 	if len(cfg.Skills.Knowledge) != 12 {
@@ -50,16 +50,6 @@ func TestLoadConfigExample(t *testing.T) {
 		t.Errorf("expected active_provider lm-studio, got %s", cfg.Models.ActiveProvider)
 	}
 
-	// Check a specific phase config
-	planning := cfg.Models.Phases["planning"]
-	if planning.Temperature != 0.3 {
-		t.Errorf("expected planning temperature 0.3, got %f", planning.Temperature)
-	}
-
-	// Check agent skills
-	if len(cfg.Agents.Planner.Skills) != 3 {
-		t.Errorf("expected planner 3 skills, got %d", len(cfg.Agents.Planner.Skills))
-	}
 }
 
 func TestLoadConfigNotExists(t *testing.T) {
