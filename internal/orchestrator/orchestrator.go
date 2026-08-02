@@ -89,7 +89,7 @@ func (o *Orchestrator) runCoding() error {
 	}
 
 	// Call coder agent with unit details
-	var coderResult *agent.AgentResult
+	var coderResult *agent.Result
 	start := time.Now()
 	err = WithRetry(func() error {
 		res, agentErr := o.runCoderAgent(unit)
@@ -179,7 +179,7 @@ func (o *Orchestrator) getNextPendingUnit(plan *state.Plan) (*state.PlanUnit, er
 }
 
 // runCoderAgent calls the coder agent with the given unit details and returns the result.
-func (o *Orchestrator) runCoderAgent(unit *state.PlanUnit) (*agent.AgentResult, error) {
+func (o *Orchestrator) runCoderAgent(unit *state.PlanUnit) (*agent.Result, error) {
 	// Convert state.PlanUnit to prompts.PlanUnit for the coder agent
 	promptsUnit := prompts.PlanUnit{
 		Title:        unit.Name,
@@ -511,7 +511,7 @@ func (o *Orchestrator) runTesterAgent(code string, testResults string) (*TestRep
 }
 
 // parseTestReportFromAgentResult parses an AgentResult into a TestReport.
-func parseTestReportFromAgentResult(result *agent.AgentResult) (*TestReport, error) {
+func parseTestReportFromAgentResult(result *agent.Result) (*TestReport, error) {
 	if result == nil {
 		return nil, fmt.Errorf("parse test report: agent result is nil")
 	}
@@ -784,7 +784,7 @@ func (o *Orchestrator) formatPlanForReviewInternal(plan *state.Plan) string {
 }
 
 // parseReviewReportFromAgentResult parses an AgentResult into a ReviewReport.
-func parseReviewReportFromAgentResult(result *agent.AgentResult) (*ReviewReport, error) {
+func parseReviewReportFromAgentResult(result *agent.Result) (*ReviewReport, error) {
 	if result == nil {
 		return nil, fmt.Errorf("parse review report: agent result is nil")
 	}

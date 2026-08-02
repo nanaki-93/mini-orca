@@ -212,7 +212,7 @@ func TestRegistry_List(t *testing.T) {
 }
 
 func TestAgentResult_Metadata(t *testing.T) {
-	result := &AgentResult{
+	result := &Result{
 		Output:   "test output",
 		Phase:    "planning",
 		Metadata: map[string]string{"key": "value"},

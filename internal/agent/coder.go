@@ -32,7 +32,7 @@ func NewCoderAgent(router *model.Router, registry *skills.SkillsRegistry) *Coder
 // Execute runs the coder agent with the given atomic unit description.
 // It builds a system prompt from coder skills, calls the LLM, and returns the code.
 // Each execution handles exactly ONE atomic unit (function, struct, or class).
-func (c *CoderAgent) Execute(ctx context.Context, input string) (*AgentResult, error) {
+func (c *CoderAgent) Execute(ctx context.Context, input string) (*Result, error) {
 	if c.router == nil {
 		return nil, fmt.Errorf("coder agent: router not configured")
 	}
@@ -68,7 +68,7 @@ func (c *CoderAgent) Execute(ctx context.Context, input string) (*AgentResult, e
 		return nil, fmt.Errorf("coder agent: empty response from model")
 	}
 
-	return &AgentResult{
+	return &Result{
 		Output: resp.Choices[0].Message.Content,
 		Metadata: map[string]string{
 			"model":  resp.Model,

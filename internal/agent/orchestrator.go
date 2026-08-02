@@ -39,7 +39,7 @@ func getSkillNames(s []skills.Skill) []string {
 
 // RunCoder executes the coder agent with the given plan unit description.
 // It returns a structured AgentResult containing the generated code.
-func (o *Orchestrator) RunCoder(unit prompts.PlanUnit) (*AgentResult, error) {
+func (o *Orchestrator) RunCoder(unit prompts.PlanUnit) (*Result, error) {
 	if unit.Title == "" {
 		return nil, fmt.Errorf("orchestrator: coder unit title is required")
 	}
@@ -61,7 +61,7 @@ func (o *Orchestrator) RunCoder(unit prompts.PlanUnit) (*AgentResult, error) {
 
 // RunTester executes the tester agent with the given code and test results.
 // It returns a structured AgentResult containing the test report as JSON.
-func (o *Orchestrator) RunTester(code string, testResults string) (*AgentResult, error) {
+func (o *Orchestrator) RunTester(code string, testResults string) (*Result, error) {
 	if code == "" {
 		return nil, fmt.Errorf("orchestrator: tester code is required")
 	}
@@ -86,7 +86,7 @@ func (o *Orchestrator) RunTester(code string, testResults string) (*AgentResult,
 
 // RunReviewer executes the reviewer agent with the given code and plan.
 // It returns a structured AgentResult containing the review report as JSON.
-func (o *Orchestrator) RunReviewer(code string, plan string) (*AgentResult, error) {
+func (o *Orchestrator) RunReviewer(code string, plan string) (*Result, error) {
 	if code == "" {
 		return nil, fmt.Errorf("orchestrator: reviewer code is required")
 	}
@@ -110,9 +110,9 @@ func (o *Orchestrator) RunReviewer(code string, plan string) (*AgentResult, erro
 }
 
 // testReportToAgentResult converts a TestReport to an AgentResult.
-func testReportToAgentResult(report *TestReport) *AgentResult {
+func testReportToAgentResult(report *TestReport) *Result {
 	data, _ := json.Marshal(report)
-	return &AgentResult{
+	return &Result{
 		Output: string(data),
 		Metadata: map[string]string{
 			"passed":  fmt.Sprintf("%t", report.Passed),
@@ -123,9 +123,9 @@ func testReportToAgentResult(report *TestReport) *AgentResult {
 }
 
 // reviewReportToAgentResult converts a ReviewReport to an AgentResult.
-func reviewReportToAgentResult(report *ReviewReport) *AgentResult {
+func reviewReportToAgentResult(report *ReviewReport) *Result {
 	data, _ := json.Marshal(report)
-	return &AgentResult{
+	return &Result{
 		Output: string(data),
 		Metadata: map[string]string{
 			"score":          fmt.Sprintf("%d", report.Score),
