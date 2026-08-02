@@ -39,54 +39,6 @@ func TestStore_Session(t *testing.T) {
 	})
 }
 
-func TestStore_Plan(t *testing.T) {
-	s := NewStore(nil)
-	sess := &Session{ID: "sess-1"}
-	s.SaveSession(sess)
-
-	plan := &Plan{
-		ID:        "plan-1",
-		SessionID: "sess-1",
-		Status:    PlanStatusDraft,
-		Units: []PlanUnit{
-			{ID: "unit-1", Status: UnitStatusPending},
-		},
-	}
-
-	t.Run("Save and Get Plan", func(t *testing.T) {
-		err := s.SavePlan(plan)
-		if err != nil {
-			t.Fatalf("SavePlan failed: %v", err)
-		}
-
-		got, err := s.GetPlan("plan-1")
-		if err != nil {
-			t.Fatalf("GetPlan failed: %v", err)
-		}
-		if got.ID != plan.ID {
-			t.Errorf("expected ID %s, got %s", plan.ID, got.ID)
-		}
-
-		// Verify session plan reference was updated
-		sessGot, _ := s.GetSession("sess-1")
-		if sessGot.Plan == nil || sessGot.Plan.ID != "plan-1" {
-			t.Error("session plan reference not updated")
-		}
-	})
-
-	t.Run("Update Unit Status", func(t *testing.T) {
-		err := s.UpdateUnitStatus("unit-1", UnitStatusCoding)
-		if err != nil {
-			t.Fatalf("UpdateUnitStatus failed: %v", err)
-		}
-
-		got, _ := s.GetPlan("plan-1")
-		if got.Units[0].Status != UnitStatusCoding {
-			t.Errorf("expected StatusCoding, got %s", got.Units[0].Status)
-		}
-	})
-}
-
 func TestStore_History(t *testing.T) {
 	s := NewStore(nil)
 	history := PhaseHistory{
@@ -187,15 +139,6 @@ func TestStore_More(t *testing.T) {
 	s := NewStore(nil)
 	sess := &Session{ID: "s1"}
 	s.SaveSession(sess)
-	plan := &Plan{ID: "p1", SessionID: "s1", Units: []PlanUnit{{ID: "u1", Status: UnitStatusPending}}}
-	s.SavePlan(plan)
-
-	t.Run("GetPendingUnits", func(t *testing.T) {
-		units, err := s.GetPendingUnits("p1")
-		if err != nil || len(units) != 1 {
-			t.Errorf("expected 1 pending unit, got %d, err: %v", len(units), err)
-		}
-	})
 
 	t.Run("UpdatePhaseStatus", func(t *testing.T) {
 		err := s.UpdatePhaseStatus(PhaseCoding, SessionStatusRunning)
@@ -216,24 +159,6 @@ func TestStore_More(t *testing.T) {
 		sessGot, _ := s.GetSession("s1")
 		if sessGot.Error != "some error" || sessGot.Status != SessionStatusFailed {
 			t.Errorf("expected error and status failed, got %s, %s", sessGot.Error, sessGot.Status)
-		}
-	})
-
-	t.Run("SaveUnitCode", func(t *testing.T) {
-		err := s.SaveUnitCode("s1", "u1", "println('hello')")
-		if err != nil {
-			t.Errorf("SaveUnitCode failed: %v", err)
-		}
-		planGot, _ := s.GetPlan("p1")
-		if planGot.Units[0].GeneratedCode != "println('hello')" {
-			t.Errorf("expected code, got %s", planGot.Units[0].GeneratedCode)
-		}
-	})
-
-	t.Run("GetPlanBySession", func(t *testing.T) {
-		p, err := s.GetPlanBySession("s1")
-		if err != nil || p == nil {
-			t.Errorf("expected plan, got %v, err: %v", p, err)
 		}
 	})
 }

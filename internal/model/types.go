@@ -66,7 +66,6 @@ type ModelConfig struct {
 type Phase string
 
 const (
-	PhasePlanning    Phase = "planning"
 	PhaseCoding      Phase = "coding"
 	PhaseTesting     Phase = "testing"
 	PhaseReview      Phase = "review"

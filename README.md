@@ -6,8 +6,8 @@ Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LL
 
 ## Features
 
-- **Multi-Agent Orchestration**: Specialized agents (Planner, Coder, Tester, Reviewer) work together to solve complex tasks.
-- **Phase-Based Workflow**: Structured execution through Planning, Coding, Testing, and Review phases.
+- **Multi-Agent Orchestration**: Specialized agents (Coder, Tester, Reviewer) work together to solve complex tasks.
+- **Phase-Based Workflow**: Structured execution through Coding, Testing, and Review phases.
 - **Human-in-the-loop**: Integrated human gate for approvals and feedback during the process.
 - **HTMX-powered IDE**: A modern, responsive web interface for monitoring and interacting with agents.
 - **Structured Logging**: Comprehensive JSON/Text logging with sensitive data redaction.
@@ -27,15 +27,13 @@ graph LR
     Router <--> Providers[LLM Providers]
     
     subgraph Agents
-        Orchestrator --> Planner[Planner Agent]
         Orchestrator --> Coder[Coder Agent]
         Orchestrator --> Tester[Tester Agent]
         Orchestrator --> Reviewer[Reviewer Agent]
     end
     
     subgraph Registry
-        Planner --> Skills[Skills Registry]
-        Coder --> Skills
+        Coder --> Skills[Skills Registry]
         Tester --> Skills
         Reviewer --> Skills
     end

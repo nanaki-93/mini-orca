@@ -170,12 +170,6 @@ func (s *ConfigStore) updateModels(models *config.ModelsConfig) error {
 
 // updateAgents applies agent configuration updates.
 func (s *ConfigStore) updateAgents(agents *config.AgentsConfig) error {
-	if agents.Planner.Skills != nil {
-		s.cfg.Agents.Planner.Skills = agents.Planner.Skills
-	}
-	if agents.Planner.Model != "" {
-		s.cfg.Agents.Planner.Model = agents.Planner.Model
-	}
 
 	if agents.Coder.Skills != nil {
 		s.cfg.Agents.Coder.Skills = agents.Coder.Skills
@@ -254,8 +248,6 @@ func copyConfig(cfg *config.Config) *config.Config {
 	}
 
 	// Deep copy agent skills
-	cfgCopy.Agents.Planner.Skills = make([]string, len(cfg.Agents.Planner.Skills))
-	copy(cfgCopy.Agents.Planner.Skills, cfg.Agents.Planner.Skills)
 	cfgCopy.Agents.Coder.Skills = make([]string, len(cfg.Agents.Coder.Skills))
 	copy(cfgCopy.Agents.Coder.Skills, cfg.Agents.Coder.Skills)
 	cfgCopy.Agents.Tester.Skills = make([]string, len(cfg.Agents.Tester.Skills))

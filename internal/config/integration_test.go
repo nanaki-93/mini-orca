@@ -18,11 +18,6 @@ models:
     lm-studio:
       base_url: "http://localhost:1234"
   phases:
-    planning:
-      provider: "lm-studio"
-      model: "test-model"
-      temperature: 0.5
-      max_tokens: 1024
     coding:
       provider: "lm-studio"
       model: "code-model"
@@ -50,16 +45,8 @@ models:
 		t.Errorf("expected 1 provider, got %d", len(cfg.Models.Providers))
 	}
 
-	if len(cfg.Models.Phases) != 2 {
-		t.Errorf("expected 2 phases, got %d", len(cfg.Models.Phases))
-	}
-
-	planning := cfg.Models.Phases["planning"]
-	if planning.Model != "test-model" {
-		t.Errorf("expected planning model test-model, got %s", planning.Model)
-	}
-	if planning.Temperature != 0.5 {
-		t.Errorf("expected planning temperature 0.5, got %f", planning.Temperature)
+	if len(cfg.Models.Phases) != 1 {
+		t.Errorf("expected 1 phase, got %d", len(cfg.Models.Phases))
 	}
 }
 
@@ -74,16 +61,12 @@ func TestDefault_FullFlow(t *testing.T) {
 		t.Errorf("expected lm-studio, got %s", cfg.Models.ActiveProvider)
 	}
 
-	if len(cfg.Models.Phases) != 5 {
-		t.Errorf("expected 5 phases, got %d", len(cfg.Models.Phases))
+	if len(cfg.Models.Phases) != 4 {
+		t.Errorf("expected 4 phases, got %d", len(cfg.Models.Phases))
 	}
 
 	if len(cfg.Models.Providers) != 1 {
 		t.Errorf("expected 1 provider, got %d", len(cfg.Models.Providers))
-	}
-
-	if len(cfg.Agents.Planner.Skills) == 0 {
-		t.Error("expected planner to have skills")
 	}
 
 	if len(cfg.Skills.Knowledge) == 0 {

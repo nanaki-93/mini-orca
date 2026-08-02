@@ -49,7 +49,7 @@ func TestClient_FullFlow_Execute(t *testing.T) {
 
 	client := NewClient(router)
 	client.name = "test-agent"
-	client.phase = model.PhasePlanning
+	client.phase = model.PhaseCoding
 
 	result, err := client.Execute(context.Background(), "Plan this")
 	if err != nil {
@@ -59,8 +59,8 @@ func TestClient_FullFlow_Execute(t *testing.T) {
 	if result.Output != "Agent response!" {
 		t.Errorf("expected 'Agent response!', got %s", result.Output)
 	}
-	if result.Phase != "planning" {
-		t.Errorf("expected phase 'planning', got %s", result.Phase)
+	if result.Phase != "coding" {
+		t.Errorf("expected phase 'coding', got %s", result.Phase)
 	}
 	if result.Metadata["model"] != "agent-model" {
 		t.Errorf("expected model 'agent-model', got %s", result.Metadata["model"])
@@ -147,19 +147,9 @@ func TestClient_FullFlow_MultiplePhases(t *testing.T) {
 	client := NewClient(router)
 	client.name = "test-agent"
 
-	// Test planning phase
-	client.phase = model.PhasePlanning
-	result, err := client.Execute(context.Background(), "Plan")
-	if err != nil {
-		t.Fatalf("planning Execute failed: %v", err)
-	}
-	if result.Metadata["model"] != "planning-model" {
-		t.Errorf("expected planning-model, got %s", result.Metadata["model"])
-	}
-
 	// Test coding phase
 	client.phase = model.PhaseCoding
-	result, err = client.Execute(context.Background(), "Code")
+	result, err := client.Execute(context.Background(), "Code")
 	if err != nil {
 		t.Fatalf("coding Execute failed: %v", err)
 	}

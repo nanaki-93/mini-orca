@@ -37,19 +37,6 @@ func getSkillNames(s []skills.Skill) []string {
 	return names
 }
 
-// RunPlanner executes the planner agent with the given goal description.
-// It returns a structured AgentResult containing the generated plan.
-func (o *Orchestrator) RunPlanner(goal string) (*AgentResult, error) {
-	if goal == "" {
-		return nil, fmt.Errorf("orchestrator: planner goal is required")
-	}
-
-	agent := NewPlannerAgent(o.router, o.registry)
-	agent.SetSkills(getSkillNames(o.registry.GetForAgent("planner")))
-
-	return agent.Execute(context.Background(), goal)
-}
-
 // RunCoder executes the coder agent with the given plan unit description.
 // It returns a structured AgentResult containing the generated code.
 func (o *Orchestrator) RunCoder(unit prompts.PlanUnit) (*AgentResult, error) {

@@ -17,11 +17,6 @@ models:
 
   # Phase-specific model configurations
   phases:
-    planning:
-      provider: "lm-studio"
-      model: ""       # Leave empty to use the provider's default model
-      temperature: 0.3
-      max_tokens: 4096
     coding:
       provider: "lm-studio"
       model: ""
@@ -106,7 +101,7 @@ retry:
   backoff_base: 1000   # ms - base delay for exponential backoff
   backoff_max: 30000   # ms - maximum delay between retries
 
-# ─── Logging ──────────────────────────────────────────────────────────────────
+# ─── Lxogging ──────────────────────────────────────────────────────────────────
 # Configure structured logging.
 
 logging:

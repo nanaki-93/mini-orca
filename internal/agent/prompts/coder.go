@@ -35,7 +35,7 @@ func BuildCoderPrompt(unit PlanUnit, existingCode string, skills []string) ([]mo
 
 // buildCoderSystemMessage constructs the system prompt with role, skill templates, output format, and constraints.
 func buildCoderSystemMessage(skills []string) string {
-	var sb coderPromptBuilder
+	var sb promptBuilder
 
 	// Role definition
 	sb.AppendLine("You are an expert Go coder. Your job is to implement clean, idiomatic, well-tested Go code for atomic units of work.")
@@ -84,7 +84,7 @@ func buildCoderSystemMessage(skills []string) string {
 
 // buildCoderUserMessage constructs the user prompt with unit description, existing code, and dependencies.
 func buildCoderUserMessage(unit PlanUnit, existingCode string) string {
-	var sb coderPromptBuilder
+	var sb promptBuilder
 
 	sb.AppendLine("## Atomic Unit")
 	sb.AppendLine(fmt.Sprintf("Title: %s", unit.Title))
@@ -115,19 +115,4 @@ func buildCoderUserMessage(unit PlanUnit, existingCode string) string {
 	sb.AppendLine("Implement the code for this atomic unit based on the description above.")
 
 	return sb.String()
-}
-
-// coderPromptBuilder is a simple helper for building multi-line prompt strings.
-type coderPromptBuilder struct {
-	lines []string
-}
-
-// AppendLine adds a line to the coder prompt builder.
-func (b *coderPromptBuilder) AppendLine(line string) {
-	b.lines = append(b.lines, line)
-}
-
-// String returns the built prompt as a single string.
-func (b *coderPromptBuilder) String() string {
-	return joinLines(b.lines)
 }

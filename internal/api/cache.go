@@ -41,7 +41,7 @@ func NewResponseCache(defaultTTL time.Duration) *ResponseCache {
 	}
 }
 
-// get retrieves a cached entry by key.
+// Get retrieves a cached entry by key.
 func (c *ResponseCache) Get(key string) (*cacheEntry, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -59,7 +59,7 @@ func (c *ResponseCache) Get(key string) (*cacheEntry, bool) {
 	return entry, true
 }
 
-// set stores a new cache entry.
+// Set stores a new cache entry.
 func (c *ResponseCache) Set(key string, body []byte, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -74,7 +74,7 @@ func (c *ResponseCache) Set(key string, body []byte, ttl time.Duration) {
 	}
 }
 
-// delete removes a cache entry by key.
+// Delete removes a cache entry by key.
 func (c *ResponseCache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -82,7 +82,7 @@ func (c *ResponseCache) Delete(key string) {
 	delete(c.entries, key)
 }
 
-// clear removes all cache entries.
+// Clear removes all cache entries.
 func (c *ResponseCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()

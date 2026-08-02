@@ -48,7 +48,6 @@ type PhaseModelConfig struct {
 
 // AgentsConfig holds agent-related configuration.
 type AgentsConfig struct {
-	Planner  AgentConfig `json:"planner" yaml:"planner"`
 	Coder    AgentConfig `json:"coder" yaml:"coder"`
 	Tester   AgentConfig `json:"tester" yaml:"tester"`
 	Reviewer AgentConfig `json:"reviewer" yaml:"reviewer"`
@@ -86,9 +85,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Skills.Tools == nil {
 		c.Skills.Tools = make(map[string]string)
-	}
-	if c.Agents.Planner.Skills == nil {
-		c.Agents.Planner.Skills = []string{}
 	}
 	if c.Agents.Coder.Skills == nil {
 		c.Agents.Coder.Skills = []string{}
