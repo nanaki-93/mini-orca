@@ -21,7 +21,7 @@ type Formatter interface {
 // WorkflowResult holds the result of a workflow execution including formatting changes.
 type WorkflowResult struct {
 	// AgentResult is the result from the agent execution.
-	AgentResult *AgentResult
+	AgentResult *Result
 	// FormattingChanges reports any code formatting changes made.
 	FormattingChanges []FormattingChange
 	// FormattingApplied indicates if formatting was applied.
@@ -66,7 +66,7 @@ func (w *Workflow) RunCodingWorkflow(unit prompts.PlanUnit) (*WorkflowResult, er
 	}
 
 	// Auto-format after code generation
-	changes, err := w.formatGeneratedCode(agentResult.Output, unit.Title)
+	changes, err := w.formatGeneratedCode(result.AgentResult.Output, unit.Title)
 	if err != nil {
 		// Don't fail the workflow if formatting fails, just log and continue
 		fmt.Printf("Warning: formatting failed: %v\n", err)
@@ -93,7 +93,7 @@ func (w *Workflow) RunTestingWorkflow(code string, testResults string) (*Workflo
 	// Auto-format after test failures (if needed)
 	// Parse the test report to check for failures
 	var testReport TestReport
-	if err := parseJSON(agentResult.Output, &testReport); err == nil {
+	if err := parseJSON(result.AgentResult.Output, &testReport); err == nil {
 		if !testReport.Passed && len(testReport.Failures) > 0 {
 			// Attempt to format the code to fix potential formatting issues
 			changes, err := w.formatCodeFromTest(code)

@@ -13,7 +13,7 @@ type Agent interface {
 	Name() string
 
 	// Execute runs the agent with the given context and input, returning the result.
-	Execute(ctx context.Context, input string) (*AgentResult, error)
+	Execute(ctx context.Context, input string) (*Result, error)
 
 	// GetSkills returns the list of skills assigned to this agent.
 	GetSkills() []string
@@ -22,8 +22,8 @@ type Agent interface {
 	SetSkills(skills []string)
 }
 
-// AgentResult holds the output and metadata produced by an agent's execution.
-type AgentResult struct {
+// Result holds the output and metadata produced by an agent's execution.
+type Result struct {
 	// Output contains the primary result of the agent's execution.
 	Output string
 

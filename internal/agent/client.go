@@ -42,7 +42,7 @@ func (c *Client) Phase() model.Phase {
 
 // Execute runs the agent with the given context and input, returning the result.
 // It implements the Agent interface.
-func (c *Client) Execute(ctx context.Context, input string) (*AgentResult, error) {
+func (c *Client) Execute(ctx context.Context, input string) (*Result, error) {
 	if c.router == nil {
 		return nil, fmt.Errorf("agent client: router not configured")
 	}
@@ -62,7 +62,7 @@ func (c *Client) Execute(ctx context.Context, input string) (*AgentResult, error
 		return nil, fmt.Errorf("agent client: empty response from model")
 	}
 
-	return &AgentResult{
+	return &Result{
 		Output: resp.Choices[0].Message.Content,
 		Metadata: map[string]string{
 			"model":  resp.Model,
