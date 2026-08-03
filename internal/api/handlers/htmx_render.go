@@ -24,37 +24,19 @@ import (
 
 // PhaseRenderData holds data for rendering phase partials.
 type PhaseRenderData struct {
-	GoalDescription         string                   `json:"goal_description"`
-	StatusMessage           string                   `json:"status_message"`
-	EstimatedTime           string                   `json:"estimated_time"`
-	PlanningSteps           []PhaseStep              `json:"planning_steps"`
-	CurrentStep             int                      `json:"current_step"`
-	Subtasks                []PhaseSubtask           `json:"subtasks"`
-	StartTime               string                   `json:"start_time"`
-	CanCancel               bool                     `json:"can_cancel"`
-	TotalPhases             int                      `json:"total_phases"`
-	CodingPhase             bool                     `json:"coding_phase"`
-	CodingPhaseData         *CodingPhaseData         `json:"coding_phase_data,omitempty"`
-	TestingPhase            bool                     `json:"testing_phase"`
-	TestingPhaseData        *TestingPhaseData        `json:"testing_phase_data,omitempty"`
-	ReviewPhase             bool                     `json:"review_phase"`
-	ReviewPhaseData         *ReviewPhaseData         `json:"review_phase_data,omitempty"`
-	HumanReviewPhase        bool                     `json:"human_review_phase"`
-	HumanReviewPhaseData    *HumanReviewPhaseData    `json:"human_review_phase_data,omitempty"`
-	PlanningReviewPhase     bool                     `json:"planning_review_phase"`
-	PlanningReviewPhaseData *PlanningReviewPhaseData `json:"planning_review_phase_data,omitempty"`
-}
-
-// PhaseStep represents a step in the planning process.
-type PhaseStep struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
-// PhaseSubtask represents a subtask generated during planning.
-type PhaseSubtask struct {
-	Name     string `json:"name"`
-	Priority string `json:"priority,omitempty"`
+	FeatureRequest       string                `json:"feature_request"`
+	CurrentPhaseName     string                `json:"current_phase_name"`
+	TotalPhases          int                   `json:"total_phases"`
+	GeneratedCode        string                `json:"generated_code,omitempty"`
+	TargetFile           string                `json:"target_file,omitempty"`
+	CodingPhase          bool                  `json:"coding_phase"`
+	CodingPhaseData      *CodingPhaseData      `json:"coding_phase_data,omitempty"`
+	TestingPhase         bool                  `json:"testing_phase"`
+	TestingPhaseData     *TestingPhaseData     `json:"testing_phase_data,omitempty"`
+	ReviewPhase          bool                  `json:"review_phase"`
+	ReviewPhaseData      *ReviewPhaseData      `json:"review_phase_data,omitempty"`
+	HumanReviewPhase     bool                  `json:"human_review_phase"`
+	HumanReviewPhaseData *HumanReviewPhaseData `json:"human_review_phase_data,omitempty"`
 }
 
 // CodingPhaseData holds data for the coding phase partial.
@@ -135,14 +117,6 @@ type HumanReviewPhaseData struct {
 	Output       string `json:"output"`
 	Approved     bool   `json:"approved"`
 	Feedback     string `json:"feedback"`
-}
-
-// PlanningReviewPhaseData holds data for the planning review phase partial.
-type PlanningReviewPhaseData struct {
-	Plan        *state.Plan `json:"plan"`
-	CurrentStep int         `json:"current_step"`
-	CanApprove  bool        `json:"can_approve"`
-	CanReject   bool        `json:"can_reject"`
 }
 
 // FileTreeRenderData holds data for rendering the file tree partial.
@@ -503,8 +477,6 @@ func (te *TemplateEngine) funcMap() template.FuncMap {
 		},
 		"agentIconClass": func(name string) string {
 			switch name {
-			case "planner":
-				return "bg-blue-500/20 text-blue-400"
 			case "coder":
 				return "bg-green-500/20 text-green-400"
 			case "tester":
@@ -517,8 +489,6 @@ func (te *TemplateEngine) funcMap() template.FuncMap {
 		},
 		"agentIcon": func(name string) string {
 			switch name {
-			case "planner":
-				return `<svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 9.5A3.5 3.5 0 005.5 13H9v2.586l-1.293-1.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 15.586V13h2.5a4.5 4.5 0 10-.616-8.958 4.002 4.002 0 10-7.753 1.977A3.5 3.5 0 002 9.5zm9 3.5H9V8a1 1 0 012 0v5z" clip-rule="evenodd"/></svg>`
 			case "coder":
 				return `<svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M13.5 2a2 2 0 012 2v12a2 2 0 01-2 2h-7a2 2 0 01-2-2V4a2 2 0 012-2h7zm0 2h-7v12h7V4zM7 7a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5A.5.5 0 017 7zm0 2.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zm0 2.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z" clip-rule="evenodd"/></svg>`
 			case "tester":
@@ -531,8 +501,6 @@ func (te *TemplateEngine) funcMap() template.FuncMap {
 		},
 		"humanName": func(name string) string {
 			switch name {
-			case "planner":
-				return "Planner"
 			case "coder":
 				return "Coder"
 			case "tester":
@@ -785,45 +753,42 @@ func (h *HTMXRenderHandler) RenderPhase(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Get session data if available
 	var data PhaseRenderData
 	sessions := h.sessionStore.ListSessions()
 	if len(sessions) > 0 {
 		session := sessions[0]
-		data.GoalDescription = session.Goal
-		data.TotalPhases = 6 // planning, planning_review, coding, testing, review, human_review
+		data.FeatureRequest = session.Goal
+		data.TotalPhases = 4 // coding, testing, review, human_review
 
-		// Get current step based on current phase
-		data.CurrentStep = getPhaseStep(phase)
-
-		// Build planning steps
-		data.PlanningSteps = []PhaseStep{
-			{Name: "Analyze requirements", Description: "Understand project scope and goals"},
-			{Name: "Break down tasks", Description: "Create atomic units of work"},
-			{Name: "Generate execution plan", Description: "Order tasks and define dependencies"},
-		}
-
-		// Check if planning is complete
-		if session.CurrentPhase == state.PhasePlanning && session.Status == state.SessionStatusRunning {
-			data.StatusMessage = "Analyzing project context and generating execution plan"
-			data.EstimatedTime = "2-5 minutes"
-		} else if session.Status == state.SessionStatusCompleted {
-			data.StatusMessage = "Planning phase completed"
-			data.CanCancel = false
-		} else {
-			data.StatusMessage = "Planning in progress"
-			data.CanCancel = true
-		}
-
-		// Add subtasks if plan exists
-		if session.Plan != nil {
-			for _, unit := range session.Plan.Units {
-				data.Subtasks = append(data.Subtasks, PhaseSubtask{
-					Name:     unit.Name,
-					Priority: "medium",
-				})
+		// Set phase-specific data
+		switch session.CurrentPhase {
+		case state.PhaseCoding:
+			data.CodingPhase = true
+			data.CodingPhaseData = &CodingPhaseData{
+				Status:        "running",
+				CurrentFile:   "generating...",
+				GeneratedCode: "",
+			}
+		case state.PhaseTesting:
+			data.TestingPhase = true
+			data.TestingPhaseData = &TestingPhaseData{
+				Status: "running",
+			}
+		case state.PhaseReview:
+			data.ReviewPhase = true
+			data.ReviewPhaseData = &ReviewPhaseData{
+				Status: "running",
+			}
+		case state.PhaseHumanReview:
+			data.HumanReviewPhase = true
+			data.HumanReviewPhaseData = &HumanReviewPhaseData{
+				CurrentPhase: "human_review",
+				Output:       "Review pending...",
 			}
 		}
+
+		// Add session-specific data
+		data.CurrentPhaseName = getCurrentPhaseName(session)
 	}
 
 	rendered, err := h.templateEngine.RenderPhasePartial(phase, data)
@@ -874,7 +839,7 @@ func (h *HTMXRenderHandler) RenderFileTree(w http.ResponseWriter, r *http.Reques
 		ProjectPath: project.Path,
 	}
 
-	rendered, err := h.templateEngine.RenderComponentPartial("file-tree.html", data)
+	rendered, err := h.templateEngine.RenderComponentPartial("file-tree", data)
 	if err != nil {
 		api.WriteAppError(w, apperrors.Internal("template rendering failed", "Failed to render the file tree component.", err))
 		return
@@ -910,7 +875,7 @@ func (h *HTMXRenderHandler) RenderActivityLog(w http.ResponseWriter, r *http.Req
 	}
 
 	// Get unique phases
-	phases := []string{"planning", "coding", "testing", "review"}
+	phases := []string{"coding", "testing", "review", "human_review"}
 	for _, hist := range session.History {
 		found := false
 		for _, p := range phases {
@@ -955,8 +920,6 @@ func (h *HTMXRenderHandler) RenderPhaseTracker(w http.ResponseWriter, r *http.Re
 
 	// Build phase tracker items
 	allPhases := []PhaseTrackerItem{
-		{Name: "Planning", Status: "pending", MaxRetries: 3},
-		{Name: "Planning Review", Status: "pending", MaxRetries: 3},
 		{Name: "Coding", Status: "pending", MaxRetries: 3},
 		{Name: "Testing", Status: "pending", MaxRetries: 3},
 		{Name: "Review", Status: "pending", MaxRetries: 3},
@@ -966,50 +929,37 @@ func (h *HTMXRenderHandler) RenderPhaseTracker(w http.ResponseWriter, r *http.Re
 	// Update statuses based on session state
 	for i := range allPhases {
 		switch session.CurrentPhase {
-		case state.PhasePlanning:
+		case state.PhaseCoding:
 			if i == 0 {
 				allPhases[i].Status = "in_progress"
 			}
-		case state.PhasePlanningReview:
-			if i == 0 {
+		case state.PhaseTesting:
+			if i < 2 {
 				allPhases[i].Status = "completed"
 			}
 			if i == 1 {
 				allPhases[i].Status = "in_progress"
 			}
-		case state.PhaseCoding:
-			if i < 2 {
+		case state.PhaseReview:
+			if i < 3 {
 				allPhases[i].Status = "completed"
 			}
 			if i == 2 {
 				allPhases[i].Status = "in_progress"
 			}
-		case state.PhaseTesting:
-			if i < 3 {
+		case state.PhaseHumanReview:
+			if i < 4 {
 				allPhases[i].Status = "completed"
 			}
 			if i == 3 {
 				allPhases[i].Status = "in_progress"
 			}
-		case state.PhaseReview:
-			if i < 4 {
-				allPhases[i].Status = "completed"
-			}
-			if i == 4 {
-				allPhases[i].Status = "in_progress"
-			}
-		case state.PhaseHumanReview:
-			if i < 5 {
-				allPhases[i].Status = "completed"
-			}
-			if i == 5 {
-				allPhases[i].Status = "in_progress"
-			}
 		}
 
-		// Mark future phases as pending
 		if session.Status == state.SessionStatusCompleted {
-			allPhases[i].Status = "completed"
+			for j := range allPhases {
+				allPhases[j].Status = "completed"
+			}
 		}
 	}
 
@@ -1050,18 +1000,14 @@ func extractPhaseFromPath(path string) string {
 // getPhaseStep returns the current step number for a phase.
 func getPhaseStep(phase string) int {
 	switch lower(phase) {
-	case "planning":
-		return 0
-	case "planning_review":
-		return 1
 	case "coding":
-		return 2
+		return 0
 	case "testing":
-		return 3
+		return 1
 	case "review":
-		return 4
+		return 2
 	case "human_review":
-		return 5
+		return 3
 	default:
 		return 0
 	}
@@ -1070,10 +1016,6 @@ func getPhaseStep(phase string) int {
 // getCurrentPhaseInfo returns the current phase name and status.
 func getCurrentPhaseInfo(session *state.Session) (string, string) {
 	switch session.CurrentPhase {
-	case state.PhasePlanning:
-		return "Planning", "in_progress"
-	case state.PhasePlanningReview:
-		return "Planning Review", "in_progress"
 	case state.PhaseCoding:
 		return "Coding", "in_progress"
 	case state.PhaseTesting:
@@ -1087,16 +1029,31 @@ func getCurrentPhaseInfo(session *state.Session) (string, string) {
 	}
 }
 
+// getCurrentPhaseName returns the current phase name as a string.
+func getCurrentPhaseName(session *state.Session) string {
+	switch session.CurrentPhase {
+	case state.PhaseCoding:
+		return "Coding"
+	case state.PhaseTesting:
+		return "Testing"
+	case state.PhaseReview:
+		return "Review"
+	case state.PhaseHumanReview:
+		return "Human Review"
+	default:
+		return "Unknown"
+	}
+}
+
 // RenderMainPage renders the main IDE page.
 func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Request) {
 	data := make(map[string]interface{})
 
-	// Get session data
 	sessions := h.sessionStore.ListSessions()
 	if len(sessions) > 0 {
 		session := sessions[0]
 		data["SessionID"] = session.ID
-		data["Goal"] = session.Goal
+		data["FeatureRequest"] = session.Goal
 		data["SessionStatus"] = string(session.Status)
 
 		currentPhaseName, currentPhaseStatus := getCurrentPhaseInfo(session)
@@ -1110,14 +1067,13 @@ func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Reques
 		data["PhaseProgress"] = 0
 	}
 
-	// Get project data
+	// Project data
 	projects := h.projectStore.ListProjects()
 	if len(projects) > 0 {
 		project := projects[0]
 		data["ProjectName"] = project.Name
 		data["ProjectPath"] = project.Path
 
-		// List initial files for the tree
 		entries, err := h.projectStore.ListProjectFiles(project.ID, "")
 		if err == nil {
 			items := make([]FileSystemItem, 0, len(entries))
@@ -1136,9 +1092,8 @@ func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Reques
 		data["ProjectPath"] = "Please open or create a project"
 		data["RootItems"] = []FileSystemItem{}
 	}
-	data["CurrentPath"] = ""
 
-	// Placeholder for model info
+	data["CurrentPath"] = ""
 	data["ModelName"] = "gpt-4o"
 	data["ProviderName"] = "OpenAI"
 
@@ -1206,8 +1161,6 @@ func (h *HTMXRenderHandler) RenderDashboard(w http.ResponseWriter, r *http.Reque
 
 	// Build phase tracker items
 	allPhases := []PhaseTrackerItem{
-		{Name: "Planning", Status: "pending", MaxRetries: 3},
-		{Name: "Planning Review", Status: "pending", MaxRetries: 3},
 		{Name: "Coding", Status: "pending", MaxRetries: 3},
 		{Name: "Testing", Status: "pending", MaxRetries: 3},
 		{Name: "Review", Status: "pending", MaxRetries: 3},
@@ -1217,50 +1170,37 @@ func (h *HTMXRenderHandler) RenderDashboard(w http.ResponseWriter, r *http.Reque
 	// Update statuses based on session state
 	for i := range allPhases {
 		switch session.CurrentPhase {
-		case state.PhasePlanning:
+		case state.PhaseCoding:
 			if i == 0 {
 				allPhases[i].Status = "in_progress"
 			}
-		case state.PhasePlanningReview:
-			if i == 0 {
+		case state.PhaseTesting:
+			if i < 2 {
 				allPhases[i].Status = "completed"
 			}
 			if i == 1 {
 				allPhases[i].Status = "in_progress"
 			}
-		case state.PhaseCoding:
-			if i < 2 {
+		case state.PhaseReview:
+			if i < 3 {
 				allPhases[i].Status = "completed"
 			}
 			if i == 2 {
 				allPhases[i].Status = "in_progress"
 			}
-		case state.PhaseTesting:
-			if i < 3 {
+		case state.PhaseHumanReview:
+			if i < 4 {
 				allPhases[i].Status = "completed"
 			}
 			if i == 3 {
 				allPhases[i].Status = "in_progress"
 			}
-		case state.PhaseReview:
-			if i < 4 {
-				allPhases[i].Status = "completed"
-			}
-			if i == 4 {
-				allPhases[i].Status = "in_progress"
-			}
-		case state.PhaseHumanReview:
-			if i < 5 {
-				allPhases[i].Status = "completed"
-			}
-			if i == 5 {
-				allPhases[i].Status = "in_progress"
-			}
 		}
 
-		// Mark future phases as pending
 		if session.Status == state.SessionStatusCompleted {
-			allPhases[i].Status = "completed"
+			for j := range allPhases {
+				allPhases[j].Status = "completed"
+			}
 		}
 	}
 
@@ -1286,7 +1226,7 @@ func (h *HTMXRenderHandler) RenderDashboard(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Get unique phases
-	phases := []string{"planning", "coding", "testing", "review"}
+	phases := []string{"coding", "testing", "review", "human_review"}
 	for _, hist := range session.History {
 		found := false
 		for _, p := range phases {
