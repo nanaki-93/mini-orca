@@ -13,9 +13,32 @@ type PlanUnit struct {
 	Dependencies []string // List of other unit titles this depends on
 }
 
+// FeatureRequest represents a user's feature request for the coder agent.
+type FeatureRequest struct {
+	Prompt         string
+	ProjectContext string
+	TargetFile     string
+	Language       string
+}
+
+// BuildCoderPromptFromRequest constructs the full chat message list for the coder agent
+// from a FeatureRequest.
+func BuildCoderPromptFromRequest(req FeatureRequest) ([]model.ChatMessage, error) {
+	if req.Prompt == "" {
+		return nil, fmt.Errorf("coder prompt: feature request prompt is required")
+	}
+	systemMessage := buildCoderSystemMessage(nil)
+	userMessage := buildCoderUserMessageFromRequest(req)
+	return []model.ChatMessage{
+		{Role: "system", Content: systemMessage},
+		{Role: "user", Content: userMessage},
+	}, nil
+}
+
 // BuildCoderPrompt constructs the full chat message list for the coder agent.
 // It combines system-level instructions (role, skills, output format, constraints)
 // with user-level content (unit description, existing code, dependencies).
+// DEPRECATED: Use BuildCoderPromptFromRequest instead.
 func BuildCoderPrompt(unit PlanUnit, existingCode string, skills []string) ([]model.ChatMessage, error) {
 	if unit.Title == "" {
 		return nil, fmt.Errorf("coder prompt: unit title is required")
@@ -82,7 +105,35 @@ func buildCoderSystemMessage(skills []string) string {
 	return sb.String()
 }
 
+// buildCoderUserMessageFromRequest constructs the user prompt from a FeatureRequest.
+func buildCoderUserMessageFromRequest(req FeatureRequest) string {
+	var sb promptBuilder
+	sb.AppendLine("## Feature Request")
+	sb.AppendLine(req.Prompt)
+	sb.AppendLine("")
+	if req.TargetFile != "" {
+		sb.AppendLine("## Target File")
+		sb.AppendLine(fmt.Sprintf("Write the code to: %s", req.TargetFile))
+		sb.AppendLine("")
+	}
+	if req.ProjectContext != "" {
+		sb.AppendLine("## Project Context")
+		sb.AppendLine("Reference this existing project context:")
+		sb.AppendLine("```")
+		sb.AppendLine(req.ProjectContext)
+		sb.AppendLine("```")
+		sb.AppendLine("")
+	}
+	sb.AppendLine("## Instructions")
+	sb.AppendLine("1. Generate clean, idiomatic code for this feature")
+	sb.AppendLine("2. Include a comment at the very top: // target: path/to/target_file.go")
+	sb.AppendLine("3. Return ONLY the code in a code block")
+	sb.AppendLine("4. Do NOT include tests — testing is a separate phase")
+	return sb.String()
+}
+
 // buildCoderUserMessage constructs the user prompt with unit description, existing code, and dependencies.
+// DEPRECATED: Use buildCoderUserMessageFromRequest instead.
 func buildCoderUserMessage(unit PlanUnit, existingCode string) string {
 	var sb promptBuilder
 

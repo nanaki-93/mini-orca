@@ -6,9 +6,27 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
+// BuildReviewerPromptFromRequest constructs the full chat message list for the reviewer agent
+// from a user request and generated code.
+func BuildReviewerPromptFromRequest(code string, userRequest string, skills []string) ([]model.ChatMessage, error) {
+	if code == "" {
+		return nil, fmt.Errorf("reviewer prompt: code is required")
+	}
+	if userRequest == "" {
+		return nil, fmt.Errorf("reviewer prompt: user request is required")
+	}
+	systemMessage := buildReviewerSystemMessage(skills)
+	userMessage := buildReviewerUserMessageFromRequest(code, userRequest)
+	return []model.ChatMessage{
+		{Role: "system", Content: systemMessage},
+		{Role: "user", Content: userMessage},
+	}, nil
+}
+
 // BuildReviewerPrompt constructs the full chat message list for the reviewer agent.
 // It combines system-level instructions (role, skills, review checklist)
 // with user-level content (code, plan/spec, previous feedback).
+// DEPRECATED: Use BuildReviewerPromptFromRequest instead.
 func BuildReviewerPrompt(code string, plan string, skills []string) ([]model.ChatMessage, error) {
 	if code == "" {
 		return nil, fmt.Errorf("reviewer prompt: code is required")
@@ -121,7 +139,31 @@ func buildReviewerSystemMessage(skills []string) string {
 	return sb.String()
 }
 
+// buildReviewerUserMessageFromRequest constructs the user prompt from code and user request.
+func buildReviewerUserMessageFromRequest(code string, userRequest string) string {
+	var sb promptBuilder
+	sb.AppendLine("## User Request")
+	sb.AppendLine(userRequest)
+	sb.AppendLine("")
+	sb.AppendLine("## Generated Code")
+	sb.AppendLine("Review this code against the user's request above:")
+	sb.AppendLine("```go")
+	sb.AppendLine(code)
+	sb.AppendLine("```")
+	sb.AppendLine("")
+	sb.AppendLine("## Review Criteria")
+	sb.AppendLine("1. Does the code fulfill the user's request?")
+	sb.AppendLine("2. Is the code clean, idiomatic, and well-structured?")
+	sb.AppendLine("3. Are there any bugs or logical errors?")
+	sb.AppendLine("4. Is error handling appropriate?")
+	sb.AppendLine("5. Are there any security concerns?")
+	sb.AppendLine("")
+	sb.AppendLine("Provide your review in the structured format specified in the system prompt.")
+	return sb.String()
+}
+
 // buildReviewerUserMessage constructs the user prompt with code, plan/spec, and previous feedback.
+// DEPRECATED: Use buildReviewerUserMessageFromRequest instead.
 func buildReviewerUserMessage(code string, plan string) string {
 	var sb promptBuilder
 
