@@ -421,7 +421,7 @@ func TestAgent_EmptySkillsFallback(t *testing.T) {
 				ID:      "fallback-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
-				Model:   "planning-model",
+				Model:   "coding-model",
 				Choices: []model.ChatChoice{
 					{
 						Index:        0,
@@ -442,9 +442,9 @@ func TestAgent_EmptySkillsFallback(t *testing.T) {
 	provider := model.NewLMStudioProvider(server.URL)
 	router := model.NewRouter()
 	router.RegisterProvider(provider)
-	router.SetDefaultConfig("planning", model.ModelConfig{
+	router.SetDefaultConfig("coding", model.ModelConfig{
 		Provider:    provider.Name(),
-		ModelID:     "planning-model",
+		ModelID:     "coding-model",
 		Temperature: 0.7,
 		MaxTokens:   4096,
 	})
@@ -487,7 +487,7 @@ func TestAgent_SkillsRegistryIntegration(t *testing.T) {
 				ID:      "integration-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
-				Model:   "planning-model",
+				Model:   "coding-model",
 				Choices: []model.ChatChoice{
 					{
 						Index:        0,
@@ -508,9 +508,9 @@ func TestAgent_SkillsRegistryIntegration(t *testing.T) {
 	provider := model.NewLMStudioProvider(server.URL)
 	router := model.NewRouter()
 	router.RegisterProvider(provider)
-	router.SetDefaultConfig("planning", model.ModelConfig{
+	router.SetDefaultConfig("coding", model.ModelConfig{
 		Provider:    provider.Name(),
-		ModelID:     "planning-model",
+		ModelID:     "coding-model",
 		Temperature: 0.7,
 		MaxTokens:   4096,
 	})

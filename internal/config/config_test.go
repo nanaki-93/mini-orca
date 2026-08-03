@@ -14,7 +14,7 @@ models:
     p1:
       base_url: "http://localhost:1234"
   phases:
-    planning:
+    coding:
       provider: "p1"
       model: "gpt-4"
 `
@@ -39,8 +39,8 @@ models:
 			t.Errorf("expected active provider p1, got %s", cfg.Models.ActiveProvider)
 		}
 
-		if cfg.Models.Phases["planning"].Model != "gpt-4" {
-			t.Errorf("expected model gpt-4, got %s", cfg.Models.Phases["planning"].Model)
+		if cfg.Models.Phases["coding"].Model != "gpt-4" {
+			t.Errorf("expected model gpt-4, got %s", cfg.Models.Phases["coding"].Model)
 		}
 
 		// Test defaults

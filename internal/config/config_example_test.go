@@ -38,8 +38,8 @@ func TestLoadConfigExample(t *testing.T) {
 		t.Errorf("expected 4 phases, got %d", len(cfg.Models.Phases))
 	}
 
-	if len(cfg.Skills.Knowledge) != 12 {
-		t.Errorf("expected 12 knowledge entries, got %d", len(cfg.Skills.Knowledge))
+	if len(cfg.Skills.Knowledge) != 9 {
+		t.Errorf("expected 9 knowledge entries, got %d", len(cfg.Skills.Knowledge))
 	}
 
 	if len(cfg.Skills.Tools) != 3 {

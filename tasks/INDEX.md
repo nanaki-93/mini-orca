@@ -2,7 +2,7 @@
 
 ## Overview
 **Goal**: Simplify mini-orca from a 6-phase plan-driven pipeline to a 4-phase single-feature workflow.
-**Current**: `planning → planning_review → coding → testing → review → human_review → completed`
+**Current**: `coding → testing → review → human_review → completed`
 **Target**: `coding → testing → review → human_gate → done`
 
 ## Workflow Change

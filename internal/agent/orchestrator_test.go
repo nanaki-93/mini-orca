@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/prompts"
 	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
 	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
@@ -27,112 +26,18 @@ func TestNewOrchestrator(t *testing.T) {
 	}
 }
 
-func TestOrchestrator_RunCoder_EmptyTitle(t *testing.T) {
+func TestRunCoderFromPrompt_EmptyPrompt(t *testing.T) {
 	router := model.NewRouter()
 	registry := skills.NewSkillsRegistry()
 	orch := NewOrchestrator(router, registry, nil)
 
-	_, err := orch.RunCoder(prompts.PlanUnit{
-		Title:       "",
-		Description: "Test description",
-	})
+	_, err := orch.RunCoderFromPrompt("", "")
 	if err == nil {
-		t.Fatal("expected error for empty title, got nil")
+		t.Fatal("expected error for empty prompt, got nil")
 	}
 }
 
-func TestOrchestrator_RunCoder_EmptyDescription(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
-
-	_, err := orch.RunCoder(prompts.PlanUnit{
-		Title:       "Test",
-		Description: "",
-	})
-	if err == nil {
-		t.Fatal("expected error for empty description, got nil")
-	}
-}
-
-func TestOrchestrator_RunCoder_NoRouter(t *testing.T) {
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(nil, registry, nil)
-
-	_, err := orch.RunCoder(prompts.PlanUnit{
-		Title:       "Test",
-		Description: "Test description",
-	})
-	if err == nil {
-		t.Fatal("expected error for nil router, got nil")
-	}
-}
-
-func TestOrchestrator_RunTester_EmptyCode(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
-
-	_, err := orch.RunTester("", "test results")
-	if err == nil {
-		t.Fatal("expected error for empty code, got nil")
-	}
-}
-
-func TestOrchestrator_RunTester_EmptyResults(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
-
-	_, err := orch.RunTester("code", "")
-	if err == nil {
-		t.Fatal("expected error for empty test results, got nil")
-	}
-}
-
-func TestOrchestrator_RunTester_NoRouter(t *testing.T) {
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(nil, registry, nil)
-
-	_, err := orch.RunTester("code", "test results")
-	if err == nil {
-		t.Fatal("expected error for nil router, got nil")
-	}
-}
-
-func TestOrchestrator_RunReviewer_EmptyCode(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
-
-	_, err := orch.RunReviewer("", "plan")
-	if err == nil {
-		t.Fatal("expected error for empty code, got nil")
-	}
-}
-
-func TestOrchestrator_RunReviewer_EmptyPlan(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
-
-	_, err := orch.RunReviewer("code", "")
-	if err == nil {
-		t.Fatal("expected error for empty plan, got nil")
-	}
-}
-
-func TestOrchestrator_RunReviewer_NoRouter(t *testing.T) {
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(nil, registry, nil)
-
-	_, err := orch.RunReviewer("code", "plan")
-	if err == nil {
-		t.Fatal("expected error for nil router, got nil")
-	}
-}
-
-func TestOrchestrator_RunCoder_FullFlow(t *testing.T) {
+func TestRunCoderFromPrompt_Valid(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
 			resp := model.ChatResponse{
@@ -170,13 +75,9 @@ func TestOrchestrator_RunCoder_FullFlow(t *testing.T) {
 	registry := skills.NewSkillsRegistry()
 	orch := NewOrchestrator(router, registry, nil)
 
-	result, err := orch.RunCoder(prompts.PlanUnit{
-		Title:        "Create User struct",
-		Description:  "Create a User struct with ID, Name, Email fields",
-		Dependencies: []string{"Setup Project"},
-	})
+	result, err := orch.RunCoderFromPrompt("Create a User struct with ID, Name, Email fields", "")
 	if err != nil {
-		t.Fatalf("RunCoder failed: %v", err)
+		t.Fatalf("RunCoderFromPrompt failed: %v", err)
 	}
 
 	if result == nil {
@@ -190,7 +91,181 @@ func TestOrchestrator_RunCoder_FullFlow(t *testing.T) {
 	}
 }
 
-func TestOrchestrator_RunTester_FullFlow(t *testing.T) {
+func TestRunCoderFromPrompt_WithProjectContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/chat/completions" {
+			resp := model.ChatResponse{
+				ID:      "coder-2",
+				Object:  "chat.completion",
+				Created: 1234567890,
+				Model:   "coding-model",
+				Choices: []model.ChatChoice{
+					{
+						Index:        0,
+						Message:      model.ChatMessage{Role: "assistant", Content: "package user\n\ntype User struct {\n\tID string `json:\"id\"`\n}"},
+						FinishReason: "stop",
+					},
+				},
+				Usage: model.ChatUsage{PromptTokens: 120, CompletionTokens: 70, TotalTokens: 190},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	provider := model.NewLMStudioProvider(server.URL)
+	router := model.NewRouter()
+	router.RegisterProvider(provider)
+	router.SetDefaultConfig("coding", model.ModelConfig{
+		Provider:    provider.Name(),
+		ModelID:     "coding-model",
+		Temperature: 0.7,
+		MaxTokens:   4096,
+	})
+
+	registry := skills.NewSkillsRegistry()
+	orch := NewOrchestrator(router, registry, nil)
+
+	projectContext := "module github.com/example/project\ngo 1.21"
+	result, err := orch.RunCoderFromPrompt("Create User struct", projectContext)
+	if err != nil {
+		t.Fatalf("RunCoderFromPrompt with project context failed: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Output == "" {
+		t.Error("expected non-empty output")
+	}
+}
+
+func TestRunReviewer_EmptyCode(t *testing.T) {
+	router := model.NewRouter()
+	registry := skills.NewSkillsRegistry()
+	orch := NewOrchestrator(router, registry, nil)
+
+	_, err := orch.RunReviewer("", "Create User struct")
+	if err == nil {
+		t.Fatal("expected error for empty code, got nil")
+	}
+}
+
+func TestRunReviewer_EmptyUserPrompt(t *testing.T) {
+	router := model.NewRouter()
+	registry := skills.NewSkillsRegistry()
+	orch := NewOrchestrator(router, registry, nil)
+
+	_, err := orch.RunReviewer("package user", "")
+	if err == nil {
+		t.Fatal("expected error for empty user prompt, got nil")
+	}
+}
+
+func TestRunReviewer_Valid(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/chat/completions" {
+			resp := model.ChatResponse{
+				ID:      "reviewer-1",
+				Object:  "chat.completion",
+				Created: 1234567890,
+				Model:   "review-model",
+				Choices: []model.ChatChoice{
+					{
+						Index:        0,
+						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nCode is well structured.\n\n## Score: 90\n\n## Recommendation\nApprove"},
+						FinishReason: "stop",
+					},
+				},
+				Usage: model.ChatUsage{PromptTokens: 70, CompletionTokens: 30, TotalTokens: 100},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	provider := model.NewLMStudioProvider(server.URL)
+	router := model.NewRouter()
+	router.RegisterProvider(provider)
+	router.SetDefaultConfig("review", model.ModelConfig{
+		Provider:    provider.Name(),
+		ModelID:     "review-model",
+		Temperature: 0.2,
+		MaxTokens:   4096,
+	})
+
+	registry := skills.NewSkillsRegistry()
+	orch := NewOrchestrator(router, registry, nil)
+
+	result, err := orch.RunReviewer(
+		"package user\n\ntype User struct {\n\tID string\n}",
+		"Create a User struct with ID field",
+	)
+	if err != nil {
+		t.Fatalf("RunReviewer failed: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Output == "" {
+		t.Error("expected non-empty output")
+	}
+	if result.Phase != "review" {
+		t.Errorf("expected phase 'review', got %s", result.Phase)
+	}
+	if result.Metadata == nil {
+		t.Error("expected non-nil metadata")
+	}
+	if result.Metadata["score"] != "90" {
+		t.Errorf("expected score=90, got %s", result.Metadata["score"])
+	}
+	if result.Metadata["recommendation"] != "Approve" {
+		t.Errorf("expected recommendation=Approve, got %s", result.Metadata["recommendation"])
+	}
+
+	// Verify JSON content
+	var reviewReport ReviewReport
+	if err := json.Unmarshal([]byte(result.Output), &reviewReport); err != nil {
+		t.Fatalf("failed to unmarshal review report: %v", err)
+	}
+	if reviewReport.Score != 90 {
+		t.Errorf("expected score=90, got %d", reviewReport.Score)
+	}
+	if reviewReport.Recommendation != "Approve" {
+		t.Errorf("expected recommendation=Approve, got %s", reviewReport.Recommendation)
+	}
+}
+
+func TestRunTester_EmptyCode(t *testing.T) {
+	router := model.NewRouter()
+	registry := skills.NewSkillsRegistry()
+	orch := NewOrchestrator(router, registry, nil)
+
+	_, err := orch.RunTester("", "test results")
+	if err == nil {
+		t.Fatal("expected error for empty code, got nil")
+	}
+}
+
+func TestRunTester_EmptyResults(t *testing.T) {
+	router := model.NewRouter()
+	registry := skills.NewSkillsRegistry()
+	orch := NewOrchestrator(router, registry, nil)
+
+	_, err := orch.RunTester("code", "")
+	if err == nil {
+		t.Fatal("expected error for empty test results, got nil")
+	}
+}
+
+func TestRunTester_Valid(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
 			resp := model.ChatResponse{
@@ -259,139 +334,6 @@ func TestOrchestrator_RunTester_FullFlow(t *testing.T) {
 	}
 	if !testReport.Passed {
 		t.Error("expected passed=true")
-	}
-}
-
-func TestOrchestrator_RunReviewer_FullFlow(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
-				ID:      "reviewer-1",
-				Object:  "chat.completion",
-				Created: 1234567890,
-				Model:   "review-model",
-				Choices: []model.ChatChoice{
-					{
-						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nCode is well structured.\n\n## Score: 90\n\n## Recommendation\nApprove"},
-						FinishReason: "stop",
-					},
-				},
-				Usage: model.ChatUsage{PromptTokens: 70, CompletionTokens: 30, TotalTokens: 100},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
-
-	result, err := orch.RunReviewer(
-		"package user\n\ntype User struct {\n\tID string\n}",
-		"1. Create User struct with ID field\n2. Add validation",
-	)
-	if err != nil {
-		t.Fatalf("RunReviewer failed: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if result.Output == "" {
-		t.Error("expected non-empty output")
-	}
-	if result.Phase != "review" {
-		t.Errorf("expected phase 'review', got %s", result.Phase)
-	}
-	if result.Metadata == nil {
-		t.Error("expected non-nil metadata")
-	}
-	if result.Metadata["score"] != "90" {
-		t.Errorf("expected score=90, got %s", result.Metadata["score"])
-	}
-	if result.Metadata["recommendation"] != "Approve" {
-		t.Errorf("expected recommendation=Approve, got %s", result.Metadata["recommendation"])
-	}
-
-	// Verify JSON content
-	var reviewReport ReviewReport
-	if err := json.Unmarshal([]byte(result.Output), &reviewReport); err != nil {
-		t.Fatalf("failed to unmarshal review report: %v", err)
-	}
-	if reviewReport.Score != 90 {
-		t.Errorf("expected score=90, got %d", reviewReport.Score)
-	}
-	if reviewReport.Recommendation != "Approve" {
-		t.Errorf("expected recommendation=Approve, got %s", reviewReport.Recommendation)
-	}
-}
-
-func TestOrchestrator_RunCoder_WithDependencies(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
-				ID:      "coder-2",
-				Object:  "chat.completion",
-				Created: 1234567890,
-				Model:   "coding-model",
-				Choices: []model.ChatChoice{
-					{
-						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "package user\n\ntype User struct {\n\tID    string\n\tName  string\n\tEmail string\n}"},
-						FinishReason: "stop",
-					},
-				},
-				Usage: model.ChatUsage{PromptTokens: 120, CompletionTokens: 70, TotalTokens: 190},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "coding-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
-
-	result, err := orch.RunCoder(prompts.PlanUnit{
-		Title:        "Create User struct",
-		Description:  "Create User struct",
-		Dependencies: []string{"Setup", "Config"},
-	})
-	if err != nil {
-		t.Fatalf("RunCoder failed: %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if result.Output == "" {
-		t.Error("expected non-empty output")
 	}
 }
 

@@ -8,12 +8,12 @@ import (
 func TestOrchestratorError(t *testing.T) {
 	cause := errors.New("cause")
 	err := &OrchestratorError{
-		Phase:   "planning",
+		Phase:   "coding",
 		Message: "failed",
 		Cause:   cause,
 	}
 
-	expected := "orchestrator error in phase planning: failed"
+	expected := "orchestrator error in phase coding: failed"
 	if err.Error() != expected {
 		t.Errorf("expected %q, got %q", expected, err.Error())
 	}

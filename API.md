@@ -14,7 +14,7 @@ This document describes the API endpoints provided by the mini-orca daemon.
 - **URL**: `/status`
 - **Method**: `GET`
 - **Description**: Returns the running status and registered agents.
-- **Response**: `{"status":"running","agents":["planner","coder","tester","reviewer"]}`
+- **Response**: `{"status":"running","agents":["coder","tester","reviewer"]}`
 
 ## Session Management
 
@@ -22,7 +22,28 @@ This document describes the API endpoints provided by the mini-orca daemon.
 - **URL**: `/api/sessions`
 - **Method**: `POST`
 - **Description**: Creates a new agent session.
-- **Body**: Session configuration (optional).
+- **Body**: 
+```json
+{
+  "feature_request": "string - Natural language description of the feature to implement",
+  "project_path": "string - Filesystem path to the existing project",
+  "project_type": "string - Optional: 'go', 'python', etc."
+}
+```
+
+Response:
+```json
+{
+  "id": "string",
+  "feature_request": "string",
+  "project_path": "string",
+  "project_type": "string",
+  "current_phase": "coding",
+  "status": "pending",
+  "created_at": "timestamp",
+  "updated_at": "timestamp"
+}
+```
 
 ### List Sessions
 - **URL**: `/api/sessions`

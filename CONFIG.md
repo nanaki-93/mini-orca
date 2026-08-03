@@ -10,7 +10,7 @@ This section defines the LLM providers and how they are used across different ex
 - `providers` (map): Definitions for LLM providers.
     - `base_url` (string, required): The base URL of the provider's API (e.g., `http://localhost:1234` for LM Studio).
     - `api_key` (string, optional): The API key for the provider.
-- `phases` (map): Phase-specific model settings. Keyed by phase name: `planning`, `coding`, `testing`, `review`, `human_review`.
+- `phases` (map): Phase-specific model settings. Keyed by phase name: `coding`, `testing`, `review`, `human_review`.
     - `provider` (string): The provider to use for this phase.
     - `model` (string): The specific model ID to use.
     - `temperature` (float): Sampling temperature (0.0 to 1.0).
@@ -18,7 +18,7 @@ This section defines the LLM providers and how they are used across different ex
 
 ## Agents Configuration (`agents`)
 
-Configure the four core agents: `planner`, `coder`, `tester`, and `reviewer`.
+Configure the three core agents: `coder`, `tester`, and `reviewer`.
 
 - `skills` (list of strings): A list of skill names assigned to the agent. Skills must be defined in the `skills` section.
 - `model` (string, optional): Override the default model for this specific agent.

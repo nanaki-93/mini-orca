@@ -1,3 +1,26 @@
+# Mini-Orca Release Notes
+
+## v3.0.0 — Simplified Workflow (2024-XX-XX)
+
+### Breaking Changes
+- Removed planning phase — sessions now start directly at coding
+- Removed plan-driven execution — single feature request per session
+- Removed `Plan`, `PlanUnit`, `AtomicUnit` data types
+- Session creation now requires `feature_request` and `project_path`
+- Removed `planner` agent from the orchestrator
+
+### New Features
+- Simplified 4-phase workflow: coding → testing → review → human_gate
+- Direct feature request input instead of multi-step planning
+- Support for adding features to existing projects
+
+### API Changes
+- `POST /api/sessions` now uses `feature_request` instead of `goal`
+- Sessions start at `PhaseCoding` instead of `PhasePlanning`
+- Removed planning-related endpoints
+
+---
+
 # Mini-Orca v2.0 Release Notes
 
 **Release Date**: July 31, 2024  

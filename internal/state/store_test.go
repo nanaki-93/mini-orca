@@ -44,7 +44,7 @@ func TestStore_History(t *testing.T) {
 	history := PhaseHistory{
 		ID:        "h1",
 		SessionID: "sess-1",
-		Phase:     "planning",
+		Phase:     "coding",
 		Status:    PhaseStatusCompleted,
 		StartedAt: time.Now(),
 	}
@@ -62,8 +62,8 @@ func TestStore_History(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("expected 1 history entry, got %d", len(got))
 		}
-		if got[0].Phase != "planning" {
-			t.Errorf("expected planning, got %s", got[0].Phase)
+		if got[0].Phase != "coding" {
+			t.Errorf("expected coding, got %s", got[0].Phase)
 		}
 	})
 }
