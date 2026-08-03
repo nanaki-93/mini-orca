@@ -12,7 +12,7 @@ func TestHistoryTracker(t *testing.T) {
 	tracker := NewHistoryTracker("sess-1", store)
 
 	t.Run("LogPhaseTransition", func(t *testing.T) {
-		tracker.LogPhaseTransition(PhasePlanning, PhasePlanningReview)
+		tracker.LogPhaseTransition(PhaseCoding, PhaseTesting)
 		history := tracker.GetHistory()
 		if len(history) != 1 {
 			t.Errorf("expected 1 event, got %d", len(history))
@@ -23,7 +23,7 @@ func TestHistoryTracker(t *testing.T) {
 	})
 
 	t.Run("LogLLMCall", func(t *testing.T) {
-		tracker.LogLLMCall("planner", "input", "output", 100*time.Millisecond, nil)
+		tracker.LogLLMCall("coder", "input", "output", 100*time.Millisecond, nil)
 		history := tracker.GetHistory()
 		if len(history) != 2 {
 			t.Errorf("expected 2 events, got %d", len(history))

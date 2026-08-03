@@ -6,7 +6,7 @@ import (
 )
 
 func TestHumanGate_Approve(t *testing.T) {
-	gate := NewHumanGate("s1", PhasePlanningReview)
+	gate := NewHumanGate("s1", PhaseHumanReview)
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
@@ -30,7 +30,7 @@ func TestHumanGate_Approve(t *testing.T) {
 }
 
 func TestHumanGate_Reject(t *testing.T) {
-	gate := NewHumanGate("s1", PhasePlanningReview)
+	gate := NewHumanGate("s1", PhaseHumanReview)
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
@@ -51,7 +51,7 @@ func TestHumanGate_Reject(t *testing.T) {
 }
 
 func TestHumanGate_InvalidAction(t *testing.T) {
-	gate := NewHumanGate("s1", PhasePlanningReview)
+	gate := NewHumanGate("s1", PhaseHumanReview)
 	err := gate.Respond("invalid", "")
 	if err == nil {
 		t.Error("expected error for invalid action")

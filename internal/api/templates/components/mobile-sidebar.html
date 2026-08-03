@@ -50,17 +50,6 @@
                 <div class="space-y-1">
                     <button
                         class="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-dark-700 rounded-md transition-colors"
-                        hx-post="/api/session/start"
-                        hx-target="#mobile-sidebar"
-                        hx-swap="innerHTML"
-                    >
-                        <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
-                        </svg>
-                        Start Session
-                    </button>
-                    <button
-                        class="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-dark-700 rounded-md transition-colors"
                         hx-post="/api/session/new"
                         hx-target="body"
                         hx-swap="outerHTML"
@@ -68,7 +57,7 @@
                         <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                             <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
                         </svg>
-                        New Session
+                        Create New Session
                     </button>
                 </div>
             </div>

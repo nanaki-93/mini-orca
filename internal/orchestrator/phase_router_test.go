@@ -10,16 +10,17 @@ func TestValidateTransition(t *testing.T) {
 		to      Phase
 		wantErr bool
 	}{
-		{PhasePlanning, PhasePlanningReview, false},
-		{PhasePlanningReview, PhaseCoding, false},
 		{PhaseCoding, PhaseTesting, false},
+		{PhaseTesting, PhaseCoding, false},
 		{PhaseTesting, PhaseReview, false},
+		{PhaseReview, PhaseCoding, false},
 		{PhaseReview, PhaseHumanReview, false},
+		{PhaseHumanReview, PhaseCoding, false},
 		{PhaseHumanReview, "completed", false},
 		// Invalid transitions
-		{PhasePlanning, PhaseCoding, true},
-		{PhaseCoding, PhasePlanning, true},
-		{PhaseReview, PhasePlanning, true},
+		{PhaseCoding, PhaseReview, true},
+		{PhaseCoding, PhaseHumanReview, true},
+		{PhaseTesting, PhaseHumanReview, true},
 	}
 
 	for _, tt := range tests {
@@ -33,9 +34,9 @@ func TestValidateTransition(t *testing.T) {
 }
 
 func TestGetValidTransitions(t *testing.T) {
-	transitions := GetValidTransitions(PhasePlanning)
-	if len(transitions) != 1 || transitions[0] != PhasePlanningReview {
-		t.Errorf("expected [PhasePlanningReview], got %v", transitions)
+	transitions := GetValidTransitions(PhaseCoding)
+	if len(transitions) != 1 || transitions[0] != PhaseTesting {
+		t.Errorf("expected [PhaseTesting], got %v", transitions)
 	}
 
 	transitions = GetValidTransitions(PhaseTesting)
@@ -48,19 +49,19 @@ func TestPhaseRouter(t *testing.T) {
 	router := NewPhaseRouter(nil, nil)
 
 	t.Run("NextPhase", func(t *testing.T) {
-		next, err := router.NextPhase(PhasePlanning)
+		next, err := router.NextPhase(PhaseCoding)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if next != PhasePlanningReview {
-			t.Errorf("expected %s, got %s", PhasePlanningReview, next)
+		if next != PhaseTesting {
+			t.Errorf("expected %s, got %s", PhaseTesting, next)
 		}
 	})
 
 	t.Run("GetTransitionsForPhase", func(t *testing.T) {
-		ts := router.GetTransitionsForPhase(PhasePlanning)
-		if len(ts) != 1 || ts[0].To != PhasePlanningReview {
-			t.Errorf("expected transition to PhasePlanningReview, got %v", ts)
+		ts := router.GetTransitionsForPhase(PhaseCoding)
+		if len(ts) != 1 || ts[0].To != PhaseTesting {
+			t.Errorf("expected transition to PhaseTesting, got %v", ts)
 		}
 	})
 }
