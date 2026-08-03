@@ -131,9 +131,8 @@ func main() {
 	}
 
 	// Log registered agents and their skills
-	logging.Info("Agent registered", "name", coder.Name(), "description", coder.Name(), "skills", coder.GetSkills())
-	logging.Info("Agent registered", "name", tester.Name(), "description", tester.Description(), "skills", tester.GetSkills())
-	logging.Info("Agent registered", "name", reviewer.Name(), "description", reviewer.Description(), "skills", reviewer.GetSkills())
+	logging.Info("Agents initialized", "agents", []string{"coder", "tester", "reviewer"})
+	logging.Info("Workflow: coding → testing → review → human_gate")
 
 	// Log registered agents from registry
 	logging.Info("Registered agents from registry", "agents", agentRegistry.List())

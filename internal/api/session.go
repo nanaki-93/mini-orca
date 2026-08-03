@@ -16,8 +16,8 @@ import (
 
 // SessionCreateRequest represents the request body for creating a new session.
 type SessionCreateRequest struct {
-	// Goal is the high-level goal of the session.
-	Goal string `json:"goal"`
+	// FeatureRequest is the feature request for the session.
+	FeatureRequest string `json:"feature_request"`
 	// ProjectPath is the path to the project directory.
 	ProjectPath string `json:"project_path"`
 	// ProjectType is the type of the project (e.g., "go", "python").
@@ -28,8 +28,8 @@ type SessionCreateRequest struct {
 type SessionResponse struct {
 	// ID is the unique identifier for the session.
 	ID string `json:"id"`
-	// Goal is the high-level goal of the session.
-	Goal string `json:"goal"`
+	// FeatureRequest is the feature request for the session.
+	FeatureRequest string `json:"feature_request"`
 	// ProjectPath is the path to the project directory.
 	ProjectPath string `json:"project_path"`
 	// ProjectType is the type of the project.
@@ -58,8 +58,8 @@ type SessionListResponse struct {
 type SessionSummary struct {
 	// ID is the unique identifier for the session.
 	ID string `json:"id"`
-	// Goal is the high-level goal of the session.
-	Goal string `json:"goal"`
+	// FeatureRequest is the feature request for the session.
+	FeatureRequest string `json:"feature_request"`
 	// CurrentPhase is the current phase of the session.
 	CurrentPhase string `json:"current_phase"`
 	// Status is the current status of the session.
@@ -82,9 +82,9 @@ func NewSessionStore() *SessionStore {
 }
 
 // CreateSession creates a new session with the given configuration.
-func (s *SessionStore) CreateSession(goal, projectPath, projectType string) (*state.Session, error) {
-	if goal == "" {
-		return nil, fmt.Errorf("session: goal is required")
+func (s *SessionStore) CreateSession(featureRequest, projectPath, projectType string) (*state.Session, error) {
+	if featureRequest == "" {
+		return nil, fmt.Errorf("session: feature_request is required")
 	}
 
 	if projectPath == "" {
@@ -98,15 +98,13 @@ func (s *SessionStore) CreateSession(goal, projectPath, projectType string) (*st
 
 	session := &state.Session{
 		ID:            sessionID,
-		Goal:          goal,
+		Goal:          featureRequest,
 		ProjectPath:   projectPath,
 		ProjectType:   projectType,
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
-		CurrentPhase:  state.PhasePlanning,
+		CurrentPhase:  state.PhaseCoding,
 		Status:        state.SessionStatusPending,
-		Plan:          nil,
-		AtomicUnits:   nil,
 		History:       nil,
 		TestResults:   nil,
 		ReviewReports: nil,
@@ -180,14 +178,6 @@ func copySession(s *state.Session) *state.Session {
 	}
 
 	copy := *s
-	if s.Plan != nil {
-		planCopy := *s.Plan
-		copy.Plan = &planCopy
-	}
-	if s.AtomicUnits != nil {
-		unitsCopy := make([]state.AtomicUnit, len(s.AtomicUnits))
-		copy.AtomicUnits = append(unitsCopy, s.AtomicUnits...)
-	}
 	if s.History != nil {
 		historyCopy := make([]state.PhaseHistory, len(s.History))
 		copy.History = append(historyCopy, s.History...)
@@ -232,8 +222,8 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Goal == "" {
-		WriteAppError(w, apperrors.BadRequest("goal is required", "A session goal must be provided.", nil))
+	if req.FeatureRequest == "" {
+		WriteAppError(w, apperrors.BadRequest("feature_request is required", "A feature request must be provided.", nil))
 		return
 	}
 
@@ -242,21 +232,21 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := h.sessionStore.CreateSession(req.Goal, req.ProjectPath, req.ProjectType)
+	session, err := h.sessionStore.CreateSession(req.FeatureRequest, req.ProjectPath, req.ProjectType)
 	if err != nil {
 		WriteAppError(w, apperrors.BadRequest("session creation failed", "Failed to create new session: "+err.Error(), err))
 		return
 	}
 
 	WriteJSON(w, http.StatusCreated, SessionResponse{
-		ID:           session.ID,
-		Goal:         session.Goal,
-		ProjectPath:  session.ProjectPath,
-		ProjectType:  session.ProjectType,
-		CurrentPhase: string(session.CurrentPhase),
-		Status:       string(session.Status),
-		CreatedAt:    session.CreatedAt,
-		UpdatedAt:    session.UpdatedAt,
+		ID:             session.ID,
+		FeatureRequest: session.Goal,
+		ProjectPath:    session.ProjectPath,
+		ProjectType:    session.ProjectType,
+		CurrentPhase:   string(state.PhaseCoding),
+		Status:         string(session.Status),
+		CreatedAt:      session.CreatedAt,
+		UpdatedAt:      session.UpdatedAt,
 	})
 }
 
@@ -276,15 +266,15 @@ func (h *SessionHandler) GetSessionStatus(w http.ResponseWriter, r *http.Request
 	}
 
 	WriteJSON(w, http.StatusOK, SessionResponse{
-		ID:           session.ID,
-		Goal:         session.Goal,
-		ProjectPath:  session.ProjectPath,
-		ProjectType:  session.ProjectType,
-		CurrentPhase: string(session.CurrentPhase),
-		Status:       string(session.Status),
-		CreatedAt:    session.CreatedAt,
-		UpdatedAt:    session.UpdatedAt,
-		Error:        session.Error,
+		ID:             session.ID,
+		FeatureRequest: session.Goal,
+		ProjectPath:    session.ProjectPath,
+		ProjectType:    session.ProjectType,
+		CurrentPhase:   string(session.CurrentPhase),
+		Status:         string(session.Status),
+		CreatedAt:      session.CreatedAt,
+		UpdatedAt:      session.UpdatedAt,
+		Error:          session.Error,
 	})
 }
 
@@ -308,7 +298,7 @@ func (h *SessionHandler) StartSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.sessionStore.UpdateSessionStatus(sessionID, state.SessionStatusRunning, state.PhasePlanning); err != nil {
+	if err := h.sessionStore.UpdateSessionStatus(sessionID, state.SessionStatusRunning, state.PhaseCoding); err != nil {
 		WriteAppError(w, apperrors.Internal("session update failed", "Failed to update session status.", err))
 		return
 	}
@@ -316,7 +306,7 @@ func (h *SessionHandler) StartSession(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]string{
 		"status":     "started",
 		"session_id": sessionID,
-		"phase":      string(state.PhasePlanning),
+		"phase":      string(state.PhaseCoding),
 	})
 }
 
@@ -421,11 +411,11 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	summaries := make([]SessionSummary, 0, len(sessions))
 	for _, session := range sessions {
 		summaries = append(summaries, SessionSummary{
-			ID:           session.ID,
-			Goal:         session.Goal,
-			CurrentPhase: string(session.CurrentPhase),
-			Status:       string(session.Status),
-			CreatedAt:    session.CreatedAt,
+			ID:             session.ID,
+			FeatureRequest: session.Goal,
+			CurrentPhase:   string(session.CurrentPhase),
+			Status:         string(session.Status),
+			CreatedAt:      session.CreatedAt,
 		})
 	}
 
