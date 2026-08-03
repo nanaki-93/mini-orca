@@ -15,7 +15,6 @@ import (
 type Store struct {
 	mu            sync.RWMutex
 	sessions      map[string]*Session
-	plans         map[string]*Plan
 	histories     map[string][]PhaseHistory
 	testResults   map[string][]TestResult
 	reviewReports map[string][]ReviewReportEntry
@@ -25,7 +24,6 @@ type Store struct {
 func NewStore(session *Session) *Store {
 	store := &Store{
 		sessions:      make(map[string]*Session),
-		plans:         make(map[string]*Plan),
 		histories:     make(map[string][]PhaseHistory),
 		testResults:   make(map[string][]TestResult),
 		reviewReports: make(map[string][]ReviewReportEntry),
@@ -96,93 +94,6 @@ func (s *Store) GetCurrentSession() *Session {
 	return nil
 }
 
-// SavePlan saves a plan to the store.
-func (s *Store) SavePlan(plan *Plan) error {
-	if plan == nil {
-		return fmt.Errorf("store: plan is required")
-	}
-
-	if plan.ID == "" {
-		return fmt.Errorf("store: plan ID is required")
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.plans[plan.ID] = plan
-
-	// Also update the session's plan reference
-	if session, ok := s.sessions[plan.SessionID]; ok {
-		session.Plan = plan
-		session.UpdatedAt = time.Now()
-	}
-
-	return nil
-}
-
-// GetPlan retrieves a plan by its ID.
-func (s *Store) GetPlan(planID string) (*Plan, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("store: plan ID is required")
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	plan, ok := s.plans[planID]
-	if !ok {
-		return nil, fmt.Errorf("store: plan %q not found", planID)
-	}
-
-	// Return a copy to prevent external mutation
-	return s.copyPlanData(plan), nil
-}
-
-// UpdateUnitStatus updates the status of a unit within a plan.
-func (s *Store) UpdateUnitStatus(unitID string, status UnitStatus) error {
-	if unitID == "" {
-		return fmt.Errorf("store: unit ID is required")
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, plan := range s.plans {
-		for i := range plan.Units {
-			if plan.Units[i].ID == unitID {
-				plan.Units[i].Status = status
-				return nil
-			}
-		}
-	}
-
-	return fmt.Errorf("store: unit %q not found in any plan", unitID)
-}
-
-// GetPendingUnits retrieves all pending units from a specific plan.
-func (s *Store) GetPendingUnits(planID string) ([]PlanUnit, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("store: plan ID is required")
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	plan, ok := s.plans[planID]
-	if !ok {
-		return nil, fmt.Errorf("store: plan %q not found", planID)
-	}
-
-	var pending []PlanUnit
-	for _, unit := range plan.Units {
-		if unit.Status == UnitStatusPending {
-			pending = append(pending, unit)
-		}
-	}
-
-	return pending, nil
-}
-
 // SavePhaseHistory saves a phase history entry to the store.
 func (s *Store) SavePhaseHistory(history *PhaseHistory) error {
 	if history == nil {
@@ -226,27 +137,6 @@ func (s *Store) GetSessionHistory(sessionID string) ([]PhaseHistory, error) {
 	copy(result, history)
 
 	return result, nil
-}
-
-// GetPlanBySession retrieves a plan by session ID.
-func (s *Store) GetPlanBySession(sessionID string) (*Plan, error) {
-	if sessionID == "" {
-		return nil, fmt.Errorf("store: session ID is required")
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	session, ok := s.sessions[sessionID]
-	if !ok {
-		return nil, fmt.Errorf("store: session %q not found", sessionID)
-	}
-
-	if session.Plan == nil {
-		return nil, nil
-	}
-
-	return s.copyPlanData(session.Plan), nil
 }
 
 // UpdatePhaseStatus updates the session's current phase and status.
@@ -378,38 +268,6 @@ func (s *Store) GetReviewReports(sessionID string) ([]ReviewReportEntry, error) 
 	return resultCopy, nil
 }
 
-// SaveUnitCode saves the generated code for a specific unit.
-func (s *Store) SaveUnitCode(sessionID string, unitID string, code string) error {
-	if sessionID == "" {
-		return fmt.Errorf("store: session ID is required")
-	}
-
-	if unitID == "" {
-		return fmt.Errorf("store: unit ID is required")
-	}
-
-	if code == "" {
-		return fmt.Errorf("store: code is required")
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Find the plan and unit, then update the generated code
-	for _, plan := range s.plans {
-		if plan.SessionID == sessionID {
-			for i := range plan.Units {
-				if plan.Units[i].ID == unitID {
-					plan.Units[i].GeneratedCode = code
-					return nil
-				}
-			}
-		}
-	}
-
-	return fmt.Errorf("store: unit %q not found in session %q", unitID, sessionID)
-}
-
 // copySessionData creates a deep copy of session data for safe read access.
 func (s *Store) copySessionData(session *Session) *Session {
 	if session == nil {
@@ -417,15 +275,6 @@ func (s *Store) copySessionData(session *Session) *Session {
 	}
 
 	sessCopy := *session
-	if session.Plan != nil {
-		planCopy := s.copyPlanData(session.Plan)
-		sessCopy.Plan = planCopy
-	}
-	if session.AtomicUnits != nil {
-		unitsCopy := make([]AtomicUnit, len(session.AtomicUnits))
-		copy(unitsCopy, session.AtomicUnits)
-		sessCopy.AtomicUnits = unitsCopy
-	}
 	if session.History != nil {
 		historyCopy := make([]PhaseHistory, len(session.History))
 		copy(historyCopy, session.History)
@@ -443,22 +292,6 @@ func (s *Store) copySessionData(session *Session) *Session {
 	}
 
 	return &sessCopy
-}
-
-// copyPlanData creates a deep copy of plan data for safe read access.
-func (s *Store) copyPlanData(plan *Plan) *Plan {
-	if plan == nil {
-		return nil
-	}
-
-	planCopy := *plan
-	if plan.Units != nil {
-		unitsCopy := make([]PlanUnit, len(plan.Units))
-		copy(unitsCopy, plan.Units)
-		planCopy.Units = unitsCopy
-	}
-
-	return &planCopy
 }
 
 // InitStateStore creates a state store with a new session.
@@ -482,7 +315,6 @@ func InitStateStore(projectInfo *tools.ProjectInfo) *Store {
 		UpdatedAt:     time.Now(),
 		CurrentPhase:  PhaseCoding,
 		Status:        SessionStatusPending,
-		AtomicUnits:   nil,
 		History:       nil,
 		TestResults:   nil,
 		ReviewReports: nil,
