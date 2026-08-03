@@ -1,6 +1,6 @@
 # Mini-Orca API Contract
 
-**Version**: 2.0.0  
+**Version**: 3.0.0  
 **Base URL**: `http://localhost:8080`  
 **Authentication**: None (v2 is unauthenticated)  
 **Content-Type**: `application/json`
@@ -87,10 +87,10 @@ Creates a new agent session for autonomous task execution.
 ```json
 {
   "id": "session-1719000000000000000",
-  "goal": "Implement user authentication module",
+  "feature_request": "Add a function to calculate fibonacci numbers",
   "project_path": "/path/to/project",
   "project_type": "go",
-  "current_phase": "planning",
+  "current_phase": "coding",
   "status": "pending",
   "created_at": "2024-07-01T12:00:00Z",
   "updated_at": "2024-07-01T12:00:00Z"
@@ -100,10 +100,10 @@ Creates a new agent session for autonomous task execution.
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | `string` | Unique session identifier |
-| `goal` | `string` | The session goal |
+| `feature_request` | `string` | The feature request |
 | `project_path` | `string` | Path to the project |
 | `project_type` | `string` | Detected or specified project type |
-| `current_phase` | `string` | Current phase: `planning`, `coding`, `testing`, `review` |
+| `current_phase` | `string` | Current phase: `coding`, `testing`, `review`, `human_review` |
 | `status` | `string` | Session status: `pending`, `running`, `paused`, `completed`, `cancelled` |
 | `created_at` | `string` (ISO 8601) | Creation timestamp |
 | `updated_at` | `string` (ISO 8601) | Last update timestamp |
@@ -150,7 +150,7 @@ Returns a list of all sessions with summaries.
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | `string` | Unique session identifier |
-| `goal` | `string` | The session goal |
+| `feature_request` | `string` | The feature request |
 | `current_phase` | `string` | Current phase |
 | `status` | `string` | Current status |
 | `created_at` | `string` (ISO 8601) | Creation timestamp |
@@ -183,7 +183,7 @@ Returns the current status of a specific session.
 
 ### 2.4 Start Session
 
-Transitions a session from `pending` to `running` and begins the planning phase.
+Transitions a session from `pending` to `running` and begins the coding phase.
 
 - **Endpoint**: `POST /api/sessions/{id}/start`
 - **Authentication**: None
@@ -199,7 +199,7 @@ Transitions a session from `pending` to `running` and begins the planning phase.
 
 | Status | Content-Type | Body |
 |--------|-------------|------|
-| 200 OK | `application/json` | `{"status":"started","session_id":"...","phase":"planning"}` |
+| 200 OK | `application/json` | `{"status":"started","session_id":"...","phase":"coding"}` |
 | 400 Bad Request | `application/json` | Error object |
 | 404 Not Found | `application/json` | Error object |
 | 409 Conflict | `application/json` | Error object |
@@ -638,13 +638,13 @@ pending → running → paused → running → completed
                       rejected → fix_required
 ```
 
-**Phases**: `planning` → `coding` → `testing` → `review`
+**Phases**: `coding` → `testing` → `review` → `human_review`
 
 ---
 
 ## Notes
 
-- **Authentication**: None required for v2.0
+- **Authentication**: None required for v3.0
 - **Rate Limits**: None configured
 - **CORS**: Not configured (same-origin only)
 - **WebSocket**: Not implemented (polling via REST)

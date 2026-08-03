@@ -1,14 +1,15 @@
 # mini-orca
 
-**Version**: 2.0.0
+**Version**: 3.0.0
 
-Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LLM agents to plan, code, test, and review your project tasks autonomously.
+Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LLM agents to code, test, and review your project features autonomously.
 
 ## Features
 
 - **Multi-Agent Orchestration**: Specialized agents (Coder, Tester, Reviewer) work together to solve complex tasks.
-- **Phase-Based Workflow**: Structured execution through Coding, Testing, and Review phases.
-- **Human-in-the-loop**: Integrated human gate for approvals and feedback during the process.
+- **Simplified Workflow**: Single-feature workflow — code generation → test → review → human gate.
+- **Human-in-the-loop**: Integrated human gate for final approval.
+- **Existing Project Support**: Add features to any existing project by specifying its path.
 - **HTMX-powered IDE**: A modern, responsive web interface for monitoring and interacting with agents.
 - **Structured Logging**: Comprehensive JSON/Text logging with sensitive data redaction.
 - **Robust Error Handling**: Centralized error management with user-friendly messages.
@@ -30,12 +31,6 @@ graph LR
         Orchestrator --> Coder[Coder Agent]
         Orchestrator --> Tester[Tester Agent]
         Orchestrator --> Reviewer[Reviewer Agent]
-    end
-    
-    subgraph Registry
-        Coder --> Skills[Skills Registry]
-        Tester --> Skills
-        Reviewer --> Skills
     end
     
     Orchestrator --> State[State Store]
@@ -94,6 +89,24 @@ docker compose up -d --build
 
 See [DOCKER.md](DOCKER.md) for detailed Docker documentation.
 
+### Creating a Session
+
+Send a POST request to `/api/sessions` with:
+```json
+{
+  "feature_request": "Add a function to calculate fibonacci numbers",
+  "project_path": "/path/to/my/project",
+  "project_type": "go"
+}
+```
+
+### Workflow
+
+1. **Coding**: Coder agent generates code based on your feature request
+2. **Testing**: Tests are run on the generated code
+3. **Review**: Reviewer agent reviews the code quality
+4. **Human Gate**: You approve or request edits
+
 ## Configuration
 
 Configuration is managed via `config.yaml`. See [CONFIG.md](CONFIG.md) for a detailed reference and [config.example.yaml](config.example.yaml) for a full example.
@@ -116,4 +129,4 @@ MIT
 
 ## Release Notes
 
-See [RELEASE_NOTES.md](RELEASE_NOTES.md) for v2.0 release notes.
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for release notes.

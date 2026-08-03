@@ -70,9 +70,9 @@ func TestRouter(t *testing.T) {
 
 	t.Run("Defaults", func(t *testing.T) {
 		cfg := ModelConfig{Provider: "p1", ModelID: "m1", Temperature: 0.7}
-		r.SetDefaultConfig("planning", cfg)
+		r.SetDefaultConfig("coding", cfg)
 
-		got := r.GetDefaultConfig("planning")
+		got := r.GetDefaultConfig("coding")
 		if got.ModelID != "m1" {
 			t.Errorf("expected m1, got %s", got.ModelID)
 		}

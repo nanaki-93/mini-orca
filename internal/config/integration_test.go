@@ -10,7 +10,7 @@ func TestLoadConfig_FullFlow(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
-	// Write a minimal config
+	// Write a minimal config with the 4 active phases
 	data := []byte(`
 models:
   active_provider: "lm-studio"
@@ -23,6 +23,21 @@ models:
       model: "code-model"
       temperature: 0.7
       max_tokens: 2048
+    testing:
+      provider: "lm-studio"
+      model: "test-model"
+      temperature: 0.7
+      max_tokens: 2048
+    review:
+      provider: "lm-studio"
+      model: "review-model"
+      temperature: 0.5
+      max_tokens: 2048
+    human_review:
+      provider: "lm-studio"
+      model: "review-model"
+      temperature: 0.5
+      max_tokens: 1024
 `)
 	if err := os.WriteFile(configPath, data, 0644); err != nil {
 		t.Fatal(err)
@@ -45,8 +60,8 @@ models:
 		t.Errorf("expected 1 provider, got %d", len(cfg.Models.Providers))
 	}
 
-	if len(cfg.Models.Phases) != 1 {
-		t.Errorf("expected 1 phase, got %d", len(cfg.Models.Phases))
+	if len(cfg.Models.Phases) != 4 {
+		t.Errorf("expected 4 phases, got %d", len(cfg.Models.Phases))
 	}
 }
 
@@ -72,6 +87,14 @@ func TestDefault_FullFlow(t *testing.T) {
 	if len(cfg.Skills.Knowledge) == 0 {
 		t.Error("expected knowledge entries")
 	}
+
+	// Verify the 4 active phases are present
+	expectedPhases := []string{"coding", "testing", "review", "human_review"}
+	for _, phase := range expectedPhases {
+		if _, ok := cfg.Models.Phases[phase]; !ok {
+			t.Errorf("expected phase %q in config", phase)
+		}
+	}
 }
 
 func TestSaveAndReload_KeepData(t *testing.T) {
@@ -96,5 +119,57 @@ func TestSaveAndReload_KeepData(t *testing.T) {
 	if len(loaded.Models.Phases) != len(original.Models.Phases) {
 		t.Errorf("phases count mismatch: got %d, want %d",
 			len(loaded.Models.Phases), len(original.Models.Phases))
+	}
+}
+
+// TestConfig_Phases verifies config accepts the 4 active phases
+func TestConfig_Phases(t *testing.T) {
+	// Test with minimal config containing all 4 active phases
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	data := []byte(`
+models:
+  active_provider: "lm-studio"
+  providers:
+    lm-studio:
+      base_url: "http://localhost:1234"
+  phases:
+    coding:
+      provider: "lm-studio"
+      model: "code-model"
+    testing:
+      provider: "lm-studio"
+      model: "test-model"
+    review:
+      provider: "lm-studio"
+      model: "review-model"
+    human_review:
+      provider: "lm-studio"
+      model: "review-model"
+`)
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFromYAML(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate failed: %v", err)
+	}
+
+	// Verify all 4 active phases are present
+	expectedPhases := []string{"coding", "testing", "review", "human_review"}
+	if len(cfg.Models.Phases) != len(expectedPhases) {
+		t.Errorf("expected %d phases, got %d", len(expectedPhases), len(cfg.Models.Phases))
+	}
+
+	for _, phase := range expectedPhases {
+		if _, ok := cfg.Models.Phases[phase]; !ok {
+			t.Errorf("expected phase %q in config", phase)
+		}
 	}
 }

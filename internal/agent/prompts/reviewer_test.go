@@ -5,21 +5,21 @@ import (
 	"testing"
 )
 
-func TestBuildReviewerPrompt_EmptyCode(t *testing.T) {
-	_, err := BuildReviewerPrompt("", "plan", nil)
+func TestBuildReviewerPromptFromRequest_EmptyCode(t *testing.T) {
+	_, err := BuildReviewerPromptFromRequest("", "Create User struct", nil)
 	if err == nil {
 		t.Fatal("expected error for empty code, got nil")
 	}
 }
 
-func TestBuildReviewerPrompt_EmptyPlan(t *testing.T) {
-	_, err := BuildReviewerPrompt("code", "", nil)
+func TestBuildReviewerPromptFromRequest_EmptyUserRequest(t *testing.T) {
+	_, err := BuildReviewerPromptFromRequest("package user", "", nil)
 	if err == nil {
-		t.Fatal("expected error for empty plan, got nil")
+		t.Fatal("expected error for empty user request, got nil")
 	}
 }
 
-func TestBuildReviewerPrompt_NoSkills(t *testing.T) {
+func TestBuildReviewerPromptFromRequest_NoSkills(t *testing.T) {
 	code := `package user
 
 type User struct {
@@ -31,11 +31,9 @@ type User struct {
 func NewUser(id, name, email string) *User {
 	return &User{ID: id, Name: name, Email: email}
 }`
-	plan := `1. Create User struct with ID, Name, Email fields
-2. Implement NewUser constructor
-3. Add validation for email format`
+	userRequest := "Create a User struct with ID, Name, Email fields and a NewUser constructor"
 
-	messages, err := BuildReviewerPrompt(code, plan, nil)
+	messages, err := BuildReviewerPromptFromRequest(code, userRequest, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -88,8 +86,14 @@ func NewUser(id, name, email string) *User {
 	}
 
 	userContent := messages[1].Content
-	if !strings.Contains(userContent, "## Code to Review") {
-		t.Error("user message should contain code section")
+	if !strings.Contains(userContent, "## User Request") {
+		t.Error("user message should contain user request section")
+	}
+	if !strings.Contains(userContent, "Create a User struct") {
+		t.Error("user message should contain the user request")
+	}
+	if !strings.Contains(userContent, "## Generated Code") {
+		t.Error("user message should contain generated code section")
 	}
 	if !strings.Contains(userContent, "package user") {
 		t.Error("user message should contain the code")
@@ -97,20 +101,17 @@ func NewUser(id, name, email string) *User {
 	if !strings.Contains(userContent, "```go") {
 		t.Error("user message should wrap code in code block")
 	}
-	if !strings.Contains(userContent, "## Original Plan/Spec") {
-		t.Error("user message should contain plan section")
-	}
-	if !strings.Contains(userContent, "```") {
-		t.Error("user message should wrap plan in code block")
+	if !strings.Contains(userContent, "## Review Criteria") {
+		t.Error("user message should contain review criteria section")
 	}
 }
 
-func TestBuildReviewerPrompt_WithSkills(t *testing.T) {
+func TestBuildReviewerPromptFromRequest_WithSkills(t *testing.T) {
 	code := `func Add(a, b int) int { return a + b }`
-	plan := `Implement Add function that takes two integers and returns their sum.`
+	userRequest := "Implement Add function that takes two integers and returns their sum."
 	skills := []string{"security_audit", "performance_review", "clean_code"}
 
-	messages, err := BuildReviewerPrompt(code, plan, skills)
+	messages, err := BuildReviewerPromptFromRequest(code, userRequest, skills)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestBuildReviewerPrompt_WithSkills(t *testing.T) {
 	}
 }
 
-func TestBuildReviewerPrompt_Full(t *testing.T) {
+func TestBuildReviewerPromptFromRequest_Full(t *testing.T) {
 	code := `package user
 
 type User struct {
@@ -142,13 +143,10 @@ type User struct {
 func NewUser(id, name, email string) *User {
 	return &User{ID: id, Name: name, Email: email}
 }`
-	plan := `1. Create User struct with ID, Name, Email fields and JSON tags
-2. Implement NewUser constructor
-3. Add email validation
-4. Add error handling for invalid inputs`
+	userRequest := "Create a User struct with ID, Name, Email fields and JSON tags, implement NewUser constructor, add email validation, and add error handling for invalid inputs"
 	skills := []string{"security_audit", "performance_review", "clean_code"}
 
-	messages, err := BuildReviewerPrompt(code, plan, skills)
+	messages, err := BuildReviewerPromptFromRequest(code, userRequest, skills)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -200,15 +198,13 @@ func NewUser(id, name, email string) *User {
 	// Verify user message content
 	userContent := messages[1].Content
 	userChecks := []string{
-		"## Code to Review",
+		"## User Request",
+		"Create a User struct",
+		"## Generated Code",
 		"package user",
 		"NewUser",
 		"```go",
-		"## Original Plan/Spec",
-		"User struct",
-		"NewUser constructor",
-		"email validation",
-		"```",
+		"## Review Criteria",
 	}
 	for _, check := range userChecks {
 		if !strings.Contains(userContent, check) {
@@ -217,14 +213,14 @@ func NewUser(id, name, email string) *User {
 	}
 }
 
-func TestBuildReviewerPrompt_OutputType(t *testing.T) {
+func TestBuildReviewerPromptFromRequest_OutputType(t *testing.T) {
 	code := `package user
 
 type User struct {
 	ID string
 }`
-	plan := `Create User struct with ID field`
-	messages, err := BuildReviewerPrompt(code, plan, nil)
+	userRequest := "Create User struct with ID field"
+	messages, err := BuildReviewerPromptFromRequest(code, userRequest, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -240,13 +236,13 @@ type User struct {
 	}
 }
 
-func TestBuildReviewerPrompt_EmptySkills(t *testing.T) {
+func TestBuildReviewerPromptFromRequest_EmptySkills(t *testing.T) {
 	code := `package user
 
 func Add(a, b int) int { return a + b }`
-	plan := `Implement Add function`
+	userRequest := "Implement Add function"
 
-	messages, err := BuildReviewerPrompt(code, plan, []string{})
+	messages, err := BuildReviewerPromptFromRequest(code, userRequest, []string{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -257,7 +253,7 @@ func Add(a, b int) int { return a + b }`
 	}
 }
 
-func TestBuildReviewerPrompt_ComplexPlan(t *testing.T) {
+func TestBuildReviewerPromptFromRequest_ComplexRequest(t *testing.T) {
 	code := `package user
 
 type User struct {
@@ -272,32 +268,27 @@ func (u *User) Validate() error {
 	}
 	return nil
 }`
-	plan := `1. Create User struct with JSON tags
-2. Implement NewUser constructor with validation
-3. Add Validate method for business rules
-4. Add error handling for all public methods
-5. Add unit tests for all functions
-6. Add integration tests for database operations`
+	userRequest := "1. Create User struct with JSON tags\n2. Implement NewUser constructor with validation\n3. Add Validate method for business rules\n4. Add error handling for all public methods\n5. Add unit tests for all functions\n6. Add integration tests for database operations"
 
-	messages, err := BuildReviewerPrompt(code, plan, nil)
+	messages, err := BuildReviewerPromptFromRequest(code, userRequest, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	userContent := messages[1].Content
 	if !strings.Contains(userContent, "Validate method") {
-		t.Error("user message should contain complex plan details")
+		t.Error("user message should contain complex request details")
 	}
 	if !strings.Contains(userContent, "unit tests") {
 		t.Error("user message should contain testing requirements")
 	}
 }
 
-func TestBuildReviewerPrompt_ReviewChecklist(t *testing.T) {
+func TestBuildReviewerPromptFromRequest_ReviewChecklist(t *testing.T) {
 	code := `func Add(a, b int) int { return a + b }`
-	plan := `Implement Add function`
+	userRequest := "Implement Add function"
 
-	messages, err := BuildReviewerPrompt(code, plan, nil)
+	messages, err := BuildReviewerPromptFromRequest(code, userRequest, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -339,11 +330,11 @@ func TestBuildReviewerPrompt_ReviewChecklist(t *testing.T) {
 	}
 }
 
-func TestBuildReviewerPrompt_OutputFormat(t *testing.T) {
+func TestBuildReviewerPromptFromRequest_OutputFormat(t *testing.T) {
 	code := `func Add(a, b int) int { return a + b }`
-	plan := `Implement Add function`
+	userRequest := "Implement Add function"
 
-	messages, err := BuildReviewerPrompt(code, plan, nil)
+	messages, err := BuildReviewerPromptFromRequest(code, userRequest, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -381,15 +372,15 @@ func TestBuildReviewerPrompt_OutputFormat(t *testing.T) {
 	}
 }
 
-func TestBuildReviewerPrompt_CodeAndPlanSeparation(t *testing.T) {
+func TestBuildReviewerPromptFromRequest_CodeAndRequestSeparation(t *testing.T) {
 	code := `package user
 
 type User struct {
 	ID string
 }`
-	plan := `Create User struct with ID field and validation`
+	userRequest := "Create User struct with ID field and validation"
 
-	messages, err := BuildReviewerPrompt(code, plan, nil)
+	messages, err := BuildReviewerPromptFromRequest(code, userRequest, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -397,16 +388,16 @@ type User struct {
 	userContent := messages[1].Content
 
 	// Verify code is in its own section
-	codeSectionIdx := strings.Index(userContent, "## Code to Review")
-	planSectionIdx := strings.Index(userContent, "## Original Plan/Spec")
+	codeSectionIdx := strings.Index(userContent, "## Generated Code")
+	requestSectionIdx := strings.Index(userContent, "## User Request")
 
 	if codeSectionIdx == -1 {
 		t.Error("user message should contain code section")
 	}
-	if planSectionIdx == -1 {
-		t.Error("user message should contain plan section")
+	if requestSectionIdx == -1 {
+		t.Error("user message should contain user request section")
 	}
-	if codeSectionIdx >= planSectionIdx {
-		t.Error("code section should come before plan section")
+	if requestSectionIdx >= codeSectionIdx {
+		t.Error("user request section should come before code section")
 	}
 }

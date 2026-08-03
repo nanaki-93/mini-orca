@@ -1,5 +1,5 @@
 # Mini-Orca Configuration Example
-# Version: 2.0.0
+# Version: 3.0.0
 # This file demonstrates all available configuration options.
 
 # ─── Models ───────────────────────────────────────────────────────────────────
@@ -42,13 +42,6 @@ models:
 # Configure the orchestrator agents with their skills and optional model overrides.
 
 agents:
-  planner:
-    skills:
-      - task_breakdown
-      - context_analysis
-      - plan_generation
-    model: ""  # Optional: override the default model for this agent
-
   coder:
     skills:
       - code_generation
@@ -75,9 +68,6 @@ agents:
 
 skills:
   knowledge:
-    task_breakdown: "Break down complex tasks into manageable subtasks"
-    context_analysis: "Analyze project context and requirements"
-    plan_generation: "Generate structured execution plans"
     code_generation: "Generate clean, well-documented code"
     refactoring: "Refactor code for clarity and maintainability"
     debugging: "Debug and fix issues in code"
