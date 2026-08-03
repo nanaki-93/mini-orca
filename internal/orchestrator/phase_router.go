@@ -183,24 +183,20 @@ func (r *PhaseRouter) triggerPhaseHandler(phase Phase) error {
 
 // handleCodingPhase handles the coding phase execution.
 func (r *PhaseRouter) handleCodingPhase() error {
-	// TODO: implement coding phase handler
-	return nil
+	return r.orchestrator.RunCoding()
 }
 
 // handleTestingPhase handles the testing phase execution.
 func (r *PhaseRouter) handleTestingPhase() error {
-	// TODO: implement testing phase handler
-	return nil
+	return r.orchestrator.RunTesting()
 }
 
 // handleReviewPhase handles the review phase execution.
 func (r *PhaseRouter) handleReviewPhase() error {
-	// TODO: implement review phase handler
-	return nil
+	return r.orchestrator.RunReview()
 }
 
 // handleHumanReviewPhase handles the human review phase execution.
 func (r *PhaseRouter) handleHumanReviewPhase() error {
-	// TODO: implement human review phase handler
-	return nil
+	return r.orchestrator.RunHumanReview()
 }
