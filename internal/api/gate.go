@@ -12,7 +12,7 @@ import (
 
 // GateResponseRequest represents the request body for responding to a human gate.
 type GateResponseRequest struct {
-	// Action is the response action: "approve", "reject", or "edit".
+	// Action is the response action: "approve" or "edit".
 	Action string `json:"action"`
 	// Feedback is optional feedback from the human reviewer.
 	Feedback string `json:"feedback,omitempty"`
@@ -122,7 +122,7 @@ func (h *GateHandler) RespondToGate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Action == "" {
-		WriteAppError(w, apperrors.BadRequest("action is required", "A response action (e.g., 'approve', 'reject') is required.", nil))
+		WriteAppError(w, apperrors.BadRequest("action is required", "A response action (e.g., 'approve', 'edit') is required.", nil))
 		return
 	}
 
@@ -131,17 +131,16 @@ func (h *GateHandler) RespondToGate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Trigger phase transition on approval
+	// On approve → transition to completed
 	if req.Action == "approve" {
-		validTransitions := orchestrator.GetValidTransitions(gate.Phase())
-		if len(validTransitions) > 0 {
-			nextPhase := validTransitions[0]
-			if err := h.router.TransitionTo(nextPhase); err != nil {
-				WriteAppError(w, apperrors.Conflict("phase transition failed", "Could not transition to the next phase: "+err.Error(), err))
-				return
-			}
+		if err := h.router.TransitionTo("completed"); err != nil {
+			WriteAppError(w, apperrors.Conflict("phase transition failed", "Could not complete the session: "+err.Error(), err))
+			return
 		}
 	}
+
+	// On edit → transition back to coding (handled by orchestrator loop)
+	// The orchestrator's Run() method checks gate.IsApproved() after runHumanReview()
 
 	WriteJSON(w, http.StatusOK, map[string]string{
 		"status":     "accepted",
