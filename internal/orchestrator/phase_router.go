@@ -12,10 +12,6 @@ import (
 type Phase string
 
 const (
-	// PhasePlanning is the initial planning phase.
-	PhasePlanning Phase = "planning"
-	// PhasePlanningReview is the human review gate for the planning phase.
-	PhasePlanningReview Phase = "planning_review"
 	// PhaseCoding is the implementation phase.
 	PhaseCoding Phase = "coding"
 	// PhaseTesting is the testing phase.
@@ -38,15 +34,12 @@ type Transition struct {
 
 // validTransitions defines all allowed phase transitions in the pipeline.
 var validTransitions = []Transition{
-	{From: PhasePlanning, To: PhasePlanningReview, RequiresHuman: true},
-	{From: PhasePlanningReview, To: PhasePlanning, RequiresHuman: true},
-	{From: PhasePlanningReview, To: PhaseCoding, RequiresHuman: true},
 	{From: PhaseCoding, To: PhaseTesting, RequiresHuman: false},
-	{From: PhaseTesting, To: PhaseCoding, RequiresHuman: false},
+	{From: PhaseTesting, To: PhaseCoding, RequiresHuman: false}, // retry loop
 	{From: PhaseTesting, To: PhaseReview, RequiresHuman: false},
-	{From: PhaseReview, To: PhaseCoding, RequiresHuman: false},
+	{From: PhaseReview, To: PhaseCoding, RequiresHuman: false}, // retry loop
 	{From: PhaseReview, To: PhaseHumanReview, RequiresHuman: false},
-	{From: PhaseHumanReview, To: PhaseCoding, RequiresHuman: true},
+	{From: PhaseHumanReview, To: PhaseCoding, RequiresHuman: true}, // edit requested
 	{From: PhaseHumanReview, To: "completed", RequiresHuman: true},
 }
 
@@ -175,10 +168,6 @@ func logTransition(from, to Phase) {
 // triggerPhaseHandler triggers the appropriate phase handler based on the target phase.
 func (r *PhaseRouter) triggerPhaseHandler(phase Phase) error {
 	switch phase {
-	case PhasePlanning:
-		return r.handlePlanningPhase()
-	case PhasePlanningReview:
-		return r.handlePlanningReviewPhase()
 	case PhaseCoding:
 		return r.handleCodingPhase()
 	case PhaseTesting:
@@ -190,18 +179,6 @@ func (r *PhaseRouter) triggerPhaseHandler(phase Phase) error {
 	default:
 		return fmt.Errorf("unknown phase: %s", phase)
 	}
-}
-
-// handlePlanningPhase handles the planning phase execution.
-func (r *PhaseRouter) handlePlanningPhase() error {
-	// TODO: implement planning phase handler
-	return nil
-}
-
-// handlePlanningReviewPhase handles the planning review phase execution.
-func (r *PhaseRouter) handlePlanningReviewPhase() error {
-	// TODO: implement planning review phase handler
-	return nil
 }
 
 // handleCodingPhase handles the coding phase execution.
