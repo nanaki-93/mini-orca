@@ -59,6 +59,25 @@ func (o *Orchestrator) RunCoder(unit prompts.PlanUnit) (*Result, error) {
 	return agent.Execute(context.Background(), input)
 }
 
+// RunCoderFromPrompt executes the coder agent with a user prompt and project context.
+// It returns a structured AgentResult containing the generated code.
+func (o *Orchestrator) RunCoderFromPrompt(userPrompt string, projectContext string) (*Result, error) {
+	if userPrompt == "" {
+		return nil, fmt.Errorf("orchestrator: coder user prompt is required")
+	}
+
+	agent := NewCoderAgent(o.router, o.registry)
+	agent.SetSkills(getSkillNames(o.registry.GetForAgent("coder")))
+
+	// Build the input from the user prompt and project context
+	input := userPrompt
+	if projectContext != "" {
+		input = fmt.Sprintf("%s\n\nProject Context:\n%s", userPrompt, projectContext)
+	}
+
+	return agent.Execute(context.Background(), input)
+}
+
 // RunTester executes the tester agent with the given code and test results.
 // It returns a structured AgentResult containing the test report as JSON.
 func (o *Orchestrator) RunTester(code string, testResults string) (*Result, error) {
