@@ -1,14 +1,15 @@
 {{ define "file-tree" }}
-<div id="file-tree" class="w-full text-sm retryable overflow-y-auto" style="max-height: calc(100vh - 12rem);">
+<div id="file-tree" class="w-full text-sm retryable overflow-y-auto" style="max-height: calc(100vh - 12rem);" data-file-tree="true">
     <div class="px-3 py-2 text-xs font-semibold text-text-secondary uppercase tracking-wider">
         Explorer
     </div>
     <!-- Truly lazy-loaded: only render first level, load children on demand -->
+    {{ $currentPath := .CurrentPath }}
     {{ range .RootItems }}
         {{ if .IsDir }}
-            {{ template "tree-folder-lazy" (dict "Item" . "Depth" 0 "CurrentPath" .CurrentPath) }}
+            {{ template "tree-folder-lazy" (dict "Item" . "Depth" 0 "CurrentPath" $currentPath) }}
         {{ else }}
-            {{ template "tree-file" (dict "Item" . "Depth" 0 "CurrentPath" .CurrentPath) }}
+            {{ template "tree-file" (dict "Item" . "Depth" 0 "CurrentPath" $currentPath) }}
         {{ end }}
     {{ end }}
 </div>
@@ -17,18 +18,15 @@
 {{ define "tree-folder-lazy" }}
 {{ $item := .Item }}
 {{ $depth := .Depth }}
-{{ $currentPath := .CurrentPath }}
 <div class="tree-folder" data-path="{{ $item.Path }}" data-loaded="false">
     <div
-        class="tree-item flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none"
-        style="padding-left: calc(0.75rem + {{ $depth }} * 1rem)"
-        onclick="toggleFolder(this)"
-        hx-get="/api/tree/expand"
-        hx-params="none"
-        hx-vals='{"path": "{{ $item.Path }}"}'
-        hx-target="#folder-children-{{ md5 $item.Path }}"
-        hx-swap="innerHTML"
-        hx-trigger="click once"
+            class="tree-item tree-folder-toggle flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none"
+            style="padding-left: calc(0.75rem + {{ $.Depth }} * 1rem)"
+            hx-get="/api/tree/expand"
+            hx-vals='{"path": "{{ $item.Path }}", "depth": "{{ add $.Depth 1 }}"}'
+            hx-target="#folder-children-{{ md5 $item.Path }}"
+            hx-swap="innerHTML"
+            hx-trigger="click once"
     >
         <svg class="tree-chevron w-4 h-4 text-text-secondary shrink-0 transition-transform"
              xmlns="http://www.w3.org/2000/svg"
@@ -53,14 +51,12 @@
 {{ define "tree-file" }}
 {{ $item := .Item }}
 {{ $depth := .Depth }}
-{{ $currentPath := .CurrentPath }}
 {{ $ext := fileExtension $item.Name }}
 {{ $icon := fileIcon $ext }}
 <div class="tree-file" data-path="{{ $item.Path }}">
     <div
-        class="tree-item flex items-center gap-1.5 px-3 py-1 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none {{ if eq $currentPath $item.Path }}bg-dark-700 text-accent{{ else }}text-text-primary{{ end }}"
+        class="tree-item tree-file-toggle flex items-center gap-1.5 px-3 py-1 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none {{ if eq .CurrentPath $item.Path }}bg-dark-700 text-accent{{ else }}text-text-primary{{ end }}"
         style="padding-left: calc(0.75rem + {{ $depth }} * 1rem)"
-        onclick="selectFile('{{ $item.Path }}')"
         hx-get="/api/files/view"
         hx-params="none"
         hx-vals='{"path": "{{ $item.Path }}"}'
@@ -80,63 +76,69 @@
 {{ end }}
 
 <script>
-    function toggleFolder(element) {
-        const folder = element.closest('.tree-folder');
-        const children = folder.querySelector('.tree-folder-children');
-        const chevron = element.querySelector('.tree-chevron');
-        const isExpanded = folder.dataset.expanded === 'true';
+(function() {
+    'use strict';
 
-        if (isExpanded) {
-            children.style.maxHeight = children.scrollHeight + 'px';
-            requestAnimationFrame(() => {
-                children.style.maxHeight = '0';
-                children.style.overflow = 'hidden';
-            });
-            chevron.style.transform = 'rotate(0deg)';
-            folder.dataset.expanded = 'false';
-        } else {
-            children.style.overflow = '';
-            children.style.maxHeight = children.scrollHeight + 'px';
-            chevron.style.transform = 'rotate(90deg)';
-            folder.dataset.expanded = 'true';
-            requestAnimationFrame(() => {
-                children.style.maxHeight = 'none';
-            });
+    // ─── Event Delegation on #file-tree ──────────────────────────────────────
+    // All clicks are handled here, so dynamically loaded content (via HTMX)
+    // works automatically without needing inline onclick handlers.
+    document.addEventListener('click', function(e) {
+        var fileTree = document.querySelector('[data-file-tree="true"]');
+        if (!fileTree) return;
+
+        // Folder toggle (expand/collapse)
+        var toggleBtn = e.target.closest('.tree-folder-toggle');
+        if (toggleBtn) {
+            e.preventDefault();
+            var folder = toggleBtn.closest('.tree-folder');
+            var children = folder.querySelector('.tree-folder-children');
+            var chevron = toggleBtn.querySelector('.tree-chevron');
+            var isExpanded = folder.dataset.expanded === 'true';
+
+            if (isExpanded) {
+                children.style.maxHeight = children.scrollHeight + 'px';
+                requestAnimationFrame(function() {
+                    children.style.maxHeight = '0';
+                    children.style.overflow = 'hidden';
+                });
+                chevron.style.transform = 'rotate(0deg)';
+                folder.dataset.expanded = 'false';
+            } else {
+                children.style.overflow = '';
+                children.style.maxHeight = children.scrollHeight + 'px';
+                chevron.style.transform = 'rotate(90deg)';
+                folder.dataset.expanded = 'true';
+                requestAnimationFrame(function() {
+                    children.style.maxHeight = 'none';
+                });
+            }
+            return;
         }
-    }
 
-    function selectFile(path) {
-        // Remove active state from all files
-        document.querySelectorAll('.tree-file .tree-item').forEach(el => {
-            el.classList.remove('bg-dark-700', 'text-accent');
-            el.classList.add('text-text-primary');
-        });
+        // File selection
+        var fileBtn = e.target.closest('.tree-file-toggle');
+        if (fileBtn) {
+            e.preventDefault();
+            var fileEl = fileBtn.closest('.tree-file');
+            var filePath = fileEl ? fileEl.getAttribute('data-path') : null;
+            if (!filePath) return;
 
-        // Add active state to clicked file
-        const clickedItem = event.currentTarget;
-        clickedItem.classList.add('bg-dark-700', 'text-accent');
-        clickedItem.classList.remove('text-text-primary');
+            // Remove active state from all files
+            document.querySelectorAll('.tree-file .tree-item').forEach(function(el) {
+                el.classList.remove('bg-dark-700', 'text-accent');
+                el.classList.add('text-text-primary');
+            });
 
-        // Update current file in state
-        window.currentFilePath = path;
-    }
+            // Add active state to clicked file
+            fileBtn.classList.add('bg-dark-700', 'text-accent');
+            fileBtn.classList.remove('text-text-primary');
 
-    function setFolderExpanded(folderElement, expanded) {
-        const children = folderElement.querySelector('.tree-folder-children');
-        const chevron = folderElement.querySelector('.tree-chevron');
-
-        if (expanded) {
-            folderElement.dataset.expanded = 'true';
-            children.style.overflow = '';
-            children.style.maxHeight = 'none';
-            chevron.style.transform = 'rotate(90deg)';
-        } else {
-            folderElement.dataset.expanded = 'false';
-            children.style.maxHeight = '0';
-            children.style.overflow = 'hidden';
-            chevron.style.transform = 'rotate(0deg)';
+            // Update current file in state
+            window.currentFilePath = filePath;
+            return;
         }
-    }
+    });
+})();
 </script>
 
 <style>
