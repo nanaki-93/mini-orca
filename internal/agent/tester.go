@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 // TestReport represents the output of a testing phase.
@@ -25,12 +25,12 @@ type TesterAgent struct {
 	registry *skills.SkillsRegistry
 }
 
-// NewTesterAgent creates a new tester agent with the given router and skills registry.
-func NewTesterAgent(router *model.Router, registry *skills.SkillsRegistry) *TesterAgent {
-	client := NewClient(router)
+// NewTesterAgent creates a new tester agent with the given LLM client and skills registry.
+func NewTesterAgent(llmClient *llm.Client, registry *skills.SkillsRegistry) *TesterAgent {
+	client := NewClient(llmClient)
 	client.name = "tester"
 	client.description = "Tests code and validates functionality against requirements"
-	client.phase = model.PhaseTesting
+	client.phase = "testing"
 	client.skills = make([]string, 0)
 
 	return &TesterAgent{
@@ -42,8 +42,8 @@ func NewTesterAgent(router *model.Router, registry *skills.SkillsRegistry) *Test
 // Execute runs the tester agent with the given code and test results.
 // It builds a system prompt from tester skills, calls the LLM, and returns a test report.
 func (t *TesterAgent) Execute(ctx context.Context, input string) (*TestReport, error) {
-	if t.router == nil {
-		return nil, fmt.Errorf("tester agent: router not configured")
+	if t.llmClient == nil {
+		return nil, fmt.Errorf("tester agent: LLM client not configured")
 	}
 
 	if input == "" {
@@ -63,12 +63,12 @@ func (t *TesterAgent) Execute(ctx context.Context, input string) (*TestReport, e
 	// Combine system prompt with user input (code + test results)
 	fullPrompt := systemPrompt + "\n\n---\n\nCode and Test Results:\n" + input
 
-	// Call the LLM with testing phase config
-	messages := []model.ChatMessage{
+	// Call the LLM
+	messages := []llm.ChatMessage{
 		{Role: "user", Content: fullPrompt},
 	}
 
-	resp, err := t.router.Chat(string(t.phase), messages)
+	resp, err := t.llmClient.Chat(ctx, messages)
 	if err != nil {
 		return nil, fmt.Errorf("tester agent: execution failed: %w", err)
 	}

@@ -11,7 +11,7 @@ import (
 
 // Config is the top-level configuration struct.
 type Config struct {
-	Models  ModelsConfig  `json:"models" yaml:"models"`
+	LLM     LLMConfig     `json:"llm" yaml:"llm"`
 	Agents  AgentsConfig  `json:"agents" yaml:"agents"`
 	Skills  SkillsConfig  `json:"skills" yaml:"skills"`
 	Retry   RetryConfig   `json:"retry" yaml:"retry"`
@@ -26,22 +26,10 @@ type LoggingConfig struct {
 	SensitiveKeys []string `json:"sensitive_keys" yaml:"sensitive_keys"`
 }
 
-// ModelsConfig holds model-related configuration.
-type ModelsConfig struct {
-	ActiveProvider string                      `json:"active_provider" yaml:"active_provider"`
-	Providers      map[string]ProviderConfig   `json:"providers" yaml:"providers"`
-	Phases         map[string]PhaseModelConfig `json:"phases" yaml:"phases"`
-}
-
-// ProviderConfig holds provider-specific configuration.
-type ProviderConfig struct {
-	BaseURL string `json:"base_url" yaml:"base_url"`
-	APIKey  string `json:"api_key,omitempty" yaml:"api_key,omitempty"`
-}
-
-// PhaseModelConfig holds model configuration for a specific phase.
-type PhaseModelConfig struct {
-	Provider    string  `json:"provider" yaml:"provider"`
+// LLMConfig holds the flat LLM configuration.
+type LLMConfig struct {
+	BaseURL     string  `json:"base_url" yaml:"base_url"`
+	APIKey      string  `json:"api_key,omitempty" yaml:"api_key,omitempty"`
 	Model       string  `json:"model" yaml:"model"`
 	Temperature float32 `json:"temperature,omitempty" yaml:"temperature,omitempty"`
 	MaxTokens   int     `json:"max_tokens,omitempty" yaml:"max_tokens,omitempty"`
@@ -75,11 +63,17 @@ type RetryConfig struct {
 
 // applyDefaults ensures all nested maps and slices are initialized.
 func (c *Config) applyDefaults() {
-	if c.Models.Providers == nil {
-		c.Models.Providers = make(map[string]ProviderConfig)
+	if c.LLM.BaseURL == "" {
+		c.LLM.BaseURL = DefaultProviderURL
 	}
-	if c.Models.Phases == nil {
-		c.Models.Phases = make(map[string]PhaseModelConfig)
+	if c.LLM.Model == "" {
+		c.LLM.Model = ""
+	}
+	if c.LLM.Temperature == 0 {
+		c.LLM.Temperature = 0.7
+	}
+	if c.LLM.MaxTokens == 0 {
+		c.LLM.MaxTokens = 8192
 	}
 	if c.Skills.Knowledge == nil {
 		c.Skills.Knowledge = make(map[string]string)
@@ -170,22 +164,8 @@ func LoadFromJSON(path string) (*Config, error) {
 
 // Validate checks that the configuration is valid.
 func (c *Config) Validate() error {
-	if c.Models.ActiveProvider == "" {
-		return fmt.Errorf("active_provider is required")
-	}
-
-	if _, ok := c.Models.Providers[c.Models.ActiveProvider]; !ok {
-		return fmt.Errorf("active_provider %q not found in providers", c.Models.ActiveProvider)
-	}
-
-	if len(c.Models.Phases) == 0 {
-		return fmt.Errorf("at least one phase configuration is required")
-	}
-
-	for name, p := range c.Models.Providers {
-		if p.BaseURL == "" {
-			return fmt.Errorf("provider %q base_url is required", name)
-		}
+	if c.LLM.BaseURL == "" {
+		return fmt.Errorf("llm.base_url is required")
 	}
 
 	return nil

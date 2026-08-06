@@ -17,8 +17,8 @@ import (
 
 // ConfigUpdateRequest represents the request body for updating configuration.
 type ConfigUpdateRequest struct {
-	// Models holds model-related configuration updates.
-	Models *config.ModelsConfig `json:"models,omitempty"`
+	// LLM holds LLM configuration updates.
+	LLM *config.LLMConfig `json:"llm,omitempty"`
 	// Agents holds agent-related configuration updates.
 	Agents *config.AgentsConfig `json:"agents,omitempty"`
 	// Skills holds skill-related configuration updates.
@@ -29,30 +29,14 @@ type ConfigUpdateRequest struct {
 
 // ConfigResponse represents the response body for configuration data.
 type ConfigResponse struct {
-	// Models holds model-related configuration.
-	Models config.ModelsConfig `json:"models"`
+	// LLM holds LLM configuration.
+	LLM config.LLMConfig `json:"llm"`
 	// Agents holds agent-related configuration.
 	Agents config.AgentsConfig `json:"agents"`
 	// Skills holds skill-related configuration.
 	Skills config.SkillsConfig `json:"skills"`
 	// Retry holds retry-related configuration.
 	Retry config.RetryConfig `json:"retry"`
-}
-
-// ModelListResponse represents the response body for listing available models.
-type ModelListResponse struct {
-	// ActiveProvider is the currently active provider.
-	ActiveProvider string `json:"active_provider"`
-	// Providers lists all available providers.
-	Providers map[string]config.ProviderConfig `json:"providers"`
-	// Phases lists model configurations per phase.
-	Phases map[string]config.PhaseModelConfig `json:"phases"`
-}
-
-// PhaseConfigResponse represents the response body for phase configurations.
-type PhaseConfigResponse struct {
-	// Phases maps phase names to their model configurations.
-	Phases map[string]config.PhaseModelConfig `json:"phases"`
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -114,8 +98,8 @@ func (s *ConfigStore) applyUpdates(req *ConfigUpdateRequest) error {
 		return nil
 	}
 
-	if req.Models != nil {
-		if err := s.updateModels(req.Models); err != nil {
+	if req.LLM != nil {
+		if err := s.updateLLM(req.LLM); err != nil {
 			return err
 		}
 	}
@@ -141,30 +125,23 @@ func (s *ConfigStore) applyUpdates(req *ConfigUpdateRequest) error {
 	return nil
 }
 
-// updateModels applies model configuration updates.
-func (s *ConfigStore) updateModels(models *config.ModelsConfig) error {
-	if models.ActiveProvider != "" {
-		if _, ok := models.Providers[models.ActiveProvider]; !ok {
-			return fmt.Errorf("models: active_provider %q not found in providers", models.ActiveProvider)
-		}
-		s.cfg.Models.ActiveProvider = models.ActiveProvider
+// updateLLM applies LLM configuration updates.
+func (s *ConfigStore) updateLLM(llm *config.LLMConfig) error {
+	if llm.BaseURL != "" {
+		s.cfg.LLM.BaseURL = llm.BaseURL
 	}
-
-	if models.Providers != nil {
-		for name, provider := range models.Providers {
-			if provider.BaseURL == "" {
-				return fmt.Errorf("models: provider %q base_url is required", name)
-			}
-			s.cfg.Models.Providers[name] = provider
-		}
+	if llm.APIKey != "" {
+		s.cfg.LLM.APIKey = llm.APIKey
 	}
-
-	if models.Phases != nil {
-		for name, phase := range models.Phases {
-			s.cfg.Models.Phases[name] = phase
-		}
+	if llm.Model != "" {
+		s.cfg.LLM.Model = llm.Model
 	}
-
+	if llm.Temperature > 0 {
+		s.cfg.LLM.Temperature = llm.Temperature
+	}
+	if llm.MaxTokens > 0 {
+		s.cfg.LLM.MaxTokens = llm.MaxTokens
+	}
 	return nil
 }
 
@@ -235,17 +212,7 @@ func copyConfig(cfg *config.Config) *config.Config {
 
 	cfgCopy := *cfg
 
-	// Deep copy providers
-	cfgCopy.Models.Providers = make(map[string]config.ProviderConfig)
-	for k, v := range cfg.Models.Providers {
-		cfgCopy.Models.Providers[k] = v
-	}
-
-	// Deep copy phases
-	cfgCopy.Models.Phases = make(map[string]config.PhaseModelConfig)
-	for k, v := range cfg.Models.Phases {
-		cfgCopy.Models.Phases[k] = v
-	}
+	// LLM is a value type, no deep copy needed
 
 	// Deep copy agent skills
 	cfgCopy.Agents.Coder.Skills = make([]string, len(cfg.Agents.Coder.Skills))
@@ -291,7 +258,7 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := h.configStore.GetConfig()
 
 	api.WriteJSON(w, http.StatusOK, ConfigResponse{
-		Models: cfg.Models,
+		LLM:    cfg.LLM,
 		Agents: cfg.Agents,
 		Skills: cfg.Skills,
 		Retry:  cfg.Retry,
@@ -315,28 +282,6 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, map[string]string{
 		"status":  "updated",
 		"message": "configuration updated successfully",
-	})
-}
-
-// ListModels handles GET /api/config/models
-// Returns available providers and phase-specific model configurations.
-func (h *ConfigHandler) ListModels(w http.ResponseWriter, r *http.Request) {
-	cfg := h.configStore.GetConfig()
-
-	api.WriteJSON(w, http.StatusOK, ModelListResponse{
-		ActiveProvider: cfg.Models.ActiveProvider,
-		Providers:      cfg.Models.Providers,
-		Phases:         cfg.Models.Phases,
-	})
-}
-
-// GetPhaseConfigs handles GET /api/config/phases
-// Returns the model configurations for each phase.
-func (h *ConfigHandler) GetPhaseConfigs(w http.ResponseWriter, r *http.Request) {
-	cfg := h.configStore.GetConfig()
-
-	api.WriteJSON(w, http.StatusOK, PhaseConfigResponse{
-		Phases: cfg.Models.Phases,
 	})
 }
 

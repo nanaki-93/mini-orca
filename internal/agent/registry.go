@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
 )
 
 // Registry manages the lifecycle and lookup of agents in the multi-agent system.
@@ -68,15 +68,9 @@ func (r *Registry) List() []string {
 	return names
 }
 
-// FromConfig creates and registers an agent from the given AgentConfig.
-// The agent is instantiated using the provided model router.
-func (r *Registry) FromConfig(cfg model.AgentConfig, router *model.Router) error {
-	a := NewClient(router)
-	a.name = cfg.Name
-	a.description = cfg.Description
-	a.phase = cfg.Phase
-
-	return r.Register(cfg.Name, a)
+// FromConfig is deprecated - use InitAgentRegistry with *llm.Client directly
+func (r *Registry) FromConfig(llmClient *llm.Client) error {
+	return fmt.Errorf("FromConfig is deprecated, use InitAgentRegistry")
 }
 
 // DefaultAgentNames returns the names of the four pre-registered default agents.
@@ -85,11 +79,11 @@ func DefaultAgentNames() []string {
 }
 
 // InitAgentRegistry creates an agent registry and registers all agents that implement the Agent interface.
-func InitAgentRegistry(router *model.Router) *Registry {
+func InitAgentRegistry(llmClient *llm.Client) *Registry {
 	registry := NewRegistry()
 
 	// Create and register coder agent
-	coder := NewCoderAgent(router, nil)
+	coder := NewCoderAgent(llmClient, nil)
 	if err := registry.Register(coder.Name(), coder); err != nil {
 		logging.Warn("Failed to register coder agent", "error", err)
 	}

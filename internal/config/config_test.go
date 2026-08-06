@@ -8,15 +8,11 @@ import (
 
 func TestLoadConfig(t *testing.T) {
 	content := `
-models:
-  active_provider: "p1"
-  providers:
-    p1:
-      base_url: "http://localhost:1234"
-  phases:
-    coding:
-      provider: "p1"
-      model: "gpt-4"
+llm:
+  base_url: "http://localhost:1234"
+  model: "gpt-4"
+  temperature: 0.7
+  max_tokens: 4096
 `
 	tmpDir, err := os.MkdirTemp("", "config-test")
 	if err != nil {
@@ -35,12 +31,12 @@ models:
 			t.Fatalf("failed to load config: %v", err)
 		}
 
-		if cfg.Models.ActiveProvider != "p1" {
-			t.Errorf("expected active provider p1, got %s", cfg.Models.ActiveProvider)
+		if cfg.LLM.BaseURL != "http://localhost:1234" {
+			t.Errorf("expected base_url http://localhost:1234, got %s", cfg.LLM.BaseURL)
 		}
 
-		if cfg.Models.Phases["coding"].Model != "gpt-4" {
-			t.Errorf("expected model gpt-4, got %s", cfg.Models.Phases["coding"].Model)
+		if cfg.LLM.Model != "gpt-4" {
+			t.Errorf("expected model gpt-4, got %s", cfg.LLM.Model)
 		}
 
 		// Test defaults
@@ -78,62 +74,17 @@ func TestValidate(t *testing.T) {
 		{
 			name: "Valid config",
 			config: Config{
-				Models: ModelsConfig{
-					ActiveProvider: "p1",
-					Providers: map[string]ProviderConfig{
-						"p1": {BaseURL: "http://localhost"},
-					},
-					Phases: map[string]PhaseModelConfig{
-						"p1": {Provider: "p1"},
-					},
+				LLM: LLMConfig{
+					BaseURL: "http://localhost",
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "Missing active provider",
+			name: "Missing base_url",
 			config: Config{
-				Models: ModelsConfig{
-					Providers: map[string]ProviderConfig{
-						"p1": {BaseURL: "http://localhost"},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "Active provider not in providers",
-			config: Config{
-				Models: ModelsConfig{
-					ActiveProvider: "p2",
-					Providers: map[string]ProviderConfig{
-						"p1": {BaseURL: "http://localhost"},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "Provider missing base_url",
-			config: Config{
-				Models: ModelsConfig{
-					ActiveProvider: "p1",
-					Providers: map[string]ProviderConfig{
-						"p1": {BaseURL: ""},
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "No phases",
-			config: Config{
-				Models: ModelsConfig{
-					ActiveProvider: "p1",
-					Providers: map[string]ProviderConfig{
-						"p1": {BaseURL: "http://localhost"},
-					},
-					Phases: nil,
+				LLM: LLMConfig{
+					BaseURL: "",
 				},
 			},
 			wantErr: true,
@@ -152,11 +103,9 @@ func TestValidate(t *testing.T) {
 
 func TestSaveLoadJSON(t *testing.T) {
 	cfg := &Config{
-		Models: ModelsConfig{
-			ActiveProvider: "p1",
-			Providers: map[string]ProviderConfig{
-				"p1": {BaseURL: "http://localhost"},
-			},
+		LLM: LLMConfig{
+			BaseURL: "http://localhost",
+			Model:   "gpt-4",
 		},
 	}
 
@@ -173,7 +122,10 @@ func TestSaveLoadJSON(t *testing.T) {
 		t.Fatalf("failed to load: %v", err)
 	}
 
-	if loaded.Models.ActiveProvider != "p1" {
-		t.Errorf("expected p1, got %s", loaded.Models.ActiveProvider)
+	if loaded.LLM.BaseURL != "http://localhost" {
+		t.Errorf("expected http://localhost, got %s", loaded.LLM.BaseURL)
+	}
+	if loaded.LLM.Model != "gpt-4" {
+		t.Errorf("expected gpt-4, got %s", loaded.LLM.Model)
 	}
 }

@@ -13,8 +13,8 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/api/handlers"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
 	"github.com/nanaki-93/mini-orca/v2/internal/orchestrator"
 	"github.com/nanaki-93/mini-orca/v2/internal/state"
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
@@ -43,12 +43,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize router
-	router, err := model.InitRouter(cfg)
-	if err != nil {
-		logging.Error("Failed to initialize router", "error", err)
-		os.Exit(1)
-	}
+	// Initialize LLM client
+	llmClient := llm.NewClient(
+		cfg.LLM.BaseURL,
+		cfg.LLM.APIKey,
+		cfg.LLM.Model,
+		cfg.LLM.Temperature,
+		cfg.LLM.MaxTokens,
+	)
 
 	// Initialize skills registry and register config skills
 	skillsRegistry := skills.InitSkillsRegistry(cfg)
@@ -57,7 +59,7 @@ func main() {
 	projectInfo, executor := tools.InitToolExecutor()
 
 	// Initialize agent registry and register agents
-	agentRegistry := agent.InitAgentRegistry(router)
+	agentRegistry := agent.InitAgentRegistry(llmClient)
 
 	// Initialize state store
 	store := state.InitStateStore(projectInfo)
@@ -97,25 +99,25 @@ func main() {
 		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, sessionStore, projectStore, cache)
 	}
 
-	// Initialize orchestrator with router, registry, and executor
-	agentOrchestrator := agent.NewOrchestrator(router, skillsRegistry, executor)
+	// Initialize orchestrator with LLM client, registry, and executor
+	agentOrchestrator := agent.NewOrchestrator(llmClient, skillsRegistry, executor)
 
 	// Create agents for logging purposes
-	coder := agent.NewCoderAgent(router, skillsRegistry)
+	coder := agent.NewCoderAgent(llmClient, skillsRegistry)
 	coder.SetSkills(cfg.Agents.Coder.Skills)
 
-	tester := agent.NewTesterAgent(router, skillsRegistry)
+	tester := agent.NewTesterAgent(llmClient, skillsRegistry)
 	tester.SetSkills(cfg.Agents.Tester.Skills)
 
-	reviewer := agent.NewReviewerAgent(router, skillsRegistry)
+	reviewer := agent.NewReviewerAgent(llmClient, skillsRegistry)
 	reviewer.SetSkills(cfg.Agents.Reviewer.Skills)
 
 	// Log successful startup
 	logging.Info("Mini-Orca daemon started successfully")
 	logging.Info("Startup config",
-		"active_provider", cfg.Models.ActiveProvider,
-		"registered_providers", router.ListProviders(),
-		"configured_phases", len(cfg.Models.Phases))
+		"base_url", cfg.LLM.BaseURL,
+		"model", cfg.LLM.Model,
+		"temperature", cfg.LLM.Temperature)
 
 	// Log project type and executor
 	if projectInfo != nil {
@@ -138,8 +140,7 @@ func main() {
 	logging.Info("Registered agents from registry", "agents", agentRegistry.List())
 
 	// List available models
-	listClient := agent.NewClient(router)
-	models, err := listClient.ListModels()
+	models, err := llmClient.ListModels(context.Background())
 	if err != nil {
 		logging.Warn("Failed to list models", "error", err)
 	} else {

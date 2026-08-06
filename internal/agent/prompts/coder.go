@@ -3,7 +3,7 @@ package prompts
 import (
 	"fmt"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 // PlanUnit represents an atomic unit of work to be implemented by the coder.
@@ -23,13 +23,13 @@ type FeatureRequest struct {
 
 // BuildCoderPromptFromRequest constructs the full chat message list for the coder agent
 // from a FeatureRequest.
-func BuildCoderPromptFromRequest(req FeatureRequest) ([]model.ChatMessage, error) {
+func BuildCoderPromptFromRequest(req FeatureRequest) ([]llm.ChatMessage, error) {
 	if req.Prompt == "" {
 		return nil, fmt.Errorf("coder prompt: feature request prompt is required")
 	}
 	systemMessage := buildCoderSystemMessage(nil)
 	userMessage := buildCoderUserMessageFromRequest(req)
-	return []model.ChatMessage{
+	return []llm.ChatMessage{
 		{Role: "system", Content: systemMessage},
 		{Role: "user", Content: userMessage},
 	}, nil
@@ -39,7 +39,7 @@ func BuildCoderPromptFromRequest(req FeatureRequest) ([]model.ChatMessage, error
 // It combines system-level instructions (role, skills, output format, constraints)
 // with user-level content (unit description, existing code, dependencies).
 // DEPRECATED: Use BuildCoderPromptFromRequest instead.
-func BuildCoderPrompt(unit PlanUnit, existingCode string, skills []string) ([]model.ChatMessage, error) {
+func BuildCoderPrompt(unit PlanUnit, existingCode string, skills []string) ([]llm.ChatMessage, error) {
 	if unit.Title == "" {
 		return nil, fmt.Errorf("coder prompt: unit title is required")
 	}
@@ -50,7 +50,7 @@ func BuildCoderPrompt(unit PlanUnit, existingCode string, skills []string) ([]mo
 	systemMessage := buildCoderSystemMessage(skills)
 	userMessage := buildCoderUserMessage(unit, existingCode)
 
-	return []model.ChatMessage{
+	return []llm.ChatMessage{
 		{Role: "system", Content: systemMessage},
 		{Role: "user", Content: userMessage},
 	}, nil

@@ -1260,8 +1260,6 @@ func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Reques
 	}
 
 	data["CurrentPath"] = ""
-	data["ModelName"] = "gpt-4o"
-	data["ProviderName"] = "OpenAI"
 
 	h.templateEngine.RenderMain(w, "ide", data)
 }

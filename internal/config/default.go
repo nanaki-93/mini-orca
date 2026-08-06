@@ -3,36 +3,6 @@ package config
 // DefaultProviderURL is the default LM Studio URL.
 const DefaultProviderURL = "http://localhost:1234"
 
-// DefaultPhaseConfigs returns a map of phase names to their default PhaseModelConfig.
-func DefaultPhaseConfigs() map[string]PhaseModelConfig {
-	return map[string]PhaseModelConfig{
-		"coding": {
-			Provider:    "lm-studio",
-			Model:       "",
-			Temperature: 0.7,
-			MaxTokens:   4096,
-		},
-		"testing": {
-			Provider:    "lm-studio",
-			Model:       "",
-			Temperature: 0.7,
-			MaxTokens:   4096,
-		},
-		"review": {
-			Provider:    "lm-studio",
-			Model:       "",
-			Temperature: 0.7,
-			MaxTokens:   4096,
-		},
-		"human_review": {
-			Provider:    "lm-studio",
-			Model:       "",
-			Temperature: 0.7,
-			MaxTokens:   4096,
-		},
-	}
-}
-
 // DefaultAgentConfigs returns default agent configurations with predefined skill lists.
 func DefaultAgentConfigs() AgentsConfig {
 	return AgentsConfig{
@@ -76,14 +46,11 @@ func DefaultSkills() SkillsConfig {
 // Default returns a Config with sensible defaults.
 func Default() *Config {
 	return &Config{
-		Models: ModelsConfig{
-			ActiveProvider: "lm-studio",
-			Providers: map[string]ProviderConfig{
-				"lm-studio": {
-					BaseURL: DefaultProviderURL,
-				},
-			},
-			Phases: DefaultPhaseConfigs(),
+		LLM: LLMConfig{
+			BaseURL:     DefaultProviderURL,
+			Model:       "",
+			Temperature: 0.7,
+			MaxTokens:   8192,
 		},
 		Agents: DefaultAgentConfigs(),
 		Skills: DefaultSkills(),

@@ -3,13 +3,13 @@ package prompts
 import (
 	"fmt"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 // BuildTesterPrompt constructs the full chat message list for the tester agent.
 // It combines system-level instructions (role, skills, analysis framework)
 // with user-level content (code, test output, coverage report).
-func BuildTesterPrompt(code string, testResults string, skills []string) ([]model.ChatMessage, error) {
+func BuildTesterPrompt(code string, testResults string, skills []string) ([]llm.ChatMessage, error) {
 	if code == "" {
 		return nil, fmt.Errorf("tester prompt: code is required")
 	}
@@ -20,7 +20,7 @@ func BuildTesterPrompt(code string, testResults string, skills []string) ([]mode
 	systemMessage := buildTesterSystemMessage(skills)
 	userMessage := buildTesterUserMessage(code, testResults)
 
-	return []model.ChatMessage{
+	return []llm.ChatMessage{
 		{Role: "system", Content: systemMessage},
 		{Role: "user", Content: userMessage},
 	}, nil
