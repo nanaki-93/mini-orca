@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 // CoderAgent is the agent responsible for implementing code.
@@ -15,12 +15,12 @@ type CoderAgent struct {
 	registry *skills.SkillsRegistry
 }
 
-// NewCoderAgent creates a new coder agent with the given router and skills registry.
-func NewCoderAgent(router *model.Router, registry *skills.SkillsRegistry) *CoderAgent {
-	client := NewClient(router)
+// NewCoderAgent creates a new coder agent with the given LLM client and skills registry.
+func NewCoderAgent(llmClient *llm.Client, registry *skills.SkillsRegistry) *CoderAgent {
+	client := NewClient(llmClient)
 	client.name = "coder"
 	client.description = "Implements code based on plans and specifications"
-	client.phase = model.PhaseCoding
+	client.phase = "coding"
 	client.skills = make([]string, 0)
 
 	return &CoderAgent{
@@ -33,8 +33,8 @@ func NewCoderAgent(router *model.Router, registry *skills.SkillsRegistry) *Coder
 // It builds a system prompt from coder skills, calls the LLM, and returns the code.
 // Each execution handles exactly ONE atomic unit (function, struct, or class).
 func (c *CoderAgent) Execute(ctx context.Context, input string) (*Result, error) {
-	if c.router == nil {
-		return nil, fmt.Errorf("coder agent: router not configured")
+	if c.llmClient == nil {
+		return nil, fmt.Errorf("coder agent: LLM client not configured")
 	}
 
 	if input == "" {
@@ -54,12 +54,12 @@ func (c *CoderAgent) Execute(ctx context.Context, input string) (*Result, error)
 	// Combine system prompt with user input (atomic unit description)
 	fullPrompt := systemPrompt + "\n\n---\n\nAtomic Unit Description:\n" + input
 
-	// Call the LLM with coding phase config
-	messages := []model.ChatMessage{
+	// Call the LLM
+	messages := []llm.ChatMessage{
 		{Role: "user", Content: fullPrompt},
 	}
 
-	resp, err := c.router.Chat(string(c.phase), messages)
+	resp, err := c.llmClient.Chat(ctx, messages)
 	if err != nil {
 		return nil, fmt.Errorf("coder agent: execution failed: %w", err)
 	}
@@ -72,9 +72,9 @@ func (c *CoderAgent) Execute(ctx context.Context, input string) (*Result, error)
 		Output: resp.Choices[0].Message.Content,
 		Metadata: map[string]string{
 			"model":  resp.Model,
-			"phase":  string(c.phase),
+			"phase":  c.phase,
 			"tokens": fmt.Sprintf("%d", resp.Usage.TotalTokens),
 		},
-		Phase: string(c.phase),
+		Phase: c.phase,
 	}, nil
 }

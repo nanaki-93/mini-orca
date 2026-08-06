@@ -30,12 +30,8 @@ func TestLoadConfigExample(t *testing.T) {
 		t.Fatalf("Validate failed: %v", err)
 	}
 
-	if len(cfg.Models.Providers) != 1 {
-		t.Errorf("expected 1 provider, got %d", len(cfg.Models.Providers))
-	}
-
-	if len(cfg.Models.Phases) != 4 {
-		t.Errorf("expected 4 phases, got %d", len(cfg.Models.Phases))
+	if cfg.LLM.BaseURL != "http://localhost:1234" {
+		t.Errorf("expected base_url http://localhost:1234, got %s", cfg.LLM.BaseURL)
 	}
 
 	if len(cfg.Skills.Knowledge) != 9 {
@@ -45,11 +41,6 @@ func TestLoadConfigExample(t *testing.T) {
 	if len(cfg.Skills.Tools) != 3 {
 		t.Errorf("expected 3 tools, got %d", len(cfg.Skills.Tools))
 	}
-
-	if cfg.Models.ActiveProvider != "lm-studio" {
-		t.Errorf("expected active_provider lm-studio, got %s", cfg.Models.ActiveProvider)
-	}
-
 }
 
 func TestLoadConfigNotExists(t *testing.T) {
@@ -86,13 +77,8 @@ func TestSaveAndReload(t *testing.T) {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
 
-	if loaded.Models.ActiveProvider != defaultCfg.Models.ActiveProvider {
-		t.Errorf("active_provider mismatch: got %s, want %s",
-			loaded.Models.ActiveProvider, defaultCfg.Models.ActiveProvider)
-	}
-
-	if len(loaded.Models.Phases) != len(defaultCfg.Models.Phases) {
-		t.Errorf("phases count mismatch: got %d, want %d",
-			len(loaded.Models.Phases), len(defaultCfg.Models.Phases))
+	if loaded.LLM.BaseURL != defaultCfg.LLM.BaseURL {
+		t.Errorf("base_url mismatch: got %s, want %s",
+			loaded.LLM.BaseURL, defaultCfg.LLM.BaseURL)
 	}
 }

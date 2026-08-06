@@ -10,34 +10,13 @@ func TestLoadConfig_FullFlow(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
-	// Write a minimal config with the 4 active phases
+	// Write a minimal config with LLM settings
 	data := []byte(`
-models:
-  active_provider: "lm-studio"
-  providers:
-    lm-studio:
-      base_url: "http://localhost:1234"
-  phases:
-    coding:
-      provider: "lm-studio"
-      model: "code-model"
-      temperature: 0.7
-      max_tokens: 2048
-    testing:
-      provider: "lm-studio"
-      model: "test-model"
-      temperature: 0.7
-      max_tokens: 2048
-    review:
-      provider: "lm-studio"
-      model: "review-model"
-      temperature: 0.5
-      max_tokens: 2048
-    human_review:
-      provider: "lm-studio"
-      model: "review-model"
-      temperature: 0.5
-      max_tokens: 1024
+llm:
+  base_url: "http://localhost:1234"
+  model: "code-model"
+  temperature: 0.7
+  max_tokens: 4096
 `)
 	if err := os.WriteFile(configPath, data, 0644); err != nil {
 		t.Fatal(err)
@@ -52,16 +31,20 @@ models:
 		t.Fatalf("Validate failed: %v", err)
 	}
 
-	if cfg.Models.ActiveProvider != "lm-studio" {
-		t.Errorf("expected active_provider lm-studio, got %s", cfg.Models.ActiveProvider)
+	if cfg.LLM.BaseURL != "http://localhost:1234" {
+		t.Errorf("expected base_url http://localhost:1234, got %s", cfg.LLM.BaseURL)
 	}
 
-	if len(cfg.Models.Providers) != 1 {
-		t.Errorf("expected 1 provider, got %d", len(cfg.Models.Providers))
+	if cfg.LLM.Model != "code-model" {
+		t.Errorf("expected model code-model, got %s", cfg.LLM.Model)
 	}
 
-	if len(cfg.Models.Phases) != 4 {
-		t.Errorf("expected 4 phases, got %d", len(cfg.Models.Phases))
+	if cfg.LLM.Temperature != 0.7 {
+		t.Errorf("expected temperature 0.7, got %f", cfg.LLM.Temperature)
+	}
+
+	if cfg.LLM.MaxTokens != 4096 {
+		t.Errorf("expected max_tokens 4096, got %d", cfg.LLM.MaxTokens)
 	}
 }
 
@@ -72,28 +55,12 @@ func TestDefault_FullFlow(t *testing.T) {
 		t.Fatalf("Default config failed validation: %v", err)
 	}
 
-	if cfg.Models.ActiveProvider != "lm-studio" {
-		t.Errorf("expected lm-studio, got %s", cfg.Models.ActiveProvider)
-	}
-
-	if len(cfg.Models.Phases) != 4 {
-		t.Errorf("expected 4 phases, got %d", len(cfg.Models.Phases))
-	}
-
-	if len(cfg.Models.Providers) != 1 {
-		t.Errorf("expected 1 provider, got %d", len(cfg.Models.Providers))
+	if cfg.LLM.BaseURL != DefaultProviderURL {
+		t.Errorf("expected base_url %s, got %s", DefaultProviderURL, cfg.LLM.BaseURL)
 	}
 
 	if len(cfg.Skills.Knowledge) == 0 {
 		t.Error("expected knowledge entries")
-	}
-
-	// Verify the 4 active phases are present
-	expectedPhases := []string{"coding", "testing", "review", "human_review"}
-	for _, phase := range expectedPhases {
-		if _, ok := cfg.Models.Phases[phase]; !ok {
-			t.Errorf("expected phase %q in config", phase)
-		}
 	}
 }
 
@@ -111,42 +78,23 @@ func TestSaveAndReload_KeepData(t *testing.T) {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
 
-	if loaded.Models.ActiveProvider != original.Models.ActiveProvider {
-		t.Errorf("active_provider mismatch: got %s, want %s",
-			loaded.Models.ActiveProvider, original.Models.ActiveProvider)
-	}
-
-	if len(loaded.Models.Phases) != len(original.Models.Phases) {
-		t.Errorf("phases count mismatch: got %d, want %d",
-			len(loaded.Models.Phases), len(original.Models.Phases))
+	if loaded.LLM.BaseURL != original.LLM.BaseURL {
+		t.Errorf("base_url mismatch: got %s, want %s",
+			loaded.LLM.BaseURL, original.LLM.BaseURL)
 	}
 }
 
-// TestConfig_Phases verifies config accepts the 4 active phases
-func TestConfig_Phases(t *testing.T) {
-	// Test with minimal config containing all 4 active phases
+// TestConfig_LLM verifies config accepts LLM settings
+func TestConfig_LLM(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	data := []byte(`
-models:
-  active_provider: "lm-studio"
-  providers:
-    lm-studio:
-      base_url: "http://localhost:1234"
-  phases:
-    coding:
-      provider: "lm-studio"
-      model: "code-model"
-    testing:
-      provider: "lm-studio"
-      model: "test-model"
-    review:
-      provider: "lm-studio"
-      model: "review-model"
-    human_review:
-      provider: "lm-studio"
-      model: "review-model"
+llm:
+  base_url: "http://localhost:1234"
+  model: "gpt-4"
+  temperature: 0.5
+  max_tokens: 2048
 `)
 	if err := os.WriteFile(configPath, data, 0644); err != nil {
 		t.Fatal(err)
@@ -161,15 +109,16 @@ models:
 		t.Fatalf("Validate failed: %v", err)
 	}
 
-	// Verify all 4 active phases are present
-	expectedPhases := []string{"coding", "testing", "review", "human_review"}
-	if len(cfg.Models.Phases) != len(expectedPhases) {
-		t.Errorf("expected %d phases, got %d", len(expectedPhases), len(cfg.Models.Phases))
+	if cfg.LLM.BaseURL != "http://localhost:1234" {
+		t.Errorf("expected base_url http://localhost:1234, got %s", cfg.LLM.BaseURL)
 	}
-
-	for _, phase := range expectedPhases {
-		if _, ok := cfg.Models.Phases[phase]; !ok {
-			t.Errorf("expected phase %q in config", phase)
-		}
+	if cfg.LLM.Model != "gpt-4" {
+		t.Errorf("expected model gpt-4, got %s", cfg.LLM.Model)
+	}
+	if cfg.LLM.Temperature != 0.5 {
+		t.Errorf("expected temperature 0.5, got %f", cfg.LLM.Temperature)
+	}
+	if cfg.LLM.MaxTokens != 2048 {
+		t.Errorf("expected max_tokens 2048, got %d", cfg.LLM.MaxTokens)
 	}
 }

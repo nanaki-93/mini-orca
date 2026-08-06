@@ -12,7 +12,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/state"
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
@@ -39,7 +39,7 @@ type Session struct {
 
 // Orchestrator manages the execution flow of the multi-phase development pipeline.
 type Orchestrator struct {
-	router         *model.Router
+	llmClient      *llm.Client
 	executor       tools.ToolExecutor
 	stateStore     *state.Store
 	config         *config.Config
@@ -52,11 +52,11 @@ type Orchestrator struct {
 }
 
 // New creates a new Orchestrator instance with the given dependencies.
-func New(router *model.Router, executor tools.ToolExecutor, stateStore *state.Store, config *config.Config) *Orchestrator {
+func New(llmClient *llm.Client, executor tools.ToolExecutor, stateStore *state.Store, config *config.Config) *Orchestrator {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
-		router:     router,
+		llmClient:  llmClient,
 		executor:   executor,
 		stateStore: stateStore,
 		config:     config,
@@ -196,7 +196,7 @@ func (o *Orchestrator) getProjectContext() (string, error) {
 
 // runCoderAgent calls the coder agent with the user prompt and project context.
 func (o *Orchestrator) runCoderAgent(userPrompt string, projectContext string) (*agent.Result, error) {
-	orchestrator := agent.NewOrchestrator(o.router, nil, o.executor)
+	orchestrator := agent.NewOrchestrator(o.llmClient, nil, o.executor)
 	return orchestrator.RunCoderFromPrompt(userPrompt, projectContext)
 }
 
@@ -423,7 +423,7 @@ func (o *Orchestrator) runTests() (string, error) {
 
 // runTesterAgent calls the tester agent with code and test results for analysis.
 func (o *Orchestrator) runTesterAgent(code string, testResults string) (*TestReport, error) {
-	orchestrator := agent.NewOrchestrator(o.router, nil, o.executor)
+	orchestrator := agent.NewOrchestrator(o.llmClient, nil, o.executor)
 	agentResult, err := orchestrator.RunTester(code, testResults)
 	if err != nil {
 		return nil, err
@@ -514,7 +514,7 @@ func (o *Orchestrator) RunReview() error {
 
 // runReviewerAgent calls the reviewer agent with code and user prompt for review.
 func (o *Orchestrator) runReviewerAgent(code string, userPrompt string) (*ReviewReport, error) {
-	orchestrator := agent.NewOrchestrator(o.router, nil, o.executor)
+	orchestrator := agent.NewOrchestrator(o.llmClient, nil, o.executor)
 	agentResult, err := orchestrator.RunReviewer(code, userPrompt)
 	if err != nil {
 		return nil, err

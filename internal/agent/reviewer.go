@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 // ReviewReport represents the output of a code review phase.
@@ -26,12 +26,12 @@ type ReviewerAgent struct {
 	registry *skills.SkillsRegistry
 }
 
-// NewReviewerAgent creates a new reviewer agent with the given router and skills registry.
-func NewReviewerAgent(router *model.Router, registry *skills.SkillsRegistry) *ReviewerAgent {
-	client := NewClient(router)
+// NewReviewerAgent creates a new reviewer agent with the given LLM client and skills registry.
+func NewReviewerAgent(llmClient *llm.Client, registry *skills.SkillsRegistry) *ReviewerAgent {
+	client := NewClient(llmClient)
 	client.name = "reviewer"
 	client.description = "Reviews code for quality, security, and adherence to standards"
-	client.phase = model.PhaseReview
+	client.phase = "review"
 	client.skills = make([]string, 0)
 
 	return &ReviewerAgent{
@@ -43,8 +43,8 @@ func NewReviewerAgent(router *model.Router, registry *skills.SkillsRegistry) *Re
 // Execute runs the reviewer agent with the given code and context.
 // It builds a system prompt from reviewer skills, calls the LLM, and returns a review report.
 func (r *ReviewerAgent) Execute(ctx context.Context, input string) (*ReviewReport, error) {
-	if r.router == nil {
-		return nil, fmt.Errorf("reviewer agent: router not configured")
+	if r.llmClient == nil {
+		return nil, fmt.Errorf("reviewer agent: LLM client not configured")
 	}
 
 	if input == "" {
@@ -64,12 +64,12 @@ func (r *ReviewerAgent) Execute(ctx context.Context, input string) (*ReviewRepor
 	// Combine system prompt with user input (code + context)
 	fullPrompt := systemPrompt + "\n\n---\n\nCode to Review:\n" + input
 
-	// Call the LLM with review phase config
-	messages := []model.ChatMessage{
+	// Call the LLM
+	messages := []llm.ChatMessage{
 		{Role: "user", Content: fullPrompt},
 	}
 
-	resp, err := r.router.Chat(string(r.phase), messages)
+	resp, err := r.llmClient.Chat(ctx, messages)
 	if err != nil {
 		return nil, fmt.Errorf("reviewer agent: execution failed: %w", err)
 	}

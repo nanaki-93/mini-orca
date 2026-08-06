@@ -3,12 +3,12 @@ package prompts
 import (
 	"fmt"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 // BuildReviewerPromptFromRequest constructs the full chat message list for the reviewer agent
 // from a user request and generated code.
-func BuildReviewerPromptFromRequest(code string, userRequest string, skills []string) ([]model.ChatMessage, error) {
+func BuildReviewerPromptFromRequest(code string, userRequest string, skills []string) ([]llm.ChatMessage, error) {
 	if code == "" {
 		return nil, fmt.Errorf("reviewer prompt: code is required")
 	}
@@ -17,7 +17,7 @@ func BuildReviewerPromptFromRequest(code string, userRequest string, skills []st
 	}
 	systemMessage := buildReviewerSystemMessage(skills)
 	userMessage := buildReviewerUserMessageFromRequest(code, userRequest)
-	return []model.ChatMessage{
+	return []llm.ChatMessage{
 		{Role: "system", Content: systemMessage},
 		{Role: "user", Content: userMessage},
 	}, nil
@@ -27,7 +27,7 @@ func BuildReviewerPromptFromRequest(code string, userRequest string, skills []st
 // It combines system-level instructions (role, skills, review checklist)
 // with user-level content (code, plan/spec, previous feedback).
 // DEPRECATED: Use BuildReviewerPromptFromRequest instead.
-func BuildReviewerPrompt(code string, plan string, skills []string) ([]model.ChatMessage, error) {
+func BuildReviewerPrompt(code string, plan string, skills []string) ([]llm.ChatMessage, error) {
 	if code == "" {
 		return nil, fmt.Errorf("reviewer prompt: code is required")
 	}
@@ -38,7 +38,7 @@ func BuildReviewerPrompt(code string, plan string, skills []string) ([]model.Cha
 	systemMessage := buildReviewerSystemMessage(skills)
 	userMessage := buildReviewerUserMessage(code, plan)
 
-	return []model.ChatMessage{
+	return []llm.ChatMessage{
 		{Role: "system", Content: systemMessage},
 		{Role: "user", Content: userMessage},
 	}, nil
