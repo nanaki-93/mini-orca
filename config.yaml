@@ -97,7 +97,7 @@ retry:
 # Configure structured logging.
 
 logging:
-  level: "info"         # debug, info, warn, error
+  level: "debug"         # debug, info, warn, error
   format: "json"        # json or text
   filename: ""          # Optional: path to log file (default: stdout)
   sensitive_keys: # Optional: list of keys to redact from logs
