@@ -1,0 +1,63 @@
+{{ define "coding-content" }}
+<div class="flex-1 overflow-auto relative">
+    {{ if eq .CodingPhaseData.Status "running" }}
+    <div class="h-full flex flex-col items-center justify-center p-8">
+        <div class="relative mb-6">
+            <div class="w-20 h-20 rounded-full border-4 border-green-500/20"></div>
+            <div class="absolute inset-0 w-20 h-20 rounded-full border-4 border-transparent border-t-green-500 border-r-green-500 animate-spin"></div>
+            <div class="absolute inset-0 flex items-center justify-center">
+                <svg class="w-8 h-8 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                </svg>
+            </div>
+        </div>
+        <h4 class="text-lg font-medium text-text-primary mb-2">Generating code...</h4>
+        <p class="text-sm text-text-secondary text-center max-w-md">The AI is writing clean, well-documented code</p>
+        {{ if .CodingPhaseData.EstimatedTimeRemaining }}
+        <p class="text-xs text-text-secondary mt-3">Estimated time: {{ .CodingPhaseData.EstimatedTimeRemaining }}</p>
+        {{ end }}
+    </div>
+    {{ else if eq .CodingPhaseData.Status "applying" }}
+    <div class="h-full flex flex-col items-center justify-center p-8">
+        <div class="loading-spinner xl warning mb-6"></div>
+        <h4 class="text-lg font-medium text-text-primary mb-2">Applying changes...</h4>
+        <p class="text-sm text-text-secondary text-center max-w-md">Writing code to files and running validations</p>
+        <p class="text-xs text-text-secondary mt-3">Current file: <code class="px-1.5 py-0.5 bg-dark-700 rounded">{{ .CodingPhaseData.CurrentFile }}</code></p>
+    </div>
+    {{ else }}
+    <div class="flex h-full">
+        <div class="line-numbers bg-dark-800 text-text-secondary text-xs font-mono text-right select-none pr-3 py-4 sticky left-0 border-r border-dark-600">
+            {{ range $i, $line := codeLines .CodingPhaseData.GeneratedCode }}
+            <div>{{ add $i 1 }}</div>
+            {{ end }}
+        </div>
+        <pre class="code-content flex-1 p-4 font-mono text-sm whitespace-pre overflow-x-auto text-text-primary">{{ .CodingPhaseData.GeneratedCode }}</pre>
+    </div>
+    {{ end }}
+</div>
+{{ end }}
+
+<script>
+    function refreshCodingStatus() {
+        htmx.ajax('GET', '/api/phases/status?phase=coding', { target: '#coding-phase', swap: 'innerHTML' });
+    }
+    const codingInterval = setInterval(() => {
+        const phaseContainer = document.getElementById('coding-phase');
+        if (phaseContainer) { refreshCodingStatus(); } else { clearInterval(codingInterval); }
+    }, 3000);
+    document.addEventListener('htmx:afterRequest', (event) => {
+        if (event.detail.target.id === 'coding-phase' || event.detail.target.closest('#coding-phase')) {
+            const statusEl = document.querySelector('[data-phase="coding"]');
+            if (statusEl && statusEl.dataset.status === 'completed') { clearInterval(codingInterval); }
+        }
+    });
+</script>
+
+<style>
+    .line-numbers { position: sticky; left: 0; z-index: 10; min-width: 3rem; }
+    .line-numbers > div { padding: 0 0.75rem 0 0; line-height: 1.6; }
+    .code-content { line-height: 1.6; }
+    .text-purple-400 { color: #c084fc; } .text-blue-400 { color: #60a5fa; }
+    .text-yellow-300 { color: #fde047; } .text-green-400 { color: #4ade80; }
+    .text-orange-400 { color: #fb923c; }
+</style>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accessibility Results - Mini-Orca</title>
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+    <script src="/static/js/main.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d1117; --bg-secondary: #161b22; --bg-tertiary: #21262d;
+            --border-color: #30363d; --text-primary: #e6edf3; --text-secondary: #8b949e;
+            --accent: #58a6ff; --accent-hover: #79c0ff; --success: #3fb950;
+            --warning: #d29922; --error: #f85149;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: var(--bg-primary); color: var(--text-primary); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; line-height: 1.6; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        h1 { font-size: 2rem; margin-bottom: 0.5rem; color: var(--text-primary); }
+        .subtitle { color: var(--text-secondary); margin-bottom: 2rem; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .summary-card { background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.5rem; text-align: center; }
+        .summary-card .number { font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem; }
+        .summary-card .label { font-size: 0.875rem; color: var(--text-secondary); }
+        .summary-card.pass .number { color: var(--success); }
+        .summary-card.fail .number { color: var(--error); }
+        .summary-card.pending .number { color: var(--warning); }
+        .legend { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+        .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary); }
+        .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+        .legend-dot.pass { background-color: var(--success); }
+        .legend-dot.fail { background-color: var(--error); }
+        .legend-dot.pending { background-color: var(--warning); }
+        .results-section { background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .results-section h2 { font-size: 1.25rem; margin-bottom: 1rem; color: var(--accent); }
+        .result-item { display: flex; align-items: flex-start; gap: 1rem; padding: 0.75rem; border-bottom: 1px solid var(--border-color); }
+        .result-item:last-child { border-bottom: none; }
+        .result-status { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+        .result-status.pass { background-color: var(--success); color: white; }
+        .result-status.fail { background-color: var(--error); color: white; }
+        .result-status.pending { background-color: var(--warning); color: white; }
+        .result-content h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+        .result-content p { font-size: 0.875rem; color: var(--text-secondary); }
+        .report-actions { display: flex; gap: 1rem; margin-top: 1.5rem; }
+        .report-btn { padding: 0.75rem 1.5rem; background-color: var(--accent); color: var(--bg-primary); border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; font-weight: 600; flex: 1; }
+        .report-btn:hover { background-color: var(--accent-hover); }
+        .report-btn.secondary { background-color: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); }
+        .report-btn.secondary:hover { background-color: var(--border-color); }
+        .report-history { background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.5rem; margin-top: 1.5rem; }
+        .report-history h3 { font-size: 1.125rem; margin-bottom: 1rem; color: var(--text-primary); }
+        .report-entry { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid var(--border-color); }
+        .report-entry:last-child { border-bottom: none; }
+        .report-entry .date { font-size: 0.875rem; color: var(--text-secondary); }
+        .report-entry .score { font-size: 0.875rem; font-weight: 600; padding: 0.25rem 0.75rem; border-radius: 4px; }
+        .report-entry .score.pass { background-color: var(--success); color: white; }
+        .report-entry .score.fail { background-color: var(--error); color: white; }
+        .report-entry .score.pending { background-color: var(--warning); color: white; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
+        @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+        @media (forced-colors: active) { .result-status.pass, .result-status.fail, .result-status.pending { border: 2px solid ButtonText; } .summary-card { border: 2px solid ButtonText; } }
+    </style>
+</head>
+<body>
+    <div class="container" id="main-content">
+        <h1>Accessibility Test Results</h1>
+        <p class="subtitle">WCAG 2.1 AA Compliance Report</p>
+        <div class="summary" id="summary-cards" role="status" aria-label="Test summary">
+            <div class="summary-card pass"><div class="number" id="pass-count">0</div><div class="label">Passed</div></div>
+            <div class="summary-card fail"><div class="number" id="fail-count">0</div><div class="label">Failed</div></div>
+            <div class="summary-card pending"><div class="number" id="pending-count">0</div><div class="label">Pending</div></div>
+        </div>
+        <div class="legend">
+            <div class="legend-item"><div class="legend-dot pass"></div><span>Passed</span></div>
+            <div class="legend-item"><div class="legend-dot fail"></div><span>Failed</span></div>
+            <div class="legend-item"><div class="legend-dot pending"></div><span>Pending</span></div>
+        </div>
+        <div class="results-section" id="detailed-results" role="region" aria-labelledby="results-title">
+            <h2 id="results-title">Detailed Results</h2>
+            <div id="results-list">
+                <div class="result-item"><div class="result-status pending" id="res-tab-nav">✓</div><div class="result-content"><h3>Tab Navigation</h3><p>Verify all interactive elements are reachable via Tab key</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-arrow-nav">✓</div><div class="result-content"><h3>Arrow Key Navigation</h3><p>Verify tree items and lists respond to arrow keys</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-focus-visible">✓</div><div class="result-content"><h3>Focus Indicators</h3><p>Verify focus ring is visible on all interactive elements</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-focus-trap">✓</div><div class="result-content"><h3>Focus Trapping</h3><p>Verify modals trap focus within the dialog</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-skip-link">✓</div><div class="result-content"><h3>Skip Navigation</h3><p>Verify skip link allows jumping to main content</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-aria-labels">✓</div><div class="result-content"><h3>ARIA Labels</h3><p>Verify all interactive elements have appropriate aria-label</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-aria-live">✓</div><div class="result-content"><h3>Live Regions</h3><p>Verify dynamic content updates are announced via aria-live</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-aria-expanded">✓</div><div class="result-content"><h3>Expanded States</h3><p>Verify collapsible elements have aria-expanded</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-aria-current">✓</div><div class="result-content"><h3>Current State</h3><p>Verify active items have aria-current</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-aria-pressed">✓</div><div class="result-content"><h3>Pressed State</h3><p>Verify toggle buttons have aria-pressed</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-announcements">✓</div><div class="result-content"><h3>Status Announcements</h3><p>Verify state changes are announced via screen reader</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-modal-announcements">✓</div><div class="result-content"><h3>Modal Announcements</h3><p>Verify dialogs are announced when opened</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-form-announcements">✓</div><div class="result-content"><h3>Form Announcements</h3><p>Verify form interactions are announced</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-contrast-ratio">✓</div><div class="result-content"><h3>Contrast Ratio</h3><p>Verify text meets WCAG AA 4.5:1 contrast ratio</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-color-only">✓</div><div class="result-content"><h3>Not Color-Only</h3><p>Verify information is not conveyed by color alone</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-high-contrast">✓</div><div class="result-content"><h3>High Contrast Mode</h3><p>Verify UI works in forced-colors/high-contrast mode</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-landmarks">✓</div><div class="result-content"><h3>ARIA Landmarks</h3><p>Verify page has proper landmark roles</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-heading-hierarchy">✓</div><div class="result-content"><h3>Heading Hierarchy</h3><p>Verify headings are in logical order</p></div></div>
+                <div class="result-item"><div class="result-status pending" id="res-alt-text">✓</div><div class="result-content"><h3>Image Alt Text</h3><p>Verify all images have meaningful alt text or aria-hidden</p></div></div>
+            </div>
+        </div>
+        <div class="report-actions">
+            <button class="report-btn" onclick="generateReport()" aria-label="Generate HTML report">Generate HTML Report</button>
+            <button class="report-btn secondary" onclick="exportJSON()" aria-label="Export results as JSON">Export JSON</button>
+            <button class="report-btn secondary" onclick="exportCSV()" aria-label="Export results as CSV">Export CSV</button>
+        </div>
+        <div class="report-history" id="report-history" role="region" aria-labelledby="history-title">
+            <h3 id="history-title">Report History</h3>
+            <div id="history-list">
+                <div class="report-entry"><span class="date">No reports generated yet</span><span class="score pending">N/A</span></div>
+            </div>
+        </div>
+    </div>
+    <div id="sr-announcements" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+    <div id="sr-alerts" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
+    <script>
+        const ScreenReader = {
+            polite: document.getElementById('sr-announcements'), assertive: document.getElementById('sr-alerts'),
+            announce(m, p = 'polite') { const t = p === 'assertive' ? this.assertive : this.polite; if (!t) return; t.textContent = ''; setTimeout(() => { t.textContent = m; }, 100); },
+            announceStatus(m) { this.announce(m, 'polite'); }, announceAlert(m) { this.announce(m, 'assertive'); }
+        };
+        function updateResultStatus(id, status) { const el = document.getElementById(id); if (!el) return; el.className = `result-status ${status}`; el.textContent = status === 'pass' ? '✓' : status === 'fail' ? '✗' : '?'; updateSummary(); }
+        function updateSummary() { const r = document.querySelectorAll('[id^="res-"]'); let p = 0, f = 0, n = 0; r.forEach(e => { const s = e.classList.contains('pass') ? 'pass' : e.classList.contains('fail') ? 'fail' : 'pending'; if (s === 'pass') p++; else if (s === 'fail') f++; else n++; }); document.getElementById('pass-count').textContent = p; document.getElementById('fail-count').textContent = f; document.getElementById('pending-count').textContent = n; }
+        function generateReport() {
+            const pass = document.getElementById('pass-count').textContent, fail = document.getElementById('fail-count').textContent, total = parseInt(pass) + parseInt(fail);
+            const score = total > 0 ? Math.round((pass / total) * 100) : 0;
+            const html = `<!DOCTYPE html><html><head><title>Accessibility Report</title></head><body><h1>Accessibility Compliance Report</h1><p>Generated: ${new Date().toISOString()}</p><p>Score: ${score}%</p><p>Passed: ${pass}, Failed: ${fail}</p></body></html>`;
+            const blob = new Blob([html], { type: 'text/html' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `accessibility-report-${Date.now()}.html`; a.click(); URL.revokeObjectURL(url);
+            addReportEntry(score, pass, fail); ScreenReader.announceStatus(`Report generated. Score: ${score}%`);
+        }
+        function exportJSON() {
+            const r = []; document.querySelectorAll('[id^="res-"]').forEach(e => { r.push({ test: e.id.replace('res-', ''), status: e.classList.contains('pass') ? 'pass' : e.classList.contains('fail') ? 'fail' : 'pending' }); });
+            const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `accessibility-results-${Date.now()}.json`; a.click(); URL.revokeObjectURL(url); ScreenReader.announceStatus('JSON report exported');
+        }
+        function exportCSV() {
+            let csv = 'Test,Status\n'; document.querySelectorAll('[id^="res-"]').forEach(e => { csv += `${e.id.replace('res-','')},${e.classList.contains('pass') ? 'pass' : e.classList.contains('fail') ? 'fail' : 'pending'}\n`; });
+            const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `accessibility-results-${Date.now()}.csv`; a.click(); URL.revokeObjectURL(url); ScreenReader.announceStatus('CSV report exported');
+        }
+        function addReportEntry(score, pass, fail) {
+            const list = document.getElementById('history-list'); const entry = document.createElement('div'); entry.className = 'report-entry'; const sc = score >= 80 ? 'pass' : score >= 50 ? 'pending' : 'fail';
+            entry.innerHTML = `<span class="date">${new Date().toLocaleString()}</span><span class="score ${sc}">${score}% (${pass}/${pass + fail})</span>`;
+            if (list.querySelector('.report-entry')) list.innerHTML = '';
+            list.insertBefore(entry, list.firstChild);
+        }
+        document.addEventListener('DOMContentLoaded', updateSummary);
+    </script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+/* =============================================================================
+   Mini-Orca — Sidebar Styles
+   =============================================================================
+   Styles for the application sidebar, file tree, and navigation.
+   ============================================================================= */
+
+/* ---------------------------------------------------------------------------
+   Sidebar Shell
+   --------------------------------------------------------------------------- */
+#app-sidebar,
+.app-shell-sidebar {
+    width: 18rem;
+    background-color: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    transition: transform var(--transition-base);
+}
+
+.sidebar-header {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidebar-title {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.sidebar-search {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-search input {
+    font-size: var(--font-size-xs);
+    padding: var(--space-1) var(--space-2);
+}
+
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-2) 0;
+}
+
+/* ---------------------------------------------------------------------------
+   File Tree Styles
+   --------------------------------------------------------------------------- */
+.file-tree {
+    font-size: var(--font-size-sm);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.tree-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    cursor: pointer;
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+    border-left: 2px solid transparent;
+}
+
+.tree-item:hover { background-color: var(--bg-tertiary); color: var(--text-primary); }
+
+.tree-item.selected {
+    background-color: var(--accent-subtle);
+    color: var(--accent);
+    border-left-color: var(--accent);
+}
+
+.tree-chevron {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    transition: transform var(--transition-base), color var(--transition-fast);
+}
+
+.tree-chevron:hover { color: var(--text-primary); }
+.tree-chevron.expanded { transform: rotate(90deg); }
+
+.tree-folder { position: relative; }
+.tree-folder-icon { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--warning); }
+.tree-folder-name { font-weight: var(--font-weight-medium); }
+.tree-folder-children { overflow: hidden; transition: max-height var(--transition-slow) ease-out; }
+
+.tree-file { position: relative; }
+.tree-file-icon { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--text-muted); }
+.tree-file-name { flex: 1; }
+
+.tree-file.modified .tree-file-name::after { content: ' ●'; color: var(--accent); }
+.tree-file.new .tree-file-name::after { content: ' +'; color: var(--success); }
+.tree-file.deleted .tree-file-name::after { content: ' ×'; color: var(--error); }
+
+.tree-context-menu {
+    position: absolute;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    z-index: var(--z-dropdown);
+    min-width: 12rem;
+}
+
+.tree-context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.tree-context-menu-item:hover { background-color: var(--bg-tertiary); }
+
+.file-icon-ts { color: #3178c6; }
+.file-icon-js { color: #f7df1e; }
+.file-icon-go { color: #00add8; }
+.file-icon-html { color: #e34c26; }
+.file-icon-css { color: #a074c4; }
+.file-icon-md { color: #083fa1; }
+.file-icon-yaml { color: #cb171e; }
+.file-icon-json { color: #f7df1e; }
+.file-icon-sh { color: #89e051; }
+.file-icon-git { color: #f05032; }
+
+/* ---------------------------------------------------------------------------
+   Sidebar Sections
+   --------------------------------------------------------------------------- */
+.sidebar-section {
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-section:last-child { border-bottom: none; }
+
+.sidebar-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: color var(--transition-fast);
+}
+
+.sidebar-section-header:hover { color: var(--text-primary); }
+
+.sidebar-section-content {
+    padding: 0 var(--space-2) var(--space-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Sidebar Footer
+   --------------------------------------------------------------------------- */
+.sidebar-footer {
+    padding: var(--space-3);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidebar-footer-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.sidebar-footer-item:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
