@@ -1,16 +1,12 @@
 {{ define "skill-form" }}
 <div id="skill-form" class="w-full">
-    <!-- Form Header -->
     <div class="p-4 border-b border-dark-600">
         <div class="flex items-center justify-between">
             <h3 class="text-sm font-semibold text-text-primary">
                 {{ if .Skill }}Edit Skill{{ else }}Add New Skill{{ end }}
             </h3>
             {{ if .Skill }}
-            <button
-                class="p-1.5 text-text-secondary hover:text-text-primary hover:bg-dark-700 rounded-md transition-colors"
-                onclick="closeSkillForm()"
-            >
+            <button class="p-1.5 text-text-secondary hover:text-text-primary hover:bg-dark-700 rounded-md transition-colors" onclick="closeSkillForm()">
                 <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
                 </svg>
@@ -18,178 +14,41 @@
             {{ end }}
         </div>
     </div>
-
-    <!-- Form -->
     <form
         id="skill-form-el"
-        {{ if .Skill }}
-        hx-put="/api/skills/{{ .Skill.Name }}"
-        {{ else }}
-        hx-post="/api/skills"
-        {{ end }}
-        hx-encoding="application/json"
-        hx-target="#skill-form-status"
-        hx-swap="innerHTML"
+        {{ if .Skill }}hx-put="/api/skills/{{ .Skill.Name }}"{{ else }}hx-post="/api/skills"{{ end }}
+        hx-encoding="application/json" hx-target="#skill-form-status" hx-swap="innerHTML"
         hx-on::after-request="handleSkillFormResponse()"
     >
         <div class="p-4 space-y-4">
-            <!-- Name Field -->
-            <div>
-                <label for="skill-name" class="block text-xs text-text-secondary mb-1.5">
-                    Name <span class="text-red-400">*</span>
-                </label>
-                <input
-                    type="text"
-                    id="skill-name"
-                    name="name"
-                    value="{{ with .Skill }}{{ .Name }}{{ else }}{{ end }}"
-                    placeholder="e.g., code_generation"
-                    required
-                    class="w-full px-3 py-2 text-xs bg-dark-700 border {{ if and .Errors (index .Errors "name") }}border-red-500 focus:ring-red-500{{ else }}border-dark-600 focus:ring-accent{{ end }} text-text-primary rounded-md focus:outline-none focus:ring-1 focus:border-accent placeholder-text-secondary/50"
-                />
-                {{ if and .Errors (index .Errors "name") }}
-                <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "name" }}</p>
-                {{ end }}
-            </div>
-
-            <!-- Type Field -->
-            <div>
-                <label for="skill-type" class="block text-xs text-text-secondary mb-1.5">
-                    Type <span class="text-red-400">*</span>
-                </label>
-                <select
-                    id="skill-type"
-                    name="type"
-                    required
-                    class="w-full px-3 py-2 text-xs bg-dark-700 border {{ if and .Errors (index .Errors "type") }}border-red-500 focus:ring-red-500{{ else }}border-dark-600 focus:ring-accent{{ end }} text-text-primary rounded-md focus:outline-none focus:ring-1 focus:border-accent"
-                >
-                    <option value="">Select type...</option>
-                    <option value="knowledge" {{ if and .Skill (eq .Skill.Type "knowledge") }}selected{{ end }}>Knowledge</option>
-                    <option value="tool" {{ if and .Skill (eq .Skill.Type "tool") }}selected{{ end }}>Tool</option>
-                </select>
-                {{ if and .Errors (index .Errors "type") }}
-                <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "type" }}</p>
-                {{ end }}
-            </div>
-
-            <!-- Category Field -->
-            <div>
-                <label for="skill-category" class="block text-xs text-text-secondary mb-1.5">
-                    Category
-                </label>
-                <select
-                    id="skill-category"
-                    name="category"
-                    class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
-                >
-                    <option value="">Select category...</option>
-                    <option value="design" {{ if and .Skill (eq .Skill.Category "design") }}selected{{ end }}>Design</option>
-                    <option value="coding" {{ if and .Skill (eq .Skill.Category "coding") }}selected{{ end }}>Coding</option>
-                    <option value="testing" {{ if and .Skill (eq .Skill.Category "testing") }}selected{{ end }}>Testing</option>
-                    <option value="review" {{ if and .Skill (eq .Skill.Category "review") }}selected{{ end }}>Review</option>
-                    <option value="tools" {{ if and .Skill (eq .Skill.Category "tools") }}selected{{ end }}>Tools</option>
-                </select>
-                {{ if and .Errors (index .Errors "category") }}
-                <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "category" }}</p>
-                {{ end }}
-            </div>
-
-            <!-- Description Field -->
-            <div>
-                <label for="skill-description" class="block text-xs text-text-secondary mb-1.5">
-                    Description
-                </label>
-                <textarea
-                    id="skill-description"
-                    name="description"
-                    rows="3"
-                    placeholder="Describe what this skill does..."
-                    class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-none placeholder-text-secondary/50"
-                >{{ with .Skill }}{{ .Description }}{{ end }}</textarea>
-                {{ if and .Errors (index .Errors "description") }}
-                <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "description" }}</p>
-                {{ end }}
-            </div>
-
-            <!-- Prompt Template Field -->
-            <div>
-                <label for="skill-prompt" class="block text-xs text-text-secondary mb-1.5">
-                    Prompt Template
-                    <span class="text-text-secondary/50 ml-1">(optional)</span>
-                </label>
-                <textarea
-                    id="skill-prompt"
-                    name="prompt_template"
-                    rows="5"
-                    placeholder="Enter the prompt template for this skill..."
-                    class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent font-mono resize-none placeholder-text-secondary/50"
-                >{{ with .Skill }}{{ .PromptTemplate }}{{ end }}</textarea>
-                <p class="mt-1 text-[10px] text-text-secondary/50">Use {{ curlyOpen }}variable{{ curlyClose }} syntax for placeholders</p>
-                {{ if and .Errors (index .Errors "prompt_template") }}
-                <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "prompt_template" }}</p>
-                {{ end }}
-            </div>
+            {{ template "skill-field-name" . }}
+            {{ template "skill-field-type" . }}
+            {{ template "skill-field-category" . }}
+            {{ template "skill-field-description" . }}
+            {{ template "skill-field-prompt" . }}
         </div>
-
-        <!-- Form Actions -->
         <div class="px-4 py-3 border-t border-dark-600 flex items-center justify-end gap-2">
             {{ if .Skill }}
-            <button
-                type="button"
-                class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-text-primary rounded-md transition-colors"
-                onclick="closeSkillForm()"
-            >
-                Cancel
-            </button>
+            <button type="button" class="px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 text-text-primary rounded-md transition-colors" onclick="closeSkillForm()">Cancel</button>
             {{ end }}
-            <button
-                type="submit"
-                class="px-4 py-1.5 text-xs bg-accent hover:bg-accent-hover text-dark-900 font-medium rounded-md transition-colors"
-            >
+            <button type="submit" class="px-4 py-1.5 text-xs bg-accent hover:bg-accent-hover text-dark-900 font-medium rounded-md transition-colors">
                 {{ if .Skill }}Update Skill{{ else }}Create Skill{{ end }}
             </button>
         </div>
-
-        <!-- Status Messages -->
         <div id="skill-form-status" class="px-4 pb-3 text-xs"></div>
     </form>
 </div>
-
 <script>
-    // Close skill form and return to library
     function closeSkillForm() {
-        const formContainer = document.getElementById('skill-form');
-        if (formContainer) {
-            formContainer.classList.add('hidden');
-            // Reload skills library
-            htmx.ajax('GET', '/api/skills', {
-                target: '#skills-results',
-                swap: 'innerHTML'
-            });
-        }
+        const fc = document.getElementById('skill-form');
+        if (fc) { fc.classList.add('hidden'); htmx.ajax('GET', '/api/skills', { target: '#skills-results', swap: 'innerHTML' }); }
     }
-
-    // Handle form submission response
     function handleSkillFormResponse() {
-        const statusEl = document.getElementById('skill-form-status');
-        if (statusEl) {
-            const html = statusEl.innerHTML;
-            if (html.includes('success') || html.includes('created') || html.includes('updated')) {
-                // Form submitted successfully, could auto-close here
-            }
-        }
+        const se = document.getElementById('skill-form-status');
+        if (se && (se.innerHTML.includes('success') || se.innerHTML.includes('created') || se.innerHTML.includes('updated'))) { /* auto-close */ }
     }
 </script>
-
 <style>
-    /* Input focus transitions */
-    input:focus, select:focus, textarea:focus {
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    /* Error input styling */
-    input:focus, select:focus, textarea:focus {
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
+    input:focus, select:focus, textarea:focus { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
 </style>
 {{ end }}

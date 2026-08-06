@@ -1,0 +1,59 @@
+{{ define "tree-folder-lazy" }}
+{{ $item := .Item }}
+{{ $depth := .Depth }}
+<div class="tree-folder" data-path="{{ $item.Path }}" data-loaded="false">
+    <div
+            class="tree-item tree-folder-toggle flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none"
+            style="padding-left: calc(0.75rem + {{ $.Depth }} * 1rem)"
+            hx-get="/api/tree/expand"
+            hx-vals='{"path": "{{ $item.Path }}", "depth": "{{ add $.Depth 1 }}"}'
+            hx-target="#folder-children-{{ md5 $item.Path }}"
+            hx-swap="innerHTML"
+            hx-trigger="click once"
+    >
+        <svg class="tree-chevron w-4 h-4 text-text-secondary shrink-0 transition-transform"
+             xmlns="http://www.w3.org/2000/svg"
+             viewBox="0 0 20 20"
+             fill="currentColor">
+            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+        </svg>
+        <svg class="tree-folder-icon w-4 h-4 text-yellow-500 shrink-0"
+             xmlns="http://www.w3.org/2000/svg"
+             viewBox="0 0 20 20"
+             fill="currentColor">
+            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+        </svg>
+        <span class="text-text-primary">{{ $item.Name }}</span>
+    </div>
+    <div id="folder-children-{{ md5 $item.Path }}" class="tree-folder-children overflow-hidden transition-all duration-150">
+        <!-- Children loaded lazily via HTMX -->
+    </div>
+</div>
+{{ end }}
+
+{{ define "tree-file" }}
+{{ $item := .Item }}
+{{ $depth := .Depth }}
+{{ $ext := fileExtension $item.Name }}
+{{ $icon := fileIcon $ext }}
+<div class="tree-file" data-path="{{ $item.Path }}">
+    <div
+        class="tree-item tree-file-toggle flex items-center gap-1.5 px-3 py-1 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none {{ if eq .CurrentPath $item.Path }}bg-dark-700 text-accent{{ else }}text-text-primary{{ end }}"
+        style="padding-left: calc(0.75rem + {{ $depth }} * 1rem)"
+        hx-get="/api/files/view"
+        hx-params="none"
+        hx-vals='{"path": "{{ $item.Path }}"}'
+        hx-target="#file-content"
+        hx-indicator="#loading-indicator"
+    >
+        <svg class="tree-file-icon w-4 h-4 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            {{ if eq $icon "folder" }}
+                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+            {{ else }}
+                <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
+            {{ end }}
+        </svg>
+        <span class="truncate">{{ $item.Name }}</span>
+    </div>
+</div>
+{{ end }}

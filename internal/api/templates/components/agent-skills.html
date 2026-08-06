@@ -1,117 +1,23 @@
 {{ define "agent-skills" }}
 <div id="agent-skills" class="w-full">
-    <!-- Header -->
     <div class="p-4 border-b border-dark-600">
         <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-semibold text-text-primary">Agent Skill Associations</h3>
             <span class="text-xs text-text-secondary">{{ len .Agents }} agents</span>
         </div>
     </div>
-
-    <!-- Agents List -->
     <div id="agents-list" class="overflow-y-auto max-h-[calc(100vh-200px)]">
         {{ range .Agents }}
-            {{ template "agent-panel" . }}
+            {{ template "agent-skill-badge" . }}
         {{ end }}
     </div>
 </div>
 {{ end }}
 
-<!-- Agent Panel Template -->
-{{ define "agent-panel" }}
-<div class="agent-panel border-b border-dark-600" data-agent="{{ .Name }}">
-    <!-- Agent Header -->
-    <div
-        class="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-dark-700/50 transition-colors"
-        onclick="toggleAgentPanel('{{ .Name }}')"
-    >
-        <div class="flex items-center gap-3">
-            <!-- Agent Icon -->
-            <div class="agent-icon w-8 h-8 rounded-md flex items-center justify-center {{ agentIconClass .Name }}">
-                {{ agentIcon .Name }}
-            </div>
-            <div>
-                <h4 class="text-sm font-medium text-text-primary">{{ humanName .Name }}</h4>
-                <p class="text-[10px] text-text-secondary">{{ len .Skills }} skills assigned</p>
-            </div>
-        </div>
-        <!-- Chevron -->
-        <svg class="agent-chevron w-4 h-4 text-text-secondary transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
-        </svg>
-    </div>
-
-    <!-- Agent Skills Content -->
-    <div id="agent-content-{{ .Name }}" class="agent-content hidden">
-        <!-- HTMX Form -->
-        <form
-            hx-post="/api/agents/{{ .Name }}/skills"
-            hx-encoding="application/json"
-            hx-target="#agent-status-{{ .Name }}"
-            hx-swap="innerHTML"
-            hx-indicator="#agent-loading-{{ .Name }}"
-        >
-            <div class="px-4 py-3">
-                <p class="text-xs text-text-secondary mb-3">Assign skills to this agent:</p>
-
-                <!-- Skills Checkboxes -->
-                <div class="space-y-2">
-                    {{ range .AvailableSkills }}
-                        <label class="skill-checkbox flex items-center gap-2 p-2 rounded-md hover:bg-dark-700/50 transition-colors cursor-pointer">
-                            <input
-                                type="checkbox"
-                                name="skills"
-                                value="{{ .Name }}"
-                                {{ if isSkillAssigned .Name .AssignedSkills }}checked{{ end }}
-                                class="w-3.5 h-3.5 rounded border-dark-600 bg-dark-700 text-accent focus:ring-accent focus:ring-offset-0 cursor-pointer"
-                            />
-                            <div class="flex-1 min-w-0">
-                                <span class="text-xs text-text-primary">{{ .Name }}</span>
-                                <p class="text-[10px] text-text-secondary truncate">{{ .Description }}</p>
-                            </div>
-                            <!-- Status Badge -->
-                            <span class="skill-status px-1.5 py-0.5 text-[9px] font-medium rounded shrink-0 {{ if isSkillAssigned .Name .AssignedSkills }}bg-green-500/10 text-green-400{{ else }}bg-dark-600 text-text-secondary/50{{ end }}">
-                                {{ if isSkillAssigned .Name .AssignedSkills }}Assigned{{ else }}Available{{ end }}
-                            </span>
-                        </label>
-                    {{ end }}
-                </div>
-
-                <!-- Status Messages -->
-                <div id="agent-status-{{ .Name }}" class="mt-3 text-xs"></div>
-            </div>
-
-            <!-- Loading Indicator -->
-            <div id="agent-loading-{{ .Name }}" class="hidden htmx-indicator px-4 py-2 text-text-secondary">
-                <div class="flex items-center gap-2">
-                    <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span class="text-[10px]">Saving...</span>
-                </div>
-            </div>
-
-            <!-- Submit Button -->
-            <div class="px-4 py-3 border-t border-dark-600">
-                <button
-                    type="submit"
-                    class="w-full px-4 py-1.5 text-xs bg-accent hover:bg-accent-hover text-dark-900 font-medium rounded-md transition-colors"
-                >
-                    Save Changes
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-{{ end }}
-
 <script>
-    // Toggle agent panel visibility
     function toggleAgentPanel(agentName) {
         const content = document.getElementById('agent-content-' + agentName);
         const chevron = content.closest('.agent-panel').querySelector('.agent-chevron');
-
         if (content.classList.contains('hidden')) {
             content.classList.remove('hidden');
             chevron.style.transform = 'rotate(180deg)';
@@ -121,12 +27,10 @@
         }
     }
 
-    // Visual feedback on checkbox change
     document.addEventListener('change', (e) => {
         if (e.target.type === 'checkbox' && e.target.name === 'skills') {
             const label = e.target.closest('.skill-checkbox');
             const statusBadge = label.querySelector('.skill-status');
-
             if (e.target.checked) {
                 statusBadge.className = 'skill-status px-1.5 py-0.5 text-[9px] font-medium rounded shrink-0 bg-green-500/10 text-green-400';
                 statusBadge.textContent = 'Assigned';
@@ -136,44 +40,22 @@
                 statusBadge.textContent = 'Available';
                 label.classList.remove('bg-green-500/5');
             }
-
-            // Update skill count in header
             updateSkillCount();
         }
     });
 
-    // Update skill count display
     function updateSkillCount() {
         const checkboxes = document.querySelectorAll('input[name="skills"]:checked');
-        const count = checkboxes.length;
-        // Could update UI with count if needed
+        checkboxes.length;
     }
 </script>
 
 <style>
-    /* Agent icon colors */
     .icon-coder { background-color: rgba(34, 197, 94, 0.15); }
     .icon-tester { background-color: rgba(234, 179, 8, 0.15); }
     .icon-reviewer { background-color: rgba(168, 85, 247, 0.15); }
-
-    /* Checkbox custom styling */
-    input[type="checkbox"] {
-        accent-color: var(--accent);
-    }
-
-    /* Agent panel hover */
-    .agent-panel:hover {
-        background-color: rgba(33, 38, 45, 0.3);
-    }
-
-    /* Scrollbar styling */
-    #agents-list {
-        scrollbar-width: thin;
-        scrollbar-color: var(--bg-tertiary) var(--bg-secondary);
-    }
-
-    /* Smooth transitions */
-    .agent-content {
-        transition: all 0.2s ease;
-    }
+    input[type="checkbox"] { accent-color: var(--accent); }
+    .agent-panel:hover { background-color: rgba(33, 38, 45, 0.3); }
+    #agents-list { scrollbar-width: thin; scrollbar-color: var(--bg-tertiary) var(--bg-secondary); }
+    .agent-content { transition: all 0.2s ease; }
 </style>

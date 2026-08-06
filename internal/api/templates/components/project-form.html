@@ -1,0 +1,154 @@
+{{ define "project-form" }}
+<div class="px-6 py-5">
+    <p class="text-sm text-text-secondary mb-5">
+        Select a directory on your filesystem to open as a project. The project type will be auto-detected.
+    </p>
+    <div class="space-y-4">
+        <div>
+            <label for="project-path" class="block text-sm font-medium text-text-primary mb-1.5">Project Path</label>
+            <div class="flex gap-2">
+                <input type="text" id="project-path" name="path" placeholder="/path/to/your/project"
+                    class="flex-1 px-3 py-2.5 text-sm bg-dark-700 border border-dark-600 text-text-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-secondary/50"
+                    autocomplete="off" />
+                <button type="button" class="px-4 py-2.5 text-sm bg-dark-700 hover:bg-dark-600 text-text-primary border border-dark-600 rounded-lg transition-colors flex items-center gap-2"
+                    onclick="browseDirectory()" title="Select a directory (requires Chrome/Edge/Safari)">
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5.5 2A2.5 2.5 0 003 4.5v11A2.5 2.5 0 005.5 18h9a2.5 2.5 0 002.5-2.5V9.82a2.5 2.5 0 00-.73-1.77L12.77 5.5A2.5 2.5 0 0011 4.78V4.5A2.5 2.5 0 008.5 2h-3z" clip-rule="evenodd"/>
+                    </svg>Browse</button>
+            </div>
+            <p class="mt-1.5 text-xs text-text-secondary">
+                Enter an absolute path (e.g., <code class="text-accent">~/projects/my-app</code> or <code class="text-accent">/Users/me/project</code>)
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button type="button" class="text-xs text-accent hover:text-accent-hover transition-colors flex items-center gap-1"
+                onclick="useCurrentDir()">
+                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .125.05.245.14.335l2.5 2.5a.75.75 0 001.06-1.06L11 10.25V5z" clip-rule="evenodd"/>
+                </svg>Use current directory</button>
+        </div>
+        <div>
+            <label for="project-name" class="block text-sm font-medium text-text-primary mb-1.5">
+                Project Name <span class="text-text-secondary font-normal">(optional)</span>
+            </label>
+            <input type="text" id="project-name" name="name" placeholder="Auto-detected from directory name"
+                class="w-full px-3 py-2.5 text-sm bg-dark-700 border border-dark-600 text-text-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-secondary/50"
+                autocomplete="off" />
+        </div>
+        <div>
+            <label for="project-type" class="block text-sm font-medium text-text-primary mb-1.5">
+                Project Type <span class="text-text-secondary font-normal">(auto-detected)</span>
+            </label>
+            <select id="project-type" name="type"
+                class="w-full px-3 py-2.5 text-sm bg-dark-700 border border-dark-600 text-text-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent">
+                <option value="">Auto-detect</option>
+                <option value="go">Go</option><option value="python">Python</option>
+                <option value="typescript">TypeScript</option><option value="rust">Rust</option>
+                <option value="java">Java</option><option value="kotlin">Kotlin</option>
+                <option value="unknown">Unknown</option>
+            </select>
+        </div>
+    </div>
+    <div id="project-error" class="hidden mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+        <div class="flex items-start gap-2">
+            <svg class="w-4 h-4 text-red-400 mt-0.5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+            </svg>
+            <span id="project-error-message" class="text-sm text-red-400"></span>
+        </div>
+    </div>
+</div>
+{{ end }}
+
+<script>
+    async function browseDirectory() {
+        if (window.showDirectoryPicker) {
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                const dirName = dirHandle.name;
+                document.getElementById('project-path').value = dirName;
+                if (!document.getElementById('project-name').value) {
+                    document.getElementById('project-name').value = dirName;
+                }
+                return;
+            } catch (err) {
+                if (err.name !== 'AbortError') { console.warn('File System Access API failed:', err); }
+            }
+        }
+        const input = document.createElement('input');
+        input.type = 'file'; input.webkitdirectory = true; input.directory = true; input.multiple = true;
+        input.onchange = function(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                const filePath = files[0].webkitRelativePath;
+                const rootDir = filePath.substring(0, filePath.indexOf('/'));
+                document.getElementById('project-path').value = rootDir;
+                if (!document.getElementById('project-name').value) {
+                    document.getElementById('project-name').value = rootDir;
+                }
+                showProjectError('Selected: ' + rootDir + '. Please enter the full absolute path in the path field (e.g., ~/projects/' + rootDir + ')', true);
+            }
+        };
+        input.click();
+    }
+
+    async function openProject() {
+        let path = document.getElementById('project-path').value.trim();
+        const name = document.getElementById('project-name').value.trim();
+        const type = document.getElementById('project-type').value;
+        if (!path) { showProjectError('Please enter a project path.'); document.getElementById('project-path').focus(); return; }
+        if (path.startsWith('~/') || path === '~') {
+            try {
+                const homeDir = await new Promise((resolve, reject) => {
+                    fetch('/api/system/info').then(r => r.json()).then(data => { resolve(data.home_dir || ''); }).catch(() => { resolve(''); });
+                });
+                if (homeDir) { path = path.replace('~', homeDir); }
+            } catch (e) { /* server will handle ~ */ }
+        }
+        const btn = document.getElementById('btn-open-project');
+        const originalContent = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Opening...`;
+        try {
+            const response = await fetch('/api/projects', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name || '', path: path, type: type || '' }),
+            });
+            const data = await response.json();
+            if (!response.ok) { throw new Error(data.user_message || data.message || 'Failed to open project'); }
+            closeProjectModal();
+            Toast.success('Project "' + data.name + '" opened successfully (' + data.file_count + ' files)', 'Project Opened');
+            setTimeout(() => { location.reload(); }, 500);
+        } catch (error) {
+            showProjectError(error.message || 'Failed to open project. Please check the path and try again.');
+            btn.disabled = false; btn.innerHTML = originalContent;
+        }
+    }
+
+    function useCurrentDir() {
+        fetch('/api/system/info').then(r => r.json()).then(data => {
+            if (data.cwd) {
+                document.getElementById('project-path').value = data.cwd;
+                document.getElementById('project-name').value = data.cwd.split('/').pop() || data.cwd;
+            } else { showProjectError('Could not determine current directory. Please enter the path manually.'); }
+        }).catch(() => { showProjectError('Could not determine current directory. Please enter the path manually.'); });
+    }
+
+    function showProjectError(message, isWarning) {
+        const errorDiv = document.getElementById('project-error');
+        const errorMessage = document.getElementById('project-error-message');
+        const svgIcon = errorDiv.querySelector('svg');
+        errorMessage.textContent = message; errorDiv.classList.remove('hidden');
+        if (isWarning) {
+            errorDiv.classList.remove('bg-red-500/10', 'border-red-500/20'); errorDiv.classList.add('bg-yellow-500/10', 'border-yellow-500/20');
+            if (svgIcon) { svgIcon.classList.remove('text-red-400'); svgIcon.classList.add('text-yellow-400'); }
+        } else {
+            errorDiv.classList.remove('bg-yellow-500/10', 'border-yellow-500/20'); errorDiv.classList.add('bg-red-500/10', 'border-red-500/20');
+            if (svgIcon) { svgIcon.classList.remove('text-yellow-400'); svgIcon.classList.add('text-red-400'); }
+        }
+    }
+
+    function hideProjectError() { document.getElementById('project-error').classList.add('hidden'); }
+    window.browseDirectory = browseDirectory; window.openProject = openProject; window.useCurrentDir = useCurrentDir;
+    window.showProjectError = showProjectError; window.hideProjectError = hideProjectError;
+</script>

@@ -1,0 +1,85 @@
+{{ define "testing-content" }}
+<div id="test-output" class="flex-1 overflow-auto bg-dark-900 p-4 font-mono text-xs">
+    {{ if eq .Status "running" }}
+    <div class="flex flex-col items-center justify-center h-full">
+        <div class="relative mb-6"><div class="loading-spinner xl warning"></div></div>
+        <h4 class="text-base font-medium text-text-primary mb-2">Running Tests...</h4>
+        <p class="text-sm text-text-secondary text-center max-w-md">Executing test suite and collecting coverage data</p>
+        {{ if .EstimatedTimeRemaining }}
+        <p class="text-xs text-text-secondary mt-3">Estimated time: {{ .EstimatedTimeRemaining }}</p>
+        {{ end }}
+    </div>
+    {{ else }}
+    <div id="output-content" class="whitespace-pre-wrap text-text-primary">{{ .TestOutput }}</div>
+    {{ if gt .FailedTests 0 }}
+    <div class="mt-4 p-4 bg-red-500/5 border border-red-500/20 rounded-lg">
+        <h4 class="text-sm font-medium text-red-400 mb-3">Failed Tests</h4>
+        <div class="space-y-2">
+            {{ range .FailedTestsList }}
+            <details class="group">
+                <summary class="cursor-pointer flex items-center gap-2 text-xs text-red-400 hover:text-red-300">
+                    <svg class="w-3 h-3 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>{{ .Name }}</span><span class="text-text-secondary ml-auto">({{ .Duration }})</span>
+                </summary>
+                <div class="mt-2 ml-5 p-2 bg-dark-800 rounded border border-dark-600">
+                    <pre class="text-xs text-red-300 whitespace-pre-wrap">{{ .Error }}</pre>
+                </div>
+            </details>
+            {{ end }}
+        </div>
+    </div>
+    {{ end }}
+    {{ if eq .Status "passed" }}
+    <div class="mt-4 p-4 bg-green-500/5 border border-green-500/20 rounded-lg text-center">
+        <svg class="w-8 h-8 text-green-500 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+        </svg>
+        <h4 class="text-sm font-medium text-green-400">All {{ .TotalTests }} Tests Passed</h4>
+        <p class="text-xs text-text-secondary mt-1">Coverage: {{ .OverallCoverage }}%</p>
+    </div>
+    {{ end }}
+    {{ end }}
+</div>
+{{ end }}
+
+<script>
+    function scrollToBottom() { const output = document.getElementById('test-output'); if (output) { output.scrollTop = output.scrollHeight; } }
+    function clearOutput() { const content = document.getElementById('output-content'); if (content) { content.innerHTML = ''; } }
+    function copyOutput() {
+        const content = document.getElementById('output-content');
+        if (content) { navigator.clipboard.writeText(content.textContent).then(() => {
+            const btn = event.currentTarget; const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<svg class="w-3.5 h-3.5 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+            setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
+        }); }
+    }
+    function refreshTestingStatus() {
+        htmx.ajax('GET', '/api/phases/status?phase=testing', { target: '#testing-phase', swap: 'innerHTML' });
+    }
+    const testingInterval = setInterval(() => {
+        const phaseContainer = document.getElementById('testing-phase');
+        if (phaseContainer) { refreshTestingStatus(); scrollToBottom(); } else { clearInterval(testingInterval); }
+    }, 2000);
+    document.addEventListener('htmx:afterRequest', (event) => {
+        if (event.detail.target.id === 'testing-phase' || event.detail.target.closest('#testing-phase')) {
+            const statusEl = document.querySelector('[data-phase="testing"]');
+            if (statusEl && (statusEl.dataset.status === 'passed' || statusEl.dataset.status === 'failed')) { clearInterval(testingInterval); }
+        }
+    });
+    function coverageColor(percentage) { if (percentage >= 80) return '#22c55e'; if (percentage >= 60) return '#eab308'; if (percentage >= 40) return '#f97316'; return '#ef4444'; }
+    document.addEventListener('DOMContentLoaded', () => { scrollToBottom(); });
+</script>
+
+<style>
+    .coverage-high { background-color: #22c55e; } .coverage-medium { background-color: #eab308; }
+    .coverage-low { background-color: #f97316; } .coverage-critical { background-color: #ef4444; }
+    #test-output::-webkit-scrollbar { width: 8px; }
+    #test-output::-webkit-scrollbar-track { background: var(--bg-secondary); }
+    #test-output::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 4px; }
+    #test-output::-webkit-scrollbar-thumb:hover { background: var(--border-color); }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::before { content: '▸'; display: inline-block; width: 1em; margin-left: -1em; color: var(--text-secondary); }
+    details[open] summary::before { content: '▾'; }
+</style>

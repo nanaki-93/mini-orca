@@ -1,0 +1,101 @@
+{{ define "skill-field-name" }}
+<div>
+    <label for="skill-name" class="block text-xs text-text-secondary mb-1.5">
+        Name <span class="text-red-400">*</span>
+    </label>
+    <input
+        type="text"
+        id="skill-name"
+        name="name"
+        value="{{ with .Skill }}{{ .Name }}{{ else }}{{ end }}"
+        placeholder="e.g., code_generation"
+        required
+        class="w-full px-3 py-2 text-xs bg-dark-700 border {{ if and .Errors (index .Errors "name") }}border-red-500 focus:ring-red-500{{ else }}border-dark-600 focus:ring-accent{{ end }} text-text-primary rounded-md focus:outline-none focus:ring-1 focus:border-accent placeholder-text-secondary/50"
+    />
+    {{ if and .Errors (index .Errors "name") }}
+    <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "name" }}</p>
+    {{ end }}
+</div>
+{{ end }}
+
+{{ define "skill-field-type" }}
+<div>
+    <label for="skill-type" class="block text-xs text-text-secondary mb-1.5">
+        Type <span class="text-red-400">*</span>
+    </label>
+    <select
+        id="skill-type"
+        name="type"
+        required
+        class="w-full px-3 py-2 text-xs bg-dark-700 border {{ if and .Errors (index .Errors "type") }}border-red-500 focus:ring-red-500{{ else }}border-dark-600 focus:ring-accent{{ end }} text-text-primary rounded-md focus:outline-none focus:ring-1 focus:border-accent"
+    >
+        <option value="">Select type...</option>
+        <option value="knowledge" {{ if and .Skill (eq .Skill.Type "knowledge") }}selected{{ end }}>Knowledge</option>
+        <option value="tool" {{ if and .Skill (eq .Skill.Type "tool") }}selected{{ end }}>Tool</option>
+    </select>
+    {{ if and .Errors (index .Errors "type") }}
+    <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "type" }}</p>
+    {{ end }}
+</div>
+{{ end }}
+
+{{ define "skill-field-category" }}
+<div>
+    <label for="skill-category" class="block text-xs text-text-secondary mb-1.5">
+        Category
+    </label>
+    <select
+        id="skill-category"
+        name="category"
+        class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+    >
+        <option value="">Select category...</option>
+        <option value="design" {{ if and .Skill (eq .Skill.Category "design") }}selected{{ end }}>Design</option>
+        <option value="coding" {{ if and .Skill (eq .Skill.Category "coding") }}selected{{ end }}>Coding</option>
+        <option value="testing" {{ if and .Skill (eq .Skill.Category "testing") }}selected{{ end }}>Testing</option>
+        <option value="review" {{ if and .Skill (eq .Skill.Category "review") }}selected{{ end }}>Review</option>
+        <option value="tools" {{ if and .Skill (eq .Skill.Category "tools") }}selected{{ end }}>Tools</option>
+    </select>
+    {{ if and .Errors (index .Errors "category") }}
+    <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "category" }}</p>
+    {{ end }}
+</div>
+{{ end }}
+
+{{ define "skill-field-description" }}
+<div>
+    <label for="skill-description" class="block text-xs text-text-secondary mb-1.5">
+        Description
+    </label>
+    <textarea
+        id="skill-description"
+        name="description"
+        rows="3"
+        placeholder="Describe what this skill does..."
+        class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-none placeholder-text-secondary/50"
+    >{{ with .Skill }}{{ .Description }}{{ end }}</textarea>
+    {{ if and .Errors (index .Errors "description") }}
+    <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "description" }}</p>
+    {{ end }}
+</div>
+{{ end }}
+
+{{ define "skill-field-prompt" }}
+<div>
+    <label for="skill-prompt" class="block text-xs text-text-secondary mb-1.5">
+        Prompt Template
+        <span class="text-text-secondary/50 ml-1">(optional)</span>
+    </label>
+    <textarea
+        id="skill-prompt"
+        name="prompt_template"
+        rows="5"
+        placeholder="Enter the prompt template for this skill..."
+        class="w-full px-3 py-2 text-xs bg-dark-700 border border-dark-600 text-text-primary rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent font-mono resize-none placeholder-text-secondary/50"
+    >{{ with .Skill }}{{ .PromptTemplate }}{{ end }}</textarea>
+    <p class="mt-1 text-[10px] text-text-secondary/50">Use {{ curlyOpen }}variable{{ curlyClose }} syntax for placeholders</p>
+    {{ if and .Errors (index .Errors "prompt_template") }}
+    <p class="mt-1 text-[10px] text-red-400">{{ index .Errors "prompt_template" }}</p>
+    {{ end }}
+</div>
+{{ end }}
