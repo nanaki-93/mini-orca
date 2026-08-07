@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent"
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/api/handlers"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
@@ -50,9 +49,6 @@ func main() {
 		cfg.LLM.MaxTokens,
 	)
 
-	// Initialize skills registry and register config skills
-	skillsRegistry := skills.InitSkillsRegistry(cfg)
-
 	// Detect project type and create tool executor
 	projectInfo, executor := tools.InitToolExecutor()
 
@@ -80,17 +76,17 @@ func main() {
 		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, cache, projectPath)
 	}
 
-	// Initialize orchestrator with LLM client, registry, and executor
-	agentOrchestrator := agent.NewOrchestrator(llmClient, skillsRegistry, executor)
+	// Initialize orchestrator with LLM client and executor
+	agentOrchestrator := agent.NewOrchestrator(llmClient, executor)
 
 	// Create agents for logging purposes
-	coder := agent.NewCoderAgent(llmClient, skillsRegistry)
+	coder := agent.NewCoderAgent(llmClient)
 	coder.SetSkills(cfg.Agents.Coder.Skills)
 
-	tester := agent.NewTesterAgent(llmClient, skillsRegistry)
+	tester := agent.NewTesterAgent(llmClient)
 	tester.SetSkills(cfg.Agents.Tester.Skills)
 
-	reviewer := agent.NewReviewerAgent(llmClient, skillsRegistry)
+	reviewer := agent.NewReviewerAgent(llmClient)
 	reviewer.SetSkills(cfg.Agents.Reviewer.Skills)
 
 	// Log successful startup

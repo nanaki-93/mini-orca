@@ -6,30 +6,24 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 func TestNewOrchestrator(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
 
-	orch := NewOrchestrator(router, registry, nil)
+	orch := NewOrchestrator(client, nil)
 	if orch == nil {
 		t.Fatal("expected non-nil orchestrator")
 	}
-	if orch.router != router {
-		t.Error("expected router to be set")
-	}
-	if orch.registry != registry {
-		t.Error("expected registry to be set")
+	if orch.llmClient == nil {
+		t.Error("expected LLM client to be set")
 	}
 }
 
 func TestRunCoderFromPrompt_EmptyPrompt(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	orch := NewOrchestrator(client, nil)
 
 	_, err := orch.RunCoderFromPrompt("", "")
 	if err == nil {
@@ -40,19 +34,19 @@ func TestRunCoderFromPrompt_EmptyPrompt(t *testing.T) {
 func TestRunCoderFromPrompt_Valid(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "coder-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "coding-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "package user\n\ntype User struct {\n\tID    string\n\tName  string\n\tEmail string\n}"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "package user\n\ntype User struct {\n\tID    string\n\tName  string\n\tEmail string\n}"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 100, CompletionTokens: 60, TotalTokens: 160},
+				Usage: llm.ChatUsage{PromptTokens: 100, CompletionTokens: 60, TotalTokens: 160},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -62,18 +56,8 @@ func TestRunCoderFromPrompt_Valid(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "coding-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
+	client := llm.NewClient(server.URL, "test-key", "coding-model", 0.7, 4096)
+	orch := NewOrchestrator(client, nil)
 
 	result, err := orch.RunCoderFromPrompt("Create a User struct with ID, Name, Email fields", "")
 	if err != nil {
@@ -94,19 +78,19 @@ func TestRunCoderFromPrompt_Valid(t *testing.T) {
 func TestRunCoderFromPrompt_WithProjectContext(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "coder-2",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "coding-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "package user\n\ntype User struct {\n\tID string `json:\"id\"`\n}"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "package user\n\ntype User struct {\n\tID string `json:\"id\"`\n}"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 120, CompletionTokens: 70, TotalTokens: 190},
+				Usage: llm.ChatUsage{PromptTokens: 120, CompletionTokens: 70, TotalTokens: 190},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -116,18 +100,8 @@ func TestRunCoderFromPrompt_WithProjectContext(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "coding-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
+	client := llm.NewClient(server.URL, "test-key", "coding-model", 0.7, 4096)
+	orch := NewOrchestrator(client, nil)
 
 	projectContext := "module github.com/example/project\ngo 1.21"
 	result, err := orch.RunCoderFromPrompt("Create User struct", projectContext)
@@ -144,9 +118,8 @@ func TestRunCoderFromPrompt_WithProjectContext(t *testing.T) {
 }
 
 func TestRunReviewer_EmptyCode(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	orch := NewOrchestrator(client, nil)
 
 	_, err := orch.RunReviewer("", "Create User struct")
 	if err == nil {
@@ -155,9 +128,8 @@ func TestRunReviewer_EmptyCode(t *testing.T) {
 }
 
 func TestRunReviewer_EmptyUserPrompt(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	orch := NewOrchestrator(client, nil)
 
 	_, err := orch.RunReviewer("package user", "")
 	if err == nil {
@@ -168,19 +140,19 @@ func TestRunReviewer_EmptyUserPrompt(t *testing.T) {
 func TestRunReviewer_Valid(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "reviewer-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "review-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nCode is well structured.\n\n## Score: 90\n\n## Recommendation\nApprove"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nCode is well structured.\n\n## Score: 90\n\n## Recommendation\nApprove"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 70, CompletionTokens: 30, TotalTokens: 100},
+				Usage: llm.ChatUsage{PromptTokens: 70, CompletionTokens: 30, TotalTokens: 100},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -190,18 +162,8 @@ func TestRunReviewer_Valid(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
+	client := llm.NewClient(server.URL, "test-key", "review-model", 0.2, 4096)
+	orch := NewOrchestrator(client, nil)
 
 	result, err := orch.RunReviewer(
 		"package user\n\ntype User struct {\n\tID string\n}",
@@ -244,9 +206,8 @@ func TestRunReviewer_Valid(t *testing.T) {
 }
 
 func TestRunTester_EmptyCode(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	orch := NewOrchestrator(client, nil)
 
 	_, err := orch.RunTester("", "test results")
 	if err == nil {
@@ -255,9 +216,8 @@ func TestRunTester_EmptyCode(t *testing.T) {
 }
 
 func TestRunTester_EmptyResults(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	orch := NewOrchestrator(client, nil)
 
 	_, err := orch.RunTester("code", "")
 	if err == nil {
@@ -268,19 +228,19 @@ func TestRunTester_EmptyResults(t *testing.T) {
 func TestRunTester_Valid(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "tester-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "testing-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed successfully.\n\n## Coverage\nTest coverage: 85%"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed successfully.\n\n## Coverage\nTest coverage: 85%"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 80, CompletionTokens: 40, TotalTokens: 120},
+				Usage: llm.ChatUsage{PromptTokens: 80, CompletionTokens: 40, TotalTokens: 120},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -290,18 +250,8 @@ func TestRunTester_Valid(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("testing", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "testing-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	orch := NewOrchestrator(router, registry, nil)
+	client := llm.NewClient(server.URL, "test-key", "testing-model", 0.7, 4096)
+	orch := NewOrchestrator(client, nil)
 
 	result, err := orch.RunTester(
 		"package user\n\ntype User struct {\n\tID string\n}",

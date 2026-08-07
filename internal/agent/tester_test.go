@@ -8,15 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 func TestNewTesterAgent(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
 
-	agent := NewTesterAgent(router, registry)
+	agent := NewTesterAgent(client)
 	if agent == nil {
 		t.Fatal("expected non-nil tester agent")
 	}
@@ -26,25 +24,23 @@ func TestNewTesterAgent(t *testing.T) {
 	if agent.Description() != "Tests code and validates functionality against requirements" {
 		t.Errorf("unexpected description: %s", agent.Description())
 	}
-	if agent.Phase() != model.PhaseTesting {
-		t.Errorf("expected phase %s, got %s", model.PhaseTesting, agent.Phase())
+	if agent.Phase() != "testing" {
+		t.Errorf("expected phase 'testing', got %s", agent.Phase())
 	}
 }
 
-func TestTesterAgent_Execute_NoRouter(t *testing.T) {
-	registry := skills.NewSkillsRegistry()
-	agent := NewTesterAgent(nil, registry)
+func TestTesterAgent_Execute_NoClient(t *testing.T) {
+	agent := NewTesterAgent(nil)
 
 	_, err := agent.Execute(context.Background(), "test input")
 	if err == nil {
-		t.Fatal("expected error for nil router")
+		t.Fatal("expected error for nil LLM client")
 	}
 }
 
 func TestTesterAgent_Execute_EmptyInput(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	agent := NewTesterAgent(router, registry)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewTesterAgent(client)
 
 	_, err := agent.Execute(context.Background(), "")
 	if err == nil {
@@ -52,38 +48,28 @@ func TestTesterAgent_Execute_EmptyInput(t *testing.T) {
 	}
 }
 
-func TestTesterAgent_Execute_NoRegistry(t *testing.T) {
-	router := model.NewRouter()
-	agent := NewTesterAgent(router, nil)
-
-	_, err := agent.Execute(context.Background(), "test input")
-	if err == nil {
-		t.Fatal("expected error for nil registry")
-	}
-}
-
 func TestTesterAgent_Execute_FullFlow(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "tester-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "testing-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed successfully.\n\n## Coverage: 95%"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed successfully.\n\n## Coverage: 95%"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 80, CompletionTokens: 50, TotalTokens: 130},
+				Usage: llm.ChatUsage{PromptTokens: 80, CompletionTokens: 50, TotalTokens: 130},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -93,18 +79,8 @@ func TestTesterAgent_Execute_FullFlow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("testing", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "testing-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewTesterAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "testing-model", 0.2, 4096)
+	agent := NewTesterAgent(client)
 
 	result, err := agent.Execute(context.Background(), "package user\n\nfunc TestUser(t *testing.T) {\n\t// test code\n}")
 	if err != nil {
@@ -128,19 +104,19 @@ func TestTesterAgent_Execute_FullFlow(t *testing.T) {
 func TestTesterAgent_Execute_WithFailures(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "tester-2",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "testing-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nTests failed.\n\n## Failures\n- TestUser_Create fails with nil pointer\n- TestUser_Update returns 500 error\n\n## Suggestions\n- Add nil checks for user creation\n- Handle database errors properly"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nTests failed.\n\n## Failures\n- TestUser_Create fails with nil pointer\n- TestUser_Update returns 500 error\n\n## Suggestions\n- Add nil checks for user creation\n- Handle database errors properly"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 90, CompletionTokens: 70, TotalTokens: 160},
+				Usage: llm.ChatUsage{PromptTokens: 90, CompletionTokens: 70, TotalTokens: 160},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -150,18 +126,8 @@ func TestTesterAgent_Execute_WithFailures(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("testing", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "testing-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewTesterAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "testing-model", 0.2, 4096)
+	agent := NewTesterAgent(client)
 
 	result, err := agent.Execute(context.Background(), "test code with failures")
 	if err != nil {
@@ -182,19 +148,19 @@ func TestTesterAgent_Execute_WithFailures(t *testing.T) {
 func TestTesterAgent_Execute_WithSkills(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "tester-3",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "testing-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed.\n\n## Coverage: 88%"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed.\n\n## Coverage: 88%"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 70, CompletionTokens: 40, TotalTokens: 110},
+				Usage: llm.ChatUsage{PromptTokens: 70, CompletionTokens: 40, TotalTokens: 110},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -204,18 +170,8 @@ func TestTesterAgent_Execute_WithSkills(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("testing", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "testing-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewTesterAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "testing-model", 0.2, 4096)
+	agent := NewTesterAgent(client)
 
 	// Set tester-specific skills
 	agent.SetSkills([]string{"test_automation", "edge_cases", "performance_testing"})
@@ -234,24 +190,23 @@ func TestTesterAgent_Execute_WithSkills(t *testing.T) {
 }
 
 func TestTesterAgent_GetSkills(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	agent := NewTesterAgent(router, registry)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewTesterAgent(client)
 
 	// Default skills should be empty
-	skills := agent.GetSkills()
-	if skills == nil {
+	agentSkills := agent.GetSkills()
+	if agentSkills == nil {
 		t.Fatal("expected non-nil skills slice")
 	}
-	if len(skills) != 0 {
-		t.Errorf("expected 0 skills, got %d", len(skills))
+	if len(agentSkills) != 0 {
+		t.Errorf("expected 0 skills, got %d", len(agentSkills))
 	}
 
 	// Set skills
 	agent.SetSkills([]string{"test_automation", "edge_cases"})
-	skills = agent.GetSkills()
-	if len(skills) != 2 {
-		t.Errorf("expected 2 skills, got %d", len(skills))
+	agentSkills = agent.GetSkills()
+	if len(agentSkills) != 2 {
+		t.Errorf("expected 2 skills, got %d", len(agentSkills))
 	}
 }
 
@@ -430,13 +385,13 @@ func TestTestReport_Struct(t *testing.T) {
 func TestTesterAgent_Execute_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "tester-4",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "testing-model",
-				Choices: []model.ChatChoice{},
-				Usage:   model.ChatUsage{PromptTokens: 10, CompletionTokens: 0, TotalTokens: 10},
+				Choices: []llm.ChatChoice{},
+				Usage:   llm.ChatUsage{PromptTokens: 10, CompletionTokens: 0, TotalTokens: 10},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -446,18 +401,8 @@ func TestTesterAgent_Execute_EmptyResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("testing", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "testing-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewTesterAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "testing-model", 0.2, 4096)
+	agent := NewTesterAgent(client)
 
 	_, err := agent.Execute(context.Background(), "test input")
 	if err == nil {

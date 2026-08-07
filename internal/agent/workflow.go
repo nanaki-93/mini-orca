@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent/prompts"
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
@@ -44,10 +43,10 @@ type Workflow struct {
 	formatter    Formatter
 }
 
-// NewWorkflow creates a new workflow with the given LLM client, skills registry, and tool executor.
-func NewWorkflow(llmClient *llm.Client, registry *skills.SkillsRegistry, executor tools.ToolExecutor) *Workflow {
+// NewWorkflow creates a new workflow with the given LLM client and tool executor.
+func NewWorkflow(llmClient *llm.Client, executor tools.ToolExecutor) *Workflow {
 	return &Workflow{
-		orchestrator: NewOrchestrator(llmClient, registry, executor),
+		orchestrator: NewOrchestrator(llmClient, executor),
 		formatter:    tools.NewFormatterExecutor(),
 	}
 }

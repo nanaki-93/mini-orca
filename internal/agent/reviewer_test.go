@@ -8,15 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 func TestNewReviewerAgent(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
 
-	agent := NewReviewerAgent(router, registry)
+	agent := NewReviewerAgent(client)
 	if agent == nil {
 		t.Fatal("expected non-nil reviewer agent")
 	}
@@ -26,25 +24,23 @@ func TestNewReviewerAgent(t *testing.T) {
 	if agent.Description() != "Reviews code for quality, security, and adherence to standards" {
 		t.Errorf("unexpected description: %s", agent.Description())
 	}
-	if agent.Phase() != model.PhaseReview {
-		t.Errorf("expected phase %s, got %s", model.PhaseReview, agent.Phase())
+	if agent.Phase() != "review" {
+		t.Errorf("expected phase 'review', got %s", agent.Phase())
 	}
 }
 
-func TestReviewerAgent_Execute_NoRouter(t *testing.T) {
-	registry := skills.NewSkillsRegistry()
-	agent := NewReviewerAgent(nil, registry)
+func TestReviewerAgent_Execute_NoClient(t *testing.T) {
+	agent := NewReviewerAgent(nil)
 
 	_, err := agent.Execute(context.Background(), "test input")
 	if err == nil {
-		t.Fatal("expected error for nil router")
+		t.Fatal("expected error for nil LLM client")
 	}
 }
 
 func TestReviewerAgent_Execute_EmptyInput(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	agent := NewReviewerAgent(router, registry)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewReviewerAgent(client)
 
 	_, err := agent.Execute(context.Background(), "")
 	if err == nil {
@@ -52,38 +48,28 @@ func TestReviewerAgent_Execute_EmptyInput(t *testing.T) {
 	}
 }
 
-func TestReviewerAgent_Execute_NoRegistry(t *testing.T) {
-	router := model.NewRouter()
-	agent := NewReviewerAgent(router, nil)
-
-	_, err := agent.Execute(context.Background(), "test input")
-	if err == nil {
-		t.Fatal("expected error for nil registry")
-	}
-}
-
 func TestReviewerAgent_Execute_FullFlow(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "reviewer-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "review-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nCode quality is good with minor improvements needed.\n\n## Score: 85\n\n## Recommendation\nApprove with minor fixes"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nCode quality is good with minor improvements needed.\n\n## Score: 85\n\n## Recommendation\nApprove with minor fixes"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 80, CompletionTokens: 50, TotalTokens: 130},
+				Usage: llm.ChatUsage{PromptTokens: 80, CompletionTokens: 50, TotalTokens: 130},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -93,18 +79,8 @@ func TestReviewerAgent_Execute_FullFlow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewReviewerAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "review-model", 0.2, 4096)
+	agent := NewReviewerAgent(client)
 
 	result, err := agent.Execute(context.Background(), "package user\n\nfunc NewUser(id, name string) *User {\n\treturn &User{ID: id, Name: name}\n}")
 	if err != nil {
@@ -128,19 +104,19 @@ func TestReviewerAgent_Execute_FullFlow(t *testing.T) {
 func TestReviewerAgent_Execute_WithIssues(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "reviewer-2",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "review-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nMultiple issues found requiring attention.\n\n## Score: 45\n\n## Issues\n- No error handling in database operations\n- Missing input validation\n- Inconsistent naming conventions\n\n## Suggestions\n- Add error wrapping for database calls\n- Implement input validation middleware\n- Standardize naming to match project conventions\n\n## Recommendation\nReject - major refactoring required"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nMultiple issues found requiring attention.\n\n## Score: 45\n\n## Issues\n- No error handling in database operations\n- Missing input validation\n- Inconsistent naming conventions\n\n## Suggestions\n- Add error wrapping for database calls\n- Implement input validation middleware\n- Standardize naming to match project conventions\n\n## Recommendation\nReject - major refactoring required"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 90, CompletionTokens: 70, TotalTokens: 160},
+				Usage: llm.ChatUsage{PromptTokens: 90, CompletionTokens: 70, TotalTokens: 160},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -150,18 +126,8 @@ func TestReviewerAgent_Execute_WithIssues(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewReviewerAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "review-model", 0.2, 4096)
+	agent := NewReviewerAgent(client)
 
 	result, err := agent.Execute(context.Background(), "test code with issues")
 	if err != nil {
@@ -185,19 +151,19 @@ func TestReviewerAgent_Execute_WithIssues(t *testing.T) {
 func TestReviewerAgent_Execute_WithSkills(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "reviewer-3",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "review-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nCode follows best practices.\n\n## Score: 92\n\n## Recommendation\nApprove"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nCode follows best practices.\n\n## Score: 92\n\n## Recommendation\nApprove"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 70, CompletionTokens: 40, TotalTokens: 110},
+				Usage: llm.ChatUsage{PromptTokens: 70, CompletionTokens: 40, TotalTokens: 110},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -207,18 +173,8 @@ func TestReviewerAgent_Execute_WithSkills(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewReviewerAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "review-model", 0.2, 4096)
+	agent := NewReviewerAgent(client)
 
 	// Set reviewer-specific skills
 	agent.SetSkills([]string{"security_audit", "performance_review", "clean_code"})
@@ -237,24 +193,23 @@ func TestReviewerAgent_Execute_WithSkills(t *testing.T) {
 }
 
 func TestReviewerAgent_GetSkills(t *testing.T) {
-	router := model.NewRouter()
-	registry := skills.NewSkillsRegistry()
-	agent := NewReviewerAgent(router, registry)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewReviewerAgent(client)
 
 	// Default skills should be empty
-	skills := agent.GetSkills()
-	if skills == nil {
+	agentSkills := agent.GetSkills()
+	if agentSkills == nil {
 		t.Fatal("expected non-nil skills slice")
 	}
-	if len(skills) != 0 {
-		t.Errorf("expected 0 skills, got %d", len(skills))
+	if len(agentSkills) != 0 {
+		t.Errorf("expected 0 skills, got %d", len(agentSkills))
 	}
 
 	// Set skills
 	agent.SetSkills([]string{"security_audit", "performance_review"})
-	skills = agent.GetSkills()
-	if len(skills) != 2 {
-		t.Errorf("expected 2 skills, got %d", len(skills))
+	agentSkills = agent.GetSkills()
+	if len(agentSkills) != 2 {
+		t.Errorf("expected 2 skills, got %d", len(agentSkills))
 	}
 }
 
@@ -506,13 +461,13 @@ func TestReviewReport_Struct(t *testing.T) {
 func TestReviewerAgent_Execute_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "reviewer-4",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "review-model",
-				Choices: []model.ChatChoice{},
-				Usage:   model.ChatUsage{PromptTokens: 10, CompletionTokens: 0, TotalTokens: 10},
+				Choices: []llm.ChatChoice{},
+				Usage:   llm.ChatUsage{PromptTokens: 10, CompletionTokens: 0, TotalTokens: 10},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -522,18 +477,8 @@ func TestReviewerAgent_Execute_EmptyResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewReviewerAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "review-model", 0.2, 4096)
+	agent := NewReviewerAgent(client)
 
 	_, err := agent.Execute(context.Background(), "test input")
 	if err == nil {

@@ -7,27 +7,27 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 func TestClient_FullFlow_Execute(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "full-flow-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "agent-model",
-				Choices: []model.ChatChoice{
-					{Index: 0, Message: model.ChatMessage{Role: "assistant", Content: "Agent response!"}, FinishReason: "stop"},
+				Choices: []llm.ChatChoice{
+					{Index: 0, Message: llm.ChatMessage{Role: "assistant", Content: "Agent response!"}, FinishReason: "stop"},
 				},
-				Usage: model.ChatUsage{PromptTokens: 8, CompletionTokens: 12, TotalTokens: 20},
+				Usage: llm.ChatUsage{PromptTokens: 8, CompletionTokens: 12, TotalTokens: 20},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -37,21 +37,12 @@ func TestClient_FullFlow_Execute(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "agent-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
+	client := llm.NewClient(server.URL, "test-key", "agent-model", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "test-agent"
+	agent.phase = "coding"
 
-	client := NewClient(router)
-	client.name = "test-agent"
-	client.phase = model.PhaseCoding
-
-	result, err := client.Execute(context.Background(), "Plan this")
+	result, err := agent.Execute(context.Background(), "Plan this")
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -84,14 +75,11 @@ func TestClient_FullFlow_ListModels(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
+	client := llm.NewClient(server.URL, "test-key", "model-1", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "test-agent"
 
-	client := NewClient(router)
-	client.name = "test-agent"
-
-	models, err := client.ListModels()
+	models, err := agent.ListModels()
 	if err != nil {
 		t.Fatalf("ListModels failed: %v", err)
 	}
@@ -107,18 +95,18 @@ func TestClient_FullFlow_ListModels(t *testing.T) {
 func TestClient_FullFlow_MultiplePhases(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			_ = json.NewDecoder(r.Body).Decode(&req)
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "multi-phase",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   req.Model,
-				Choices: []model.ChatChoice{
-					{Index: 0, Message: model.ChatMessage{Role: "assistant", Content: "OK"}, FinishReason: "stop"},
+				Choices: []llm.ChatChoice{
+					{Index: 0, Message: llm.ChatMessage{Role: "assistant", Content: "OK"}, FinishReason: "stop"},
 				},
-				Usage: model.ChatUsage{PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2},
+				Usage: llm.ChatUsage{PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -128,34 +116,12 @@ func TestClient_FullFlow_MultiplePhases(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "coding-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-	router.SetDefaultConfig("testing", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "testing-model",
-		Temperature: 0.3,
-		MaxTokens:   1024,
-	})
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.5,
-		MaxTokens:   2048,
-	})
-
-	client := NewClient(router)
-	client.name = "test-agent"
-
 	// Test coding phase
-	client.phase = model.PhaseCoding
-	result, err := client.Execute(context.Background(), "Code")
+	client := llm.NewClient(server.URL, "test-key", "coding-model", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "test-agent"
+	agent.phase = "coding"
+	result, err := agent.Execute(context.Background(), "Code")
 	if err != nil {
 		t.Fatalf("coding Execute failed: %v", err)
 	}
@@ -164,8 +130,11 @@ func TestClient_FullFlow_MultiplePhases(t *testing.T) {
 	}
 
 	// Test testing phase
-	client.phase = model.PhaseTesting
-	result, err = client.Execute(context.Background(), "Test")
+	client = llm.NewClient(server.URL, "test-key", "testing-model", 0.3, 1024)
+	agent = NewClient(client)
+	agent.name = "test-agent"
+	agent.phase = "testing"
+	result, err = agent.Execute(context.Background(), "Test")
 	if err != nil {
 		t.Fatalf("testing Execute failed: %v", err)
 	}
@@ -174,8 +143,11 @@ func TestClient_FullFlow_MultiplePhases(t *testing.T) {
 	}
 
 	// Test review phase
-	client.phase = model.PhaseReview
-	result, err = client.Execute(context.Background(), "Review")
+	client = llm.NewClient(server.URL, "test-key", "review-model", 0.5, 2048)
+	agent = NewClient(client)
+	agent.name = "test-agent"
+	agent.phase = "review"
+	result, err = agent.Execute(context.Background(), "Review")
 	if err != nil {
 		t.Fatalf("review Execute failed: %v", err)
 	}
@@ -186,10 +158,11 @@ func TestClient_FullFlow_MultiplePhases(t *testing.T) {
 
 func TestRegistry_RegisterAndGet(t *testing.T) {
 	registry := NewRegistry()
-	client := NewClient(nil)
-	client.name = "test-agent"
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "test-agent"
 
-	if err := registry.Register("test-agent", client); err != nil {
+	if err := registry.Register("test-agent", agent); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
 
@@ -204,11 +177,12 @@ func TestRegistry_RegisterAndGet(t *testing.T) {
 
 func TestRegistry_RegisterDuplicate(t *testing.T) {
 	registry := NewRegistry()
-	client := NewClient(nil)
-	client.name = "test-agent"
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "test-agent"
 
-	_ = registry.Register("test-agent", client)
-	err := registry.Register("test-agent", client)
+	_ = registry.Register("test-agent", agent)
+	err := registry.Register("test-agent", agent)
 	if err == nil {
 		t.Fatal("expected error for duplicate registration")
 	}
@@ -217,13 +191,15 @@ func TestRegistry_RegisterDuplicate(t *testing.T) {
 func TestRegistry_List(t *testing.T) {
 	registry := NewRegistry()
 
-	client1 := NewClient(nil)
-	client1.name = "agent-1"
-	_ = registry.Register("agent-1", client1)
+	client1 := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent1 := NewClient(client1)
+	agent1.name = "agent-1"
+	_ = registry.Register("agent-1", agent1)
 
-	client2 := NewClient(nil)
-	client2.name = "agent-2"
-	_ = registry.Register("agent-2", client2)
+	client2 := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent2 := NewClient(client2)
+	agent2.name = "agent-2"
+	_ = registry.Register("agent-2", agent2)
 
 	names := registry.List()
 	if len(names) != 2 {
@@ -257,10 +233,11 @@ func TestAgentResult_Metadata(t *testing.T) {
 
 func TestRegistry_NameMismatch(t *testing.T) {
 	registry := NewRegistry()
-	client := NewClient(nil)
-	client.name = "actual-name"
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "actual-name"
 
-	err := registry.Register("different-name", client)
+	err := registry.Register("different-name", agent)
 	if err == nil {
 		t.Fatal("expected error for name mismatch")
 	}
@@ -299,7 +276,7 @@ func TestFullFeatureWorkflow(t *testing.T) {
 	// 1. Start session with feature request
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			_ = json.NewDecoder(r.Body).Decode(&req)
 
 			// Different responses based on phase
@@ -313,15 +290,15 @@ func TestFullFeatureWorkflow(t *testing.T) {
 				content = "## Score: 85\n## Summary: Code is good\n## Recommendation: Approve"
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "workflow-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   req.Model,
-				Choices: []model.ChatChoice{
-					{Index: 0, Message: model.ChatMessage{Role: "assistant", Content: content}, FinishReason: "stop"},
+				Choices: []llm.ChatChoice{
+					{Index: 0, Message: llm.ChatMessage{Role: "assistant", Content: content}, FinishReason: "stop"},
 				},
-				Usage: model.ChatUsage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
+				Usage: llm.ChatUsage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -331,32 +308,11 @@ func TestFullFeatureWorkflow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "coding-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-	router.SetDefaultConfig("testing", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "testing-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.5,
-		MaxTokens:   2048,
-	})
-
 	// 2. Run coding phase
-	coder := NewClient(router)
+	client := llm.NewClient(server.URL, "test-key", "coding-model", 0.7, 4096)
+	coder := NewClient(client)
 	coder.name = "coder"
-	coder.phase = model.PhaseCoding
+	coder.phase = "coding"
 	codingResult, err := coder.Execute(context.Background(), "Create a User struct with ID and Name fields")
 	if err != nil {
 		t.Fatalf("coding phase failed: %v", err)
@@ -366,9 +322,10 @@ func TestFullFeatureWorkflow(t *testing.T) {
 	}
 
 	// 3. Run testing phase
-	tester := NewClient(router)
+	client = llm.NewClient(server.URL, "test-key", "testing-model", 0.7, 4096)
+	tester := NewClient(client)
 	tester.name = "tester"
-	tester.phase = model.PhaseTesting
+	tester.phase = "testing"
 	testResult, err := tester.Execute(context.Background(), "Generate tests for User struct")
 	if err != nil {
 		t.Fatalf("testing phase failed: %v", err)
@@ -378,9 +335,10 @@ func TestFullFeatureWorkflow(t *testing.T) {
 	}
 
 	// 4. Run review phase
-	reviewer := NewClient(router)
+	client = llm.NewClient(server.URL, "test-key", "review-model", 0.5, 2048)
+	reviewer := NewClient(client)
 	reviewer.name = "reviewer"
-	reviewer.phase = model.PhaseReview
+	reviewer.phase = "review"
 	reviewResult, err := reviewer.Execute(context.Background(), "Review the User struct implementation")
 	if err != nil {
 		t.Fatalf("review phase failed: %v", err)
@@ -390,7 +348,7 @@ func TestFullFeatureWorkflow(t *testing.T) {
 	}
 
 	// 5. Verify human gate can be created (simulated by checking phase)
-	if model.PhaseHumanReview != "human_review" {
+	if "human_review" != "human_review" {
 		t.Error("expected human_review phase to be defined")
 	}
 }

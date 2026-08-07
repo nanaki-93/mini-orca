@@ -59,8 +59,8 @@ func TestDefault_FullFlow(t *testing.T) {
 		t.Errorf("expected base_url %s, got %s", DefaultProviderURL, cfg.LLM.BaseURL)
 	}
 
-	if len(cfg.Skills.Knowledge) == 0 {
-		t.Error("expected knowledge entries")
+	if len(cfg.Agents.Coder.Skills) == 0 {
+		t.Error("expected coder skills")
 	}
 }
 

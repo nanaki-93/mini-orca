@@ -21,8 +21,6 @@ type ConfigUpdateRequest struct {
 	LLM *config.LLMConfig `json:"llm,omitempty"`
 	// Agents holds agent-related configuration updates.
 	Agents *config.AgentsConfig `json:"agents,omitempty"`
-	// Skills holds skill-related configuration updates.
-	Skills *config.SkillsConfig `json:"skills,omitempty"`
 	// Retry holds retry-related configuration updates.
 	Retry *config.RetryConfig `json:"retry,omitempty"`
 }
@@ -33,8 +31,6 @@ type ConfigResponse struct {
 	LLM config.LLMConfig `json:"llm"`
 	// Agents holds agent-related configuration.
 	Agents config.AgentsConfig `json:"agents"`
-	// Skills holds skill-related configuration.
-	Skills config.SkillsConfig `json:"skills"`
 	// Retry holds retry-related configuration.
 	Retry config.RetryConfig `json:"retry"`
 }
@@ -110,12 +106,6 @@ func (s *ConfigStore) applyUpdates(req *ConfigUpdateRequest) error {
 		}
 	}
 
-	if req.Skills != nil {
-		if err := s.updateSkills(req.Skills); err != nil {
-			return err
-		}
-	}
-
 	if req.Retry != nil {
 		if err := s.updateRetry(req.Retry); err != nil {
 			return err
@@ -172,23 +162,6 @@ func (s *ConfigStore) updateAgents(agents *config.AgentsConfig) error {
 	return nil
 }
 
-// updateSkills applies skill configuration updates.
-func (s *ConfigStore) updateSkills(skills *config.SkillsConfig) error {
-	if skills.Knowledge != nil {
-		for name, desc := range skills.Knowledge {
-			s.cfg.Skills.Knowledge[name] = desc
-		}
-	}
-
-	if skills.Tools != nil {
-		for name, desc := range skills.Tools {
-			s.cfg.Skills.Tools[name] = desc
-		}
-	}
-
-	return nil
-}
-
 // updateRetry applies retry configuration updates.
 func (s *ConfigStore) updateRetry(retry *config.RetryConfig) error {
 	if retry.MaxRetries > 0 {
@@ -222,18 +195,6 @@ func copyConfig(cfg *config.Config) *config.Config {
 	cfgCopy.Agents.Reviewer.Skills = make([]string, len(cfg.Agents.Reviewer.Skills))
 	copy(cfgCopy.Agents.Reviewer.Skills, cfg.Agents.Reviewer.Skills)
 
-	// Deep copy skills knowledge
-	cfgCopy.Skills.Knowledge = make(map[string]string)
-	for k, v := range cfg.Skills.Knowledge {
-		cfgCopy.Skills.Knowledge[k] = v
-	}
-
-	// Deep copy skills tools
-	cfgCopy.Skills.Tools = make(map[string]string)
-	for k, v := range cfg.Skills.Tools {
-		cfgCopy.Skills.Tools[k] = v
-	}
-
 	return &cfgCopy
 }
 
@@ -260,7 +221,6 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, ConfigResponse{
 		LLM:    cfg.LLM,
 		Agents: cfg.Agents,
-		Skills: cfg.Skills,
 		Retry:  cfg.Retry,
 	})
 }

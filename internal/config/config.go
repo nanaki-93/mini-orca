@@ -13,7 +13,6 @@ import (
 type Config struct {
 	LLM     LLMConfig     `json:"llm" yaml:"llm"`
 	Agents  AgentsConfig  `json:"agents" yaml:"agents"`
-	Skills  SkillsConfig  `json:"skills" yaml:"skills"`
 	Retry   RetryConfig   `json:"retry" yaml:"retry"`
 	Logging LoggingConfig `json:"logging" yaml:"logging"`
 }
@@ -48,12 +47,6 @@ type AgentConfig struct {
 	Model  string   `json:"model,omitempty" yaml:"model,omitempty"` // optional override
 }
 
-// SkillsConfig holds skill-related configuration.
-type SkillsConfig struct {
-	Knowledge map[string]string `json:"knowledge" yaml:"knowledge"`
-	Tools     map[string]string `json:"tools" yaml:"tools"`
-}
-
 // RetryConfig holds retry-related configuration.
 type RetryConfig struct {
 	MaxRetries  int `json:"max_retries" yaml:"max_retries"`
@@ -74,12 +67,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.LLM.MaxTokens == 0 {
 		c.LLM.MaxTokens = 8192
-	}
-	if c.Skills.Knowledge == nil {
-		c.Skills.Knowledge = make(map[string]string)
-	}
-	if c.Skills.Tools == nil {
-		c.Skills.Tools = make(map[string]string)
 	}
 	if c.Agents.Coder.Skills == nil {
 		c.Agents.Coder.Skills = []string{}
