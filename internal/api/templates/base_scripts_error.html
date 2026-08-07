@@ -84,29 +84,6 @@
     window.addEventListener('error', (event) => { console.error('Global error:', event.error); Toast.error(event.error?.message || 'An unexpected error occurred.', 'JavaScript Error'); });
     window.addEventListener('unhandledrejection', (event) => { console.error('Unhandled promise rejection:', event.reason); Toast.error(event.reason?.message || 'An unexpected error occurred.', 'Promise Rejection'); });
 
-    function toggleMobileSidebar() {
-        const sidebar = document.getElementById('app-sidebar');
-        const overlay = document.getElementById('sidebar-overlay');
-        const icon = document.getElementById('menu-icon');
-        const isClosed = sidebar.classList.contains('-translate-x-full');
-        if (isClosed) {
-            sidebar.classList.remove('-translate-x-full'); sidebar.classList.add('translate-x-0');
-            overlay.classList.remove('hidden'); overlay.classList.add('opacity-100');
-            icon.innerHTML = `<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>`;
-            document.body.classList.add('overflow-hidden');
-        } else {
-            sidebar.classList.remove('translate-x-0'); sidebar.classList.add('-translate-x-full');
-            overlay.classList.remove('opacity-100'); overlay.classList.add('opacity-0');
-            setTimeout(() => overlay.classList.add('hidden'), 200);
-            icon.innerHTML = `<path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>`;
-            document.body.classList.remove('overflow-hidden');
-        }
-    }
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') { const sidebar = document.getElementById('app-sidebar'); if (!sidebar.classList.contains('-translate-x-full')) { toggleMobileSidebar(); } }
-    });
-
     const PhaseHistoryCache = {
         lastSnapshot: null, lastETag: null, lastFetchTime: 0, cacheDuration: 3000, updateCount: 0,
         snapshotKey(data) {
@@ -148,7 +125,7 @@
 
     window.Toast = Toast; window.GracefulDegradation = GracefulDegradation; window.addRetryButton = addRetryButton;
     window.setLoading = setLoading; window.showPhaseLoading = showPhaseLoading; window.hidePhaseLoading = hidePhaseLoading;
-    window.showSkeleton = showSkeleton; window.hideSkeleton = hideSkeleton; window.toggleMobileSidebar = toggleMobileSidebar;
+    window.showSkeleton = showSkeleton; window.hideSkeleton = hideSkeleton;
     window.PhaseHistoryCache = PhaseHistoryCache; window.ScreenReader = ScreenReader; window.FocusManager = FocusManager;
 </script>
 {{ end }}

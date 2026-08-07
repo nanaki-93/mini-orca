@@ -6,6 +6,13 @@ Phase 4: Simplify UI Components
 ## Status
 ⬜ Pending | 🔄 In Progress | ✅ Complete
 
+## Completed
+- **Date**: 2025-08-07
+- **Deleted `full-file-editor.html`** (11.7KB)
+- **`code-editor.html` is the only remaining editor template**
+- **No external references to `full-file-editor.html` found**
+- **Build verified: ✅ passes**
+
 ## Goal
 Delete `internal/api/templates/editors/full-file-editor.html` and keep only `code-editor.html`.
 
@@ -31,6 +38,6 @@ Delete `internal/api/templates/editors/full-file-editor.html` and keep only `cod
 🟢 **Low** - `code-editor.html` is the main editor
 
 ## Checklist
-- [ ] Delete `full-file-editor.html`
-- [ ] Verify `code-editor.html` is the only editor template
-- [ ] Ensure no references to `full-file-editor.html` remain
+- [x] Delete `full-file-editor.html`
+- [x] Verify `code-editor.html` is the only editor template
+- [x] Ensure no references to `full-file-editor.html` remain

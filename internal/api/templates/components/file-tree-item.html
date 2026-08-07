@@ -7,7 +7,7 @@
             style="padding-left: calc(0.75rem + {{ $.Depth }} * 1rem)"
             hx-get="/api/tree/expand"
             hx-vals='{"path": "{{ $item.Path }}", "depth": "{{ add $.Depth 1 }}"}'
-            hx-target="#folder-children-{{ md5 $item.Path }}"
+            hx-target="#folder-children-{{ $item.Path }}"
             hx-swap="innerHTML"
             hx-trigger="click once"
     >
@@ -25,7 +25,7 @@
         </svg>
         <span class="text-text-primary">{{ $item.Name }}</span>
     </div>
-    <div id="folder-children-{{ md5 $item.Path }}" class="tree-folder-children overflow-hidden transition-all duration-150">
+    <div id="folder-children-{{ $item.Path }}" class="tree-folder-children overflow-hidden transition-all duration-150">
         <!-- Children loaded lazily via HTMX -->
     </div>
 </div>

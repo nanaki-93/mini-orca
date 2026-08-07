@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"unicode"
@@ -88,27 +86,9 @@ func dict(values ...interface{}) (map[string]interface{}, error) {
 	return dict, nil
 }
 
-func md5Hash(s string) string {
-	hash := md5.Sum([]byte(s))
-	return hex.EncodeToString(hash[:])
-}
-
 func defFunc(val, fallback interface{}) interface{} {
 	if val == nil {
 		return fallback
 	}
 	return val
-}
-
-func humanName(name string) string {
-	switch name {
-	case "coder":
-		return "Coder"
-	case "tester":
-		return "Tester"
-	case "reviewer":
-		return "Reviewer"
-	default:
-		return title(name)
-	}
 }

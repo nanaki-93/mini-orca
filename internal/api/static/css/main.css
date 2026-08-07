@@ -12,14 +12,9 @@
 @import 'header.css';
 @import 'sidebar.css';
 @import 'editor.css';
-@import 'dashboard.css';
-@import 'activity-log.css';
 @import 'phase-tracker.css';
 @import 'modal.css';
 @import 'toast.css';
-@import 'accessibility.css';
-@import 'skills.css';
-@import 'responsive.css';
 
 /* ---------------------------------------------------------------------------
    1. CSS Custom Properties (Design Tokens)

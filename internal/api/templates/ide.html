@@ -13,39 +13,43 @@
 
 {{ define "main" }}
 <div id="ide-container" class="h-full flex flex-col">
-    <!-- Main Content Area -->
-    <div class="flex-1 flex overflow-hidden">
-        <!-- Editor/Main View Area -->
-        <div id="editor-container" class="flex-1 flex flex-col bg-dark-900 border-r border-dark-600" role="region" aria-label="Code editor">
-            <div id="file-content" class="flex-1 overflow-auto" role="main" tabindex="0" aria-label="File content">
-                <div class="flex flex-col items-center justify-center h-full text-text-secondary opacity-50">
-                    <svg class="w-16 h-16 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <p class="text-lg">Select a file to view its content</p>
-                </div>
+    <!-- Editor Area -->
+    <div id="editor-container" class="flex-1 flex flex-col bg-dark-900" role="region" aria-label="Code editor">
+        <div id="file-content" class="flex-1 overflow-auto" role="main" tabindex="0" aria-label="File content">
+            <div class="flex flex-col items-center justify-center h-full text-text-secondary opacity-50">
+                <svg class="w-16 h-16 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p class="text-lg">Select a file to view its content</p>
             </div>
         </div>
+    </div>
 
-        <!-- Activity/Phase Info Panel (Right Sidebar) -->
-        <div id="info-panel" class="w-80 bg-dark-800 flex flex-col overflow-hidden shrink-0" role="complementary" aria-label="Phase tracker and activity log">
-            <!-- Dashboard Polling Trigger (hidden) - 10s interval for performance -->
-            <div id="dashboard-poll-trigger" class="no-global-loading"
-                 hx-get="/api/render/dashboard"
-                 hx-trigger="load, every 10s"
-                 hx-swap="none"
-                 hx-include="#phase-tracker-container, #activity-log-container">
+    <!-- Chat Input Area -->
+    <div id="chat-input-container" class="border-t border-dark-600 bg-dark-800 p-3">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-2">
+                <input
+                    type="text"
+                    id="chat-input"
+                    placeholder="Ask Mini-Orca to help with your code..."
+                    class="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-blue-500"
+                    hx-post="/api/chat"
+                    hx-trigger="keyup[key === 'Enter'] from:#chat-input"
+                    hx-vals='js:{message: document.getElementById("chat-input").value}'
+                    hx-target="#chat-response"
+                    hx-swap="innerHTML"
+                    hx-disabled-elt="this"
+                >
+                <button
+                    id="chat-send-btn"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
+                    onclick="document.getElementById('chat-input').dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter'}))"
+                >
+                    Send
+                </button>
             </div>
-
-            <!-- Phase Tracker -->
-            <div id="phase-tracker-container" class="h-1/2 border-b border-dark-600 overflow-y-auto no-global-loading" role="region" aria-label="Development phases">
-                <div class="p-4 text-text-secondary text-sm">Loading phase tracker...</div>
-            </div>
-
-            <!-- Activity Log -->
-            <div id="activity-log-container" class="h-1/2 overflow-y-auto no-global-loading" role="log" aria-label="Activity log" aria-live="polite">
-                <div class="p-4 text-text-secondary text-sm">Loading activity log...</div>
-            </div>
+            <div id="chat-response" class="mt-2 text-xs text-text-secondary"></div>
         </div>
     </div>
 </div>
