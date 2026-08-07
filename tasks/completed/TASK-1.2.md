@@ -4,7 +4,7 @@
 Phase 1: Remove Session System
 
 ## Status
-⬜ Pending | 🔄 In Progress | ✅ Complete
+✅ Complete
 
 ## Goal
 Delete `internal/api/session_handler.go` to remove session-related HTTP handlers and endpoints.
@@ -39,7 +39,7 @@ Delete `internal/api/session_handler.go` to remove session-related HTTP handlers
 🟡 **Medium** - handlers referenced in main.go
 
 ## Checklist
-- [ ] Delete `internal/api/session_handler.go`
-- [ ] Remove route registrations from `cmd/daemon/main.go`
-- [ ] Remove `sessionHandler` initialization from `main.go`
-- [ ] Ensure no dangling references remain
+- [x] Delete `internal/api/session_handler.go`
+- [x] Remove route registrations from `cmd/daemon/main.go`
+- [x] Remove `sessionHandler` initialization from `main.go`
+- [x] Ensure no dangling references remain

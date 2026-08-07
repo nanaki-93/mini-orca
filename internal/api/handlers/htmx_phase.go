@@ -5,7 +5,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
-	"github.com/nanaki-93/mini-orca/v2/internal/state"
+	"github.com/nanaki-93/mini-orca/v2/internal/orchestrator"
 )
 
 // RenderPhase handles GET /api/render/phase/:phase
@@ -18,41 +18,39 @@ func (h *HTMXRenderHandler) RenderPhase(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var data PhaseRenderData
-	sessions := h.sessionStore.ListSessions()
-	if len(sessions) > 0 {
-		session := sessions[0]
-		data.FeatureRequest = session.Goal
-		data.TotalPhases = 4 // coding, testing, review, human_review
+	data.TotalPhases = 4 // coding, testing, review, human_review
 
-		// Set phase-specific data
-		switch session.CurrentPhase {
-		case state.PhaseCoding:
-			data.CodingPhase = true
-			data.CodingPhaseData = &CodingPhaseData{
-				Status:        "running",
-				CurrentFile:   "generating...",
-				GeneratedCode: "",
-			}
-		case state.PhaseTesting:
-			data.TestingPhase = true
-			data.TestingPhaseData = &TestingPhaseData{
-				Status: "running",
-			}
-		case state.PhaseReview:
-			data.ReviewPhase = true
-			data.ReviewPhaseData = &ReviewPhaseData{
-				Status: "running",
-			}
-		case state.PhaseHumanReview:
-			data.HumanReviewPhase = true
-			data.HumanReviewPhaseData = &HumanReviewPhaseData{
-				CurrentPhase: "human_review",
-				Output:       "Review pending...",
-			}
+	// Set phase-specific data based on the requested phase
+	switch phase {
+	case "coding":
+		data.CodingPhase = true
+		data.CodingPhaseData = &CodingPhaseData{
+			Status:        "running",
+			CurrentFile:   "generating...",
+			GeneratedCode: "",
 		}
-
-		// Add session-specific data
-		data.CurrentPhaseName = getCurrentPhaseName(session)
+		data.CurrentPhaseName = "Coding"
+	case "testing":
+		data.TestingPhase = true
+		data.TestingPhaseData = &TestingPhaseData{
+			Status: "running",
+		}
+		data.CurrentPhaseName = "Testing"
+	case "review":
+		data.ReviewPhase = true
+		data.ReviewPhaseData = &ReviewPhaseData{
+			Status: "running",
+		}
+		data.CurrentPhaseName = "Review"
+	case "human_review":
+		data.HumanReviewPhase = true
+		data.HumanReviewPhaseData = &HumanReviewPhaseData{
+			CurrentPhase: "human_review",
+			Output:       "Review pending...",
+		}
+		data.CurrentPhaseName = "Human Review"
+	default:
+		data.CurrentPhaseName = "Unknown"
 	}
 
 	rendered, err := h.templateEngine.RenderPhasePartial(phase, data)
@@ -94,15 +92,15 @@ func getPhaseStep(phase string) int {
 }
 
 // getCurrentPhaseInfo returns the current phase name and status.
-func getCurrentPhaseInfo(session *state.Session) (string, string) {
-	switch session.CurrentPhase {
-	case state.PhaseCoding:
+func getCurrentPhaseInfo(phase string) (string, string) {
+	switch phase {
+	case string(orchestrator.PhaseCoding):
 		return "Coding", "in_progress"
-	case state.PhaseTesting:
+	case string(orchestrator.PhaseTesting):
 		return "Testing", "in_progress"
-	case state.PhaseReview:
+	case string(orchestrator.PhaseReview):
 		return "Review", "in_progress"
-	case state.PhaseHumanReview:
+	case string(orchestrator.PhaseHumanReview):
 		return "Human Review", "in_progress"
 	default:
 		return "Unknown", "pending"
@@ -110,15 +108,15 @@ func getCurrentPhaseInfo(session *state.Session) (string, string) {
 }
 
 // getCurrentPhaseName returns the current phase name as a string.
-func getCurrentPhaseName(session *state.Session) string {
-	switch session.CurrentPhase {
-	case state.PhaseCoding:
+func getCurrentPhaseName(phase string) string {
+	switch phase {
+	case string(orchestrator.PhaseCoding):
 		return "Coding"
-	case state.PhaseTesting:
+	case string(orchestrator.PhaseTesting):
 		return "Testing"
-	case state.PhaseReview:
+	case string(orchestrator.PhaseReview):
 		return "Review"
-	case state.PhaseHumanReview:
+	case string(orchestrator.PhaseHumanReview):
 		return "Human Review"
 	default:
 		return "Unknown"
@@ -126,13 +124,13 @@ func getCurrentPhaseName(session *state.Session) string {
 }
 
 // getPhaseProgress returns a progress percentage based on session status.
-func getPhaseProgress(status state.SessionStatus) int {
+func getPhaseProgress(status string) int {
 	switch status {
-	case state.SessionStatusCompleted:
+	case "completed":
 		return 100
-	case state.SessionStatusRunning:
+	case "running":
 		return 45
-	case state.SessionStatusPending:
+	case "pending":
 		return 0
 	default:
 		return 0

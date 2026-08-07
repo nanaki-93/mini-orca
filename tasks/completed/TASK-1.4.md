@@ -4,7 +4,7 @@
 Phase 1: Remove Session System
 
 ## Status
-⬜ Pending | 🔄 In Progress | ✅ Complete
+✅ Complete
 
 ## Goal
 Delete `internal/api/gate.go` to remove the gate store type and its methods.
@@ -34,7 +34,7 @@ Delete `internal/api/gate.go` to remove the gate store type and its methods.
 🟢 **Low** - gate store used only in session handler and main.go
 
 ## Checklist
-- [ ] Delete `internal/api/gate.go`
-- [ ] Remove `gateStore` initialization from `main.go`
-- [ ] Remove `gateHandler` initialization from `main.go`
-- [ ] Ensure no dangling references remain
+- [x] Delete `internal/api/gate.go`
+- [x] Remove `gateStore` initialization from `main.go`
+- [x] Remove `gateHandler` initialization from `main.go`
+- [x] Ensure no dangling references remain

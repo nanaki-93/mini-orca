@@ -3,9 +3,6 @@ package orchestrator
 
 import (
 	"fmt"
-	"time"
-
-	"github.com/nanaki-93/mini-orca/v2/internal/state"
 )
 
 // Phase represents a stage in the development pipeline.
@@ -71,17 +68,14 @@ type PhaseRouter struct {
 	transitions []Transition
 	// currentPhase tracks the current phase of the pipeline.
 	currentPhase Phase
-	// session stores the current session state.
-	session *state.Session
 	// orchestrator is the orchestrator instance for phase handlers.
 	orchestrator *Orchestrator
 }
 
-// NewPhaseRouter creates a new PhaseRouter instance with the given session and orchestrator.
-func NewPhaseRouter(session *state.Session, orchestrator *Orchestrator) *PhaseRouter {
+// NewPhaseRouter creates a new PhaseRouter instance with the given orchestrator.
+func NewPhaseRouter(orchestrator *Orchestrator) *PhaseRouter {
 	return &PhaseRouter{
 		transitions:  validTransitions,
-		session:      session,
 		orchestrator: orchestrator,
 	}
 }
@@ -120,7 +114,7 @@ func (r *PhaseRouter) ValidateTransition(from, to Phase) error {
 }
 
 // TransitionTo transitions the pipeline to the specified phase.
-// It validates the transition, updates session state, logs the transition,
+// It validates the transition, logs the transition,
 // and triggers the appropriate phase handler.
 func (r *PhaseRouter) TransitionTo(phase Phase) error {
 	// Validate the transition
@@ -131,11 +125,6 @@ func (r *PhaseRouter) TransitionTo(phase Phase) error {
 	// Log the transition
 	logTransition(r.currentPhase, phase)
 
-	// Update session state
-	if err := r.updateSessionState(phase); err != nil {
-		return fmt.Errorf("failed to update session state: %w", err)
-	}
-
 	// Trigger phase handler
 	if err := r.triggerPhaseHandler(phase); err != nil {
 		return fmt.Errorf("phase handler failed: %w", err)
@@ -143,18 +132,6 @@ func (r *PhaseRouter) TransitionTo(phase Phase) error {
 
 	// Update current phase
 	r.currentPhase = phase
-
-	return nil
-}
-
-// updateSessionState updates the session's current phase and timestamp.
-func (r *PhaseRouter) updateSessionState(phase Phase) error {
-	if r.session == nil {
-		return fmt.Errorf("session is nil")
-	}
-
-	r.session.CurrentPhase = state.Phase(phase)
-	r.session.UpdatedAt = time.Now()
 
 	return nil
 }

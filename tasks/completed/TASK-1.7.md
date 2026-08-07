@@ -4,7 +4,7 @@
 Phase 1: Remove Session System
 
 ## Status
-⬜ Pending | 🔄 In Progress | ✅ Complete
+✅ Complete
 
 ## Goal
 Edit `cmd/daemon/main.go` to remove all session store initialization and session-related route registrations.
@@ -44,9 +44,9 @@ Edit `cmd/daemon/main.go` to remove all session store initialization and session
 🔴 **High** - entry point
 
 ## Checklist
-- [ ] Remove `sessionStore` initialization
-- [ ] Remove `gateStore` initialization
-- [ ] Remove all session route registrations
-- [ ] Remove `sessionHandler` and `gateHandler` initialization
-- [ ] Keep `projectStore` and `htmxRenderHandler`
-- [ ] Build and verify no compilation errors
+- [x] Remove `sessionStore` initialization
+- [x] Remove `gateStore` initialization
+- [x] Remove all session route registrations
+- [x] Remove `sessionHandler` and `gateHandler` initialization
+- [x] Keep `projectStore` and `htmxRenderHandler`
+- [x] Build and verify no compilation errors

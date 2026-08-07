@@ -15,8 +15,6 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
-	"github.com/nanaki-93/mini-orca/v2/internal/orchestrator"
-	"github.com/nanaki-93/mini-orca/v2/internal/state"
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 	"github.com/nanaki-93/mini-orca/v2/internal/version"
 )
@@ -61,28 +59,10 @@ func main() {
 	// Initialize agent registry and register agents
 	agentRegistry := agent.InitAgentRegistry(llmClient)
 
-	// Initialize state store
-	store := state.InitStateStore(projectInfo)
-
 	// Initialize API stores and handlers
-	sessionStore := api.NewSessionStore()
-	gateStore := api.NewGateStore()
 
 	// Initialize project store
 	projectStore := handlers.NewProjectStore()
-
-	// Auto-create project from state store session
-	if store != nil {
-		session := store.GetCurrentSession()
-		if session != nil && session.ProjectPath != "" {
-			project, err := projectStore.CreateProject("", session.ProjectPath, session.ProjectType)
-			if err != nil {
-				logging.Warn("Failed to auto-create project from state store", "error", err)
-			} else {
-				logging.Info("Auto-created project from state store", "project_id", project.ID, "project_name", project.Name, "project_path", project.Path)
-			}
-		}
-	}
 
 	// Initialize template engine
 	templatesPath := "internal/api/templates"
@@ -96,7 +76,7 @@ func main() {
 	var htmxRenderHandler *handlers.HTMXRenderHandler
 	if templateEngine != nil {
 		cache := api.NewResponseCache(10 * time.Second)
-		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, sessionStore, projectStore, cache)
+		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, projectStore, cache)
 	}
 
 	// Initialize orchestrator with LLM client, registry, and executor
@@ -151,7 +131,7 @@ func main() {
 	}
 
 	// Start HTTP server with all API endpoints
-	server := startHTTPServer(agentOrchestrator, store, sessionStore, gateStore, projectStore, htmxRenderHandler)
+	server := startHTTPServer(agentOrchestrator, projectStore, htmxRenderHandler)
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
@@ -170,9 +150,6 @@ func main() {
 // startHTTPServer creates and starts the HTTP server with all API endpoints.
 func startHTTPServer(
 	agentOrchestrator *agent.Orchestrator,
-	store *state.Store,
-	sessionStore *api.SessionStore,
-	gateStore *api.GateStore,
 	projectStore *handlers.ProjectStore,
 	htmxRenderHandler *handlers.HTMXRenderHandler,
 ) *http.Server {
@@ -190,49 +167,6 @@ func startHTTPServer(
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","agents":["coder","tester","reviewer"]}`))
-	})
-
-	// Create phase router for session lifecycle
-	currentSession := &state.Session{
-		ID:           "default",
-		CurrentPhase: state.PhaseCoding,
-		Status:       state.SessionStatusPending,
-	}
-	phaseRouter := orchestrator.NewPhaseRouter(currentSession, nil)
-
-	// Initialize API handlers
-	sessionHandler := api.NewSessionHandler(sessionStore, gateStore, phaseRouter)
-	gateHandler := api.NewGateHandler(gateStore, phaseRouter)
-
-	// Register session routes
-	mux.HandleFunc("POST /api/sessions", sessionHandler.CreateSession)
-	mux.HandleFunc("GET /api/sessions", sessionHandler.ListSessions)
-	mux.HandleFunc("GET /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
-		parts := api.SplitPath(r.URL.Path)
-		if len(parts) >= 5 && parts[4] == "gate" {
-			gateHandler.GetGateStatus(w, r)
-		} else {
-			sessionHandler.GetSessionStatus(w, r)
-		}
-	})
-	mux.HandleFunc("POST /api/sessions/", func(w http.ResponseWriter, r *http.Request) {
-		// Route to appropriate lifecycle handler
-		parts := api.SplitPath(r.URL.Path)
-		if len(parts) >= 5 {
-			action := parts[4]
-			switch action {
-			case "start":
-				sessionHandler.StartSession(w, r)
-			case "pause":
-				sessionHandler.PauseSession(w, r)
-			case "resume":
-				sessionHandler.ResumeSession(w, r)
-			case "stop":
-				sessionHandler.StopSession(w, r)
-			case "gate":
-				gateHandler.RespondToGate(w, r)
-			}
-		}
 	})
 
 	// Register project routes
