@@ -6,6 +6,15 @@ Phase 4: Simplify UI Components
 ## Status
 ⬜ Pending | 🔄 In Progress | ✅ Complete
 
+## Completed
+- **Date**: 2025-08-07
+- **Removed right sidebar** (info-panel with phase tracker + activity log) and dashboard polling trigger
+- **Simplified main area** — editor now takes full width (no right panel split)
+- **Added chat input area** — bottom panel with text input, send button, and response display
+- **Footer simplified** — shows connected status and current phase (already simplified)
+- **Build verified: ✅ passes**
+- **No dangling references to removed elements remain**
+
 ## Goal
 Edit `internal/api/templates/ide.html` to simplify layout and add chat input area.
 
@@ -46,8 +55,8 @@ Edit `internal/api/templates/ide.html` to simplify layout and add chat input are
 🔴 **High** - main UI layout
 
 ## Checklist
-- [ ] Remove/simplify right sidebar (phase info panel)
-- [ ] Keep file tree (left) and editor (center)
-- [ ] Add chat input area
-- [ ] Simplify footer to show connected status and current phase
-- [ ] Verify IDE layout is functional
+- [x] Remove/simplify right sidebar (phase info panel)
+- [x] Keep file tree (left) and editor (center)
+- [x] Add chat input area
+- [x] Simplify footer to show connected status and current phase
+- [x] Verify IDE layout is functional

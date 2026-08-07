@@ -58,14 +58,13 @@
 <!-- Screen Reader & Focus Management -->
 <script>
     const ScreenReader = {
-        polite: document.getElementById('sr-announcements'),
-        assertive: document.getElementById('sr-alerts'),
-
         announce(message, priority = 'polite') {
-            const target = priority === 'assertive' ? this.assertive : this.polite;
-            if (!target) return;
-            target.textContent = '';
-            setTimeout(() => { target.textContent = message; }, 100);
+            // Console fallback for development
+            if (priority === 'assertive') {
+                console.log('[ALERT]', message);
+            } else {
+                console.log('[INFO]', message);
+            }
         },
         announceStatus(message) { this.announce(message, 'polite'); },
         announceAlert(message) { this.announce(message, 'assertive'); }

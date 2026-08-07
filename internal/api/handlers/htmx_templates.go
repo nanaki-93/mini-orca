@@ -93,50 +93,24 @@ func (te *TemplateEngine) loadTemplates() error {
 // funcMap returns the custom template functions.
 func (te *TemplateEngine) funcMap() template.FuncMap {
 	return template.FuncMap{
-		"lower":                lower,
-		"title":                title,
-		"add":                  func(a, b int) int { return a + b },
-		"sub":                  func(a, b int) int { return a - b },
-		"div":                  func(a, b int) int { return a / b },
-		"now":                  func() string { return time.Now().Format("15:04:05") },
-		"getStats":             getStats,
-		"logTypeClass":         logTypeClass,
-		"logStatusClass":       logStatusClass,
-		"typeBadgeClass":       typeBadgeClass,
-		"phaseState":           phaseState,
-		"phaseClass":           phaseClass,
-		"phaseLabelClass":      phaseLabelClass,
-		"phaseConnectorClass":  phaseConnectorClass,
-		"phaseProgress":        phaseProgress,
-		"currentPhaseDotClass": currentPhaseDotClass,
-		"priorityClass":        priorityClass,
-		"fileExtension":        fileExtension,
-		"fileIcon":             fileIcon,
+		"lower":         lower,
+		"title":         title,
+		"add":           func(a, b int) int { return a + b },
+		"sub":           func(a, b int) int { return a - b },
+		"div":           func(a, b int) int { return a / b },
+		"now":           func() string { return time.Now().Format("15:04:05") },
+		"fileExtension": fileExtension,
+		"fileIcon":      fileIcon,
 		"codeLines": func(code string) []string {
 			if code == "" {
 				return []string{}
 			}
 			return strings.Split(code, "\n")
 		},
-		"dict":               dict,
-		"agentIconClass":     agentIconClass,
-		"agentIcon":          agentIcon,
-		"humanName":          humanName,
-		"categoryBadgeClass": categoryBadgeClass,
-		"curlyOpen":          func() string { return "{{" },
-		"curlyClose":         func() string { return "}}" },
-		"md5":                md5Hash,
-		"default":            defFunc,
-		"scoreColor":         scoreColor,
-		"totalIssues":        totalIssues,
-		"countBySeverity":    countBySeverity,
-		"filterBySeverity":   filterBySeverity,
-		"isSkillAssigned":    isSkillAssigned,
-		"phaseBorderClass":   phaseBorderClass,
-		"phaseDotClass":      phaseDotClass,
-		"phaseProgressClass": phaseProgressClass,
-		"phaseTextClass":     phaseTextClass,
-		"coverageColor":      coverageColor,
+		"dict":       dict,
+		"curlyOpen":  func() string { return "{{" },
+		"curlyClose": func() string { return "}}" },
+		"default":    defFunc,
 	}
 }
 

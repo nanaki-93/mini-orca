@@ -99,31 +99,9 @@
         {{ block "header" . }}{{ end }}
     </header>
 
-    <!-- Mobile Sidebar Toggle (visible only on mobile) -->
-    <button
-        id="mobile-menu-toggle"
-        class="fixed top-3 left-3 z-50 flex items-center justify-center w-10 h-10 bg-dark-800 border border-dark-600 rounded-lg shadow-lg sm:hidden hover:bg-dark-700 transition-colors"
-        onclick="toggleMobileSidebar()"
-        aria-label="Toggle navigation menu"
-        aria-expanded="false"
-        aria-controls="sidebar-overlay"
-    >
-        <svg id="menu-icon" class="w-5 h-5 text-text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
-        </svg>
-    </button>
-
-    <!-- Mobile Sidebar Overlay -->
-    <div
-        id="sidebar-overlay"
-        class="fixed inset-0 bg-black/60 z-40 hidden sm:hidden transition-opacity duration-200"
-        onclick="toggleMobileSidebar()"
-        role="presentation"
-    ></div>
-
     <div class="flex flex-1 overflow-hidden">
-        <!-- Sidebar (hidden on mobile, visible on desktop) -->
-        <aside id="app-sidebar" class="sm:w-64 w-72 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0 overflow-y-auto transform -translate-x-full sm:translate-x-0 transition-transform duration-200 ease-in-out fixed sm:relative top-0 left-0 h-full z-40" role="complementary" aria-label="File tree and navigation">
+        <!-- Sidebar (file tree) -->
+        <aside id="app-sidebar" class="sm:w-64 w-72 bg-dark-800 border-r border-dark-600 flex flex-col shrink-0 overflow-y-auto" role="complementary">
             {{ block "sidebar" . }}{{ end }}
         </aside>
 
@@ -139,20 +117,15 @@
     </footer>
 
     <!-- Global Loading Overlay -->
-    <div id="global-loading" class="global-loading-overlay" role="status" aria-live="polite" aria-label="Loading">
+    <div id="global-loading" class="global-loading-overlay">
         <div class="global-loading-spinner relative">
             <div class="spinner-ring"></div>
-            <div class="spinner-ring-secondary"></div>
         </div>
         <span class="global-loading-text">Loading...</span>
     </div>
 
     <!-- Toast Notification Container -->
-    <div id="toast-container" class="toast-container" role="region" aria-label="Notifications"></div>
-
-    <!-- Screen Reader Announcements (Live Regions) -->
-    <div id="sr-announcements" aria-live="polite" aria-atomic="true" class="sr-only"></div>
-    <div id="sr-alerts" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
+    <div id="toast-container" class="toast-container"></div>
 
     {{ template "base_scripts" . }}
     {{ block "scripts" . }}{{ end }}

@@ -1,0 +1,95 @@
+{{ define "testing-phase" }}
+<div id="testing-phase" class="w-full p-4 bg-dark-900">
+    <!-- Phase Header -->
+    <div class="flex items-center gap-3 mb-4">
+        <div class="w-8 h-8 rounded-lg bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center">
+            <svg class="w-4 h-4 text-yellow-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+            </svg>
+        </div>
+        <div>
+            <h3 class="text-sm font-semibold text-text-primary">Testing Phase</h3>
+            <p class="text-xs text-text-secondary">Running tests for the generated code</p>
+        </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="flex items-center gap-3 mb-4">
+        <span class="text-xs text-text-secondary">Progress</span>
+        <div class="flex-1 h-1.5 bg-dark-600 rounded-full overflow-hidden">
+            <div class="h-full bg-yellow-500 transition-all duration-500" style="width: {{ if .TestingPhaseData }}{{ .TestingPhaseData.Progress }}{{ else }}0{{ end }}%"></div>
+        </div>
+        <span class="text-xs text-text-secondary">{{ if .TestingPhaseData }}{{ .TestingPhaseData.Progress }}%{{ else }}0%{{ end }}</span>
+    </div>
+
+    <!-- Test Stats -->
+    {{ if .TestingPhaseData }}
+    <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="p-3 bg-dark-800 rounded-lg border border-dark-600 text-center">
+            <div class="text-lg font-semibold text-text-primary">{{ .TestingPhaseData.TotalTests }}</div>
+            <div class="text-xs text-text-secondary">Total</div>
+        </div>
+        <div class="p-3 bg-dark-800 rounded-lg border border-dark-600 text-center">
+            <div class="text-lg font-semibold text-green-500">{{ .TestingPhaseData.PassedTests }}</div>
+            <div class="text-xs text-text-secondary">Passed</div>
+        </div>
+        <div class="p-3 bg-dark-800 rounded-lg border border-dark-600 text-center">
+            <div class="text-lg font-semibold text-red-500">{{ .TestingPhaseData.FailedTests }}</div>
+            <div class="text-xs text-text-secondary">Failed</div>
+        </div>
+    </div>
+
+    <!-- Coverage -->
+    {{ if .TestingPhaseData.Coverage }}
+    <div class="p-3 bg-dark-800 rounded-lg border border-dark-600">
+        <div class="flex items-center justify-between">
+            <span class="text-xs text-text-secondary">Coverage</span>
+            <span class="text-xs text-text-primary font-medium">{{ .TestingPhaseData.Coverage }}</span>
+        </div>
+    </div>
+    {{ end }}
+
+    <!-- Current Test -->
+    {{ if .TestingPhaseData.CurrentTest }}
+    <div class="mt-3 p-3 bg-dark-800 rounded-lg border border-dark-600">
+        <span class="text-xs text-text-secondary">Running:</span>
+        <span class="text-xs text-text-primary font-mono block mt-1">{{ .TestingPhaseData.CurrentTest }}</span>
+    </div>
+    {{ end }}
+    {{ else }}
+    <div class="p-3 bg-dark-800 rounded-lg border border-dark-600">
+        <span class="text-xs text-text-secondary">Waiting for testing phase to start...</span>
+    </div>
+    {{ end }}
+
+    <!-- Actions -->
+    {{ if and .TestingPhaseData (eq .TestingPhaseData.Status "failed") }}
+    <div class="mt-3 flex gap-2">
+        <button
+            class="px-3 py-1.5 text-xs bg-dark-600 hover:bg-dark-500 text-text-primary font-medium rounded-md transition-colors"
+            hx-post="/api/phases/retry"
+            hx-vals='{"phase": "testing"}'
+            hx-target="#testing-phase"
+            hx-swap="outerHTML"
+            hx-disabled-elt="this"
+        >
+            Retry
+        </button>
+    </div>
+    {{ end }}
+    {{ if and .TestingPhaseData (eq .TestingPhaseData.Status "completed") .TestingPhaseData.PassedTests .TestingPhaseData.TotalTests (eq .TestingPhaseData.PassedTests .TestingPhaseData.TotalTests) }}
+    <div class="mt-3">
+        <button
+            class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-500 text-white font-medium rounded-md transition-colors"
+            hx-post="/api/phases/continue"
+            hx-vals='{"phase": "testing"}'
+            hx-target="#testing-phase"
+            hx-swap="outerHTML"
+            hx-disabled-elt="this"
+        >
+            Continue
+        </button>
+    </div>
+    {{ end }}
+</div>
+{{ end }}
