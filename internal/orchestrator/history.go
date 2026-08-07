@@ -2,131 +2,62 @@
 package orchestrator
 
 import (
-	"fmt"
-	"strings"
 	"time"
 )
 
-// HistoryEvent represents a single event in the session history.
-type HistoryEvent struct {
-	// ID is the unique identifier for the event.
-	ID string
-	// SessionID is the ID of the session this event belongs to.
-	SessionID string
-	// EventType is the type of event (phase_transition, llm_call, file_operation).
-	EventType string
-	// Timestamp is when the event occurred.
+// PhaseLogEntry represents a single phase execution in the pipeline.
+type PhaseLogEntry struct {
+	// Phase is the pipeline phase that was executed.
+	Phase Phase
+	// Status indicates the result of the phase execution.
+	Status string
+	// Timestamp records when the phase was executed.
 	Timestamp time.Time
-	// Summary is a brief summary of the event.
-	Summary string
-	// Details contains detailed information about the event.
-	Details string
-	// Error contains any error that occurred during the event.
-	Error string
-	// Duration is how long the event took.
-	Duration time.Duration
+	// Output contains a brief summary of the phase output.
+	Output string
 }
 
-// HistoryTracker manages session history tracking.
+// HistoryTracker manages simple phase execution logs for a session.
 type HistoryTracker struct {
 	sessionID string
-	history   []HistoryEvent
+	entries   []PhaseLogEntry
 }
 
 // NewHistoryTracker creates a new HistoryTracker instance.
 func NewHistoryTracker(sessionID string) *HistoryTracker {
 	return &HistoryTracker{
 		sessionID: sessionID,
-		history:   make([]HistoryEvent, 0),
+		entries:   make([]PhaseLogEntry, 0),
 	}
 }
 
-// LogPhaseTransition logs a phase transition event.
-func (h *HistoryTracker) LogPhaseTransition(from, to Phase) {
-	event := HistoryEvent{
-		ID:        fmt.Sprintf("hist-%d", time.Now().UnixNano()),
-		SessionID: h.sessionID,
-		EventType: "phase_transition",
+// LogPhase logs a phase execution with its status and output.
+func (h *HistoryTracker) LogPhase(phase Phase, status string, output string) {
+	entry := PhaseLogEntry{
+		Phase:     phase,
+		Status:    status,
 		Timestamp: time.Now(),
-		Summary:   fmt.Sprintf("Transitioned from %s to %s", from, to),
-		Details:   fmt.Sprintf("From: %s, To: %s", from, to),
+		Output:    output,
 	}
-
-	h.addEvent(event)
+	h.entries = append(h.entries, entry)
 }
 
-// LogLLMCall logs an LLM call event with input/output summary.
-func (h *HistoryTracker) LogLLMCall(agent string, input string, output string, duration time.Duration, err error) {
-	event := HistoryEvent{
-		ID:        fmt.Sprintf("hist-%d", time.Now().UnixNano()),
-		SessionID: h.sessionID,
-		EventType: "llm_call",
-		Timestamp: time.Now(),
-		Summary:   fmt.Sprintf("LLM call to %s agent", agent),
-		Details:   h.formatLLMDetails(agent, input, output, err),
-		Duration:  duration,
-	}
-
-	if err != nil {
-		event.Error = err.Error()
-	}
-
-	h.addEvent(event)
+// GetHistory returns all phase log entries.
+func (h *HistoryTracker) GetHistory() []PhaseLogEntry {
+	return h.entries
 }
 
-// LogFileOperation logs a file operation event.
-func (h *HistoryTracker) LogFileOperation(operation string, path string, err error) {
-	event := HistoryEvent{
-		ID:        fmt.Sprintf("hist-%d", time.Now().UnixNano()),
-		SessionID: h.sessionID,
-		EventType: "file_operation",
-		Timestamp: time.Now(),
-		Summary:   fmt.Sprintf("%s: %s", operation, path),
-		Details:   fmt.Sprintf("Operation: %s, Path: %s", operation, path),
+// GetPhaseStatus returns the status of the most recent execution of the given phase.
+func (h *HistoryTracker) GetPhaseStatus(phase Phase) string {
+	for i := len(h.entries) - 1; i >= 0; i-- {
+		if h.entries[i].Phase == phase {
+			return h.entries[i].Status
+		}
 	}
-
-	if err != nil {
-		event.Error = err.Error()
-	}
-
-	h.addEvent(event)
+	return ""
 }
 
-// GetHistory returns all history events.
-func (h *HistoryTracker) GetHistory() []HistoryEvent {
-	return h.history
-}
-
-// PersistToStore persists all history events.
-// Note: This method is now a no-op since session persistence has been removed.
-func (h *HistoryTracker) PersistToStore() error {
-	return nil
-}
-
-// addEvent adds an event to the history.
-func (h *HistoryTracker) addEvent(event HistoryEvent) {
-	h.history = append(h.history, event)
-}
-
-// formatLLMDetails formats LLM call details for logging.
-func (h *HistoryTracker) formatLLMDetails(agent string, input string, output string, err error) string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("Agent: %s\n", agent))
-	sb.WriteString(fmt.Sprintf("Input (first 500 chars): %s\n", truncateString(input, 500)))
-	sb.WriteString(fmt.Sprintf("Output (first 500 chars): %s\n", truncateString(output, 500)))
-
-	if err != nil {
-		sb.WriteString(fmt.Sprintf("Error: %v\n", err))
-	}
-
-	return sb.String()
-}
-
-// truncateString truncates a string to the specified length.
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
+// CountEntries returns the total number of phase log entries.
+func (h *HistoryTracker) CountEntries() int {
+	return len(h.entries)
 }

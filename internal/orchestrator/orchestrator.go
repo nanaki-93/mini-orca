@@ -16,6 +16,43 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
 
+// Phase represents a stage in the development pipeline.
+type Phase string
+
+const (
+	// PhaseCoding is the implementation phase.
+	PhaseCoding Phase = "coding"
+	// PhaseTesting is the testing phase.
+	PhaseTesting Phase = "testing"
+	// PhaseReview is the automated review phase.
+	PhaseReview Phase = "review"
+	// PhaseHumanReview is the final human review gate.
+	PhaseHumanReview Phase = "human_review"
+)
+
+// validTransitions defines all allowed phase transitions in the pipeline.
+var validTransitions = []struct {
+	from, to Phase
+}{
+	{PhaseCoding, PhaseTesting},
+	{PhaseTesting, PhaseCoding},
+	{PhaseTesting, PhaseReview},
+	{PhaseReview, PhaseCoding},
+	{PhaseReview, PhaseHumanReview},
+	{PhaseHumanReview, PhaseCoding},
+	{PhaseHumanReview, "completed"},
+}
+
+// ValidateTransition checks whether a transition from 'from' to 'to' is valid.
+func ValidateTransition(from, to Phase) error {
+	for _, t := range validTransitions {
+		if t.from == from && t.to == to {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid phase transition: %s → %s", from, to)
+}
+
 // Session represents a single execution session within the pipeline.
 type Session struct {
 	// ID is the unique identifier for this session.
@@ -43,7 +80,6 @@ type Orchestrator struct {
 	config         *config.Config
 	currentPhase   Phase
 	currentSession *Session
-	historyTracker *HistoryTracker
 	ctx            context.Context
 	cancel         context.CancelFunc
 	humanGate      *HumanGate
@@ -76,44 +112,35 @@ func (o *Orchestrator) StartSession(sessionID, goal, projectPath, projectType st
 	return nil
 }
 
-// Run executes the full pipeline: coding → testing → review → human_gate
-func (o *Orchestrator) Run() error {
-	for {
-		switch o.currentPhase {
-		case PhaseCoding:
-			if err := o.RunCoding(); err != nil {
-				return fmt.Errorf("pipeline: coding failed: %w", err)
-			}
-		case PhaseTesting:
-			if err := o.RunTesting(); err != nil {
-				return fmt.Errorf("pipeline: testing failed: %w", err)
-			}
-		case PhaseReview:
-			if err := o.RunReview(); err != nil {
-				return fmt.Errorf("pipeline: review failed: %w", err)
-			}
-		case PhaseHumanReview:
-			if err := o.RunHumanReview(); err != nil {
-				return fmt.Errorf("pipeline: human review failed: %w", err)
-			}
-			if o.humanGate != nil && o.humanGate.IsApproved() {
-				if err := o.transitionToCompleted(); err != nil {
-					return fmt.Errorf("pipeline: completed failed: %w", err)
-				}
-				return nil
-			}
-			if o.humanGate != nil && !o.humanGate.IsApproved() {
-				fmt.Printf("Human requested edits: %s\n", o.humanGate.Feedback())
-				if err := o.transitionTo(PhaseCoding); err != nil {
-					return fmt.Errorf("pipeline: failed to loop back to coding: %w", err)
-				}
-			}
-		case "completed":
-			return nil
-		default:
-			return fmt.Errorf("pipeline: unknown phase %s", o.currentPhase)
+// RunOnce executes a single pass through the pipeline: coding → testing → review → human_gate.
+// It does not loop; each phase runs once and transitions to the next.
+// Callers should handle retries if a phase fails.
+func (o *Orchestrator) RunOnce() error {
+	// Execute phases in linear order
+	if err := o.RunCoding(); err != nil {
+		return fmt.Errorf("pipeline: coding failed: %w", err)
+	}
+
+	if err := o.RunTesting(); err != nil {
+		return fmt.Errorf("pipeline: testing failed: %w", err)
+	}
+
+	if err := o.RunReview(); err != nil {
+		return fmt.Errorf("pipeline: review failed: %w", err)
+	}
+
+	if err := o.RunHumanReview(); err != nil {
+		return fmt.Errorf("pipeline: human review failed: %w", err)
+	}
+
+	// After human review, transition to completed if approved
+	if o.humanGate != nil && o.humanGate.IsApproved() {
+		if err := o.transitionToCompleted(); err != nil {
+			return fmt.Errorf("pipeline: completed failed: %w", err)
 		}
 	}
+
+	return nil
 }
 
 // RunCoding executes the coding phase of the pipeline.
@@ -276,6 +303,11 @@ func (o *Orchestrator) transitionTo(phase Phase) error {
 	return nil
 }
 
+// logTransition logs a phase transition for monitoring and debugging.
+func logTransition(from, to Phase) {
+	fmt.Printf("[Orchestrator] Transition: %s → %s\n", from, to)
+}
+
 // codeBlock represents a code block extracted from agent output.
 type codeBlock struct {
 	// Language is the programming language of the code block.
@@ -315,23 +347,21 @@ func extractCodeBlocks(output string) []codeBlock {
 }
 
 // RunTesting executes the testing phase of the pipeline.
+// It runs tests and analyzes results, then transitions to review (if passed)
+// or returns an error (if failed). Callers handle retry logic.
 func (o *Orchestrator) RunTesting() error {
 	if o.currentSession == nil || o.currentSession.GeneratedCode == "" {
 		return fmt.Errorf("testing phase: no generated code available")
 	}
-	var testOutput string
-	err := WithRetry(func() error {
-		out, testErr := o.runTests()
-		if testErr != nil {
-			return fmt.Errorf("test execution failed: %w", testErr)
-		}
-		testOutput = out
-		return nil
-	}, 1, o.config.Retry.BackoffBase, o.config.Retry.BackoffMax)
+
+	// Execute tests (single attempt, no retry loop)
+	testOutput, err := o.runTests()
 	if err != nil {
+		// Log warning but continue - test failures are expected in single-pass mode
 		fmt.Printf("Warning: test execution returned error: %v\n", err)
 	}
 
+	// Analyze test results with retry (LLM call reliability)
 	var testerReport *TestReport
 	err = WithRetry(func() error {
 		res, agentErr := o.runTesterAgent(o.currentSession.GeneratedCode, testOutput)
@@ -351,9 +381,8 @@ func (o *Orchestrator) RunTesting() error {
 			return fmt.Errorf("testing phase: failed to transition to review: %w", err)
 		}
 	} else {
-		if err := o.transitionTo(PhaseCoding); err != nil {
-			return fmt.Errorf("testing phase: failed to transition to coding: %w", err)
-		}
+		// Single-pass: return error instead of looping back to coding
+		return fmt.Errorf("testing phase: tests failed - %s", report.Summary)
 	}
 	return nil
 }
@@ -415,10 +444,14 @@ type TestReport struct {
 }
 
 // RunReview executes the review phase of the pipeline.
+// It analyzes code quality and transitions to human review (if passing)
+// or returns an error (if failing). Callers handle retry logic.
 func (o *Orchestrator) RunReview() error {
 	if o.currentSession == nil || o.currentSession.GeneratedCode == "" {
 		return fmt.Errorf("review phase: no code available")
 	}
+
+	// Analyze code with retry (LLM call reliability)
 	var reviewerReport *ReviewReport
 	err := WithRetry(func() error {
 		res, agentErr := o.runReviewerAgent(o.currentSession.GeneratedCode, o.currentSession.Goal)
@@ -438,9 +471,8 @@ func (o *Orchestrator) RunReview() error {
 			return fmt.Errorf("review phase: failed to transition to human review: %w", err)
 		}
 	} else {
-		if err := o.transitionTo(PhaseCoding); err != nil {
-			return fmt.Errorf("review phase: failed to transition to coding: %w", err)
-		}
+		// Single-pass: return error instead of looping back to coding
+		return fmt.Errorf("review phase: review failed - %s (score: %d)", report.Summary, report.Score)
 	}
 	return nil
 }

@@ -18,6 +18,7 @@ Edit `internal/orchestrator/retry.go` to keep basic retry with exponential backo
 | Action | File |
 |--------|------|
 | EDIT | `internal/orchestrator/retry.go` |
+| EDIT | `internal/orchestrator/retry_test.go` |
 
 ## Changes Required
 - Keep basic retry with exponential backoff
@@ -35,7 +36,7 @@ Edit `internal/orchestrator/retry.go` to keep basic retry with exponential backo
 🟢 **Low**
 
 ## Checklist
-- [ ] Keep basic retry with exponential backoff
-- [ ] Remove complex retry strategies
-- [ ] Simplify `WithRetry` function
-- [ ] Ensure retry still works for failed operations
+- [x] Keep basic retry with exponential backoff
+- [x] Remove complex retry strategies
+- [x] Simplify `WithRetry` function
+- [x] Ensure retry still works for failed operations
