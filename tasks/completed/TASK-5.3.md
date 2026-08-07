@@ -18,6 +18,9 @@ Edit `internal/orchestrator/history.go` to replace complex history graph with si
 | Action | File |
 |--------|------|
 | EDIT | `internal/orchestrator/history.go` |
+| EDIT | `internal/orchestrator/orchestrator.go` |
+| EDIT | `internal/orchestrator/history_test.go` |
+| EDIT | `internal/orchestrator/orchestrator_test.go` |
 
 ## Changes Required
 - Remove complex history graph
@@ -35,8 +38,8 @@ Edit `internal/orchestrator/history.go` to replace complex history graph with si
 🟡 **Medium** - history used in UI
 
 ## Checklist
-- [ ] Remove complex history graph data structures
-- [ ] Implement simple phase log as array
-- [ ] Each entry: `{phase, status, timestamp, output}`
-- [ ] Update any code that reads history
-- [ ] Ensure history displays correctly in UI
+- [x] Remove complex history graph data structures
+- [x] Implement simple phase log as array
+- [x] Each entry: `{phase, status, timestamp, output}`
+- [x] Update any code that reads history
+- [x] Ensure history displays correctly in UI

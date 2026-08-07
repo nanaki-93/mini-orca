@@ -3,17 +3,14 @@ package orchestrator
 import (
 	"fmt"
 	"sync"
-	"time"
 )
 
 // GateResponse represents a human response to an approval request.
 type GateResponse struct {
-	// Action is the response action: "approve", "reject", or "edit".
+	// Action is the response action: "approve", "edit", or "refuse".
 	Action string
 	// Feedback is optional feedback from the human reviewer.
 	Feedback string
-	// Timestamp records when the response was made.
-	Timestamp time.Time
 }
 
 // HumanGate manages human-in-the-loop approval gates within the pipeline.
@@ -44,8 +41,8 @@ func NewHumanGate(sessionID string, phase Phase) *HumanGate {
 }
 
 // RequestApproval requests human approval for the given output.
-// It blocks until a response is received via Respond() or a timeout occurs.
-// Returns the GateResponse or an error if the gate is already approved or timed out.
+// It blocks until a response is received via Respond().
+// Returns nil if approved, or the GateResponse if edit/refuse.
 func (g *HumanGate) RequestApproval(output string) (*GateResponse, error) {
 	g.mu.Lock()
 	if g.approved {
@@ -71,22 +68,21 @@ func (g *HumanGate) RequestApproval(output string) (*GateResponse, error) {
 }
 
 // Respond sends a response to the approval gate.
-// The action must be one of: "approve", "reject", or "edit".
+// The action must be one of: "approve", "edit", or "refuse".
 func (g *HumanGate) Respond(action string, feedback string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	switch action {
-	case "approve", "reject", "edit":
+	case "approve", "edit", "refuse":
 		// Valid action
 	default:
-		return fmt.Errorf("human gate: invalid action %q, must be 'approve', 'reject', or 'edit'", action)
+		return fmt.Errorf("human gate: invalid action %q, must be 'approve', 'edit', or 'refuse'", action)
 	}
 
 	response := GateResponse{
-		Action:    action,
-		Feedback:  feedback,
-		Timestamp: time.Now(),
+		Action:   action,
+		Feedback: feedback,
 	}
 
 	select {
@@ -94,24 +90,6 @@ func (g *HumanGate) Respond(action string, feedback string) error {
 		return nil
 	default:
 		return fmt.Errorf("human gate: no pending approval request for session %s", g.sessionID)
-	}
-}
-
-// Timeout forces the gate into a timed-out state.
-// It returns an error indicating the timeout occurred.
-func (g *HumanGate) Timeout(timeout time.Duration) error {
-	// Wait for the specified duration for a response
-	select {
-	case response := <-g.responseChan:
-		g.mu.Lock()
-		defer g.mu.Unlock()
-		g.approved = response.Action == "approve"
-		g.feedback = response.Feedback
-		return nil
-	case <-time.After(timeout):
-		g.mu.Lock()
-		defer g.mu.Unlock()
-		return fmt.Errorf("human gate: approval timed out after %v for session %s", timeout, g.sessionID)
 	}
 }
 

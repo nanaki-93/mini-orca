@@ -37,8 +37,8 @@ Edit `internal/orchestrator/orchestrator.go` to replace infinite loop `Run()` wi
 🔴 **High** - core pipeline logic
 
 ## Checklist
-- [ ] Replace `Run()` infinite loop with `RunOnce()` single-pass
-- [ ] Implement linear flow: coding → testing → review → human_gate
-- [ ] Remove auto-retry loops
-- [ ] Keep phase transition validation
-- [ ] Ensure orchestrator handles single request correctly
+- [x] Replace `Run()` infinite loop with `RunOnce()` single-pass
+- [x] Implement linear flow: coding → testing → review → human_gate
+- [x] Remove auto-retry loops
+- [x] Keep phase transition validation
+- [x] Ensure orchestrator handles single request correctly

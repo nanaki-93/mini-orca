@@ -31,7 +31,7 @@ Delete `internal/orchestrator/phase_router.go` and `internal/orchestrator/phase_
 🟢 **Low** - replaced by simple linear flow
 
 ## Checklist
-- [ ] Delete `phase_router.go`
-- [ ] Delete `phase_router_test.go`
-- [ ] Remove any imports of phase router
-- [ ] Ensure orchestrator uses linear flow instead
+- [x] Delete `phase_router.go`
+- [x] Delete `phase_router_test.go`
+- [x] Remove any imports of phase router
+- [x] Ensure orchestrator uses linear flow instead
