@@ -7,8 +7,6 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
-	"github.com/nanaki-93/mini-orca/v2/internal/state"
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
 
@@ -19,12 +17,6 @@ func createTestDir(t *testing.T) string {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 	return dir
-}
-
-func createTestRouter(t *testing.T) *model.Router {
-	t.Helper()
-	router := model.NewRouter()
-	return router
 }
 
 func createTestConfig() *config.Config {
@@ -38,11 +30,9 @@ func createTestConfig() *config.Config {
 }
 
 func TestStartSession(t *testing.T) {
-	router := createTestRouter(t)
-	stateStore := state.NewStore(nil)
 	cfg := createTestConfig()
 
-	orch := New(router, nil, stateStore, cfg)
+	orch := New(nil, nil, cfg)
 	if orch == nil {
 		t.Fatal("expected non-nil orchestrator")
 	}
@@ -74,19 +64,14 @@ func TestStartSession(t *testing.T) {
 		t.Errorf("expected phase %s, got %s", PhaseCoding, orch.currentPhase)
 	}
 
-	// Verify state store has the session
-	storedSession, err := stateStore.GetSession(sessionID)
-	if err != nil {
-		t.Fatalf("failed to get session from store: %v", err)
-	}
-	if storedSession.Goal != goal {
-		t.Errorf("expected stored goal %q, got %q", goal, storedSession.Goal)
+	// Verify phase was set correctly
+	if orch.GetCurrentPhase() != PhaseCoding {
+		t.Errorf("expected phase %s from getter, got %s", PhaseCoding, orch.GetCurrentPhase())
 	}
 }
 
 func TestStartSession_WithNilStore(t *testing.T) {
-	router := createTestRouter(t)
-	orch := New(router, nil, nil, createTestConfig())
+	orch := New(nil, nil, createTestConfig())
 
 	err := orch.StartSession("sess-1", "test goal", "/tmp", "go")
 	if err != nil {
@@ -110,15 +95,16 @@ func TestRunCoding_EmptyOutput(t *testing.T) {
 }
 
 func TestRunTesting(t *testing.T) {
-	// Skip this test - runCoderAgent creates agent.Orchestrator with nil registry
-	t.Skip("Skipping: runCoding requires registry")
+	orch := New(nil, nil, createTestConfig())
+
+	err := orch.RunTesting()
+	if err == nil {
+		t.Fatal("expected error when no generated code, got nil")
+	}
 }
 
-func TestRunTesting_NoGeneratedCode(t *testing.T) {
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(nil, nil, stateStore, cfg)
+func TestRunTesting_EmptyOutput(t *testing.T) {
+	orch := New(nil, nil, createTestConfig())
 
 	err := orch.RunTesting()
 	if err == nil {
@@ -127,15 +113,16 @@ func TestRunTesting_NoGeneratedCode(t *testing.T) {
 }
 
 func TestRunReview(t *testing.T) {
-	// Skip this test - runReviewerAgent creates agent.Orchestrator with nil registry
-	t.Skip("Skipping: runReviewerAgent passes nil registry to agent.Orchestrator")
+	orch := New(nil, nil, createTestConfig())
+
+	err := orch.RunReview()
+	if err == nil {
+		t.Fatal("expected error when no code, got nil")
+	}
 }
 
 func TestRunReview_NoCode(t *testing.T) {
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(nil, nil, stateStore, cfg)
+	orch := New(nil, nil, createTestConfig())
 	_ = orch.StartSession("sess-1", "Create something", createTestDir(t), "go")
 
 	err := orch.RunReview()
@@ -145,12 +132,10 @@ func TestRunReview_NoCode(t *testing.T) {
 }
 
 func TestRunHumanReview(t *testing.T) {
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(nil, nil, stateStore, cfg)
+	orch := New(nil, nil, createTestConfig())
 	_ = orch.StartSession("sess-1", "Create User struct", createTestDir(t), "go")
 	orch.currentSession.GeneratedCode = "package user\n\ntype User struct {\n\tID string\n}"
+	orch.currentPhase = PhaseHumanReview
 
 	// Start the human gate in a goroutine to simulate approval
 	go func() {
@@ -165,21 +150,14 @@ func TestRunHumanReview(t *testing.T) {
 		t.Fatalf("RunHumanReview failed: %v", err)
 	}
 
-	// Verify phase history was saved
-	history, err := stateStore.GetSessionHistory("sess-1")
-	if err != nil {
-		t.Fatalf("failed to get session history: %v", err)
-	}
-	if len(history) == 0 {
-		t.Error("expected phase history to be saved")
+	// Verify phase was tracked
+	if orch.currentPhase != PhaseHumanReview {
+		t.Errorf("expected phase %s, got %s", PhaseHumanReview, orch.currentPhase)
 	}
 }
 
 func TestRunHumanReview_NoSession(t *testing.T) {
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(nil, nil, stateStore, cfg)
+	orch := New(nil, nil, createTestConfig())
 
 	err := orch.RunHumanReview()
 	if err == nil {
@@ -188,10 +166,7 @@ func TestRunHumanReview_NoSession(t *testing.T) {
 }
 
 func TestTransitionToCompleted(t *testing.T) {
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(nil, nil, stateStore, cfg)
+	orch := New(nil, nil, createTestConfig())
 	_ = orch.StartSession("sess-1", "Create User struct", createTestDir(t), "go")
 	orch.currentPhase = PhaseHumanReview
 
@@ -212,15 +187,12 @@ func TestTransitionToCompleted(t *testing.T) {
 }
 
 func TestTransitionToCompleted_WithHistory(t *testing.T) {
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(nil, nil, stateStore, cfg)
+	orch := New(nil, nil, createTestConfig())
 	_ = orch.StartSession("sess-1", "Create User struct", createTestDir(t), "go")
 	orch.currentPhase = PhaseHumanReview
 
 	// Initialize history tracker (normally done in StartSession)
-	orch.historyTracker = NewHistoryTracker("sess-1", stateStore)
+	orch.historyTracker = NewHistoryTracker("sess-1")
 	orch.historyTracker.LogPhaseTransition("", PhaseCoding)
 	orch.historyTracker.LogPhaseTransition(PhaseCoding, PhaseHumanReview)
 
@@ -235,12 +207,8 @@ func TestTransitionToCompleted_WithHistory(t *testing.T) {
 	}
 
 	// Verify session history
-	history, err := stateStore.GetSessionHistory("sess-1")
-	if err != nil {
-		t.Fatalf("failed to get session history: %v", err)
-	}
-	if len(history) == 0 {
-		t.Error("expected history entries to be saved")
+	if orch.currentPhase != "completed" {
+		t.Errorf("expected phase 'completed', got %s", orch.currentPhase)
 	}
 }
 
@@ -348,19 +316,11 @@ func TestExtractCodeBlocks_NoBackticks(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	router := createTestRouter(t)
-	stateStore := state.NewStore(nil)
 	cfg := createTestConfig()
 
-	orch := New(router, nil, stateStore, cfg)
+	orch := New(nil, nil, cfg)
 	if orch == nil {
 		t.Fatal("expected non-nil orchestrator")
-	}
-	if orch.router != router {
-		t.Error("expected router to be set")
-	}
-	if orch.stateStore != stateStore {
-		t.Error("expected stateStore to be set")
 	}
 	if orch.config != cfg {
 		t.Error("expected config to be set")
@@ -391,11 +351,7 @@ func TestSession_Struct(t *testing.T) {
 }
 
 func TestTransitionTo(t *testing.T) {
-	router := createTestRouter(t)
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(router, nil, stateStore, cfg)
+	orch := New(nil, nil, createTestConfig())
 	_ = orch.StartSession("sess-1", "test", createTestDir(t), "go")
 
 	// Valid transition
@@ -415,11 +371,7 @@ func TestTransitionTo(t *testing.T) {
 }
 
 func TestTransitionTo_InvalidTransition(t *testing.T) {
-	router := createTestRouter(t)
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(router, nil, stateStore, cfg)
+	orch := New(nil, nil, createTestConfig())
 	_ = orch.StartSession("sess-1", "test", createTestDir(t), "go")
 
 	// Invalid transition: coding -> review
@@ -430,10 +382,7 @@ func TestTransitionTo_InvalidTransition(t *testing.T) {
 }
 
 func TestOrchestrator_PipelineRun(t *testing.T) {
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(nil, nil, stateStore, cfg)
+	orch := New(nil, nil, createTestConfig())
 	_ = orch.StartSession("sess-1", "test", createTestDir(t), "go")
 	orch.currentPhase = "completed"
 
@@ -445,10 +394,7 @@ func TestOrchestrator_PipelineRun(t *testing.T) {
 }
 
 func TestOrchestrator_PipelineRun_UnknownPhase(t *testing.T) {
-	stateStore := state.NewStore(nil)
-	cfg := createTestConfig()
-
-	orch := New(nil, nil, stateStore, cfg)
+	orch := New(nil, nil, createTestConfig())
 	_ = orch.StartSession("sess-1", "test", createTestDir(t), "go")
 	orch.currentPhase = Phase("unknown")
 

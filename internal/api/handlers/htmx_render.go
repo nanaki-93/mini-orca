@@ -5,17 +5,12 @@ import (
 	"net/http"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
-	"github.com/nanaki-93/mini-orca/v2/internal/state"
 )
 
 // HTMXRenderHandler manages HTTP handlers for HTMX partial rendering.
 type HTMXRenderHandler struct {
 	// templateEngine provides template rendering capabilities.
 	templateEngine *TemplateEngine
-	// sessionStore provides access to session data.
-	sessionStore interface {
-		ListSessions() []*state.Session
-	}
 	// projectStore provides access to project data.
 	projectStore *ProjectStore
 	// cache provides caching for rendered responses.
@@ -27,15 +22,11 @@ type HTMXRenderHandler struct {
 // NewHTMXRenderHandler creates a new HTMXRenderHandler instance.
 func NewHTMXRenderHandler(
 	templateEngine *TemplateEngine,
-	sessionStore interface {
-		ListSessions() []*state.Session
-	},
 	projectStore *ProjectStore,
 	cache *api.ResponseCache,
 ) *HTMXRenderHandler {
 	return &HTMXRenderHandler{
 		templateEngine: templateEngine,
-		sessionStore:   sessionStore,
 		projectStore:   projectStore,
 		cache:          cache,
 	}
@@ -45,23 +36,10 @@ func NewHTMXRenderHandler(
 func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Request) {
 	data := make(map[string]interface{})
 
-	sessions := h.sessionStore.ListSessions()
-	if len(sessions) > 0 {
-		session := sessions[0]
-		data["SessionID"] = session.ID
-		data["FeatureRequest"] = session.Goal
-		data["SessionStatus"] = string(session.Status)
-
-		currentPhaseName, currentPhaseStatus := getCurrentPhaseInfo(session)
-		data["CurrentPhaseName"] = currentPhaseName
-		data["CurrentPhaseStatus"] = currentPhaseStatus
-		data["PhaseProgress"] = getPhaseProgress(session.Status)
-	} else {
-		data["SessionID"] = "no-active-session"
-		data["CurrentPhaseName"] = "Idle"
-		data["CurrentPhaseStatus"] = "pending"
-		data["PhaseProgress"] = 0
-	}
+	data["SessionID"] = "no-active-session"
+	data["CurrentPhaseName"] = "Idle"
+	data["CurrentPhaseStatus"] = "pending"
+	data["PhaseProgress"] = 0
 
 	// Project data
 	projects := h.projectStore.ListProjects()

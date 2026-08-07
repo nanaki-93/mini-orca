@@ -4,7 +4,7 @@
 Phase 1: Remove Session System
 
 ## Status
-⬜ Pending | 🔄 In Progress | ✅ Complete
+✅ Complete
 
 ## Goal
 Edit `internal/state/store.go` to remove all session-related methods and data, keeping only phase tracking functionality.
@@ -56,8 +56,8 @@ Edit `internal/state/store.go` to remove all session-related methods and data, k
 🔴 **High** - orchestrator depends on these methods
 
 ## Checklist
-- [ ] Remove all session-related methods from `Store`
-- [ ] Remove `Session` map from store struct
-- [ ] Keep only `currentPhase` and `status` fields
-- [ ] Simplify `InitStateStore` for single-session use
-- [ ] Ensure store compiles independently
+- [x] Remove all session-related methods from `Store`
+- [x] Remove `Session` map from store struct
+- [x] Keep only `currentPhase` and `status` fields
+- [x] Simplify `InitStateStore` for single-session use
+- [x] Ensure store compiles independently

@@ -60,7 +60,7 @@ func TestGetValidTransitions(t *testing.T) {
 }
 
 func TestPhaseRouter(t *testing.T) {
-	router := NewPhaseRouter(nil, nil)
+	router := NewPhaseRouter(nil)
 
 	t.Run("NextPhase", func(t *testing.T) {
 		next, err := router.NextPhase(PhaseCoding)

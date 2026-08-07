@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/nanaki-93/mini-orca/v2/internal/state"
 )
 
 // HistoryEvent represents a single event in the session history.
@@ -31,17 +29,15 @@ type HistoryEvent struct {
 
 // HistoryTracker manages session history tracking.
 type HistoryTracker struct {
-	sessionID  string
-	history    []HistoryEvent
-	stateStore *state.Store
+	sessionID string
+	history   []HistoryEvent
 }
 
 // NewHistoryTracker creates a new HistoryTracker instance.
-func NewHistoryTracker(sessionID string, stateStore *state.Store) *HistoryTracker {
+func NewHistoryTracker(sessionID string) *HistoryTracker {
 	return &HistoryTracker{
-		sessionID:  sessionID,
-		history:    make([]HistoryEvent, 0),
-		stateStore: stateStore,
+		sessionID: sessionID,
+		history:   make([]HistoryEvent, 0),
 	}
 }
 
@@ -101,29 +97,9 @@ func (h *HistoryTracker) GetHistory() []HistoryEvent {
 	return h.history
 }
 
-// PersistToStore persists all history events to the state store.
+// PersistToStore persists all history events.
+// Note: This method is now a no-op since session persistence has been removed.
 func (h *HistoryTracker) PersistToStore() error {
-	if h.stateStore == nil {
-		return fmt.Errorf("history tracker: state store is not initialized")
-	}
-
-	for _, event := range h.history {
-		historyEntry := &state.PhaseHistory{
-			ID:          event.ID,
-			SessionID:   event.SessionID,
-			Phase:       event.EventType,
-			StartedAt:   event.Timestamp,
-			CompletedAt: event.Timestamp.Add(event.Duration),
-			Status:      h.mapEventStatus(event),
-			Output:      event.Summary,
-			Error:       event.Error,
-		}
-
-		if err := h.stateStore.SavePhaseHistory(historyEntry); err != nil {
-			return fmt.Errorf("history tracker: failed to persist history: %w", err)
-		}
-	}
-
 	return nil
 }
 
@@ -145,24 +121,6 @@ func (h *HistoryTracker) formatLLMDetails(agent string, input string, output str
 	}
 
 	return sb.String()
-}
-
-// mapEventStatus maps a HistoryEvent status to a state.PhaseStatus.
-func (h *HistoryTracker) mapEventStatus(event HistoryEvent) state.PhaseStatus {
-	if event.Error != "" {
-		return state.PhaseStatusFailed
-	}
-
-	switch event.EventType {
-	case "phase_transition":
-		return state.PhaseStatusCompleted
-	case "llm_call":
-		return state.PhaseStatusCompleted
-	case "file_operation":
-		return state.PhaseStatusCompleted
-	default:
-		return state.PhaseStatusCompleted
-	}
 }
 
 // truncateString truncates a string to the specified length.

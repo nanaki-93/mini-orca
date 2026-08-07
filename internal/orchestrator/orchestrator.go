@@ -13,7 +13,6 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/agent"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
-	"github.com/nanaki-93/mini-orca/v2/internal/state"
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
 
@@ -41,7 +40,6 @@ type Session struct {
 type Orchestrator struct {
 	llmClient      *llm.Client
 	executor       tools.ToolExecutor
-	stateStore     *state.Store
 	config         *config.Config
 	currentPhase   Phase
 	currentSession *Session
@@ -51,17 +49,19 @@ type Orchestrator struct {
 	humanGate      *HumanGate
 }
 
-// New creates a new Orchestrator instance with the given dependencies.
-func New(llmClient *llm.Client, executor tools.ToolExecutor, stateStore *state.Store, config *config.Config) *Orchestrator {
+// GetCurrentPhase returns the current phase.
+func (o *Orchestrator) GetCurrentPhase() Phase {
+	return o.currentPhase
+}
+func New(llmClient *llm.Client, executor tools.ToolExecutor, cfg *config.Config) *Orchestrator {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Orchestrator{
-		llmClient:  llmClient,
-		executor:   executor,
-		stateStore: stateStore,
-		config:     config,
-		ctx:        ctx,
-		cancel:     cancel,
+		llmClient: llmClient,
+		executor:  executor,
+		config:    cfg,
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 }
 
@@ -72,17 +72,6 @@ func (o *Orchestrator) StartSession(sessionID, goal, projectPath, projectType st
 		ProjectType: projectType, CreatedAt: time.Now().Format(time.RFC3339),
 	}
 	o.currentPhase = PhaseCoding
-	if o.stateStore != nil {
-		stSession := &state.Session{
-			ID: sessionID, Goal: goal, ProjectPath: projectPath,
-			ProjectType: projectType, CurrentPhase: state.PhaseCoding,
-			Status: state.SessionStatusRunning, CreatedAt: time.Now(), UpdatedAt: time.Now(),
-		}
-		if err := o.stateStore.SaveSession(stSession); err != nil {
-			return fmt.Errorf("start session: %w", err)
-		}
-	}
-	o.historyTracker = NewHistoryTracker(sessionID, o.stateStore)
 	logTransition("", PhaseCoding)
 	return nil
 }
@@ -164,16 +153,6 @@ func (o *Orchestrator) RunCoding() error {
 
 	o.currentSession.GeneratedCode = code
 	o.currentSession.TargetFile = targetFile
-
-	// Save phase history
-	history := &state.PhaseHistory{
-		ID: fmt.Sprintf("history-%d", time.Now().UnixNano()), SessionID: o.currentSession.ID,
-		Phase: string(PhaseCoding), StartedAt: time.Now(), CompletedAt: time.Now(),
-		Status: state.PhaseStatusCompleted, Output: fmt.Sprintf("Code generated: %s", targetFile),
-	}
-	if err := o.stateStore.SavePhaseHistory(history); err != nil {
-		return fmt.Errorf("coding phase: failed to save phase history: %w", err)
-	}
 
 	// Transition to Testing
 	if err := o.transitionTo(PhaseTesting); err != nil {
@@ -294,11 +273,6 @@ func (o *Orchestrator) transitionTo(phase Phase) error {
 		o.currentSession.Phase = phase
 	}
 
-	// Update state store
-	if o.stateStore != nil {
-		_ = o.stateStore.UpdatePhaseStatus(state.Phase(phase), state.SessionStatusRunning)
-	}
-
 	return nil
 }
 
@@ -371,27 +345,6 @@ func (o *Orchestrator) RunTesting() error {
 		return fmt.Errorf("testing phase: tester agent failed: %w", err)
 	}
 	report := testerReport
-
-	// Save test results
-	testResult := &state.TestResult{
-		ID: fmt.Sprintf("test-result-%d", time.Now().UnixNano()), SessionID: o.currentSession.ID,
-		TestOutput: testOutput, Passed: report.Passed, Failures: report.Failures,
-		Suggestions: report.Suggestions, Coverage: report.Coverage, Summary: report.Summary,
-		ExecutedAt: time.Now(),
-	}
-	if err := o.stateStore.SaveTestResult(testResult); err != nil {
-		return fmt.Errorf("testing phase: failed to save test results: %w", err)
-	}
-
-	// Save phase history
-	history := &state.PhaseHistory{
-		ID: fmt.Sprintf("history-%d", time.Now().UnixNano()), SessionID: o.currentSession.ID,
-		Phase: string(PhaseTesting), StartedAt: time.Now(), CompletedAt: time.Now(),
-		Status: state.PhaseStatusCompleted, Output: fmt.Sprintf("Tests passed=%t", report.Passed),
-	}
-	if err := o.stateStore.SavePhaseHistory(history); err != nil {
-		return fmt.Errorf("testing phase: failed to save phase history: %w", err)
-	}
 
 	if report.Passed {
 		if err := o.transitionTo(PhaseReview); err != nil {
@@ -480,26 +433,6 @@ func (o *Orchestrator) RunReview() error {
 	}
 	report := reviewerReport
 
-	// Save review report
-	reviewReport := &state.ReviewReportEntry{
-		ID: fmt.Sprintf("review-report-%d", time.Now().UnixNano()), SessionID: o.currentSession.ID,
-		Issues: report.Issues, Suggestions: report.Suggestions, Score: report.Score,
-		Recommendation: report.Recommendation, Summary: report.Summary, ReviewedAt: time.Now(),
-	}
-	if err := o.stateStore.SaveReviewReport(reviewReport); err != nil {
-		return fmt.Errorf("review phase: failed to save review report: %w", err)
-	}
-
-	// Save phase history
-	history := &state.PhaseHistory{
-		ID: fmt.Sprintf("history-%d", time.Now().UnixNano()), SessionID: o.currentSession.ID,
-		Phase: string(PhaseReview), StartedAt: time.Now(), CompletedAt: time.Now(),
-		Status: state.PhaseStatusCompleted, Output: fmt.Sprintf("Score: %d, Rec: %s", report.Score, report.Recommendation),
-	}
-	if err := o.stateStore.SavePhaseHistory(history); err != nil {
-		return fmt.Errorf("review phase: failed to save phase history: %w", err)
-	}
-
 	if o.isReviewPassing(report) {
 		if err := o.transitionTo(PhaseHumanReview); err != nil {
 			return fmt.Errorf("review phase: failed to transition to human review: %w", err)
@@ -577,24 +510,12 @@ func (o *Orchestrator) RunHumanReview() error {
 	}
 
 	var reviewSummary string
-	if reports, err := o.stateStore.GetReviewReports(o.currentSession.ID); err == nil && len(reports) > 0 {
-		reviewSummary = reports[len(reports)-1].Summary
-	}
 
 	o.humanGate = NewHumanGate(o.currentSession.ID, PhaseHumanReview)
 	reviewOutput := o.formatHumanReviewOutput(code, reviewSummary)
 	_, err := o.humanGate.RequestApproval(reviewOutput)
 	if err != nil {
 		return fmt.Errorf("human review phase: failed to get human response: %w", err)
-	}
-
-	history := &state.PhaseHistory{
-		ID: fmt.Sprintf("history-%d", time.Now().UnixNano()), SessionID: o.currentSession.ID,
-		Phase: string(PhaseHumanReview), StartedAt: time.Now(), CompletedAt: time.Now(),
-		Status: state.PhaseStatusCompleted, Output: "Human review completed",
-	}
-	if err := o.stateStore.SavePhaseHistory(history); err != nil {
-		return fmt.Errorf("human review phase: failed to save phase history: %w", err)
 	}
 	return nil
 }
@@ -626,16 +547,6 @@ func (o *Orchestrator) transitionToCompleted() error {
 	if o.currentSession != nil {
 		o.currentSession.Phase = "completed"
 	}
-	if o.stateStore != nil {
-		if err := o.stateStore.UpdatePhaseStatus(state.PhaseHumanReview, state.SessionStatusCompleted); err != nil {
-			return fmt.Errorf("failed to update session status: %w", err)
-		}
-	}
 	o.currentPhase = "completed"
-	if o.historyTracker != nil {
-		if err := o.historyTracker.PersistToStore(); err != nil {
-			return fmt.Errorf("failed to persist history: %w", err)
-		}
-	}
 	return nil
 }
