@@ -61,9 +61,6 @@ func main() {
 
 	// Initialize API stores and handlers
 
-	// Initialize project store
-	projectStore := handlers.NewProjectStore()
-
 	// Initialize template engine
 	templatesPath := "internal/api/templates"
 	templateEngine, err := handlers.NewTemplateEngine(templatesPath)
@@ -76,7 +73,11 @@ func main() {
 	var htmxRenderHandler *handlers.HTMXRenderHandler
 	if templateEngine != nil {
 		cache := api.NewResponseCache(10 * time.Second)
-		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, projectStore, cache)
+		projectPath := ""
+		if projectInfo != nil {
+			projectPath = projectInfo.RootDir
+		}
+		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, cache, projectPath)
 	}
 
 	// Initialize orchestrator with LLM client, registry, and executor
@@ -131,7 +132,7 @@ func main() {
 	}
 
 	// Start HTTP server with all API endpoints
-	server := startHTTPServer(agentOrchestrator, projectStore, htmxRenderHandler)
+	server := startHTTPServer(agentOrchestrator, htmxRenderHandler)
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
@@ -150,7 +151,6 @@ func main() {
 // startHTTPServer creates and starts the HTTP server with all API endpoints.
 func startHTTPServer(
 	agentOrchestrator *agent.Orchestrator,
-	projectStore *handlers.ProjectStore,
 	htmxRenderHandler *handlers.HTMXRenderHandler,
 ) *http.Server {
 	mux := http.NewServeMux()
@@ -167,25 +167,6 @@ func startHTTPServer(
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","agents":["coder","tester","reviewer"]}`))
-	})
-
-	// Register project routes
-	projectHandler := handlers.NewProjectHandler(projectStore)
-	mux.HandleFunc("GET /api/projects", projectHandler.ListProjects)
-	mux.HandleFunc("POST /api/projects", projectHandler.CreateProject)
-	mux.HandleFunc("GET /api/projects/", func(w http.ResponseWriter, r *http.Request) {
-		// Route to appropriate project handler
-		parts := api.SplitPath(r.URL.Path)
-		if len(parts) >= 5 {
-			action := parts[4]
-			switch action {
-			case "files":
-				projectHandler.ListFiles(w, r)
-			}
-		}
-	})
-	mux.HandleFunc("GET /api/projects/files/", func(w http.ResponseWriter, r *http.Request) {
-		projectHandler.GetFileContent(w, r)
 	})
 
 	// System info endpoint
