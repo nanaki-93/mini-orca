@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
@@ -23,11 +22,10 @@ type ReviewReport struct {
 // It embeds *Client to inherit Agent interface implementation.
 type ReviewerAgent struct {
 	*Client
-	registry *skills.SkillsRegistry
 }
 
-// NewReviewerAgent creates a new reviewer agent with the given LLM client and skills registry.
-func NewReviewerAgent(llmClient *llm.Client, registry *skills.SkillsRegistry) *ReviewerAgent {
+// NewReviewerAgent creates a new reviewer agent with the given LLM client.
+func NewReviewerAgent(llmClient *llm.Client) *ReviewerAgent {
 	client := NewClient(llmClient)
 	client.name = "reviewer"
 	client.description = "Reviews code for quality, security, and adherence to standards"
@@ -35,8 +33,7 @@ func NewReviewerAgent(llmClient *llm.Client, registry *skills.SkillsRegistry) *R
 	client.skills = make([]string, 0)
 
 	return &ReviewerAgent{
-		Client:   client,
-		registry: registry,
+		Client: client,
 	}
 }
 
@@ -51,12 +48,8 @@ func (r *ReviewerAgent) Execute(ctx context.Context, input string) (*ReviewRepor
 		return nil, fmt.Errorf("reviewer agent: input is required")
 	}
 
-	if r.registry == nil {
-		return nil, fmt.Errorf("reviewer agent: skills registry not configured")
-	}
-
 	// Build system prompt from reviewer skills
-	systemPrompt := r.registry.BuildSkillPrompt(r.GetSkills())
+	systemPrompt := r.buildSkillPrompt(r.GetSkills())
 	if systemPrompt == "" {
 		systemPrompt = "You are an expert code reviewer. Analyze code for quality, security, and adherence to standards."
 	}
@@ -82,6 +75,19 @@ func (r *ReviewerAgent) Execute(ctx context.Context, input string) (*ReviewRepor
 	report := parseReviewReport(resp.Choices[0].Message.Content)
 
 	return report, nil
+}
+
+// buildSkillPrompt constructs a system prompt from the given skill names.
+func (r *ReviewerAgent) buildSkillPrompt(skillNames []string) string {
+	if len(skillNames) == 0 {
+		return ""
+	}
+
+	var prompt string
+	for _, skillName := range skillNames {
+		prompt += "Use the " + skillName + " skill.\n"
+	}
+	return prompt
 }
 
 // parseReviewReport parses the LLM response into a ReviewReport struct.

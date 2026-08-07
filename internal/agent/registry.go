@@ -83,7 +83,7 @@ func InitAgentRegistry(llmClient *llm.Client) *Registry {
 	registry := NewRegistry()
 
 	// Create and register coder agent
-	coder := NewCoderAgent(llmClient, nil)
+	coder := NewCoderAgent(llmClient)
 	if err := registry.Register(coder.Name(), coder); err != nil {
 		logging.Warn("Failed to register coder agent", "error", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
@@ -22,11 +21,10 @@ type TestReport struct {
 // It embeds *Client to inherit Agent interface implementation.
 type TesterAgent struct {
 	*Client
-	registry *skills.SkillsRegistry
 }
 
-// NewTesterAgent creates a new tester agent with the given LLM client and skills registry.
-func NewTesterAgent(llmClient *llm.Client, registry *skills.SkillsRegistry) *TesterAgent {
+// NewTesterAgent creates a new tester agent with the given LLM client.
+func NewTesterAgent(llmClient *llm.Client) *TesterAgent {
 	client := NewClient(llmClient)
 	client.name = "tester"
 	client.description = "Tests code and validates functionality against requirements"
@@ -34,8 +32,7 @@ func NewTesterAgent(llmClient *llm.Client, registry *skills.SkillsRegistry) *Tes
 	client.skills = make([]string, 0)
 
 	return &TesterAgent{
-		Client:   client,
-		registry: registry,
+		Client: client,
 	}
 }
 
@@ -50,12 +47,8 @@ func (t *TesterAgent) Execute(ctx context.Context, input string) (*TestReport, e
 		return nil, fmt.Errorf("tester agent: input is required")
 	}
 
-	if t.registry == nil {
-		return nil, fmt.Errorf("tester agent: skills registry not configured")
-	}
-
 	// Build system prompt from tester skills
-	systemPrompt := t.registry.BuildSkillPrompt(t.GetSkills())
+	systemPrompt := t.buildSkillPrompt(t.GetSkills())
 	if systemPrompt == "" {
 		systemPrompt = "You are an expert QA tester. Analyze code and test results to identify failures and suggest improvements."
 	}
@@ -81,6 +74,19 @@ func (t *TesterAgent) Execute(ctx context.Context, input string) (*TestReport, e
 	report := parseTestReport(resp.Choices[0].Message.Content)
 
 	return report, nil
+}
+
+// buildSkillPrompt constructs a system prompt from the given skill names.
+func (t *TesterAgent) buildSkillPrompt(skillNames []string) string {
+	if len(skillNames) == 0 {
+		return ""
+	}
+
+	var prompt string
+	for _, skillName := range skillNames {
+		prompt += "Use the " + skillName + " skill.\n"
+	}
+	return prompt
 }
 
 // parseTestReport parses the LLM response into a TestReport struct.

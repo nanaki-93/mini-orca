@@ -175,7 +175,7 @@ func (o *Orchestrator) getProjectContext() (string, error) {
 
 // runCoderAgent calls the coder agent with the user prompt and project context.
 func (o *Orchestrator) runCoderAgent(userPrompt string, projectContext string) (*agent.Result, error) {
-	orchestrator := agent.NewOrchestrator(o.llmClient, nil, o.executor)
+	orchestrator := agent.NewOrchestrator(o.llmClient, o.executor)
 	return orchestrator.RunCoderFromPrompt(userPrompt, projectContext)
 }
 
@@ -376,7 +376,7 @@ func (o *Orchestrator) runTests() (string, error) {
 
 // runTesterAgent calls the tester agent with code and test results for analysis.
 func (o *Orchestrator) runTesterAgent(code string, testResults string) (*TestReport, error) {
-	orchestrator := agent.NewOrchestrator(o.llmClient, nil, o.executor)
+	orchestrator := agent.NewOrchestrator(o.llmClient, o.executor)
 	agentResult, err := orchestrator.RunTester(code, testResults)
 	if err != nil {
 		return nil, err
@@ -447,7 +447,7 @@ func (o *Orchestrator) RunReview() error {
 
 // runReviewerAgent calls the reviewer agent with code and user prompt for review.
 func (o *Orchestrator) runReviewerAgent(code string, userPrompt string) (*ReviewReport, error) {
-	orchestrator := agent.NewOrchestrator(o.llmClient, nil, o.executor)
+	orchestrator := agent.NewOrchestrator(o.llmClient, o.executor)
 	agentResult, err := orchestrator.RunReviewer(code, userPrompt)
 	if err != nil {
 		return nil, err

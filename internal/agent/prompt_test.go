@@ -8,8 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 // TestCoderAgent_PromptBuilding verifies that the coder agent builds prompts
@@ -17,7 +16,7 @@ import (
 func TestCoderAgent_PromptBuilding(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
@@ -33,19 +32,19 @@ func TestCoderAgent_PromptBuilding(t *testing.T) {
 				t.Error("expected prompt to contain atomic unit description")
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "coder-prompt-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "coding-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "package user\n\ntype User struct {\n\tID string\n}"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "package user\n\ntype User struct {\n\tID string\n}"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 50, CompletionTokens: 30, TotalTokens: 80},
+				Usage: llm.ChatUsage{PromptTokens: 50, CompletionTokens: 30, TotalTokens: 80},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -55,18 +54,8 @@ func TestCoderAgent_PromptBuilding(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "coding-model",
-		Temperature: 0.3,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewCoderAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "coding-model", 0.3, 4096)
+	agent := NewCoderAgent(client)
 
 	_, err := agent.Execute(context.Background(), "Create a User struct with ID, Name, Email fields")
 	if err != nil {
@@ -79,7 +68,7 @@ func TestCoderAgent_PromptBuilding(t *testing.T) {
 func TestCoderAgent_SkillsInPrompt(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
@@ -92,19 +81,19 @@ func TestCoderAgent_SkillsInPrompt(t *testing.T) {
 				t.Error("expected prompt to contain atomic unit description")
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "coder-prompt-2",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "coding-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "func NewUser(id, name, email string) *User {\n\treturn &User{ID: id, Name: name, Email: email}\n}"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "func NewUser(id, name, email string) *User {\n\treturn &User{ID: id, Name: name, Email: email}\n}"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 60, CompletionTokens: 40, TotalTokens: 100},
+				Usage: llm.ChatUsage{PromptTokens: 60, CompletionTokens: 40, TotalTokens: 100},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -114,18 +103,8 @@ func TestCoderAgent_SkillsInPrompt(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "coding-model",
-		Temperature: 0.3,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewCoderAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "coding-model", 0.3, 4096)
+	agent := NewCoderAgent(client)
 
 	// Set coder-specific skills
 	agent.SetSkills([]string{"code_generation", "refactoring", "clean_code"})
@@ -146,7 +125,7 @@ func TestCoderAgent_SkillsInPrompt(t *testing.T) {
 func TestTesterAgent_PromptBuilding(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
@@ -162,19 +141,19 @@ func TestTesterAgent_PromptBuilding(t *testing.T) {
 				t.Error("expected prompt to contain test code")
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "tester-prompt-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "testing-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed.\n\n## Coverage: 90%"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed.\n\n## Coverage: 90%"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 80, CompletionTokens: 30, TotalTokens: 110},
+				Usage: llm.ChatUsage{PromptTokens: 80, CompletionTokens: 30, TotalTokens: 110},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -184,18 +163,8 @@ func TestTesterAgent_PromptBuilding(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("testing", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "testing-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewTesterAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "testing-model", 0.2, 4096)
+	agent := NewTesterAgent(client)
 
 	_, err := agent.Execute(context.Background(), "package user\n\nfunc TestUser(t *testing.T) {\n\t// test code\n}")
 	if err != nil {
@@ -208,7 +177,7 @@ func TestTesterAgent_PromptBuilding(t *testing.T) {
 func TestTesterAgent_SkillsInPrompt(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
@@ -221,19 +190,19 @@ func TestTesterAgent_SkillsInPrompt(t *testing.T) {
 				t.Error("expected prompt to contain 'Code and Test Results:' marker")
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "tester-prompt-2",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "testing-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed.\n\n## Coverage: 85%"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nAll tests passed.\n\n## Coverage: 85%"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 70, CompletionTokens: 25, TotalTokens: 95},
+				Usage: llm.ChatUsage{PromptTokens: 70, CompletionTokens: 25, TotalTokens: 95},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -243,18 +212,8 @@ func TestTesterAgent_SkillsInPrompt(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("testing", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "testing-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewTesterAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "testing-model", 0.2, 4096)
+	agent := NewTesterAgent(client)
 
 	// Set tester-specific skills
 	agent.SetSkills([]string{"test_generation", "edge_case_detection", "validation"})
@@ -275,7 +234,7 @@ func TestTesterAgent_SkillsInPrompt(t *testing.T) {
 func TestReviewerAgent_PromptBuilding(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
@@ -291,19 +250,19 @@ func TestReviewerAgent_PromptBuilding(t *testing.T) {
 				t.Error("expected prompt to contain code content")
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "reviewer-prompt-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "review-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nCode quality is good.\n\n## Score: 85\n\n## Recommendation\nApprove"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nCode quality is good.\n\n## Score: 85\n\n## Recommendation\nApprove"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 80, CompletionTokens: 30, TotalTokens: 110},
+				Usage: llm.ChatUsage{PromptTokens: 80, CompletionTokens: 30, TotalTokens: 110},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -313,18 +272,8 @@ func TestReviewerAgent_PromptBuilding(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewReviewerAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "review-model", 0.2, 4096)
+	agent := NewReviewerAgent(client)
 
 	_, err := agent.Execute(context.Background(), "package user\n\nfunc NewUser(id, name string) *User {\n\treturn &User{ID: id, Name: name}\n}")
 	if err != nil {
@@ -337,7 +286,7 @@ func TestReviewerAgent_PromptBuilding(t *testing.T) {
 func TestReviewerAgent_SkillsInPrompt(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
@@ -350,19 +299,19 @@ func TestReviewerAgent_SkillsInPrompt(t *testing.T) {
 				t.Error("expected prompt to contain 'Code to Review:' marker")
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "reviewer-prompt-2",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "review-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "## Summary\nCode follows best practices.\n\n## Score: 92\n\n## Recommendation\nApprove"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "## Summary\nCode follows best practices.\n\n## Score: 92\n\n## Recommendation\nApprove"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 70, CompletionTokens: 25, TotalTokens: 95},
+				Usage: llm.ChatUsage{PromptTokens: 70, CompletionTokens: 25, TotalTokens: 95},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -372,18 +321,8 @@ func TestReviewerAgent_SkillsInPrompt(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("review", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "review-model",
-		Temperature: 0.2,
-		MaxTokens:   4096,
-	})
-
-	registry := skills.NewSkillsRegistry()
-	agent := NewReviewerAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "review-model", 0.2, 4096)
+	agent := NewReviewerAgent(client)
 
 	// Set reviewer-specific skills
 	agent.SetSkills([]string{"code_review", "security_check", "best_practices"})
@@ -403,7 +342,7 @@ func TestReviewerAgent_SkillsInPrompt(t *testing.T) {
 func TestAgent_EmptySkillsFallback(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
@@ -417,19 +356,19 @@ func TestAgent_EmptySkillsFallback(t *testing.T) {
 				t.Error("expected prompt to contain content markers")
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "fallback-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "coding-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "Fallback response"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "Fallback response"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 10, CompletionTokens: 10, TotalTokens: 20},
+				Usage: llm.ChatUsage{PromptTokens: 10, CompletionTokens: 10, TotalTokens: 20},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -439,19 +378,8 @@ func TestAgent_EmptySkillsFallback(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "coding-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-
-	// Create an empty registry (no skills registered)
-	registry := skills.NewSkillsRegistry()
-	agent := NewCoderAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "coding-model", 0.7, 4096)
+	agent := NewCoderAgent(client)
 
 	// Don't set any skills - should use fallback
 	_, err := agent.Execute(context.Background(), "Build a REST API")
@@ -470,7 +398,7 @@ func TestAgent_EmptySkillsFallback(t *testing.T) {
 func TestAgent_SkillsRegistryIntegration(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
-			var req model.ChatRequest
+			var req llm.ChatRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("failed to decode request: %v", err)
 				return
@@ -483,19 +411,19 @@ func TestAgent_SkillsRegistryIntegration(t *testing.T) {
 				t.Error("expected prompt to contain goal content")
 			}
 
-			resp := model.ChatResponse{
+			resp := llm.ChatResponse{
 				ID:      "integration-1",
 				Object:  "chat.completion",
 				Created: 1234567890,
 				Model:   "coding-model",
-				Choices: []model.ChatChoice{
+				Choices: []llm.ChatChoice{
 					{
 						Index:        0,
-						Message:      model.ChatMessage{Role: "assistant", Content: "Plan with registry skills"},
+						Message:      llm.ChatMessage{Role: "assistant", Content: "Plan with registry skills"},
 						FinishReason: "stop",
 					},
 				},
-				Usage: model.ChatUsage{PromptTokens: 15, CompletionTokens: 10, TotalTokens: 25},
+				Usage: llm.ChatUsage{PromptTokens: 15, CompletionTokens: 10, TotalTokens: 25},
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(resp)
@@ -505,32 +433,8 @@ func TestAgent_SkillsRegistryIntegration(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := model.NewLMStudioProvider(server.URL)
-	router := model.NewRouter()
-	router.RegisterProvider(provider)
-	router.SetDefaultConfig("coding", model.ModelConfig{
-		Provider:    provider.Name(),
-		ModelID:     "coding-model",
-		Temperature: 0.7,
-		MaxTokens:   4096,
-	})
-
-	// Create a registry with some skills
-	registry := skills.NewSkillsRegistry()
-
-	// Register planner-specific skills
-	_ = registry.Register(skills.Skill{
-		Name:           "code_generation",
-		Type:           skills.Knowledge,
-		PromptTemplate: "Generate clean, well-documented code",
-	})
-	_ = registry.Register(skills.Skill{
-		Name:           "refactoring",
-		Type:           skills.Knowledge,
-		PromptTemplate: "Refactor code for clarity and maintainability",
-	})
-
-	agent := NewCoderAgent(router, registry)
+	client := llm.NewClient(server.URL, "test-key", "coding-model", 0.7, 4096)
+	agent := NewCoderAgent(client)
 
 	// Set skills from the registry
 	agent.SetSkills([]string{"task_breakdown", "architecture_design"})
@@ -541,8 +445,8 @@ func TestAgent_SkillsRegistryIntegration(t *testing.T) {
 	}
 
 	// Verify skills are set correctly
-	skills := agent.GetSkills()
-	if len(skills) != 2 {
-		t.Errorf("expected 2 skills, got %d", len(skills))
+	agentSkills := agent.GetSkills()
+	if len(agentSkills) != 2 {
+		t.Errorf("expected 2 skills, got %d", len(agentSkills))
 	}
 }

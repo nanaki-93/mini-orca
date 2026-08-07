@@ -34,12 +34,8 @@ func TestLoadConfigExample(t *testing.T) {
 		t.Errorf("expected base_url http://localhost:1234, got %s", cfg.LLM.BaseURL)
 	}
 
-	if len(cfg.Skills.Knowledge) != 9 {
-		t.Errorf("expected 9 knowledge entries, got %d", len(cfg.Skills.Knowledge))
-	}
-
-	if len(cfg.Skills.Tools) != 3 {
-		t.Errorf("expected 3 tools, got %d", len(cfg.Skills.Tools))
+	if len(cfg.Agents.Coder.Skills) != 3 {
+		t.Errorf("expected 3 coder skills, got %d", len(cfg.Agents.Coder.Skills))
 	}
 }
 

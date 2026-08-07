@@ -4,81 +4,84 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/model"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 func TestNewClient(t *testing.T) {
-	router := model.NewRouter()
-	client := NewClient(router)
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewClient(client)
 
-	if client == nil {
+	if agent == nil {
 		t.Fatal("expected non-nil client")
 	}
-	if client.router != router {
-		t.Error("expected client to hold the provided router")
+	if agent.llmClient == nil {
+		t.Error("expected client to hold the provided LLM client")
 	}
 }
 
 func TestClient_Name(t *testing.T) {
-	client := NewClient(nil)
-	client.name = "test-agent"
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "test-agent"
 
-	if got := client.Name(); got != "test-agent" {
+	if got := agent.Name(); got != "test-agent" {
 		t.Errorf("expected test-agent, got %s", got)
 	}
 }
 
-func TestClient_Execute_NoRouter(t *testing.T) {
-	client := NewClient(nil)
-	client.name = "test-agent"
-	_, err := client.Execute(context.Background(), "test input")
+func TestClient_Execute_NoClient(t *testing.T) {
+	agent := NewClient(nil)
+	agent.name = "test-agent"
+	_, err := agent.Execute(context.Background(), "test input")
 	if err == nil {
-		t.Fatal("expected error for nil router")
+		t.Fatal("expected error for nil LLM client")
 	}
 }
 
 func TestClient_Execute_EmptyInput(t *testing.T) {
-	router := model.NewRouter()
-	client := NewClient(router)
-	client.name = "test-agent"
-	client.phase = model.PhaseCoding
-	_, err := client.Execute(context.Background(), "")
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "test-agent"
+	agent.phase = "coding"
+	_, err := agent.Execute(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error for empty input")
 	}
 }
 
 func TestClient_GetSkills_Default(t *testing.T) {
-	client := NewClient(nil)
-	client.name = "test-agent"
-	skills := client.GetSkills()
-	if skills == nil {
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "test-agent"
+	agentSkills := agent.GetSkills()
+	if agentSkills == nil {
 		t.Fatal("expected non-nil skills slice")
 	}
-	if len(skills) != 0 {
-		t.Errorf("expected empty skills, got %v", skills)
+	if len(agentSkills) != 0 {
+		t.Errorf("expected empty skills, got %v", agentSkills)
 	}
 }
 
 func TestClient_SetSkills(t *testing.T) {
-	client := NewClient(nil)
-	client.name = "test-agent"
-	client.SetSkills([]string{"skill1", "skill2"})
+	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
+	agent := NewClient(client)
+	agent.name = "test-agent"
+	agent.SetSkills([]string{"skill1", "skill2"})
 
-	skills := client.GetSkills()
-	if len(skills) != 2 {
-		t.Errorf("expected 2 skills, got %d", len(skills))
+	agentSkills := agent.GetSkills()
+	if len(agentSkills) != 2 {
+		t.Errorf("expected 2 skills, got %d", len(agentSkills))
 	}
-	if skills[0] != "skill1" || skills[1] != "skill2" {
-		t.Errorf("expected [skill1, skill2], got %v", skills)
+	if agentSkills[0] != "skill1" || agentSkills[1] != "skill2" {
+		t.Errorf("expected [skill1, skill2], got %v", agentSkills)
 	}
 }
 
-func TestClient_ListModels_NoRouter(t *testing.T) {
-	client := NewClient(nil)
-	client.name = "test-agent"
-	_, err := client.ListModels()
+func TestClient_ListModels_NoClient(t *testing.T) {
+	agent := NewClient(nil)
+	agent.name = "test-agent"
+	_, err := agent.ListModels()
 	if err == nil {
-		t.Fatal("expected error for nil router")
+		t.Fatal("expected error for nil LLM client")
 	}
 }

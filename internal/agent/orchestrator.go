@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent/prompts"
-	"github.com/nanaki-93/mini-orca/v2/internal/agent/skills"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
@@ -16,26 +15,15 @@ import (
 // It provides high-level helper functions for running each agent with the appropriate inputs.
 type Orchestrator struct {
 	llmClient *llm.Client
-	registry  *skills.SkillsRegistry
 	executor  tools.ToolExecutor
 }
 
-// NewOrchestrator creates a new orchestrator with the given LLM client, skills registry, and tool executor.
-func NewOrchestrator(llmClient *llm.Client, registry *skills.SkillsRegistry, executor tools.ToolExecutor) *Orchestrator {
+// NewOrchestrator creates a new orchestrator with the given LLM client and tool executor.
+func NewOrchestrator(llmClient *llm.Client, executor tools.ToolExecutor) *Orchestrator {
 	return &Orchestrator{
 		llmClient: llmClient,
-		registry:  registry,
 		executor:  executor,
 	}
-}
-
-// getSkillNames extracts skill names from a slice of skills.
-func getSkillNames(s []skills.Skill) []string {
-	names := make([]string, len(s))
-	for i, s := range s {
-		names[i] = s.Name
-	}
-	return names
 }
 
 // RunCoder executes the coder agent with a plan unit description.
@@ -54,8 +42,7 @@ func (o *Orchestrator) RunCoderFromPrompt(userPrompt string, projectContext stri
 	if userPrompt == "" {
 		return nil, fmt.Errorf("orchestrator: coder user prompt is required")
 	}
-	agent := NewCoderAgent(o.llmClient, o.registry)
-	agent.SetSkills(getSkillNames(o.registry.GetForAgent("coder")))
+	agent := NewCoderAgent(o.llmClient)
 	var input strings.Builder
 	input.WriteString("## Feature Request\n" + userPrompt + "\n\n")
 	if projectContext != "" {
@@ -78,8 +65,7 @@ func (o *Orchestrator) RunTester(code string, testResults string) (*Result, erro
 		return nil, fmt.Errorf("orchestrator: tester test results are required")
 	}
 
-	agent := NewTesterAgent(o.llmClient, o.registry)
-	agent.SetSkills(getSkillNames(o.registry.GetForAgent("tester")))
+	agent := NewTesterAgent(o.llmClient)
 
 	// Combine code and test results into a single input
 	input := fmt.Sprintf("Code:\n%s\n\nTest Results:\n%s", code, testResults)
@@ -102,8 +88,7 @@ func (o *Orchestrator) RunReviewer(code string, userPrompt string) (*Result, err
 	if userPrompt == "" {
 		return nil, fmt.Errorf("orchestrator: reviewer user prompt is required")
 	}
-	agent := NewReviewerAgent(o.llmClient, o.registry)
-	agent.SetSkills(getSkillNames(o.registry.GetForAgent("reviewer")))
+	agent := NewReviewerAgent(o.llmClient)
 	input := fmt.Sprintf("## User Request\n%s\n\n## Generated Code\n%s", userPrompt, code)
 	report, err := agent.Execute(context.Background(), input)
 	if err != nil {
