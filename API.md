@@ -8,111 +8,78 @@ This document describes the API endpoints provided by the mini-orca daemon.
 - **URL**: `/health`
 - **Method**: `GET`
 - **Description**: Returns the health status of the daemon.
-- **Response**: `{"status":"ok"}`
+- **Response**: `{"status":"ok","version":"<version>"}`
 
 ### Daemon Status
 - **URL**: `/status`
 - **Method**: `GET`
 - **Description**: Returns the running status and registered agents.
-- **Response**: `{"status":"running","agents":["coder","tester","reviewer"]}`
+- **Response**: `{"status":"running","version":"<version>","agents":["coder","tester","reviewer"]}`
 
-## Session Management
+### System Info
+- **URL**: `/api/system/info`
+- **Method**: `GET`
+- **Description**: Returns system information (OS, architecture, Go version, etc.).
+- **Response**: JSON object with system details.
 
-### Create Session
-- **URL**: `/api/sessions`
+## Chat API
+
+### Send Message
+- **URL**: `/api/chat/message`
 - **Method**: `POST`
-- **Description**: Creates a new agent session.
+- **Description**: Sends a message to start a new session or continue an existing one.
 - **Body**: 
 ```json
 {
-  "feature_request": "string - Natural language description of the feature to implement",
+  "message": "string - Natural language description of the feature to implement",
   "project_path": "string - Filesystem path to the existing project",
   "project_type": "string - Optional: 'go', 'python', etc."
 }
 ```
+- **Response**: Streaming SSE (Server-Sent Events) with incremental updates.
 
-Response:
-```json
-{
-  "id": "string",
-  "feature_request": "string",
-  "project_path": "string",
-  "project_type": "string",
-  "current_phase": "coding",
-  "status": "pending",
-  "created_at": "timestamp",
-  "updated_at": "timestamp"
-}
-```
-
-### List Sessions
-- **URL**: `/api/sessions`
+### Get Chat History
+- **URL**: `/api/chat/history`
 - **Method**: `GET`
-- **Description**: Lists all active and past sessions.
-
-### Get Session Status
-- **URL**: `/api/sessions/{id}`
-- **Method**: `GET`
-- **Description**: Returns the current status of a specific session.
-
-### Start Session
-- **URL**: `/api/sessions/{id}/start`
-- **Method**: `POST`
-- **Description**: Starts the execution of a session.
-
-### Pause Session
-- **URL**: `/api/sessions/{id}/pause`
-- **Method**: `POST`
-- **Description**: Pauses a running session.
-
-### Resume Session
-- **URL**: `/api/sessions/{id}/resume`
-- **Method**: `POST`
-- **Description**: Resumes a paused session.
-
-### Stop Session
-- **URL**: `/api/sessions/{id}/stop`
-- **Method**: `POST`
-- **Description**: Stops a running session.
-
-### Get Gate Status
-- **URL**: `/api/sessions/{id}/gate`
-- **Method**: `GET`
-- **Description**: Returns the status of the human gate for the session.
-
-### Respond to Gate
-- **URL**: `/api/sessions/{id}/gate`
-- **Method**: `POST`
-- **Description**: Provides feedback or approval to a pending gate request.
-
-## Project Management
-
-### List Projects
-- **URL**: `/api/projects`
-- **Method**: `GET`
-- **Description**: Lists all projects managed by the daemon.
-
-### Create Project
-- **URL**: `/api/projects`
-- **Method**: `POST`
-- **Description**: Registers a new project.
-
-### List Project Files
-- **URL**: `/api/projects/{id}/files`
-- **Method**: `GET`
-- **Description**: Lists files within a project.
-
-### Get File Content
-- **URL**: `/api/projects/files/{path}`
-- **Method**: `GET`
-- **Description**: Returns the content of a specific file.
+- **Description**: Returns the message history for the current session.
+- **Response**: JSON array of message objects.
 
 ## UI Rendering (HTMX)
 
 These endpoints return HTML fragments for the HTMX-based frontend.
 
-- `GET /api/render/phase/{name}`: Renders the UI for a specific phase.
-- `GET /api/render/file-tree`: Renders the file tree component.
-- `GET /api/render/activity-log`: Renders the activity log component.
-- `GET /api/render/phase-tracker`: Renders the phase tracker component.
-- `GET /`: Renders the main IDE page.
+### Render Phase
+- **URL**: `/api/render/phase/{name}`
+- **Method**: `GET`
+- **Description**: Renders the UI for a specific phase.
+
+### Render File Tree
+- **URL**: `/api/render/file-tree`
+- **Method**: `GET`
+- **Description**: Renders the file tree component.
+
+### Render Dashboard
+- **URL**: `/api/render/dashboard`
+- **Method**: `GET`
+- **Description**: Renders the dashboard component.
+
+### Expand Folder
+- **URL**: `/api/tree/expand`
+- **Method**: `GET`
+- **Description**: Expands a folder in the file tree.
+
+### View File
+- **URL**: `/api/files/view`
+- **Method**: `GET`
+- **Description**: Displays the content of a file.
+
+### Main Page
+- **URL**: `/`
+- **Method**: `GET`
+- **Description**: Renders the main IDE page.
+
+## Static Files
+
+- **URL**: `/static/*`
+- **Method**: `GET`
+- **Description**: Serves static assets (CSS, JS, images).

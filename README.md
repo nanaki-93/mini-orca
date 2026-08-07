@@ -1,20 +1,20 @@
 # mini-orca
 
-**Version**: 3.0.0
+**Version**: 4.0.0
 
 Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LLM agents to code, test, and review your project features autonomously.
 
 ## Features
 
 - **Multi-Agent Orchestration**: Specialized agents (Coder, Tester, Reviewer) work together to solve complex tasks.
-- **Simplified Workflow**: Single-feature workflow — code generation → test → review → human gate.
-- **Human-in-the-loop**: Integrated human gate for final approval.
+- **Single-Feature Workflow**: Code generation → test → review → human gate — linear, no loops.
+- **Human-in-the-loop**: Integrated human gate for final approval before completion.
 - **Existing Project Support**: Add features to any existing project by specifying its path.
 - **HTMX-powered IDE**: A modern, responsive web interface for monitoring and interacting with agents.
 - **Structured Logging**: Comprehensive JSON/Text logging with sensitive data redaction.
 - **Robust Error Handling**: Centralized error management with user-friendly messages.
 - **Extensible Skills**: Easily add new knowledge and tool skills to your agents via configuration.
-- **LLM Provider Agnostic**: Supports multiple providers (e.g., LM Studio) with phase-specific model overrides.
+- **LLM Provider Agnostic**: Supports multiple providers (e.g., LM Studio, OpenAI-compatible APIs) with phase-specific model overrides.
 - **Docker Support**: Containerized deployment with Docker and Docker Compose.
 
 ## Architecture
@@ -22,19 +22,15 @@ Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LL
 ```mermaid
 graph LR
     User([User]) <--> UI[HTMX IDE]
-    UI <--> API[API Gateway]
+    UI <--> API[HTTP Server]
     API <--> Orchestrator[Orchestrator]
-    Orchestrator <--> Router[Model Router]
-    Router <--> Providers[LLM Providers]
-    
-    subgraph Agents
-        Orchestrator --> Coder[Coder Agent]
-        Orchestrator --> Tester[Tester Agent]
-        Orchestrator --> Reviewer[Reviewer Agent]
-    end
-    
-    Orchestrator --> State[State Store]
-    Orchestrator --> Executor[Tool Executor]
+    Orchestrator <--> Coder[Coder Agent]
+    Orchestrator <--> Tester[Tester Agent]
+    Orchestrator <--> Reviewer[Reviewer Agent]
+    Orchestrator <--> LLM[LLM Client]
+    Orchestrator <--> Executor[Tool Executor]
+    Orchestrator <--> Gate[Human Gate]
+    Orchestrator <--> Store[State Store]
 ```
 
 ## Getting Started
@@ -42,7 +38,7 @@ graph LR
 ### Prerequisites
 
 - Go 1.22+
-- LLM Provider (e.g., [LM Studio](https://lmstudio.ai/))
+- LLM Provider (e.g., [LM Studio](https://lmstudio.ai/), OpenAI-compatible API)
 
 ### Installation
 
@@ -91,12 +87,11 @@ See [DOCKER.md](DOCKER.md) for detailed Docker documentation.
 
 ### Creating a Session
 
-Send a POST request to `/api/sessions` with:
+Send a POST request to `/api/chat/message` with:
 ```json
 {
-  "feature_request": "Add a function to calculate fibonacci numbers",
-  "project_path": "/path/to/my/project",
-  "project_type": "go"
+  "message": "Implement a User struct with ID, Name, Email fields",
+  "project_path": "/path/to/my/project"
 }
 ```
 
