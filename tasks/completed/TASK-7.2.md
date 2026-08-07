@@ -39,7 +39,7 @@ Create chat message and chat input HTML component templates.
 🟢 **Low** - new components
 
 ## Checklist
-- [ ] Create `chat-message.html` component
-- [ ] Create `chat-input.html` component
-- [ ] Ensure components render correctly
-- [ ] Verify component integration with IDE template
+- [x] Create `chat-message.html` component
+- [x] Create `chat-input.html` component
+- [x] Ensure components render correctly
+- [x] Verify component integration with IDE template

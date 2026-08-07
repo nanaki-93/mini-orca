@@ -37,9 +37,9 @@ Create `internal/api/templates/components/review-modal.html` for user review act
 🟡 **Medium** - new modal
 
 ## Checklist
-- [ ] Create `review-modal.html` component
-- [ ] Add code diff display
-- [ ] Add test results display
-- [ ] Add review report display
-- [ ] Add Accept, Edit (with feedback), Refuse buttons
-- [ ] Ensure modal integrates with human gate workflow
+- [x] Create `review-modal.html` component
+- [x] Add code diff display
+- [x] Add test results display
+- [x] Add review report display
+- [x] Add Accept, Edit (with feedback), Refuse buttons
+- [x] Ensure modal integrates with human gate workflow
