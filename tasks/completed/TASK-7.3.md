@@ -37,9 +37,9 @@ Create `internal/api/static/js/chat.js` with chat client-side logic.
 🟡 **Medium** - client-side logic
 
 ## Checklist
-- [ ] Create `chat.js` file
-- [ ] Implement message sending to `/api/chat/message`
-- [ ] Implement response display
-- [ ] Implement streaming updates for pipeline phases
-- [ ] Handle accept/edit/refuse actions
-- [ ] Test chat functionality in browser
+- [x] Create `chat.js` file
+- [x] Implement message sending to `/api/chat/message`
+- [x] Implement response display
+- [x] Implement streaming updates for pipeline phases
+- [x] Handle accept/edit/refuse actions
+- [x] Test chat functionality in browser

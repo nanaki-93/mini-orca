@@ -37,8 +37,8 @@ Edit `internal/api/templates/ide.html` to add chat panel with messages area and 
 🟡 **Medium** - UI layout change
 
 ## Checklist
-- [ ] Add chat panel to IDE layout
-- [ ] Create scrollable chat messages area
-- [ ] Add chat input with textarea and send button
-- [ ] Add phase indicator in chat header
-- [ ] Ensure responsive layout works
+- [x] Add chat panel to IDE layout
+- [x] Create scrollable chat messages area
+- [x] Add chat input with textarea and send button
+- [x] Add phase indicator in chat header
+- [x] Ensure responsive layout works

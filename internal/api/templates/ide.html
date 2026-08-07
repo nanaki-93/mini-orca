@@ -12,9 +12,9 @@
 {{ end }}
 
 {{ define "main" }}
-<div id="ide-container" class="h-full flex flex-col">
+<div id="ide-container" class="h-full flex flex-row overflow-hidden">
     <!-- Editor Area -->
-    <div id="editor-container" class="flex-1 flex flex-col bg-dark-900" role="region" aria-label="Code editor">
+    <div id="editor-container" class="flex-1 flex flex-col bg-dark-900 min-w-0" role="region" aria-label="Code editor">
         <div id="file-content" class="flex-1 overflow-auto" role="main" tabindex="0" aria-label="File content">
             <div class="flex flex-col items-center justify-center h-full text-text-secondary opacity-50">
                 <svg class="w-16 h-16 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -25,31 +25,69 @@
         </div>
     </div>
 
-    <!-- Chat Input Area -->
-    <div id="chat-input-container" class="border-t border-dark-600 bg-dark-800 p-3">
-        <div class="max-w-4xl mx-auto">
+    <!-- Chat Panel (Right Sidebar) -->
+    <div id="chat-panel" class="w-full md:w-96 lg:w-[420px] flex flex-col bg-dark-800 border-l border-dark-600 shrink-0">
+        <!-- Chat Header with Phase Indicator -->
+        <div id="chat-header" class="h-12 border-b border-dark-600 flex items-center justify-between px-4 shrink-0">
             <div class="flex items-center gap-2">
-                <input
-                    type="text"
+                <svg class="w-4 h-4 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span class="text-sm font-medium text-text-primary">Mini-Orca</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-text-secondary">Phase:</span>
+                <span id="chat-phase-indicator" class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-600/20 text-blue-400" aria-label="Current phase: {{ title .CurrentPhaseName }}">
+                    {{ title .CurrentPhaseName }}
+                </span>
+            </div>
+        </div>
+
+        <!-- Chat Messages Area (Scrollable) -->
+        <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4" role="log" aria-label="Chat messages" aria-live="polite">
+            <!-- Welcome Message -->
+            <div class="flex items-start gap-2">
+                <div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+                    <svg class="w-3.5 h-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="bg-dark-700 rounded-lg rounded-tl-none px-3 py-2 text-sm text-text-primary">
+                        <p>Hello! I'm Mini-Orca, your AI development assistant. How can I help you today?</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Input Area -->
+        <div id="chat-input-container" class="border-t border-dark-600 p-3 shrink-0">
+            <div class="flex items-end gap-2">
+                <textarea
                     id="chat-input"
+                    rows="1"
                     placeholder="Ask Mini-Orca to help with your code..."
-                    class="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-blue-500"
-                    hx-post="/api/chat"
-                    hx-trigger="keyup[key === 'Enter'] from:#chat-input"
+                    class="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-blue-500 resize-none max-h-32"
+                    hx-post="/api/chat/message"
+                    hx-trigger="keyup[key === 'Enter'] and not key === 'ShiftEnter' from:#chat-input, keyup[key === 'Enter'] from:#chat-input"
                     hx-vals='js:{message: document.getElementById("chat-input").value}'
-                    hx-target="#chat-response"
+                    hx-target="#chat-messages"
                     hx-swap="innerHTML"
+                    hx-swap-oob="true"
                     hx-disabled-elt="this"
-                >
+                    onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.getElementById('chat-input').dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter'})); }"
+                ></textarea>
                 <button
                     id="chat-send-btn"
-                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
+                    class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shrink-0"
+                    aria-label="Send message"
                     onclick="document.getElementById('chat-input').dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter'}))"
                 >
-                    Send
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19V5m0 0l-7 7m7-7l7 7" />
+                    </svg>
                 </button>
             </div>
-            <div id="chat-response" class="mt-2 text-xs text-text-secondary"></div>
         </div>
     </div>
 </div>
