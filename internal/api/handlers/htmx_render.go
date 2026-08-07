@@ -3,6 +3,8 @@ package handlers
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 )
@@ -11,10 +13,10 @@ import (
 type HTMXRenderHandler struct {
 	// templateEngine provides template rendering capabilities.
 	templateEngine *TemplateEngine
-	// projectStore provides access to project data.
-	projectStore *ProjectStore
 	// cache provides caching for rendered responses.
 	cache *api.ResponseCache
+	// projectPath is the path to the project directory (from config or cwd).
+	projectPath string
 	// lastRenderedPhaseHistory stores the last rendered phase history for diffing.
 	lastRenderedPhaseHistory string
 }
@@ -22,13 +24,13 @@ type HTMXRenderHandler struct {
 // NewHTMXRenderHandler creates a new HTMXRenderHandler instance.
 func NewHTMXRenderHandler(
 	templateEngine *TemplateEngine,
-	projectStore *ProjectStore,
 	cache *api.ResponseCache,
+	projectPath string,
 ) *HTMXRenderHandler {
 	return &HTMXRenderHandler{
 		templateEngine: templateEngine,
-		projectStore:   projectStore,
 		cache:          cache,
+		projectPath:    projectPath,
 	}
 }
 
@@ -41,30 +43,40 @@ func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Reques
 	data["CurrentPhaseStatus"] = "pending"
 	data["PhaseProgress"] = 0
 
-	// Project data
-	projects := h.projectStore.ListProjects()
-	if len(projects) > 0 {
-		project := projects[0]
-		data["ProjectName"] = project.Name
-		data["ProjectPath"] = project.Path
-
-		entries, err := h.projectStore.ListProjectFiles(project.ID, "")
-		if err == nil {
-			items := make([]FileSystemItem, 0, len(entries))
-			for _, entry := range entries {
-				items = append(items, FileSystemItem{
-					Name:  entry.Name,
-					Path:  entry.Path,
-					IsDir: entry.IsDir,
-					Size:  entry.Size,
-				})
-			}
-			data["RootItems"] = items
+	// Project data from config or cwd
+	projectPath := h.projectPath
+	if projectPath == "" {
+		// Fallback to current working directory
+		var err error
+		projectPath, err = os.Getwd()
+		if err != nil {
+			projectPath = "."
 		}
-	} else {
-		data["ProjectName"] = "No Project"
-		data["ProjectPath"] = "Please open or create a project"
+	}
+
+	projectName := filepath.Base(projectPath)
+	data["ProjectName"] = projectName
+	data["ProjectPath"] = projectPath
+
+	// Read file tree directly from filesystem
+	entries, err := os.ReadDir(projectPath)
+	if err != nil {
 		data["RootItems"] = []FileSystemItem{}
+	} else {
+		items := make([]FileSystemItem, 0, len(entries))
+		for _, entry := range entries {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			items = append(items, FileSystemItem{
+				Name:  entry.Name(),
+				Path:  entry.Name(),
+				IsDir: entry.IsDir(),
+				Size:  info.Size(),
+			})
+		}
+		data["RootItems"] = items
 	}
 
 	data["CurrentPath"] = ""
