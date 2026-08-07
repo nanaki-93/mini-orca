@@ -43,9 +43,9 @@ Create `internal/api/handlers/chat_handler.go` with chat message and history end
 🟡 **Medium** - new feature
 
 ## Checklist
-- [ ] Create `internal/api/handlers/chat_handler.go`
-- [ ] Implement `SendMessage` handler for `POST /api/chat/message`
-- [ ] Implement `GetHistory` handler for `GET /api/chat/history`
-- [ ] Add in-memory chat history storage
-- [ ] Integrate with simplified orchestrator
-- [ ] Implement response streaming
+- [x] Create `internal/api/handlers/chat_handler.go`
+- [x] Implement `SendMessage` handler for `POST /api/chat/message`
+- [x] Implement `GetHistory` handler for `GET /api/chat/history`
+- [x] Add in-memory chat history storage
+- [x] Integrate with simplified orchestrator
+- [x] Implement response streaming

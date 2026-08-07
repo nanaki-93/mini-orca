@@ -128,7 +128,11 @@ func main() {
 	}
 
 	// Start HTTP server with all API endpoints
-	server := startHTTPServer(agentOrchestrator, htmxRenderHandler)
+	projectPath := ""
+	if projectInfo != nil {
+		projectPath = projectInfo.RootDir
+	}
+	server := startHTTPServer(agentOrchestrator, htmxRenderHandler, llmClient, executor, projectPath)
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
@@ -148,6 +152,9 @@ func main() {
 func startHTTPServer(
 	agentOrchestrator *agent.Orchestrator,
 	htmxRenderHandler *handlers.HTMXRenderHandler,
+	llmClient *llm.Client,
+	executor tools.ToolExecutor,
+	projectPath string,
 ) *http.Server {
 	mux := http.NewServeMux()
 
@@ -193,6 +200,13 @@ func startHTTPServer(
 			}
 		})
 	}
+
+	// Initialize chat handler
+	chatHandler := handlers.NewChatHandler(llmClient, executor, projectPath)
+
+	// Register chat endpoints
+	mux.HandleFunc("POST /api/chat/message", chatHandler.SendMessage)
+	mux.HandleFunc("GET /api/chat/history", chatHandler.GetHistory)
 
 	// Initialize error handler
 	templatesPath := "internal/api/templates"

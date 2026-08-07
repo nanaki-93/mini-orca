@@ -47,7 +47,7 @@ type ChatResponse struct {
 🟢 **Low** - new types
 
 ## Checklist
-- [ ] Create `internal/api/handlers/chat_types.go`
-- [ ] Define `ChatRequest` struct with Message, FilePath, LineNumber
-- [ ] Define `ChatResponse` struct with Role, Content, Phase, Timestamp
-- [ ] Ensure types compile
+- [x] Create `internal/api/handlers/chat_types.go`
+- [x] Define `ChatRequest` struct with Message, FilePath, LineNumber
+- [x] Define `ChatResponse` struct with Role, Content, Phase, Timestamp
+- [x] Ensure types compile

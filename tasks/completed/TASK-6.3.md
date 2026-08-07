@@ -40,8 +40,8 @@ Edit `cmd/daemon/main.go` to register chat handler and routes.
 🟢 **Low** - just registration
 
 ## Checklist
-- [ ] Create `chatHandler` instance
-- [ ] Register `POST /api/chat/message` route
-- [ ] Register `GET /api/chat/history` route
-- [ ] Ensure routes are properly mounted
-- [ ] Verify endpoints are accessible
+- [x] Create `chatHandler` instance
+- [x] Register `POST /api/chat/message` route
+- [x] Register `GET /api/chat/history` route
+- [x] Ensure routes are properly mounted
+- [x] Verify endpoints are accessible
