@@ -23,27 +23,6 @@ func BuildReviewerPromptFromRequest(code string, userRequest string, skills []st
 	}, nil
 }
 
-// BuildReviewerPrompt constructs the full chat message list for the reviewer agent.
-// It combines system-level instructions (role, skills, review checklist)
-// with user-level content (code, plan/spec, previous feedback).
-// DEPRECATED: Use BuildReviewerPromptFromRequest instead.
-func BuildReviewerPrompt(code string, plan string, skills []string) ([]llm.ChatMessage, error) {
-	if code == "" {
-		return nil, fmt.Errorf("reviewer prompt: code is required")
-	}
-	if plan == "" {
-		return nil, fmt.Errorf("reviewer prompt: plan/spec is required")
-	}
-
-	systemMessage := buildReviewerSystemMessage(skills)
-	userMessage := buildReviewerUserMessage(code, plan)
-
-	return []llm.ChatMessage{
-		{Role: "system", Content: systemMessage},
-		{Role: "user", Content: userMessage},
-	}, nil
-}
-
 // buildReviewerSystemMessage constructs the system prompt with role, skill templates, review checklist, and constraints.
 func buildReviewerSystemMessage(skills []string) string {
 	var sb promptBuilder
@@ -159,27 +138,5 @@ func buildReviewerUserMessageFromRequest(code string, userRequest string) string
 	sb.AppendLine("5. Are there any security concerns?")
 	sb.AppendLine("")
 	sb.AppendLine("Provide your review in the structured format specified in the system prompt.")
-	return sb.String()
-}
-
-// buildReviewerUserMessage constructs the user prompt with code, plan/spec, and previous feedback.
-// DEPRECATED: Use buildReviewerUserMessageFromRequest instead.
-func buildReviewerUserMessage(code string, plan string) string {
-	var sb promptBuilder
-
-	sb.AppendLine("## Code to Review")
-	sb.AppendLine("```go")
-	sb.AppendLine(code)
-	sb.AppendLine("```")
-
-	sb.AppendLine("")
-	sb.AppendLine("## Original Plan/Spec")
-	sb.AppendLine("```")
-	sb.AppendLine(plan)
-	sb.AppendLine("```")
-
-	sb.AppendLine("")
-	sb.AppendLine("Review the code against the plan/spec above. Identify issues, suggest improvements, and provide a quality score and recommendation.")
-
 	return sb.String()
 }

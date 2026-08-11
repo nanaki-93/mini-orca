@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -251,6 +252,13 @@ func (h *HTMXRenderHandler) readDir(dirPath string) ([]FileSystemItem, error) {
 			Size:  info.Size(),
 		})
 	}
+	//order the items by isDir first and then by name
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].IsDir == items[j].IsDir {
+			return items[i].Name < items[j].Name
+		}
+		return items[i].IsDir
+	})
 
 	return items, nil
 }
