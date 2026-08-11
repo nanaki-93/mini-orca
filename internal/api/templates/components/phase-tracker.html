@@ -16,7 +16,7 @@
             {{ range $index, $phase := .Phases }}
                 {{ $isLast := eq $index (sub $totalPhases 1) }}
                 {{ $phaseName := lower $phase.Name }}
-                {{ $phaseState := "pending" }}{{ if eq $phase.Status \"completed\" }}{{ $phaseState = \"completed\" }}{{ else if eq $phase.Status \"failed\" }}{{ $phaseState = \"failed\" }}{{ else if eq $phase.Status \"in_progress\" }}{{ $phaseState = \"in-progress\" }}{{ else if eq $phase.Status \"pending\" }}{{ $phaseState = \"waiting\" }}{{ end }}
+                {{ $phaseState := "pending" }}{{ if eq $phase.Status (quote "completed") }}{{ $phaseState = (quote "completed") }}{{ else if eq $phase.Status (quote "failed") }}{{ $phaseState = (quote "failed") }}{{ else if eq $phase.Status (quote "in_progress") }}{{ $phaseState = (quote "in-progress") }}{{ else if eq $phase.Status (quote "pending") }}{{ $phaseState = (quote "waiting") }}{{ end }}
 
                 {{ template "phase-node" dict "phase" $phase "phaseName" $phaseName "phaseState" $phaseState "isLast" $isLast }}
             {{ end }}
@@ -26,7 +26,7 @@
         <div id="current-phase-info" class="mt-3 p-3 bg-dark-700/50 rounded-md border border-dark-600 retryable">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <div class="phase-indicator-dot w-2 h-2 rounded-full {{ if eq .CurrentPhaseStatus \"completed\" }}bg-green-500{{ else if eq .CurrentPhaseStatus \"failed\" }}bg-red-500{{ else if eq .CurrentPhaseStatus \"in-progress\" }}bg-blue-500 animate-pulse{{ else if eq .CurrentPhaseStatus \"waiting\" }}bg-yellow-500{{ else }}bg-dark-600{{ end }}"></div>
+                    <div class="phase-indicator-dot w-2 h-2 rounded-full {{ if eq .CurrentPhaseStatus (quote "completed") }}bg-green-500{{ else if eq .CurrentPhaseStatus (quote "failed") }}bg-red-500{{ else if eq .CurrentPhaseStatus (quote "in-progress") }}bg-blue-500 animate-pulse{{ else if eq .CurrentPhaseStatus (quote "waiting") }}bg-yellow-500{{ else }}bg-dark-600{{ end }}"></div>
                     <div>
                         <span class="text-sm font-medium text-text-primary">{{ title .CurrentPhaseName }}</span>
                         {{ if .CurrentPhaseMessage }}
