@@ -9,59 +9,6 @@ import (
 	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
 )
 
-// RenderActivityLog handles GET /api/render/activity-log
-// Renders the HTML partial for the activity log.
-func (h *HTMXRenderHandler) RenderActivityLog(w http.ResponseWriter, r *http.Request) {
-	// Return empty activity log (session system removed)
-	entries := []ActivityEntry{}
-	phases := []string{"coding", "testing", "review", "human_review"}
-
-	data := ActivityLogRenderData{
-		Entries:    entries,
-		Phases:     phases,
-		AutoScroll: true,
-	}
-
-	rendered, err := h.templateEngine.RenderComponentPartial("activity-log", data)
-	if err != nil {
-		api.WriteAppError(w, apperrors.Internal("template rendering failed", "Failed to render the activity log component.", err))
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(rendered))
-}
-
-// RenderPhaseTracker handles GET /api/render/phase-tracker
-// Renders the HTML partial for the phase tracker.
-func (h *HTMXRenderHandler) RenderPhaseTracker(w http.ResponseWriter, r *http.Request) {
-	// Return default phase tracker (session system removed)
-	allPhases := []PhaseTrackerItem{
-		{Name: "Coding", Status: "pending", MaxRetries: 3},
-		{Name: "Testing", Status: "pending", MaxRetries: 3},
-		{Name: "Review", Status: "pending", MaxRetries: 3},
-		{Name: "Human Review", Status: "pending", MaxRetries: 3},
-	}
-
-	data := PhaseTrackerRenderData{
-		Phases:              allPhases,
-		CurrentPhaseName:    "Idle",
-		CurrentPhaseStatus:  "pending",
-		CurrentPhaseMessage: "No active session",
-	}
-
-	rendered, err := h.templateEngine.RenderComponentPartial("phase-tracker", data)
-	if err != nil {
-		api.WriteAppError(w, apperrors.Internal("template rendering failed", "Failed to render the phase tracker component.", err))
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(rendered))
-}
-
 // RenderDashboard handles GET /api/render/dashboard
 // Renders both phase tracker and activity log in a single request.
 // Uses caching to avoid unnecessary re-renders.
@@ -77,34 +24,7 @@ func (h *HTMXRenderHandler) RenderDashboard(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// Return default dashboard (session system removed)
-	allPhases := []PhaseTrackerItem{
-		{Name: "Coding", Status: "pending", MaxRetries: 3},
-		{Name: "Testing", Status: "pending", MaxRetries: 3},
-		{Name: "Review", Status: "pending", MaxRetries: 3},
-		{Name: "Human Review", Status: "pending", MaxRetries: 3},
-	}
-
-	phaseData := PhaseTrackerRenderData{
-		Phases:              allPhases,
-		CurrentPhaseName:    "Idle",
-		CurrentPhaseStatus:  "pending",
-		CurrentPhaseMessage: "No active session",
-	}
-
-	entries := []ActivityEntry{}
-	phases := []string{"coding", "testing", "review", "human_review"}
-
-	activityData := ActivityLogRenderData{
-		Entries:    entries,
-		Phases:     phases,
-		AutoScroll: true,
-	}
-
-	rendered, err := h.templateEngine.RenderComponentPartial("dashboard", DashboardRenderData{
-		PhaseTracker: phaseData,
-		ActivityLog:  activityData,
-	})
+	rendered, err := h.templateEngine.RenderComponentPartial("dashboard", nil)
 	if err != nil {
 		api.WriteAppError(w, apperrors.Internal("template rendering failed", "Failed to render the dashboard component.", err))
 		return

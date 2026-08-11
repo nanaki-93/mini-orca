@@ -36,12 +36,7 @@ func NewHTMXRenderHandler(
 
 // RenderMainPage renders the main IDE page.
 func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Request) {
-	data := make(map[string]interface{})
-
-	data["SessionID"] = "no-active-session"
-	data["CurrentPhaseName"] = "Idle"
-	data["CurrentPhaseStatus"] = "pending"
-	data["PhaseProgress"] = 0
+	data := make(map[string]any)
 
 	// Project data from config or cwd
 	projectPath := h.projectPath
