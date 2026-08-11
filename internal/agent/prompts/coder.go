@@ -35,27 +35,6 @@ func BuildCoderPromptFromRequest(req FeatureRequest) ([]llm.ChatMessage, error) 
 	}, nil
 }
 
-// BuildCoderPrompt constructs the full chat message list for the coder agent.
-// It combines system-level instructions (role, skills, output format, constraints)
-// with user-level content (unit description, existing code, dependencies).
-// DEPRECATED: Use BuildCoderPromptFromRequest instead.
-func BuildCoderPrompt(unit PlanUnit, existingCode string, skills []string) ([]llm.ChatMessage, error) {
-	if unit.Title == "" {
-		return nil, fmt.Errorf("coder prompt: unit title is required")
-	}
-	if unit.Description == "" {
-		return nil, fmt.Errorf("coder prompt: unit description is required")
-	}
-
-	systemMessage := buildCoderSystemMessage(skills)
-	userMessage := buildCoderUserMessage(unit, existingCode)
-
-	return []llm.ChatMessage{
-		{Role: "system", Content: systemMessage},
-		{Role: "user", Content: userMessage},
-	}, nil
-}
-
 // buildCoderSystemMessage constructs the system prompt with role, skill templates, output format, and constraints.
 func buildCoderSystemMessage(skills []string) string {
 	var sb promptBuilder
@@ -129,41 +108,5 @@ func buildCoderUserMessageFromRequest(req FeatureRequest) string {
 	sb.AppendLine("2. Include a comment at the very top: // target: path/to/target_file.go")
 	sb.AppendLine("3. Return ONLY the code in a code block")
 	sb.AppendLine("4. Do NOT include tests — testing is a separate phase")
-	return sb.String()
-}
-
-// buildCoderUserMessage constructs the user prompt with unit description, existing code, and dependencies.
-// DEPRECATED: Use buildCoderUserMessageFromRequest instead.
-func buildCoderUserMessage(unit PlanUnit, existingCode string) string {
-	var sb promptBuilder
-
-	sb.AppendLine("## Atomic Unit")
-	sb.AppendLine(fmt.Sprintf("Title: %s", unit.Title))
-	sb.AppendLine("")
-	sb.AppendLine(unit.Description)
-
-	// Dependencies
-	if len(unit.Dependencies) > 0 {
-		sb.AppendLine("")
-		sb.AppendLine("## Dependencies")
-		sb.AppendLine("This unit depends on the following units:")
-		for _, dep := range unit.Dependencies {
-			sb.AppendLine(fmt.Sprintf("- %s", dep))
-		}
-	}
-
-	// Existing code
-	if existingCode != "" {
-		sb.AppendLine("")
-		sb.AppendLine("## Existing Code")
-		sb.AppendLine("Reference this existing code for context:")
-		sb.AppendLine("```go")
-		sb.AppendLine(existingCode)
-		sb.AppendLine("```")
-	}
-
-	sb.AppendLine("")
-	sb.AppendLine("Implement the code for this atomic unit based on the description above.")
-
 	return sb.String()
 }
