@@ -35,12 +35,6 @@
                 </svg>
                 <span class="text-sm font-medium text-text-primary">Mini-Orca</span>
             </div>
-            <div class="flex items-center gap-2">
-                <span class="text-xs text-text-secondary">Phase:</span>
-                <span id="chat-phase-indicator" class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-600/20 text-blue-400" aria-label="Current phase: {{ title .CurrentPhaseName }}">
-                    {{ title .CurrentPhaseName }}
-                </span>
-            </div>
         </div>
 
         <!-- Chat Messages Area (Scrollable) -->
@@ -99,10 +93,6 @@
             <div class="flex items-center gap-1.5" aria-label="Connection status: Connected">
                 <span class="w-2 h-2 rounded-full bg-green-500" aria-hidden="true"></span>
                 <span>Daemon Connected</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <span>Phase:</span>
-                <span class="text-text-primary font-medium" aria-label="Current phase: {{ title .CurrentPhaseName }}">{{ title .CurrentPhaseName }}</span>
             </div>
         </div>
         <div class="flex items-center gap-4">

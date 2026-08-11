@@ -116,26 +116,6 @@ func (te *TemplateEngine) funcMap() template.FuncMap {
 	}
 }
 
-// RenderPhasePartial renders a phase partial for the given phase name.
-func (te *TemplateEngine) RenderPhasePartial(phase string, data PhaseRenderData) (string, error) {
-	phaseKey := fmt.Sprintf("%s-phase", lower(phase))
-
-	te.mu.RLock()
-	tmpl, ok := te.templates[phaseKey]
-	te.mu.RUnlock()
-
-	if !ok {
-		return "", fmt.Errorf("phase: unknown phase %q", phase)
-	}
-
-	var buf strings.Builder
-	if err := tmpl.ExecuteTemplate(&buf, phaseKey, data); err != nil {
-		return "", fmt.Errorf("phase: failed to render %q: %w", phaseKey, err)
-	}
-
-	return buf.String(), nil
-}
-
 // RenderComponentPartial renders a component partial by name.
 func (te *TemplateEngine) RenderComponentPartial(name string, data interface{}) (string, error) {
 	te.mu.RLock()

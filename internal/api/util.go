@@ -88,36 +88,3 @@ func CleanPath(path string) string {
 	}
 	return path
 }
-
-// ExtractSessionID extracts the session ID from the URL path.
-// Expected format: /api/sessions/{id}...
-func ExtractSessionID(path string) string {
-	parts := SplitPath(path)
-	if len(parts) < 4 || parts[1] != "api" || parts[2] != "sessions" {
-		return ""
-	}
-	return parts[3]
-}
-
-// ExtractProjectID extracts the project ID from the URL path.
-// Expected format: /api/projects/{id}...
-func ExtractProjectID(path string) string {
-	parts := SplitPath(path)
-	if len(parts) < 4 || parts[1] != "api" || parts[2] != "projects" {
-		return ""
-	}
-	return parts[3]
-}
-
-// ExtractSubPath extracts the sub-path after a known prefix.
-// For example, given path="/api/projects/123/files/src/main.go" and
-// prefix="/api/projects/123/files", it returns "src/main.go".
-func ExtractSubPath(path, prefix string) string {
-	if !strings.HasPrefix(path, prefix) {
-		return ""
-	}
-
-	subPath := strings.TrimPrefix(path, prefix)
-	subPath = strings.TrimPrefix(subPath, "/")
-	return subPath
-}

@@ -179,21 +179,6 @@ func newCacheInvalidator(cache *ResponseCache) *cacheInvalidator {
 	}
 }
 
-// invalidateSession invalidates all cached responses for a session.
-func (i *cacheInvalidator) invalidateSession(sessionID string) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Invalidate dashboard cache (the main polling endpoint)
-	i.cache.Delete("/api/render/dashboard")
-
-	// Invalidate phase tracker
-	i.cache.Delete("/api/render/phase-tracker")
-
-	// Invalidate activity log
-	i.cache.Delete("/api/render/activity-log")
-}
-
 // invalidateAll invalidates all cached responses.
 func (i *cacheInvalidator) invalidateAll() {
 	i.cache.Clear()

@@ -11,10 +11,8 @@
    --------------------------------------------------------------------------- */
 @import 'header.css';
 @import 'sidebar.css';
-@import 'editor.css';
-@import 'phase-tracker.css';
-@import 'modal.css';
 @import 'toast.css';
+@import "base.css";
 
 /* ---------------------------------------------------------------------------
    1. CSS Custom Properties (Design Tokens)
@@ -379,14 +377,6 @@ select option:checked { background-color: var(--accent-subtle); color: var(--acc
 .skeleton-grid-item .skeleton-description { height: 0.75rem; width: 90%; }
 .skeleton-grid-item .skeleton-footer { margin-top: auto; display: flex; gap: var(--space-2); }
 .skeleton-grid-item .skeleton-button { height: 1.75rem; width: 4rem; border-radius: var(--radius-md); }
-.phase-loading-overlay { position: absolute; inset: 0; background-color: rgba(13, 17, 23, 0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); z-index: 10; border-radius: inherit; }
-.phase-loading-overlay .phase-loading-text { font-size: var(--font-size-sm); color: var(--text-secondary); text-align: center; }
-.phase-loading-overlay .phase-loading-subtext { font-size: var(--font-size-xs); color: var(--text-muted); text-align: center; }
-@keyframes progressPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-.phase-progress-loading { animation: progressPulse 2s ease-in-out infinite; }
-.empty-state-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-12); text-align: center; }
-.empty-state-loading-icon { width: 3rem; height: 3rem; color: var(--text-muted); margin-bottom: var(--space-4); }
-.empty-state-loading-text { font-size: var(--font-size-sm); color: var(--text-secondary); }
 
 /* ---------------------------------------------------------------------------
    13. Tooltip
