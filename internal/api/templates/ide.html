@@ -58,18 +58,18 @@
         <div id="chat-input-container" class="border-t border-dark-600 p-3 shrink-0">
             <div class="flex items-end gap-2">
                 <textarea
-                    id="chat-input"
-                    rows="1"
-                    placeholder="Ask Mini-Orca to help with your code..."
-                    class="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-blue-500 resize-none max-h-32"
-                    hx-post="/api/chat/message"
-                    hx-trigger="keyup[key === 'Enter'] and not key === 'ShiftEnter' from:#chat-input, keyup[key === 'Enter'] from:#chat-input"
-                    hx-vals='js:{message: document.getElementById("chat-input").value}'
-                    hx-target="#chat-messages"
-                    hx-swap="innerHTML"
-                    hx-swap-oob="true"
-                    hx-disabled-elt="this"
-                    onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.getElementById('chat-input').dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter'})); }"
+                        id="chat-input"
+                        name="message"
+                        rows="1"
+                        placeholder="Ask Mini-Orca to help with your code..."
+                        class="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-blue-500 resize-none max-h-32"
+                        hx-post="/api/chat/message"
+                        hx-ext="json-enc"
+                        hx-trigger="keyup[event.key==='Enter' && !event.shiftKey]"
+                        hx-target="#chat-messages"
+                        hx-swap="innerHTML"
+                        hx-disabled-elt="this"
+                        onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); }"
                 ></textarea>
                 <button
                     id="chat-send-btn"

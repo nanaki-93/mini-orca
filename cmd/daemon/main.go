@@ -183,7 +183,6 @@ func startHTTPServer(
 	// Register HTMX render endpoints
 	if htmxRenderHandler != nil {
 		mux.HandleFunc("GET /api/render/file-tree", htmxRenderHandler.RenderFileTree)
-		mux.HandleFunc("GET /api/render/dashboard", htmxRenderHandler.RenderDashboard)
 		mux.HandleFunc("GET /api/tree/expand", htmxRenderHandler.ExpandFolder)
 		mux.HandleFunc("GET /api/files/view", htmxRenderHandler.ViewFile)
 	}
