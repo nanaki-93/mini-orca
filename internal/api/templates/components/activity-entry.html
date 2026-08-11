@@ -1,6 +1,6 @@
 {{ define "log-entry" }}
 <div
-    class="log-entry flex items-start gap-3 px-4 py-2 border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors cursor-pointer {{ if eq .Type \"llm\" }}type-llm{{ else if eq .Type \"file\" }}type-file{{ else if eq .Type \"test\" }}type-test{{ else if eq .Type \"review\" }}type-review{{ else }}type-system{{ end }} {{ if eq .Status \"error\" }}status-error{{ else if eq .Status \"running\" }}status-running{{ end }}"
+    class="log-entry flex items-start gap-3 px-4 py-2 border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors cursor-pointer {{ if eq .Type (quote "llm") }}type-llm{{ else if eq .Type (quote "file") }}type-file{{ else if eq .Type (quote "test") }}type-test{{ else if eq .Type (quote "review") }}type-review{{ else }}type-system{{ end }} {{ if eq .Status (quote "error") }}status-error{{ else if eq .Status (quote "running") }}status-running{{ end }}"
     data-phase="{{ .Phase }}"
     data-type="{{ .Type }}"
     data-status="{{ .Status }}"
@@ -37,7 +37,7 @@
             </span>
 
             <!-- Type Badge -->
-            <span class="log-type-badge px-1.5 py-0.5 text-[10px] font-medium rounded {{ if eq .Type \"llm\" }}badge-llm{{ else if eq .Type \"file\" }}badge-file{{ else if eq .Type \"test\" }}badge-test{{ else if eq .Type \"review\" }}badge-review{{ else }}badge-system{{ end }}">
+            <span class="log-type-badge px-1.5 py-0.5 text-[10px] font-medium rounded {{ if eq .Type (quote "llm") }}badge-llm{{ else if eq .Type (quote "file") }}badge-file{{ else if eq .Type (quote "test") }}badge-test{{ else if eq .Type (quote "review") }}badge-review{{ else }}badge-system{{ end }}">
                 {{ title .Type }}
             </span>
 

@@ -38,9 +38,9 @@
     <!-- Center Section: Phase Indicator -->
     <div class="flex items-center gap-2">
         <!-- Phase Badge -->
-        <div class="flex items-center gap-2 px-3 py-1.5 bg-dark-700 rounded-md border {{ if eq .CurrentPhaseStatus \"completed\" }}border-green-500{{ else if eq .CurrentPhaseStatus \"failed\" }}border-red-500{{ else if eq .CurrentPhaseStatus \"in-progress\" }}border-blue-500{{ else if eq .CurrentPhaseStatus \"waiting\" }}border-yellow-500{{ else }}border-dark-600{{ end }}">
-            <div class="phase-dot w-2 h-2 rounded-full {{ if eq .CurrentPhaseStatus \"completed\" }}bg-green-500{{ else if eq .CurrentPhaseStatus \"failed\" }}bg-red-500{{ else if eq .CurrentPhaseStatus \"in-progress\" }}bg-blue-500 animate-pulse{{ else if eq .CurrentPhaseStatus \"waiting\" }}bg-yellow-500{{ else }}bg-dark-600{{ end }}"></div>
-            <span class="text-xs font-medium {{ if eq .CurrentPhaseStatus \"completed\" }}text-green-500{{ else if eq .CurrentPhaseStatus \"failed\" }}text-red-500{{ else if eq .CurrentPhaseStatus \"in-progress\" }}text-blue-500{{ else if eq .CurrentPhaseStatus \"waiting\" }}text-yellow-500{{ else }}text-dark-600{{ end }}">{{ title .CurrentPhaseName }}</span>
+        <div class="flex items-center gap-2 px-3 py-1.5 bg-dark-700 rounded-md border {{ if eq .CurrentPhaseStatus (quote "completed") }}border-green-500{{ else if eq .CurrentPhaseStatus (quote "failed") }}border-red-500{{ else if eq .CurrentPhaseStatus (quote "in-progress") }}border-blue-500{{ else if eq .CurrentPhaseStatus (quote "waiting") }}border-yellow-500{{ else }}border-dark-600{{ end }}">
+            <div class="phase-dot w-2 h-2 rounded-full {{ if eq .CurrentPhaseStatus (quote "completed") }}bg-green-500{{ else if eq .CurrentPhaseStatus (quote "failed") }}bg-red-500{{ else if eq .CurrentPhaseStatus (quote "in-progress") }}bg-blue-500 animate-pulse{{ else if eq .CurrentPhaseStatus (quote "waiting") }}bg-yellow-500{{ else }}bg-dark-600{{ end }}"></div>
+            <span class="text-xs font-medium {{ if eq .CurrentPhaseStatus (quote "completed") }}text-green-500{{ else if eq .CurrentPhaseStatus (quote "failed") }}text-red-500{{ else if eq .CurrentPhaseStatus (quote "in-progress") }}text-blue-500{{ else if eq .CurrentPhaseStatus (quote "waiting") }}text-yellow-500{{ else }}text-dark-600{{ end }}">{{ title .CurrentPhaseName }}</span>
             {{ if .PhaseProgress }}
             <span class="text-xs text-text-secondary">{{ .PhaseProgress }}%</span>
             {{ end }}
@@ -48,7 +48,7 @@
 
         <!-- Phase Progress Bar -->
         <div class="hidden md:block w-32 h-1.5 bg-dark-600 rounded-full overflow-hidden">
-            <div class="phase-progress-bar h-full {{ if eq .CurrentPhaseStatus \"completed\" }}bg-green-500{{ else if eq .CurrentPhaseStatus \"failed\" }}bg-red-500{{ else if eq .CurrentPhaseStatus \"in-progress\" }}bg-blue-500{{ else if eq .CurrentPhaseStatus \"waiting\" }}bg-yellow-500{{ else }}bg-dark-600{{ end }} transition-all duration-500" style="width: {{ .PhaseProgress }}%"></div>
+            <div class="phase-progress-bar h-full {{ if eq .CurrentPhaseStatus (quote "completed") }}bg-green-500{{ else if eq .CurrentPhaseStatus (quote "failed") }}bg-red-500{{ else if eq .CurrentPhaseStatus (quote "in-progress") }}bg-blue-500{{ else if eq .CurrentPhaseStatus (quote "waiting") }}bg-yellow-500{{ else }}bg-dark-600{{ end }} transition-all duration-500" style="width: {{ .PhaseProgress }}%"></div>
         </div>
     </div>
 

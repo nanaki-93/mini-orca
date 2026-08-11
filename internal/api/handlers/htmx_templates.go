@@ -97,6 +97,7 @@ func (te *TemplateEngine) funcMap() template.FuncMap {
 		"title":         title,
 		"add":           func(a, b int) int { return a + b },
 		"sub":           func(a, b int) int { return a - b },
+		"mul":           func(a, b int) int { return a * b },
 		"div":           func(a, b int) int { return a / b },
 		"now":           func() string { return time.Now().Format("15:04:05") },
 		"fileExtension": fileExtension,
@@ -111,6 +112,7 @@ func (te *TemplateEngine) funcMap() template.FuncMap {
 		"curlyOpen":  func() string { return "{{" },
 		"curlyClose": func() string { return "}}" },
 		"default":    defFunc,
+		"quote":      func(s string) string { return s },
 	}
 }
 

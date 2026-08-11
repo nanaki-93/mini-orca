@@ -12,7 +12,7 @@
     <!-- Phase Indicator -->
     <div class="flex flex-col items-center">
         <!-- Status Circle -->
-        <div class="phase-circle w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all {{ if eq .phaseState \"completed\" }}border-green-500 text-green-500{{ else if eq .phaseState \"failed\" }}border-red-500 text-red-500{{ else if eq .phaseState \"in-progress\" }}border-blue-500 text-blue-500 ring-2 ring-blue-500/30{{ else if eq .phaseState \"waiting\" }}border-yellow-500 text-yellow-500{{ else }}border-dark-600 text-dark-600{{ end }} group-hover:scale-110">
+        <div class="phase-circle w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all {{ if eq .phaseState (quote "completed") }}border-green-500 text-green-500{{ else if eq .phaseState (quote "failed") }}border-red-500 text-red-500{{ else if eq .phaseState (quote "in-progress") }}border-blue-500 text-blue-500 ring-2 ring-blue-500/30{{ else if eq .phaseState (quote "waiting") }}border-yellow-500 text-yellow-500{{ else }}border-dark-600 text-dark-600{{ end }} group-hover:scale-110">
             {{ if eq .phaseState "completed" }}
                 <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
@@ -33,7 +33,7 @@
         </div>
 
         <!-- Phase Label -->
-        <span class="phase-label mt-2 text-xs font-medium truncate max-w-[80px] text-center {{ if eq .phaseState \"completed\" }}text-green-500{{ else if eq .phaseState \"failed\" }}text-red-500{{ else if eq .phaseState \"in-progress\" }}text-blue-500 font-bold{{ else if eq .phaseState \"waiting\" }}text-yellow-500{{ else }}text-dark-600{{ end }}">
+        <span class="phase-label mt-2 text-xs font-medium truncate max-w-[80px] text-center {{ if eq .phaseState (quote "completed") }}text-green-500{{ else if eq .phaseState (quote "failed") }}text-red-500{{ else if eq .phaseState (quote "in-progress") }}text-blue-500 font-bold{{ else if eq .phaseState (quote "waiting") }}text-yellow-500{{ else }}text-dark-600{{ end }}">
             {{ title .phase.Name }}
         </span>
 
@@ -62,8 +62,8 @@
 
     <!-- Connector Line -->
     {{ if not .isLast }}
-    <div class="phase-connector absolute top-4 left-[50%] w-[calc(100%-2rem)] h-0.5 -translate-x-1/2 {{ if eq .phaseState \"completed\" }}border-green-500{{ else if eq .phaseState \"failed\" }}border-red-500{{ else if eq .phaseState \"in-progress\" }}border-blue-500{{ else if eq .phaseState \"waiting\" }}border-yellow-500{{ else }}border-dark-600{{ end }}">
-        <div class="phase-connector-progress h-full bg-current transition-all duration-500 {{ if eq .phaseState "in-progress" }}phase-progress-loading{{ end }}" style="width: {{ if eq .phaseState \"completed\" }}100{{ else if eq .phaseState \"in-progress\" }}75{{ else if eq .phaseState \"waiting\" }}25{{ else }}0{{ end }}%"></div>
+    <div class="phase-connector absolute top-4 left-[50%] w-[calc(100%-2rem)] h-0.5 -translate-x-1/2 {{ if eq .phaseState (quote "completed") }}border-green-500{{ else if eq .phaseState (quote "failed") }}border-red-500{{ else if eq .phaseState (quote "in-progress") }}border-blue-500{{ else if eq .phaseState (quote "waiting") }}border-yellow-500{{ else }}border-dark-600{{ end }}">
+        <div class="phase-connector-progress h-full bg-current transition-all duration-500 {{ if eq .phaseState "in-progress" }}phase-progress-loading{{ end }}" style="width: {{ if eq .phaseState (quote "completed") }}100{{ else if eq .phaseState (quote "in-progress") }}75{{ else if eq .phaseState (quote "waiting") }}25{{ else }}0{{ end }}%"></div>
     </div>
     {{ end }}
 </div>
