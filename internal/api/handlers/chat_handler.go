@@ -40,6 +40,7 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req ChatRequest
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		api.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
