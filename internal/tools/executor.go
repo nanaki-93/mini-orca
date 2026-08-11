@@ -258,23 +258,29 @@ func (p *pythonToolExecutor) FormatCode(path string) error {
 // InitToolExecutor detects the project type at the current directory and creates
 // the appropriate ToolExecutor for the detected project type.
 func InitToolExecutor() (*ProjectInfo, ToolExecutor) {
-	// Detect project type starting from current directory
-	detector := NewProjectDetectorExecutor()
 	currentDir, err := os.Getwd()
 	if err != nil {
 		logging.Warn("Failed to get current directory", "error", err)
 		currentDir = "."
 	}
+	return InitToolExecutorWithPath(currentDir)
+}
 
-	projectInfo, err := detector.DetectProjectType(currentDir)
+// InitToolExecutorWithPath detects the project type at the given path and creates
+// the appropriate ToolExecutor for the detected project type.
+func InitToolExecutorWithPath(path string) (*ProjectInfo, ToolExecutor) {
+	// Detect project type starting from the provided path
+	detector := NewProjectDetectorExecutor()
+
+	projectInfo, err := detector.DetectProjectType(path)
 	if err != nil {
 		// If project type detection fails, try parent directories
-		logging.Warn("Failed to detect project type", "dir", currentDir, "error", err)
-		projectInfo, err = detector.DetectProjectType(filepath.Dir(currentDir))
+		logging.Warn("Failed to detect project type", "dir", path, "error", err)
+		projectInfo, err = detector.DetectProjectType(filepath.Dir(path))
 		if err != nil {
 			logging.Warn("Failed to detect project type in parent directory", "error", err)
 			logging.Info("Using generic executor (shell-only)")
-			return nil, NewExecutor(&ProjectInfo{Type: ProjectTypeUnknown, RootDir: currentDir})
+			return nil, NewExecutor(&ProjectInfo{Type: ProjectTypeUnknown, RootDir: path})
 		}
 	}
 
