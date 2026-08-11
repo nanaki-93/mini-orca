@@ -59,6 +59,11 @@ skills:
     linter: "Lint code for style and correctness"
     test_runner: "Execute test suites"
 
+# ─── Project ──────────────────────────────────────────────────────────────────
+# Path of the project to work with.
+
+project_path: "/Users/marcoandreose/DEV/lab/goktor"         # Default to current directory if empty
+
 # ─── Retry ────────────────────────────────────────────────────────────────────
 # Configure retry behavior for failed operations.
 

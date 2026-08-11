@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +53,11 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.FilePath == "" {
+		api.WriteError(w, http.StatusBadRequest, "a file must be open to send a message")
+		return
+	}
+
 	// Store user message
 	h.mu.Lock()
 	historyEntry := ChatResponse{
@@ -63,16 +70,25 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	// Build project context
-	projectContext := ""
+	var projectContext strings.Builder
 	if h.projectPath != "" {
-		goModPath := fmt.Sprintf("%s/go.mod", h.projectPath)
-		if data, err := os.ReadFile(goModPath); err == nil {
-			projectContext = string(data)
+		detector := tools.NewProjectDetectorExecutor()
+		if info, err := detector.DetectProjectType(h.projectPath); err == nil {
+			buildFilePath := filepath.Join(h.projectPath, info.BuildFile)
+			if data, err := os.ReadFile(buildFilePath); err == nil {
+				projectContext.WriteString(fmt.Sprintf("## Dependencies (%s)\n%s\n\n", info.BuildFile, string(data)))
+			}
 		}
 	}
 
+	// Add the currently open file to context
+	fullPath := filepath.Join(h.projectPath, req.FilePath)
+	if data, err := os.ReadFile(fullPath); err == nil {
+		projectContext.WriteString(fmt.Sprintf("## Open File (%s)\n%s\n\n", req.FilePath, string(data)))
+	}
+
 	// Run the pipeline
-	result, err := h.orchestrator.RunCoderFromPrompt(req.Message, projectContext)
+	result, err := h.orchestrator.RunCoderFromPrompt(req.Message, projectContext.String())
 	if err != nil {
 		h.mu.Lock()
 		h.history = append(h.history, ChatResponse{

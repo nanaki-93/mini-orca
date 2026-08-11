@@ -293,6 +293,11 @@
         const message = input.value.trim();
         if (!message || ChatState.isSending) return;
 
+        if (!ChatState.focusedFile) {
+            alert('Please open a file before sending a message.');
+            return;
+        }
+
         // Set sending state
         ChatState.isSending = true;
         setInputDisabled(true);
@@ -491,6 +496,23 @@
         // Setup textarea auto-resize
         if (DOM.input) {
             autoResizeTextarea(DOM.input);
+
+            // Override HTMX Enter key behavior to use our sendMessage function
+            DOM.input.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    sendMessage();
+                }
+            });
+        }
+
+        // Setup send button
+        if (DOM.sendBtn) {
+            DOM.sendBtn.onclick = (e) => {
+                e.preventDefault();
+                sendMessage();
+            };
         }
 
         // Load chat history

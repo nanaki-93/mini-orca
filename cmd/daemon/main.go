@@ -50,7 +50,7 @@ func main() {
 	)
 
 	// Detect project type and create tool executor
-	projectInfo, executor := tools.InitToolExecutor()
+	projectInfo, executor := tools.InitToolExecutorWithPath(cfg.ProjectPath)
 
 	// Initialize agent registry and register agents
 	agentRegistry := agent.InitAgentRegistry(llmClient)
@@ -69,10 +69,7 @@ func main() {
 	var htmxRenderHandler *handlers.HTMXRenderHandler
 	if templateEngine != nil {
 		cache := api.NewResponseCache(10 * time.Second)
-		projectPath := ""
-		if projectInfo != nil {
-			projectPath = projectInfo.RootDir
-		}
+		projectPath := cfg.ProjectPath
 		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, cache, projectPath)
 	}
 
@@ -128,10 +125,7 @@ func main() {
 	}
 
 	// Start HTTP server with all API endpoints
-	projectPath := ""
-	if projectInfo != nil {
-		projectPath = projectInfo.RootDir
-	}
+	projectPath := cfg.ProjectPath
 	server := startHTTPServer(agentOrchestrator, htmxRenderHandler, llmClient, executor, projectPath)
 
 	// Wait for shutdown signal

@@ -214,6 +214,7 @@ func (h *HTMXRenderHandler) ViewFile(w http.ResponseWriter, r *http.Request) {
 `)
 	}
 	sb.WriteString(`</code></pre></div>`)
+	sb.WriteString(`<script>if(window.setFileContext) window.setFileContext("` + template.JSEscapeString(path) + `");</script>`)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

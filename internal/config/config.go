@@ -11,10 +11,11 @@ import (
 
 // Config is the top-level configuration struct.
 type Config struct {
-	LLM     LLMConfig     `json:"llm" yaml:"llm"`
-	Agents  AgentsConfig  `json:"agents" yaml:"agents"`
-	Retry   RetryConfig   `json:"retry" yaml:"retry"`
-	Logging LoggingConfig `json:"logging" yaml:"logging"`
+	LLM         LLMConfig     `json:"llm" yaml:"llm"`
+	Agents      AgentsConfig  `json:"agents" yaml:"agents"`
+	Retry       RetryConfig   `json:"retry" yaml:"retry"`
+	Logging     LoggingConfig `json:"logging" yaml:"logging"`
+	ProjectPath string        `json:"project_path" yaml:"project_path"`
 }
 
 // LoggingConfig holds configuration for the logger.
@@ -91,6 +92,13 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Logging.Format == "" {
 		c.Logging.Format = "json"
+	}
+	if c.ProjectPath == "" {
+		if wd, err := os.Getwd(); err == nil {
+			c.ProjectPath = wd
+		} else {
+			c.ProjectPath = "."
+		}
 	}
 }
 
