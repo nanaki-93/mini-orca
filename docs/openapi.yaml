@@ -156,6 +156,58 @@ paths:
         '204': {description: Analysis cache entry removed.}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/analysis-job:
+    get:
+      tags: [Projects]
+      summary: Sequential semantic-analysis job progress
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Source-free project-scoped progress, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
+        '204': {description: No Analyze-all job has been started for this project revision.}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Explicitly start bounded sequential analysis
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllRequest'}}}
+      responses:
+        '202': {description: Job accepted; one file is analyzed at a time, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/analysis-job/pause:
+    post:
+      tags: [Projects]
+      summary: Pause after the current one-file analysis
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Paused job, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/analysis-job/resume:
+    post:
+      tags: [Projects]
+      summary: Resume a persisted paused job
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllRequest'}}}
+      responses:
+        '202': {description: Resumed job, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/analysis-job/cancel:
+    post:
+      tags: [Projects]
+      summary: Cancel the active sequential analysis job
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Canceled job, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/reindex:
     post:
       tags: [Projects]
@@ -395,6 +447,36 @@ components:
         prompt_version: {type: string}
         context_policy_version: {type: string}
         generated_at: {type: string, format: date-time}
+    AnalyzeAllRequest:
+      type: object
+      required: [project_revision]
+      properties:
+        project_revision: {type: string}
+        max_files: {type: integer, minimum: 1, maximum: 500, description: Bounded cache-warming file budget.}
+        max_retries: {type: integer, minimum: 0, maximum: 3}
+        confirm_remote_provider: {type: boolean}
+    AnalyzeAllJob:
+      type: object
+      required: [project_id, project_revision, status, max_files, max_retries, files, created_at, updated_at]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        status: {type: string, enum: [running, paused, canceled, completed, stale]}
+        max_files: {type: integer}
+        max_retries: {type: integer}
+        files:
+          type: array
+          items: {$ref: '#/components/schemas/AnalyzeAllFileJob'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AnalyzeAllFileJob:
+      type: object
+      required: [path, status, attempts]
+      properties:
+        path: {type: string, description: Eligible project-relative source file.}
+        status: {type: string, enum: [pending, running, completed, failed]}
+        attempts: {type: integer}
+        error: {type: string, description: Sanitized per-file failure state.}
     Finding:
       type: object
       properties: {severity: {type: string}, summary: {type: string}}
@@ -431,17 +513,55 @@ components:
         message: {type: string}
         file_path: {type: string, description: Project-relative selected file.}
         target_symbol: {type: string, description: Selected function, method, type, interface, or class.}
+        scope_mode: {type: string, enum: [strict_symbol, symbol_plus_imports], default: strict_symbol}
         project_id: {type: string, description: Stable id returned by project import.}
         project_revision: {type: string, description: Current project revision returned by project import.}
         base_file_hash: {type: string, description: Hash returned by selected-file information.}
         confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
     GenerationResponse:
       type: object
-      required: [output, phase]
+      required: [generation_id, version, project_id, project_revision, base_file_hash, target_path, target_symbol, scope_mode, candidate_content, candidate_hash, effective_model, context_manifest]
       properties:
-        output: {type: string, description: Preview only; never written by this endpoint.}
-        phase: {type: string, example: coding}
-        metadata: {type: object, additionalProperties: {type: string}}
+        generation_id: {type: string}
+        version: {type: string, enum: [v1]}
+        project_id: {type: string}
+        project_revision: {type: string}
+        base_file_hash: {type: string, description: Hash captured before the model request.}
+        target_path: {type: string}
+        target_symbol: {type: string}
+        scope_mode: {type: string, enum: [strict_symbol, symbol_plus_imports]}
+        candidate_content: {type: string, description: Unvalidated preview only; never persisted or applied by this endpoint.}
+        candidate_hash: {type: string, description: Normalized SHA-256 hash of candidate_content.}
+        rationale: {type: string}
+        effective_model: {$ref: '#/components/schemas/EffectiveModel'}
+        context_manifest: {$ref: '#/components/schemas/ContextManifest'}
+        validation: {$ref: '#/components/schemas/GenerationValidation'}
+    GenerationValidation:
+      type: object
+      required: [applicable, scope_mode, diagnostics, diff]
+      properties:
+        applicable: {type: boolean}
+        scope_mode: {type: string, enum: [strict_symbol, symbol_plus_imports]}
+        diagnostics: {type: array, items: {$ref: '#/components/schemas/GenerationFinding'}}
+        diff: {$ref: '#/components/schemas/UnifiedDiff'}
+    GenerationFinding:
+      type: object
+      properties:
+        code: {type: string}
+        message: {type: string}
+    UnifiedDiff:
+      type: object
+      properties:
+        old_path: {type: string}
+        new_path: {type: string}
+        lines: {type: array, items: {$ref: '#/components/schemas/DiffLine'}}
+    DiffLine:
+      type: object
+      properties:
+        kind: {type: string, enum: [context, added, removed]}
+        old_line: {type: integer}
+        new_line: {type: integer}
+        text: {type: string}
     ChatEntry:
       type: object
       properties:

@@ -26,6 +26,11 @@ coder/tester/reviewer pipeline.
 | GET | `/api/projects/current/files/analysis?path=…&project_revision=…` | Cached one-file semantic-analysis status. |
 | POST | `/api/projects/current/files/analysis` | Analyze exactly one selected file. |
 | DELETE | `/api/projects/current/files/analysis?path=…&project_revision=…` | Clear one selected-file analysis cache entry. |
+| GET | `/api/projects/current/analysis-job?project_revision=…` | Source-free Analyze-all progress for the active project revision. |
+| POST | `/api/projects/current/analysis-job` | Explicitly start bounded, sequential semantic analysis. |
+| POST | `/api/projects/current/analysis-job/pause?project_revision=…` | Pause after the active one-file request completes. |
+| POST | `/api/projects/current/analysis-job/resume` | Resume a persisted paused job. |
+| POST | `/api/projects/current/analysis-job/cancel?project_revision=…` | Cancel the active request and pending work. |
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM call. |
 | GET | `/api/projects/current/context?path=…` | Exact bounded context manifest without source text. |
 | POST | `/api/chat/message` | Generate one focused preview; never writes code. |
@@ -50,8 +55,17 @@ registered desktop API routes.
 
 The active generation action is `fix` with `strict_symbol` scope. The requested
 file and symbol, active project id/revision, and selected-file base hash are
-mandatory; stale project or file state returns `409 Conflict`. The response is a candidate preview only. The
-later `symbol_plus_imports` mode is reserved for validated minimal import edits.
+mandatory; stale project or file state returns `409 Conflict`. `scope_mode` is
+optional and defaults to `strict_symbol`; `symbol_plus_imports` requests the
+later validated minimal-import exception. The response contains a generation id,
+captured base hash, effective profile, source-free context manifest, normalized
+candidate hash, and unvalidated candidate content. It is preview-only and is
+never persisted or applied by this endpoint.
+
+The daemon asks models for one versioned JSON object with matching target path,
+symbol, and scope. For compatible local models it also accepts exactly one
+complete-file fenced code block. Multiple blocks, prose, unknown response
+fields, mismatched target metadata, and missing candidate content are rejected.
 
 When the configured model endpoint is not loopback/local, include
 `"confirm_remote_provider": true` in an import or generation request after the
@@ -87,3 +101,17 @@ and `atomic_target` flag.
 revision or the daemon returns `409 Conflict`; a successful response is the new
 deterministic index and revision. Missing projects return `404`, excluded files
 return `403`, invalid paths return `400`, and binary files return `422`.
+
+## Sequential Analyze-all
+
+Analyze-all is an explicit cache-warming operation; importing or reindexing a
+project never starts it. `POST /api/projects/current/analysis-job` requires the
+active `project_revision` and accepts optional `max_files` (at most 500) and
+`max_retries` (at most 3). It analyzes only eligible stale or missing text-file
+summaries, strictly one model request at a time. Progress is persisted as
+source-free metadata in `.mini-orca/sessions/analyze-all.json`.
+
+Pause lets the current request finish and retains its valid cache entry. Cancel
+propagates cancellation to the current model request and preserves previously
+completed entries. Reindexing invalidates an active job; resume is allowed only
+for a paused job at the same project revision.

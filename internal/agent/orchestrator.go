@@ -72,6 +72,11 @@ func (o *Orchestrator) RunCoderForSymbolContext(ctx context.Context, userPrompt,
 
 // AtomicCoderInput builds the shared prompt for one-file, one-symbol generation.
 func AtomicCoderInput(userPrompt, projectContext, targetFile, targetSymbol string) (string, error) {
+	return AtomicCoderInputWithScope(userPrompt, projectContext, targetFile, targetSymbol, "strict_symbol")
+}
+
+// AtomicCoderInputWithScope builds a versioned machine-checkable generation request.
+func AtomicCoderInputWithScope(userPrompt, projectContext, targetFile, targetSymbol, scope string) (string, error) {
 	if strings.TrimSpace(userPrompt) == "" {
 		return "", fmt.Errorf("orchestrator: coder user prompt is required")
 	}
@@ -87,10 +92,10 @@ func AtomicCoderInput(userPrompt, projectContext, targetFile, targetSymbol strin
 	input.WriteString("Target file: " + targetFile + "\n")
 	input.WriteString("Target function or class: " + targetSymbol + "\n")
 	input.WriteString("Action: fix\n")
-	input.WriteString("Scope mode: strict_symbol\n")
+	input.WriteString("Scope mode: " + scope + "\n")
 	input.WriteString("You may change only this named symbol in this one file. Do not create, rename, or modify any other file or symbol. Preserve unrelated target-file code exactly.\n\n")
 	input.WriteString("## Project-wide context\n" + projectContext + "\n\n")
-	input.WriteString("## Output contract\nReturn exactly one code block containing the complete updated content of " + targetFile + ". Do not return patches, explanations, or additional files.\n")
+	input.WriteString("## Output contract\nReturn exactly one JSON object and no Markdown or prose. Its fields must be version (\"v1\"), target_path (\"" + targetFile + "\"), target_symbol (\"" + targetSymbol + "\"), scope_mode (\"" + scope + "\"), candidate_content (the complete updated content of " + targetFile + "), and optional rationale. Do not return patches, explanations outside rationale, or additional files.\n")
 	return input.String(), nil
 }
 

@@ -38,6 +38,7 @@ type Service struct {
 	retryBase           time.Duration
 	retryMax            time.Duration
 	remoteProvider      bool
+	analysisAll         *analysisAllController
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
@@ -85,6 +86,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		retryBase:           time.Duration(backoffBase) * time.Millisecond,
 		retryMax:            time.Duration(backoffMax) * time.Millisecond,
 		remoteProvider:      !isLoopbackURL(cfg.LLM.BaseURL),
+		analysisAll:         newAnalysisAllController(),
 	}, nil
 }
 
@@ -145,37 +147,6 @@ func (s *Service) RequireRemoteConfirmation(confirmed bool) error {
 func (s *Service) ContextManifest(targetFile string) (project.ContextManifest, error) {
 	_, manifest, err := project.NewContextBuilder().BuildWithManifest(s.manager.Root(), targetFile)
 	return manifest, err
-}
-
-// Generate produces a preview only. It never writes to the active project.
-func (s *Service) Generate(ctx context.Context, userPrompt, targetFile, targetSymbol string, confirmRemoteProvider bool) (*agent.Result, error) {
-	if err := s.RequireRemoteConfirmation(confirmRemoteProvider); err != nil {
-		return nil, err
-	}
-	root := s.manager.Root()
-	fileInfo, err := project.GetFileInfo(root, targetFile)
-	if err != nil {
-		return nil, err
-	}
-	if fileInfo.Binary {
-		return nil, fmt.Errorf("target file must be a text source file")
-	}
-	projectContext, _, err := project.NewContextBuilder().BuildWithManifest(root, targetFile)
-	if err != nil {
-		return nil, fmt.Errorf("build project context: %w", err)
-	}
-	input, err := agent.AtomicCoderInput(userPrompt, projectContext, targetFile, targetSymbol)
-	if err != nil {
-		return nil, err
-	}
-
-	timed, cancel := context.WithTimeout(ctx, duration(s.profile.Timeout))
-	defer cancel()
-	result, err := s.retry(timed, input)
-	if timed.Err() != nil {
-		return nil, timed.Err()
-	}
-	return result, err
 }
 
 func isLoopbackURL(rawURL string) bool {

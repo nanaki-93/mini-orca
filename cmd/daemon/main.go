@@ -221,6 +221,11 @@ func newHTTPMux(
 	mux.HandleFunc("GET /api/projects/current/files/analysis", projectHandler.FileAnalysis)
 	mux.HandleFunc("POST /api/projects/current/files/analysis", projectHandler.AnalyzeFile)
 	mux.HandleFunc("DELETE /api/projects/current/files/analysis", projectHandler.DeleteFileAnalysis)
+	mux.HandleFunc("GET /api/projects/current/analysis-job", projectHandler.AnalyzeAllJob)
+	mux.HandleFunc("POST /api/projects/current/analysis-job", projectHandler.StartAnalyzeAll)
+	mux.HandleFunc("POST /api/projects/current/analysis-job/pause", projectHandler.PauseAnalyzeAll)
+	mux.HandleFunc("POST /api/projects/current/analysis-job/resume", projectHandler.ResumeAnalyzeAll)
+	mux.HandleFunc("POST /api/projects/current/analysis-job/cancel", projectHandler.CancelAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/reindex", projectHandler.Reindex)
 
 	return mux

@@ -20,9 +20,9 @@ Source roadmap: [`../docs/NEXT_FUNCTIONS_FIXES_UI.md`](../docs/NEXT_FUNCTIONS_FI
 | 12 | [File-analysis cache](completed/12_file_analysis_cache.md) | 04, 07, 08 | Complete |
 | 13 | [Semantic file analysis](completed/13_semantic_file_analysis.md) | 02, 05, 09, 10, 12 | Complete |
 | 14 | [File-analysis APIs](completed/14_file_analysis_apis.md) | 12, 13 | Complete |
-| 15 | [Sequential analyze-all](15_sequential_analyze_all.md) | 14 | Pending |
-| 16 | [Generation response contract](16_generation_response_contract.md) | 02, 06, 07 | Pending |
-| 17 | [Scope validation and diff](17_scope_validation_and_diff.md) | 09, 16 | Pending |
+| 15 | [Sequential analyze-all](completed/15_sequential_analyze_all.md) | 14 | Complete |
+| 16 | [Generation response contract](completed/16_generation_response_contract.md) | 02, 06, 07 | Complete |
+| 17 | [Scope validation and diff](completed/17_scope_validation_and_diff.md) | 09, 16 | Complete |
 | 18 | [Candidate checks](18_candidate_checks.md) | 17 | Pending |
 | 19 | [Apply, undo, audit](19_apply_undo_audit.md) | 07, 17, 18 | Pending |
 | 20 | [Desktop API client and state](20_desktop_api_client_state.md) | 03, 11, 14, 16, 19 | Pending |
