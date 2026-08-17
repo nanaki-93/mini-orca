@@ -71,6 +71,15 @@ retry:
   backoff_base: 1000   # ms - base delay for exponential backoff
   backoff_max: 30000   # ms - maximum delay between retries
 
+# ─── Operation timeouts ──────────────────────────────────────────────────────
+# These deadlines bound work started by one desktop request. They are separate
+# from the daemon's HTTP server timeouts.
+timeouts:
+  import_seconds: 300
+  analysis_seconds: 300
+  generation_seconds: 300
+  focused_check_seconds: 60
+
 # ─── Logging ──────────────────────────────────────────────────────────────────
 # Configure structured logging.
 

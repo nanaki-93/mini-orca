@@ -42,6 +42,8 @@ type chatClient interface {
 
 // Analysis is the persisted and API-facing summary for an imported project.
 type Analysis struct {
+	ProjectID       string         `json:"project_id"`
+	ProjectRevision string         `json:"project_revision"`
 	Name            string         `json:"name"`
 	Path            string         `json:"path"`
 	Type            string         `json:"type"`
@@ -59,15 +61,16 @@ type Analysis struct {
 
 // FileInfo describes one selected project file.
 type FileInfo struct {
-	Path       string    `json:"path"`
-	Name       string    `json:"name"`
-	Extension  string    `json:"extension"`
-	Language   string    `json:"language"`
-	SizeBytes  int64     `json:"size_bytes"`
-	LineCount  int       `json:"line_count"`
-	ModifiedAt time.Time `json:"modified_at"`
-	Binary     bool      `json:"binary"`
-	Content    string    `json:"content,omitempty"`
+	Path        string    `json:"path"`
+	ContentHash string    `json:"content_hash"`
+	Name        string    `json:"name"`
+	Extension   string    `json:"extension"`
+	Language    string    `json:"language"`
+	SizeBytes   int64     `json:"size_bytes"`
+	LineCount   int       `json:"line_count"`
+	ModifiedAt  time.Time `json:"modified_at"`
+	Binary      bool      `json:"binary"`
+	Content     string    `json:"content,omitempty"`
 }
 
 // Analyzer scans projects and asks the configured model for an architectural summary.
@@ -208,6 +211,7 @@ func GetFileInfo(root, relative string) (*FileInfo, error) {
 		info.LineCount = countLines(data)
 		info.Content = string(data)
 	}
+	info.ContentHash = contentHash(data)
 	return info, nil
 }
 

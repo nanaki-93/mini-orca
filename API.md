@@ -33,7 +33,10 @@ This document describes the API endpoints provided by the mini-orca daemon.
 {
   "message": "Precise behavior to implement",
   "file_path": "relative/path/to/selected-file.go",
-  "target_symbol": "Type.Method"
+  "target_symbol": "Type.Method",
+  "project_id": "sha256:...",
+  "project_revision": "sha256:...",
+  "base_file_hash": "sha256:..."
 }
 ```
 - **Response**: JSON agent result containing a one-file generated preview. The endpoint never writes generated code automatically. Read-only `analyze_file` and `explain_symbol` actions do not produce candidates; `generate_test` must target a symbol in an already selected test file.

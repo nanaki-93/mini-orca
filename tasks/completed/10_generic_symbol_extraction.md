@@ -1,5 +1,9 @@
 # 10 — Add safe generic symbol extraction
 
+## Status
+
+Complete
+
 ## Goal
 
 Support useful file facts in non-Go projects without claiming parser-level certainty.

@@ -212,7 +212,7 @@ func newHTTPMux(
 	contextHandler := handlers.NewContextHandler(application)
 	mux.HandleFunc("GET /api/projects/current/context", contextHandler.Preview)
 
-	projectHandler := handlers.NewProjectHandler(projectManager, project.NewAnalyzer(application.AnalysisClient()), application)
+	projectHandler := handlers.NewProjectHandler(projectManager, application)
 	mux.HandleFunc("POST /api/projects/import", projectHandler.Import)
 	mux.HandleFunc("GET /api/projects/current", projectHandler.Current)
 	mux.HandleFunc("GET /api/projects/current/files/info", projectHandler.FileInfo)

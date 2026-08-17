@@ -5,8 +5,11 @@ import "time"
 // ChatRequest represents a chat message request from the client.
 type ChatRequest struct {
 	Message               string `json:"message"`
-	FilePath              string `json:"file_path"`             // target file being edited
-	TargetSymbol          string `json:"target_symbol"`         // exact function or class to generate
+	FilePath              string `json:"file_path"`     // target file being edited
+	TargetSymbol          string `json:"target_symbol"` // exact function or class to generate
+	ProjectID             string `json:"project_id"`
+	ProjectRevision       string `json:"project_revision"`
+	BaseFileHash          string `json:"base_file_hash"`
 	LineNumber            int    `json:"line_number,omitempty"` // optional: cursor position
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }

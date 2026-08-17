@@ -128,7 +128,16 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         status = "Generating only $symbol in ${file.path}…"
         scope.launch {
             runCatching {
-                withContext(Dispatchers.IO) { api.generate(prompt.trim(), file.path, symbol.trim()) }
+                withContext(Dispatchers.IO) {
+                    api.generate(
+                        prompt.trim(),
+                        file.path,
+                        symbol.trim(),
+                        project?.projectId ?: error("Project is required"),
+                        project?.projectRevision ?: error("Project is required"),
+                        file.contentHash,
+                    )
+                }
             }.onSuccess {
                 generated = it.output
                 status = "Generated one-file result · ${it.phase}"

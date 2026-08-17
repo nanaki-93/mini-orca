@@ -1,28 +1,25 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 // ChatHandler manages chat message and history endpoints.
 type ChatHandler struct {
-	mu      sync.Mutex
-	history []ChatResponse
 	service *app.Service
 }
 
 // NewChatHandler creates a new ChatHandler instance.
 func NewChatHandler(service *app.Service) *ChatHandler {
 	return &ChatHandler{
-		history: make([]ChatResponse, 0),
 		service: service,
 	}
 }
@@ -59,40 +56,38 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, http.StatusBadRequest, "target_symbol is invalid")
 		return
 	}
-	// Store user message
-	h.mu.Lock()
-	historyEntry := ChatResponse{
-		Role:      "user",
-		Content:   req.Message,
-		Phase:     "coding",
-		Timestamp: time.Now(),
+	if err := h.service.ValidateMutableRequest(req.ProjectID, req.ProjectRevision, req.FilePath, req.BaseFileHash); err != nil {
+		if errors.Is(err, project.ErrRevisionConflict) {
+			api.WriteError(w, http.StatusConflict, "project or file changed; reload before generating")
+			return
+		}
+		api.WriteError(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	h.history = append(h.history, historyEntry)
-	h.mu.Unlock()
+	_ = h.service.RecordActivity(req.ProjectID, req.ProjectRevision, project.Activity{
+		Role: "user", Content: "Requested focused generation", Phase: "coding", TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol,
+	})
 
 	result, err := h.service.Generate(r.Context(), req.Message, req.FilePath, req.TargetSymbol, req.ConfirmRemoteProvider)
 	if err != nil {
-		h.mu.Lock()
-		h.history = append(h.history, ChatResponse{
-			Role:      "assistant",
-			Content:   fmt.Sprintf("Error: %v", err),
-			Phase:     "error",
-			Timestamp: time.Now(),
+		_ = h.service.RecordActivity(req.ProjectID, req.ProjectRevision, project.Activity{
+			Role: "assistant", Content: "Generation failed", Phase: "error", TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol,
 		})
-		h.mu.Unlock()
+		if errors.Is(err, context.Canceled) {
+			api.WriteError(w, http.StatusRequestTimeout, "generation canceled")
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			api.WriteError(w, http.StatusGatewayTimeout, "generation timed out")
+			return
+		}
 		api.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	// Store assistant response
-	h.mu.Lock()
-	h.history = append(h.history, ChatResponse{
-		Role:      "assistant",
-		Content:   result.Output,
-		Phase:     "coding",
-		Timestamp: time.Now(),
+	_ = h.service.RecordActivity(req.ProjectID, req.ProjectRevision, project.Activity{
+		Role: "assistant", Content: "Generated preview", Phase: "coding", TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol,
 	})
-	h.mu.Unlock()
 
 	api.WriteJSON(w, http.StatusOK, result)
 }
@@ -105,10 +100,10 @@ func (h *ChatHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.mu.Lock()
-	historyCopy := make([]ChatResponse, len(h.history))
-	copy(historyCopy, h.history)
-	h.mu.Unlock()
-
-	api.WriteJSON(w, http.StatusOK, historyCopy)
+	history, err := h.service.Activity()
+	if err != nil {
+		api.WriteError(w, http.StatusNotFound, "project activity not found")
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, history)
 }

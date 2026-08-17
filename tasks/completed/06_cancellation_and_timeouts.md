@@ -1,5 +1,9 @@
 # 06 — Propagate request cancellation and deadlines
 
+## Status
+
+Complete
+
 ## Goal
 
 Stop LLM and check work when the desktop request is canceled or exceeds its declared deadline.

@@ -35,12 +35,16 @@ registered desktop API routes.
 {
   "message": "Return a typed error for blank names",
   "file_path": "internal/user/service.go",
-  "target_symbol": "UserService.Create"
+  "target_symbol": "UserService.Create",
+  "project_id": "sha256:...",
+  "project_revision": "sha256:...",
+  "base_file_hash": "sha256:..."
 }
 ```
 
 The active generation action is `fix` with `strict_symbol` scope. The requested
-file and symbol are mandatory; the response is a candidate preview only. The
+file and symbol, active project id/revision, and selected-file base hash are
+mandatory; stale project or file state returns `409 Conflict`. The response is a candidate preview only. The
 later `symbol_plus_imports` mode is reserved for validated minimal import edits.
 
 When the configured model endpoint is not loopback/local, include

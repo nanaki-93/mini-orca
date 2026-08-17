@@ -1,5 +1,9 @@
 # 07 — Add project revisions and project-scoped state
 
+## Status
+
+Complete
+
 ## Goal
 
 Prevent stale candidates and cross-project history from affecting the active project.

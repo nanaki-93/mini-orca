@@ -191,8 +191,10 @@ components:
         confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
     ProjectAnalysis:
       type: object
-      required: [name, path, type, file_count, source_file_count, total_lines, languages, files, analysis_file, summary, ai_status, analyzed_at]
+      required: [project_id, project_revision, name, path, type, file_count, source_file_count, total_lines, languages, files, analysis_file, summary, ai_status, analyzed_at]
       properties:
+        project_id: {type: string, description: Stable hash of the canonical imported root.}
+        project_revision: {type: string, description: Content-derived revision captured by mutable requests.}
         name: {type: string}
         path: {type: string}
         type: {type: string}
@@ -210,6 +212,7 @@ components:
       type: object
       properties:
         path: {type: string}
+        content_hash: {type: string, description: Hash required with a mutable request.}
         name: {type: string}
         extension: {type: string}
         language: {type: string}
@@ -243,11 +246,14 @@ components:
         reason: {type: string}
     GenerationRequest:
       type: object
-      required: [message, file_path, target_symbol]
+      required: [message, file_path, target_symbol, project_id, project_revision, base_file_hash]
       properties:
         message: {type: string}
         file_path: {type: string, description: Project-relative selected file.}
         target_symbol: {type: string, description: Selected function, method, type, interface, or class.}
+        project_id: {type: string, description: Stable id returned by project import.}
+        project_revision: {type: string, description: Current project revision returned by project import.}
+        base_file_hash: {type: string, description: Hash returned by selected-file information.}
         confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
     GenerationResponse:
       type: object

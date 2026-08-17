@@ -28,5 +28,11 @@ func Default() *Config {
 			MaxTokens:   8192,
 		},
 		Agents: DefaultAgentConfigs(),
+		Timeouts: TimeoutConfig{
+			ImportSeconds:       300,
+			AnalysisSeconds:     300,
+			GenerationSeconds:   300,
+			FocusedCheckSeconds: 60,
+		},
 	}
 }
