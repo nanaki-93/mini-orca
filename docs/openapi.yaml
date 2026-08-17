@@ -82,6 +82,17 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ProjectAnalysis'}
         '404': {$ref: '#/components/responses/Error'}
+  /api/projects/current/index:
+    get:
+      tags: [Projects]
+      summary: Deterministic active-project index
+      responses:
+        '200':
+          description: Eligible project-relative file and symbol facts without source text
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProjectIndex'}
+        '404': {$ref: '#/components/responses/Error'}
   /api/projects/current/files/info:
     get:
       tags: [Projects]
@@ -95,6 +106,74 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/FileInfo'}
         '400': {$ref: '#/components/responses/Error'}
+  /api/projects/current/files/symbols:
+    get:
+      tags: [Projects]
+      summary: Atomic targets in one selected file
+      parameters:
+        - {$ref: '#/components/parameters/ProjectPath'}
+      responses:
+        '200':
+          description: Symbol facts for one project-relative eligible text file
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SymbolsResponse'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /api/projects/current/files/analysis:
+    get:
+      tags: [Projects]
+      summary: Cached semantic analysis for one selected file
+      parameters:
+        - {$ref: '#/components/parameters/ProjectPath'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Cached status and source-free analysis, content: {application/json: {schema: {$ref: '#/components/schemas/FileAnalysis'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Analyze exactly one selected file
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FileAnalysisRequest'}}}
+      responses:
+        '200': {description: Fresh or failed source-free analysis, content: {application/json: {schema: {$ref: '#/components/schemas/FileAnalysis'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    delete:
+      tags: [Projects]
+      summary: Clear one selected file analysis
+      parameters:
+        - {$ref: '#/components/parameters/ProjectPath'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '204': {description: Analysis cache entry removed.}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/reindex:
+    post:
+      tags: [Projects]
+      summary: Refresh deterministic project facts
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReindexRequest'}
+      responses:
+        '200':
+          description: Rebuilt deterministic index with its current project revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProjectIndex'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/context:
     get:
       tags: [Projects]
@@ -146,6 +225,11 @@ components:
       required: true
       schema: {type: string}
       description: Canonical project-relative path only.
+    ProjectRevision:
+      name: project_revision
+      in: query
+      required: true
+      schema: {type: string}
   responses:
     Error:
       description: Structured API error
@@ -221,6 +305,102 @@ components:
         modified_at: {type: string, format: date-time}
         binary: {type: boolean}
         content: {type: string}
+    ProjectIndex:
+      type: object
+      required: [schema_version, project_id, project_revision, generated_at, files]
+      properties:
+        schema_version: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        generated_at: {type: string, format: date-time}
+        files:
+          type: array
+          items: {$ref: '#/components/schemas/IndexFile'}
+    IndexFile:
+      type: object
+      required: [path, content_hash, language, size_bytes, line_count, modified_at, binary, imports, symbols, analysis_status]
+      properties:
+        path: {type: string, description: Project-relative safe path.}
+        content_hash: {type: string}
+        language: {type: string}
+        size_bytes: {type: integer, format: int64}
+        line_count: {type: integer}
+        modified_at: {type: string, format: date-time}
+        binary: {type: boolean}
+        imports: {type: array, items: {type: string}}
+        symbols: {type: array, items: {$ref: '#/components/schemas/SymbolInfo'}}
+        diagnostics: {type: array, items: {$ref: '#/components/schemas/Diagnostic'}}
+        analysis_status: {type: string}
+    SymbolInfo:
+      type: object
+      required: [name, kind, signature, start_line, end_line, visibility, confidence, atomic_target]
+      properties:
+        name: {type: string}
+        kind: {type: string}
+        signature: {type: string}
+        start_line: {type: integer}
+        end_line: {type: integer}
+        visibility: {type: string}
+        confidence: {type: string, enum: [exact, approximate]}
+        atomic_target: {type: boolean}
+    Diagnostic:
+      type: object
+      properties:
+        message: {type: string}
+        line: {type: integer}
+    SymbolsResponse:
+      type: object
+      required: [project_id, project_revision, path, language, symbols]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        path: {type: string}
+        language: {type: string}
+        symbols: {type: array, items: {$ref: '#/components/schemas/SymbolInfo'}}
+    ReindexRequest:
+      type: object
+      properties:
+        project_revision: {type: string, description: Optional revision expected by the client.}
+    FileAnalysisRequest:
+      type: object
+      required: [path, project_revision]
+      properties:
+        path: {type: string}
+        project_revision: {type: string}
+        refresh: {type: boolean}
+        confirm_remote_provider: {type: boolean}
+    FileAnalysis:
+      type: object
+      required: [schema_version, project_id, project_revision, path, content_hash, language, status, prompt_version, context_policy_version, generated_at]
+      properties:
+        schema_version: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        path: {type: string}
+        content_hash: {type: string}
+        language: {type: string}
+        purpose: {type: string}
+        responsibilities: {type: array, items: {type: string}}
+        symbols: {type: array, items: {$ref: '#/components/schemas/SymbolInfo'}}
+        imports: {type: array, items: {type: string}}
+        dependencies: {type: array, items: {type: string}}
+        side_effects: {type: array, items: {type: string}}
+        risks: {type: array, items: {$ref: '#/components/schemas/Finding'}}
+        suggestions: {type: array, items: {$ref: '#/components/schemas/Suggestion'}}
+        symbol_explanations: {type: object, additionalProperties: {type: string}}
+        status: {type: string, enum: [fresh, missing, stale, failed, running]}
+        failure: {type: string}
+        model: {type: string}
+        profile: {type: string}
+        prompt_version: {type: string}
+        context_policy_version: {type: string}
+        generated_at: {type: string, format: date-time}
+    Finding:
+      type: object
+      properties: {severity: {type: string}, summary: {type: string}}
+    Suggestion:
+      type: object
+      properties: {title: {type: string}, summary: {type: string}, target_symbol: {type: string}, action: {type: string}}
     ContextManifest:
       type: object
       properties:

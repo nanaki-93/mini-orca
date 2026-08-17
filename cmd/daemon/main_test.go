@@ -31,7 +31,13 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 		{http.MethodGet, "/api/projects/current/context"},
 		{http.MethodPost, "/api/projects/import"},
 		{http.MethodGet, "/api/projects/current"},
+		{http.MethodGet, "/api/projects/current/index"},
 		{http.MethodGet, "/api/projects/current/files/info"},
+		{http.MethodGet, "/api/projects/current/files/symbols"},
+		{http.MethodGet, "/api/projects/current/files/analysis"},
+		{http.MethodPost, "/api/projects/current/files/analysis"},
+		{http.MethodDelete, "/api/projects/current/files/analysis"},
+		{http.MethodPost, "/api/projects/current/reindex"},
 	}
 
 	if got := openAPIRoutes(t); !sameRoutes(got, routes) {
@@ -54,7 +60,7 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 	for _, route := range routes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			path := route.path
-			if path == "/api/projects/current/files/info" || path == "/api/projects/current/context" {
+			if path == "/api/projects/current/files/info" || path == "/api/projects/current/files/symbols" || path == "/api/projects/current/files/analysis" || path == "/api/projects/current/context" {
 				path += "?path=missing.go"
 			}
 			req := httptest.NewRequest(route.method, path, nil)

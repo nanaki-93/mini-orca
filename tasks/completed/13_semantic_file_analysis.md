@@ -1,5 +1,9 @@
 # 13 — Generate semantic summaries one file at a time
 
+## Status
+
+Complete
+
 ## Goal
 
 Use the local model to explain one selected file while separating facts from interpretation.

@@ -215,7 +215,13 @@ func newHTTPMux(
 	projectHandler := handlers.NewProjectHandler(projectManager, application)
 	mux.HandleFunc("POST /api/projects/import", projectHandler.Import)
 	mux.HandleFunc("GET /api/projects/current", projectHandler.Current)
+	mux.HandleFunc("GET /api/projects/current/index", projectHandler.Index)
 	mux.HandleFunc("GET /api/projects/current/files/info", projectHandler.FileInfo)
+	mux.HandleFunc("GET /api/projects/current/files/symbols", projectHandler.Symbols)
+	mux.HandleFunc("GET /api/projects/current/files/analysis", projectHandler.FileAnalysis)
+	mux.HandleFunc("POST /api/projects/current/files/analysis", projectHandler.AnalyzeFile)
+	mux.HandleFunc("DELETE /api/projects/current/files/analysis", projectHandler.DeleteFileAnalysis)
+	mux.HandleFunc("POST /api/projects/current/reindex", projectHandler.Reindex)
 
 	return mux
 }

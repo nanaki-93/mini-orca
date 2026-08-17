@@ -1,5 +1,9 @@
 # 14 — Deliver per-file analysis APIs
 
+## Status
+
+Complete
+
 ## Goal
 
 Expose cached and on-demand semantic analysis to the desktop client.

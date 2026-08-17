@@ -16,10 +16,10 @@ Source roadmap: [`../docs/NEXT_FUNCTIONS_FIXES_UI.md`](../docs/NEXT_FUNCTIONS_FI
 | 08 | [Deterministic index persistence](completed/08_deterministic_index_persistence.md) | 04, 07 | Complete |
 | 09 | [Go symbols](completed/09_go_symbol_extraction.md) | 08 | Complete |
 | 10 | [Generic symbols](completed/10_generic_symbol_extraction.md) | 08 | Complete |
-| 11 | [Index and symbol APIs](11_index_and_symbol_apis.md) | 08, 09, 10 | Pending |
-| 12 | [File-analysis cache](12_file_analysis_cache.md) | 04, 07, 08 | Pending |
-| 13 | [Semantic file analysis](13_semantic_file_analysis.md) | 02, 05, 09, 10, 12 | Pending |
-| 14 | [File-analysis APIs](14_file_analysis_apis.md) | 12, 13 | Pending |
+| 11 | [Index and symbol APIs](completed/11_index_and_symbol_apis.md) | 08, 09, 10 | Complete |
+| 12 | [File-analysis cache](completed/12_file_analysis_cache.md) | 04, 07, 08 | Complete |
+| 13 | [Semantic file analysis](completed/13_semantic_file_analysis.md) | 02, 05, 09, 10, 12 | Complete |
+| 14 | [File-analysis APIs](completed/14_file_analysis_apis.md) | 12, 13 | Complete |
 | 15 | [Sequential analyze-all](15_sequential_analyze_all.md) | 14 | Pending |
 | 16 | [Generation response contract](16_generation_response_contract.md) | 02, 06, 07 | Pending |
 | 17 | [Scope validation and diff](17_scope_validation_and_diff.md) | 09, 16 | Pending |

@@ -1,5 +1,9 @@
 # 11 — Deliver project-index and symbol APIs
 
+## Status
+
+Complete
+
 ## Goal
 
 Make deterministic project facts available to the desktop client.

@@ -20,7 +20,13 @@ coder/tester/reviewer pipeline.
 | GET | `/api/models/current` | Effective coder model/profile without credentials. |
 | POST | `/api/projects/import` | Import and analyze a selected project. |
 | GET | `/api/projects/current` | Current project analysis. |
+| GET | `/api/projects/current/index` | Deterministic index of eligible project files and symbols. |
 | GET | `/api/projects/current/files/info?path=…` | Safe selected-file information. |
+| GET | `/api/projects/current/files/symbols?path=…` | Valid atomic targets for one eligible file. |
+| GET | `/api/projects/current/files/analysis?path=…&project_revision=…` | Cached one-file semantic-analysis status. |
+| POST | `/api/projects/current/files/analysis` | Analyze exactly one selected file. |
+| DELETE | `/api/projects/current/files/analysis?path=…&project_revision=…` | Clear one selected-file analysis cache entry. |
+| POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM call. |
 | GET | `/api/projects/current/context?path=…` | Exact bounded context manifest without source text. |
 | POST | `/api/chat/message` | Generate one focused preview; never writes code. |
 | GET | `/api/chat/history` | Current activity history (project-scoped persistence follows in a later revision). |
@@ -67,3 +73,17 @@ Every API failure uses this shape:
 
 Paths supplied to selected-file endpoints must be project-relative and pass the
 daemon's canonical-path and symlink protections.
+
+## Project index and symbols
+
+`GET /api/projects/current/index` returns deterministic metadata only: eligible
+project-relative paths, hashes, language facts, imports, diagnostics, and symbol
+locations. It never returns source text. `GET /api/projects/current/files/symbols`
+returns the selected file's `name`, `kind`, `signature`, line range, confidence,
+and `atomic_target` flag.
+
+`POST /api/projects/current/reindex` accepts an optional
+`{"project_revision":"sha256:..."}` body. If supplied, it must match the active
+revision or the daemon returns `409 Conflict`; a successful response is the new
+deterministic index and revision. Missing projects return `404`, excluded files
+return `403`, invalid paths return `400`, and binary files return `422`.

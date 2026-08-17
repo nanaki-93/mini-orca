@@ -2,6 +2,7 @@ package project
 
 import (
 	"fmt"
+	"path/filepath"
 	"sync"
 )
 
@@ -96,6 +97,57 @@ func (m *Manager) Index() (*ProjectIndex, error) {
 		return nil, ErrNoActiveProject
 	}
 	return cloneIndex(m.index), nil
+}
+
+// IndexedFile returns one active-project file after canonical-path and policy
+// checks. The final lock check prevents a file from a previously active project
+// being returned after a concurrent import or reindex.
+func (m *Manager) IndexedFile(relative string) (*IndexFile, error) {
+	m.mu.RLock()
+	if m.index == nil || m.analysis == nil {
+		m.mu.RUnlock()
+		return nil, ErrNoActiveProject
+	}
+	root := m.root
+	revision := m.index.ProjectRevision
+	m.mu.RUnlock()
+
+	policy, err := NewContextPolicy(root)
+	if err != nil {
+		return nil, err
+	}
+	decision := policy.Decide(relative)
+	if decision.Reason == "unsafe path" {
+		return nil, fmt.Errorf("invalid indexed file path: %s", relative)
+	}
+	if !decision.Include {
+		return nil, fmt.Errorf("%w: %s", ErrExcludedFile, decision.Reason)
+	}
+	resolved, err := ResolveFile(root, relative)
+	if err != nil {
+		return nil, err
+	}
+	normalized, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return nil, fmt.Errorf("normalize indexed file path: %w", err)
+	}
+	normalized = filepath.ToSlash(normalized)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.root != root || m.index == nil || m.index.ProjectRevision != revision {
+		return nil, ErrRevisionConflict
+	}
+	for _, file := range m.index.Files {
+		if file.Path == normalized {
+			copy := file
+			copy.Imports = append([]string(nil), file.Imports...)
+			copy.Symbols = append([]SymbolInfo(nil), file.Symbols...)
+			copy.Diagnostics = append([]Diagnostic(nil), file.Diagnostics...)
+			return &copy, nil
+		}
+	}
+	return nil, fmt.Errorf("indexed file not found: %s", normalized)
 }
 
 func (m *Manager) Analysis() (*Analysis, error) {
