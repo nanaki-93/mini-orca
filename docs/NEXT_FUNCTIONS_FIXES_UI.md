@@ -517,7 +517,7 @@ Exit condition: import → select file → analyze → select symbol → generat
 
 - Confirm the Step 5 desktop workflow covers the current web UI's useful capabilities.
 - Remove HTMX page routes, templates, static web assets, and web-only response cache wiring.
-- Remove browser-specific UI dependencies and update Docker/README guidance so it no longer advertises an IDE at `localhost:8080`.
+- Remove browser-specific UI dependencies and update Docker/README guidance so it no longer advertises an IDE at `localhost:9090`.
 - Keep health/status and desktop API routes; restrict their CORS/network exposure to the local-machine deployment model.
 
 Exit condition: the daemon starts without web assets or HTML routes, and the desktop client remains fully functional against its REST API.

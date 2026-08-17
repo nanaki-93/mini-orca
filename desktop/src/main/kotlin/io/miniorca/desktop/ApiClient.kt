@@ -12,7 +12,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 class ApiClient(
-    baseUrl: String = System.getenv("MINI_ORCA_URL") ?: "http://localhost:8080",
+    baseUrl: String = System.getenv("MINI_ORCA_URL") ?: "http://localhost:9090",
 ) {
     private val root = baseUrl.trimEnd('/')
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()

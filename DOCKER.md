@@ -49,7 +49,7 @@ docker build -t mini-orca:4.1.0 .
 docker run -d \
   --name mini-orca \
   --restart unless-stopped \
-  -p 8080:8080 \
+  -p 9090:9090 \
   -v $(pwd)/config.yaml:/app/config.yaml:ro \
   -v $(pwd)/projects:/app/projects:rw \
   -v $(pwd)/logs:/app/logs:rw \
@@ -182,7 +182,7 @@ services:
       - MINI_ORCA_CONFIG=/app/config.yaml
       - MINI_ORCA_LOG_LEVEL=debug
     ports:
-      - "8080:8080"
+      - "9090:9090"
     command: air  # Hot reload
 ```
 
@@ -221,7 +221,7 @@ spec:
         - name: mini-orca
           image: mini-orca:4.1.0
           ports:
-            - containerPort: 8080
+            - containerPort: 9090
           resources:
             requests:
               memory: "512Mi"
@@ -232,13 +232,13 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 9090
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 9090
             initialDelaySeconds: 3
             periodSeconds: 5
           volumeMounts:
@@ -270,7 +270,7 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 8080
+      targetPort: 9090
   type: LoadBalancer
 ```
 
@@ -285,7 +285,7 @@ services:
     image: mini-orca:4.1.0
     restart: always
     ports:
-      - "8080:8080"
+      - "9090:9090"
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./projects:/app/projects:rw
@@ -302,7 +302,7 @@ services:
           memory: 512M
           cpus: '0.25'
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -361,14 +361,14 @@ jobs:
 #### 1. Port Already in Use
 
 ```bash
-# Check what's using port 8080
-lsof -i :8080
+# Check what's using port 9090
+lsof -i :9090
 
 # Stop existing container
 make docker-stop
 
 # Run on different port
-docker run -p 8081:8080 mini-orca:4.1.0
+docker run -p 8081:9090 mini-orca:4.1.0
 ```
 
 #### 2. Permission Denied

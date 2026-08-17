@@ -59,7 +59,7 @@ test: ## Run tests
 	@$(GO) tool cover -html=$(BUILD_DIR)/coverage.out -o $(BUILD_DIR)/coverage.html
 	@echo "$(COLOR_GREEN)Tests complete. Coverage report: $(BUILD_DIR)/coverage.html$(COLOR_RESET)"
 
-desktop-run: ## Run the Compose Desktop client (daemon required at localhost:8080)
+desktop-run: ## Run the Compose Desktop client (daemon required at localhost:9090)
 	@echo "$(COLOR_GREEN)Starting the Mini-Orca desktop client...$(COLOR_RESET)"
 	@gradle -p desktop run
 
@@ -90,14 +90,14 @@ docker-run: ## Run container in detached mode
 	@$(DOCKER) run -d \
 		--name $(APP_NAME) \
 		--restart unless-stopped \
-		-p 8080:8080 \
+		-p 9090:9090 \
 		-v $$(pwd)/config.yaml:/app/config.yaml:ro \
 		-v $$(pwd)/projects:/app/projects:rw \
 		-v $$(pwd)/logs:/app/logs:rw \
 		-e MINI_ORCA_CONFIG=/app/config.yaml \
 		$(DOCKER_IMAGE)
 	@echo "$(COLOR_GREEN)Container started: $(APP_NAME)$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Access the IDE at: http://localhost:8080$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Access the IDE at: http://localhost:9090$(COLOR_RESET)"
 
 docker-run-detached: docker-run ## Run container in detached mode (alias)
 
@@ -117,13 +117,13 @@ compose-up: ## Start services with docker-compose
 	@echo "$(COLOR_GREEN)Starting services with docker-compose...$(COLOR_RESET)"
 	@$(DOCKER_COMPOSE) up -d --build
 	@echo "$(COLOR_GREEN)Services started$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Access the IDE at: http://localhost:8080$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Access the IDE at: http://localhost:9090$(COLOR_RESET)"
 
 compose-up-llm: ## Start services with docker-compose including LM Studio
 	@echo "$(COLOR_GREEN)Starting services with docker-compose (with LM Studio)...$(COLOR_RESET)"
 	@$(DOCKER_COMPOSE) --profile with-llm up -d --build
 	@echo "$(COLOR_GREEN)Services started (with LM Studio)$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Access the IDE at: http://localhost:8080$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Access the IDE at: http://localhost:9090$(COLOR_RESET)"
 
 compose-down: ## Stop services with docker-compose
 	@echo "$(COLOR_YELLOW)Stopping services...$(COLOR_RESET)"
