@@ -1,5 +1,9 @@
 # 21 — Build the desktop shell and file explorer
 
+## Status
+
+In Progress
+
 ## Goal
 
 Turn the current flat desktop view into the durable desktop-only navigation shell.

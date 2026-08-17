@@ -32,9 +32,13 @@ coder/tester/reviewer pipeline.
 | POST | `/api/projects/current/analysis-job/resume` | Resume a persisted paused job. |
 | POST | `/api/projects/current/analysis-job/cancel?project_revision=…` | Cancel the active request and pending work. |
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM call. |
-| GET | `/api/projects/current/context?path=…` | Exact bounded context manifest without source text. |
+| POST | `/api/projects/current/candidates/checks` | Run focused checks in an isolated candidate workspace. |
+| POST | `/api/projects/current/apply` | Explicitly apply one checked, validated candidate. |
+| POST | `/api/projects/current/undo` | Restore the immediately preceding unchanged applied file. |
+| GET | `/api/projects/current/audit?project_revision=…` | Source-free apply/undo audit history. |
+| GET | `/api/projects/current/context?path=…&action=…` | Exact bounded context manifest without source text; `action=analyze_file` previews the semantic-analysis request. |
 | POST | `/api/chat/message` | Generate one focused preview; never writes code. |
-| GET | `/api/chat/history` | Current activity history (project-scoped persistence follows in a later revision). |
+| GET | `/api/chat/history` | Current project-scoped, source-free activity history. |
 
 `docs/openapi.yaml` is the machine-readable source for request and response
 schemas. The route-contract test compares this table's API inventory with the

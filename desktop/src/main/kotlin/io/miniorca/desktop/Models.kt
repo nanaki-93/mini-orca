@@ -38,7 +38,36 @@ data class ProjectFileInfo(
 
 @Serializable
 data class GenerationResult(
-    val output: String,
-    val phase: String = "coding",
-    val metadata: Map<String, String> = emptyMap(),
+    @SerialName("generation_id") val generationId: String,
+    @SerialName("project_id") val projectId: String,
+    @SerialName("project_revision") val projectRevision: String,
+    @SerialName("base_file_hash") val baseFileHash: String,
+    @SerialName("target_path") val targetPath: String,
+    @SerialName("target_symbol") val targetSymbol: String,
+    @SerialName("scope_mode") val scopeMode: String,
+    @SerialName("candidate_content") val candidateContent: String,
+    @SerialName("candidate_hash") val candidateHash: String,
+    val validation: GenerationValidation,
+    @SerialName("context_manifest") val contextManifest: ContextManifest,
 )
+
+@Serializable data class ProjectIndex(@SerialName("project_id") val projectId: String, @SerialName("project_revision") val projectRevision: String, val files: List<IndexedFile> = emptyList())
+@Serializable data class IndexedFile(val path: String, @SerialName("content_hash") val contentHash: String, val language: String, val binary: Boolean, @SerialName("analysis_status") val analysisStatus: String = "missing", val symbols: List<SymbolInfo> = emptyList())
+@Serializable data class SymbolInfo(val name: String, val kind: String, val signature: String = "", @SerialName("start_line") val startLine: Int = 0, @SerialName("end_line") val endLine: Int = 0, val confidence: String, @SerialName("atomic_target") val atomicTarget: Boolean)
+@Serializable data class SymbolsResponse(@SerialName("project_id") val projectId: String, @SerialName("project_revision") val projectRevision: String, val path: String, val symbols: List<SymbolInfo> = emptyList())
+@Serializable data class FileAnalysis(val path: String, val status: String, val purpose: String = "", val responsibilities: List<String> = emptyList(), val dependencies: List<String> = emptyList(), @SerialName("side_effects") val sideEffects: List<String> = emptyList(), val risks: List<Finding> = emptyList(), val suggestions: List<Suggestion> = emptyList(), @SerialName("symbol_explanations") val symbolExplanations: Map<String, String> = emptyMap())
+@Serializable data class Finding(val severity: String, val summary: String)
+@Serializable data class Suggestion(val title: String, val summary: String, @SerialName("target_symbol") val targetSymbol: String = "", val action: String = "")
+@Serializable data class ContextManifest(val included: List<ContextFile> = emptyList(), val excluded: List<ContextDecision> = emptyList(), @SerialName("estimated_tokens") val estimatedTokens: Int = 0, val truncated: Boolean = false)
+@Serializable data class ContextFile(val path: String, @SerialName("size_bytes") val sizeBytes: Long, val hash: String, @SerialName("estimated_tokens") val estimatedTokens: Int)
+@Serializable data class ContextDecision(val path: String, val include: Boolean, val reason: String)
+@Serializable data class GenerationValidation(val applicable: Boolean, @SerialName("scope_mode") val scopeMode: String, val diagnostics: List<GenerationFinding> = emptyList(), val diff: UnifiedDiff)
+@Serializable data class GenerationFinding(val code: String, val message: String)
+@Serializable data class UnifiedDiff(@SerialName("old_path") val oldPath: String, @SerialName("new_path") val newPath: String, val lines: List<DiffLine> = emptyList())
+@Serializable data class DiffLine(val kind: String, @SerialName("old_line") val oldLine: Int = 0, @SerialName("new_line") val newLine: Int = 0, val text: String)
+@Serializable data class CandidateCheckReport(@SerialName("target_path") val targetPath: String, val applicable: Boolean, val checks: List<CandidateCheck> = emptyList())
+@Serializable data class CandidateCheck(val name: String, val required: Boolean = false, val state: String, val command: List<String> = emptyList(), val output: String = "")
+@Serializable data class ApplyResult(@SerialName("project_revision") val projectRevision: String, @SerialName("post_apply_hash") val postApplyHash: String, @SerialName("undo_available") val undoAvailable: Boolean)
+@Serializable data class AuditEntry(val action: String, @SerialName("target_path") val targetPath: String, val outcome: String, val timestamp: String)
+@Serializable data class EffectiveModel(val profile: String, val model: String, val timeout: String = "")
+@Serializable data class ApiError(val message: String = "", @SerialName("user_message") val userMessage: String = "")

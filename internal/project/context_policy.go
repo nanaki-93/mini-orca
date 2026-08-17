@@ -1,6 +1,8 @@
 package project
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -24,6 +26,7 @@ type ContextPolicy struct {
 	ignores []ignoreRule
 	include []ignoreRule
 	exclude []ignoreRule
+	version string
 }
 
 type ignoreRule struct {
@@ -68,15 +71,31 @@ func NewContextPolicy(root string) (*ContextPolicy, error) {
 			return nil, err
 		}
 	}
+	p.version = policyVersion(p.ignores, p.include, p.exclude)
 	return p, nil
 }
 
-func (p *ContextPolicy) Version() string { return contextPolicyVersion }
+func (p *ContextPolicy) Version() string { return p.version }
+
+func policyVersion(groups ...[]ignoreRule) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte(contextPolicyVersion + "\n"))
+	for _, group := range groups {
+		for _, rule := range group {
+			_, _ = hash.Write([]byte(rule.pattern + "\n"))
+		}
+		_, _ = hash.Write([]byte("\n"))
+	}
+	return contextPolicyVersion + ":" + hex.EncodeToString(hash.Sum(nil))
+}
 
 func (p *ContextPolicy) Decide(relative string) ContextDecision {
 	path := filepath.ToSlash(filepath.Clean(relative))
 	if path == "." || strings.HasPrefix(path, "../") || filepath.IsAbs(relative) {
 		return ContextDecision{Path: path, Reason: "unsafe path"}
+	}
+	if path == ".mini-orca" || strings.HasPrefix(path, ".mini-orca/") {
+		return ContextDecision{Path: path, Reason: "Mini-Orca metadata"}
 	}
 	if info, err := os.Lstat(filepath.Join(p.root, filepath.FromSlash(path))); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		return ContextDecision{Path: path, Reason: "symlink is excluded from model context"}

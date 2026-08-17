@@ -23,10 +23,10 @@ Source roadmap: [`../docs/NEXT_FUNCTIONS_FIXES_UI.md`](../docs/NEXT_FUNCTIONS_FI
 | 15 | [Sequential analyze-all](completed/15_sequential_analyze_all.md) | 14 | Complete |
 | 16 | [Generation response contract](completed/16_generation_response_contract.md) | 02, 06, 07 | Complete |
 | 17 | [Scope validation and diff](completed/17_scope_validation_and_diff.md) | 09, 16 | Complete |
-| 18 | [Candidate checks](18_candidate_checks.md) | 17 | Pending |
-| 19 | [Apply, undo, audit](19_apply_undo_audit.md) | 07, 17, 18 | Pending |
-| 20 | [Desktop API client and state](20_desktop_api_client_state.md) | 03, 11, 14, 16, 19 | Pending |
-| 21 | [Desktop shell and explorer](21_desktop_shell_explorer.md) | 20 | Pending |
+| 18 | [Candidate checks](completed/18_candidate_checks.md) | 17 | Complete |
+| 19 | [Apply, undo, audit](completed/19_apply_undo_audit.md) | 07, 17, 18 | Complete |
+| 20 | [Desktop API client and state](completed/20_desktop_api_client_state.md) | 03, 11, 14, 16, 19 | Complete |
+| 21 | [Desktop shell and explorer](21_desktop_shell_explorer.md) | 20 | In Progress |
 | 22 | [Desktop summaries and symbol actions](22_desktop_summaries_symbols.md) | 20, 21 | Pending |
 | 23 | [Desktop generation and diff review](23_desktop_generation_diff_review.md) | 20, 21, 22 | Pending |
 | 24 | [Desktop context, status, history](24_desktop_context_status_history.md) | 05, 07, 20, 21 | Pending |

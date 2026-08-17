@@ -5,6 +5,8 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
 )
 
 type ContextHandler struct{ service *app.Service }
@@ -19,7 +21,14 @@ func (h *ContextHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	manifest, err := h.service.ContextManifest(r.URL.Query().Get("path"))
+	path := r.URL.Query().Get("path")
+	var manifest project.ContextManifest
+	var err error
+	if r.URL.Query().Get("action") == string(workflow.ActionAnalyzeFile) {
+		manifest, err = h.service.AnalysisContextManifest(path)
+	} else {
+		manifest, err = h.service.ContextManifest(path)
+	}
 	if err != nil {
 		api.WriteError(w, http.StatusBadRequest, err.Error())
 		return

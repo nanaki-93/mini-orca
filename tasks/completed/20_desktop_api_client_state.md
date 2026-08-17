@@ -1,5 +1,9 @@
 # 20 — Extend desktop API client and application state
 
+## Status
+
+Complete
+
 ## Goal
 
 Give Compose Desktop typed access to all new daemon capabilities and one coherent state model.

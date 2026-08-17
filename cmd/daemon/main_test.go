@@ -43,6 +43,10 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 		{http.MethodPost, "/api/projects/current/analysis-job/resume"},
 		{http.MethodPost, "/api/projects/current/analysis-job/cancel"},
 		{http.MethodPost, "/api/projects/current/reindex"},
+		{http.MethodPost, "/api/projects/current/candidates/checks"},
+		{http.MethodPost, "/api/projects/current/apply"},
+		{http.MethodPost, "/api/projects/current/undo"},
+		{http.MethodGet, "/api/projects/current/audit"},
 	}
 
 	if got := openAPIRoutes(t); !sameRoutes(got, routes) {
