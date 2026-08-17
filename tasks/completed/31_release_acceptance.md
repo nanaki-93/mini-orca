@@ -1,5 +1,9 @@
 # 31 — Validate release acceptance and publish implementation evidence
 
+## Status
+
+Complete
+
 ## Goal
 
 Prove the desktop-only milestone satisfies the roadmap before calling it complete.

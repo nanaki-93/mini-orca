@@ -6,7 +6,8 @@ plugins {
 }
 
 group = "io.miniorca"
-version = "4.1.0"
+version = file("../internal/version/version.go").readText()
+    .let { Regex("Version = \\\"([^\\\"]+)\\\"").find(it)?.groupValues?.get(1) ?: error("Mini-Orca version is missing") }
 
 kotlin {
     jvmToolchain(21)
@@ -24,7 +25,7 @@ compose.desktop {
         mainClass = "io.miniorca.desktop.MainKt"
         nativeDistributions {
             packageName = "Mini-Orca"
-            packageVersion = "4.1.0"
+            packageVersion = project.version.toString()
         }
     }
 }

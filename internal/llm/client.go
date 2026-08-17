@@ -12,6 +12,8 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
+const maxProviderResponseBytes = 4 * 1024 * 1024
+
 // ChatMessage represents a single message in a chat conversation
 type ChatMessage struct {
 	Role    string `json:"role"`
@@ -122,13 +124,16 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatRespons
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		logging.Error("Unexpected status code", "status", resp.StatusCode, "body", string(respBody))
-		return nil, fmt.Errorf("llm client: unexpected status code: %d: %s", resp.StatusCode, string(respBody))
+		logging.Error("Unexpected status code", "status", resp.StatusCode)
+		return nil, fmt.Errorf("llm client: unexpected status code: %d", resp.StatusCode)
 	}
 
 	var chatResp ChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+	data, err := readProviderBody(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(data, &chatResp); err != nil {
 		logging.Error("Failed to decode response", "error", err)
 		return nil, fmt.Errorf("llm client: failed to decode response: %w", err)
 	}
@@ -161,8 +166,7 @@ func (c *Client) ListModels(ctx context.Context) ([]Model, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		logging.Error("Unexpected status code", "status", resp.StatusCode, "body", string(body))
+		logging.Error("Unexpected status code", "status", resp.StatusCode)
 		return nil, fmt.Errorf("llm client: unexpected status code: %d", resp.StatusCode)
 	}
 
@@ -170,7 +174,11 @@ func (c *Client) ListModels(ctx context.Context) ([]Model, error) {
 		Object string       `json:"object"`
 		Data   []modelEntry `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+	data, err := readProviderBody(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(data, &listResp); err != nil {
 		logging.Error("Failed to decode response", "error", err)
 		return nil, fmt.Errorf("llm client: failed to decode response: %w", err)
 	}
@@ -186,6 +194,17 @@ func (c *Client) ListModels(ctx context.Context) ([]Model, error) {
 
 	logging.Info("Listed models", "count", len(models))
 	return models, nil
+}
+
+func readProviderBody(body io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, maxProviderResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("llm client: read response: %w", err)
+	}
+	if len(data) > maxProviderResponseBytes {
+		return nil, fmt.Errorf("llm client: response exceeds %d byte limit", maxProviderResponseBytes)
+	}
+	return data, nil
 }
 
 // modelEntry represents a single model entry in the /v1/models response

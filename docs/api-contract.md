@@ -35,6 +35,8 @@ coder/tester/reviewer pipeline.
 | POST | `/api/projects/current/analysis-job/cancel?project_revision=…` | Cancel the active request and pending work. |
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM call. |
 | POST | `/api/projects/current/candidates/checks` | Run focused checks in an isolated candidate workspace. |
+| POST | `/api/projects/current/candidates/compare` | Compare two validated preview-only candidates for the same focused base. |
+| POST | `/api/projects/current/candidates/export` | Return a source-free Markdown focused-review export for an explicitly selected preview. |
 | POST | `/api/projects/current/apply` | Explicitly apply one checked, validated candidate. |
 | POST | `/api/projects/current/undo` | Restore the immediately preceding unchanged applied file. |
 | GET | `/api/projects/current/audit?project_revision=…` | Source-free apply/undo audit history. |
@@ -77,6 +79,22 @@ When the configured model endpoint is not loopback/local, include
 `"confirm_remote_provider": true` in an import or generation request after the
 desktop user has reviewed the destination. The daemon rejects remote prompt
 delivery without that explicit signal.
+
+## Candidate comparison and review export
+
+`POST /api/projects/current/candidates/compare` accepts two distinct generation
+ids plus the active `project_revision`. Both previews must already have passed
+independent scope validation and must share project revision, base file hash,
+target file, target symbol, and action. The response compares source-free diff
+size, scope, focused-check state, effective model, and optional user notes. It
+never creates or applies either candidate.
+
+`POST /api/projects/current/candidates/export` accepts one generation id and
+the active revision. It returns a suggested filename and Markdown containing
+only the file summary, selected symbol, findings, candidate metadata, focused
+check states, and an audit reference when one exists. Prompts, source content,
+candidate content, excluded paths, and secret-like values are omitted or
+redacted. The desktop app writes the export only after the user chooses a file.
 
 ## Error shape
 

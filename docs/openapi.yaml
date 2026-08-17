@@ -263,6 +263,32 @@ paths:
         '200': {description: Source-free candidate check report}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/candidates/compare:
+    post:
+      tags: [Generation]
+      summary: Compare two validated preview-only candidates for one focused base
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CandidateComparisonRequest'}}}
+      responses:
+        '200':
+          description: Source-free candidate comparison; neither candidate is applied.
+          content: {application/json: {schema: {$ref: '#/components/schemas/CandidateComparison'}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/candidates/export:
+    post:
+      tags: [Generation]
+      summary: Build a source-free Markdown focused-review export
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CandidateExportRequest'}}}
+      responses:
+        '200':
+          description: Suggested filename and Markdown metadata; the daemon does not write a file.
+          content: {application/json: {schema: {$ref: '#/components/schemas/ReviewExport'}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/apply:
     post:
       tags: [Generation]
@@ -598,6 +624,47 @@ components:
         effective_model: {$ref: '#/components/schemas/EffectiveModel'}
         context_manifest: {$ref: '#/components/schemas/ContextManifest'}
         validation: {$ref: '#/components/schemas/GenerationValidation'}
+    CandidateComparisonRequest:
+      type: object
+      required: [left_generation_id, right_generation_id, project_revision]
+      properties:
+        left_generation_id: {type: string}
+        right_generation_id: {type: string}
+        project_revision: {type: string}
+        left_note: {type: string, description: Optional user-authored comparison note.}
+        right_note: {type: string, description: Optional user-authored comparison note.}
+    CandidateComparison:
+      type: object
+      required: [left, right]
+      properties:
+        left: {$ref: '#/components/schemas/CandidateComparisonItem'}
+        right: {$ref: '#/components/schemas/CandidateComparisonItem'}
+    CandidateComparisonItem:
+      type: object
+      properties:
+        generation_id: {type: string}
+        candidate_hash: {type: string}
+        target_path: {type: string}
+        target_symbol: {type: string}
+        action: {type: string}
+        scope_mode: {type: string, enum: [strict_symbol, symbol_plus_imports]}
+        diff_lines: {type: integer}
+        applicable: {type: boolean}
+        checks: {type: string, enum: [not run, passed, failed]}
+        model: {type: string}
+        user_note: {type: string}
+    CandidateExportRequest:
+      type: object
+      required: [generation_id, project_revision]
+      properties:
+        generation_id: {type: string}
+        project_revision: {type: string}
+    ReviewExport:
+      type: object
+      required: [filename, markdown]
+      properties:
+        filename: {type: string}
+        markdown: {type: string, description: Source-free focused-review Markdown.}
     GenerationValidation:
       type: object
       required: [applicable, scope_mode, diagnostics, diff]

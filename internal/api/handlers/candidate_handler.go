@@ -28,6 +28,19 @@ type candidateCheckRequest struct {
 	RunTests        bool   `json:"run_tests,omitempty"`
 }
 
+type candidateComparisonRequest struct {
+	LeftGenerationID  string `json:"left_generation_id"`
+	RightGenerationID string `json:"right_generation_id"`
+	ProjectRevision   string `json:"project_revision"`
+	LeftNote          string `json:"left_note,omitempty"`
+	RightNote         string `json:"right_note,omitempty"`
+}
+
+type candidateExportRequest struct {
+	GenerationID    string `json:"generation_id"`
+	ProjectRevision string `json:"project_revision"`
+}
+
 func (h *CandidateHandler) Check(w http.ResponseWriter, r *http.Request) {
 	var request candidateCheckRequest
 	if !decodeCandidateRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
@@ -77,6 +90,36 @@ func (h *CandidateHandler) Audit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, entries)
+}
+
+// Compare returns metadata for two separately generated, validated previews.
+// It has no side effects and cannot apply either candidate.
+func (h *CandidateHandler) Compare(w http.ResponseWriter, r *http.Request) {
+	var request candidateComparisonRequest
+	if !decodeCandidateRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+		return
+	}
+	comparison, err := h.service.CompareCandidates(request.LeftGenerationID, request.RightGenerationID, request.LeftNote, request.RightNote)
+	if err != nil {
+		writeCandidateError(w, "compare candidates failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, comparison)
+}
+
+// Export returns a source-free Markdown review. The desktop client is solely
+// responsible for writing it after the user chooses a local destination.
+func (h *CandidateHandler) Export(w http.ResponseWriter, r *http.Request) {
+	var request candidateExportRequest
+	if !decodeCandidateRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+		return
+	}
+	export, err := h.service.ExportCandidateReviewMarkdown(request.GenerationID)
+	if err != nil {
+		writeCandidateError(w, "export review failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, export)
 }
 
 func (h *CandidateHandler) requireRevision(w http.ResponseWriter, revision string) bool {

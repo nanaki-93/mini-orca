@@ -10,6 +10,8 @@ data class ExplorerRow(
     val analysisStatus: String = "missing",
 )
 
+fun useNarrowLayout(widthDp: Float): Boolean = widthDp < 1000f
+
 /** Builds a stable project-relative explorer without exposing filesystem paths. */
 fun explorerRows(files: List<IndexedFile>, filter: String = ""): List<ExplorerRow> {
     val matching = files
