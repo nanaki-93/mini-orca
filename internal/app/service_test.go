@@ -15,6 +15,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
 )
 
 func TestGenerateUsesConfiguredCoderProfile(t *testing.T) {
@@ -25,7 +26,7 @@ func TestGenerateUsesConfiguredCoderProfile(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{
 			Model:   "coder-override",
-			Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: "```go\npackage sample\n```"}}},
+			Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: `{"version":"v1","target_path":"sample.go","target_symbol":"Run","scope_mode":"strict_symbol","candidate_content":"package sample\n\nfunc Run() {}"}`}}},
 		})
 	}))
 	defer server.Close()
@@ -38,6 +39,9 @@ func TestGenerateUsesConfiguredCoderProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
 	service, err := New(&config.Config{
 		LLM:    config.LLMConfig{BaseURL: server.URL, Model: "default-model", Temperature: 0.25, MaxTokens: 321},
 		Agents: config.AgentsConfig{Coder: config.AgentConfig{Model: "coder-override", Skills: []string{"custom_skill"}, TimeoutSeconds: 30}},
@@ -47,8 +51,12 @@ func TestGenerateUsesConfiguredCoderProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := service.Generate(context.Background(), "improve Run", "sample.go", "Run", false); err != nil {
+	preview, err := service.Generate(context.Background(), "improve Run", "sample.go", "Run", workflow.ScopeStrictSymbol, false)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if preview.GenerationID == "" || preview.BaseFileHash == "" || preview.CandidateHash == "" || preview.CandidateContent != "package sample\n\nfunc Run() {}" || preview.ScopeMode != workflow.ScopeStrictSymbol || preview.EffectiveModel.Model != "coder-override" || len(preview.ContextManifest.Included) != 1 {
+		t.Fatalf("generation preview = %+v", preview)
 	}
 	if received.Model != "coder-override" || received.Temperature != 0.25 || received.MaxTokens != 321 {
 		t.Fatalf("generation used %+v, want configured coder model and LLM settings", received)
@@ -110,6 +118,9 @@ func TestGenerateCancellationStopsLLMRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
 	service, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: server.URL}, Retry: config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}}, manager)
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +128,7 @@ func TestGenerateCancellationStopsLLMRequest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		_, err := service.Generate(ctx, "improve Run", "sample.go", "Run", false)
+		_, err := service.Generate(ctx, "improve Run", "sample.go", "Run", workflow.ScopeStrictSymbol, false)
 		done <- err
 	}()
 	<-started
@@ -145,6 +156,9 @@ func TestGenerateReturnsDeadlineExceeded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
 	service, err := New(&config.Config{
 		LLM:      config.LLMConfig{BaseURL: server.URL},
 		Timeouts: config.TimeoutConfig{GenerationSeconds: 1},
@@ -154,7 +168,7 @@ func TestGenerateReturnsDeadlineExceeded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = service.Generate(context.Background(), "improve Run", "sample.go", "Run", false)
+	_, err = service.Generate(context.Background(), "improve Run", "sample.go", "Run", workflow.ScopeStrictSymbol, false)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("generation error = %v, want deadline exceeded", err)
 	}

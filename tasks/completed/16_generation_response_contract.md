@@ -1,5 +1,9 @@
 # 16 — Define structured generation response contract
 
+## Status
+
+Complete
+
 ## Goal
 
 Make model output machine-checkable before any diff or Apply work begins.

@@ -37,6 +37,11 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 		{http.MethodGet, "/api/projects/current/files/analysis"},
 		{http.MethodPost, "/api/projects/current/files/analysis"},
 		{http.MethodDelete, "/api/projects/current/files/analysis"},
+		{http.MethodGet, "/api/projects/current/analysis-job"},
+		{http.MethodPost, "/api/projects/current/analysis-job"},
+		{http.MethodPost, "/api/projects/current/analysis-job/pause"},
+		{http.MethodPost, "/api/projects/current/analysis-job/resume"},
+		{http.MethodPost, "/api/projects/current/analysis-job/cancel"},
 		{http.MethodPost, "/api/projects/current/reindex"},
 	}
 

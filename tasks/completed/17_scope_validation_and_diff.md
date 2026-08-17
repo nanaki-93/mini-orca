@@ -1,5 +1,9 @@
 # 17 — Validate atomic scope and generate diffs
 
+## Status
+
+Complete
+
 ## Goal
 
 Prove that a candidate changes only the selected symbol and allowed imports in one file.

@@ -10,6 +10,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
 )
 
 // ChatHandler manages chat message and history endpoints.
@@ -56,6 +57,13 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, http.StatusBadRequest, "target_symbol is invalid")
 		return
 	}
+	if req.ScopeMode == "" {
+		req.ScopeMode = workflow.ScopeStrictSymbol
+	}
+	if req.ScopeMode != workflow.ScopeStrictSymbol && req.ScopeMode != workflow.ScopeSymbolPlusImports {
+		api.WriteError(w, http.StatusBadRequest, "scope_mode must be strict_symbol or symbol_plus_imports")
+		return
+	}
 	if err := h.service.ValidateMutableRequest(req.ProjectID, req.ProjectRevision, req.FilePath, req.BaseFileHash); err != nil {
 		if errors.Is(err, project.ErrRevisionConflict) {
 			api.WriteError(w, http.StatusConflict, "project or file changed; reload before generating")
@@ -68,7 +76,7 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		Role: "user", Content: "Requested focused generation", Phase: "coding", TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol,
 	})
 
-	result, err := h.service.Generate(r.Context(), req.Message, req.FilePath, req.TargetSymbol, req.ConfirmRemoteProvider)
+	result, err := h.service.Generate(r.Context(), req.Message, req.FilePath, req.TargetSymbol, req.ScopeMode, req.ConfirmRemoteProvider)
 	if err != nil {
 		_ = h.service.RecordActivity(req.ProjectID, req.ProjectRevision, project.Activity{
 			Role: "assistant", Content: "Generation failed", Phase: "error", TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol,

@@ -42,6 +42,13 @@ type fileAnalysisRequest struct {
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }
 
+type analyzeAllRequest struct {
+	ProjectRevision       string `json:"project_revision"`
+	MaxFiles              int    `json:"max_files,omitempty"`
+	MaxRetries            int    `json:"max_retries,omitempty"`
+	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
+}
+
 func NewProjectHandler(manager *project.Manager, service *app.Service) *ProjectHandler {
 	return &ProjectHandler{manager: manager, service: service}
 }
@@ -66,6 +73,7 @@ func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
 		api.WriteAppError(w, apperrors.BadRequest("project import failed", err.Error(), err))
 		return
 	}
+	h.service.ProjectChanged()
 	if err := h.manager.Set(analysis.Path, analysis); err != nil {
 		api.WriteAppError(w, apperrors.Internal("project activation failed", "The analysis was created but the project could not be activated.", err))
 		return
@@ -157,12 +165,91 @@ func (h *ProjectHandler) Reindex(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	index, err := h.manager.Reindex()
+	var (
+		index *project.ProjectIndex
+		err   error
+	)
+	if h.service != nil {
+		index, err = h.service.Reindex()
+	} else {
+		index, err = h.manager.Reindex()
+	}
 	if err != nil {
 		writeProjectError(w, "project reindex failed", err)
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, index)
+}
+
+// AnalyzeAllJob returns persisted sequential cache-warming progress.
+func (h *ProjectHandler) AnalyzeAllJob(w http.ResponseWriter, r *http.Request) {
+	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	job, err := h.service.AnalyzeAllJob()
+	if err != nil {
+		writeProjectError(w, "analyze-all job lookup failed", err)
+		return
+	}
+	if job == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, job)
+}
+
+// StartAnalyzeAll explicitly starts a bounded sequential analysis job.
+func (h *ProjectHandler) StartAnalyzeAll(w http.ResponseWriter, r *http.Request) {
+	request, ok := h.decodeAnalyzeAllRequest(w, r)
+	if !ok || !h.requireRevision(w, request.ProjectRevision) {
+		return
+	}
+	job, err := h.service.StartAnalyzeAll(r.Context(), app.AnalyzeAllOptions{MaxFiles: request.MaxFiles, MaxRetries: request.MaxRetries}, request.ConfirmRemoteProvider)
+	if err != nil {
+		writeProjectError(w, "start analyze-all failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusAccepted, job)
+}
+
+// PauseAnalyzeAll pauses after any current one-file request completes.
+func (h *ProjectHandler) PauseAnalyzeAll(w http.ResponseWriter, r *http.Request) {
+	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	job, err := h.service.PauseAnalyzeAll()
+	if err != nil {
+		writeProjectError(w, "pause analyze-all failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, job)
+}
+
+// ResumeAnalyzeAll restarts a paused job for the same active project revision.
+func (h *ProjectHandler) ResumeAnalyzeAll(w http.ResponseWriter, r *http.Request) {
+	request, ok := h.decodeAnalyzeAllRequest(w, r)
+	if !ok || !h.requireRevision(w, request.ProjectRevision) {
+		return
+	}
+	job, err := h.service.ResumeAnalyzeAll(r.Context(), request.ConfirmRemoteProvider)
+	if err != nil {
+		writeProjectError(w, "resume analyze-all failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusAccepted, job)
+}
+
+// CancelAnalyzeAll cancels an in-flight request and prevents later files starting.
+func (h *ProjectHandler) CancelAnalyzeAll(w http.ResponseWriter, r *http.Request) {
+	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	job, err := h.service.CancelAnalyzeAll()
+	if err != nil {
+		writeProjectError(w, "cancel analyze-all failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, job)
 }
 
 // FileAnalysis returns cached semantic state only; source is never returned.
@@ -213,6 +300,17 @@ func (h *ProjectHandler) decodeFileAnalysisRequest(w http.ResponseWriter, r *htt
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		api.WriteAppError(w, apperrors.BadRequest("invalid file analysis request", "Provide path and project_revision.", err))
+		return request, false
+	}
+	return request, true
+}
+
+func (h *ProjectHandler) decodeAnalyzeAllRequest(w http.ResponseWriter, r *http.Request) (analyzeAllRequest, bool) {
+	var request analyzeAllRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		api.WriteAppError(w, apperrors.BadRequest("invalid analyze-all request", "Provide project_revision and optional job limits.", err))
 		return request, false
 	}
 	return request, true

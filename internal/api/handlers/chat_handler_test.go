@@ -14,7 +14,9 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
 )
 
 func TestSendMessageReportsCanceledGeneration(t *testing.T) {
@@ -86,6 +88,27 @@ func TestSendMessageRejectsStaleProjectState(t *testing.T) {
 	handler.SendMessage(response, httptest.NewRequest(http.MethodPost, "/api/chat/message", bytes.NewReader(body)))
 	if response.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusConflict, response.Body.String())
+	}
+}
+
+func TestSendMessageReturnsStructuredGenerationPreview(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "fixture-model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"version":"v1","target_path":"sample.go","target_symbol":"Run","scope_mode":"strict_symbol","candidate_content":"package sample\nfunc Run() {}"}`}}}})
+	}))
+	defer server.Close()
+
+	handler, body := newCancellationTestHandler(t, server.URL, 0)
+	response := httptest.NewRecorder()
+	handler.SendMessage(response, httptest.NewRequest(http.MethodPost, "/api/chat/message", bytes.NewReader(body)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+	var preview app.GenerationPreview
+	if err := json.NewDecoder(response.Body).Decode(&preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.GenerationID == "" || preview.TargetPath != "sample.go" || preview.TargetSymbol != "Run" || preview.ScopeMode != workflow.ScopeStrictSymbol || preview.CandidateHash == "" || preview.BaseFileHash == "" {
+		t.Fatalf("preview = %+v", preview)
 	}
 }
 
