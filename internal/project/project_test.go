@@ -18,6 +18,13 @@ func (mockChatClient) Chat(context.Context, []llm.ChatMessage) (*llm.ChatRespons
 	}}}}, nil
 }
 
+type recordingChatClient struct{ messages []llm.ChatMessage }
+
+func (c *recordingChatClient) Chat(_ context.Context, messages []llm.ChatMessage) (*llm.ChatResponse, error) {
+	c.messages = append([]llm.ChatMessage(nil), messages...)
+	return mockChatClient{}.Chat(context.Background(), messages)
+}
+
 func TestResolveFileRejectsSiblingPrefixAndSymlinkEscape(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "app")
@@ -113,5 +120,99 @@ func TestGetFileInfoRejectsLargeAndBinaryFiles(t *testing.T) {
 	}
 	if _, err := GetFileInfo(root, "large.txt"); err == nil {
 		t.Fatal("expected oversized file to be rejected")
+	}
+}
+
+func TestContextPolicyExcludesSecretsIgnoredAndGeneratedFiles(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		".gitignore":        "ignored.go\n",
+		".mini-orcaignore":  "private/**\n",
+		"main.go":           "package main\nfunc main() {}\n",
+		".env":              "DATABASE_PASSWORD=must-not-leak\n",
+		"private/server.go": "package private\nconst Key = \"must-not-leak\"\n",
+		"ignored.go":        "package ignored\nconst Token = \"must-not-leak\"\n",
+		"config.yaml":       "api_key: must-not-leak\n",
+		"tls.key":           "must-not-leak\n",
+		"app.min.js":        "const secret = 'must-not-leak'\n",
+		"package-lock.json": "must-not-leak\n",
+	}
+	for path, content := range files {
+		fullPath := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	policy, err := NewContextPolicy(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{".env", "config.yaml", "tls.key", "app.min.js", "package-lock.json", "ignored.go", "private/server.go"} {
+		if decision := policy.Decide(path); decision.Include || decision.Reason == "" {
+			t.Errorf("policy decision for %s = %+v, want excluded with reason", path, decision)
+		}
+	}
+	if decision := policy.Decide("main.go"); !decision.Include {
+		t.Fatalf("main.go unexpectedly excluded: %+v", decision)
+	}
+
+	client := &recordingChatClient{}
+	if _, err := NewAnalyzer(client).Analyze(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	var prompt strings.Builder
+	for _, message := range client.messages {
+		prompt.WriteString(message.Content)
+	}
+	if strings.Contains(prompt.String(), "must-not-leak") {
+		t.Fatalf("excluded content reached model prompt: %s", prompt.String())
+	}
+	if !strings.Contains(prompt.String(), "func main()") {
+		t.Fatalf("eligible source did not reach model prompt: %s", prompt.String())
+	}
+}
+
+func TestContextPolicyExcludesSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.go")
+	if err := os.WriteFile(outside, []byte("package outside\nconst Secret = \"must-not-leak\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked.go")); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := NewContextPolicy(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision := policy.Decide("linked.go"); decision.Include || !strings.Contains(decision.Reason, "symlink") {
+		t.Fatalf("symlink decision = %+v, want exclusion", decision)
+	}
+}
+
+func TestContextPolicyProjectOverrides(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".mini-orca"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	config := `{"include":["ignored.go"],"exclude":["drafts/**"]}`
+	if err := os.WriteFile(filepath.Join(root, ".mini-orca", "context-policy.json"), []byte(config), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored.go\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := NewContextPolicy(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision := policy.Decide("ignored.go"); !decision.Include || decision.Reason != "project context-policy include" {
+		t.Fatalf("include override = %+v", decision)
+	}
+	if decision := policy.Decide("drafts/main.go"); decision.Include || decision.Reason != "project context-policy exclude" {
+		t.Fatalf("exclude override = %+v", decision)
 	}
 }

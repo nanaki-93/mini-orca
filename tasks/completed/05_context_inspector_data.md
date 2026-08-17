@@ -1,5 +1,9 @@
 # 05 — Expose context-inspector data
 
+## Status
+
+Complete
+
 ## Goal
 
 Provide the desktop client with an exact preview of what a model request will receive.

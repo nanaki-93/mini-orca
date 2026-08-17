@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -12,14 +13,16 @@ import (
 type ProjectHandler struct {
 	manager  *project.Manager
 	analyzer *project.Analyzer
+	service  *app.Service
 }
 
 type projectImportRequest struct {
-	ProjectPath string `json:"project_path"`
+	ProjectPath           string `json:"project_path"`
+	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }
 
-func NewProjectHandler(manager *project.Manager, analyzer *project.Analyzer) *ProjectHandler {
-	return &ProjectHandler{manager: manager, analyzer: analyzer}
+func NewProjectHandler(manager *project.Manager, analyzer *project.Analyzer, service *app.Service) *ProjectHandler {
+	return &ProjectHandler{manager: manager, analyzer: analyzer, service: service}
 }
 
 func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
@@ -28,6 +31,10 @@ func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		api.WriteAppError(w, apperrors.BadRequest("invalid request", "A JSON project_path is required.", err))
+		return
+	}
+	if err := h.service.RequireRemoteConfirmation(request.ConfirmRemoteProvider); err != nil {
+		api.WriteAppError(w, apperrors.BadRequest("remote provider confirmation required", err.Error(), err))
 		return
 	}
 	analysis, err := h.analyzer.Analyze(r.Context(), request.ProjectPath)

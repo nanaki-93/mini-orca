@@ -1,5 +1,9 @@
 # 04 — Implement context privacy and inclusion policy
 
+## Status
+
+Complete
+
 ## Goal
 
 Ensure project analysis and local-model prompts include only intentional, safe, bounded context.
@@ -11,7 +15,7 @@ Task 01.
 ## Implementation
 
 - Add one `ContextPolicy` shared by import, indexing, summaries, and generation.
-- Honor `.gitignore` and project-local `.mini-orcaignore`.
+- Honor `../../.gitignore` and project-local `.mini-orcaignore`.
 - Deny secrets and unsafe paths by name/pattern: `.env*`, credential/key/certificate files, tokens, and local overrides.
 - Exclude generated, minified, dependency, and lock files by default; allow explicit project configuration overrides.
 - Replace raw byte-only limits with token estimation plus hard byte/file limits.
@@ -26,4 +30,4 @@ Task 01.
 
 ## Verification
 
-- Add policy table tests, `.gitignore` fixtures, and path/symlink regression tests.
+- Add policy table tests, `../../.gitignore` fixtures, and path/symlink regression tests.

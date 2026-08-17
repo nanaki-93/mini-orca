@@ -8,27 +8,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent"
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
-	"github.com/nanaki-93/mini-orca/v2/internal/llm"
-	"github.com/nanaki-93/mini-orca/v2/internal/project"
-	"github.com/nanaki-93/mini-orca/v2/internal/tools"
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
 )
 
 // ChatHandler manages chat message and history endpoints.
 type ChatHandler struct {
-	mu        sync.Mutex
-	history   []ChatResponse
-	llmClient *llm.Client
-	manager   *project.Manager
+	mu      sync.Mutex
+	history []ChatResponse
+	service *app.Service
 }
 
 // NewChatHandler creates a new ChatHandler instance.
-func NewChatHandler(llmClient *llm.Client, manager *project.Manager) *ChatHandler {
+func NewChatHandler(service *app.Service) *ChatHandler {
 	return &ChatHandler{
-		history:   make([]ChatResponse, 0),
-		llmClient: llmClient,
-		manager:   manager,
+		history: make([]ChatResponse, 0),
+		service: service,
 	}
 }
 
@@ -64,17 +59,6 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, http.StatusBadRequest, "target_symbol is invalid")
 		return
 	}
-	projectRoot := h.manager.Root()
-	fileInfo, err := project.GetFileInfo(projectRoot, req.FilePath)
-	if err != nil {
-		api.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if fileInfo.Binary {
-		api.WriteError(w, http.StatusBadRequest, "target file must be a text source file")
-		return
-	}
-
 	// Store user message
 	h.mu.Lock()
 	historyEntry := ChatResponse{
@@ -86,16 +70,7 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	h.history = append(h.history, historyEntry)
 	h.mu.Unlock()
 
-	projectContext, err := project.NewContextBuilder().Build(projectRoot, req.FilePath)
-	if err != nil {
-		api.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("build project context: %v", err))
-		return
-	}
-
-	// Run the pipeline
-	_, executor := tools.InitToolExecutorWithPath(projectRoot)
-	orchestrator := agent.NewOrchestrator(h.llmClient, executor)
-	result, err := orchestrator.RunCoderForSymbol(req.Message, projectContext, req.FilePath, req.TargetSymbol)
+	result, err := h.service.Generate(r.Context(), req.Message, req.FilePath, req.TargetSymbol, req.ConfirmRemoteProvider)
 	if err != nil {
 		h.mu.Lock()
 		h.history = append(h.history, ChatResponse{

@@ -1,0 +1,109 @@
+package main
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"gopkg.in/yaml.v3"
+)
+
+type documentedRoute struct {
+	method string
+	path   string
+}
+
+func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
+	routes := []documentedRoute{
+		{http.MethodGet, "/health"},
+		{http.MethodGet, "/status"},
+		{http.MethodGet, "/api/system/info"},
+		{http.MethodPost, "/api/chat/message"},
+		{http.MethodGet, "/api/chat/history"},
+		{http.MethodGet, "/api/models/current"},
+		{http.MethodGet, "/api/projects/current/context"},
+		{http.MethodPost, "/api/projects/import"},
+		{http.MethodGet, "/api/projects/current"},
+		{http.MethodGet, "/api/projects/current/files/info"},
+	}
+
+	if got := openAPIRoutes(t); !sameRoutes(got, routes) {
+		t.Fatalf("OpenAPI routes = %v, want %v", got, routes)
+	}
+
+	root := t.TempDir()
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := newHTTPMux(service, nil, manager)
+	for _, route := range routes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			path := route.path
+			if path == "/api/projects/current/files/info" || path == "/api/projects/current/context" {
+				path += "?path=missing.go"
+			}
+			req := httptest.NewRequest(route.method, path, nil)
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, req)
+			if response.Code == http.StatusNotFound || response.Code == http.StatusMethodNotAllowed {
+				t.Fatalf("documented route is not registered: status %d", response.Code)
+			}
+		})
+	}
+}
+
+func openAPIRoutes(t *testing.T) []documentedRoute {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec struct {
+		Paths map[string]map[string]any `yaml:"paths"`
+	}
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		t.Fatalf("parse OpenAPI: %v", err)
+	}
+	var routes []documentedRoute
+	for path, methods := range spec.Paths {
+		for method := range methods {
+			if method == "parameters" {
+				continue
+			}
+			routes = append(routes, documentedRoute{strings.ToUpper(method), path})
+		}
+	}
+	sort.Slice(routes, func(i, j int) bool { return routes[i].method+routes[i].path < routes[j].method+routes[j].path })
+	return routes
+}
+
+func sameRoutes(left, right []documentedRoute) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	copyRight := append([]documentedRoute(nil), right...)
+	sort.Slice(copyRight, func(i, j int) bool {
+		return copyRight[i].method+copyRight[i].path < copyRight[j].method+copyRight[j].path
+	})
+	for i := range left {
+		if left[i] != copyRight[i] {
+			return false
+		}
+	}
+	return true
+}

@@ -84,7 +84,11 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 	if err != nil {
 		return nil, err
 	}
-	analysis, err := scan(canonical)
+	policy, err := NewContextPolicy(canonical)
+	if err != nil {
+		return nil, err
+	}
+	analysis, err := scanWithPolicy(canonical, policy)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +121,14 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 }
 
 func scan(root string) (*Analysis, error) {
+	policy, err := NewContextPolicy(root)
+	if err != nil {
+		return nil, err
+	}
+	return scanWithPolicy(root, policy)
+}
+
+func scanWithPolicy(root string, policy *ContextPolicy) (*Analysis, error) {
 	result := &Analysis{
 		Name: filepath.Base(root), Path: root, Type: string(tools.ProjectTypeUnknown),
 		Languages: make(map[string]int), AnalysisFile: analysisRelativePath, AnalyzedAt: time.Now().UTC(),
@@ -142,7 +154,11 @@ func scan(root string) (*Analysis, error) {
 		if err != nil {
 			return nil
 		}
-		result.Files = append(result.Files, filepath.ToSlash(relative))
+		relativePath := filepath.ToSlash(relative)
+		if !policy.Decide(relativePath).Include {
+			return nil
+		}
+		result.Files = append(result.Files, relativePath)
 		result.FileCount++
 		language := detectLanguage(path)
 		if language == "Text" {

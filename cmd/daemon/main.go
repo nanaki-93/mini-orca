@@ -8,14 +8,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent"
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/api/handlers"
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
-	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
-	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 	"github.com/nanaki-93/mini-orca/v2/internal/version"
 )
 
@@ -41,25 +39,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize LLM client
-	llmClient := llm.NewClient(
-		cfg.LLM.BaseURL,
-		cfg.LLM.APIKey,
-		cfg.LLM.Model,
-		cfg.LLM.Temperature,
-		cfg.LLM.MaxTokens,
-	)
-
-	// Detect project type and create tool executor
-	projectInfo, executor := tools.InitToolExecutorWithPath(cfg.ProjectPath)
 	projectManager, err := project.NewManager(cfg.ProjectPath)
 	if err != nil {
 		logging.Error("Invalid initial project path", "error", err)
 		os.Exit(1)
 	}
 
-	// Initialize agent registry and register agents
-	agentRegistry := agent.InitAgentRegistry(llmClient)
+	application, err := app.New(cfg, projectManager)
+	if err != nil {
+		logging.Error("Failed to initialize application service", "error", err)
+		os.Exit(1)
+	}
 
 	// Initialize API stores and handlers
 
@@ -78,19 +68,6 @@ func main() {
 		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, cache, projectManager)
 	}
 
-	// Initialize orchestrator with LLM client and executor
-	agentOrchestrator := agent.NewOrchestrator(llmClient, executor)
-
-	// Create agents for logging purposes
-	coder := agent.NewCoderAgent(llmClient)
-	coder.SetSkills(cfg.Agents.Coder.Skills)
-
-	tester := agent.NewTesterAgent(llmClient)
-	tester.SetSkills(cfg.Agents.Tester.Skills)
-
-	reviewer := agent.NewReviewerAgent(llmClient)
-	reviewer.SetSkills(cfg.Agents.Reviewer.Skills)
-
 	// Log successful startup
 	logging.Info("Mini-Orca daemon started successfully")
 	logging.Info("Startup config",
@@ -98,29 +75,12 @@ func main() {
 		"model", cfg.LLM.Model,
 		"temperature", cfg.LLM.Temperature)
 
-	// Log project type and executor
-	if projectInfo != nil {
-		logging.Info("Project info", "type", projectInfo.Type, "root_dir", projectInfo.RootDir)
-	} else {
-		logging.Info("Project type: generic (unknown) - using shell-only executor")
-	}
-	if executor != nil {
-		logging.Info("Tool executor initialized successfully")
-	}
-	if agentOrchestrator != nil {
-		logging.Info("Orchestrator initialized with executor")
-	}
-
-	// Log registered agents and their skills
-	logging.Info("Agents initialized", "agents", []string{"coder", "tester", "reviewer"})
-	logging.Info("Workflow: coding → testing → review → human_gate")
-
-	// Log registered agents from registry
-	logging.Info("Registered agents from registry", "agents", agentRegistry.List())
+	logging.Info("Generation profile initialized", "profile", application.EffectiveModel().Profile, "model", application.EffectiveModel().Model)
+	logging.Info("Workflow: single-coder preview with explicit review")
 
 	// List available models
 	modelsCtx, cancelModels := context.WithTimeout(context.Background(), 10*time.Second)
-	models, err := llmClient.ListModels(modelsCtx)
+	models, err := application.AnalysisClient().ListModels(modelsCtx)
 	cancelModels()
 	if err != nil {
 		logging.Warn("Failed to list models", "error", err)
@@ -132,7 +92,7 @@ func main() {
 	}
 
 	// Start HTTP server with all API endpoints
-	server := startHTTPServer(agentOrchestrator, htmxRenderHandler, llmClient, projectManager)
+	server := startHTTPServer(application, htmxRenderHandler, projectManager)
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
@@ -150,11 +110,53 @@ func main() {
 
 // startHTTPServer creates and starts the HTTP server with all API endpoints.
 func startHTTPServer(
-	agentOrchestrator *agent.Orchestrator,
+	application *app.Service,
 	htmxRenderHandler *handlers.HTMXRenderHandler,
-	llmClient *llm.Client,
 	projectManager *project.Manager,
 ) *http.Server {
+	mux := newHTTPMux(application, htmxRenderHandler, projectManager)
+
+	// Initialize error handler
+	templatesPath := "internal/api/templates"
+	errorHandler, err := api.NewErrorHandler(templatesPath)
+	if err != nil {
+		logging.Warn("Failed to initialize error handler", "error", err)
+		errorHandler = nil
+	}
+
+	// Wrap with error handler middleware
+	var handler http.Handler = mux
+	if errorHandler != nil {
+		handler = errorHandler.Next(handler)
+	}
+
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      handler,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 6 * time.Minute,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		logging.Info("HTTP server starting", "addr", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logging.Error("HTTP server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	return server
+}
+
+// newHTTPMux registers the daemon routes. Browser UI routes remain temporary
+// compatibility routes until the desktop replacement is complete.
+func newHTTPMux(
+	application *app.Service,
+	htmxRenderHandler *handlers.HTMXRenderHandler,
+	projectManager *project.Manager,
+) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Health check endpoint
@@ -168,7 +170,7 @@ func startHTTPServer(
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","agents":["coder","tester","reviewer"]}`))
+		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","workflow":"single_coder_preview"}`))
 	})
 
 	// System info endpoint
@@ -199,50 +201,23 @@ func startHTTPServer(
 	}
 
 	// Initialize chat handler
-	chatHandler := handlers.NewChatHandler(llmClient, projectManager)
+	chatHandler := handlers.NewChatHandler(application)
 
 	// Register chat endpoints
 	mux.HandleFunc("POST /api/chat/message", chatHandler.SendMessage)
 	mux.HandleFunc("GET /api/chat/history", chatHandler.GetHistory)
 
-	projectHandler := handlers.NewProjectHandler(projectManager, project.NewAnalyzer(llmClient))
+	modelHandler := handlers.NewModelHandler(application)
+	mux.HandleFunc("GET /api/models/current", modelHandler.Current)
+	contextHandler := handlers.NewContextHandler(application)
+	mux.HandleFunc("GET /api/projects/current/context", contextHandler.Preview)
+
+	projectHandler := handlers.NewProjectHandler(projectManager, project.NewAnalyzer(application.AnalysisClient()), application)
 	mux.HandleFunc("POST /api/projects/import", projectHandler.Import)
 	mux.HandleFunc("GET /api/projects/current", projectHandler.Current)
 	mux.HandleFunc("GET /api/projects/current/files/info", projectHandler.FileInfo)
 
-	// Initialize error handler
-	templatesPath := "internal/api/templates"
-	errorHandler, err := api.NewErrorHandler(templatesPath)
-	if err != nil {
-		logging.Warn("Failed to initialize error handler", "error", err)
-		errorHandler = nil
-	}
-
-	// Wrap with error handler middleware
-	var handler http.Handler = mux
-	if errorHandler != nil {
-		handler = errorHandler.Next(handler)
-	}
-
-	server := &http.Server{
-		Addr:        ":8080",
-		Handler:     handler,
-		ReadTimeout: 10 * time.Second,
-		// Analysis and code-generation calls wait for an LLM response.
-		WriteTimeout: 6 * time.Minute,
-		IdleTimeout:  60 * time.Second,
-	}
-
-	// Start server in a goroutine
-	go func() {
-		logging.Info("HTTP server starting", "addr", server.Addr)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logging.Error("HTTP server error", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	return server
+	return mux
 }
 
 // waitForShutdown blocks until a SIGINT or SIGTERM signal is received.
