@@ -62,6 +62,25 @@ This document describes the API endpoints provided by the mini-orca daemon.
 - **Method**: `GET`
 - **Description**: Returns safe, project-relative file metadata and text content. Binary files and files over 1 MiB are not displayed.
 
+### Deterministic project index
+
+- **URL**: `/api/projects/current/index`
+- **Method**: `GET`
+- **Description**: Returns deterministic metadata for context-policy-eligible project-relative files, including hashes, language, imports, diagnostics, and symbols. It never returns source text.
+
+### Selected-file symbols
+
+- **URL**: `/api/projects/current/files/symbols?path=relative/path`
+- **Method**: `GET`
+- **Description**: Returns valid atomic targets with name, kind, signature, line range, confidence, and atomic-target flag. Excluded files are rejected.
+
+### Reindex project facts
+
+- **URL**: `/api/projects/current/reindex`
+- **Method**: `POST`
+- **Body**: `{"project_revision":"sha256:..."}` (optional)
+- **Description**: Rebuilds deterministic index facts without calling the model. A supplied revision must match the active project or the endpoint returns `409 Conflict`.
+
 ### Get Chat History
 - **URL**: `/api/chat/history`
 - **Method**: `GET`

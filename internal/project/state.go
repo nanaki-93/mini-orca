@@ -17,6 +17,8 @@ import (
 var (
 	ErrNoActiveProject  = errors.New("active project has not been analyzed")
 	ErrRevisionConflict = errors.New("project or file state changed")
+	ErrExcludedFile     = errors.New("file is excluded by context policy")
+	ErrUnsupportedFile  = errors.New("file does not support symbol extraction")
 )
 
 // Activity is durable project-scoped metadata. It intentionally excludes model

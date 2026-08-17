@@ -1,5 +1,9 @@
 # 12 — Create versioned file-analysis cache
 
+## Status
+
+Complete
+
 ## Goal
 
 Persist semantic summaries safely and invalidate them exactly when inputs change.
