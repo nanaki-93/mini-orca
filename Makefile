@@ -1,9 +1,9 @@
 # Mini-Orca Makefile
-# Version: 4.0.0
+# Version: 4.1.0
 
 # Variables
 APP_NAME := mini-orca
-VERSION := 4.0.0
+VERSION := 4.1.0
 IMAGE_NAME := $(APP_NAME)
 IMAGE_TAG := $(VERSION)
 DOCKER_IMAGE := $(IMAGE_NAME):$(IMAGE_TAG)
@@ -26,7 +26,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build clean test run docker-build docker-run docker-stop docker-logs docker-clean help
+.PHONY: all build clean test desktop-run docker-build docker-run docker-stop docker-logs docker-clean help
 
 # ─── Default Target ────────────────────────────────────────────────────────────
 all: help
@@ -58,6 +58,10 @@ test: ## Run tests
 	@$(GO) test ./... -v -coverprofile=$(BUILD_DIR)/coverage.out
 	@$(GO) tool cover -html=$(BUILD_DIR)/coverage.out -o $(BUILD_DIR)/coverage.html
 	@echo "$(COLOR_GREEN)Tests complete. Coverage report: $(BUILD_DIR)/coverage.html$(COLOR_RESET)"
+
+desktop-run: ## Run the Compose Desktop client (daemon required at localhost:8080)
+	@echo "$(COLOR_GREEN)Starting the Mini-Orca desktop client...$(COLOR_RESET)"
+	@gradle -p desktop run
 
 # ─── Docker Build ──────────────────────────────────────────────────────────────
 docker-build: ## Build Docker image
