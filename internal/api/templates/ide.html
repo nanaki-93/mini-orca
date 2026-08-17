@@ -56,6 +56,13 @@
 
         <!-- Chat Input Area -->
         <div id="chat-input-container" class="border-t border-dark-600 p-3 shrink-0">
+            <input
+                    id="chat-target-symbol"
+                    type="text"
+                    placeholder="Function or class (required)"
+                    class="w-full mb-2 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-blue-500"
+                    aria-label="Target function or class"
+            >
             <div class="flex items-end gap-2">
                 <textarea
                         id="chat-input"
@@ -63,19 +70,11 @@
                         rows="1"
                         placeholder="Ask Mini-Orca to help with your code..."
                         class="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-blue-500 resize-none max-h-32"
-                        hx-post="/api/chat/message"
-                        hx-ext="json-enc"
-                        hx-trigger="keyup[event.key==='Enter' && !event.shiftKey]"
-                        hx-target="#chat-messages"
-                        hx-swap="innerHTML"
-                        hx-disabled-elt="this"
-                        onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); }"
                 ></textarea>
                 <button
                     id="chat-send-btn"
                     class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shrink-0"
                     aria-label="Send message"
-                    onclick="document.getElementById('chat-input').dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter'}))"
                 >
                     <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19V5m0 0l-7 7m7-7l7 7" />
@@ -104,7 +103,7 @@
                 </svg>
                 <span>Loading...</span>
             </div>
-            <span>Mini-Orca v0.1.0</span>
+            <span>Mini-Orca v{{ .Version }}</span>
         </div>
     </div>
 {{ end }}

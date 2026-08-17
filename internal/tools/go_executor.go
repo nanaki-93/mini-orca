@@ -13,8 +13,12 @@ type goExecutor struct {
 
 // NewGoExecutor creates a new Go executor instance.
 func NewGoExecutor() *goExecutor {
+	return newGoExecutorAt("")
+}
+
+func newGoExecutorAt(workingDir string) *goExecutor {
 	return &goExecutor{
-		shell: NewSafeShellExecutor(),
+		shell: newSafeShellExecutorAt(workingDir),
 	}
 }
 

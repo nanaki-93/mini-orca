@@ -1,10 +1,16 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"unicode"
 )
+
+func pathID(path string) string {
+	sum := sha256.Sum256([]byte(path))
+	return fmt.Sprintf("%x", sum[:8])
+}
 
 // ─── String Utility Functions ─────────────────────────────────────────────────
 

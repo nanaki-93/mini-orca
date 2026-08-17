@@ -15,11 +15,17 @@ import (
 const DefaultTimeout = 60 * time.Second
 
 // shellExecutor implements the Executor interface for shell command execution.
-type shellExecutor struct{}
+type shellExecutor struct {
+	workingDir string
+}
 
 // NewShellExecutor creates a new shell executor instance.
 func NewShellExecutor() Executor {
 	return &shellExecutor{}
+}
+
+func newShellExecutorAt(workingDir string) Executor {
+	return &shellExecutor{workingDir: workingDir}
 }
 
 // safeShellExecutor wraps shellExecutor with safety features: allowlist, dangerous command blocking, and logging.
@@ -31,8 +37,12 @@ type safeShellExecutor struct {
 
 // NewSafeShellExecutor creates a new safe shell executor with default settings.
 func NewSafeShellExecutor() Executor {
+	return newSafeShellExecutorAt("")
+}
+
+func newSafeShellExecutorAt(workingDir string) Executor {
 	return &safeShellExecutor{
-		shell: &shellExecutor{},
+		shell: &shellExecutor{workingDir: workingDir},
 		allowedCommands: map[string]bool{
 			"go": true, "gofmt": true, "golangci-lint": true, "go vet": true,
 			"gradlew": true, "./gradlew": true,
@@ -78,18 +88,9 @@ func (s *safeShellExecutor) isDangerousCommand(cmd string, args []string) bool {
 
 // isCommandAllowed checks if a command is in the allowlist.
 func (s *safeShellExecutor) isCommandAllowed(cmd string) bool {
-	// Check exact match
-	if s.allowedCommands[cmd] {
-		return true
-	}
-
-	// Check prefix match for commands with subcommands (e.g., "go build" matches "go")
-	for allowedCmd := range s.allowedCommands {
-		if strings.HasPrefix(cmd, allowedCmd) {
-			return true
-		}
-	}
-	return false
+	// exec.Command receives the executable separately from its arguments, so an
+	// exact match is required. Prefix matching would allow names such as "goevil".
+	return s.allowedCommands[cmd]
 }
 
 // logCommand logs the executed command for audit trail.
@@ -100,6 +101,9 @@ func (s *safeShellExecutor) logCommand(cmd string, args []string) {
 // Shell executes a shell command with the given arguments and returns the result.
 func (s *shellExecutor) Shell(ctx context.Context, command string, args ...string) (*ShellResult, error) {
 	cmd := exec.CommandContext(ctx, command, args...)
+	if s.workingDir != "" {
+		cmd.Dir = s.workingDir
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -161,6 +165,9 @@ func (s *shellExecutor) Execute(cmd string, args []string, timeout time.Duration
 	start := time.Now()
 	result, err := s.Shell(ctx, cmd, args...)
 	duration := time.Since(start)
+	if result == nil {
+		return nil, err
+	}
 
 	return &ExecResult{
 		ExitCode: result.ExitCode,
@@ -231,6 +238,9 @@ func (s *safeShellExecutor) Execute(cmd string, args []string, timeout time.Dura
 	start := time.Now()
 	result, err := s.Shell(ctx, cmd, args...)
 	duration := time.Since(start)
+	if result == nil {
+		return nil, err
+	}
 
 	return &ExecResult{
 		ExitCode: result.ExitCode,

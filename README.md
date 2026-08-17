@@ -1,6 +1,6 @@
 # mini-orca
 
-**Version**: 4.0.0
+**Version**: 4.1.0
 
 Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LLM agents to code, test, and review your project features autonomously.
 
@@ -10,7 +10,10 @@ Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LL
 - **Single-Feature Workflow**: Code generation → test → review → human gate — linear, no loops.
 - **Human-in-the-loop**: Integrated human gate for final approval before completion.
 - **Existing Project Support**: Add features to any existing project by specifying its path.
+- **AI Project Analysis**: Import a project to create a durable `.mini-orca/analysis.md` architecture summary and inventory.
+- **Atomic Generation**: Generate exactly one named function or class in one selected file with project-wide context.
 - **HTMX-powered IDE**: A modern, responsive web interface for monitoring and interacting with agents.
+- **Compose Desktop IDE**: A native Kotlin desktop client with the same compact dark IDE style.
 - **Structured Logging**: Comprehensive JSON/Text logging with sensitive data redaction.
 - **Robust Error Handling**: Centralized error management with user-friendly messages.
 - **Extensible Skills**: Easily add new knowledge and tool skills to your agents via configuration.
@@ -68,6 +71,14 @@ Start the daemon:
 
 Access the IDE at `http://localhost:8080`.
 
+Or start the native desktop client in another terminal:
+
+```bash
+gradle -p desktop run
+```
+
+Use **Import project** in the desktop app. The daemon scans the selected directory, runs the AI architecture task, and writes `.mini-orca/analysis.md` into that project. See [Plan.md](Plan.md) for the implementation plan.
+
 ### Docker
 
 Run Mini-Orca with Docker:
@@ -90,8 +101,9 @@ See [DOCKER.md](DOCKER.md) for detailed Docker documentation.
 Send a POST request to `/api/chat/message` with:
 ```json
 {
-  "message": "Implement a User struct with ID, Name, Email fields",
-  "project_path": "/path/to/my/project"
+  "message": "Validate email and return a typed error for invalid input",
+  "file_path": "internal/user/service.go",
+  "target_symbol": "UserService.Create"
 }
 ```
 

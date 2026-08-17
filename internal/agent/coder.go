@@ -41,7 +41,7 @@ func (c *CoderAgent) Execute(ctx context.Context, input string) (*Result, error)
 	// Build system prompt from coder skills
 	systemPrompt := c.buildSkillPrompt(c.GetSkills())
 	if systemPrompt == "" {
-		systemPrompt = "You are an expert Go coder. Generate clean, idiomatic, well-tested code."
+		systemPrompt = "You are an expert software engineer. Generate clean, idiomatic code in the target project's existing language and style."
 	}
 
 	// Combine system prompt with user input (atomic unit description)

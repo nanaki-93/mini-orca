@@ -27,16 +27,37 @@ This document describes the API endpoints provided by the mini-orca daemon.
 ### Send Message
 - **URL**: `/api/chat/message`
 - **Method**: `POST`
-- **Description**: Sends a message to start a new session or continue an existing one.
+- **Description**: Generates one named function or class in one selected file. The daemon supplies the active project's analysis, complete file inventory, build metadata, and bounded source context.
 - **Body**: 
 ```json
 {
-  "message": "string - Natural language description of the feature to implement",
-  "project_path": "string - Filesystem path to the existing project",
-  "project_type": "string - Optional: 'go', 'python', etc."
+  "message": "Precise behavior to implement",
+  "file_path": "relative/path/to/selected-file.go",
+  "target_symbol": "Type.Method"
 }
 ```
-- **Response**: Streaming SSE (Server-Sent Events) with incremental updates.
+- **Response**: JSON agent result containing a one-file generated preview. The endpoint never writes generated code automatically.
+
+## Project API
+
+### Import and analyze a project
+
+- **URL**: `/api/projects/import`
+- **Method**: `POST`
+- **Body**: `{"project_path":"/absolute/path/to/project"}`
+- **Description**: Activates the directory, scans its files, asks the configured LLM for an architectural analysis, and writes `.mini-orca/analysis.md`.
+
+### Current project information
+
+- **URL**: `/api/projects/current`
+- **Method**: `GET`
+- **Description**: Returns project type, build file, file/source/line totals, languages, file inventory, AI status, and summary.
+
+### Selected file information
+
+- **URL**: `/api/projects/current/files/info?path=relative/path`
+- **Method**: `GET`
+- **Description**: Returns safe, project-relative file metadata and text content. Binary files and files over 1 MiB are not displayed.
 
 ### Get Chat History
 - **URL**: `/api/chat/history`

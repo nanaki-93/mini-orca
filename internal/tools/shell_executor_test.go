@@ -12,7 +12,7 @@ import (
 // ============================================================================
 
 func TestShellExecutor_Shell_Success(t *testing.T) {
-	executor := NewShellExecutor()
+	executor := &shellExecutor{}
 	ctx := context.Background()
 
 	// Test echo command (available on all systems)
@@ -184,6 +184,21 @@ func TestSafeShellExecutor_DisallowedCommand(t *testing.T) {
 	}
 }
 
+func TestSafeShellExecutor_RejectsAllowedPrefix(t *testing.T) {
+	executor := NewSafeShellExecutor()
+	_, err := executor.Shell(context.Background(), "goevil", "version")
+	if err == nil || !strings.Contains(err.Error(), "command not allowed") {
+		t.Fatalf("expected prefix lookalike to be rejected, got %v", err)
+	}
+}
+
+func TestShellExecutor_Execute_NonexistentDoesNotPanic(t *testing.T) {
+	executor := &shellExecutor{}
+	if _, err := executor.Execute("definitely-not-a-command", nil, time.Second); err == nil {
+		t.Fatal("expected nonexistent command error")
+	}
+}
+
 func TestSafeShellExecutor_DangerousCommand(t *testing.T) {
 	executor := NewSafeShellExecutor()
 	ctx := context.Background()
@@ -218,9 +233,9 @@ func TestSafeShellExecutor_IsCommandAllowed(t *testing.T) {
 		t.Error("expected 'echo' to be allowed")
 	}
 
-	// Test prefix match (go build should match go)
-	if !executor.(*safeShellExecutor).isCommandAllowed("go build") {
-		t.Error("expected 'go build' to be allowed (prefix match)")
+	// Arguments are passed separately; a compound executable name must not match.
+	if executor.(*safeShellExecutor).isCommandAllowed("go build") {
+		t.Error("expected compound executable name to be rejected")
 	}
 
 	// Test not allowed

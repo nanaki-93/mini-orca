@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/version"
 )
 
 // HTMXRenderHandler manages HTTP handlers for HTMX partial rendering.
@@ -15,8 +17,8 @@ type HTMXRenderHandler struct {
 	templateEngine *TemplateEngine
 	// cache provides caching for rendered responses.
 	cache *api.ResponseCache
-	// projectPath is the path to the project directory (from config or cwd).
-	projectPath string
+	// projectManager provides the currently imported project.
+	projectManager *project.Manager
 	// lastRenderedPhaseHistory stores the last rendered phase history for diffing.
 	lastRenderedPhaseHistory string
 }
@@ -25,29 +27,22 @@ type HTMXRenderHandler struct {
 func NewHTMXRenderHandler(
 	templateEngine *TemplateEngine,
 	cache *api.ResponseCache,
-	projectPath string,
+	projectManager *project.Manager,
 ) *HTMXRenderHandler {
 	return &HTMXRenderHandler{
 		templateEngine: templateEngine,
 		cache:          cache,
-		projectPath:    projectPath,
+		projectManager: projectManager,
 	}
 }
 
 // RenderMainPage renders the main IDE page.
 func (h *HTMXRenderHandler) RenderMainPage(w http.ResponseWriter, r *http.Request) {
 	data := make(map[string]any)
+	data["Version"] = version.Version
 
 	// Project data from config or cwd
-	projectPath := h.projectPath
-	if projectPath == "" {
-		// Fallback to current working directory
-		var err error
-		projectPath, err = os.Getwd()
-		if err != nil {
-			projectPath = "."
-		}
-	}
+	projectPath := h.getProjectPath()
 
 	projectName := filepath.Base(projectPath)
 	data["ProjectName"] = projectName

@@ -102,6 +102,7 @@ func (te *TemplateEngine) funcMap() template.FuncMap {
 		"now":           func() string { return time.Now().Format("15:04:05") },
 		"fileExtension": fileExtension,
 		"fileIcon":      fileIcon,
+		"pathID":        pathID,
 		"codeLines": func(code string) []string {
 			if code == "" {
 				return []string{}

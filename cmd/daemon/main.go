@@ -14,6 +14,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 	"github.com/nanaki-93/mini-orca/v2/internal/version"
 )
@@ -51,6 +52,11 @@ func main() {
 
 	// Detect project type and create tool executor
 	projectInfo, executor := tools.InitToolExecutorWithPath(cfg.ProjectPath)
+	projectManager, err := project.NewManager(cfg.ProjectPath)
+	if err != nil {
+		logging.Error("Invalid initial project path", "error", err)
+		os.Exit(1)
+	}
 
 	// Initialize agent registry and register agents
 	agentRegistry := agent.InitAgentRegistry(llmClient)
@@ -69,8 +75,7 @@ func main() {
 	var htmxRenderHandler *handlers.HTMXRenderHandler
 	if templateEngine != nil {
 		cache := api.NewResponseCache(10 * time.Second)
-		projectPath := cfg.ProjectPath
-		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, cache, projectPath)
+		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, cache, projectManager)
 	}
 
 	// Initialize orchestrator with LLM client and executor
@@ -114,7 +119,9 @@ func main() {
 	logging.Info("Registered agents from registry", "agents", agentRegistry.List())
 
 	// List available models
-	models, err := llmClient.ListModels(context.Background())
+	modelsCtx, cancelModels := context.WithTimeout(context.Background(), 10*time.Second)
+	models, err := llmClient.ListModels(modelsCtx)
+	cancelModels()
 	if err != nil {
 		logging.Warn("Failed to list models", "error", err)
 	} else {
@@ -125,8 +132,7 @@ func main() {
 	}
 
 	// Start HTTP server with all API endpoints
-	projectPath := cfg.ProjectPath
-	server := startHTTPServer(agentOrchestrator, htmxRenderHandler, llmClient, executor, projectPath)
+	server := startHTTPServer(agentOrchestrator, htmxRenderHandler, llmClient, projectManager)
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
@@ -147,8 +153,7 @@ func startHTTPServer(
 	agentOrchestrator *agent.Orchestrator,
 	htmxRenderHandler *handlers.HTMXRenderHandler,
 	llmClient *llm.Client,
-	executor tools.ToolExecutor,
-	projectPath string,
+	projectManager *project.Manager,
 ) *http.Server {
 	mux := http.NewServeMux()
 
@@ -194,11 +199,16 @@ func startHTTPServer(
 	}
 
 	// Initialize chat handler
-	chatHandler := handlers.NewChatHandler(llmClient, executor, projectPath)
+	chatHandler := handlers.NewChatHandler(llmClient, projectManager)
 
 	// Register chat endpoints
 	mux.HandleFunc("POST /api/chat/message", chatHandler.SendMessage)
 	mux.HandleFunc("GET /api/chat/history", chatHandler.GetHistory)
+
+	projectHandler := handlers.NewProjectHandler(projectManager, project.NewAnalyzer(llmClient))
+	mux.HandleFunc("POST /api/projects/import", projectHandler.Import)
+	mux.HandleFunc("GET /api/projects/current", projectHandler.Current)
+	mux.HandleFunc("GET /api/projects/current/files/info", projectHandler.FileInfo)
 
 	// Initialize error handler
 	templatesPath := "internal/api/templates"
@@ -215,10 +225,11 @@ func startHTTPServer(
 	}
 
 	server := &http.Server{
-		Addr:         ":8080",
-		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:        ":8080",
+		Handler:     handler,
+		ReadTimeout: 10 * time.Second,
+		// Analysis and code-generation calls wait for an LLM response.
+		WriteTimeout: 6 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}
 
