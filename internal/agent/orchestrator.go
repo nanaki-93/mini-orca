@@ -55,6 +55,29 @@ func (o *Orchestrator) RunCoderFromPrompt(userPrompt string, projectContext stri
 	return agent.Execute(context.Background(), input.String())
 }
 
+// RunCoderForSymbol generates one atomic function or class in exactly one target file.
+func (o *Orchestrator) RunCoderForSymbol(userPrompt, projectContext, targetFile, targetSymbol string) (*Result, error) {
+	if strings.TrimSpace(userPrompt) == "" {
+		return nil, fmt.Errorf("orchestrator: coder user prompt is required")
+	}
+	if strings.TrimSpace(targetFile) == "" {
+		return nil, fmt.Errorf("orchestrator: target file is required")
+	}
+	if strings.TrimSpace(targetSymbol) == "" {
+		return nil, fmt.Errorf("orchestrator: target symbol is required")
+	}
+	agent := NewCoderAgent(o.llmClient)
+	var input strings.Builder
+	input.WriteString("## Atomic code request\n" + userPrompt + "\n\n")
+	input.WriteString("## Immutable scope\n")
+	input.WriteString("Target file: " + targetFile + "\n")
+	input.WriteString("Target function or class: " + targetSymbol + "\n")
+	input.WriteString("You may change only this named symbol in this one file. Do not create, rename, or modify any other file or symbol. Preserve unrelated target-file code exactly.\n\n")
+	input.WriteString("## Project-wide context\n" + projectContext + "\n\n")
+	input.WriteString("## Output contract\nReturn exactly one code block containing the complete updated content of " + targetFile + ". Do not return patches, explanations, or additional files.\n")
+	return agent.Execute(context.Background(), input.String())
+}
+
 // RunTester executes the tester agent with the given code and test results.
 // It returns a structured AgentResult containing the test report as JSON.
 func (o *Orchestrator) RunTester(code string, testResults string) (*Result, error) {

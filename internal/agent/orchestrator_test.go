@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
@@ -114,6 +115,55 @@ func TestRunCoderFromPrompt_WithProjectContext(t *testing.T) {
 	}
 	if result.Output == "" {
 		t.Error("expected non-empty output")
+	}
+}
+
+func TestRunCoderForSymbol_SendsAtomicScope(t *testing.T) {
+	var received llm.ChatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatal(err)
+		}
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{
+			Model:   "coding-model",
+			Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: "```go\npackage user\n```"}}},
+		})
+	}))
+	defer server.Close()
+
+	orchestrator := NewOrchestrator(llm.NewClient(server.URL, "", "coding-model", 0.2, 4096), nil)
+	_, err := orchestrator.RunCoderForSymbol(
+		"Return an error for blank names",
+		"- internal/user/service.go\n## File: internal/user/service.go\npackage user",
+		"internal/user/service.go",
+		"UserService.Create",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(received.Messages) != 1 {
+		t.Fatalf("expected one message, got %d", len(received.Messages))
+	}
+	prompt := received.Messages[0].Content
+	for _, required := range []string{
+		"Target file: internal/user/service.go",
+		"Target function or class: UserService.Create",
+		"Do not create, rename, or modify any other file or symbol",
+		"complete updated content of internal/user/service.go",
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Errorf("atomic prompt missing %q", required)
+		}
+	}
+}
+
+func TestRunCoderForSymbol_RequiresTarget(t *testing.T) {
+	orchestrator := NewOrchestrator(nil, nil)
+	if _, err := orchestrator.RunCoderForSymbol("change", "context", "", "Thing"); err == nil {
+		t.Fatal("expected missing target file error")
+	}
+	if _, err := orchestrator.RunCoderForSymbol("change", "context", "file.go", ""); err == nil {
+		t.Fatal("expected missing target symbol error")
 	}
 }
 

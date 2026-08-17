@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ============================================================================
@@ -139,6 +140,27 @@ func TestGenericToolExecutor_WriteFile(t *testing.T) {
 	content := readTestFile(t, testFile)
 	if content != "test" {
 		t.Errorf("expected content %q, got %q", "test", content)
+	}
+}
+
+func TestGenericToolExecutor_ExecuteUsesProjectRoot(t *testing.T) {
+	root := createTempDir(t)
+	defer cleanupTempDir(t, root)
+	executor := NewExecutor(&ProjectInfo{Type: ProjectTypeUnknown, RootDir: root})
+	result, err := executor.Execute("pwd", nil, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedRoot, _ := filepath.EvalSymlinks(root)
+	resolvedOutput, _ := filepath.EvalSymlinks(result.Stdout)
+	if resolvedOutput != resolvedRoot {
+		t.Fatalf("expected command directory %q, got %q", resolvedRoot, resolvedOutput)
+	}
+}
+
+func TestNewExecutor_NilProjectInfo(t *testing.T) {
+	if executor := NewExecutor(nil); executor == nil {
+		t.Fatal("expected generic executor for nil project info")
 	}
 }
 
@@ -278,8 +300,11 @@ func TestDetectProjectType_KotlinProject(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if info.Type != ProjectTypeJava {
-		t.Errorf("expected project type %q, got %q", ProjectTypeJava, info.Type)
+	if info.Type != ProjectTypeKotlin {
+		t.Errorf("expected project type %q, got %q", ProjectTypeKotlin, info.Type)
+	}
+	if info.BuildFile != "build.gradle.kts" {
+		t.Errorf("expected build file %q, got %q", "build.gradle.kts", info.BuildFile)
 	}
 }
 
@@ -361,6 +386,9 @@ func TestDetectProjectType_PyProjectToml(t *testing.T) {
 
 	if info.Type != ProjectTypePython {
 		t.Errorf("expected project type %q, got %q", ProjectTypePython, info.Type)
+	}
+	if info.BuildFile != "pyproject.toml" {
+		t.Errorf("expected build file %q, got %q", "pyproject.toml", info.BuildFile)
 	}
 }
 

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 // RenderFileTree handles GET /api/render/file-tree
@@ -85,10 +85,8 @@ func (h *HTMXRenderHandler) ExpandFolder(w http.ResponseWriter, r *http.Request)
 	}
 
 	projectPath := h.getProjectPath()
-	fullPath := filepath.Join(projectPath, path)
-
-	// Verify the path is within the project directory
-	if !strings.HasPrefix(filepath.Clean(fullPath), filepath.Clean(projectPath)) {
+	fullPath, err := project.ResolveDirectory(projectPath, path)
+	if err != nil {
 		api.WriteAppError(w, apperrors.BadRequest("invalid path", "Path escapes project directory.", nil))
 		return
 	}
@@ -104,14 +102,16 @@ func (h *HTMXRenderHandler) ExpandFolder(w http.ResponseWriter, r *http.Request)
 	paddingLeft := fmt.Sprintf("calc(0.75rem + %d * 1rem)", depth)
 
 	for _, entry := range entries {
+		relativePath := filepath.ToSlash(filepath.Join(path, entry.Name()))
+		hxValues, _ := json.Marshal(map[string]string{"path": relativePath, "depth": nextDepth})
+		escapedPath := template.HTMLEscapeString(relativePath)
 		if entry.IsDir() {
-			// 1. Calculate the MD5 ID upfront
-			folderID := fmt.Sprintf("folder-children-%x", md5.Sum([]byte(entry.Name())))
+			folderID := "folder-children-" + pathID(relativePath)
 
-			sb.WriteString(`<div class="tree-folder" data-path="` + filepath.Join(path, entry.Name()) + `" data-loaded="false">`)
+			sb.WriteString(`<div class="tree-folder" data-path="` + escapedPath + `" data-loaded="false">`)
 
 			// 2. Use folderID in hx-target, update hx-vals with current path and next depth, and dynamic padding
-			sb.WriteString(`<div class="tree-item tree-folder-toggle flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none" style="padding-left: ` + paddingLeft + `" hx-get="/api/tree/expand" hx-vals='{"path": "` + filepath.Join(path, entry.Name()) + `", "depth": "` + nextDepth + `"}' hx-target="#` + folderID + `" hx-swap="innerHTML" hx-trigger="click once">`)
+			sb.WriteString(`<div class="tree-item tree-folder-toggle flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none" style="padding-left: ` + paddingLeft + `" hx-get="/api/tree/expand" hx-vals='` + template.HTMLEscapeString(string(hxValues)) + `' hx-target="#` + folderID + `" hx-swap="innerHTML" hx-trigger="click once">`)
 
 			sb.WriteString(`<svg class="tree-chevron w-4 h-4 text-text-secondary shrink-0 transition-transform" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>`)
 			sb.WriteString(`<svg class="tree-folder-icon w-4 h-4 text-yellow-500 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>`)
@@ -123,9 +123,10 @@ func (h *HTMXRenderHandler) ExpandFolder(w http.ResponseWriter, r *http.Request)
 		} else {
 			ext := fileExtension(entry.Name())
 			icon := fileIcon(ext)
-			sb.WriteString(`<div class="tree-file" data-path="` + filepath.Join(path, entry.Name()) + `">`)
+			sb.WriteString(`<div class="tree-file" data-path="` + escapedPath + `">`)
 
-			sb.WriteString(`<div class="tree-item tree-file-toggle flex items-center gap-1.5 px-3 py-1 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none text-text-primary" style="padding-left: ` + paddingLeft + `" hx-get="/api/files/view" hx-vals='{"path": "` + filepath.Join(path, entry.Name()) + `"}' hx-target="#file-content" hx-indicator="#loading-indicator">`)
+			fileValues, _ := json.Marshal(map[string]string{"path": relativePath})
+			sb.WriteString(`<div class="tree-item tree-file-toggle flex items-center gap-1.5 px-3 py-1 cursor-pointer hover:bg-dark-700 rounded-sm transition-colors select-none text-text-primary" style="padding-left: ` + paddingLeft + `" hx-get="/api/files/view" hx-vals='` + template.HTMLEscapeString(string(fileValues)) + `' hx-target="#file-content" hx-indicator="#loading-indicator">`)
 
 			sb.WriteString(`<svg class="tree-file-icon w-4 h-4 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">`)
 			if icon == "folder" {
@@ -166,34 +167,18 @@ func (h *HTMXRenderHandler) ViewFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	projectPath := h.getProjectPath()
-	fullPath := filepath.Join(projectPath, path)
-
-	// Verify the path is within the project directory
-	if !strings.HasPrefix(filepath.Clean(fullPath), filepath.Clean(projectPath)) {
-		api.WriteAppError(w, apperrors.BadRequest("invalid path", "Path escapes project directory.", nil))
-		return
-	}
-
-	// Check if it's a file (not a directory)
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		api.WriteAppError(w, apperrors.NotFound("file not found", "File not found: "+path, err))
-		return
-	}
-	if info.IsDir() {
-		api.WriteAppError(w, apperrors.BadRequest("not a file", path+" is a directory, not a file.", nil))
-		return
-	}
-
-	// Read file content
-	content, err := os.ReadFile(fullPath)
+	info, err := project.GetFileInfo(projectPath, path)
 	if err != nil {
 		api.WriteAppError(w, apperrors.Internal("file read failed", "Failed to read file content.", err))
 		return
 	}
+	if info.Binary {
+		api.WriteAppError(w, apperrors.BadRequest("binary file", "Binary files cannot be displayed.", nil))
+		return
+	}
 
 	// Escape HTML for safe display
-	escapedContent := template.HTMLEscapeString(string(content))
+	escapedContent := template.HTMLEscapeString(info.Content)
 
 	// Format as code block with line numbers
 	lines := strings.Split(escapedContent, "\n")
@@ -223,8 +208,8 @@ func (h *HTMXRenderHandler) ViewFile(w http.ResponseWriter, r *http.Request) {
 
 // getProjectPath returns the configured project path or falls back to cwd.
 func (h *HTMXRenderHandler) getProjectPath() string {
-	if h.projectPath != "" {
-		return h.projectPath
+	if h.projectManager != nil && h.projectManager.Root() != "" {
+		return h.projectManager.Root()
 	}
 	cwd, err := os.Getwd()
 	if err != nil {

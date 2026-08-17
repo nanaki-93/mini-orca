@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // projectDetectorExecutor implements project detection for the Executor interface.
@@ -39,10 +40,20 @@ func (p *projectDetectorExecutor) DetectProjectType(dirPath string) (*ProjectInf
 
 	// Check for Kotlin/Java project
 	if p.hasGradleBuild(dirPath) {
-		info.Type = ProjectTypeJava
-		info.SrcDir = "src/main/java"
-		info.TestDir = "src/test/java"
-		info.BuildFile = "build.gradle"
+		if p.isKotlinProject(dirPath) {
+			info.Type = ProjectTypeKotlin
+			info.SrcDir = "src/main/kotlin"
+			info.TestDir = "src/test/kotlin"
+		} else {
+			info.Type = ProjectTypeJava
+			info.SrcDir = "src/main/java"
+			info.TestDir = "src/test/java"
+		}
+		if _, err := os.Stat(filepath.Join(dirPath, "build.gradle.kts")); err == nil {
+			info.BuildFile = "build.gradle.kts"
+		} else {
+			info.BuildFile = "build.gradle"
+		}
 		return info, nil
 	}
 
@@ -69,11 +80,32 @@ func (p *projectDetectorExecutor) DetectProjectType(dirPath string) (*ProjectInf
 		info.Type = ProjectTypePython
 		info.SrcDir = "."
 		info.TestDir = "."
-		info.BuildFile = "requirements.txt"
+		if p.hasPyProject(dirPath) {
+			info.BuildFile = "pyproject.toml"
+		} else {
+			info.BuildFile = "requirements.txt"
+		}
 		return info, nil
 	}
 
 	return nil, fmt.Errorf("project_detection: no known project type found in %s", dirPath)
+}
+
+func (p *projectDetectorExecutor) isKotlinProject(dirPath string) bool {
+	if _, err := os.Stat(filepath.Join(dirPath, "src", "main", "kotlin")); err == nil {
+		return true
+	}
+	for _, buildFile := range []string{"build.gradle.kts", "build.gradle"} {
+		data, err := os.ReadFile(filepath.Join(dirPath, buildFile))
+		if err == nil && (contains(data, "kotlin(") || contains(data, "org.jetbrains.kotlin")) {
+			return true
+		}
+	}
+	return false
+}
+
+func contains(data []byte, value string) bool {
+	return strings.Contains(string(data), value)
 }
 
 // hasGoMod checks if a go.mod file exists in the directory.

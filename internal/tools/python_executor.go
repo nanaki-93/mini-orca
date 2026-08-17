@@ -13,8 +13,12 @@ type pythonExecutor struct {
 
 // NewPythonExecutor creates a new Python executor instance.
 func NewPythonExecutor() *pythonExecutor {
+	return newPythonExecutorAt("")
+}
+
+func newPythonExecutorAt(workingDir string) *pythonExecutor {
 	return &pythonExecutor{
-		shell: NewSafeShellExecutor(),
+		shell: newSafeShellExecutorAt(workingDir),
 	}
 }
 

@@ -25,6 +25,9 @@
         get sendBtn() {
             return document.getElementById('chat-send-btn');
         },
+        get targetSymbol() {
+            return document.getElementById('chat-target-symbol');
+        },
         get phaseIndicator() {
             return document.getElementById('chat-phase-indicator');
         },
@@ -298,6 +301,13 @@
             return;
         }
 
+        const targetSymbol = DOM.targetSymbol?.value.trim();
+        if (!targetSymbol) {
+            alert('Enter the exact function or class to generate.');
+            DOM.targetSymbol?.focus();
+            return;
+        }
+
         // Set sending state
         ChatState.isSending = true;
         setInputDisabled(true);
@@ -320,7 +330,8 @@
                 },
                 body: JSON.stringify({
                     message: message,
-                    file_path: ChatState.focusedFile || null
+                    file_path: ChatState.focusedFile,
+                    target_symbol: targetSymbol
                 })
             });
 
@@ -373,6 +384,7 @@
         const sendBtn = DOM.sendBtn;
         if (input) input.disabled = disabled;
         if (sendBtn) sendBtn.disabled = disabled;
+        if (DOM.targetSymbol) DOM.targetSymbol.disabled = disabled;
     }
 
     /**

@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
 
@@ -83,6 +85,20 @@ type Orchestrator struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	humanGate      *HumanGate
+	humanGateMu    sync.RWMutex
+}
+
+// GetHumanGate returns the active approval gate safely for UI responders.
+func (o *Orchestrator) GetHumanGate() *HumanGate {
+	o.humanGateMu.RLock()
+	defer o.humanGateMu.RUnlock()
+	return o.humanGate
+}
+
+func (o *Orchestrator) setHumanGate(gate *HumanGate) {
+	o.humanGateMu.Lock()
+	o.humanGate = gate
+	o.humanGateMu.Unlock()
 }
 
 // GetCurrentPhase returns the current phase.
@@ -134,7 +150,7 @@ func (o *Orchestrator) RunOnce() error {
 	}
 
 	// After human review, transition to completed if approved
-	if o.humanGate != nil && o.humanGate.IsApproved() {
+	if gate := o.GetHumanGate(); gate != nil && gate.IsApproved() {
 		if err := o.transitionToCompleted(); err != nil {
 			return fmt.Errorf("pipeline: completed failed: %w", err)
 		}
@@ -216,24 +232,30 @@ func (o *Orchestrator) extractCodeFromResult(output string) (string, string, err
 		return "", "", fmt.Errorf("no code blocks found in output")
 	}
 	code := codeBlocks[0].Content
-	targetFile := o.determineTargetFileFromPrompt(code, codeBlocks[0].Language)
+	targetFile, err := o.determineTargetFileFromPrompt(code, codeBlocks[0].Language)
+	if err != nil {
+		return "", "", err
+	}
 	return code, targetFile, nil
 }
 
 // determineTargetFileFromPrompt determines the target file from code comments or generates a default.
-func (o *Orchestrator) determineTargetFileFromPrompt(code string, language string) string {
+func (o *Orchestrator) determineTargetFileFromPrompt(code string, language string) (string, error) {
+	if o.currentSession == nil {
+		return "", fmt.Errorf("no active session")
+	}
 	lines := strings.Split(code, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "// target:") {
 			filePath := strings.TrimSpace(strings.TrimPrefix(line, "// target:"))
-			if filePath != "" && o.currentSession != nil {
-				return filepath.Join(o.currentSession.ProjectPath, filePath)
+			if filePath != "" {
+				return project.ResolvePathForWrite(o.currentSession.ProjectPath, filePath)
 			}
 		}
 	}
 	filename := fmt.Sprintf("feature_%d.go", time.Now().Unix())
-	return filepath.Join(o.currentSession.ProjectPath, filename)
+	return project.ResolvePathForWrite(o.currentSession.ProjectPath, filename)
 }
 
 // writeFileAtomic writes content to a file atomically using temp file + rename.
@@ -543,9 +565,10 @@ func (o *Orchestrator) RunHumanReview() error {
 
 	var reviewSummary string
 
-	o.humanGate = NewHumanGate(o.currentSession.ID, PhaseHumanReview)
+	gate := NewHumanGate(o.currentSession.ID, PhaseHumanReview)
+	o.setHumanGate(gate)
 	reviewOutput := o.formatHumanReviewOutput(code, reviewSummary)
-	_, err := o.humanGate.RequestApproval(reviewOutput)
+	_, err := gate.RequestApproval(reviewOutput)
 	if err != nil {
 		return fmt.Errorf("human review phase: failed to get human response: %w", err)
 	}

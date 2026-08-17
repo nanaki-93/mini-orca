@@ -12,8 +12,12 @@ type kotlinExecutor struct {
 
 // NewKotlinExecutor creates a new Kotlin executor instance.
 func NewKotlinExecutor() *kotlinExecutor {
+	return newKotlinExecutorAt("")
+}
+
+func newKotlinExecutorAt(workingDir string) *kotlinExecutor {
 	return &kotlinExecutor{
-		shell: NewSafeShellExecutor(),
+		shell: newSafeShellExecutorAt(workingDir),
 	}
 }
 

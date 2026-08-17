@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +95,18 @@ func TestRunCoding_EmptyOutput(t *testing.T) {
 	t.Skip("Skipping: runCoderAgent passes nil registry to agent.Orchestrator")
 }
 
+func TestExtractCodeRejectsTargetOutsideProject(t *testing.T) {
+	root := createTestDir(t)
+	orch := New(nil, nil, createTestConfig())
+	if err := orch.StartSession("sess-path", "change", root, "go"); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := orch.extractCodeFromResult("```go\n// target: ../outside.go\npackage sample\n```")
+	if err == nil || !strings.Contains(err.Error(), "escapes project") {
+		t.Fatalf("expected target traversal error, got %v", err)
+	}
+}
+
 func TestRunTesting(t *testing.T) {
 	orch := New(nil, nil, createTestConfig())
 
@@ -140,8 +153,8 @@ func TestRunHumanReview(t *testing.T) {
 	// Start the human gate in a goroutine to simulate approval
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		if orch.humanGate != nil {
-			_ = orch.humanGate.Respond("approve", "")
+		if gate := orch.GetHumanGate(); gate != nil {
+			_ = gate.Respond("approve", "")
 		}
 	}()
 
@@ -171,8 +184,8 @@ func TestTransitionToCompleted(t *testing.T) {
 	orch.currentPhase = PhaseHumanReview
 
 	// Simulate human approval by directly setting humanGate
-	orch.humanGate = NewHumanGate("sess-1", PhaseHumanReview)
-	_ = orch.humanGate.Respond("approve", "") // Direct approval
+	orch.setHumanGate(NewHumanGate("sess-1", PhaseHumanReview))
+	_ = orch.GetHumanGate().Respond("approve", "") // Direct approval
 
 	// Manually transition to completed (simulating what Run() does)
 	err := orch.transitionToCompleted()
@@ -197,8 +210,8 @@ func TestTransitionToCompleted_WithHistory(t *testing.T) {
 	historyTracker.LogPhase(PhaseHumanReview, "success", "Human approved")
 
 	// Simulate human approval
-	orch.humanGate = NewHumanGate("sess-1", PhaseHumanReview)
-	_ = orch.humanGate.Respond("approve", "") // Direct approval
+	orch.setHumanGate(NewHumanGate("sess-1", PhaseHumanReview))
+	_ = orch.GetHumanGate().Respond("approve", "") // Direct approval
 
 	// Manually transition to completed
 	err := orch.transitionToCompleted()

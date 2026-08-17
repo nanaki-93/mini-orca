@@ -79,6 +79,9 @@ type ExecResult struct {
 // It dispatches to the correct language-specific executor based on ProjectInfo.Type.
 // For unknown project types, it returns a generic shell-only executor.
 func NewExecutor(projectInfo *ProjectInfo) ToolExecutor {
+	if projectInfo == nil {
+		projectInfo = &ProjectInfo{Type: ProjectTypeUnknown, RootDir: "."}
+	}
 	switch projectInfo.Type {
 	case ProjectTypeGo:
 		return newGoToolExecutor(projectInfo)
@@ -106,7 +109,7 @@ type genericToolExecutor struct {
 func newGenericToolExecutor(info *ProjectInfo) *genericToolExecutor {
 	return &genericToolExecutor{
 		info:  info,
-		shell: NewShellExecutor(),
+		shell: newShellExecutorAt(info.RootDir),
 	}
 }
 
@@ -117,6 +120,9 @@ func (g *genericToolExecutor) Execute(cmd string, args []string, timeout time.Du
 	start := time.Now()
 	result, err := g.shell.Shell(ctx, cmd, args...)
 	duration := time.Since(start)
+	if result == nil {
+		return nil, err
+	}
 
 	return &ExecResult{
 		ExitCode: result.ExitCode,
@@ -162,12 +168,12 @@ type goToolExecutor struct {
 func newGoToolExecutor(info *ProjectInfo) *goToolExecutor {
 	return &goToolExecutor{
 		genericToolExecutor: *newGenericToolExecutor(info),
-		goExecutor:          NewGoExecutor(),
+		goExecutor:          newGoExecutorAt(info.RootDir),
 	}
 }
 
 func (g *goToolExecutor) FormatCode(path string) error {
-	return g.goExecutor.FormatCode()
+	return NewFormatterExecutor().FormatCode(path)
 }
 
 // kotlinToolExecutor implements ToolExecutor for Kotlin projects.
@@ -179,12 +185,12 @@ type kotlinToolExecutor struct {
 func newKotlinToolExecutor(info *ProjectInfo) *kotlinToolExecutor {
 	return &kotlinToolExecutor{
 		genericToolExecutor: *newGenericToolExecutor(info),
-		kotlinExecutor:      NewKotlinExecutor(),
+		kotlinExecutor:      newKotlinExecutorAt(info.RootDir),
 	}
 }
 
 func (k *kotlinToolExecutor) FormatCode(path string) error {
-	return k.kotlinExecutor.FormatCode()
+	return NewFormatterExecutor().FormatCode(path)
 }
 
 // javaToolExecutor implements ToolExecutor for Java projects.
@@ -196,12 +202,12 @@ type javaToolExecutor struct {
 func newJavaToolExecutor(info *ProjectInfo) *javaToolExecutor {
 	return &javaToolExecutor{
 		genericToolExecutor: *newGenericToolExecutor(info),
-		javaExecutor:        NewJavaExecutor(),
+		javaExecutor:        newJavaExecutorAt(info.RootDir),
 	}
 }
 
 func (j *javaToolExecutor) FormatCode(path string) error {
-	return j.javaExecutor.FormatCode()
+	return NewFormatterExecutor().FormatCode(path)
 }
 
 // rustToolExecutor implements ToolExecutor for Rust projects.
@@ -213,12 +219,12 @@ type rustToolExecutor struct {
 func newRustToolExecutor(info *ProjectInfo) *rustToolExecutor {
 	return &rustToolExecutor{
 		genericToolExecutor: *newGenericToolExecutor(info),
-		rustExecutor:        NewRustExecutor(),
+		rustExecutor:        newRustExecutorAt(info.RootDir),
 	}
 }
 
 func (r *rustToolExecutor) FormatCode(path string) error {
-	return r.rustExecutor.FormatCode()
+	return NewFormatterExecutor().FormatCode(path)
 }
 
 // typescriptToolExecutor implements ToolExecutor for TypeScript projects.
@@ -230,12 +236,12 @@ type typescriptToolExecutor struct {
 func newTypeScriptToolExecutor(info *ProjectInfo) *typescriptToolExecutor {
 	return &typescriptToolExecutor{
 		genericToolExecutor: *newGenericToolExecutor(info),
-		typescriptExecutor:  NewTypeScriptExecutor(),
+		typescriptExecutor:  newTypeScriptExecutorAt(info.RootDir),
 	}
 }
 
 func (t *typescriptToolExecutor) FormatCode(path string) error {
-	return t.typescriptExecutor.FormatCode()
+	return NewFormatterExecutor().FormatCode(path)
 }
 
 // pythonToolExecutor implements ToolExecutor for Python projects.
@@ -247,12 +253,12 @@ type pythonToolExecutor struct {
 func newPythonToolExecutor(info *ProjectInfo) *pythonToolExecutor {
 	return &pythonToolExecutor{
 		genericToolExecutor: *newGenericToolExecutor(info),
-		pythonExecutor:      NewPythonExecutor(),
+		pythonExecutor:      newPythonExecutorAt(info.RootDir),
 	}
 }
 
 func (p *pythonToolExecutor) FormatCode(path string) error {
-	return p.pythonExecutor.FormatCode()
+	return NewFormatterExecutor().FormatCode(path)
 }
 
 // InitToolExecutor detects the project type at the current directory and creates

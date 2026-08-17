@@ -30,3 +30,8 @@ go.work.sum
 # Editor/IDE
 .idea/
 # .vscode/
+
+# Kotlin/Gradle desktop build output
+desktop/.gradle/
+desktop/.kotlin/
+desktop/build/

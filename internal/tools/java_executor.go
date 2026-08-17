@@ -12,8 +12,12 @@ type javaExecutor struct {
 
 // NewJavaExecutor creates a new Java executor instance.
 func NewJavaExecutor() *javaExecutor {
+	return newJavaExecutorAt("")
+}
+
+func newJavaExecutorAt(workingDir string) *javaExecutor {
 	return &javaExecutor{
-		shell: NewSafeShellExecutor(),
+		shell: newSafeShellExecutorAt(workingDir),
 	}
 }
 
