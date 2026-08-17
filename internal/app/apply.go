@@ -35,20 +35,23 @@ type UndoRequest struct {
 
 // AuditEntry is durable source-free evidence of one requested mutation.
 type AuditEntry struct {
-	ID              string       `json:"id"`
-	Action          string       `json:"action"`
-	TargetPath      string       `json:"target_path"`
-	GenerationID    string       `json:"generation_id,omitempty"`
-	BeforeHash      string       `json:"before_hash"`
-	AfterHash       string       `json:"after_hash"`
-	ProjectID       string       `json:"project_id"`
-	ProjectRevision string       `json:"project_revision"`
-	Model           string       `json:"model,omitempty"`
-	Profile         string       `json:"profile,omitempty"`
-	Validation      bool         `json:"validation_passed"`
-	Checks          []CheckAudit `json:"checks"`
-	Outcome         string       `json:"outcome"`
-	Timestamp       time.Time    `json:"timestamp"`
+	ID                string       `json:"id"`
+	Action            string       `json:"action"`
+	TargetPath        string       `json:"target_path"`
+	GenerationID      string       `json:"generation_id,omitempty"`
+	BeforeHash        string       `json:"before_hash"`
+	AfterHash         string       `json:"after_hash"`
+	ProjectID         string       `json:"project_id"`
+	ProjectRevision   string       `json:"project_revision"`
+	Model             string       `json:"model,omitempty"`
+	Profile           string       `json:"profile,omitempty"`
+	Validation        bool         `json:"validation_passed"`
+	Checks            []CheckAudit `json:"checks"`
+	Outcome           string       `json:"outcome"`
+	Timestamp         time.Time    `json:"timestamp"`
+	TemplateID        string       `json:"template_id,omitempty"`
+	ActionTemplate    string       `json:"action_template,omitempty"`
+	TemplateInputHash string       `json:"template_input_hash,omitempty"`
 }
 
 // CheckAudit omits command output because it can contain source.
@@ -123,7 +126,7 @@ func (s *Service) ApplyCandidate(ctx context.Context, request ApplyRequest) (*Ap
 	if err != nil {
 		return nil, err
 	}
-	audit := AuditEntry{ID: "apply-" + shortHash(postHash), Action: "apply", TargetPath: preview.TargetPath, GenerationID: preview.GenerationID, BeforeHash: preview.BaseFileHash, AfterHash: postHash, ProjectID: preview.ProjectID, ProjectRevision: index.ProjectRevision, Model: preview.EffectiveModel.Model, Profile: preview.EffectiveModel.Profile, Validation: true, Checks: auditChecks(checks.Checks), Outcome: "applied", Timestamp: time.Now().UTC()}
+	audit := AuditEntry{ID: "apply-" + shortHash(postHash), Action: "apply", TargetPath: preview.TargetPath, GenerationID: preview.GenerationID, BeforeHash: preview.BaseFileHash, AfterHash: postHash, ProjectID: preview.ProjectID, ProjectRevision: index.ProjectRevision, Model: preview.EffectiveModel.Model, Profile: preview.EffectiveModel.Profile, Validation: true, Checks: auditChecks(checks.Checks), Outcome: "applied", Timestamp: time.Now().UTC(), TemplateID: preview.TemplateID, ActionTemplate: preview.Action, TemplateInputHash: preview.TemplateInputHash}
 	if err := appendAudit(root, audit); err != nil {
 		return nil, err
 	}

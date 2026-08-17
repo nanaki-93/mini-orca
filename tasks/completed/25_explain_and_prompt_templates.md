@@ -1,5 +1,9 @@
 # 25 — Add explain actions and focused prompt templates
 
+## Status
+
+Complete
+
 ## Goal
 
 Offer repeatable one-file/one-symbol assistance without relying on ad-hoc chat wording.

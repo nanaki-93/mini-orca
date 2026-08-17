@@ -1,5 +1,9 @@
 # 23 — Deliver focused generation and diff review
 
+## Status
+
+Complete
+
 ## Goal
 
 Replace raw generated text with an explicit scope-aware preview and Apply workflow.

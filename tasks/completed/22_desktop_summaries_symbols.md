@@ -4,6 +4,10 @@
 
 Make each selected file understandable and make real symbols the default generation targets.
 
+## Status
+
+Complete
+
 ## Depends on
 
 Tasks 20–21.

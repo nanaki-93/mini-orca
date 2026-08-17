@@ -99,6 +99,24 @@ func (m *Manager) Index() (*ProjectIndex, error) {
 	return cloneIndex(m.index), nil
 }
 
+func (m *Manager) ImpactPreview(relative, symbol string) (ImpactPreview, error) {
+	if _, err := m.IndexedFile(relative); err != nil {
+		return ImpactPreview{}, err
+	}
+	index, err := m.Index()
+	if err != nil {
+		return ImpactPreview{}, err
+	}
+	return BuildImpactPreview(index, relative, symbol), nil
+}
+
+func (m *Manager) GitStatus(relative string) (GitStatus, error) {
+	if _, err := m.IndexedFile(relative); err != nil {
+		return GitStatus{}, err
+	}
+	return ReadGitStatus(m.Root(), relative), nil
+}
+
 // IndexedFile returns one active-project file after canonical-path and policy
 // checks. The final lock check prevents a file from a previously active project
 // being returned after a concurrent import or reindex.

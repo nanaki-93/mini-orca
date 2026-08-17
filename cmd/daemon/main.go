@@ -219,6 +219,8 @@ func newHTTPMux(
 	mux.HandleFunc("GET /api/projects/current/index", projectHandler.Index)
 	mux.HandleFunc("GET /api/projects/current/files/info", projectHandler.FileInfo)
 	mux.HandleFunc("GET /api/projects/current/files/symbols", projectHandler.Symbols)
+	mux.HandleFunc("GET /api/projects/current/impact", projectHandler.Impact)
+	mux.HandleFunc("GET /api/projects/current/git", projectHandler.GitStatus)
 	mux.HandleFunc("GET /api/projects/current/files/analysis", projectHandler.FileAnalysis)
 	mux.HandleFunc("POST /api/projects/current/files/analysis", projectHandler.AnalyzeFile)
 	mux.HandleFunc("DELETE /api/projects/current/files/analysis", projectHandler.DeleteFileAnalysis)

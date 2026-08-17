@@ -19,10 +19,15 @@ class ApiClient(
     baseUrl: String = System.getenv("MINI_ORCA_URL") ?: "http://localhost:9090",
     private val transport: DaemonTransport = HttpDaemonTransport(baseUrl.trimEnd('/')),
 ) {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val endpoint = URI.create(baseUrl)
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+    }
 
     fun importProject(path: String): ProjectAnalysis = decode(send("POST", "/api/projects/import", jsonBody("project_path" to path)))
     fun index(): ProjectIndex = decode(send("GET", "/api/projects/current/index"))
+    fun reindex(revision: String): ProjectIndex = decode(send("POST", "/api/projects/current/reindex", jsonBody("project_revision" to revision)))
     fun fileInfo(path: String): ProjectFileInfo = decode(send("GET", "/api/projects/current/files/info?path=${encode(path)}"))
     fun symbols(path: String): SymbolsResponse = decode(send("GET", "/api/projects/current/files/symbols?path=${encode(path)}"))
     fun analysis(path: String, revision: String): FileAnalysis = decode(send("GET", "/api/projects/current/files/analysis?path=${encode(path)}&project_revision=${encode(revision)}"))
@@ -30,8 +35,18 @@ class ApiClient(
     fun context(path: String, action: String = "fix"): ContextManifest = decode(send("GET", "/api/projects/current/context?path=${encode(path)}&action=${encode(action)}"))
     fun effectiveModel(): EffectiveModel = decode(send("GET", "/api/models/current"))
     fun audit(revision: String): List<AuditEntry> = decode(send("GET", "/api/projects/current/audit?project_revision=${encode(revision)}"))
+    fun activity(): List<ActivityEntry> = decode(send("GET", "/api/chat/history"))
+    fun impact(path: String, symbol: String = ""): ImpactPreview = decode(send("GET", "/api/projects/current/impact?path=${encode(path)}&symbol=${encode(symbol)}"))
+    fun gitStatus(path: String): GitStatus = decode(send("GET", "/api/projects/current/git?path=${encode(path)}"))
 
-    fun generate(message: String, filePath: String, targetSymbol: String, projectId: String, projectRevision: String, baseFileHash: String, scopeMode: String = "strict_symbol"): GenerationResult = decode(send("POST", "/api/chat/message", jsonBody("message" to message, "file_path" to filePath, "target_symbol" to targetSymbol, "project_id" to projectId, "project_revision" to projectRevision, "base_file_hash" to baseFileHash, "scope_mode" to scopeMode)))
+    fun endpointLocality(): String {
+        val host = endpoint.host?.lowercase().orEmpty()
+        return if (host == "localhost" || host == "127.0.0.1" || host == "::1") "Local endpoint" else "Remote endpoint"
+    }
+
+    fun isLoopbackEndpoint(): Boolean = endpointLocality() == "Local endpoint"
+
+    fun generate(message: String, filePath: String, targetSymbol: String, projectId: String, projectRevision: String, baseFileHash: String, scopeMode: String = "strict_symbol", action: String = "fix", templateId: String = ""): GenerationResult = decode(send("POST", "/api/chat/message", jsonBody("message" to message, "file_path" to filePath, "target_symbol" to targetSymbol, "project_id" to projectId, "project_revision" to projectRevision, "base_file_hash" to baseFileHash, "scope_mode" to scopeMode, "action" to action, "template_id" to templateId)))
     fun checks(generationId: String, revision: String, runLint: Boolean = false, runTests: Boolean = false): CandidateCheckReport = decode(send("POST", "/api/projects/current/candidates/checks", jsonBody("generation_id" to generationId, "project_revision" to revision, "run_lint" to runLint, "run_tests" to runTests)))
     fun apply(generationId: String, projectId: String, revision: String, baseHash: String): ApplyResult = decode(send("POST", "/api/projects/current/apply", jsonBody("generation_id" to generationId, "project_id" to projectId, "project_revision" to revision, "base_file_hash" to baseHash, "confirm" to true)))
     fun undo(projectId: String, revision: String, postApplyHash: String): ApplyResult = decode(send("POST", "/api/projects/current/undo", jsonBody("project_id" to projectId, "project_revision" to revision, "post_apply_hash" to postApplyHash, "confirm" to true)))

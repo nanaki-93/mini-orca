@@ -24,14 +24,17 @@ var (
 // Activity is durable project-scoped metadata. It intentionally excludes model
 // output and source content.
 type Activity struct {
-	Role            string    `json:"role"`
-	Content         string    `json:"content"`
-	Phase           string    `json:"phase"`
-	Timestamp       time.Time `json:"timestamp"`
-	ProjectID       string    `json:"project_id"`
-	ProjectRevision string    `json:"project_revision"`
-	TargetFile      string    `json:"target_file,omitempty"`
-	TargetSymbol    string    `json:"target_symbol,omitempty"`
+	Role              string    `json:"role"`
+	Content           string    `json:"content"`
+	Phase             string    `json:"phase"`
+	Timestamp         time.Time `json:"timestamp"`
+	ProjectID         string    `json:"project_id"`
+	ProjectRevision   string    `json:"project_revision"`
+	TargetFile        string    `json:"target_file,omitempty"`
+	TargetSymbol      string    `json:"target_symbol,omitempty"`
+	TemplateID        string    `json:"template_id,omitempty"`
+	Action            string    `json:"action,omitempty"`
+	TemplateInputHash string    `json:"template_input_hash,omitempty"`
 }
 
 type sessionStore struct {

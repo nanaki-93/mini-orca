@@ -67,6 +67,18 @@ func (s *Service) checkedCandidate(id string) (GenerationPreview, CandidateCheck
 	return cloneGenerationPreview(&candidate.preview), cloneCheckReport(*candidate.checks), nil
 }
 
+// SetCandidateTemplate adds source-free action metadata after the HTTP request
+// has been validated. It is retained with the candidate for later audit.
+func (s *Service) SetCandidateTemplate(id, action, templateID, inputHash string) {
+	s.candidateMu.Lock()
+	defer s.candidateMu.Unlock()
+	if candidate := s.candidates[id]; candidate != nil {
+		candidate.preview.Action = action
+		candidate.preview.TemplateID = templateID
+		candidate.preview.TemplateInputHash = inputHash
+	}
+}
+
 func cloneGenerationPreview(source *GenerationPreview) GenerationPreview {
 	copy := *source
 	copy.ContextManifest.Included = append([]project.ContextFile(nil), source.ContextManifest.Included...)
