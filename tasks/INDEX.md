@@ -32,11 +32,11 @@ Source roadmap: [`../docs/NEXT_FUNCTIONS_FIXES_UI.md`](../docs/NEXT_FUNCTIONS_FI
 | 24 | [Desktop context, status, history](completed/24_desktop_context_status_history.md) | 05, 07, 20, 21 | Complete |
 | 25 | [Explain and prompt templates](completed/25_explain_and_prompt_templates.md) | 13, 20, 22 | Complete |
 | 26 | [Impact preview and Git status](completed/26_impact_preview_git_status.md) | 08, 20, 22 | Complete |
-| 27 | [Candidate comparison and report export](27_candidate_comparison_report_export.md) | 13, 17, 20, 23 | Pending |
-| 28 | [Desktop usability and accessibility](28_desktop_usability_accessibility.md) | 21, 22, 23, 24 | Pending |
-| 29 | [Retire the web UI](29_retire_web_ui.md) | 03, 20, 21, 22, 23, 24, 28 | Pending |
-| 30 | [Tooling and verification](30_tooling_and_verification.md) | 03, 06, 11, 14, 19, 20, 29 | Pending |
-| 31 | [Release acceptance](31_release_acceptance.md) | 15, 25, 26, 27, 28, 29, 30 | Pending |
+| 27 | [Candidate comparison and report export](completed/27_candidate_comparison_report_export.md) | 13, 17, 20, 23 | Complete |
+| 28 | [Desktop usability and accessibility](completed/28_desktop_usability_accessibility.md) | 21, 22, 23, 24 | Complete |
+| 29 | [Retire the web UI](completed/29_retire_web_ui.md) | 03, 20, 21, 22, 23, 24, 28 | Complete |
+| 30 | [Tooling and verification](completed/30_tooling_and_verification.md) | 03, 06, 11, 14, 19, 20, 29 | Complete |
+| 31 | [Release acceptance](completed/31_release_acceptance.md) | 15, 25, 26, 27, 28, 29, 30 | Complete |
 
 ## Delivery boundaries
 

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -15,27 +16,56 @@ type CandidateComparison struct {
 type CandidateComparisonItem struct {
 	GenerationID  string `json:"generation_id"`
 	CandidateHash string `json:"candidate_hash"`
+	TargetPath    string `json:"target_path"`
+	TargetSymbol  string `json:"target_symbol"`
+	Action        string `json:"action"`
+	ScopeMode     string `json:"scope_mode"`
 	DiffLines     int    `json:"diff_lines"`
 	Applicable    bool   `json:"applicable"`
 	Checks        string `json:"checks"`
 	Model         string `json:"model"`
+	UserNote      string `json:"user_note,omitempty"`
 }
 
-func (s *Service) CompareCandidates(leftID, rightID string) (CandidateComparison, error) {
+// ReviewExport is a source-free Markdown artifact. The desktop client writes
+// it only after the user explicitly chooses an export destination.
+type ReviewExport struct {
+	Filename string `json:"filename"`
+	Markdown string `json:"markdown"`
+}
+
+// CompareCandidates compares exactly two independently validated, preview-only
+// candidates. It intentionally does not create, apply, or mutate either one.
+func (s *Service) CompareCandidates(leftID, rightID, leftNote, rightNote string) (CandidateComparison, error) {
+	if leftID == "" || rightID == "" || leftID == rightID {
+		return CandidateComparison{}, fmt.Errorf("two distinct validated candidates are required")
+	}
 	s.candidateMu.Lock()
-	defer s.candidateMu.Unlock()
 	leftStored, rightStored := s.candidates[leftID], s.candidates[rightID]
 	if leftStored == nil || rightStored == nil {
+		s.candidateMu.Unlock()
 		return CandidateComparison{}, fmt.Errorf("both validated candidates are required")
 	}
 	left, right := &leftStored.preview, &rightStored.preview
 	if left.ProjectID != right.ProjectID || left.ProjectRevision != right.ProjectRevision || left.BaseFileHash != right.BaseFileHash || left.TargetPath != right.TargetPath || left.TargetSymbol != right.TargetSymbol || left.Action != right.Action {
+		s.candidateMu.Unlock()
 		return CandidateComparison{}, fmt.Errorf("candidates must share project revision, base hash, file, symbol, and action")
 	}
-	return CandidateComparison{Left: comparisonItem(left, leftStored.checks), Right: comparisonItem(right, rightStored.checks)}, nil
+	leftCopy := cloneGenerationPreview(left)
+	rightCopy := cloneGenerationPreview(right)
+	leftChecks := cloneOptionalCheckReport(leftStored.checks)
+	rightChecks := cloneOptionalCheckReport(rightStored.checks)
+	s.candidateMu.Unlock()
+	if err := s.ValidateMutableRequest(leftCopy.ProjectID, leftCopy.ProjectRevision, leftCopy.TargetPath, leftCopy.BaseFileHash); err != nil {
+		return CandidateComparison{}, err
+	}
+	return CandidateComparison{
+		Left:  comparisonItem(&leftCopy, leftChecks, leftNote),
+		Right: comparisonItem(&rightCopy, rightChecks, rightNote),
+	}, nil
 }
 
-func comparisonItem(candidate *GenerationPreview, checksReport *CandidateCheckReport) CandidateComparisonItem {
+func comparisonItem(candidate *GenerationPreview, checksReport *CandidateCheckReport, note string) CandidateComparisonItem {
 	checks := "not run"
 	if checksReport != nil {
 		checks = "failed"
@@ -43,8 +73,70 @@ func comparisonItem(candidate *GenerationPreview, checksReport *CandidateCheckRe
 			checks = "passed"
 		}
 	}
-	return CandidateComparisonItem{GenerationID: candidate.GenerationID, CandidateHash: candidate.CandidateHash, DiffLines: len(candidate.Validation.Diff.Lines), Applicable: candidate.Validation.Applicable, Checks: checks, Model: candidate.EffectiveModel.Model}
+	return CandidateComparisonItem{
+		GenerationID: candidate.GenerationID, CandidateHash: candidate.CandidateHash,
+		TargetPath: candidate.TargetPath, TargetSymbol: candidate.TargetSymbol,
+		Action: candidate.Action, ScopeMode: string(candidate.ScopeMode),
+		DiffLines: len(candidate.Validation.Diff.Lines), Applicable: candidate.Validation.Applicable,
+		Checks: checks, Model: candidate.EffectiveModel.Model, UserNote: redactExportText(note),
+	}
 }
+
+// ExportCandidateReviewMarkdown builds one focused review from the active
+// project state. Candidate source, prompt content, and check output stay in
+// memory and are never placed in the exported artifact.
+func (s *Service) ExportCandidateReviewMarkdown(generationID string) (ReviewExport, error) {
+	s.candidateMu.Lock()
+	stored := s.candidates[generationID]
+	if stored == nil {
+		s.candidateMu.Unlock()
+		return ReviewExport{}, fmt.Errorf("validated candidate not found; generate a new preview")
+	}
+	preview := cloneGenerationPreview(&stored.preview)
+	var checks *CandidateCheckReport
+	if stored.checks != nil {
+		copy := cloneCheckReport(*stored.checks)
+		checks = &copy
+	}
+	s.candidateMu.Unlock()
+	if err := s.ValidateMutableRequest(preview.ProjectID, preview.ProjectRevision, preview.TargetPath, preview.BaseFileHash); err != nil {
+		return ReviewExport{}, err
+	}
+
+	indexedFile, err := s.manager.IndexedFile(preview.TargetPath)
+	if err != nil {
+		return ReviewExport{}, err
+	}
+	var symbol project.SymbolInfo
+	for _, item := range indexedFile.Symbols {
+		if item.Name == preview.TargetSymbol {
+			symbol = item
+			break
+		}
+	}
+	if symbol.Name == "" {
+		return ReviewExport{}, fmt.Errorf("selected candidate symbol is no longer indexed")
+	}
+	analysis, err := s.CachedFileAnalysis(preview.TargetPath)
+	if err != nil {
+		return ReviewExport{}, err
+	}
+	auditID := ""
+	if entries, err := s.AuditHistory(); err == nil {
+		for index := len(entries) - 1; index >= 0; index-- {
+			if entries[index].GenerationID == generationID {
+				auditID = entries[index].ID
+				break
+			}
+		}
+	}
+	return ReviewExport{
+		Filename: reviewExportFilename(preview.TargetPath, preview.TargetSymbol),
+		Markdown: ExportReviewMarkdown(analysis, symbol, &preview, checks, auditID),
+	}, nil
+}
+
+var exportSecret = regexp.MustCompile(`(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|credential)\b\s*[:=]\s*[^\s,;]+`)
 
 // ExportReviewMarkdown is deliberately metadata-only: it omits source, prompts,
 // candidate content, and any excluded paths.
@@ -52,13 +144,13 @@ func ExportReviewMarkdown(analysis *project.FileAnalysis, symbol project.SymbolI
 	var out strings.Builder
 	out.WriteString("# Mini-Orca focused review\n\n")
 	if analysis != nil {
-		out.WriteString("## File summary\n\nPath: `" + analysis.Path + "`\n\nPurpose: " + analysis.Purpose + "\n\n")
+		out.WriteString("## File summary\n\nPath: `" + redactExportText(analysis.Path) + "`\n\nPurpose: " + redactExportText(analysis.Purpose) + "\n\n")
 	}
-	out.WriteString("## Selected symbol\n\n`" + symbol.Name + "` · " + symbol.Kind + "\n\n")
+	out.WriteString("## Selected symbol\n\n`" + redactExportText(symbol.Name) + "` · " + redactExportText(symbol.Kind) + "\n\n")
 	if analysis != nil && len(analysis.Risks) > 0 {
 		out.WriteString("## Findings\n\n")
 		for _, risk := range analysis.Risks {
-			out.WriteString("- " + risk.Severity + ": " + risk.Summary + "\n")
+			out.WriteString("- " + redactExportText(risk.Severity) + ": " + redactExportText(risk.Summary) + "\n")
 		}
 		out.WriteString("\n")
 	}
@@ -76,4 +168,25 @@ func ExportReviewMarkdown(analysis *project.FileAnalysis, symbol project.SymbolI
 		out.WriteString("Audit reference: `" + auditID + "`\n")
 	}
 	return out.String()
+}
+
+func redactExportText(value string) string {
+	return exportSecret.ReplaceAllString(value, "[redacted]")
+}
+
+func reviewExportFilename(path, symbol string) string {
+	name := strings.NewReplacer("/", "-", "\\", "-", ".", "-", " ", "-").Replace(path + "-" + symbol)
+	name = strings.Trim(name, "-")
+	if name == "" {
+		name = "review"
+	}
+	return "mini-orca-" + name + ".md"
+}
+
+func cloneOptionalCheckReport(source *CandidateCheckReport) *CandidateCheckReport {
+	if source == nil {
+		return nil
+	}
+	copy := cloneCheckReport(*source)
+	return &copy
 }

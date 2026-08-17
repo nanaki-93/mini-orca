@@ -3,7 +3,7 @@
 
 # Variables
 APP_NAME := mini-orca
-VERSION := 4.1.0
+VERSION := $(shell sed -n 's/.*Version = "\([^"]*\)"/\1/p' internal/version/version.go)
 IMAGE_NAME := $(APP_NAME)
 IMAGE_TAG := $(VERSION)
 DOCKER_IMAGE := $(IMAGE_NAME):$(IMAGE_TAG)
@@ -11,9 +11,8 @@ BUILD_DIR := build
 
 # Go settings
 GO := go
-GOOS := linux
-GOARCH := amd64
 CGO_ENABLED := 0
+GRADLE := ./desktop/gradlew -p desktop
 
 # Docker settings
 DOCKER := docker
@@ -26,7 +25,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build clean test desktop-run docker-build docker-run docker-stop docker-logs docker-clean help
+.PHONY: all build build-linux clean test test-race vet fmt-check check desktop-test desktop-build desktop-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
 
 # ─── Default Target ────────────────────────────────────────────────────────────
 all: help
@@ -43,9 +42,13 @@ help: ## Show this help message
 build: ## Build the application locally
 	@echo "$(COLOR_GREEN)Building $(APP_NAME) $(VERSION)...$(COLOR_RESET)"
 	@mkdir -p $(BUILD_DIR)
-	@CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) \
-		$(GO) build -ldflags="-w -s" -o $(BUILD_DIR)/$(APP_NAME)-daemon ./cmd/daemon
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon ./cmd/daemon
 	@echo "$(COLOR_GREEN)Build complete: $(BUILD_DIR)/$(APP_NAME)-daemon$(COLOR_RESET)"
+
+build-linux: ## Build the Linux amd64 release daemon
+	@mkdir -p $(BUILD_DIR)
+	@CGO_ENABLED=$(CGO_ENABLED) GOOS=linux GOARCH=amd64 $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64 ./cmd/daemon
+	@echo "$(COLOR_GREEN)Linux build complete: $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64$(COLOR_RESET)"
 
 clean: ## Remove build artifacts
 	@echo "$(COLOR_YELLOW)Cleaning build artifacts...$(COLOR_RESET)"
@@ -53,15 +56,33 @@ clean: ## Remove build artifacts
 	@echo "$(COLOR_YELLOW)Clean complete$(COLOR_RESET)"
 
 # ─── Testing ───────────────────────────────────────────────────────────────────
-test: ## Run tests
+test: ## Run Go tests and write the coverage report
 	@echo "$(COLOR_GREEN)Running tests...$(COLOR_RESET)"
+	@mkdir -p $(BUILD_DIR)
 	@$(GO) test ./... -v -coverprofile=$(BUILD_DIR)/coverage.out
 	@$(GO) tool cover -html=$(BUILD_DIR)/coverage.out -o $(BUILD_DIR)/coverage.html
 	@echo "$(COLOR_GREEN)Tests complete. Coverage report: $(BUILD_DIR)/coverage.html$(COLOR_RESET)"
 
+test-race: ## Run all Go tests under the race detector
+	@$(GO) test -race ./...
+
+vet: ## Vet all Go packages
+	@$(GO) vet ./...
+
+fmt-check: ## Verify Go formatting without modifying files
+	@files="$$(gofmt -l $$(find . -path '*/testdata/*' -prune -o -name '*.go' -type f -not -path './build/*' -print))"; test -z "$$files" || { echo "Run go fmt ./...:"; echo "$$files"; exit 1; }
+
+desktop-test: ## Run desktop unit tests through the Gradle wrapper
+	@$(GRADLE) test
+
+desktop-build: ## Build the current OS desktop distribution through the wrapper
+	@$(GRADLE) clean packageDistributionForCurrentOS
+
+check: fmt-check test test-race vet desktop-test ## Run the complete supported validation path
+
 desktop-run: ## Run the Compose Desktop client (daemon required at localhost:9090)
 	@echo "$(COLOR_GREEN)Starting the Mini-Orca desktop client...$(COLOR_RESET)"
-	@gradle -p desktop run
+	@$(GRADLE) run
 
 # ─── Docker Build ──────────────────────────────────────────────────────────────
 docker-build: ## Build Docker image
@@ -95,9 +116,10 @@ docker-run: ## Run container in detached mode
 		-v $$(pwd)/projects:/app/projects:rw \
 		-v $$(pwd)/logs:/app/logs:rw \
 		-e MINI_ORCA_CONFIG=/app/config.yaml \
+		-e MINI_ORCA_BIND_ADDRESS=0.0.0.0:9090 \
 		$(DOCKER_IMAGE)
 	@echo "$(COLOR_GREEN)Container started: $(APP_NAME)$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Access the IDE at: http://localhost:9090$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Daemon API available to the desktop client at: http://localhost:9090$(COLOR_RESET)"
 
 docker-run-detached: docker-run ## Run container in detached mode (alias)
 
@@ -117,13 +139,13 @@ compose-up: ## Start services with docker-compose
 	@echo "$(COLOR_GREEN)Starting services with docker-compose...$(COLOR_RESET)"
 	@$(DOCKER_COMPOSE) up -d --build
 	@echo "$(COLOR_GREEN)Services started$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Access the IDE at: http://localhost:9090$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Daemon API available to the desktop client at: http://localhost:9090$(COLOR_RESET)"
 
 compose-up-llm: ## Start services with docker-compose including LM Studio
 	@echo "$(COLOR_GREEN)Starting services with docker-compose (with LM Studio)...$(COLOR_RESET)"
 	@$(DOCKER_COMPOSE) --profile with-llm up -d --build
 	@echo "$(COLOR_GREEN)Services started (with LM Studio)$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Access the IDE at: http://localhost:9090$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Daemon API available to the desktop client at: http://localhost:9090$(COLOR_RESET)"
 
 compose-down: ## Stop services with docker-compose
 	@echo "$(COLOR_YELLOW)Stopping services...$(COLOR_RESET)"

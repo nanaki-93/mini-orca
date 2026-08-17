@@ -1,5 +1,9 @@
 # 29 — Remove the legacy HTMX web UI
 
+## Status
+
+Complete
+
 ## Goal
 
 Retire browser IDE code after the desktop client satisfies the focused workflow.

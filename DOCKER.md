@@ -1,7 +1,9 @@
 # Docker Usage Guide
 
-Mini-Orca's container runs the local daemon API. Use the Compose Desktop client
-on the same machine; the container does not serve a browser IDE.
+Mini-Orca's container runs the daemon API for the Compose Desktop client on the
+same machine; it does not serve a browser IDE. The daemon defaults to loopback
+for local safety, so container examples explicitly set
+`MINI_ORCA_BIND_ADDRESS=0.0.0.0:9090` only to make the published port reachable.
 
 ---
 

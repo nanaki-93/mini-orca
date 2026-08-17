@@ -64,12 +64,12 @@ Start the daemon:
 ./mini-orca-daemon
 ```
 
-The daemon exposes a local API at `http://localhost:9090`; start the desktop client to use Mini-Orca.
+The daemon exposes a loopback-only local API at `http://localhost:9090`; start the desktop client to use Mini-Orca. Container deployments must explicitly set `MINI_ORCA_BIND_ADDRESS=0.0.0.0:9090` when publishing the API port.
 
 Or start the native desktop client in another terminal:
 
 ```bash
-gradle -p desktop run
+./desktop/gradlew -p desktop run
 ```
 
 Use **Import project** in the desktop app. The daemon scans the selected directory, runs the AI architecture task, and writes `.mini-orca/analysis.md` into that project. See [Plan.md](Plan.md) for the implementation plan.

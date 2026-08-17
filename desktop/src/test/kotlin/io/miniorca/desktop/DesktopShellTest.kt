@@ -30,6 +30,11 @@ class DesktopShellTest {
         assertEquals(560f, widths.action)
     }
 
+    @Test fun narrowWindowsUseDrawersInsteadOfSqueezingThreePanes() {
+        assertTrue(useNarrowLayout(999f))
+        assertTrue(!useNarrowLayout(1_000f))
+    }
+
     @Test fun largeExplorerKeepsAStableFilteredSelectionPath() {
         val files = (1..2_000).map { number ->
             IndexedFile("src/module$number/File$number.kt", "hash-$number", "Kotlin", false, if (number % 2 == 0) "fresh" else "missing")

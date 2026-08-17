@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/api/handlers"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
@@ -51,23 +50,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize API stores and handlers
-
-	// Initialize template engine
-	templatesPath := "internal/api/templates"
-	templateEngine, err := handlers.NewTemplateEngine(templatesPath)
-	if err != nil {
-		logging.Warn("Failed to initialize template engine", "error", err)
-		templateEngine = nil
-	}
-
-	// Initialize HTMX render handler
-	var htmxRenderHandler *handlers.HTMXRenderHandler
-	if templateEngine != nil {
-		cache := api.NewResponseCache(10 * time.Second)
-		htmxRenderHandler = handlers.NewHTMXRenderHandler(templateEngine, cache, projectManager)
-	}
-
 	// Log successful startup
 	logging.Info("Mini-Orca daemon started successfully")
 	logging.Info("Startup config",
@@ -92,7 +74,7 @@ func main() {
 	}
 
 	// Start HTTP server with all API endpoints
-	server := startHTTPServer(application, htmxRenderHandler, projectManager)
+	server := startHTTPServer(application, projectManager)
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
@@ -111,28 +93,13 @@ func main() {
 // startHTTPServer creates and starts the HTTP server with all API endpoints.
 func startHTTPServer(
 	application *app.Service,
-	htmxRenderHandler *handlers.HTMXRenderHandler,
 	projectManager *project.Manager,
 ) *http.Server {
-	mux := newHTTPMux(application, htmxRenderHandler, projectManager)
-
-	// Initialize error handler
-	templatesPath := "internal/api/templates"
-	errorHandler, err := api.NewErrorHandler(templatesPath)
-	if err != nil {
-		logging.Warn("Failed to initialize error handler", "error", err)
-		errorHandler = nil
-	}
-
-	// Wrap with error handler middleware
-	var handler http.Handler = mux
-	if errorHandler != nil {
-		handler = errorHandler.Next(handler)
-	}
+	mux := newHTTPMux(application, projectManager)
 
 	server := &http.Server{
-		Addr:         ":9090",
-		Handler:      handler,
+		Addr:         daemonAddress(),
+		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 6 * time.Minute,
 		IdleTimeout:  60 * time.Second,
@@ -150,11 +117,18 @@ func startHTTPServer(
 	return server
 }
 
-// newHTTPMux registers the daemon routes. Browser UI routes remain temporary
-// compatibility routes until the desktop replacement is complete.
+// daemonAddress is loopback-only unless a local deployment explicitly opts in
+// to another bind address (for example, a container port mapping).
+func daemonAddress() string {
+	if address := os.Getenv("MINI_ORCA_BIND_ADDRESS"); address != "" {
+		return address
+	}
+	return "127.0.0.1:9090"
+}
+
+// newHTTPMux registers only the local desktop API routes.
 func newHTTPMux(
 	application *app.Service,
-	htmxRenderHandler *handlers.HTMXRenderHandler,
 	projectManager *project.Manager,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
@@ -176,29 +150,6 @@ func newHTTPMux(
 	// System info endpoint
 	systemHandler := handlers.NewSystemHandler()
 	mux.HandleFunc("GET /api/system/info", systemHandler.GetSystemInfo)
-
-	// Static files
-	fs := http.FileServer(http.Dir("internal/api/static"))
-	mux.Handle("/static/", http.StripPrefix("/static/", fs))
-
-	// Register HTMX render endpoints
-	if htmxRenderHandler != nil {
-		mux.HandleFunc("GET /api/render/file-tree", htmxRenderHandler.RenderFileTree)
-		mux.HandleFunc("GET /api/tree/expand", htmxRenderHandler.ExpandFolder)
-		mux.HandleFunc("GET /api/files/view", htmxRenderHandler.ViewFile)
-	}
-
-	// Register main page
-	if htmxRenderHandler != nil {
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			// Only handle the root path, let other routes handle their own paths
-			if r.URL.Path == "/" {
-				htmxRenderHandler.RenderMainPage(w, r)
-			} else {
-				http.NotFound(w, r)
-			}
-		})
-	}
 
 	// Initialize chat handler
 	chatHandler := handlers.NewChatHandler(application)
@@ -231,6 +182,8 @@ func newHTTPMux(
 	mux.HandleFunc("POST /api/projects/current/analysis-job/cancel", projectHandler.CancelAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/reindex", projectHandler.Reindex)
 	mux.HandleFunc("POST /api/projects/current/candidates/checks", candidateHandler.Check)
+	mux.HandleFunc("POST /api/projects/current/candidates/compare", candidateHandler.Compare)
+	mux.HandleFunc("POST /api/projects/current/candidates/export", candidateHandler.Export)
 	mux.HandleFunc("POST /api/projects/current/apply", candidateHandler.Apply)
 	mux.HandleFunc("POST /api/projects/current/undo", candidateHandler.Undo)
 	mux.HandleFunc("GET /api/projects/current/audit", candidateHandler.Audit)

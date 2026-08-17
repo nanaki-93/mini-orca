@@ -1,5 +1,44 @@
 # Mini-Orca Release Notes
 
+## v4.2.0 — Desktop-only focused workflow (2026-08-18)
+
+Mini-Orca is now a Compose Desktop application backed by a loopback-only local
+daemon API. The daemon remains the sole model boundary; it does not serve a
+browser IDE, static assets, or HTML routes.
+
+### Focused and safe changes
+
+- Import builds a policy-filtered deterministic index and writes
+  `.mini-orca/analysis.md`; semantic summaries are generated one selected file
+  at a time and cached without source content.
+- Generation remains preview-only for one selected file and symbol. Scope,
+  syntax, base hash, focused checks, explicit Apply, and immediate Undo protect
+  the project from stale or out-of-scope writes.
+- Candidate comparison and Markdown review export are metadata-only. Exports
+  omit prompts, source, candidate content, excluded paths, and secret-like
+  values by default.
+
+### Privacy and model behavior
+
+- `.gitignore`, `.mini-orcaignore`, secret/configuration patterns, generated
+  files, and lock files are excluded before model context is assembled.
+- Loopback endpoints are local by default. A non-loopback provider requires
+  explicit user confirmation before project context is sent.
+- Provider responses are size-bounded; malformed, empty, non-200, offline, and
+  canceled requests return structured failures rather than partial candidates.
+
+### Known limitations
+
+- Go symbols use parser-backed exact locations. Kotlin, Java, TypeScript,
+  Python, Rust, and unknown text use conservative approximate extraction until
+  dedicated parsers are added.
+- The desktop client is read-only outside explicit one-file Apply/Undo. It does
+  not support autonomous multi-file edits, automatic commits, or pushes.
+- The final visual desktop smoke check is documented in
+  `docs/RELEASE_ACCEPTANCE.md` for execution on a local graphical desktop.
+
+---
+
 ## v3.0.0 — Simplified Workflow (2024-XX-XX)
 
 ### Breaking Changes

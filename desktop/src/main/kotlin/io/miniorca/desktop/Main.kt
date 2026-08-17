@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +29,8 @@ import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.DrawerValue
+import androidx.compose.material.ModalDrawer
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Surface
 import androidx.compose.material.Tab
@@ -40,12 +43,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.rememberDrawerState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,6 +88,8 @@ private val Error = Color(0xFFF85149)
 
 private data class ConnectionState(val label: String = "Connecting", val model: String = "", val connected: Boolean = false, val locality: String = "", val latency: String = "")
 private data class FileSelection(val file: ProjectFileInfo, val symbols: List<SymbolInfo>, val analysis: FileAnalysis, val impact: ImpactPreview, val gitStatus: GitStatus)
+private enum class PaletteMode { Files, Symbols, Actions }
+private enum class NarrowDrawer { Explorer, Action }
 
 fun main() = application {
     Window(onCloseRequest = ::exitApplication, title = "Mini-Orca", resizable = true) {
@@ -106,6 +122,13 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     var activity by remember { mutableStateOf<List<ActivityEntry>>(emptyList()) }
     var showActivity by remember { mutableStateOf(false) }
     var applied by remember { mutableStateOf<ApplyResult?>(null) }
+    var comparisonBaseNote by remember { mutableStateOf("") }
+    var comparisonCandidateNote by remember { mutableStateOf("") }
+    var paletteMode by remember { mutableStateOf(PaletteMode.Files) }
+    var paletteQuery by remember { mutableStateOf("") }
+    var showPalette by remember { mutableStateOf(false) }
+    var narrowDrawer by remember { mutableStateOf(NarrowDrawer.Explorer) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
     LaunchedEffect(appState.preparedAction, appState.preparedRequest, appState.selectedSymbol) {
         if (appState.preparedAction.isNotBlank()) action = appState.preparedAction
@@ -123,6 +146,17 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                 }
                 .onFailure { connection = ConnectionState("Daemon unavailable", "Retry from the status bar", false, api.endpointLocality()) }
         }
+    }
+
+    fun openPalette(mode: PaletteMode) {
+        paletteMode = mode
+        paletteQuery = ""
+        showPalette = true
+    }
+
+    fun openNarrowDrawer(drawer: NarrowDrawer) {
+        narrowDrawer = drawer
+        scope.launch { drawerState.open() }
     }
 
     LaunchedEffect(api) { refreshConnection() }
@@ -229,9 +263,14 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         }
     }
 
-    fun generatePreview() {
+    fun generatePreview(compareWithCurrent: Boolean = false) {
         val project = appState.project ?: return
         val file = appState.selectedFile ?: return
+        val currentCandidate = appState.candidate
+        if (compareWithCurrent && currentCandidate == null) {
+            appState = appState.reduce(DesktopEvent.Failed("Generate one preview before requesting an alternate candidate."))
+            return
+        }
         val target = appState.selectedSymbol?.name ?: manualSymbol.trim()
         if (target.isBlank() || request.isBlank()) {
             appState = appState.reduce(DesktopEvent.Failed("Select or enter one target symbol and describe the requested change."))
@@ -246,7 +285,11 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                         api.generate("$action: ${request.trim()}", file.path, target, project.projectId, project.projectRevision, file.contentHash, scopeMode, action, templateID)
                     }
                 }
-                appState = appState.reduce(DesktopEvent.CandidateLoaded(candidate)).reduce(DesktopEvent.Status("Generated preview · ${candidate.scopeMode}"))
+                appState = if (compareWithCurrent) {
+                    appState.reduce(DesktopEvent.AlternateCandidateLoaded(currentCandidate!!, candidate))
+                } else {
+                    appState.reduce(DesktopEvent.CandidateLoaded(candidate))
+                }.reduce(DesktopEvent.Status("Generated preview · ${candidate.scopeMode}"))
                 activeTab = 2
                 refreshActivity()
             } catch (_: CancellationException) {
@@ -256,6 +299,40 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             } finally {
                 generationJob = null
             }
+        }
+    }
+
+    fun comparePreviews() {
+        val base = appState.comparisonBase ?: return
+        val candidate = appState.candidate ?: return
+        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Comparing two preview-only candidates…"))
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    api.compareCandidates(base.generationId, candidate.generationId, candidate.projectRevision, comparisonBaseNote, comparisonCandidateNote)
+                }
+            }
+                .onSuccess { appState = appState.reduce(DesktopEvent.ComparisonLoaded(it)).reduce(DesktopEvent.Status("Candidate comparison ready")) }
+                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Candidate comparison failed")) }
+        }
+    }
+
+    fun exportReview() {
+        val candidate = appState.candidate ?: return
+        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Preparing source-free review export…"))
+        scope.launch {
+            runCatching { withContext(Dispatchers.IO) { api.exportReview(candidate.generationId, candidate.projectRevision) } }
+                .onSuccess { review ->
+                    val destination = chooseExportFile(review.filename)
+                    if (destination == null) {
+                        appState = appState.reduce(DesktopEvent.Status("Review export canceled"))
+                    } else {
+                        runCatching { withContext(Dispatchers.IO) { destination.writeText(review.markdown) } }
+                            .onSuccess { appState = appState.reduce(DesktopEvent.Status("Saved review export: ${destination.name}")) }
+                            .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Review export failed")) }
+                    }
+                }
+                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Review export failed")) }
         }
     }
 
@@ -315,13 +392,8 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         if (appState.project != null) refreshActivity()
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
-        Column {
-            Header(appState.project, appState.loading, connection, ::importProject, ::reanalyze) {
-                appState = appState.reduce(DesktopEvent.Status("Command palette will be available in the accessibility pass."))
-            }
-            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                Explorer(
+    val explorerPane: @Composable (Modifier) -> Unit = { modifier ->
+        Explorer(
                     index = appState.index,
                     selectedPath = appState.selectedFile?.path,
                     filter = filter,
@@ -330,23 +402,16 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                     onToggleDirectory = { path ->
                         collapsedDirectories = if (path in collapsedDirectories) collapsedDirectories - path else collapsedDirectories + path
                     },
-                    onSelect = ::selectFile,
-                    modifier = Modifier.width(paneWidths.explorer.dp).fillMaxHeight(),
+                    onSelect = {
+                        selectFile(it)
+                        scope.launch { drawerState.close() }
+                    },
+                    loading = appState.loading,
+                    modifier = modifier,
                 )
-                ResizableDivider(onDelta = { paneWidths = paneWidths.withExplorer(paneWidths.explorer + it) }) { widthStore.save(paneWidths) }
-                ContentPane(
-                    project = appState.project, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis,
-                    selectedSymbol = appState.selectedSymbol, activeTab = activeTab, analysisInProgress = analysisJob != null,
-                    onTab = { activeTab = it }, onAnalyze = { analyzeSelected(false) }, onRefreshAnalysis = { analyzeSelected(true) },
-                    onCancelAnalysis = { analysisJob?.cancel() }, onSelectSymbol = { appState = appState.reduce(DesktopEvent.SymbolSelected(it)) },
-                    onPrepareSuggestion = ::prepareSuggestion, candidate = appState.candidate, checks = appState.checks, applied = applied,
-                    onDiscard = { appState = appState.reduce(DesktopEvent.CandidateDiscarded) },
-                    onAskForRevision = { appState = appState.reduce(DesktopEvent.Status("Revise the request in Focused Action, then generate a new preview.")) },
-                    onRunChecks = ::runFocusedChecks, onApply = ::applyPreview, onUndo = ::undoAppliedPreview,
-                    activity = activity, showActivity = showActivity, onToggleActivity = { showActivity = !showActivity }, impact = appState.impact, gitStatus = appState.gitStatus, modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
-                ResizableDivider(onDelta = { paneWidths = paneWidths.withAction(paneWidths.action - it) }) { widthStore.save(paneWidths) }
-                FocusedActionPane(
+    }
+    val actionPane: @Composable (Modifier) -> Unit = { modifier ->
+        FocusedActionPane(
                     appState.selectedFile,
                     appState.symbols,
                     appState.selectedSymbol,
@@ -362,7 +427,7 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                     ::prepareTemplate,
                     { scopeMode = if (scopeMode == "strict_symbol") "symbol_plus_imports" else "strict_symbol" },
                     ::inspectContext,
-                    ::generatePreview,
+                    { generatePreview() },
                     { generationJob?.cancel() },
                     {
                         appState.selectedSymbol?.let { symbol ->
@@ -376,19 +441,99 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                             activeTab = 1
                         }
                     },
-                    Modifier.width(paneWidths.action.dp).fillMaxHeight(),
+                    modifier,
                 )
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val key = when (event.key) {
+                Key.P -> "P"
+                Key.O -> "O"
+                Key.K -> "K"
+                Key.Enter -> "Enter"
+                Key.Escape -> "Escape"
+                Key.Tab -> "Tab"
+                else -> ""
             }
-            StatusBar(appState.status, appState.error, connection, ::refreshConnection)
+            when (desktopShortcut(key, event.isMetaPressed || event.isCtrlPressed, event.isShiftPressed)) {
+                DesktopShortcut.OpenFile -> openPalette(PaletteMode.Files)
+                DesktopShortcut.OpenSymbol -> openPalette(PaletteMode.Symbols)
+                DesktopShortcut.OpenAction -> openPalette(PaletteMode.Actions)
+                DesktopShortcut.Generate -> if (generationJob != null) generationJob?.cancel() else generatePreview()
+                DesktopShortcut.Cancel -> {
+                    showPalette = false
+                    showContext = false
+                    analysisJob?.cancel()
+                    generationJob?.cancel()
+                }
+                DesktopShortcut.NextTab -> activeTab = (activeTab + 1) % 3
+                null -> return@onPreviewKeyEvent false
+            }
+            true
+        },
+        color = AppBackground,
+    ) {
+        BoxWithConstraints {
+            val narrow = useNarrowLayout(maxWidth.value)
+            ModalDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    if (narrowDrawer == NarrowDrawer.Explorer) explorerPane(Modifier.fillMaxHeight().width(320.dp))
+                    else actionPane(Modifier.fillMaxHeight().width(360.dp))
+                },
+            ) {
+                Column {
+                    Header(appState.project, appState.loading, connection, ::importProject, ::reanalyze, { openPalette(PaletteMode.Actions) }, narrow, { openNarrowDrawer(NarrowDrawer.Explorer) }, { openNarrowDrawer(NarrowDrawer.Action) })
+                    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        if (!narrow) {
+                            explorerPane(Modifier.width(paneWidths.explorer.dp).fillMaxHeight())
+                            ResizableDivider(onDelta = { paneWidths = paneWidths.withExplorer(paneWidths.explorer + it) }) { widthStore.save(paneWidths) }
+                        }
+                        ContentPane(
+                    project = appState.project, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis,
+                    selectedSymbol = appState.selectedSymbol, activeTab = activeTab, analysisInProgress = analysisJob != null,
+                    onTab = { activeTab = it }, onAnalyze = { analyzeSelected(false) }, onRefreshAnalysis = { analyzeSelected(true) },
+                    onCancelAnalysis = { analysisJob?.cancel() }, onSelectSymbol = { appState = appState.reduce(DesktopEvent.SymbolSelected(it)) },
+                    onPrepareSuggestion = ::prepareSuggestion, candidate = appState.candidate, comparisonBase = appState.comparisonBase, comparison = appState.comparison, checks = appState.checks, applied = applied,
+                    onDiscard = { appState = appState.reduce(DesktopEvent.CandidateDiscarded) },
+                    onAskForRevision = { appState = appState.reduce(DesktopEvent.Status("Revise the request in Focused Action, then generate a new preview.")) },
+                    onRunChecks = ::runFocusedChecks, onGenerateAlternate = { generatePreview(compareWithCurrent = true) }, onCompare = ::comparePreviews, onExport = ::exportReview,
+                    comparisonBaseNote = comparisonBaseNote, comparisonCandidateNote = comparisonCandidateNote, onComparisonBaseNote = { comparisonBaseNote = it }, onComparisonCandidateNote = { comparisonCandidateNote = it },
+                    onApply = ::applyPreview, onUndo = ::undoAppliedPreview,
+                    activity = activity, showActivity = showActivity, onToggleActivity = { showActivity = !showActivity }, impact = appState.impact, gitStatus = appState.gitStatus, modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+                        if (!narrow) {
+                            ResizableDivider(onDelta = { paneWidths = paneWidths.withAction(paneWidths.action - it) }) { widthStore.save(paneWidths) }
+                            actionPane(Modifier.width(paneWidths.action.dp).fillMaxHeight())
+                        }
+                    }
+                    StatusBar(appState.status, appState.error, connection, ::refreshConnection)
+                }
+            }
         }
         if (showContext) {
             ContextInspectorDialog(contextManifest ?: ContextManifest(), remoteProvider = !api.isLoopbackEndpoint(), onDismiss = { showContext = false })
+        }
+        if (showPalette) {
+            CommandPaletteDialog(
+                paletteMode, paletteQuery, { paletteQuery = it },
+                appState.index?.files.orEmpty(), appState.symbols,
+                onSelectFile = { showPalette = false; selectFile(it) },
+                onSelectSymbol = { showPalette = false; appState = appState.reduce(DesktopEvent.SymbolSelected(it)) },
+                onSelectAction = { showPalette = false; action = it },
+                onDismiss = { showPalette = false },
+            )
         }
     }
 }
 
 @Composable
-private fun Header(project: ProjectAnalysis?, busy: Boolean, connection: ConnectionState, onImport: () -> Unit, onReanalyze: () -> Unit, onPalette: () -> Unit) {
+private fun Header(
+    project: ProjectAnalysis?, busy: Boolean, connection: ConnectionState, onImport: () -> Unit, onReanalyze: () -> Unit, onPalette: () -> Unit,
+    narrow: Boolean, onOpenExplorer: () -> Unit, onOpenAction: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().height(56.dp).background(Panel).border(BorderStroke(1.dp, Border)).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -401,18 +546,58 @@ private fun Header(project: ProjectAnalysis?, busy: Boolean, connection: Connect
         Text(if (connection.connected) "● ${connection.model} · ${connection.locality} ${connection.latency}" else "○ ${connection.label} · ${connection.locality}", color = if (connection.connected) Success else Warning, fontSize = 11.sp)
         if (busy) { Spacer(Modifier.width(12.dp)); CircularProgressIndicator(Modifier.size(18.dp), color = Accent, strokeWidth = 2.dp) }
         Spacer(Modifier.width(12.dp))
-        Button(onClick = onPalette, enabled = !busy) { Text("⌘K") }
+        if (narrow) {
+            Button(onClick = onOpenExplorer) { Text("Files") }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onOpenAction) { Text("Action") }
+            Spacer(Modifier.width(8.dp))
+        }
+        Button(onClick = onPalette) { Text("⌘K") }
         Spacer(Modifier.width(8.dp))
-        Button(onClick = onReanalyze, enabled = project != null && !busy) { Text("Re-analyze") }
+        Button(onClick = onReanalyze, enabled = project != null) { Text("Re-analyze") }
         Spacer(Modifier.width(8.dp))
-        Button(onClick = onImport, enabled = !busy, colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = Color.White)) { Text("Import") }
+        Button(onClick = onImport, colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = Color.White)) { Text("Import") }
     }
+}
+
+@Composable
+private fun CommandPaletteDialog(
+    mode: PaletteMode, query: String, onQuery: (String) -> Unit, files: List<IndexedFile>, symbols: List<SymbolInfo>,
+    onSelectFile: (String) -> Unit, onSelectSymbol: (SymbolInfo) -> Unit, onSelectAction: (String) -> Unit, onDismiss: () -> Unit,
+) {
+    val title = when (mode) {
+        PaletteMode.Files -> "Go to file · ⌘P"
+        PaletteMode.Symbols -> "Go to symbol · ⌘⇧O"
+        PaletteMode.Actions -> "Focused action · ⌘K"
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                OutlinedTextField(value = query, onValueChange = onQuery, singleLine = true, label = { Text("Filter") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                when (mode) {
+                    PaletteMode.Files -> files.filter { it.path.contains(query, ignoreCase = true) }.take(12).forEach { file ->
+                        Button(onClick = { onSelectFile(file.path) }, modifier = Modifier.fillMaxWidth().padding(top = 3.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText)) { Text(file.path, fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
+                    }
+                    PaletteMode.Symbols -> symbols.filter { it.name.contains(query, ignoreCase = true) }.take(12).forEach { symbol ->
+                        Button(onClick = { onSelectSymbol(symbol) }, modifier = Modifier.fillMaxWidth().padding(top = 3.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText)) { Text("${symbol.kind} · ${symbol.name}", fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
+                    }
+                    PaletteMode.Actions -> listOf("fix", "refactor", "document").filter { it.contains(query, ignoreCase = true) }.forEach { action ->
+                        Button(onClick = { onSelectAction(action) }, modifier = Modifier.fillMaxWidth().padding(top = 3.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText)) { Text(action.replaceFirstChar { it.uppercase() }) }
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text("Close") } },
+    )
 }
 
 @Composable
 private fun Explorer(
     index: ProjectIndex?, selectedPath: String?, filter: String, collapsedDirectories: Set<String>, onFilter: (String) -> Unit,
-    onToggleDirectory: (String) -> Unit, onSelect: (String) -> Unit, modifier: Modifier,
+    onToggleDirectory: (String) -> Unit, onSelect: (String) -> Unit, loading: Boolean, modifier: Modifier,
 ) {
     val rows = visibleExplorerRows(index?.files.orEmpty(), filter, collapsedDirectories)
     Column(modifier.background(Panel).border(BorderStroke(1.dp, Border)).padding(12.dp)) {
@@ -421,13 +606,14 @@ private fun Explorer(
         OutlinedTextField(value = filter, onValueChange = onFilter, placeholder = { Text("Filter files", color = SecondaryText, fontSize = 12.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         when {
+            index == null && loading -> LoadingRows("Loading indexed files")
             index == null -> Text("Import a project to browse its safe, indexed files.", color = SecondaryText, fontSize = 13.sp)
             rows.isEmpty() -> Text("No indexed files match this filter.", color = SecondaryText, fontSize = 13.sp)
             else -> LazyColumn {
                 items(rows, key = { it.path }) { row ->
                     val active = !row.directory && row.path == selectedPath
                     Row(
-                        modifier = Modifier.fillMaxWidth().background(if (active) Card else Color.Transparent, RoundedCornerShape(5.dp))
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = if (row.directory) "Folder ${row.name}" else "${row.name}, ${analysisBadge(row.analysisStatus)}" }.background(if (active) Card else Color.Transparent, RoundedCornerShape(5.dp))
                             .clickable { if (row.directory) onToggleDirectory(row.path) else onSelect(row.path) }.padding(start = (8 + row.depth * 14).dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -445,11 +631,20 @@ private fun Explorer(
 }
 
 @Composable
+private fun LoadingRows(label: String) {
+    Column {
+        Text("$label…", color = SecondaryText, fontSize = 12.sp)
+        repeat(3) { Box(Modifier.fillMaxWidth().height(20.dp).padding(top = 6.dp).background(Card, RoundedCornerShape(4.dp))) }
+    }
+}
+
+@Composable
 private fun ContentPane(
     project: ProjectAnalysis?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, activeTab: Int,
     analysisInProgress: Boolean, onTab: (Int) -> Unit, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit,
-    onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, candidate: GenerationResult?, checks: CandidateCheckReport?, applied: ApplyResult?,
-    onDiscard: () -> Unit, onAskForRevision: () -> Unit, onRunChecks: () -> Unit, onApply: () -> Unit, onUndo: () -> Unit,
+    onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, candidate: GenerationResult?, comparisonBase: GenerationResult?, comparison: CandidateComparison?, checks: CandidateCheckReport?, applied: ApplyResult?,
+    onDiscard: () -> Unit, onAskForRevision: () -> Unit, onRunChecks: () -> Unit, onGenerateAlternate: () -> Unit, onCompare: () -> Unit, onExport: () -> Unit,
+    comparisonBaseNote: String, comparisonCandidateNote: String, onComparisonBaseNote: (String) -> Unit, onComparisonCandidateNote: (String) -> Unit, onApply: () -> Unit, onUndo: () -> Unit,
     activity: List<ActivityEntry>, showActivity: Boolean, onToggleActivity: () -> Unit, impact: ImpactPreview?, gitStatus: GitStatus?, modifier: Modifier,
 ) {
     Column(modifier.background(AppBackground)) {
@@ -460,7 +655,7 @@ private fun ContentPane(
         when (activeTab) {
             0 -> CodeTab(project, selected)
             1 -> SummaryTab(selected, symbols, analysis, selectedSymbol, analysisInProgress, onAnalyze, onRefreshAnalysis, onCancelAnalysis, onSelectSymbol, onPrepareSuggestion)
-            else -> ChangesTab(candidate, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
+            else -> ChangesTab(candidate, comparisonBase, comparison, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onGenerateAlternate, onCompare, onExport, comparisonBaseNote, comparisonCandidateNote, onComparisonBaseNote, onComparisonCandidateNote, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
         }
     }
 }
@@ -546,14 +741,15 @@ private fun LabeledItems(label: String, values: List<String>) {
 
 @Composable
 private fun CodeTab(project: ProjectAnalysis?, selected: ProjectFileInfo?) {
+    val source = when {
+        selected != null -> if (selected.binary) "Binary file: source preview is unavailable." else selected.content
+        project != null -> project.summary
+        else -> "Select Import to analyze a project. Mini-Orca indexes only policy-eligible project files."
+    }
     SelectionContainer {
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
             Text(
-                text = when {
-                    selected != null -> if (selected.binary) "Binary file: source preview is unavailable." else selected.content
-                    project != null -> project.summary
-                    else -> "Select Import to analyze a project. Mini-Orca indexes only policy-eligible project files."
-                },
+                text = highlightedCode(source),
                 color = PrimaryText, fontFamily = if (selected != null) FontFamily.Monospace else FontFamily.Default, fontSize = 13.sp, lineHeight = 20.sp,
             )
         }
@@ -634,8 +830,9 @@ private fun FocusedActionPane(
 
 @Composable
 private fun ChangesTab(
-    candidate: GenerationResult?, checks: CandidateCheckReport?, applied: ApplyResult?, selected: ProjectFileInfo?, onDiscard: () -> Unit,
-    onAskForRevision: () -> Unit, onRunChecks: () -> Unit, onApply: () -> Unit, onUndo: () -> Unit, activity: List<ActivityEntry>,
+    candidate: GenerationResult?, comparisonBase: GenerationResult?, comparison: CandidateComparison?, checks: CandidateCheckReport?, applied: ApplyResult?, selected: ProjectFileInfo?, onDiscard: () -> Unit,
+    onAskForRevision: () -> Unit, onRunChecks: () -> Unit, onGenerateAlternate: () -> Unit, onCompare: () -> Unit, onExport: () -> Unit,
+    comparisonBaseNote: String, comparisonCandidateNote: String, onComparisonBaseNote: (String) -> Unit, onComparisonCandidateNote: (String) -> Unit, onApply: () -> Unit, onUndo: () -> Unit, activity: List<ActivityEntry>,
     showActivity: Boolean, onToggleActivity: () -> Unit, impact: ImpactPreview?, gitStatus: GitStatus?,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
@@ -660,7 +857,10 @@ private fun ChangesTab(
                 Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(6.dp)).padding(10.dp)) {
                     candidate.validation.diff.lines.forEach { line ->
                         val prefix = when (line.kind) { "added" -> "+"; "removed" -> "-"; else -> " " }
-                        Text("$prefix ${line.newLine.takeIf { it > 0 } ?: line.oldLine}  ${line.text}", color = when (line.kind) { "added" -> Success; "removed" -> Error; else -> PrimaryText }, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                        Row {
+                            Text("$prefix ${line.newLine.takeIf { it > 0 } ?: line.oldLine}  ", fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                            Text(highlightedCode(line.text), color = when (line.kind) { "added" -> Success; "removed" -> Error; else -> PrimaryText }, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                        }
                     }
                 }
             }
@@ -674,6 +874,24 @@ private fun ChangesTab(
                 Button(onClick = onAskForRevision) { Text("Ask for revision") }
                 Button(onClick = onRunChecks, enabled = candidate.validation.applicable) { Text("Run focused checks") }
             }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onGenerateAlternate, enabled = candidate.validation.applicable, colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText)) { Text("Generate alternate") }
+            Text("An alternate is another preview only. It cannot apply either candidate.", color = SecondaryText, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+            if (comparisonBase != null) {
+                Spacer(Modifier.height(12.dp))
+                Text("CANDIDATE COMPARISON", color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                OutlinedTextField(value = comparisonBaseNote, onValueChange = onComparisonBaseNote, label = { Text("First candidate note") }, modifier = Modifier.fillMaxWidth(), minLines = 1)
+                OutlinedTextField(value = comparisonCandidateNote, onValueChange = onComparisonCandidateNote, label = { Text("Alternate candidate note") }, modifier = Modifier.fillMaxWidth(), minLines = 1)
+                Button(onClick = onCompare, colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText), modifier = Modifier.padding(top = 6.dp)) { Text("Compare candidates") }
+                comparison?.let { result ->
+                    Spacer(Modifier.height(6.dp))
+                    Text("First · ${result.left.diffLines} diff lines · ${result.left.scopeMode} · checks ${result.left.checks} · ${result.left.model}", color = SecondaryText, fontSize = 11.sp)
+                    Text("Alternate · ${result.right.diffLines} diff lines · ${result.right.scopeMode} · checks ${result.right.checks} · ${result.right.model}", color = SecondaryText, fontSize = 11.sp)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onExport, colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText)) { Text("Export review Markdown") }
+            Text("Exports source-free summary, findings, candidate metadata, checks, and audit reference only.", color = SecondaryText, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(8.dp))
             val applyEnabled = candidate.validation.applicable && checks?.applicable == true && candidate.baseFileHash == selected?.contentHash
             Button(onClick = onApply, enabled = applyEnabled, colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = Color.White)) { Text("Apply") }
@@ -770,6 +988,14 @@ private fun badgeColor(status: String) = when (status.lowercase()) {
 private fun chooseDirectory(): File? {
     val chooser = JFileChooser().apply { dialogTitle = "Import project"; fileSelectionMode = JFileChooser.DIRECTORIES_ONLY; isAcceptAllFileFilterUsed = false }
     return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
+}
+
+private fun chooseExportFile(filename: String): File? {
+    val chooser = JFileChooser().apply {
+        dialogTitle = "Export focused review"
+        selectedFile = File(filename)
+    }
+    return if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
 }
 
 private fun formatBytes(bytes: Long): String = when {

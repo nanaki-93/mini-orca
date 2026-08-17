@@ -1,5 +1,9 @@
 # 27 — Compare candidates and export focused reports
 
+## Status
+
+Complete
+
 ## Goal
 
 Make review choices and handoff useful without changing project files.

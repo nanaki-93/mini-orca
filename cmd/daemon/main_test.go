@@ -46,6 +46,8 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 		{http.MethodPost, "/api/projects/current/analysis-job/cancel"},
 		{http.MethodPost, "/api/projects/current/reindex"},
 		{http.MethodPost, "/api/projects/current/candidates/checks"},
+		{http.MethodPost, "/api/projects/current/candidates/compare"},
+		{http.MethodPost, "/api/projects/current/candidates/export"},
 		{http.MethodPost, "/api/projects/current/apply"},
 		{http.MethodPost, "/api/projects/current/undo"},
 		{http.MethodGet, "/api/projects/current/audit"},
@@ -67,7 +69,7 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux := newHTTPMux(service, nil, manager)
+	mux := newHTTPMux(service, manager)
 	for _, route := range routes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			path := route.path
@@ -81,6 +83,40 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 				t.Fatalf("documented route is not registered: status %d", response.Code)
 			}
 		})
+	}
+}
+
+func TestDaemonDoesNotRegisterBrowserUIRoutes(t *testing.T) {
+	root := t.TempDir()
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := newHTTPMux(service, manager)
+	for _, path := range []string{"/", "/static/js/chat.js", "/api/render/file-tree", "/api/tree/expand", "/api/files/view"} {
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("browser route %s returned %d, want 404", path, response.Code)
+		}
+	}
+}
+
+func TestDaemonBindsToLoopbackUnlessExplicitlyOverridden(t *testing.T) {
+	t.Setenv("MINI_ORCA_BIND_ADDRESS", "")
+	if got := daemonAddress(); got != "127.0.0.1:9090" {
+		t.Fatalf("default daemon address = %q", got)
+	}
+	t.Setenv("MINI_ORCA_BIND_ADDRESS", "0.0.0.0:9090")
+	if got := daemonAddress(); got != "0.0.0.0:9090" {
+		t.Fatalf("override daemon address = %q", got)
 	}
 }
 

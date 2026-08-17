@@ -23,6 +23,8 @@ services:
     environment:
       # Configuration file path (optional, defaults to config.yaml)
       - MINI_ORCA_CONFIG=/app/config.yaml
+      # Container networking is an explicit opt-in; the daemon defaults to loopback.
+      - MINI_ORCA_BIND_ADDRESS=0.0.0.0:9090
       # Log level (optional, defaults to info)
       - MINI_ORCA_LOG_LEVEL=info
     healthcheck:

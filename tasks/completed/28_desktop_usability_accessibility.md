@@ -1,5 +1,9 @@
 # 28 — Polish desktop usability and accessibility
 
+## Status
+
+Complete
+
 ## Goal
 
 Make the focused workflow fast, legible, and usable without a mouse.
