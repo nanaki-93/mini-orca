@@ -33,20 +33,23 @@ type GenerationResponse struct {
 // GenerationPreview is an in-memory, unvalidated candidate. It is returned for
 // review only and is never persisted or applied by this package.
 type GenerationPreview struct {
-	GenerationID     string                       `json:"generation_id"`
-	Version          string                       `json:"version"`
-	ProjectID        string                       `json:"project_id"`
-	ProjectRevision  string                       `json:"project_revision"`
-	BaseFileHash     string                       `json:"base_file_hash"`
-	TargetPath       string                       `json:"target_path"`
-	TargetSymbol     string                       `json:"target_symbol"`
-	ScopeMode        workflow.ScopeMode           `json:"scope_mode"`
-	CandidateContent string                       `json:"candidate_content"`
-	CandidateHash    string                       `json:"candidate_hash"`
-	Rationale        string                       `json:"rationale,omitempty"`
-	EffectiveModel   EffectiveModel               `json:"effective_model"`
-	ContextManifest  project.ContextManifest      `json:"context_manifest"`
-	Validation       project.GenerationValidation `json:"validation"`
+	GenerationID      string                       `json:"generation_id"`
+	Version           string                       `json:"version"`
+	ProjectID         string                       `json:"project_id"`
+	ProjectRevision   string                       `json:"project_revision"`
+	BaseFileHash      string                       `json:"base_file_hash"`
+	TargetPath        string                       `json:"target_path"`
+	TargetSymbol      string                       `json:"target_symbol"`
+	ScopeMode         workflow.ScopeMode           `json:"scope_mode"`
+	CandidateContent  string                       `json:"candidate_content"`
+	CandidateHash     string                       `json:"candidate_hash"`
+	Rationale         string                       `json:"rationale,omitempty"`
+	Action            string                       `json:"action,omitempty"`
+	TemplateID        string                       `json:"template_id,omitempty"`
+	TemplateInputHash string                       `json:"template_input_hash,omitempty"`
+	EffectiveModel    EffectiveModel               `json:"effective_model"`
+	ContextManifest   project.ContextManifest      `json:"context_manifest"`
+	Validation        project.GenerationValidation `json:"validation"`
 }
 
 // Generate produces an in-memory candidate preview only. It captures the base

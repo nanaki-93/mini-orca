@@ -23,6 +23,8 @@ coder/tester/reviewer pipeline.
 | GET | `/api/projects/current/index` | Deterministic index of eligible project files and symbols. |
 | GET | `/api/projects/current/files/info?path=…` | Safe selected-file information. |
 | GET | `/api/projects/current/files/symbols?path=…` | Valid atomic targets for one eligible file. |
+| GET | `/api/projects/current/impact?path=…&symbol=…` | Advisory source-free impact references; never expands model context. |
+| GET | `/api/projects/current/git?path=…` | Read-only target-file Git availability, branch, and status. |
 | GET | `/api/projects/current/files/analysis?path=…&project_revision=…` | Cached one-file semantic-analysis status. |
 | POST | `/api/projects/current/files/analysis` | Analyze exactly one selected file. |
 | DELETE | `/api/projects/current/files/analysis?path=…&project_revision=…` | Clear one selected-file analysis cache entry. |

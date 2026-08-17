@@ -144,6 +144,24 @@ func (h *ProjectHandler) Symbols(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *ProjectHandler) Impact(w http.ResponseWriter, r *http.Request) {
+	preview, err := h.manager.ImpactPreview(r.URL.Query().Get("path"), r.URL.Query().Get("symbol"))
+	if err != nil {
+		writeProjectError(w, "impact preview failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, preview)
+}
+
+func (h *ProjectHandler) GitStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := h.manager.GitStatus(r.URL.Query().Get("path"))
+	if err != nil {
+		writeProjectError(w, "Git status failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, status)
+}
+
 // Reindex refreshes deterministic facts without contacting the model. A client
 // may supply its current revision to avoid refreshing state it no longer owns.
 func (h *ProjectHandler) Reindex(w http.ResponseWriter, r *http.Request) {

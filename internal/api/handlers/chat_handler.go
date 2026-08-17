@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -64,6 +66,14 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, http.StatusBadRequest, "scope_mode must be strict_symbol or symbol_plus_imports")
 		return
 	}
+	if req.Action == "" {
+		req.Action = workflow.ActionFix
+	}
+	if err := (workflow.Request{Action: req.Action, Scope: req.ScopeMode, TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol}).Validate(); err != nil {
+		api.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	inputHash := templateInputHash(req.Message)
 	if err := h.service.ValidateMutableRequest(req.ProjectID, req.ProjectRevision, req.FilePath, req.BaseFileHash); err != nil {
 		if errors.Is(err, project.ErrRevisionConflict) {
 			api.WriteError(w, http.StatusConflict, "project or file changed; reload before generating")
@@ -73,7 +83,7 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = h.service.RecordActivity(req.ProjectID, req.ProjectRevision, project.Activity{
-		Role: "user", Content: "Requested focused generation", Phase: "coding", TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol,
+		Role: "user", Content: "Requested focused generation", Phase: "coding", TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol, TemplateID: req.TemplateID, Action: string(req.Action), TemplateInputHash: inputHash,
 	})
 
 	result, err := h.service.Generate(r.Context(), req.Message, req.FilePath, req.TargetSymbol, req.ScopeMode, req.ConfirmRemoteProvider)
@@ -92,12 +102,21 @@ func (h *ChatHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	result.Action = string(req.Action)
+	result.TemplateID = req.TemplateID
+	result.TemplateInputHash = inputHash
+	h.service.SetCandidateTemplate(result.GenerationID, result.Action, result.TemplateID, inputHash)
 
 	_ = h.service.RecordActivity(req.ProjectID, req.ProjectRevision, project.Activity{
-		Role: "assistant", Content: "Generated preview", Phase: "coding", TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol,
+		Role: "assistant", Content: "Generated preview", Phase: "coding", TargetFile: req.FilePath, TargetSymbol: req.TargetSymbol, TemplateID: req.TemplateID, Action: string(req.Action), TemplateInputHash: inputHash,
 	})
 
 	api.WriteJSON(w, http.StatusOK, result)
+}
+
+func templateInputHash(input string) string {
+	sum := sha256.Sum256([]byte(input))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // GetHistory handles GET /api/chat/history

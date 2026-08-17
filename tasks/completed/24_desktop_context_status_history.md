@@ -1,5 +1,9 @@
 # 24 — Add context, local-model status, and project activity UI
 
+## Status
+
+Complete
+
 ## Goal
 
 Make model usage, privacy boundaries, and prior focused work visible in the desktop app.

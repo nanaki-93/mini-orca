@@ -17,6 +17,8 @@ type ChatRequest struct {
 	BaseFileHash          string             `json:"base_file_hash"`
 	LineNumber            int                `json:"line_number,omitempty"` // optional: cursor position
 	ConfirmRemoteProvider bool               `json:"confirm_remote_provider,omitempty"`
+	Action                workflow.Action    `json:"action,omitempty"`
+	TemplateID            string             `json:"template_id,omitempty"`
 }
 
 // ChatResponse represents a chat message response from the system.

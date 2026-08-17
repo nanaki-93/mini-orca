@@ -123,6 +123,35 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
+  /api/projects/current/impact:
+    get:
+      tags: [Projects]
+      summary: Advisory index-based impact preview for one selected file or symbol
+      parameters:
+        - {$ref: '#/components/parameters/ProjectPath'}
+        - name: symbol
+          in: query
+          schema: {type: string}
+      responses:
+        '200':
+          description: Source-free advisory references that do not alter model context
+          content:
+            application/json:
+              schema: {type: object}
+        '400': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git:
+    get:
+      tags: [Projects]
+      summary: Read-only Git status for one selected file
+      parameters:
+        - {$ref: '#/components/parameters/ProjectPath'}
+      responses:
+        '200':
+          description: Repository availability, branch, and target-file status
+          content:
+            application/json:
+              schema: {type: object}
+        '400': {$ref: '#/components/responses/Error'}
   /api/projects/current/files/analysis:
     get:
       tags: [Projects]

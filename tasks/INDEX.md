@@ -26,12 +26,12 @@ Source roadmap: [`../docs/NEXT_FUNCTIONS_FIXES_UI.md`](../docs/NEXT_FUNCTIONS_FI
 | 18 | [Candidate checks](completed/18_candidate_checks.md) | 17 | Complete |
 | 19 | [Apply, undo, audit](completed/19_apply_undo_audit.md) | 07, 17, 18 | Complete |
 | 20 | [Desktop API client and state](completed/20_desktop_api_client_state.md) | 03, 11, 14, 16, 19 | Complete |
-| 21 | [Desktop shell and explorer](21_desktop_shell_explorer.md) | 20 | In Progress |
-| 22 | [Desktop summaries and symbol actions](22_desktop_summaries_symbols.md) | 20, 21 | Pending |
-| 23 | [Desktop generation and diff review](23_desktop_generation_diff_review.md) | 20, 21, 22 | Pending |
-| 24 | [Desktop context, status, history](24_desktop_context_status_history.md) | 05, 07, 20, 21 | Pending |
-| 25 | [Explain and prompt templates](25_explain_and_prompt_templates.md) | 13, 20, 22 | Pending |
-| 26 | [Impact preview and Git status](26_impact_preview_git_status.md) | 08, 20, 22 | Pending |
+| 21 | [Desktop shell and explorer](completed/21_desktop_shell_explorer.md) | 20 | Complete |
+| 22 | [Desktop summaries and symbol actions](completed/22_desktop_summaries_symbols.md) | 20, 21 | Complete |
+| 23 | [Desktop generation and diff review](completed/23_desktop_generation_diff_review.md) | 20, 21, 22 | Complete |
+| 24 | [Desktop context, status, history](completed/24_desktop_context_status_history.md) | 05, 07, 20, 21 | Complete |
+| 25 | [Explain and prompt templates](completed/25_explain_and_prompt_templates.md) | 13, 20, 22 | Complete |
+| 26 | [Impact preview and Git status](completed/26_impact_preview_git_status.md) | 08, 20, 22 | Complete |
 | 27 | [Candidate comparison and report export](27_candidate_comparison_report_export.md) | 13, 17, 20, 23 | Pending |
 | 28 | [Desktop usability and accessibility](28_desktop_usability_accessibility.md) | 21, 22, 23, 24 | Pending |
 | 29 | [Retire the web UI](29_retire_web_ui.md) | 03, 20, 21, 22, 23, 24, 28 | Pending |

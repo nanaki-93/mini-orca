@@ -91,6 +91,24 @@ func TestSendMessageRejectsStaleProjectState(t *testing.T) {
 	}
 }
 
+func TestSendMessageRejectsUnsupportedTemplateAction(t *testing.T) {
+	handler, body := newCancellationTestHandler(t, "http://127.0.0.1:1", 1)
+	var request ChatRequest
+	if err := json.Unmarshal(body, &request); err != nil {
+		t.Fatal(err)
+	}
+	request.Action = "rewrite_project"
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.SendMessage(response, httptest.NewRequest(http.MethodPost, "/api/chat/message", bytes.NewReader(body)))
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "unsupported action") {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestSendMessageReturnsStructuredGenerationPreview(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "fixture-model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"version":"v1","target_path":"sample.go","target_symbol":"Run","scope_mode":"strict_symbol","candidate_content":"package sample\nfunc Run() {}"}`}}}})

@@ -1,5 +1,9 @@
 # 26 — Add impact preview and read-only Git status
 
+## Status
+
+Complete
+
 ## Goal
 
 Help users judge a focused change without enabling repository-wide mutation.
