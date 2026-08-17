@@ -1,7 +1,7 @@
 # Mini-Orca desktop API contract
 
 **Version:** 4.1.0
-**Base URL:** `http://localhost:8080`
+**Base URL:** `http://localhost:9090`
 **Client:** the local Compose Desktop application
 **Content type:** `application/json`
 

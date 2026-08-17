@@ -13,7 +13,7 @@ Tasks 03 and 20–24, 28.
 - Confirm desktop parity for import, browsing, selection, generation preview, errors, connection status, and activity history.
 - Remove page routes, HTMX handlers, templates, static CSS/JavaScript, Tailwind/HTMX browser dependencies, and web-only response cache wiring.
 - Keep health, status, and documented desktop API routes.
-- Remove web-specific tests and update Docker/README so port 8080 is described as a local API, not an IDE URL.
+- Remove web-specific tests and update Docker/README so port 9090 is described as a local API, not an IDE URL.
 - Review daemon bind address/CORS exposure for the local-machine model; do not expose sensitive project APIs unintentionally.
 
 ## Acceptance criteria

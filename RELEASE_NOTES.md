@@ -392,12 +392,12 @@ Update all API endpoints from v1.x format to v2.0 format:
 
 ```bash
 # Before (v1.x)
-curl -X POST http://localhost:8080/create \
+curl -X POST http://localhost:9090/create \
   -H "Content-Type: application/json" \
   -d '{"goal": "Implement auth"}'
 
 # After (v2.0)
-curl -X POST http://localhost:8080/api/sessions \
+curl -X POST http://localhost:9090/api/sessions \
   -H "Content-Type: application/json" \
   -d '{"goal": "Implement auth", "project_path": "/path/to/project"}'
 ```

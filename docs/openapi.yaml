@@ -7,7 +7,7 @@ info:
     LLM boundary and produces one-file, one-symbol previews; it does not expose a
     browser IDE or an autonomous multi-agent workflow. Generated code is preview-only.
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:9090
     description: Local daemon
 tags:
   - name: Daemon

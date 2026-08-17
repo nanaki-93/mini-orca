@@ -64,7 +64,7 @@ Start the daemon:
 ./mini-orca-daemon
 ```
 
-The daemon exposes a local API at `http://localhost:8080`; start the desktop client to use Mini-Orca.
+The daemon exposes a local API at `http://localhost:9090`; start the desktop client to use Mini-Orca.
 
 Or start the native desktop client in another terminal:
 
@@ -86,7 +86,7 @@ make docker-run
 # Or use docker-compose
 docker compose up -d --build
 
-# The daemon exposes its local API on port 8080
+# The daemon exposes its local API on port 9090
 ```
 
 See [DOCKER.md](DOCKER.md) for detailed Docker documentation.

@@ -131,7 +131,7 @@ func startHTTPServer(
 	}
 
 	server := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":9090",
 		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 6 * time.Minute,
