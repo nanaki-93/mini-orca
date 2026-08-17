@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
@@ -11,9 +13,8 @@ import (
 )
 
 type ProjectHandler struct {
-	manager  *project.Manager
-	analyzer *project.Analyzer
-	service  *app.Service
+	manager *project.Manager
+	service *app.Service
 }
 
 type projectImportRequest struct {
@@ -21,8 +22,8 @@ type projectImportRequest struct {
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }
 
-func NewProjectHandler(manager *project.Manager, analyzer *project.Analyzer, service *app.Service) *ProjectHandler {
-	return &ProjectHandler{manager: manager, analyzer: analyzer, service: service}
+func NewProjectHandler(manager *project.Manager, service *app.Service) *ProjectHandler {
+	return &ProjectHandler{manager: manager, service: service}
 }
 
 func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
@@ -37,8 +38,11 @@ func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
 		api.WriteAppError(w, apperrors.BadRequest("remote provider confirmation required", err.Error(), err))
 		return
 	}
-	analysis, err := h.analyzer.Analyze(r.Context(), request.ProjectPath)
+	analysis, err := h.service.AnalyzeProject(r.Context(), request.ProjectPath)
 	if err != nil {
+		if writeContextError(w, "project import", err) {
+			return
+		}
 		api.WriteAppError(w, apperrors.BadRequest("project import failed", err.Error(), err))
 		return
 	}
@@ -47,6 +51,18 @@ func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, analysis)
+}
+
+func writeContextError(w http.ResponseWriter, action string, err error) bool {
+	switch {
+	case errors.Is(err, context.Canceled):
+		api.WriteError(w, http.StatusRequestTimeout, action+" canceled")
+	case errors.Is(err, context.DeadlineExceeded):
+		api.WriteError(w, http.StatusGatewayTimeout, action+" timed out")
+	default:
+		return false
+	}
+	return true
 }
 
 func (h *ProjectHandler) Current(w http.ResponseWriter, _ *http.Request) {

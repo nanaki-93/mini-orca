@@ -14,6 +14,7 @@ type Config struct {
 	LLM         LLMConfig     `json:"llm" yaml:"llm"`
 	Agents      AgentsConfig  `json:"agents" yaml:"agents"`
 	Retry       RetryConfig   `json:"retry" yaml:"retry"`
+	Timeouts    TimeoutConfig `json:"timeouts" yaml:"timeouts"`
 	Logging     LoggingConfig `json:"logging" yaml:"logging"`
 	ProjectPath string        `json:"project_path" yaml:"project_path"`
 }
@@ -56,6 +57,15 @@ type RetryConfig struct {
 	BackoffMax  int `json:"backoff_max" yaml:"backoff_max"`
 }
 
+// TimeoutConfig sets operation deadlines independently of HTTP server timeouts.
+// Zero values use conservative local-daemon defaults.
+type TimeoutConfig struct {
+	ImportSeconds       int `json:"import_seconds" yaml:"import_seconds"`
+	AnalysisSeconds     int `json:"analysis_seconds" yaml:"analysis_seconds"`
+	GenerationSeconds   int `json:"generation_seconds" yaml:"generation_seconds"`
+	FocusedCheckSeconds int `json:"focused_check_seconds" yaml:"focused_check_seconds"`
+}
+
 // applyDefaults ensures all nested maps and slices are initialized.
 func (c *Config) applyDefaults() {
 	if c.LLM.BaseURL == "" {
@@ -87,6 +97,21 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Retry.BackoffMax == 0 {
 		c.Retry.BackoffMax = 30000
+	}
+	if c.Timeouts.ImportSeconds == 0 {
+		c.Timeouts.ImportSeconds = 300
+	}
+	if c.Timeouts.AnalysisSeconds == 0 {
+		c.Timeouts.AnalysisSeconds = 300
+	}
+	if c.Timeouts.GenerationSeconds == 0 {
+		c.Timeouts.GenerationSeconds = c.Agents.Coder.TimeoutSeconds
+		if c.Timeouts.GenerationSeconds == 0 {
+			c.Timeouts.GenerationSeconds = 300
+		}
+	}
+	if c.Timeouts.FocusedCheckSeconds == 0 {
+		c.Timeouts.FocusedCheckSeconds = 60
 	}
 	if c.Logging.Level == "" {
 		c.Logging.Level = "info"

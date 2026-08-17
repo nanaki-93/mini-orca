@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -95,6 +97,7 @@ func TestGenerateCancellationStopsLLMRequest(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
 		close(started)
 		<-release
 	}))
@@ -121,6 +124,38 @@ func TestGenerateCancellationStopsLLMRequest(t *testing.T) {
 	cancel()
 	if err := <-done; err == nil {
 		t.Fatal("expected canceled generation error")
+	} else if !errors.Is(err, context.Canceled) {
+		t.Fatalf("generation error = %v, want context cancellation", err)
 	}
 	close(release)
+}
+
+func TestGenerateReturnsDeadlineExceeded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "sample.go"), []byte("package sample\nfunc Run() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(&config.Config{
+		LLM:      config.LLMConfig{BaseURL: server.URL},
+		Timeouts: config.TimeoutConfig{GenerationSeconds: 1},
+		Retry:    config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1},
+	}, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.Generate(context.Background(), "improve Run", "sample.go", "Run", false)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("generation error = %v, want deadline exceeded", err)
+	}
 }

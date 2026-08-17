@@ -11,11 +11,11 @@ Source roadmap: [`../docs/NEXT_FUNCTIONS_FIXES_UI.md`](../docs/NEXT_FUNCTIONS_FI
 | 03 | [API contract and documentation](completed/03_api_contract_and_documentation.md) | 01, 02 | Complete |
 | 04 | [Context policy](completed/04_context_policy.md) | 01 | Complete |
 | 05 | [Context inspector data](completed/05_context_inspector_data.md) | 04 | Complete |
-| 06 | [Cancellation and timeouts](06_cancellation_and_timeouts.md) | 02 | Pending |
-| 07 | [Project revision and state](07_project_revision_and_state.md) | 02 | Pending |
-| 08 | [Deterministic index persistence](08_deterministic_index_persistence.md) | 04, 07 | Pending |
-| 09 | [Go symbols](09_go_symbol_extraction.md) | 08 | Pending |
-| 10 | [Generic symbols](10_generic_symbol_extraction.md) | 08 | Pending |
+| 06 | [Cancellation and timeouts](completed/06_cancellation_and_timeouts.md) | 02 | Complete |
+| 07 | [Project revision and state](completed/07_project_revision_and_state.md) | 02 | Complete |
+| 08 | [Deterministic index persistence](completed/08_deterministic_index_persistence.md) | 04, 07 | Complete |
+| 09 | [Go symbols](completed/09_go_symbol_extraction.md) | 08 | Complete |
+| 10 | [Generic symbols](completed/10_generic_symbol_extraction.md) | 08 | Complete |
 | 11 | [Index and symbol APIs](11_index_and_symbol_apis.md) | 08, 09, 10 | Pending |
 | 12 | [File-analysis cache](12_file_analysis_cache.md) | 04, 07, 08 | Pending |
 | 13 | [Semantic file analysis](13_semantic_file_analysis.md) | 02, 05, 09, 10, 12 | Pending |

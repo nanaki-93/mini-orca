@@ -5,6 +5,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ProjectAnalysis(
+    @SerialName("project_id") val projectId: String,
+    @SerialName("project_revision") val projectRevision: String,
     val name: String,
     val path: String,
     val type: String,
@@ -23,6 +25,7 @@ data class ProjectAnalysis(
 @Serializable
 data class ProjectFileInfo(
     val path: String,
+    @SerialName("content_hash") val contentHash: String,
     val name: String,
     val extension: String = "",
     val language: String,

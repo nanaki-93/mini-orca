@@ -28,11 +28,21 @@ class ApiClient(
         return json.decodeFromString(send("/api/projects/current/files/info?path=$encoded"))
     }
 
-    fun generate(message: String, filePath: String, targetSymbol: String): GenerationResult {
+    fun generate(
+        message: String,
+        filePath: String,
+        targetSymbol: String,
+        projectId: String,
+        projectRevision: String,
+        baseFileHash: String,
+    ): GenerationResult {
         val body = buildJsonObject {
             put("message", message)
             put("file_path", filePath)
             put("target_symbol", targetSymbol)
+            put("project_id", projectId)
+            put("project_revision", projectRevision)
+            put("base_file_hash", baseFileHash)
         }.toString()
         return json.decodeFromString(send("/api/chat/message", "POST", body))
     }

@@ -1,5 +1,9 @@
 # 08 — Build and persist the deterministic project index
 
+## Status
+
+Complete
+
 ## Goal
 
 Index every eligible project file without an LLM call.

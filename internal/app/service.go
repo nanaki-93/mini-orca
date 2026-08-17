@@ -28,13 +28,16 @@ type EffectiveModel struct {
 
 // Service owns configured model access and the active project's generation path.
 type Service struct {
-	manager        *project.Manager
-	analysisClient *llm.Client
-	coder          *agent.CoderAgent
-	profile        EffectiveModel
-	retryBase      time.Duration
-	retryMax       time.Duration
-	remoteProvider bool
+	manager             *project.Manager
+	analysisClient      *llm.Client
+	coder               *agent.CoderAgent
+	profile             EffectiveModel
+	importTimeout       time.Duration
+	analysisTimeout     time.Duration
+	focusedCheckTimeout time.Duration
+	retryBase           time.Duration
+	retryMax            time.Duration
+	remoteProvider      bool
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
@@ -54,10 +57,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	coder := agent.NewCoderAgent(coderClient)
 	coder.SetSkills(append([]string(nil), cfg.Agents.Coder.Skills...))
 
-	timeout := 5 * time.Minute
-	if cfg.Agents.Coder.TimeoutSeconds > 0 {
-		timeout = time.Duration(cfg.Agents.Coder.TimeoutSeconds) * time.Second
-	}
+	timeout := configuredDuration(cfg.Timeouts.GenerationSeconds, cfg.Agents.Coder.TimeoutSeconds, 5*time.Minute)
 	maxRetries := cfg.Retry.MaxRetries
 	if maxRetries == 0 {
 		maxRetries = 3
@@ -79,13 +79,53 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 			Profile: "coder", Model: model, Temperature: cfg.LLM.Temperature, MaxTokens: cfg.LLM.MaxTokens,
 			Skills: append([]string(nil), cfg.Agents.Coder.Skills...), Timeout: timeout.String(), MaxRetries: maxRetries,
 		},
-		retryBase:      time.Duration(backoffBase) * time.Millisecond,
-		retryMax:       time.Duration(backoffMax) * time.Millisecond,
-		remoteProvider: !isLoopbackURL(cfg.LLM.BaseURL),
+		importTimeout:       configuredDuration(cfg.Timeouts.ImportSeconds, 0, 5*time.Minute),
+		analysisTimeout:     configuredDuration(cfg.Timeouts.AnalysisSeconds, 0, 5*time.Minute),
+		focusedCheckTimeout: configuredDuration(cfg.Timeouts.FocusedCheckSeconds, 0, time.Minute),
+		retryBase:           time.Duration(backoffBase) * time.Millisecond,
+		retryMax:            time.Duration(backoffMax) * time.Millisecond,
+		remoteProvider:      !isLoopbackURL(cfg.LLM.BaseURL),
 	}, nil
 }
 
+func configuredDuration(primarySeconds, fallbackSeconds int, defaultValue time.Duration) time.Duration {
+	seconds := primarySeconds
+	if seconds == 0 {
+		seconds = fallbackSeconds
+	}
+	if seconds <= 0 {
+		return defaultValue
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 func (s *Service) AnalysisClient() *llm.Client { return s.analysisClient }
+
+// ValidateMutableRequest rejects candidates based on a different project or file state.
+func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash string) error {
+	return s.manager.ValidateMutableRequest(id, revision, targetFile, baseFileHash)
+}
+
+// RecordActivity persists source-free activity for the accepted project revision.
+func (s *Service) RecordActivity(id, revision string, activity project.Activity) error {
+	return s.manager.RecordActivityFor(id, revision, activity)
+}
+
+// Activity returns only the active project's durable activity history.
+func (s *Service) Activity() ([]project.Activity, error) {
+	return s.manager.Activity()
+}
+
+// AnalyzeProject runs import analysis under its own deadline.
+func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
+	timed, cancel := context.WithTimeout(ctx, s.importTimeout)
+	defer cancel()
+	analysis, err := project.NewAnalyzer(s.analysisClient).Analyze(timed, root)
+	if timed.Err() != nil {
+		return nil, timed.Err()
+	}
+	return analysis, err
+}
 
 func (s *Service) EffectiveModel() EffectiveModel {
 	profile := s.profile
@@ -131,7 +171,11 @@ func (s *Service) Generate(ctx context.Context, userPrompt, targetFile, targetSy
 
 	timed, cancel := context.WithTimeout(ctx, duration(s.profile.Timeout))
 	defer cancel()
-	return s.retry(timed, input)
+	result, err := s.retry(timed, input)
+	if timed.Err() != nil {
+		return nil, timed.Err()
+	}
+	return result, err
 }
 
 func isLoopbackURL(rawURL string) bool {
@@ -169,6 +213,9 @@ func (s *Service) retry(ctx context.Context, input string) (*agent.Result, error
 			return nil, ctx.Err()
 		case <-timer.C:
 		}
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 	return nil, lastErr
 }

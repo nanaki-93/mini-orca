@@ -60,6 +60,16 @@ Control how the system handles failed LLM requests or tool executions.
 - `backoff_base` (int): The base delay for exponential backoff in milliseconds. Default: `1000`.
 - `backoff_max` (int): The maximum delay between retries in milliseconds. Default: `30000`.
 
+## Operation Timeouts (`timeouts`)
+
+Each desktop request carries its cancellation context through daemon work. These
+values cap the daemon operation even when the client remains connected.
+
+- `import_seconds` (int): Project import and architectural analysis deadline. Default: `300`.
+- `analysis_seconds` (int): One-file semantic analysis deadline. Default: `300`.
+- `generation_seconds` (int): Focused candidate generation deadline. Default: `300`.
+- `focused_check_seconds` (int): Isolated formatter/parser/check deadline. Default: `60`.
+
 ## Logging Configuration (`logging`)
 
 Mini-Orca uses structured logging via Go's `slog` package.
@@ -96,6 +106,12 @@ retry:
   max_retries: 3
   backoff_base: 1000
   backoff_max: 30000
+
+timeouts:
+  import_seconds: 300
+  analysis_seconds: 300
+  generation_seconds: 300
+  focused_check_seconds: 60
 
 logging:
   level: "info"

@@ -1,5 +1,9 @@
 # 09 — Extract exact Go symbols
 
+## Status
+
+Complete
+
 ## Goal
 
 Provide reliable atomic targets and facts for Go files.
