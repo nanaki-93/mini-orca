@@ -368,7 +368,7 @@ private fun StatusBar(status: String, error: String?) {
         Spacer(Modifier.width(7.dp))
         Text(error ?: status, color = if (error == null) SecondaryText else Color(0xFFF85149), fontSize = 11.sp, maxLines = 1)
         Spacer(Modifier.weight(1f))
-        Text("Mini-Orca v4.1", color = SecondaryText, fontSize = 10.sp)
+        Text("Mini-Orca v4.1.0", color = SecondaryText, fontSize = 10.sp)
     }
 }
 
