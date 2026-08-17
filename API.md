@@ -14,7 +14,7 @@ This document describes the API endpoints provided by the mini-orca daemon.
 - **URL**: `/status`
 - **Method**: `GET`
 - **Description**: Returns the running status and registered agents.
-- **Response**: `{"status":"running","version":"<version>","agents":["coder","tester","reviewer"]}`
+- **Response**: `{"status":"running","version":"<version>","workflow":"single_coder_preview"}`
 
 ### System Info
 - **URL**: `/api/system/info`
@@ -27,7 +27,7 @@ This document describes the API endpoints provided by the mini-orca daemon.
 ### Send Message
 - **URL**: `/api/chat/message`
 - **Method**: `POST`
-- **Description**: Generates one named function or class in one selected file. The daemon supplies the active project's analysis, complete file inventory, build metadata, and bounded source context.
+- **Description**: Produces a focused preview for the `fix` action: one named function, method, type, interface, or class in one selected file. The default scope is `strict_symbol`; later candidate workflows may explicitly request `symbol_plus_imports` when required imports must change. The daemon supplies the active project's analysis, complete file inventory, build metadata, and bounded source context.
 - **Body**: 
 ```json
 {
@@ -36,7 +36,7 @@ This document describes the API endpoints provided by the mini-orca daemon.
   "target_symbol": "Type.Method"
 }
 ```
-- **Response**: JSON agent result containing a one-file generated preview. The endpoint never writes generated code automatically.
+- **Response**: JSON agent result containing a one-file generated preview. The endpoint never writes generated code automatically. Read-only `analyze_file` and `explain_symbol` actions do not produce candidates; `generate_test` must target a symbol in an already selected test file.
 
 ## Project API
 
@@ -65,42 +65,10 @@ This document describes the API endpoints provided by the mini-orca daemon.
 - **Description**: Returns the message history for the current session.
 - **Response**: JSON array of message objects.
 
-## UI Rendering (HTMX)
+### Effective model profile
 
-These endpoints return HTML fragments for the HTMX-based frontend.
-
-### Render Phase
-- **URL**: `/api/render/phase/{name}`
+- **URL**: `/api/models/current`
 - **Method**: `GET`
-- **Description**: Renders the UI for a specific phase.
+- **Description**: Returns the effective profile used for generation, including the selected model, skills, temperature, token limit, timeout, and retry count. It never returns credentials or prompt bodies.
 
-### Render File Tree
-- **URL**: `/api/render/file-tree`
-- **Method**: `GET`
-- **Description**: Renders the file tree component.
-
-### Render Dashboard
-- **URL**: `/api/render/dashboard`
-- **Method**: `GET`
-- **Description**: Renders the dashboard component.
-
-### Expand Folder
-- **URL**: `/api/tree/expand`
-- **Method**: `GET`
-- **Description**: Expands a folder in the file tree.
-
-### View File
-- **URL**: `/api/files/view`
-- **Method**: `GET`
-- **Description**: Displays the content of a file.
-
-### Main Page
-- **URL**: `/`
-- **Method**: `GET`
-- **Description**: Renders the main IDE page.
-
-## Static Files
-
-- **URL**: `/static/*`
-- **Method**: `GET`
-- **Description**: Serves static assets (CSS, JS, images).
+The daemon is a local desktop-client API. It does not document a browser IDE or automatic coder/tester/reviewer pipeline.

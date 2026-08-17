@@ -1,5 +1,9 @@
 # 03 — Align API contract, routes, and documentation
 
+## Status
+
+Complete
+
 ## Goal
 
 Make registered HTTP routes, OpenAPI, README, Docker guidance, and desktop-client expectations truthful and synchronized.

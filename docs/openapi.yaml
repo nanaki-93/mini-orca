@@ -1,1219 +1,273 @@
-openapi: "3.0.3"
+openapi: 3.0.3
 info:
-  title: Mini-Orca API
+  title: Mini-Orca local daemon API
+  version: 4.1.0
   description: |
-    Mini-Orca is a local agents orchestrator for mini tasks. It uses multiple specialized LLM agents
-    (Planner, Coder, Tester, Reviewer) to plan, code, test, and review project tasks autonomously
-    through a phase-based workflow.
-
-    ## Versioning Strategy
-
-    Mini-Orca follows [Semantic Versioning](https://semver.org/) (SemVer) for its API:
-
-    - **MAJOR version (v2)**: Incremented for incompatible API changes.
-      - v2.0.0 introduced the `/api/render/*` HTMX endpoints, project management APIs, and updated session lifecycle.
-      - v1.x used a different session model and lacked project management.
-    - **MINOR version (x.1)**: Incremented for backward-compatible additions (new endpoints, fields).
-    - **PATCH version (x.y.1)**: Incremented for backward-compatible bug fixes.
-
-    ## Version Detection
-
-    Access the current API version via:
-    - `GET /health` → `{"status":"ok","version":"2.0.0"}`
-    - `GET /status` → `{"status":"running","version":"2.0.0",...}`
-
-    ## Authentication
-
-    Version 2.0 does not require authentication. All endpoints are publicly accessible.
-
-    ## Rate Limiting
-
-    No rate limits are currently configured.
-
-    ## Error Handling
-
-    All errors follow a consistent JSON format:
-
-    ```json
-    {
-      "type": "bad_request",
-      "message": "Technical error description for developers",
-      "user_message": "User-friendly error message",
-      "code": 400
-    }
-    ```
-
-    See [Error Codes](#error-codes) for the complete list.
-  version: "2.0.0"
-  contact:
-    name: Mini-Orca Team
-    url: https://github.com/nanaki-93/mini-orca
-
+    Local REST API used by the Mini-Orca Compose Desktop client. The daemon is the
+    LLM boundary and produces one-file, one-symbol previews; it does not expose a
+    browser IDE or an autonomous multi-agent workflow. Generated code is preview-only.
 servers:
   - url: http://localhost:8080
-    description: Local development server
-
+    description: Local daemon
 tags:
-  - name: Health
-    description: Health check and daemon status endpoints
-  - name: Sessions
-    description: Session lifecycle management (create, start, pause, resume, stop)
-  - name: Gates
-    description: Human-in-the-loop approval gates
+  - name: Daemon
   - name: Projects
-    description: Project and file management
-  - name: HTMX
-    description: HTMX-based UI rendering endpoints
-
+  - name: Generation
 paths:
   /health:
     get:
-      tags:
-        - Health
+      tags: [Daemon]
       summary: Health check
-      description: Returns the health status and version of the daemon.
-      operationId: getHealth
       responses:
-        "200":
+        '200':
           description: Daemon is healthy
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
-              example:
-                status: ok
-                version: "2.0.0"
-
+              schema: {$ref: '#/components/schemas/Health'}
   /status:
     get:
-      tags:
-        - Health
-      summary: Daemon status
-      description: Returns the running status, version, and registered agents.
-      operationId: getStatus
+      tags: [Daemon]
+      summary: Daemon workflow status
       responses:
-        "200":
-          description: Daemon status retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StatusResponse"
-              example:
-                status: running
-                version: "2.0.0"
-                agents:
-                  - planner
-                  - coder
-                  - tester
-                  - reviewer
-
-  /api/sessions:
-    post:
-      tags:
-        - Sessions
-      summary: Create session
-      description: Creates a new agent session for autonomous task execution.
-      operationId: createSession
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SessionCreateRequest"
-            example:
-              goal: "Implement user authentication module"
-              project_path: "/path/to/project"
-              project_type: "go"
-      responses:
-        "201":
-          description: Session created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionResponse"
-              example:
-                id: "session-1719000000000000000"
-                goal: "Implement user authentication module"
-                project_path: "/path/to/project"
-                project_type: "go"
-                current_phase: "coding"
-                status: "pending"
-                created_at: "2024-07-01T12:00:00Z"
-                updated_at: "2024-07-01T12:00:00Z"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "500":
-          $ref: "#/components/responses/InternalError"
-    get:
-      tags:
-        - Sessions
-      summary: List sessions
-      description: Returns a list of all sessions with their summaries.
-      operationId: listSessions
-      responses:
-        "200":
-          description: Session list retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionListResponse"
-              example:
-                sessions:
-                  - id: "session-1719000000000000000"
-                    goal: "Implement user authentication module"
-                    current_phase: "coding"
-                    status: "running"
-                    created_at: "2024-07-01T12:00:00Z"
-                total: 1
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/sessions/{id}:
-    get:
-      tags:
-        - Sessions
-      summary: Get session status
-      description: Returns the current status of a specific session.
-      operationId: getSessionStatus
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Session ID
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Session details retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/sessions/{id}/start:
-    post:
-      tags:
-        - Sessions
-      summary: Start session
-      description: Transitions a session from pending to running and begins the coding phase.
-      operationId: startSession
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Session ID
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Session started
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionActionResponse"
-              example:
-                status: started
-                session_id: "session-1719000000000000000"
-                phase: "coding"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/sessions/{id}/pause:
-    post:
-      tags:
-        - Sessions
-      summary: Pause session
-      description: Pauses a running session.
-      operationId: pauseSession
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Session ID
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Session paused
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionActionResponse"
-              example:
-                status: paused
-                session_id: "session-1719000000000000000"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/sessions/{id}/resume:
-    post:
-      tags:
-        - Sessions
-      summary: Resume session
-      description: Resumes a paused session.
-      operationId: resumeSession
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Session ID
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Session resumed
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionActionResponse"
-              example:
-                status: resumed
-                session_id: "session-1719000000000000000"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/sessions/{id}/stop:
-    post:
-      tags:
-        - Sessions
-      summary: Stop session
-      description: Stops a running session, transitioning it to completed state.
-      operationId: stopSession
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Session ID
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Session stopped
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionActionResponse"
-              example:
-                status: stopped
-                session_id: "session-1719000000000000000"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/sessions/{id}/gate:
-    get:
-      tags:
-        - Gates
-      summary: Get gate status
-      description: Returns the status of the human approval gate for a session.
-      operationId: getGateStatus
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Session ID
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Gate status retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GateResponse"
-              example:
-                session_id: "session-1719000000000000000"
-                phase: "coding"
-                output: "Generated authentication module code..."
-                approved: false
-                feedback: ""
-                timestamp: "2024-07-01T12:05:00Z"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalError"
-    post:
-      tags:
-        - Gates
-      summary: Respond to gate
-      description: |
-        Provides feedback or approval to a pending gate request.
-        On approval, the session transitions to the next phase.
-      operationId: respondToGate
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Session ID
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/GateResponseRequest"
-            example:
-              action: "approve"
-              feedback: "Looks good, please add error handling"
-      responses:
-        "200":
-          description: Gate response accepted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GateActionResponse"
-              example:
-                status: accepted
-                action: approve
-                session_id: "session-1719000000000000000"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/projects:
-    get:
-      tags:
-        - Projects
-      summary: List projects
-      description: Returns a list of all managed projects.
-      operationId: listProjects
-      responses:
-        "200":
-          description: Project list retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectListResponse"
-              example:
-                projects:
-                  - id: "proj-1719000000000000000"
-                    name: "my-project"
-                    type: "go"
-                    file_count: 42
-                    created_at: "2024-07-01T12:00:00Z"
-                total: 1
-        "500":
-          $ref: "#/components/responses/InternalError"
-    post:
-      tags:
-        - Projects
-      summary: Create project
-      description: Creates or opens a project from a filesystem path.
-      operationId: createProject
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProjectCreateRequest"
-            example:
-              name: "my-project"
-              path: "/path/to/project"
-              type: "go"
-      responses:
-        "201":
-          description: Project created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectResponse"
-              example:
-                id: "proj-1719000000000000000"
-                name: "my-project"
-                path: "/path/to/project"
-                type: "go"
-                file_count: 42
-                created_at: "2024-07-01T12:00:00Z"
-                updated_at: "2024-07-01T12:00:00Z"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/projects/{id}/files:
-    get:
-      tags:
-        - Projects
-      summary: List project files
-      description: Lists files and directories within a project.
-      operationId: listProjectFiles
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Project ID
-          schema:
-            type: string
-        - name: path
-          in: query
-          required: false
-          description: Subdirectory path within the project
-          schema:
-            type: string
-      responses:
-        "200":
-          description: File list retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/FileListResponse"
-              example:
-                files:
-                  - name: "cmd"
-                    path: "cmd"
-                    is_dir: true
-                    size: 0
-                    modified_at: "2024-07-01T12:00:00Z"
-                  - name: "main.go"
-                    path: "main.go"
-                    is_dir: false
-                    size: 1024
-                    modified_at: "2024-07-01T12:00:00Z"
-                total: 2
-                project_path: "proj-1719000000000000000"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/projects/files/{path}:
-    get:
-      tags:
-        - Projects
-      summary: Get file content
-      description: Returns the content of a specific file in a project.
-      operationId: getFileContent
-      parameters:
-        - name: path
-          in: path
-          required: true
-          description: File path within the project
-          schema:
-            type: string
-      responses:
-        "200":
-          description: File content retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/FileContentResponse"
-              example:
-                path: "cmd/daemon/main.go"
-                content: "package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello\")\n}"
-                size: 65
-                content_type: "text/x-go"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /api/render/phase/{name}:
-    get:
-      tags:
-        - HTMX
-      summary: Render phase
-      description: Renders the UI for a specific phase as an HTML fragment.
-      operationId: renderPhase
-      parameters:
-        - name: name
-          in: path
-          required: true
-          description: Phase name (coding, testing, review, human_review)
-          schema:
-            type: string
-            enum:
-              - coding
-              - coding
-              - testing
-              - review
-      responses:
-        "200":
-          description: HTML fragment rendered
-          content:
-            text/html:
-              schema:
-                type: string
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/render/file-tree:
-    get:
-      tags:
-        - HTMX
-      summary: Render file tree
-      description: Renders the file tree component as an HTML fragment.
-      operationId: renderFileTree
-      responses:
-        "200":
-          description: HTML fragment rendered
-          content:
-            text/html:
-              schema:
-                type: string
-
-  /api/render/dashboard:
-    get:
-      tags:
-        - HTMX
-      summary: Render dashboard
-      description: Renders the dashboard component as an HTML fragment.
-      operationId: renderDashboard
-      responses:
-        "200":
-          description: HTML fragment rendered
-          content:
-            text/html:
-              schema:
-                type: string
-
-  /:
-    get:
-      tags:
-        - HTMX
-      summary: Main page
-      description: Renders the main IDE page as a full HTML document.
-      operationId: renderMainPage
-      responses:
-        "200":
-          description: Main page rendered
-          content:
-            text/html:
-              schema:
-                type: string
-
-components:
-  schemas:
-    # ─── Health & Status ───────────────────────────────────────────────
-
-    HealthResponse:
-      type: object
-      required:
-        - status
-        - version
-      properties:
-        status:
-          type: string
-          description: Health status
-          enum:
-            - ok
-          example: ok
-        version:
-          type: string
-          description: Application version
-          example: "2.0.0"
-
-    StatusResponse:
-      type: object
-      required:
-        - status
-        - version
-        - agents
-      properties:
-        status:
-          type: string
+        '200':
           description: Daemon status
-          enum:
-            - running
-          example: running
-        version:
-          type: string
-          description: Application version
-          example: "2.0.0"
-        agents:
-          type: array
-          items:
-            type: string
-          description: List of registered agent names
-          example:
-            - planner
-            - coder
-            - tester
-            - reviewer
-
-    # ─── Sessions ──────────────────────────────────────────────────────
-
-    SessionCreateRequest:
-      type: object
-      required:
-        - goal
-        - project_path
-      properties:
-        goal:
-          type: string
-          description: High-level goal of the session
-          example: "Implement user authentication module"
-        project_path:
-          type: string
-          description: Filesystem path to the project directory
-          example: "/path/to/project"
-        project_type:
-          type: string
-          description: Project type override (auto-detected if omitted)
-          enum:
-            - go
-            - python
-            - typescript
-            - rust
-            - java
-            - kotlin
-            - unknown
-          example: "go"
-
-    SessionResponse:
-      type: object
-      required:
-        - id
-        - goal
-        - project_path
-        - project_type
-        - current_phase
-        - status
-        - created_at
-        - updated_at
-      properties:
-        id:
-          type: string
-          description: Unique session identifier
-          example: "session-1719000000000000000"
-        goal:
-          type: string
-          description: The session goal
-          example: "Implement user authentication module"
-        project_path:
-          type: string
-          description: Path to the project
-          example: "/path/to/project"
-        project_type:
-          type: string
-          description: Detected or specified project type
-          example: "go"
-        current_phase:
-          type: string
-          description: Current phase of the session
-          enum:
-            - coding
-            - coding
-            - testing
-            - review
-          example: "coding"
-        status:
-          type: string
-          description: Current session status
-          enum:
-            - pending
-            - running
-            - paused
-            - completed
-            - cancelled
-          example: "pending"
-        created_at:
-          type: string
-          format: date-time
-          description: Creation timestamp (ISO 8601)
-          example: "2024-07-01T12:00:00Z"
-        updated_at:
-          type: string
-          format: date-time
-          description: Last update timestamp (ISO 8601)
-          example: "2024-07-01T12:00:00Z"
-        error:
-          type: string
-          description: Optional error message if session failed
-          nullable: true
-          example: ""
-
-    SessionListResponse:
-      type: object
-      required:
-        - sessions
-        - total
-      properties:
-        sessions:
-          type: array
-          items:
-            $ref: "#/components/schemas/SessionSummary"
-          description: List of session summaries
-        total:
-          type: integer
-          description: Total number of sessions
-          example: 1
-
-    SessionSummary:
-      type: object
-      required:
-        - id
-        - goal
-        - current_phase
-        - status
-        - created_at
-      properties:
-        id:
-          type: string
-          description: Unique session identifier
-          example: "session-1719000000000000000"
-        goal:
-          type: string
-          description: The session goal
-          example: "Implement user authentication module"
-        current_phase:
-          type: string
-          description: Current phase
-          enum:
-            - coding
-            - coding
-            - testing
-            - review
-          example: "coding"
-        status:
-          type: string
-          description: Current status
-          enum:
-            - pending
-            - running
-            - paused
-            - completed
-            - cancelled
-          example: "running"
-        created_at:
-          type: string
-          format: date-time
-          description: Creation timestamp
-          example: "2024-07-01T12:00:00Z"
-
-    SessionActionResponse:
-      type: object
-      required:
-        - status
-        - session_id
-      properties:
-        status:
-          type: string
-          description: Action result
-          example: started
-        session_id:
-          type: string
-          description: Session identifier
-          example: "session-1719000000000000000"
-        phase:
-          type: string
-          description: Phase name (only on start)
-          enum:
-            - coding
-            - coding
-            - testing
-            - review
-          nullable: true
-          example: "coding"
-
-    # ─── Gates ─────────────────────────────────────────────────────────
-
-    GateResponseRequest:
-      type: object
-      required:
-        - action
-      properties:
-        action:
-          type: string
-          description: Response action
-          enum:
-            - approve
-            - reject
-            - edit
-          example: "approve"
-        feedback:
-          type: string
-          description: Optional feedback from the human reviewer
-          nullable: true
-          example: "Looks good, please add error handling"
-
-    GateResponse:
-      type: object
-      required:
-        - session_id
-        - phase
-        - output
-        - approved
-        - timestamp
-      properties:
-        session_id:
-          type: string
-          description: Session identifier
-          example: "session-1719000000000000000"
-        phase:
-          type: string
-          description: Phase requiring approval
-          example: "coding"
-        output:
-          type: string
-          description: Content for human review
-          example: "Generated authentication module code..."
-        approved:
-          type: boolean
-          description: Whether the gate has been approved
-          example: false
-        feedback:
-          type: string
-          description: Optional human feedback
-          nullable: true
-          example: ""
-        timestamp:
-          type: string
-          format: date-time
-          description: Gate timestamp
-          example: "2024-07-01T12:05:00Z"
-
-    GateActionResponse:
-      type: object
-      required:
-        - status
-        - action
-        - session_id
-      properties:
-        status:
-          type: string
-          description: Acceptance status
-          example: accepted
-        action:
-          type: string
-          description: Action taken
-          example: approve
-        session_id:
-          type: string
-          description: Session identifier
-          example: "session-1719000000000000000"
-
-    # ─── Projects ──────────────────────────────────────────────────────
-
-    ProjectCreateRequest:
-      type: object
-      required:
-        - path
-      properties:
-        name:
-          type: string
-          description: Project name (derived from directory if omitted)
-          nullable: true
-          example: "my-project"
-        path:
-          type: string
-          description: Filesystem path to the project directory
-          example: "/path/to/project"
-        type:
-          type: string
-          description: Project type override (auto-detected if omitted)
-          enum:
-            - go
-            - python
-            - typescript
-            - rust
-            - java
-            - kotlin
-            - unknown
-          nullable: true
-          example: "go"
-
-    ProjectResponse:
-      type: object
-      required:
-        - id
-        - name
-        - path
-        - type
-        - file_count
-        - created_at
-        - updated_at
-      properties:
-        id:
-          type: string
-          description: Unique project identifier
-          example: "proj-1719000000000000000"
-        name:
-          type: string
-          description: Project name
-          example: "my-project"
-        path:
-          type: string
-          description: Filesystem path to the project directory
-          example: "/path/to/project"
-        type:
-          type: string
-          description: Project type
-          enum:
-            - go
-            - python
-            - typescript
-            - rust
-            - java
-            - kotlin
-            - unknown
-          example: "go"
-        file_count:
-          type: integer
-          description: Number of files in the project
-          example: 42
-        created_at:
-          type: string
-          format: date-time
-          description: Creation timestamp
-          example: "2024-07-01T12:00:00Z"
-        updated_at:
-          type: string
-          format: date-time
-          description: Last update timestamp
-          example: "2024-07-01T12:00:00Z"
-
-    ProjectListResponse:
-      type: object
-      required:
-        - projects
-        - total
-      properties:
-        projects:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProjectSummary"
-          description: List of project summaries
-        total:
-          type: integer
-          description: Total number of projects
-          example: 1
-
-    ProjectSummary:
-      type: object
-      required:
-        - id
-        - name
-        - type
-        - file_count
-        - created_at
-      properties:
-        id:
-          type: string
-          description: Unique project identifier
-          example: "proj-1719000000000000000"
-        name:
-          type: string
-          description: Project name
-          example: "my-project"
-        type:
-          type: string
-          description: Project type
-          enum:
-            - go
-            - python
-            - typescript
-            - rust
-            - java
-            - kotlin
-            - unknown
-          example: "go"
-        file_count:
-          type: integer
-          description: Number of files in the project
-          example: 42
-        created_at:
-          type: string
-          format: date-time
-          description: Creation timestamp
-          example: "2024-07-01T12:00:00Z"
-
-    # ─── Files ─────────────────────────────────────────────────────────
-
-    FileListResponse:
-      type: object
-      required:
-        - files
-        - total
-        - project_path
-      properties:
-        files:
-          type: array
-          items:
-            $ref: "#/components/schemas/FileEntry"
-          description: List of file/directory entries
-        total:
-          type: integer
-          description: Total number of entries
-          example: 2
-        project_path:
-          type: string
-          description: Project ID
-          example: "proj-1719000000000000000"
-
-    FileEntry:
-      type: object
-      required:
-        - name
-        - path
-        - is_dir
-        - size
-        - modified_at
-      properties:
-        name:
-          type: string
-          description: File or directory name
-          example: "main.go"
-        path:
-          type: string
-          description: Relative path from project root
-          example: "main.go"
-        is_dir:
-          type: boolean
-          description: Whether this is a directory
-          example: false
-        size:
-          type: integer
-          description: File size in bytes (0 for directories)
-          example: 1024
-        modified_at:
-          type: string
-          format: date-time
-          description: Last modification time
-          example: "2024-07-01T12:00:00Z"
-
-    FileContentResponse:
-      type: object
-      required:
-        - path
-        - content
-        - size
-        - content_type
-      properties:
-        path:
-          type: string
-          description: Relative file path
-          example: "cmd/daemon/main.go"
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Status'}
+  /api/system/info:
+    get:
+      tags: [Daemon]
+      summary: Local daemon system information
+      responses:
+        '200':
+          description: System information
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SystemInfo'}
+  /api/models/current:
+    get:
+      tags: [Daemon]
+      summary: Effective generation profile
+      responses:
+        '200':
+          description: Active coder profile
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EffectiveModel'}
+  /api/projects/import:
+    post:
+      tags: [Projects]
+      summary: Import and analyze a project
+      requestBody:
+        required: true
         content:
-          type: string
-          description: File content
-          example: "package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello\")\n}"
-        size:
-          type: integer
-          description: File size in bytes
-          example: 65
-        content_type:
-          type: string
-          description: MIME type of the file
-          example: "text/x-go"
-
-    # ─── Errors ────────────────────────────────────────────────────────
-
+          application/json:
+            schema: {$ref: '#/components/schemas/ProjectImportRequest'}
+      responses:
+        '200':
+          description: Imported project analysis
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProjectAnalysis'}
+        '400': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current:
+    get:
+      tags: [Projects]
+      summary: Active project analysis
+      responses:
+        '200':
+          description: Active project
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProjectAnalysis'}
+        '404': {$ref: '#/components/responses/Error'}
+  /api/projects/current/files/info:
+    get:
+      tags: [Projects]
+      summary: Selected file information
+      parameters:
+        - {$ref: '#/components/parameters/ProjectPath'}
+      responses:
+        '200':
+          description: Safe project-relative file information
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FileInfo'}
+        '400': {$ref: '#/components/responses/Error'}
+  /api/projects/current/context:
+    get:
+      tags: [Projects]
+      summary: Preview bounded model context
+      parameters:
+        - {$ref: '#/components/parameters/ProjectPath'}
+      responses:
+        '200':
+          description: Paths, hashes, exclusion reasons, token estimate, and truncation state; source text is never returned.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ContextManifest'}
+        '400': {$ref: '#/components/responses/Error'}
+  /api/chat/message:
+    post:
+      tags: [Generation]
+      summary: Generate one focused preview
+      description: Generates a preview for one selected symbol in one selected file. No generated code is written.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GenerationRequest'}
+      responses:
+        '200':
+          description: Preview result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GenerationResponse'}
+        '400': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/chat/history:
+    get:
+      tags: [Generation]
+      summary: Current activity history
+      responses:
+        '200':
+          description: Current in-memory history; it becomes project-scoped persistence in a later API revision.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ChatEntry'}
+components:
+  parameters:
+    ProjectPath:
+      name: path
+      in: query
+      required: true
+      schema: {type: string}
+      description: Canonical project-relative path only.
+  responses:
+    Error:
+      description: Structured API error
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Health:
+      type: object
+      required: [status, version]
+      properties:
+        status: {type: string, example: ok}
+        version: {type: string}
+    Status:
+      type: object
+      required: [status, version, workflow]
+      properties:
+        status: {type: string, example: running}
+        version: {type: string}
+        workflow: {type: string, example: single_coder_preview}
+    SystemInfo:
+      type: object
+      properties:
+        cwd: {type: string}
+        home_dir: {type: string}
+        version: {type: string}
+    EffectiveModel:
+      type: object
+      required: [profile, model, temperature, max_tokens, skills, timeout, max_retries]
+      properties:
+        profile: {type: string, example: coder}
+        model: {type: string}
+        temperature: {type: number}
+        max_tokens: {type: integer}
+        skills: {type: array, items: {type: string}}
+        timeout: {type: string}
+        max_retries: {type: integer}
+    ProjectImportRequest:
+      type: object
+      required: [project_path]
+      properties:
+        project_path: {type: string, description: Absolute path selected by the local user.}
+        confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
+    ProjectAnalysis:
+      type: object
+      required: [name, path, type, file_count, source_file_count, total_lines, languages, files, analysis_file, summary, ai_status, analyzed_at]
+      properties:
+        name: {type: string}
+        path: {type: string}
+        type: {type: string}
+        build_file: {type: string}
+        file_count: {type: integer}
+        source_file_count: {type: integer}
+        total_lines: {type: integer}
+        languages: {type: object, additionalProperties: {type: integer}}
+        files: {type: array, items: {type: string}}
+        analysis_file: {type: string}
+        summary: {type: string}
+        ai_status: {type: string}
+        analyzed_at: {type: string, format: date-time}
+    FileInfo:
+      type: object
+      properties:
+        path: {type: string}
+        name: {type: string}
+        extension: {type: string}
+        language: {type: string}
+        size_bytes: {type: integer, format: int64}
+        line_count: {type: integer}
+        modified_at: {type: string, format: date-time}
+        binary: {type: boolean}
+        content: {type: string}
+    ContextManifest:
+      type: object
+      properties:
+        included: {type: array, items: {$ref: '#/components/schemas/ContextFile'}}
+        excluded: {type: array, items: {$ref: '#/components/schemas/ContextDecision'}}
+        estimated_tokens: {type: integer}
+        byte_limit: {type: integer}
+        token_limit: {type: integer}
+        truncated: {type: boolean}
+    ContextFile:
+      type: object
+      properties:
+        path: {type: string}
+        size_bytes: {type: integer, format: int64}
+        hash: {type: string}
+        estimated_tokens: {type: integer}
+        truncated: {type: boolean}
+    ContextDecision:
+      type: object
+      properties:
+        path: {type: string}
+        include: {type: boolean}
+        reason: {type: string}
+    GenerationRequest:
+      type: object
+      required: [message, file_path, target_symbol]
+      properties:
+        message: {type: string}
+        file_path: {type: string, description: Project-relative selected file.}
+        target_symbol: {type: string, description: Selected function, method, type, interface, or class.}
+        confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
+    GenerationResponse:
+      type: object
+      required: [output, phase]
+      properties:
+        output: {type: string, description: Preview only; never written by this endpoint.}
+        phase: {type: string, example: coding}
+        metadata: {type: object, additionalProperties: {type: string}}
+    ChatEntry:
+      type: object
+      properties:
+        role: {type: string}
+        content: {type: string}
+        phase: {type: string}
+        timestamp: {type: string, format: date-time}
     Error:
       type: object
-      required:
-        - type
-        - message
-        - user_message
-        - code
+      required: [type, message, user_message, code]
       properties:
-        type:
-          type: string
-          description: Error category
-          enum:
-            - internal
-            - not_found
-            - bad_request
-            - unauthorized
-            - forbidden
-            - conflict
-          example: bad_request
-        message:
-          type: string
-          description: Technical error description for developers
-          example: "session: goal is required"
-        user_message:
-          type: string
-          description: User-friendly error message
-          example: "A session goal must be provided."
-        code:
-          type: integer
-          description: HTTP status code
-          example: 400
-
-  responses:
-    BadRequest:
-      description: Bad request - invalid parameters or body
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-          example:
-            type: bad_request
-            message: "session: goal is required"
-            user_message: "A session goal must be provided."
-            code: 400
-
-    NotFound:
-      description: Resource not found
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-          example:
-            type: not_found
-            message: "session: \"abc\" not found"
-            user_message: "The requested resource was not found."
-            code: 404
-
-    Conflict:
-      description: Conflict - invalid state transition
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-          example:
-            type: conflict
-            message: "The session must be in pending state to start."
-            user_message: "A conflict occurred with the current state of the resource."
-            code: 409
-
-    InternalError:
-      description: Internal server error
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-          example:
-            type: internal
-            message: "Failed to update session status."
-            user_message: "An internal server error occurred. Please try again later."
-            code: 500
+        type: {type: string}
+        message: {type: string}
+        user_message: {type: string}
+        code: {type: integer}

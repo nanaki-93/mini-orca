@@ -14,7 +14,8 @@ Defines the LLM provider settings. This is a flat configuration (no nested provi
 
 ## Agents Configuration (`agents`)
 
-Configure the three core agents: `coder`, `tester`, and `reviewer`.
+Configure the active `coder` profile. Tester and reviewer settings are retained
+for optional focused checks but are not an automatic generation pipeline.
 
 ### Agent Configuration
 
@@ -22,6 +23,7 @@ Each agent supports the following fields:
 
 - `skills` (list of strings, optional): A list of skill names assigned to the agent. Skills must be defined in the `skills` section.
 - `model` (string, optional): Override the default model for this specific agent.
+- `timeout_seconds` (int, optional): Maximum duration for requests made with this profile. Default: `300`.
 
 Example:
 ```yaml
@@ -29,10 +31,7 @@ agents:
   coder:
     skills: ["go", "file-system"]
     model: "qwen3-coder-30b"
-  tester:
-    skills: ["testing", "go"]
-  reviewer:
-    skills: ["code-review", "security"]
+    timeout_seconds: 300
 ```
 
 ## Skills Configuration (`skills`)
@@ -84,10 +83,7 @@ agents:
   coder:
     skills: ["go", "file-system"]
     model: "qwen3-coder-30b"
-  tester:
-    skills: ["testing", "go"]
-  reviewer:
-    skills: ["code-review", "security"]
+    timeout_seconds: 300
 
 skills:
   knowledge:

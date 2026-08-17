@@ -318,9 +318,9 @@ private fun Generator(
     modifier: Modifier,
 ) {
     Column(modifier.background(Panel).border(BorderStroke(1.dp, Border)).padding(16.dp)) {
-        Text("Atomic generator", fontWeight = FontWeight.SemiBold)
+        Text("Focused action · Fix", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
-        Text("One symbol · one file · full project context", color = SecondaryText, fontSize = 12.sp)
+        Text("One symbol · one file · strict symbol scope", color = SecondaryText, fontSize = 12.sp)
         Spacer(Modifier.height(18.dp))
         Text("TARGET FILE", color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         Text(selected?.path ?: "Select a source file", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -328,7 +328,7 @@ private fun Generator(
         OutlinedTextField(
             value = symbol,
             onValueChange = onSymbol,
-            label = { Text("Function or class") },
+            label = { Text("Target symbol") },
             placeholder = { Text("e.g. UserService.createUser") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),

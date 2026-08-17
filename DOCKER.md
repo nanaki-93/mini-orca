@@ -1,6 +1,7 @@
 # Docker Usage Guide
 
-Mini-Orca provides Docker support for easy deployment and development. This guide covers Docker setup, usage, and best practices.
+Mini-Orca's container runs the local daemon API. Use the Compose Desktop client
+on the same machine; the container does not serve a browser IDE.
 
 ---
 
@@ -42,7 +43,7 @@ make compose-up
 
 ```bash
 # Build the image
-docker build -t mini-orca:2.0.0 .
+docker build -t mini-orca:4.1.0 .
 
 # Run the container
 docker run -d \
@@ -53,7 +54,7 @@ docker run -d \
   -v $(pwd)/projects:/app/projects:rw \
   -v $(pwd)/logs:/app/logs:rw \
   -e MINI_ORCA_CONFIG=/app/config.yaml \
-  mini-orca:2.0.0
+  mini-orca:4.1.0
 ```
 
 ### Option 3: Using Docker Compose
@@ -74,7 +75,7 @@ docker compose --profile with-llm up -d --build
 
 | Tag | Description |
 |-----|-------------|
-| `mini-orca:2.0.0` | Latest stable release |
+| `mini-orca:4.1.0` | Current desktop-API build |
 | `mini-orca:latest` | Latest build (may be unstable) |
 | `mini-orca:dev` | Development build |
 
@@ -116,65 +117,21 @@ The Docker image uses a multi-stage build:
 
 ```yaml
 # config.yaml
-models:
-  active_provider: "lm-studio"
-  providers:
-    lm-studio:
-      base_url: "http://lm-studio:1234"  # Use container name
-      api_key: ""
-
-  phases:
-    planning:
-      provider: "lm-studio"
-      model: ""
-      temperature: 0.3
-      max_tokens: 4096
-    coding:
-      provider: "lm-studio"
-      model: ""
-      temperature: 0.7
-      max_tokens: 8192
+llm:
+  base_url: "http://lm-studio:1234"  # Use container name
+  api_key: ""
+  model: ""
+  temperature: 0.7
+  max_tokens: 8192
 
 agents:
-  planner:
-    skills:
-      - task_breakdown
-      - context_analysis
-      - plan_generation
   coder:
     skills:
       - code_generation
       - refactoring
       - debugging
-  tester:
-    skills:
-      - test_generation
-      - edge_case_detection
-      - validation
-  reviewer:
-    skills:
-      - code_review
-      - security_check
-      - best_practices
-
-skills:
-  knowledge:
-    task_breakdown: "Break down complex tasks into manageable subtasks"
-    context_analysis: "Analyze project context and requirements"
-    plan_generation: "Generate structured execution plans"
-    code_generation: "Generate clean, well-documented code"
-    refactoring: "Refactor code for clarity and maintainability"
-    debugging: "Debug and fix issues in code"
-    test_generation: "Generate comprehensive unit and integration tests"
-    edge_case_detection: "Identify and handle edge cases"
-    validation: "Validate code against requirements and standards"
-    code_review: "Review code for quality and correctness"
-    security_check: "Identify potential security vulnerabilities"
-    best_practices: "Enforce coding best practices and patterns"
-  tools:
-    formatter: "Format code according to project standards"
-    linter: "Lint code for style and correctness"
-    test_runner: "Execute test suites"
+    model: ""
+    timeout_seconds: 300
 
 retry:
   max_retries: 3
@@ -262,7 +219,7 @@ spec:
     spec:
       containers:
         - name: mini-orca
-          image: mini-orca:2.0.0
+          image: mini-orca:4.1.0
           ports:
             - containerPort: 8080
           resources:
@@ -325,7 +282,7 @@ version: '3.8'
 
 services:
   mini-orca:
-    image: mini-orca:2.0.0
+    image: mini-orca:4.1.0
     restart: always
     ports:
       - "8080:8080"
@@ -411,7 +368,7 @@ lsof -i :8080
 make docker-stop
 
 # Run on different port
-docker run -p 8081:8080 mini-orca:2.0.0
+docker run -p 8081:8080 mini-orca:4.1.0
 ```
 
 #### 2. Permission Denied
@@ -421,7 +378,7 @@ docker run -p 8081:8080 mini-orca:2.0.0
 chmod 755 ./projects ./logs
 
 # Or run as root (not recommended)
-docker run --user root -v $(pwd)/projects:/app/projects mini-orca:2.0.0
+docker run --user root -v $(pwd)/projects:/app/projects mini-orca:4.1.0
 ```
 
 #### 3. Config File Not Found
@@ -431,10 +388,10 @@ docker run --user root -v $(pwd)/projects:/app/projects mini-orca:2.0.0
 ls -la config.yaml
 
 # Use default config
-docker run -d mini-orca:2.0.0
+docker run -d mini-orca:4.1.0
 
 # Or specify config path
-docker run -e MINI_ORCA_CONFIG=/app/config.yaml -v $(pwd)/config.yaml:/app/config.yaml mini-orca:2.0.0
+docker run -e MINI_ORCA_CONFIG=/app/config.yaml -v $(pwd)/config.yaml:/app/config.yaml mini-orca:4.1.0
 ```
 
 #### 4. Health Check Failing
@@ -454,7 +411,7 @@ docker restart mini-orca
 
 ```bash
 # Increase memory limits
-docker run -m 4g --memory-swap 4g mini-orca:2.0.0
+docker run -m 4g --memory-swap 4g mini-orca:4.1.0
 
 # Or in docker-compose
 # deploy:
@@ -467,10 +424,10 @@ docker run -m 4g --memory-swap 4g mini-orca:2.0.0
 
 ```bash
 # Run with debug logging
-docker run -e MINI_ORCA_LOG_LEVEL=debug mini-orca:2.0.0
+docker run -e MINI_ORCA_LOG_LEVEL=debug mini-orca:4.1.0
 
 # Run interactively
-docker run -it --entrypoint sh mini-orca:2.0.0
+docker run -it --entrypoint sh mini-orca:4.1.0
 
 # Execute commands in running container
 docker exec -it mini-orca sh

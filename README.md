@@ -2,18 +2,18 @@
 
 **Version**: 4.1.0
 
-Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LLM agents to code, test, and review your project features autonomously.
+Mini-Orca is a local-first desktop coding assistant for one deliberate change at a time: one active project, one selected file, one selected symbol, and one reviewed candidate.
 
 ## Features
 
-- **Multi-Agent Orchestration**: Specialized agents (Coder, Tester, Reviewer) work together to solve complex tasks.
-- **Single-Feature Workflow**: Code generation → test → review → human gate — linear, no loops.
-- **Human-in-the-loop**: Integrated human gate for final approval before completion.
+- **Focused preview workflow**: A single configured coder produces a preview; focused checks are optional and Apply remains explicit.
+- **Action modes**: `analyze_file`, `explain_symbol`, `fix`, `refactor`, `document`, and `generate_test`.
+- **Visible scope modes**: `strict_symbol` changes one selected symbol; `symbol_plus_imports` additionally permits only required import changes.
+- **No autonomous mutation**: No multi-file edits, automatic commits, or silent writes.
 - **Existing Project Support**: Add features to any existing project by specifying its path.
 - **AI Project Analysis**: Import a project to create a durable `.mini-orca/analysis.md` architecture summary and inventory.
 - **Atomic Generation**: Generate exactly one named function or class in one selected file with project-wide context.
-- **HTMX-powered IDE**: A modern, responsive web interface for monitoring and interacting with agents.
-- **Compose Desktop IDE**: A native Kotlin desktop client with the same compact dark IDE style.
+- **Compose Desktop client**: A native Kotlin desktop client for import, focused generation preview, and explicit review.
 - **Structured Logging**: Comprehensive JSON/Text logging with sensitive data redaction.
 - **Robust Error Handling**: Centralized error management with user-friendly messages.
 - **Extensible Skills**: Easily add new knowledge and tool skills to your agents via configuration.
@@ -24,16 +24,11 @@ Local agents orchestrator for mini tasks. Mini-Orca uses multiple specialized LL
 
 ```mermaid
 graph LR
-    User([User]) <--> UI[HTMX IDE]
+    User([User]) <--> UI[Compose Desktop]
     UI <--> API[HTTP Server]
     API <--> Orchestrator[Orchestrator]
     Orchestrator <--> Coder[Coder Agent]
-    Orchestrator <--> Tester[Tester Agent]
-    Orchestrator <--> Reviewer[Reviewer Agent]
-    Orchestrator <--> LLM[LLM Client]
-    Orchestrator <--> Executor[Tool Executor]
-    Orchestrator <--> Gate[Human Gate]
-    Orchestrator <--> Store[State Store]
+	Orchestrator <--> LLM[LLM Client]
 ```
 
 ## Getting Started
@@ -69,7 +64,7 @@ Start the daemon:
 ./mini-orca-daemon
 ```
 
-Access the IDE at `http://localhost:8080`.
+The daemon exposes a local API at `http://localhost:8080`; start the desktop client to use Mini-Orca.
 
 Or start the native desktop client in another terminal:
 
@@ -91,7 +86,7 @@ make docker-run
 # Or use docker-compose
 docker compose up -d --build
 
-# Access the IDE at http://localhost:8080
+# The daemon exposes its local API on port 8080
 ```
 
 See [DOCKER.md](DOCKER.md) for detailed Docker documentation.
@@ -109,10 +104,10 @@ Send a POST request to `/api/chat/message` with:
 
 ### Workflow
 
-1. **Coding**: Coder agent generates code based on your feature request
-2. **Testing**: Tests are run on the generated code
-3. **Review**: Reviewer agent reviews the code quality
-4. **Human Gate**: You approve or request edits
+1. Select one file and one function, method, type, interface, or class.
+2. Choose a focused action. Candidate-producing actions require a target file and target symbol; `generate_test` requires a selected test file and test symbol.
+3. Choose `strict_symbol` or, when required, `symbol_plus_imports`.
+4. Review the generated preview. Generated code is never written automatically.
 
 ## Configuration
 

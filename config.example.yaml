@@ -1,5 +1,5 @@
 # Mini-Orca Configuration Example
-# Version: 3.0.0
+# Version: 4.1.0
 # This file demonstrates all available configuration options.
 
 # ─── LLM ──────────────────────────────────────────────────────────────────────
@@ -22,6 +22,7 @@ agents:
       - refactoring
       - debugging
     model: ""  # Optional: override the default model for this agent
+    timeout_seconds: 300 # Optional request timeout for this profile
 
   tester:
     skills:

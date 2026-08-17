@@ -1,5 +1,9 @@
 # 01 — Define the focused workflow contract
 
+## Status
+
+Complete
+
 ## Goal
 
 Make the product promise explicit: one active project, one file, one selected symbol, one reviewed candidate.

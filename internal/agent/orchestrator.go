@@ -57,30 +57,51 @@ func (o *Orchestrator) RunCoderFromPrompt(userPrompt string, projectContext stri
 
 // RunCoderForSymbol generates one atomic function or class in exactly one target file.
 func (o *Orchestrator) RunCoderForSymbol(userPrompt, projectContext, targetFile, targetSymbol string) (*Result, error) {
-	if strings.TrimSpace(userPrompt) == "" {
-		return nil, fmt.Errorf("orchestrator: coder user prompt is required")
-	}
-	if strings.TrimSpace(targetFile) == "" {
-		return nil, fmt.Errorf("orchestrator: target file is required")
-	}
-	if strings.TrimSpace(targetSymbol) == "" {
-		return nil, fmt.Errorf("orchestrator: target symbol is required")
+	return o.RunCoderForSymbolContext(context.Background(), userPrompt, projectContext, targetFile, targetSymbol)
+}
+
+// RunCoderForSymbolContext generates one atomic candidate using the caller's context.
+func (o *Orchestrator) RunCoderForSymbolContext(ctx context.Context, userPrompt, projectContext, targetFile, targetSymbol string) (*Result, error) {
+	input, err := AtomicCoderInput(userPrompt, projectContext, targetFile, targetSymbol)
+	if err != nil {
+		return nil, err
 	}
 	agent := NewCoderAgent(o.llmClient)
+	return agent.Execute(ctx, input)
+}
+
+// AtomicCoderInput builds the shared prompt for one-file, one-symbol generation.
+func AtomicCoderInput(userPrompt, projectContext, targetFile, targetSymbol string) (string, error) {
+	if strings.TrimSpace(userPrompt) == "" {
+		return "", fmt.Errorf("orchestrator: coder user prompt is required")
+	}
+	if strings.TrimSpace(targetFile) == "" {
+		return "", fmt.Errorf("orchestrator: target file is required")
+	}
+	if strings.TrimSpace(targetSymbol) == "" {
+		return "", fmt.Errorf("orchestrator: target symbol is required")
+	}
 	var input strings.Builder
 	input.WriteString("## Atomic code request\n" + userPrompt + "\n\n")
 	input.WriteString("## Immutable scope\n")
 	input.WriteString("Target file: " + targetFile + "\n")
 	input.WriteString("Target function or class: " + targetSymbol + "\n")
+	input.WriteString("Action: fix\n")
+	input.WriteString("Scope mode: strict_symbol\n")
 	input.WriteString("You may change only this named symbol in this one file. Do not create, rename, or modify any other file or symbol. Preserve unrelated target-file code exactly.\n\n")
 	input.WriteString("## Project-wide context\n" + projectContext + "\n\n")
 	input.WriteString("## Output contract\nReturn exactly one code block containing the complete updated content of " + targetFile + ". Do not return patches, explanations, or additional files.\n")
-	return agent.Execute(context.Background(), input.String())
+	return input.String(), nil
 }
 
 // RunTester executes the tester agent with the given code and test results.
 // It returns a structured AgentResult containing the test report as JSON.
 func (o *Orchestrator) RunTester(code string, testResults string) (*Result, error) {
+	return o.RunTesterContext(context.Background(), code, testResults)
+}
+
+// RunTesterContext runs the optional focused tester with the caller's context.
+func (o *Orchestrator) RunTesterContext(ctx context.Context, code string, testResults string) (*Result, error) {
 	if code == "" {
 		return nil, fmt.Errorf("orchestrator: tester code is required")
 	}
@@ -93,7 +114,7 @@ func (o *Orchestrator) RunTester(code string, testResults string) (*Result, erro
 	// Combine code and test results into a single input
 	input := fmt.Sprintf("Code:\n%s\n\nTest Results:\n%s", code, testResults)
 
-	report, err := agent.Execute(context.Background(), input)
+	report, err := agent.Execute(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("orchestrator: tester execution failed: %w", err)
 	}
@@ -105,6 +126,11 @@ func (o *Orchestrator) RunTester(code string, testResults string) (*Result, erro
 // RunReviewer executes the reviewer agent with the given code and user prompt.
 // It returns a structured AgentResult containing the review report as JSON.
 func (o *Orchestrator) RunReviewer(code string, userPrompt string) (*Result, error) {
+	return o.RunReviewerContext(context.Background(), code, userPrompt)
+}
+
+// RunReviewerContext runs the optional focused reviewer with the caller's context.
+func (o *Orchestrator) RunReviewerContext(ctx context.Context, code string, userPrompt string) (*Result, error) {
 	if code == "" {
 		return nil, fmt.Errorf("orchestrator: reviewer code is required")
 	}
@@ -113,7 +139,7 @@ func (o *Orchestrator) RunReviewer(code string, userPrompt string) (*Result, err
 	}
 	agent := NewReviewerAgent(o.llmClient)
 	input := fmt.Sprintf("## User Request\n%s\n\n## Generated Code\n%s", userPrompt, code)
-	report, err := agent.Execute(context.Background(), input)
+	report, err := agent.Execute(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("orchestrator: reviewer execution failed: %w", err)
 	}

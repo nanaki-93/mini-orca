@@ -148,6 +148,8 @@ func TestRunCoderForSymbol_SendsAtomicScope(t *testing.T) {
 	for _, required := range []string{
 		"Target file: internal/user/service.go",
 		"Target function or class: UserService.Create",
+		"Action: fix",
+		"Scope mode: strict_symbol",
 		"Do not create, rename, or modify any other file or symbol",
 		"complete updated content of internal/user/service.go",
 	} {

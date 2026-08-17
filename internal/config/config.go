@@ -44,8 +44,9 @@ type AgentsConfig struct {
 
 // AgentConfig holds configuration for a single agent.
 type AgentConfig struct {
-	Skills []string `json:"skills" yaml:"skills"`
-	Model  string   `json:"model,omitempty" yaml:"model,omitempty"` // optional override
+	Skills         []string `json:"skills" yaml:"skills"`
+	Model          string   `json:"model,omitempty" yaml:"model,omitempty"` // optional override
+	TimeoutSeconds int      `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
 }
 
 // RetryConfig holds retry-related configuration.
