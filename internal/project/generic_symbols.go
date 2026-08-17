@@ -31,11 +31,23 @@ func extractGenericFacts(language string, source []byte) ([]string, []SymbolInfo
 		}
 		kind, name := match[1], match[2]
 		if language == "Java" && kind != "class" && kind != "interface" && kind != "enum" && kind != "record" {
+			if !genericJavaDeclaration(kind) {
+				continue
+			}
 			kind = "method"
 		}
 		symbols = append(symbols, SymbolInfo{Name: name, Kind: kind, Signature: trimmed, StartLine: number + 1, EndLine: number + 1, Visibility: "unknown", Confidence: "approximate", AtomicTarget: kind != "impl"})
 	}
 	return imports, symbols
+}
+
+func genericJavaDeclaration(prefix string) bool {
+	switch prefix {
+	case "new", "return", "throw", "case", "else", "for", "while", "switch", "catch", "try", "do", "assert", "yield":
+		return false
+	default:
+		return true
+	}
 }
 
 func genericImport(language, line string) bool {

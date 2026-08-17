@@ -85,6 +85,43 @@ func TestFileAnalysisCacheInvalidatesOnlyChangedInputs(t *testing.T) {
 	}
 }
 
+func TestFileAnalysisCacheInvalidatesWhenPolicyRulesChange(t *testing.T) {
+	root := t.TempDir()
+	writeIndexFixture(t, root, "main.go", "package main\nfunc Run() {}\n")
+	cache, err := NewFileAnalysisCache(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy, err := NewContextPolicy(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := analysisCacheInput("main.go", "sha256:one")
+	input.ContextPolicyVersion = policy.Version()
+	if err := cache.Store(newFreshAnalysis(input)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".mini-orca"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".mini-orca", "context-policy.json"), []byte(`{"exclude":["generated/**"]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	changedPolicy, err := NewContextPolicy(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changedPolicy.Version() == input.ContextPolicyVersion {
+		t.Fatal("policy version did not change after context-policy update")
+	}
+	changedInput := input
+	changedInput.ContextPolicyVersion = changedPolicy.Version()
+	loaded, err := cache.Load(changedInput)
+	if err != nil || loaded.Status != AnalysisStatusStale {
+		t.Fatalf("policy-changed analysis = %+v, %v; want stale", loaded, err)
+	}
+}
+
 func TestFileAnalysisCacheRecoversCorruptionAndConcurrentAccess(t *testing.T) {
 	root := t.TempDir()
 	writeIndexFixture(t, root, "main.go", "package main\nfunc Run() {}\n")

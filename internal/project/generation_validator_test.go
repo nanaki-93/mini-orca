@@ -23,6 +23,7 @@ func TestValidateGenerationGoScope(t *testing.T) {
 		{name: "invalid syntax", candidate: "package fixture\nfunc Run( {", scope: workflow.ScopeStrictSymbol, code: "candidate_syntax"},
 		{name: "strict import", candidate: strings.Replace(original, "import \"fmt\"", "import \"strings\"", 1), scope: workflow.ScopeStrictSymbol, code: "out_of_scope_import"},
 		{name: "imports allowed", candidate: strings.Replace(strings.Replace(original, "import \"fmt\"", "import \"strings\"", 1), "fmt.Println", "strings.TrimSpace", 1), scope: workflow.ScopeSymbolPlusImports, applicable: true},
+		{name: "unused import addition", candidate: strings.Replace(original, "import \"fmt\"", "import (\n\t\"fmt\"\n\t\"strings\"\n)", 1), scope: workflow.ScopeSymbolPlusImports, code: "out_of_scope_import"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got := ValidateGeneration("fixture.go", original, test.candidate, target, test.scope)

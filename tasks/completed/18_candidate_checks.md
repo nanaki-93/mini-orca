@@ -1,5 +1,9 @@
 # 18 — Run focused candidate validation checks
 
+## Status
+
+Complete
+
 ## Goal
 
 Report whether an approved-scope candidate parses, formats, lints, and passes selected checks before Apply.

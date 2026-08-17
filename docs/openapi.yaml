@@ -226,6 +226,39 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/candidates/checks:
+    post:
+      tags: [Generation]
+      summary: Run focused checks for one validated candidate in an isolated workspace
+      responses:
+        '200': {description: Source-free candidate check report}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/apply:
+    post:
+      tags: [Generation]
+      summary: Explicitly apply one checked candidate
+      responses:
+        '200': {description: Atomic one-file apply result with Undo metadata}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/undo:
+    post:
+      tags: [Generation]
+      summary: Undo the immediately preceding unchanged apply
+      responses:
+        '200': {description: Atomic one-file undo result}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/audit:
+    get:
+      tags: [Generation]
+      summary: Return source-free project mutation audit history
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Source-free apply and undo audit entries}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/context:
     get:
       tags: [Projects]
@@ -263,7 +296,7 @@ paths:
       summary: Current activity history
       responses:
         '200':
-          description: Current in-memory history; it becomes project-scoped persistence in a later API revision.
+          description: Current project-scoped source-free activity history.
           content:
             application/json:
               schema:

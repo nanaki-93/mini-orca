@@ -105,7 +105,7 @@ func (s *Service) Generate(ctx context.Context, userPrompt, targetFile, targetSy
 		return nil, err
 	}
 	validation := project.ValidateGeneration(indexedFile.Path, fileInfo.Content, response.CandidateContent, selectedSymbol(*indexedFile, targetSymbol), scope)
-	return &GenerationPreview{
+	preview := &GenerationPreview{
 		GenerationID:     newGenerationID(),
 		Version:          generationResponseVersion,
 		ProjectID:        analysis.ProjectID,
@@ -120,7 +120,11 @@ func (s *Service) Generate(ctx context.Context, userPrompt, targetFile, targetSy
 		EffectiveModel:   s.EffectiveModel(),
 		ContextManifest:  manifest,
 		Validation:       validation,
-	}, nil
+	}
+	if validation.Applicable {
+		s.rememberCandidate(preview)
+	}
+	return preview, nil
 }
 
 func selectedSymbol(file project.IndexFile, name string) project.SymbolInfo {

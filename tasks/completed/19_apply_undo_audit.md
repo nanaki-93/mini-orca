@@ -1,5 +1,9 @@
 # 19 — Add explicit Apply, Undo, and audit history
 
+## Status
+
+Complete
+
 ## Goal
 
 Safely write one validated candidate and allow immediate recovery.

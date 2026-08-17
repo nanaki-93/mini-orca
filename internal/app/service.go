@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent"
@@ -39,6 +40,8 @@ type Service struct {
 	retryMax            time.Duration
 	remoteProvider      bool
 	analysisAll         *analysisAllController
+	candidates          map[string]*storedCandidate
+	candidateMu         sync.Mutex
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
@@ -87,6 +90,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		retryMax:            time.Duration(backoffMax) * time.Millisecond,
 		remoteProvider:      !isLoopbackURL(cfg.LLM.BaseURL),
 		analysisAll:         newAnalysisAllController(),
+		candidates:          make(map[string]*storedCandidate),
 	}, nil
 }
 
@@ -147,6 +151,15 @@ func (s *Service) RequireRemoteConfirmation(confirmed bool) error {
 func (s *Service) ContextManifest(targetFile string) (project.ContextManifest, error) {
 	_, manifest, err := project.NewContextBuilder().BuildWithManifest(s.manager.Root(), targetFile)
 	return manifest, err
+}
+
+// AnalysisContextManifest previews the one-file context used for semantic analysis.
+func (s *Service) AnalysisContextManifest(targetFile string) (project.ContextManifest, error) {
+	indexedFile, err := s.manager.IndexedFile(targetFile)
+	if err != nil {
+		return project.ContextManifest{}, err
+	}
+	return semanticManifest(*indexedFile), nil
 }
 
 func isLoopbackURL(rawURL string) bool {

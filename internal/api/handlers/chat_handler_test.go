@@ -164,3 +164,34 @@ func TestContextErrorResponseIsStructuredJSON(t *testing.T) {
 		t.Fatalf("message = %q", body.Message)
 	}
 }
+
+func TestContextPreviewUsesOneFileManifestForAnalysis(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "sample.go"), []byte("package sample\nfunc Run() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := httptest.NewRecorder()
+	NewContextHandler(service).Preview(response, httptest.NewRequest(http.MethodGet, "/api/projects/current/context?path=sample.go&action=analyze_file", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+	var manifest project.ContextManifest
+	if err := json.NewDecoder(response.Body).Decode(&manifest); err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Included) != 1 || manifest.Included[0].Path != "sample.go" || manifest.ByteLimit != 64*1024 {
+		t.Fatalf("analysis context manifest = %+v", manifest)
+	}
+}

@@ -213,6 +213,7 @@ func newHTTPMux(
 	mux.HandleFunc("GET /api/projects/current/context", contextHandler.Preview)
 
 	projectHandler := handlers.NewProjectHandler(projectManager, application)
+	candidateHandler := handlers.NewCandidateHandler(application, projectManager)
 	mux.HandleFunc("POST /api/projects/import", projectHandler.Import)
 	mux.HandleFunc("GET /api/projects/current", projectHandler.Current)
 	mux.HandleFunc("GET /api/projects/current/index", projectHandler.Index)
@@ -227,6 +228,10 @@ func newHTTPMux(
 	mux.HandleFunc("POST /api/projects/current/analysis-job/resume", projectHandler.ResumeAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/analysis-job/cancel", projectHandler.CancelAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/reindex", projectHandler.Reindex)
+	mux.HandleFunc("POST /api/projects/current/candidates/checks", candidateHandler.Check)
+	mux.HandleFunc("POST /api/projects/current/apply", candidateHandler.Apply)
+	mux.HandleFunc("POST /api/projects/current/undo", candidateHandler.Undo)
+	mux.HandleFunc("GET /api/projects/current/audit", candidateHandler.Audit)
 
 	return mux
 }
