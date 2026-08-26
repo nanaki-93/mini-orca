@@ -86,7 +86,7 @@ private val Success = Color(0xFF3FB950)
 private val Warning = Color(0xFFD29922)
 private val Error = Color(0xFFF85149)
 
-private data class ConnectionState(val label: String = "Connecting", val model: String = "", val connected: Boolean = false, val locality: String = "", val latency: String = "")
+private data class ConnectionState(val label: String = "Connecting", val model: String = "", val version: String = "", val connected: Boolean = false, val locality: String = "", val latency: String = "")
 private data class FileSelection(val file: ProjectFileInfo, val symbols: List<SymbolInfo>, val analysis: FileAnalysis, val impact: ImpactPreview, val gitStatus: GitStatus)
 private enum class PaletteMode { Files, Symbols, Actions }
 private enum class NarrowDrawer { Explorer, Action }
@@ -139,12 +139,12 @@ private fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     fun refreshConnection() {
         scope.launch {
             val startedAt = System.nanoTime()
-            runCatching { withContext(Dispatchers.IO) { api.effectiveModel() } }
+            runCatching { withContext(Dispatchers.IO) { api.status() to api.effectiveModel() } }
                 .onSuccess {
                     val elapsed = (System.nanoTime() - startedAt) / 1_000_000
-                    connection = ConnectionState("Daemon connected", "${it.profile} · ${it.model}", true, api.endpointLocality(), "${elapsed}ms")
+                    connection = ConnectionState("Daemon connected", "${it.second.profile} · ${it.second.model}", it.first.version, true, api.endpointLocality(), "${elapsed}ms")
                 }
-                .onFailure { connection = ConnectionState("Daemon unavailable", "Retry from the status bar", false, api.endpointLocality()) }
+                .onFailure { connection = ConnectionState(label = "Daemon unavailable", model = "Retry from the status bar", locality = api.endpointLocality()) }
         }
     }
 
@@ -974,7 +974,7 @@ private fun StatusBar(status: String, error: String?, connection: ConnectionStat
         Spacer(Modifier.weight(1f))
         Button(onClick = onReconnect, modifier = Modifier.height(24.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 7.dp, vertical = 0.dp)) { Text("Reconnect", fontSize = 10.sp) }
         Spacer(Modifier.width(8.dp))
-        Text("Mini-Orca v4.2", color = SecondaryText, fontSize = 10.sp)
+        Text(if (connection.version.isBlank()) "Mini-Orca" else "Mini-Orca v${connection.version}", color = SecondaryText, fontSize = 10.sp)
     }
 }
 

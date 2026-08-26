@@ -34,6 +34,7 @@ class ApiClient(
     fun analyze(path: String, revision: String, refresh: Boolean = false): FileAnalysis = decode(send("POST", "/api/projects/current/files/analysis", jsonBody("path" to path, "project_revision" to revision, "refresh" to refresh)))
     fun context(path: String, action: String = "fix"): ContextManifest = decode(send("GET", "/api/projects/current/context?path=${encode(path)}&action=${encode(action)}"))
     fun effectiveModel(): EffectiveModel = decode(send("GET", "/api/models/current"))
+    fun status(): DaemonStatus = decode(send("GET", "/status"))
     fun audit(revision: String): List<AuditEntry> = decode(send("GET", "/api/projects/current/audit?project_revision=${encode(revision)}"))
     fun activity(): List<ActivityEntry> = decode(send("GET", "/api/chat/history"))
     fun impact(path: String, symbol: String = ""): ImpactPreview = decode(send("GET", "/api/projects/current/impact?path=${encode(path)}&symbol=${encode(symbol)}"))

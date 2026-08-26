@@ -77,4 +77,5 @@ data class GenerationResult(
 @Serializable data class GitStatus(val available: Boolean, val branch: String = "", @SerialName("file_state") val fileState: String = "", @SerialName("diff_state") val diffState: String = "")
 @Serializable data class ActivityEntry(val role: String, val content: String, val phase: String, val timestamp: String, @SerialName("target_file") val targetFile: String = "", @SerialName("target_symbol") val targetSymbol: String = "")
 @Serializable data class EffectiveModel(val profile: String, val model: String, val timeout: String = "")
+@Serializable data class DaemonStatus(val status: String, val version: String, val workflow: String = "")
 @Serializable data class ApiError(val message: String = "", @SerialName("user_message") val userMessage: String = "")

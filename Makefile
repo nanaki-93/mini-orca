@@ -1,5 +1,4 @@
 # Mini-Orca Makefile
-# Version: 4.1.0
 
 # Variables
 APP_NAME := mini-orca

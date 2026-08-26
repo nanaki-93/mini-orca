@@ -85,6 +85,9 @@ func (m *Manager) Reindex() (*ProjectIndex, error) {
 		return nil, ErrRevisionConflict
 	}
 	m.analysis.ProjectRevision = revision
+	if m.analysis.Report.Status == ProjectAnalysisStatusFresh && m.analysis.Report.ProjectRevision != revision {
+		m.analysis.Report.Status = ProjectAnalysisStatusStale
+	}
 	m.index = index
 	return cloneIndex(index), nil
 }
@@ -177,6 +180,7 @@ func (m *Manager) Analysis() (*Analysis, error) {
 	copy := *m.analysis
 	copy.Languages = cloneMap(m.analysis.Languages)
 	copy.Files = append([]string(nil), m.analysis.Files...)
+	copy.Report = *cloneProjectAnalysisReport(&m.analysis.Report)
 	return &copy, nil
 }
 

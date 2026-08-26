@@ -31,6 +31,7 @@ type EffectiveModel struct {
 type Service struct {
 	manager             *project.Manager
 	analysisClient      *llm.Client
+	analysisModel       string
 	coder               *agent.CoderAgent
 	profile             EffectiveModel
 	importTimeout       time.Duration
@@ -78,6 +79,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	return &Service{
 		manager:        manager,
 		analysisClient: analysisClient,
+		analysisModel:  cfg.LLM.Model,
 		coder:          coder,
 		profile: EffectiveModel{
 			Profile: "coder", Model: model, Temperature: cfg.LLM.Temperature, MaxTokens: cfg.LLM.MaxTokens,
@@ -126,7 +128,7 @@ func (s *Service) Activity() ([]project.Activity, error) {
 func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
 	timed, cancel := context.WithTimeout(ctx, s.importTimeout)
 	defer cancel()
-	analysis, err := project.NewAnalyzer(s.analysisClient).Analyze(timed, root)
+	analysis, err := project.NewAnalyzerWithProfile(s.analysisClient, s.analysisModel, "analysis").Analyze(timed, root)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}

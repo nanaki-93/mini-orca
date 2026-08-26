@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,8 +13,39 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/version"
 	"gopkg.in/yaml.v3"
 )
+
+func TestDaemonStatusReportsCanonicalVersion(t *testing.T) {
+	root := t.TempDir()
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := httptest.NewRecorder()
+	newHTTPMux(service, manager).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/status", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status response = %d: %s", response.Code, response.Body.String())
+	}
+	var status struct {
+		Version string `json:"version"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Version != version.Version {
+		t.Fatalf("daemon version = %q, want %q", status.Version, version.Version)
+	}
+}
 
 type documentedRoute struct {
 	method string

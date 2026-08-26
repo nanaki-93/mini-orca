@@ -1,17 +1,16 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -70,9 +69,11 @@ func TestAnalyzeFileStoresActionableMalformedAndEmptyFailures(t *testing.T) {
 }
 
 func TestAnalyzeFileHonorsTimeout(t *testing.T) {
+	handlerCanceled := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		<-r.Context().Done()
+		handlerCanceled <- struct{}{}
 	}))
 	defer server.Close()
 	service, _ := newSemanticAnalysisService(t, server.URL, 1)
@@ -80,19 +81,22 @@ func TestAnalyzeFileHonorsTimeout(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("analysis error = %v, want deadline exceeded", err)
 	}
+	waitForTestSignal(t, handlerCanceled, "analysis provider cancellation")
 }
 
 func TestAnalyzeAllProcessesEligibleFilesSequentially(t *testing.T) {
 	var mu sync.Mutex
 	var paths []string
+	handlerErrors := make(chan error, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		match := regexp.MustCompile(`"path":"([^"]+)"`).FindSubmatch(body)
-		if len(match) != 2 {
-			t.Fatalf("target path missing from prompt: %s", body)
+		path, err := analyzeAllRequestPath(r)
+		if err != nil {
+			handlerErrors <- err
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 		mu.Lock()
-		paths = append(paths, string(match[1]))
+		paths = append(paths, path)
 		mu.Unlock()
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
 	}))
@@ -117,20 +121,34 @@ func TestAnalyzeAllProcessesEligibleFilesSequentially(t *testing.T) {
 	if want := []string{"main.go", "second.go"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("request order = %v, want %v", got, want)
 	}
+	assertNoTestHandlerError(t, handlerErrors)
 }
 
 func TestAnalyzeAllCancelRetainsCompletedEntries(t *testing.T) {
-	firstDone := make(chan struct{})
-	secondStarted := make(chan struct{})
+	firstDone := make(chan struct{}, 1)
+	secondStarted := make(chan struct{}, 1)
+	secondCanceled := make(chan struct{}, 1)
+	handlerErrors := make(chan error, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		if bytes.Contains(body, []byte(`"path":"main.go"`)) {
-			_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
-			close(firstDone)
+		path, err := analyzeAllRequestPath(r)
+		if err != nil {
+			handlerErrors <- err
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		close(secondStarted)
+		if path == "main.go" {
+			_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
+			firstDone <- struct{}{}
+			return
+		}
+		if path != "second.go" {
+			handlerErrors <- fmt.Errorf("analysis target path = %q, want second.go", path)
+			http.Error(w, "unexpected analysis target", http.StatusBadRequest)
+			return
+		}
+		secondStarted <- struct{}{}
 		<-r.Context().Done()
+		secondCanceled <- struct{}{}
 	}))
 	defer server.Close()
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
@@ -143,12 +161,13 @@ func TestAnalyzeAllCancelRetainsCompletedEntries(t *testing.T) {
 	if _, err := service.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{MaxFiles: 2}, false); err != nil {
 		t.Fatal(err)
 	}
-	<-firstDone
-	<-secondStarted
+	waitForTestSignal(t, firstDone, "first analysis completion")
+	waitForTestSignal(t, secondStarted, "second analysis request")
 	if _, err := service.CancelAnalyzeAll(); err != nil {
 		t.Fatal(err)
 	}
 	job := waitForAnalyzeAll(t, service, analysisAllStateCanceled)
+	waitForTestSignal(t, secondCanceled, "second analysis cancellation")
 	if job.Files[0].Status != analysisAllFileCompleted || job.Files[1].Status == analysisAllFileCompleted {
 		t.Fatalf("canceled job should preserve only the completed cache entry: %+v", job)
 	}
@@ -156,20 +175,30 @@ func TestAnalyzeAllCancelRetainsCompletedEntries(t *testing.T) {
 	if err != nil || analysis.Status != project.AnalysisStatusFresh {
 		t.Fatalf("completed cache entry = %+v, %v", analysis, err)
 	}
+	assertNoTestHandlerError(t, handlerErrors)
 }
 
 func TestAnalyzeAllPersistsPausedJobAndResumesAfterServiceRestart(t *testing.T) {
-	started := make(chan struct{})
+	started := make(chan struct{}, 1)
 	release := make(chan struct{})
+	var releaseOnce sync.Once
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		if bytes.Contains(body, []byte(`"path":"main.go"`)) {
-			close(started)
-			<-release
+		path, err := analyzeAllRequestPath(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if path == "main.go" {
+			started <- struct{}{}
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
 		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
 	}))
 	defer server.Close()
+	defer releaseOnce.Do(func() { close(release) })
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
 	if err := os.WriteFile(filepath.Join(root, "second.go"), []byte("package main\nfunc Second() {}\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -180,11 +209,11 @@ func TestAnalyzeAllPersistsPausedJobAndResumesAfterServiceRestart(t *testing.T) 
 	if _, err := service.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{MaxFiles: 2}, false); err != nil {
 		t.Fatal(err)
 	}
-	<-started
+	waitForTestSignal(t, started, "first analysis request")
 	if _, err := service.PauseAnalyzeAll(); err != nil {
 		t.Fatal(err)
 	}
-	close(release)
+	releaseOnce.Do(func() { close(release) })
 	waitForAnalyzeAll(t, service, analysisAllStatePaused)
 
 	manager, err := project.NewManager(root)
@@ -208,18 +237,20 @@ func TestAnalyzeAllPersistsPausedJobAndResumesAfterServiceRestart(t *testing.T) 
 }
 
 func TestAnalyzeAllBecomesStaleWhenReindexChangesRevision(t *testing.T) {
-	started := make(chan struct{})
+	started := make(chan struct{}, 1)
+	handlerCanceled := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
-		close(started)
+		started <- struct{}{}
 		<-r.Context().Done()
+		handlerCanceled <- struct{}{}
 	}))
 	defer server.Close()
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
 	if _, err := service.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{MaxFiles: 1}, false); err != nil {
 		t.Fatal(err)
 	}
-	<-started
+	waitForTestSignal(t, started, "analysis request")
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() { println(\"changed\") }\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -227,6 +258,7 @@ func TestAnalyzeAllBecomesStaleWhenReindexChangesRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	job := waitForAnalyzeAll(t, service, analysisAllStateStale)
+	waitForTestSignal(t, handlerCanceled, "stale analysis cancellation")
 	if job.Status != analysisAllStateStale {
 		t.Fatalf("reindexed job = %+v", job)
 	}
@@ -249,6 +281,58 @@ func waitForAnalyzeAll(t *testing.T, service *Service, want string) *AnalyzeAllJ
 	}
 	t.Fatalf("analyze-all job did not reach %q", want)
 	return nil
+}
+
+func waitForTestSignal(t *testing.T, signal <-chan struct{}, description string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for %s", description)
+	}
+}
+
+func waitForTestError(t *testing.T, done <-chan error, description string) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for %s", description)
+		return nil
+	}
+}
+
+func assertNoTestHandlerError(t *testing.T, handlerErrors <-chan error) {
+	t.Helper()
+	select {
+	case err := <-handlerErrors:
+		t.Fatal(err)
+	default:
+	}
+}
+
+func analyzeAllRequestPath(r *http.Request) (string, error) {
+	var request llm.ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		return "", fmt.Errorf("decode LLM request: %w", err)
+	}
+	if len(request.Messages) != 1 {
+		return "", fmt.Errorf("LLM messages = %d, want 1", len(request.Messages))
+	}
+	const marker = "TARGET_FACTS:\n{\"path\":\""
+	prompt := request.Messages[0].Content
+	start := strings.Index(prompt, marker)
+	if start < 0 {
+		return "", fmt.Errorf("target facts missing from semantic prompt")
+	}
+	path := prompt[start+len(marker):]
+	var found bool
+	path, _, found = strings.Cut(path, "\"")
+	if !found || path == "" {
+		return "", fmt.Errorf("target path missing from semantic prompt")
+	}
+	return path, nil
 }
 
 func newSemanticAnalysisService(t *testing.T, baseURL string, analysisSeconds int) (*Service, string) {

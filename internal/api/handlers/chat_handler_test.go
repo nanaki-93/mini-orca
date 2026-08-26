@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
@@ -20,13 +21,13 @@ import (
 )
 
 func TestSendMessageReportsCanceledGeneration(t *testing.T) {
-	started := make(chan struct{})
-	providerCanceled := make(chan struct{})
+	started := make(chan struct{}, 1)
+	providerCanceled := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
-		close(started)
+		started <- struct{}{}
 		<-r.Context().Done()
-		close(providerCanceled)
+		providerCanceled <- struct{}{}
 	}))
 	defer server.Close()
 
@@ -40,16 +41,25 @@ func TestSendMessageReportsCanceledGeneration(t *testing.T) {
 		handler.SendMessage(response, req)
 		close(done)
 	}()
-	<-started
+	waitForTestSignal(t, started, "generation provider request")
 	cancel()
-	<-done
-	<-providerCanceled
+	waitForTestSignal(t, done, "canceled handler response")
+	waitForTestSignal(t, providerCanceled, "generation provider cancellation")
 
 	if response.Code != http.StatusRequestTimeout {
 		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusRequestTimeout, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), "generation canceled") {
 		t.Fatalf("response does not identify cancellation: %s", response.Body.String())
+	}
+}
+
+func waitForTestSignal(t *testing.T, signal <-chan struct{}, description string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for %s", description)
 	}
 }
 
