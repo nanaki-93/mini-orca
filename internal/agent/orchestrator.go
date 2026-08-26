@@ -99,6 +99,30 @@ func AtomicCoderInputWithScope(userPrompt, projectContext, targetFile, targetSym
 	return input.String(), nil
 }
 
+// DeclarationDraftInput builds the declaration-only contract used by a
+// file-scoped chat session. The daemon composes the complete file itself.
+func DeclarationDraftInput(userPrompt, projectContext, targetFile, targetSymbol, mode string) (string, error) {
+	if strings.TrimSpace(userPrompt) == "" {
+		return "", fmt.Errorf("orchestrator: coder user prompt is required")
+	}
+	if strings.TrimSpace(targetFile) == "" || strings.TrimSpace(targetSymbol) == "" {
+		return "", fmt.Errorf("orchestrator: target file and symbol are required")
+	}
+	if mode != "replace_symbol" && mode != "create_symbol" {
+		return "", fmt.Errorf("orchestrator: unsupported declaration edit mode %q", mode)
+	}
+	var input strings.Builder
+	input.WriteString("## File-scoped declaration request\n" + userPrompt + "\n\n")
+	input.WriteString("## Immutable session scope\n")
+	input.WriteString("Target file: " + targetFile + "\n")
+	input.WriteString("Target symbol: " + targetSymbol + "\n")
+	input.WriteString("Edit mode: " + mode + "\n")
+	input.WriteString("Return exactly one complete Go function, method, or type declaration for this symbol. Do not return package clauses, a full file, a patch, or any declaration for another symbol. Imports must be listed separately.\n\n")
+	input.WriteString("## One-file context\n" + projectContext + "\n\n")
+	input.WriteString("## Output contract\nReturn exactly one JSON object and no Markdown. Its fields must be version (\"v1\"), declaration, imports (an optional array of import specs), and explanation (a concise assistant explanation). Do not include target paths, symbols, complete file content, patches, or extra fields.\n")
+	return input.String(), nil
+}
+
 // RunTester executes the tester agent with the given code and test results.
 // It returns a structured AgentResult containing the test report as JSON.
 func (o *Orchestrator) RunTester(code string, testResults string) (*Result, error) {

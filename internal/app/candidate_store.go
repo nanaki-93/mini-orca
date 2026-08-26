@@ -46,6 +46,7 @@ type Draft struct {
 	Imports         []string                      `json:"imports,omitempty"`
 	Revision        int64                         `json:"revision"`
 	Hash            string                        `json:"hash"`
+	CandidateHash   string                        `json:"candidate_hash,omitempty"`
 	ParentDraftID   string                        `json:"parent_draft_id,omitempty"`
 	PreviousHash    string                        `json:"previous_hash,omitempty"`
 	State           DraftState                    `json:"state"`
@@ -74,6 +75,23 @@ type DraftUpdateRequest struct {
 	ExpectedRevision int64
 	Declaration      string
 	Imports          []string
+}
+
+// DraftCheckRequest pins focused checks to the exact validated declaration
+// revision and hash the reviewer saw.
+type DraftCheckRequest struct {
+	ID               string
+	ExpectedRevision int64
+	ExpectedHash     string
+	Options          CandidateCheckOptions
+}
+
+// DraftReview exposes only the editable declaration and source-free review
+// evidence. Complete candidate source is composed transiently by the daemon.
+type DraftReview struct {
+	Draft         Draft                 `json:"draft"`
+	Checks        *CandidateCheckReport `json:"checks,omitempty"`
+	ApplyEligible bool                  `json:"apply_eligible"`
 }
 
 // DraftAuditMetadata deliberately omits declaration, imports, candidate text,
@@ -184,6 +202,7 @@ func (s *Service) UpdateDraft(request DraftUpdateRequest) (*Draft, error) {
 	stored.draft.Revision++
 	stored.draft.Hash = draftHash(stored.draft.Declaration, stored.draft.Imports)
 	stored.draft.Validation = nil
+	stored.draft.CandidateHash = ""
 	stored.draft.State = DraftDirty
 	stored.checks = nil
 	copy := cloneDraft(stored.draft)
@@ -205,6 +224,7 @@ func (s *Service) BeginDraftValidation(id string, expectedRevision int64) (*Draf
 	}
 	stored.draft.State = DraftValidating
 	stored.draft.Validation = nil
+	stored.draft.CandidateHash = ""
 	stored.checks = nil
 	copy := cloneDraft(stored.draft)
 	return &copy, nil
@@ -213,6 +233,10 @@ func (s *Service) BeginDraftValidation(id string, expectedRevision int64) (*Draf
 // CompleteDraftValidation stores validation only for the revision that began
 // it. Invalid drafts retain their editable declaration for correction.
 func (s *Service) CompleteDraftValidation(id string, expectedRevision int64, validation project.GenerationValidation) (*Draft, error) {
+	return s.completeDraftValidation(id, expectedRevision, validation, "")
+}
+
+func (s *Service) completeDraftValidation(id string, expectedRevision int64, validation project.GenerationValidation, candidateHash string) (*Draft, error) {
 	s.draftMu.Lock()
 	defer s.draftMu.Unlock()
 	stored := s.drafts[id]
@@ -227,11 +251,125 @@ func (s *Service) CompleteDraftValidation(id string, expectedRevision int64, val
 	stored.draft.Validation = &copyValidation
 	if validation.Applicable {
 		stored.draft.State = DraftValid
+		stored.draft.CandidateHash = candidateHash
 	} else {
 		stored.draft.State = DraftInvalid
+		stored.draft.CandidateHash = ""
 	}
 	copy := cloneDraft(stored.draft)
 	return &copy, nil
+}
+
+// ValidateDraft composes the current declaration in memory and records only
+// validation evidence for the exact revision that was requested.
+func (s *Service) ValidateDraft(id string, expectedRevision int64) (*Draft, error) {
+	draft, err := s.BeginDraftValidation(id, expectedRevision)
+	if err != nil {
+		return nil, err
+	}
+	composition, err := s.composeDraft(*draft)
+	if err != nil {
+		return nil, s.finishDraftValidationAfterError(id, expectedRevision, err)
+	}
+	return s.completeDraftValidation(id, expectedRevision, composition.Validation, composition.CandidateHash)
+}
+
+func (s *Service) finishDraftValidationAfterError(id string, expectedRevision int64, cause error) error {
+	if _, err := s.CompleteDraftValidation(id, expectedRevision, project.GenerationValidation{}); err != nil {
+		return err
+	}
+	return cause
+}
+
+func (s *Service) composeDraft(draft Draft) (project.GoDeclarationComposition, error) {
+	if err := s.ValidateMutableRequest(draft.ProjectID, draft.ProjectRevision, draft.TargetPath, draft.BaseFileHash); err != nil {
+		return project.GoDeclarationComposition{}, err
+	}
+	path, err := project.ResolveFile(s.manager.Root(), draft.TargetPath)
+	if err != nil {
+		return project.GoDeclarationComposition{}, err
+	}
+	original, err := os.ReadFile(path)
+	if err != nil {
+		return project.GoDeclarationComposition{}, fmt.Errorf("read draft target: %w", err)
+	}
+	return project.ComposeGoDeclaration(draft.TargetPath, string(original), project.GoDeclarationEdit{
+		Mode: draft.Mode, TargetSymbol: draft.TargetSymbol, Declaration: draft.Declaration, Imports: draft.Imports,
+	}), nil
+}
+
+// CheckDraft runs isolated checks for exactly one current, validated draft.
+// A concurrent manual edit cannot retain its predecessor's check evidence.
+func (s *Service) CheckDraft(ctx context.Context, request DraftCheckRequest) (*CandidateCheckReport, error) {
+	s.draftMu.Lock()
+	stored := s.drafts[request.ID]
+	if stored == nil {
+		s.draftMu.Unlock()
+		return nil, fmt.Errorf("draft not found")
+	}
+	s.expireDraftLocked(stored)
+	if stored.draft.State == DraftStale || stored.draft.Revision != request.ExpectedRevision || stored.draft.Hash != request.ExpectedHash {
+		s.draftMu.Unlock()
+		return nil, project.ErrRevisionConflict
+	}
+	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable || stored.draft.CandidateHash == "" {
+		s.draftMu.Unlock()
+		return nil, fmt.Errorf("draft is not valid; validate the latest revision")
+	}
+	draft := cloneDraft(stored.draft)
+	s.draftMu.Unlock()
+
+	composition, err := s.composeDraft(draft)
+	if err != nil {
+		return nil, err
+	}
+	if !composition.Validation.Applicable || composition.CandidateHash != draft.CandidateHash {
+		return nil, project.ErrRevisionConflict
+	}
+	report, err := s.RunCandidateChecks(ctx, draft.TargetPath, composition.CandidateContent, request.Options)
+	if err != nil {
+		return nil, err
+	}
+	report.DraftID = draft.ID
+	report.DraftRevision = draft.Revision
+	report.DraftHash = draft.Hash
+	report.CandidateHash = composition.CandidateHash
+	report.ProjectID = draft.ProjectID
+	report.ProjectRevision = draft.ProjectRevision
+	report.BaseFileHash = draft.BaseFileHash
+
+	s.draftMu.Lock()
+	defer s.draftMu.Unlock()
+	stored = s.drafts[request.ID]
+	if stored == nil {
+		return nil, project.ErrRevisionConflict
+	}
+	s.expireDraftLocked(stored)
+	if stored.draft.State != DraftValid || stored.draft.Revision != draft.Revision || stored.draft.Hash != draft.Hash || stored.draft.CandidateHash != composition.CandidateHash {
+		return nil, project.ErrRevisionConflict
+	}
+	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CandidateHash: composition.CandidateHash, Report: cloneCheckReport(report)}
+	copy := cloneCheckReport(report)
+	return &copy, nil
+}
+
+// ReviewDraft returns the latest source-free state, including whether the
+// exact validated and checked revision can be explicitly applied.
+func (s *Service) ReviewDraft(id string) (*DraftReview, error) {
+	s.draftMu.Lock()
+	defer s.draftMu.Unlock()
+	stored := s.drafts[id]
+	if stored == nil {
+		return nil, fmt.Errorf("draft not found")
+	}
+	s.expireDraftLocked(stored)
+	review := &DraftReview{Draft: cloneDraft(stored.draft)}
+	if stored.checks != nil && stored.checks.Revision == stored.draft.Revision && stored.checks.CandidateHash == stored.draft.CandidateHash {
+		checks := cloneCheckReport(stored.checks.Report)
+		review.Checks = &checks
+		review.ApplyEligible = stored.draft.State == DraftValid && stored.draft.Validation != nil && stored.draft.Validation.Applicable && checks.Applicable
+	}
+	return review, nil
 }
 
 // ExpireDraftsForOpenFile marks drafts stale when a UI changes the open file or
@@ -267,6 +405,7 @@ func (s *Service) expireDraftLocked(stored *storedDraft) {
 func staleDraft(stored *storedDraft) {
 	stored.draft.State = DraftStale
 	stored.draft.Validation = nil
+	stored.draft.CandidateHash = ""
 	stored.checks = nil
 }
 
@@ -330,6 +469,9 @@ func (s *Service) Candidate(id string) (*GenerationPreview, error) {
 		return nil, fmt.Errorf("validated candidate not found; generate a new preview")
 	}
 	s.expireDraftLocked(stored)
+	if stored.draft.State == DraftStale {
+		return nil, project.ErrRevisionConflict
+	}
 	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable {
 		return nil, fmt.Errorf("draft is not valid; validate the latest revision")
 	}
@@ -342,23 +484,23 @@ func (s *Service) Candidate(id string) (*GenerationPreview, error) {
 }
 
 func (s *Service) CheckCandidate(ctx context.Context, id string, options CandidateCheckOptions) (*CandidateCheckReport, error) {
-	preview, err := s.Candidate(id)
+	draft, err := s.Draft(id)
 	if err != nil {
 		return nil, err
 	}
-	report, err := s.RunCandidateChecks(ctx, preview.TargetPath, preview.CandidateContent, options)
-	if err != nil {
-		return nil, err
-	}
-	s.draftMu.Lock()
-	if stored := s.drafts[id]; stored != nil && stored.draft.State == DraftValid {
-		current, composeErr := s.composePreviewLocked(stored)
-		if composeErr == nil && current.CandidateHash == preview.CandidateHash {
-			stored.checks = &draftCheckEvidence{Revision: stored.draft.Revision, CandidateHash: preview.CandidateHash, Report: cloneCheckReport(report)}
+	if draft.CandidateHash == "" {
+		preview, err := s.Candidate(id)
+		if err != nil {
+			return nil, err
 		}
+		draft.CandidateHash = preview.CandidateHash
+		s.draftMu.Lock()
+		if stored := s.drafts[id]; stored != nil && stored.draft.Revision == draft.Revision && stored.draft.Hash == draft.Hash {
+			stored.draft.CandidateHash = draft.CandidateHash
+		}
+		s.draftMu.Unlock()
 	}
-	s.draftMu.Unlock()
-	return &report, nil
+	return s.CheckDraft(ctx, DraftCheckRequest{ID: id, ExpectedRevision: draft.Revision, ExpectedHash: draft.Hash, Options: options})
 }
 
 func (s *Service) checkedCandidate(id string) (GenerationPreview, CandidateCheckReport, error) {
@@ -369,6 +511,9 @@ func (s *Service) checkedCandidate(id string) (GenerationPreview, CandidateCheck
 		return GenerationPreview{}, CandidateCheckReport{}, fmt.Errorf("validated candidate not found; generate a new preview")
 	}
 	s.expireDraftLocked(stored)
+	if stored.draft.State == DraftStale {
+		return GenerationPreview{}, CandidateCheckReport{}, project.ErrRevisionConflict
+	}
 	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable {
 		return GenerationPreview{}, CandidateCheckReport{}, fmt.Errorf("draft is not valid; validate the latest revision")
 	}
@@ -390,6 +535,9 @@ func (s *Service) candidateReviewState(id string) (Draft, GenerationPreview, *Ca
 		return Draft{}, GenerationPreview{}, nil, fmt.Errorf("validated candidate not found; generate a new preview")
 	}
 	s.expireDraftLocked(stored)
+	if stored.draft.State == DraftStale {
+		return Draft{}, GenerationPreview{}, nil, project.ErrRevisionConflict
+	}
 	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable {
 		return Draft{}, GenerationPreview{}, nil, fmt.Errorf("draft is not valid; validate the latest revision")
 	}

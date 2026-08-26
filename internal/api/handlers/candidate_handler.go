@@ -28,6 +28,26 @@ type candidateCheckRequest struct {
 	RunTests        bool   `json:"run_tests,omitempty"`
 }
 
+type draftUpdateRequest struct {
+	ProjectRevision  string   `json:"project_revision"`
+	ExpectedRevision int64    `json:"expected_revision"`
+	Declaration      string   `json:"declaration"`
+	Imports          []string `json:"imports"`
+}
+
+type draftValidationRequest struct {
+	ProjectRevision  string `json:"project_revision"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+
+type draftCheckRequest struct {
+	ProjectRevision  string `json:"project_revision"`
+	ExpectedRevision int64  `json:"expected_revision"`
+	ExpectedHash     string `json:"expected_hash"`
+	RunLint          bool   `json:"run_lint,omitempty"`
+	RunTests         bool   `json:"run_tests,omitempty"`
+}
+
 type candidateComparisonRequest struct {
 	LeftGenerationID  string `json:"left_generation_id"`
 	RightGenerationID string `json:"right_generation_id"`
@@ -52,6 +72,82 @@ func (h *CandidateHandler) Check(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, report)
+}
+
+// Draft returns the isolated editable declaration, never a complete source file.
+func (h *CandidateHandler) Draft(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	draft, err := h.service.Draft(r.PathValue("draftID"))
+	if err != nil {
+		writeCandidateError(w, "draft unavailable", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, draft)
+}
+
+// UpdateDraft creates a new revision for a manual declaration/import edit.
+func (h *CandidateHandler) UpdateDraft(w http.ResponseWriter, r *http.Request) {
+	var request draftUpdateRequest
+	if !decodeCandidateRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+		return
+	}
+	draft, err := h.service.UpdateDraft(app.DraftUpdateRequest{ID: r.PathValue("draftID"), ExpectedRevision: request.ExpectedRevision, Declaration: request.Declaration, Imports: request.Imports})
+	if err != nil {
+		writeCandidateError(w, "update draft failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, draft)
+}
+
+// ValidateDraft performs focused declaration composition for one exact draft revision.
+func (h *CandidateHandler) ValidateDraft(w http.ResponseWriter, r *http.Request) {
+	var request draftValidationRequest
+	if !decodeCandidateRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+		return
+	}
+	draft, err := h.service.ValidateDraft(r.PathValue("draftID"), request.ExpectedRevision)
+	if err != nil {
+		writeCandidateError(w, "validate draft failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, draft)
+}
+
+// CheckDraft runs isolated checks for the exact validated draft revision and hash.
+func (h *CandidateHandler) CheckDraft(w http.ResponseWriter, r *http.Request) {
+	var request draftCheckRequest
+	if !decodeCandidateRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+		return
+	}
+	report, err := h.service.CheckDraft(r.Context(), app.DraftCheckRequest{ID: r.PathValue("draftID"), ExpectedRevision: request.ExpectedRevision, ExpectedHash: request.ExpectedHash, Options: app.CandidateCheckOptions{RunLint: request.RunLint, RunTests: request.RunTests}})
+	if err != nil {
+		writeCandidateError(w, "draft checks failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, report)
+}
+
+// ReviewDraft returns validation, check evidence, and explicit Apply eligibility.
+func (h *CandidateHandler) ReviewDraft(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	review, err := h.service.ReviewDraft(r.PathValue("draftID"))
+	if err != nil {
+		writeCandidateError(w, "draft review unavailable", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, review)
 }
 
 func (h *CandidateHandler) Apply(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +232,7 @@ func (h *CandidateHandler) requireRevision(w http.ResponseWriter, revision strin
 }
 
 func decodeCandidateRequest(w http.ResponseWriter, r *http.Request, value any) bool {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost && r.Method != http.MethodPatch {
 		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return false
 	}
