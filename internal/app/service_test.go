@@ -101,13 +101,50 @@ func TestRemoteProviderRequiresConfirmation(t *testing.T) {
 	}
 }
 
+func TestAnalyzeProjectStoresStructuredReport(t *testing.T) {
+	var received llm.ChatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Error(err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "fixture-model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs a small daemon.","architecture":"One Go package.","components":["daemon"],"entry_points":["main.main"],"flows":["request to service"],"risks":[],"next_steps":["Add coverage"]}`}}}})
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: server.URL, Model: "analysis-model"}}, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	analysis, err := service.AnalyzeProject(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if analysis.Report.Status != project.ProjectAnalysisStatusFresh || analysis.Report.Model != "analysis-model" || analysis.Report.Profile != "analysis" || analysis.Report.Purpose != "Runs a small daemon." {
+		t.Fatalf("project report = %+v", analysis.Report)
+	}
+	if len(received.Messages) != 2 || !strings.Contains(received.Messages[0].Content, "exactly one JSON object") {
+		t.Fatalf("project analysis prompt = %+v", received.Messages)
+	}
+}
+
 func TestGenerateCancellationStopsLLMRequest(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	providerCanceled := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
-		close(started)
-		<-release
+		started <- struct{}{}
+		<-r.Context().Done()
+		providerCanceled <- struct{}{}
 	}))
 	defer server.Close()
 	root := t.TempDir()
@@ -131,14 +168,14 @@ func TestGenerateCancellationStopsLLMRequest(t *testing.T) {
 		_, err := service.Generate(ctx, "improve Run", "sample.go", "Run", workflow.ScopeStrictSymbol, false)
 		done <- err
 	}()
-	<-started
+	waitForTestSignal(t, started, "generation provider request")
 	cancel()
-	if err := <-done; err == nil {
+	if err := waitForTestError(t, done, "canceled generation"); err == nil {
 		t.Fatal("expected canceled generation error")
 	} else if !errors.Is(err, context.Canceled) {
 		t.Fatalf("generation error = %v, want context cancellation", err)
 	}
-	close(release)
+	waitForTestSignal(t, providerCanceled, "generation provider cancellation")
 }
 
 func TestGenerateReturnsDeadlineExceeded(t *testing.T) {

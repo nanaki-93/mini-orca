@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
@@ -37,6 +38,34 @@ func TestLoadConfigExample(t *testing.T) {
 	if len(cfg.Agents.Coder.Skills) != 3 {
 		t.Errorf("expected 3 coder skills, got %d", len(cfg.Agents.Coder.Skills))
 	}
+}
+
+func TestRepositoryConfigurationPolicy(t *testing.T) {
+	repositoryRoot := filepath.Join("..", "..")
+	ignoreFile, err := os.ReadFile(filepath.Join(repositoryRoot, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+	if !containsIgnoreRule(string(ignoreFile), "config.yaml") {
+		t.Fatal(".gitignore must ignore local config.yaml")
+	}
+
+	example, err := config.LoadFromYAML(filepath.Join(repositoryRoot, "config.example.yaml"))
+	if err != nil {
+		t.Fatalf("load config example: %v", err)
+	}
+	if err := example.Validate(); err != nil {
+		t.Fatalf("validate config example: %v", err)
+	}
+}
+
+func containsIgnoreRule(contents, want string) bool {
+	for _, line := range strings.Split(contents, "\n") {
+		if strings.TrimSpace(line) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestLoadConfigNotExists(t *testing.T) {

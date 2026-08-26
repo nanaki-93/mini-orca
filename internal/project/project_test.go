@@ -14,7 +14,7 @@ type mockChatClient struct{}
 
 func (mockChatClient) Chat(context.Context, []llm.ChatMessage) (*llm.ChatResponse, error) {
 	return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{
-		Role: "assistant", Content: "## Purpose\nA small test project.\n\n## Architecture\nOne Go package.",
+		Role: "assistant", Content: `{"purpose":"A small test project.","architecture":"One Go package.","components":["main package"],"entry_points":["main.main"],"flows":["main invokes work"],"risks":[],"next_steps":["Add tests"]}`,
 	}}}}, nil
 }
 
@@ -83,6 +83,9 @@ func TestAnalyzerWritesAnalysisAndContextIncludesInventory(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(root, analysisRelativePath))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if analysis.Report.Status != ProjectAnalysisStatusFresh || analysis.Report.Purpose != "A small test project." {
+		t.Fatalf("structured report = %+v", analysis.Report)
 	}
 	if !strings.Contains(string(data), "A small test project") || !strings.Contains(string(data), "internal/service.go") {
 		t.Fatalf("analysis file missing AI summary or inventory:\n%s", data)

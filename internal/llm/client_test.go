@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestChatRejectsMalformedNonOKAndOversizedProviderResponses(t *testing.T) {
@@ -39,17 +40,17 @@ func TestChatRejectsMalformedNonOKAndOversizedProviderResponses(t *testing.T) {
 }
 
 func TestChatPropagatesCancellationAndLeavesEmptyChoicesForAgentValidation(t *testing.T) {
-	started := make(chan struct{})
-	canceled := make(chan struct{})
+	started := make(chan struct{}, 1)
+	canceled := make(chan struct{}, 1)
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if requests.Add(1) == 2 {
 			_ = json.NewEncoder(w).Encode(ChatResponse{Model: "fixture", Choices: []ChatChoice{}})
 			return
 		}
-		close(started)
+		started <- struct{}{}
 		<-r.Context().Done()
-		close(canceled)
+		canceled <- struct{}{}
 	}))
 	defer server.Close()
 
@@ -59,16 +60,36 @@ func TestChatPropagatesCancellationAndLeavesEmptyChoicesForAgentValidation(t *te
 		_, err := NewClient(server.URL, "", "fixture", 0, 0).Chat(ctx, []ChatMessage{{Role: "user", Content: "hello"}})
 		done <- err
 	}()
-	<-started
+	waitForTestSignal(t, started, "provider request")
 	cancel()
-	if err := <-done; err == nil || !errors.Is(err, context.Canceled) {
+	if err := waitForTestError(t, done, "canceled chat request"); err == nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation error = %v", err)
 	}
-	<-canceled
+	waitForTestSignal(t, canceled, "provider cancellation")
 
 	client := NewClient(server.URL, "", "fixture", 0, 0)
 	response, err := client.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}})
 	if err != nil || len(response.Choices) != 0 {
 		t.Fatalf("empty choices response = %+v, %v", response, err)
+	}
+}
+
+func waitForTestSignal(t *testing.T, signal <-chan struct{}, description string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for %s", description)
+	}
+}
+
+func waitForTestError(t *testing.T, done <-chan error, description string) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for %s", description)
+		return nil
 	}
 }

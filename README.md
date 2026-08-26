@@ -1,6 +1,6 @@
 # mini-orca
 
-**Version**: 4.1.0
+**Version**: maintained in [internal/version/version.go](internal/version/version.go) and reported by the daemon status endpoint.
 
 Mini-Orca is a local-first desktop coding assistant for one deliberate change at a time: one active project, one selected file, one selected symbol, and one reviewed candidate.
 

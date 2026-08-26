@@ -42,21 +42,22 @@ type chatClient interface {
 
 // Analysis is the persisted and API-facing summary for an imported project.
 type Analysis struct {
-	ProjectID       string         `json:"project_id"`
-	ProjectRevision string         `json:"project_revision"`
-	Name            string         `json:"name"`
-	Path            string         `json:"path"`
-	Type            string         `json:"type"`
-	BuildFile       string         `json:"build_file,omitempty"`
-	FileCount       int            `json:"file_count"`
-	SourceFileCount int            `json:"source_file_count"`
-	TotalLines      int            `json:"total_lines"`
-	Languages       map[string]int `json:"languages"`
-	Files           []string       `json:"files"`
-	AnalysisFile    string         `json:"analysis_file"`
-	Summary         string         `json:"summary"`
-	AIStatus        string         `json:"ai_status"`
-	AnalyzedAt      time.Time      `json:"analyzed_at"`
+	ProjectID       string                `json:"project_id"`
+	ProjectRevision string                `json:"project_revision"`
+	Name            string                `json:"name"`
+	Path            string                `json:"path"`
+	Type            string                `json:"type"`
+	BuildFile       string                `json:"build_file,omitempty"`
+	FileCount       int                   `json:"file_count"`
+	SourceFileCount int                   `json:"source_file_count"`
+	TotalLines      int                   `json:"total_lines"`
+	Languages       map[string]int        `json:"languages"`
+	Files           []string              `json:"files"`
+	AnalysisFile    string                `json:"analysis_file"`
+	Summary         string                `json:"summary"`
+	AIStatus        string                `json:"ai_status"`
+	AnalyzedAt      time.Time             `json:"analyzed_at"`
+	Report          ProjectAnalysisReport `json:"report"`
 }
 
 // FileInfo describes one selected project file.
@@ -75,11 +76,22 @@ type FileInfo struct {
 
 // Analyzer scans projects and asks the configured model for an architectural summary.
 type Analyzer struct {
-	llm chatClient
+	llm     chatClient
+	model   string
+	profile string
 }
 
 func NewAnalyzer(client chatClient) *Analyzer {
-	return &Analyzer{llm: client}
+	return NewAnalyzerWithProfile(client, "", "analysis")
+}
+
+// NewAnalyzerWithProfile records the configured analysis model identity with
+// every structured report so cached interpretations can be invalidated safely.
+func NewAnalyzerWithProfile(client chatClient, model, profile string) *Analyzer {
+	if profile == "" {
+		profile = "analysis"
+	}
+	return &Analyzer{llm: client, model: model, profile: profile}
 }
 
 func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) {
@@ -95,29 +107,49 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 	if err != nil {
 		return nil, err
 	}
+	analysis.ProjectID = projectID(canonical)
+	analysis.ProjectRevision, err = projectRevision(canonical)
+	if err != nil {
+		return nil, err
+	}
 
 	contextText, err := NewContextBuilder().Build(canonical, "")
 	if err != nil {
 		return nil, fmt.Errorf("build analysis context: %w", err)
 	}
-	analysis.AIStatus = "complete"
+	report := newProjectAnalysisReport(analysis.ProjectID, analysis.ProjectRevision, a.model, a.profile)
 	if a.llm == nil {
-		analysis.AIStatus = "unavailable"
-		analysis.Summary = "AI analysis is unavailable because no LLM client is configured."
+		report.Status = ProjectAnalysisStatusUnavailable
+		report.Failure = "AI analysis is unavailable because no LLM client is configured."
 	} else {
-		response, chatErr := a.llm.Chat(ctx, []llm.ChatMessage{
-			{Role: "system", Content: "You are a software architect. Analyze the supplied project facts and context. Be concise and factual. Return Markdown with: Purpose, Architecture, Entry points, Data/control flow, Risks, and Suggested next steps. Do not invent files or dependencies."},
-			{Role: "user", Content: contextText},
-		})
-		if chatErr != nil || len(response.Choices) == 0 {
-			analysis.AIStatus = "failed"
-			analysis.Summary = "AI analysis could not be completed. The factual project inventory below is still valid."
+		response, chatErr := a.llm.Chat(ctx, projectAnalysisMessages(contextText))
+		if chatErr != nil || response == nil || len(response.Choices) == 0 {
+			report.Status = ProjectAnalysisStatusFailed
+			report.Failure = "AI analysis could not be completed. The factual project inventory below is still valid."
 		} else {
-			analysis.Summary = strings.TrimSpace(response.Choices[0].Message.Content)
+			parsed, parseErr := parseProjectAnalysisResponse(response.Choices[0].Message.Content)
+			if parseErr != nil {
+				report.Status = ProjectAnalysisStatusFailed
+				report.Failure = "AI analysis returned an unusable structured report. The factual project inventory below is still valid."
+			} else {
+				report.Purpose = parsed.Purpose
+				report.Architecture = parsed.Architecture
+				report.Components = parsed.Components
+				report.EntryPoints = parsed.EntryPoints
+				report.Flows = parsed.Flows
+				report.Risks = parsed.Risks
+				report.NextSteps = parsed.NextSteps
+			}
 		}
 	}
+	analysis.Report = report
+	analysis.AIStatus = report.Status
+	analysis.Summary = projectAnalysisSummary(report)
 
-	if err := writeAnalysis(canonical, analysis); err != nil {
+	if err := StoreProjectAnalysisReport(canonical, report); err != nil {
+		return nil, err
+	}
+	if err := writeAnalysisProjection(canonical, analysis); err != nil {
 		return nil, err
 	}
 	return analysis, nil
@@ -213,33 +245,6 @@ func GetFileInfo(root, relative string) (*FileInfo, error) {
 	}
 	info.ContentHash = contentHash(data)
 	return info, nil
-}
-
-func writeAnalysis(root string, analysis *Analysis) error {
-	directory := filepath.Join(root, filepath.Dir(analysisRelativePath))
-	if err := os.MkdirAll(directory, 0755); err != nil {
-		return fmt.Errorf("create analysis directory: %w", err)
-	}
-	var markdown strings.Builder
-	markdown.WriteString("# Project analysis: " + analysis.Name + "\n\n")
-	markdown.WriteString(fmt.Sprintf("Generated: %s  \nAI status: %s  \nProject type: %s  \nBuild file: %s  \nFiles: %d (%d source)  \nLines: %d\n\n", analysis.AnalyzedAt.Format(time.RFC3339), analysis.AIStatus, analysis.Type, analysis.BuildFile, analysis.FileCount, analysis.SourceFileCount, analysis.TotalLines))
-	markdown.WriteString("## Languages\n\n")
-	languages := make([]string, 0, len(analysis.Languages))
-	for language := range analysis.Languages {
-		languages = append(languages, language)
-	}
-	sort.Strings(languages)
-	for _, language := range languages {
-		markdown.WriteString(fmt.Sprintf("- %s: %d files\n", language, analysis.Languages[language]))
-	}
-	markdown.WriteString("\n## AI architecture summary\n\n" + analysis.Summary + "\n\n## File inventory\n\n")
-	for _, file := range analysis.Files {
-		markdown.WriteString("- `" + strings.ReplaceAll(file, "`", "") + "`\n")
-	}
-	if err := os.WriteFile(filepath.Join(root, analysisRelativePath), []byte(markdown.String()), 0644); err != nil {
-		return fmt.Errorf("write analysis file: %w", err)
-	}
-	return nil
 }
 
 func readLimited(path string, limit int64) ([]byte, error) {
