@@ -36,10 +36,10 @@ class DesktopStateTest {
         val client = ApiClient(transport = DaemonTransport { method, path, _ ->
             assertEquals("GET", method)
             assertEquals("/status", path)
-            TransportResponse(200, "{\"status\":\"running\",\"version\":\"4.1.0\",\"workflow\":\"single_coder_preview\"}")
+            TransportResponse(200, "{\"status\":\"running\",\"version\":\"4.3.0\",\"workflow\":\"single_coder_preview\"}")
         })
 
-        assertEquals("4.1.0", client.status().version)
+        assertEquals("4.3.0", client.status().version)
     }
 
     @Test fun indexAcceptsLegacyNullCollectionFields() {

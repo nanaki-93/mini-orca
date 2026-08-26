@@ -9,6 +9,12 @@ non-loopback provider, the desktop user must explicitly confirm the destination
 for every request that sends prompt content. That confirmation is part of the
 request, not a configuration switch that silently enables remote delivery.
 
+Prompt-bearing requests are project import/analysis, one-file semantic
+analysis, Analyze-all, and file-scoped chat messages. Deterministic reindexing,
+verified Go scans, validation, focused checks, Apply, and Undo do not send a
+prompt. Confirming a remote provider does not authorize automatic scans,
+automatic writes, multi-file edits, commits, or pushes.
+
 ## LLM Configuration (`llm`)
 
 Defines the LLM provider settings. This is a flat configuration (no nested providers).

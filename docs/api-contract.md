@@ -16,6 +16,11 @@ writes automatically, commits, or pushes.
 route test in `cmd/daemon/main_test.go` compares both this table and the OpenAPI
 paths with the daemon registrations.
 
+Use the routes in this table exactly once in a client integration. The three
+compatibility candidate routes do not create a draft or write a file, and the
+retired one-shot message route always returns `410 Gone`; neither is part of
+the current declaration-draft workflow.
+
 ## Live routes
 
 | Method | Path | Purpose |
@@ -113,4 +118,3 @@ Configuration is local-only in `config.yaml` (ignored by Git); begin with
 failures use a structured error object with `type`, `message`, `user_message`,
 and `code`. Project paths are canonical project-relative paths and revision/hash
 guards return `409 Conflict` when their captured base is no longer current.
-

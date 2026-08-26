@@ -8,6 +8,10 @@ info:
     conversation, then reviews an editable declaration draft before explicitly
     applying it. Source and diff views are read-only; no route creates multi-file
     changes, writes automatically, or exposes a browser IDE.
+    Project import, semantic analysis, Analyze-all, and chat messages can send
+    prompt content; a non-loopback provider requires explicit confirmation for
+    each of those requests. Verified scans, validation, checks, Apply, and Undo
+    do not send prompts and never run automatically.
 servers:
   - url: http://localhost:9090
     description: Local daemon
@@ -1049,36 +1053,6 @@ components:
         project_revision: {type: string}
         post_apply_hash: {type: string}
         confirm: {type: boolean, description: Must be true after the user confirms restoration of the immediately preceding unchanged apply.}
-    GenerationRequest:
-      type: object
-      required: [message, file_path, target_symbol, project_id, project_revision, base_file_hash]
-      properties:
-        message: {type: string}
-        file_path: {type: string, description: Project-relative selected file.}
-        target_symbol: {type: string, description: Selected function, method, type, interface, or class.}
-        scope_mode: {type: string, enum: [strict_symbol, symbol_plus_imports], default: strict_symbol}
-        project_id: {type: string, description: Stable id returned by project import.}
-        project_revision: {type: string, description: Current project revision returned by project import.}
-        base_file_hash: {type: string, description: Hash returned by selected-file information.}
-        confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
-    GenerationResponse:
-      type: object
-      required: [generation_id, version, project_id, project_revision, base_file_hash, target_path, target_symbol, scope_mode, candidate_content, candidate_hash, effective_model, context_manifest]
-      properties:
-        generation_id: {type: string}
-        version: {type: string, enum: [v1]}
-        project_id: {type: string}
-        project_revision: {type: string}
-        base_file_hash: {type: string, description: Hash captured before the model request.}
-        target_path: {type: string}
-        target_symbol: {type: string}
-        scope_mode: {type: string, enum: [strict_symbol, symbol_plus_imports]}
-        candidate_content: {type: string, description: Unvalidated preview only; never persisted or applied by this endpoint.}
-        candidate_hash: {type: string, description: Normalized SHA-256 hash of candidate_content.}
-        rationale: {type: string}
-        effective_model: {$ref: '#/components/schemas/EffectiveModel'}
-        context_manifest: {$ref: '#/components/schemas/ContextManifest'}
-        validation: {$ref: '#/components/schemas/GenerationValidation'}
     CandidateComparisonRequest:
       type: object
       required: [left_generation_id, right_generation_id, project_revision]

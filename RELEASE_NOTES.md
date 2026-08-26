@@ -22,6 +22,7 @@ immediate guarded Undo.
   findings from AI suggestions with provenance and freshness.
 - The API, OpenAPI contract, configuration guidance, and desktop smoke checklist
   now describe this workflow and its keyboard/responsive behavior.
+- The canonical daemon, API, and release-documentation version is now `4.3.0`.
 
 ### Migration notes
 
@@ -32,7 +33,8 @@ immediate guarded Undo.
   /api/chat/history is a deprecated source-free activity alias; use GET
   /api/projects/current/activity instead.
 - The older candidate comparison/check/export routes remain compatibility routes
-  for their metadata only. New Desktop workflow code uses draft routes.
+  for pre-draft review metadata only. New Desktop workflow code uses draft
+  routes; no current example represents them as a generation workflow.
 
 ### Privacy and limits
 
@@ -46,9 +48,22 @@ immediate guarded Undo.
   Other languages may be analyzed conservatively but do not receive equivalent
   declaration editing until dedicated validators exist.
 
+### Release acceptance evidence
+
+- On 2026-08-27, `make check` passed: Go formatting, unit tests, race tests,
+  vet, and the desktop suite. The named desktop integration, accessibility, and
+  draft-review workflow tests also passed.
+- Route/OpenAPI/API-contract and canonical-version checks passed, as did the
+  release-fixture tests for replace/create targets, secret exclusions, parser,
+  vet, test, AI-suggestion provenance, stale state, and Git/non-Git coverage.
+  `git diff --check` passed and `config.yaml` remains ignored and untracked.
+- `docs/RELEASE_ACCEPTANCE.md` records the reproducible desktop keyboard,
+  narrow-layout, remote/offline, and Git/non-Git manual checks. These require a
+  release operator with a local desktop session; they do not expose prompts,
+  source, or credentials in the release record.
+
 ## v4.2.0 — Desktop-only focused workflow (superseded)
 
 The v4.2 preview workflow has been superseded by v4.3 file-scoped declaration
 drafts. Consult the v4.3 migration notes and current API contract rather than
 using its former one-shot generation examples.
-
