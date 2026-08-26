@@ -7,6 +7,13 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopWorkflowControllerTest {
+    @Test fun overviewEnrichmentKeepsDeterministicProjectStateAvailable() {
+        val controller = loadedController()
+        controller.dispatch(DesktopEvent.OverviewLoaded(ProjectOverview(projectId = "project", projectRevision = "revision", metrics = ProjectMetrics(type = "go", fileCount = 1))))
+
+        assertEquals("project", controller.state.project?.projectId)
+        assertEquals("go", controller.state.overview?.metrics?.type)
+    }
     @Test fun lateFileResponsesCannotReplaceTheNewSelection() {
         val controller = loadedController()
         val first = controller.beginFileLoad("first.go")!!

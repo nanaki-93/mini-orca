@@ -30,6 +30,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     var filter by remember { mutableStateOf("") }
     var collapsedDirectories by remember { mutableStateOf(emptySet<String>()) }
     var analysisJob by remember { mutableStateOf<Job?>(null) }
+    var analyzeAllPollJob by remember { mutableStateOf<Job?>(null) }
     var analysisRequestId by remember { mutableStateOf(0) }
     var generationJob by remember { mutableStateOf<Job?>(null) }
     var manualSymbol by remember { mutableStateOf("") }
@@ -74,6 +75,60 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         paletteQuery = ""
         showPalette = true
     }
+    fun refreshProjectWorkspace(revision: String) {
+        scope.launch {
+            runCatching { withContext(Dispatchers.IO) { Triple(api.overview(revision), api.findings(revision), api.analyzeAllJob(revision)) } }
+                .onSuccess { (overview, findings, job) ->
+                    if (appState.project?.projectRevision == revision) {
+                        update(DesktopEvent.OverviewLoaded(overview))
+                        update(DesktopEvent.FindingsLoaded(findings.findings))
+                        update(DesktopEvent.AnalyzeAllLoaded(job))
+                    }
+                }
+                .onFailure { update(DesktopEvent.Status("Project facts are available; workspace details could not be refreshed.")) }
+        }
+    }
+    fun pollAnalyzeAll(revision: String) {
+        analyzeAllPollJob?.cancel()
+        analyzeAllPollJob = scope.launch {
+            while (true) {
+                val response = runCatching { withContext(Dispatchers.IO) { api.analyzeAllJob(revision) } }
+                if (response.isFailure) {
+                    update(DesktopEvent.Failed(response.exceptionOrNull()?.message ?: "Analyze-all status failed"))
+                    return@launch
+                }
+                val job = response.getOrNull()
+                if (appState.project?.projectRevision != revision) break
+                update(DesktopEvent.AnalyzeAllLoaded(job))
+                if (!shouldPollAnalyzeAll(job)) break
+                kotlinx.coroutines.delay(750)
+            }
+        }
+    }
+    fun startAnalyzeAll() {
+        val project = appState.project ?: return
+        scope.launch { runCatching { withContext(Dispatchers.IO) { api.startAnalyzeAll(project.projectRevision) } }
+            .onSuccess { update(DesktopEvent.AnalyzeAllLoaded(it)); pollAnalyzeAll(project.projectRevision) }
+            .onFailure { update(DesktopEvent.Failed(it.message ?: "Unable to start Analyze-all")) } }
+    }
+    fun changeAnalyzeAll(action: (String) -> AnalyzeAllJob) {
+        val project = appState.project ?: return
+        scope.launch { runCatching { withContext(Dispatchers.IO) { action(project.projectRevision) } }
+            .onSuccess { update(DesktopEvent.AnalyzeAllLoaded(it)); if (shouldPollAnalyzeAll(it)) pollAnalyzeAll(project.projectRevision) }
+            .onFailure { update(DesktopEvent.Failed(it.message ?: "Unable to update Analyze-all")) } }
+    }
+    fun runVerifiedScan() {
+        val project = appState.project ?: return
+        scope.launch { runCatching { withContext(Dispatchers.IO) { api.startGoScan(project.projectRevision) } }
+            .onSuccess { update(DesktopEvent.GoScanLoaded(it)); refreshProjectWorkspace(project.projectRevision) }
+            .onFailure { update(DesktopEvent.Failed(it.message ?: "Unable to start verified scan")) } }
+    }
+    fun cancelVerifiedScan() {
+        val project = appState.project ?: return
+        scope.launch { runCatching { withContext(Dispatchers.IO) { api.cancelGoScan(project.projectRevision) } }
+            .onSuccess { update(DesktopEvent.GoScanLoaded(it)) }
+            .onFailure { update(DesktopEvent.Failed(it.message ?: "Unable to cancel verified scan")) } }
+    }
     fun importProject() {
         val directory = chooseDirectory() ?: return
         val requestId = workflow.beginProjectLoad()
@@ -85,6 +140,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                     if (workflow.projectLoaded(requestId, project, index)) {
                         appState = workflow.state
                         collapsedDirectories = explorerDirectories(index.files)
+                        refreshProjectWorkspace(project.projectRevision)
                     }
                 }
                 .onFailure { if (workflow.isCurrentProjectRequest(requestId)) update(DesktopEvent.Failed(it.message ?: "Import failed")) }
@@ -96,7 +152,10 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         update(DesktopEvent.Status("Refreshing deterministic project facts…"))
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { api.reindex(project.projectRevision) } }
-                .onSuccess { update(DesktopEvent.IndexRefreshed(it)) }
+                .onSuccess {
+                    update(DesktopEvent.IndexRefreshed(it))
+                    refreshProjectWorkspace(it.projectRevision)
+                }
                 .onFailure { update(DesktopEvent.Failed(it.message ?: "Re-analysis failed")) }
         }
     }
@@ -140,6 +199,11 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         }
         update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
         selectFile(target.path, target)
+    }
+    fun prepareFinding(finding: UnifiedFinding) {
+        if (!findingCanPrepareFix(finding)) { update(DesktopEvent.Failed("Refresh this finding before preparing a fix.")); return }
+        openFinding(finding)
+        update(DesktopEvent.SuggestionPrepared("fix", "Address ${finding.title}: ${finding.message}", null))
     }
     fun analyzeSelected(refresh: Boolean) {
         val project = appState.project ?: return
@@ -427,6 +491,13 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
         },
         onOpenFinding = ::openFinding,
+        onPrepareFinding = ::prepareFinding,
+        onStartAnalyzeAll = ::startAnalyzeAll,
+        onPauseAnalyzeAll = { changeAnalyzeAll(api::pauseAnalyzeAll) },
+        onResumeAnalyzeAll = { changeAnalyzeAll { api.resumeAnalyzeAll(it) } },
+        onCancelAnalyzeAll = { changeAnalyzeAll(api::cancelAnalyzeAll) },
+        onStartScan = ::runVerifiedScan,
+        onCancelScan = ::cancelVerifiedScan,
         explorer = explorer,
         focusedAction = focusedAction,
         onImport = ::importProject,

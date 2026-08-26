@@ -89,4 +89,17 @@ class DesktopShellTest {
         assertEquals(Workspace.Editor, nextWorkspace(Workspace.Bugs))
         assertEquals(Workspace.Summary, nextWorkspace(Workspace.Editor))
     }
+
+    @Test fun analysisPollingStopsForNoContentAndTerminalJobs() {
+        assertTrue(!shouldPollAnalyzeAll(null))
+        assertTrue(shouldPollAnalyzeAll(AnalyzeAllJob(status = "running")))
+        assertTrue(!shouldPollAnalyzeAll(AnalyzeAllJob(status = "paused")))
+        assertTrue(!shouldPollAnalyzeAll(AnalyzeAllJob(status = "completed")))
+    }
+
+    @Test fun onlyFreshLocatedFindingsCanPrepareFixes() {
+        assertTrue(findingCanPrepareFix(UnifiedFinding(freshness = "fresh", location = FindingLocation(path = "main.go"))))
+        assertTrue(!findingCanPrepareFix(UnifiedFinding(freshness = "stale", location = FindingLocation(path = "main.go"))))
+        assertTrue(!findingCanPrepareFix(UnifiedFinding(freshness = "fresh")))
+    }
 }

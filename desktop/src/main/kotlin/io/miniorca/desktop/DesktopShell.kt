@@ -157,6 +157,13 @@ internal fun DesktopShell(
     onSelectPaletteSymbol: (SymbolInfo) -> Unit,
     onSelectPaletteAction: (String) -> Unit,
     onOpenFinding: (UnifiedFinding) -> Unit,
+    onPrepareFinding: (UnifiedFinding) -> Unit,
+    onStartAnalyzeAll: () -> Unit,
+    onPauseAnalyzeAll: () -> Unit,
+    onResumeAnalyzeAll: () -> Unit,
+    onCancelAnalyzeAll: () -> Unit,
+    onStartScan: () -> Unit,
+    onCancelScan: () -> Unit,
     explorer: @Composable (Modifier, () -> Unit) -> Unit,
     focusedAction: @Composable (Modifier) -> Unit,
     onImport: () -> Unit,
@@ -240,14 +247,15 @@ internal fun DesktopShell(
                             ResizableDivider(onDelta = { onPaneWidths(paneWidths.withExplorer(paneWidths.explorer + it)) }, onCommit = onSavePaneWidths)
                         }
                         ContentPane(
-                            project = appState.project, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis, selectedSymbol = appState.selectedSymbol,
+                            project = appState.project, overview = appState.overview, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis, selectedSymbol = appState.selectedSymbol,
                             workspace = workspace, analysisInProgress = analysisInProgress, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis,
                             onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, candidate = appState.candidate, comparisonBase = appState.comparisonBase, comparison = appState.comparison,
                             checks = appState.checks, applied = applied, onDiscard = onDiscard, onAskForRevision = onAskForRevision, onRunChecks = onRunChecks, onGenerateAlternate = onGenerateAlternate,
                             onCompare = onCompare, onExport = onExport, comparisonBaseNote = comparisonBaseNote, comparisonCandidateNote = comparisonCandidateNote, onComparisonBaseNote = onComparisonBaseNote,
                             onComparisonCandidateNote = onComparisonCandidateNote, onApply = onApply, onUndo = onUndo, activity = activity, showActivity = showActivity, onToggleActivity = onToggleActivity,
-                            impact = appState.impact, gitStatus = appState.gitStatus, findings = appState.findings.findings, onOpenFinding = onOpenFinding,
-                            focusedLine = appState.selection.focusedLine, modifier = Modifier.weight(1f).fillMaxHeight(),
+                            impact = appState.impact, gitStatus = appState.gitStatus, findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding,
+                            onStartAnalyzeAll = onStartAnalyzeAll, onPauseAnalyzeAll = onPauseAnalyzeAll, onResumeAnalyzeAll = onResumeAnalyzeAll, onCancelAnalyzeAll = onCancelAnalyzeAll, onStartScan = onStartScan, onCancelScan = onCancelScan,
+                            focusedLine = appState.selection.focusedLine, onWorkspace = onWorkspace, modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
                         if (!narrow) {
                             ResizableDivider(onDelta = { onPaneWidths(paneWidths.withAction(paneWidths.action - it)) }, onCommit = onSavePaneWidths)
@@ -265,21 +273,22 @@ internal fun DesktopShell(
 
 @Composable
 private fun ContentPane(
-    project: ProjectAnalysis?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, workspace: Workspace,
+    project: ProjectAnalysis?, overview: ProjectOverview?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, workspace: Workspace,
     analysisInProgress: Boolean, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit,
     onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, candidate: GenerationResult?, comparisonBase: GenerationResult?, comparison: CandidateComparison?, checks: CandidateCheckReport?, applied: ApplyResult?,
     onDiscard: () -> Unit, onAskForRevision: () -> Unit, onRunChecks: () -> Unit, onGenerateAlternate: () -> Unit, onCompare: () -> Unit, onExport: () -> Unit,
     comparisonBaseNote: String, comparisonCandidateNote: String, onComparisonBaseNote: (String) -> Unit, onComparisonCandidateNote: (String) -> Unit, onApply: () -> Unit, onUndo: () -> Unit,
-    activity: List<ActivityEntry>, showActivity: Boolean, onToggleActivity: () -> Unit, impact: ImpactPreview?, gitStatus: GitStatus?, findings: List<UnifiedFinding>, onOpenFinding: (UnifiedFinding) -> Unit,
-    focusedLine: Int, modifier: Modifier,
+    activity: List<ActivityEntry>, showActivity: Boolean, onToggleActivity: () -> Unit, impact: ImpactPreview?, gitStatus: GitStatus?, findings: List<UnifiedFinding>, scan: GoScanReport?, analyzeAll: AnalyzeAllJob?, coverage: AnalysisCoverage?, onOpenFinding: (UnifiedFinding) -> Unit, onPrepareFinding: (UnifiedFinding) -> Unit,
+    onStartAnalyzeAll: () -> Unit, onPauseAnalyzeAll: () -> Unit, onResumeAnalyzeAll: () -> Unit, onCancelAnalyzeAll: () -> Unit, onStartScan: () -> Unit, onCancelScan: () -> Unit,
+    focusedLine: Int, onWorkspace: (Workspace) -> Unit, modifier: Modifier,
 ) {
     Column(modifier.background(AppBackground)) {
         InfoStrip(project, selected)
         when (workspace) {
-            Workspace.Summary -> SummaryPane(selected, symbols, analysis, selectedSymbol, analysisInProgress, onAnalyze, onRefreshAnalysis, onCancelAnalysis, onSelectSymbol, onPrepareSuggestion)
-            Workspace.Editor -> if (candidate == null) CodePane(project, selected, selectedSymbol, focusedLine) else ReviewPane(candidate, comparisonBase, comparison, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onGenerateAlternate, onCompare, onExport, comparisonBaseNote, comparisonCandidateNote, onComparisonBaseNote, onComparisonCandidateNote, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
-            Workspace.Analysis -> WorkspacePlaceholder("Project Analysis", "Analysis controls will be available here.")
-            Workspace.Bugs -> BugsNavigationPane(findings, onOpenFinding)
+            Workspace.Summary -> ProjectSummaryPane(overview, project, onWorkspace)
+            Workspace.Editor -> if (candidate == null) EditorPane(project, selected, symbols, analysis, selectedSymbol, focusedLine, onSelectSymbol, onAnalyze, onRefreshAnalysis) else ReviewPane(candidate, comparisonBase, comparison, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onGenerateAlternate, onCompare, onExport, comparisonBaseNote, comparisonCandidateNote, onComparisonBaseNote, onComparisonCandidateNote, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
+            Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll) { path -> onOpenFinding(UnifiedFinding(location = FindingLocation(path = path))) }
+            Workspace.Bugs -> BugsWorkspacePane(findings, scan, onOpenFinding, onPrepareFinding, onStartScan, onCancelScan)
         }
     }
 }
@@ -290,22 +299,6 @@ private fun WorkspacePlaceholder(title: String, detail: String) {
         Text(title, color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         Text(detail, color = SecondaryText, fontSize = 13.sp)
-    }
-}
-
-@Composable
-private fun BugsNavigationPane(findings: List<UnifiedFinding>, onOpenFinding: (UnifiedFinding) -> Unit) {
-    if (findings.isEmpty()) {
-        WorkspacePlaceholder("Project Bugs", "Verified findings and AI suggestions will be available here.")
-        return
-    }
-    Column(Modifier.fillMaxSize().padding(18.dp)) {
-        Text("Project Bugs", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        findings.take(8).forEach { finding ->
-            Button(onClick = { onOpenFinding(finding) }, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Open ${finding.location.path.ifBlank { "finding" }} in Editor")
-            }
-        }
     }
 }
 

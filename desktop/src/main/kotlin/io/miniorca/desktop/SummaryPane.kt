@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -107,6 +108,49 @@ internal fun CodePane(project: ProjectAnalysis?, selected: ProjectFileInfo?, sel
                 )
             }
             Text(text = highlightedCode(source), color = PrimaryText, fontFamily = if (selected != null) FontFamily.Monospace else FontFamily.Default, fontSize = 13.sp, lineHeight = 20.sp)
+        }
+    }
+}
+
+@Composable
+internal fun EditorPane(project: ProjectAnalysis?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, focusedLine: Int, onSelectSymbol: (SymbolInfo) -> Unit, onAnalyze: () -> Unit, onRefresh: () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        FileSymbolBrief(selected, analysis, selectedSymbol, symbols, onSelectSymbol, onAnalyze, onRefresh)
+        CodePane(project, selected, selectedSymbol, focusedLine)
+    }
+}
+
+/** The source stays in SelectionContainer; this separate brief is the only editor-side control surface. */
+@Composable
+private fun FileSymbolBrief(selected: ProjectFileInfo?, analysis: FileAnalysis?, symbol: SymbolInfo?, symbols: List<SymbolInfo>, onSelectSymbol: (SymbolInfo) -> Unit, onAnalyze: () -> Unit, onRefresh: () -> Unit) {
+    Column(Modifier.fillMaxWidth().background(Panel).padding(12.dp)) {
+        if (selected == null) {
+            Text("Open a file to view its deterministic brief.", color = SecondaryText, fontSize = 12.sp)
+            return
+        }
+        Text("FILE BRIEF · ${selected.path}", color = PrimaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text("${selected.language} · ${formatBytes(selected.sizeBytes)} · ${selected.lineCount} lines · ${selected.contentHash.take(12)}", color = SecondaryText, fontSize = 11.sp)
+        Row {
+            Button(onClick = onAnalyze, modifier = Modifier.padding(top = 6.dp)) { Text("Analyze") }
+            Button(onClick = onRefresh, modifier = Modifier.padding(start = 6.dp, top = 6.dp)) { Text("Refresh") }
+        }
+        if (symbols.isNotEmpty()) {
+            Text("Target: ${symbol?.signature ?: "Select a function or type"}", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            symbol?.let { selectedSymbol ->
+                Text("${selectedSymbol.kind} · lines ${selectedSymbol.startLine}–${selectedSymbol.endLine}", color = SecondaryText, fontSize = 11.sp)
+                analysis?.symbolExplanations?.get(selectedSymbol.name)?.let { Text(it, color = SecondaryText, fontSize = 11.sp) }
+            }
+            symbols.take(8).forEach { candidate ->
+                Button(onClick = { onSelectSymbol(candidate) }, modifier = Modifier.padding(top = 3.dp)) { Text(candidate.name) }
+            }
+        }
+        when (analysis?.status?.lowercase()) {
+            "fresh", "stale" -> {
+                Text(analysis.purpose, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                if (analysis.risks.isNotEmpty()) Text("Advisory impact: ${analysis.risks.joinToString { it.summary }}", color = Warning, fontSize = 11.sp)
+            }
+            "failed" -> Text("Analysis unavailable: ${analysis.failure}", color = Error, fontSize = 11.sp)
+            else -> Text("Deterministic brief only — semantic analysis is optional.", color = SecondaryText, fontSize = 11.sp)
         }
     }
 }
