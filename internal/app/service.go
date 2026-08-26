@@ -18,13 +18,14 @@ import (
 
 // EffectiveModel is the actual generation profile used by the daemon.
 type EffectiveModel struct {
-	Profile     string   `json:"profile"`
-	Model       string   `json:"model"`
-	Temperature float32  `json:"temperature"`
-	MaxTokens   int      `json:"max_tokens"`
-	Skills      []string `json:"skills"`
-	Timeout     string   `json:"timeout"`
-	MaxRetries  int      `json:"max_retries"`
+	Profile        string   `json:"profile"`
+	Model          string   `json:"model"`
+	RemoteProvider bool     `json:"remote_provider"`
+	Temperature    float32  `json:"temperature"`
+	MaxTokens      int      `json:"max_tokens"`
+	Skills         []string `json:"skills"`
+	Timeout        string   `json:"timeout"`
+	MaxRetries     int      `json:"max_retries"`
 }
 
 // Service owns configured model access and the active project's generation path.
@@ -80,13 +81,14 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		backoffMax = 30000
 	}
 
+	remoteProvider := !isLoopbackURL(cfg.LLM.BaseURL)
 	return &Service{
 		manager:        manager,
 		analysisClient: analysisClient,
 		analysisModel:  cfg.LLM.Model,
 		coder:          coder,
 		profile: EffectiveModel{
-			Profile: "coder", Model: model, Temperature: cfg.LLM.Temperature, MaxTokens: cfg.LLM.MaxTokens,
+			Profile: "coder", Model: model, RemoteProvider: remoteProvider, Temperature: cfg.LLM.Temperature, MaxTokens: cfg.LLM.MaxTokens,
 			Skills: append([]string(nil), cfg.Agents.Coder.Skills...), Timeout: timeout.String(), MaxRetries: maxRetries,
 		},
 		importTimeout:       configuredDuration(cfg.Timeouts.ImportSeconds, 0, 5*time.Minute),
@@ -94,7 +96,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		focusedCheckTimeout: configuredDuration(cfg.Timeouts.FocusedCheckSeconds, 0, time.Minute),
 		retryBase:           time.Duration(backoffBase) * time.Millisecond,
 		retryMax:            time.Duration(backoffMax) * time.Millisecond,
-		remoteProvider:      !isLoopbackURL(cfg.LLM.BaseURL),
+		remoteProvider:      remoteProvider,
 		analysisAll:         newAnalysisAllController(),
 		goScan:              newGoScanController(),
 		drafts:              make(map[string]*storedDraft),

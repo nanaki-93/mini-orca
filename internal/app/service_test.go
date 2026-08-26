@@ -99,6 +99,9 @@ func TestRemoteProviderRequiresConfirmation(t *testing.T) {
 	if err := service.RequireRemoteConfirmation(true); err != nil {
 		t.Fatal(err)
 	}
+	if !service.EffectiveModel().RemoteProvider {
+		t.Fatal("effective model must disclose that the configured provider is remote")
+	}
 }
 
 func TestAnalyzeProjectStoresStructuredReport(t *testing.T) {
