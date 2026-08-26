@@ -101,7 +101,7 @@ func AtomicCoderInputWithScope(userPrompt, projectContext, targetFile, targetSym
 
 // DeclarationDraftInput builds the declaration-only contract used by a
 // file-scoped chat session. The daemon composes the complete file itself.
-func DeclarationDraftInput(userPrompt, projectContext, targetFile, targetSymbol, mode string) (string, error) {
+func DeclarationDraftInput(userPrompt, conversation, projectContext, targetFile, targetSymbol, mode string) (string, error) {
 	if strings.TrimSpace(userPrompt) == "" {
 		return "", fmt.Errorf("orchestrator: coder user prompt is required")
 	}
@@ -118,6 +118,9 @@ func DeclarationDraftInput(userPrompt, projectContext, targetFile, targetSymbol,
 	input.WriteString("Target symbol: " + targetSymbol + "\n")
 	input.WriteString("Edit mode: " + mode + "\n")
 	input.WriteString("Return exactly one complete Go function, method, or type declaration for this symbol. Do not return package clauses, a full file, a patch, or any declaration for another symbol. Imports must be listed separately.\n\n")
+	if strings.TrimSpace(conversation) != "" {
+		input.WriteString("## Earlier file-scoped conversation\n" + conversation + "\n\n")
+	}
 	input.WriteString("## One-file context\n" + projectContext + "\n\n")
 	input.WriteString("## Output contract\nReturn exactly one JSON object and no Markdown. Its fields must be version (\"v1\"), declaration, imports (an optional array of import specs), and explanation (a concise assistant explanation). Do not include target paths, symbols, complete file content, patches, or extra fields.\n")
 	return input.String(), nil

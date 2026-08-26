@@ -17,10 +17,65 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
-	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
 )
 
-func TestSendMessageReportsCanceledGeneration(t *testing.T) {
+func TestChatSessionEndpointsKeepMessagesBoundToOneFile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"version":"v1","declaration":"func Run() { println(\"draft\") }","explanation":"Updated Run."}`}}}})
+	}))
+	defer server.Close()
+	handler, identity := newChatSessionTestHandler(t, server.URL, 0)
+
+	openBody := marshalChatBody(t, ChatSessionRequest{ProjectID: identity.projectID, ProjectRevision: identity.revision, BaseFileHash: identity.hash, OpenPath: "sample.go", Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: "Run"})
+	opened := httptest.NewRecorder()
+	handler.OpenSession(opened, httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions", bytes.NewReader(openBody)))
+	if opened.Code != http.StatusCreated {
+		t.Fatalf("open status = %d: %s", opened.Code, opened.Body.String())
+	}
+	var session app.ChatSession
+	if err := json.NewDecoder(opened.Body).Decode(&session); err != nil {
+		t.Fatal(err)
+	}
+
+	message := httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions/"+session.ID+"/messages", bytes.NewReader([]byte(`{"message":"Improve Run."}`)))
+	message.SetPathValue("sessionID", session.ID)
+	generated := httptest.NewRecorder()
+	handler.SendSessionMessage(generated, message)
+	if generated.Code != http.StatusOK {
+		t.Fatalf("message status = %d: %s", generated.Code, generated.Body.String())
+	}
+	var proposal app.ChatDraftProposal
+	if err := json.NewDecoder(generated.Body).Decode(&proposal); err != nil {
+		t.Fatal(err)
+	}
+	if proposal.Draft.TargetPath != "sample.go" || proposal.Draft.TargetSymbol != "Run" || proposal.Draft.Declaration == "" || proposal.AssistantMessage.Content != "Updated Run." {
+		t.Fatalf("proposal = %+v", proposal)
+	}
+
+	retarget := httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions/"+session.ID+"/messages", bytes.NewReader([]byte(`{"message":"Change another file.","file_path":"other.go"}`)))
+	retarget.SetPathValue("sessionID", session.ID)
+	retargetResponse := httptest.NewRecorder()
+	handler.SendSessionMessage(retargetResponse, retarget)
+	if retargetResponse.Code != http.StatusBadRequest || !strings.Contains(retargetResponse.Body.String(), "unknown field") {
+		t.Fatalf("retarget response = %d: %s", retargetResponse.Code, retargetResponse.Body.String())
+	}
+
+	loaded := httptest.NewRequest(http.MethodGet, "/api/projects/current/chat/sessions/"+session.ID, nil)
+	loaded.SetPathValue("sessionID", session.ID)
+	loadedResponse := httptest.NewRecorder()
+	handler.Session(loadedResponse, loaded)
+	if loadedResponse.Code != http.StatusOK || !strings.Contains(loadedResponse.Body.String(), "Improve Run.") {
+		t.Fatalf("session response = %d: %s", loadedResponse.Code, loadedResponse.Body.String())
+	}
+
+	activity := httptest.NewRecorder()
+	handler.Activity(activity, httptest.NewRequest(http.MethodGet, "/api/projects/current/activity", nil))
+	if activity.Code != http.StatusOK || strings.Contains(activity.Body.String(), "Improve Run.") || !strings.Contains(activity.Body.String(), "Generated declaration draft") {
+		t.Fatalf("activity response = %d: %s", activity.Code, activity.Body.String())
+	}
+}
+
+func TestChatSessionEndpointReportsCancellationAndStaleSession(t *testing.T) {
 	started := make(chan struct{}, 1)
 	providerCanceled := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -30,120 +85,47 @@ func TestSendMessageReportsCanceledGeneration(t *testing.T) {
 		providerCanceled <- struct{}{}
 	}))
 	defer server.Close()
-
-	handler, body := newCancellationTestHandler(t, server.URL, 0)
+	handler, identity := newChatSessionTestHandler(t, server.URL, 0)
+	session := openChatSessionThroughHandler(t, handler, identity)
+	request := httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions/"+session.ID+"/messages", bytes.NewReader([]byte(`{"message":"Change Run."}`)))
+	request.SetPathValue("sessionID", session.ID)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	req := httptest.NewRequest(http.MethodPost, "/api/chat/message", bytes.NewReader(body)).WithContext(ctx)
+	request = request.WithContext(ctx)
 	response := httptest.NewRecorder()
 	done := make(chan struct{})
 	go func() {
-		handler.SendMessage(response, req)
+		handler.SendSessionMessage(response, request)
 		close(done)
 	}()
-	waitForTestSignal(t, started, "generation provider request")
+	waitForChatTestSignal(t, started, "chat provider request")
 	cancel()
-	waitForTestSignal(t, done, "canceled handler response")
-	waitForTestSignal(t, providerCanceled, "generation provider cancellation")
-
+	waitForChatTestSignal(t, done, "canceled handler response")
+	waitForChatTestSignal(t, providerCanceled, "provider cancellation")
 	if response.Code != http.StatusRequestTimeout {
-		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusRequestTimeout, response.Body.String())
-	}
-	if !strings.Contains(response.Body.String(), "generation canceled") {
-		t.Fatalf("response does not identify cancellation: %s", response.Body.String())
+		t.Fatalf("canceled status = %d: %s", response.Code, response.Body.String())
 	}
 }
 
-func waitForTestSignal(t *testing.T, signal <-chan struct{}, description string) {
-	t.Helper()
-	select {
-	case <-signal:
-	case <-time.After(3 * time.Second):
-		t.Fatalf("timed out waiting for %s", description)
-	}
-}
-
-func TestSendMessageReportsGenerationTimeout(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body)
-		<-r.Context().Done()
-	}))
-	defer server.Close()
-
-	handler, body := newCancellationTestHandler(t, server.URL, 1)
-	req := httptest.NewRequest(http.MethodPost, "/api/chat/message", bytes.NewReader(body))
+func TestRetiredOneShotChatRouteReturnsGone(t *testing.T) {
+	handler, _ := newChatSessionTestHandler(t, "http://127.0.0.1:1", 0)
 	response := httptest.NewRecorder()
-	handler.SendMessage(response, req)
-
-	if response.Code != http.StatusGatewayTimeout {
-		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusGatewayTimeout, response.Body.String())
-	}
-	if !strings.Contains(response.Body.String(), "generation timed out") {
-		t.Fatalf("response does not identify timeout: %s", response.Body.String())
+	handler.RemovedMessageEndpoint(response, httptest.NewRequest(http.MethodPost, "/api/chat/message", nil))
+	if response.Code != http.StatusGone {
+		t.Fatalf("retired route status = %d: %s", response.Code, response.Body.String())
 	}
 }
 
-func TestSendMessageRejectsStaleProjectState(t *testing.T) {
-	handler, body := newCancellationTestHandler(t, "http://127.0.0.1:1", 1)
-	var request ChatRequest
-	if err := json.Unmarshal(body, &request); err != nil {
-		t.Fatal(err)
-	}
-	request.BaseFileHash = "sha256:stale"
-	body, err := json.Marshal(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := httptest.NewRecorder()
-	handler.SendMessage(response, httptest.NewRequest(http.MethodPost, "/api/chat/message", bytes.NewReader(body)))
-	if response.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusConflict, response.Body.String())
-	}
+type chatSessionIdentity struct {
+	projectID string
+	revision  string
+	hash      string
 }
 
-func TestSendMessageRejectsUnsupportedTemplateAction(t *testing.T) {
-	handler, body := newCancellationTestHandler(t, "http://127.0.0.1:1", 1)
-	var request ChatRequest
-	if err := json.Unmarshal(body, &request); err != nil {
-		t.Fatal(err)
-	}
-	request.Action = "rewrite_project"
-	body, err := json.Marshal(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := httptest.NewRecorder()
-	handler.SendMessage(response, httptest.NewRequest(http.MethodPost, "/api/chat/message", bytes.NewReader(body)))
-	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "unsupported action") {
-		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
-	}
-}
-
-func TestSendMessageReturnsStructuredGenerationPreview(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "fixture-model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"version":"v1","target_path":"sample.go","target_symbol":"Run","scope_mode":"strict_symbol","candidate_content":"package sample\nfunc Run() {}"}`}}}})
-	}))
-	defer server.Close()
-
-	handler, body := newCancellationTestHandler(t, server.URL, 0)
-	response := httptest.NewRecorder()
-	handler.SendMessage(response, httptest.NewRequest(http.MethodPost, "/api/chat/message", bytes.NewReader(body)))
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
-	}
-	var preview app.GenerationPreview
-	if err := json.NewDecoder(response.Body).Decode(&preview); err != nil {
-		t.Fatal(err)
-	}
-	if preview.GenerationID == "" || preview.TargetPath != "sample.go" || preview.TargetSymbol != "Run" || preview.ScopeMode != workflow.ScopeStrictSymbol || preview.CandidateHash == "" || preview.BaseFileHash == "" {
-		t.Fatalf("preview = %+v", preview)
-	}
-}
-
-func newCancellationTestHandler(t *testing.T, baseURL string, generationSeconds int) (*ChatHandler, []byte) {
+func newChatSessionTestHandler(t *testing.T, baseURL string, generationSeconds int) (*ChatHandler, chatSessionIdentity) {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "sample.go"), []byte("package sample\nfunc Run() {}\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "sample.go"), []byte("package sample\n\nfunc Run() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	manager, err := project.NewManager(root)
@@ -161,65 +143,41 @@ func newCancellationTestHandler(t *testing.T, baseURL string, generationSeconds 
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := app.New(&config.Config{
-		LLM:      config.LLMConfig{BaseURL: baseURL},
-		Timeouts: config.TimeoutConfig{GenerationSeconds: generationSeconds},
-		Retry:    config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1},
-	}, manager)
+	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: baseURL}, Timeouts: config.TimeoutConfig{GenerationSeconds: generationSeconds}, Retry: config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}}, manager)
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := json.Marshal(ChatRequest{
-		Message: "improve Run", FilePath: "sample.go", TargetSymbol: "Run",
-		ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return NewChatHandler(service), body
+	return NewChatHandler(service), chatSessionIdentity{projectID: analysis.ProjectID, revision: analysis.ProjectRevision, hash: file.ContentHash}
 }
 
-func TestContextErrorResponseIsStructuredJSON(t *testing.T) {
+func openChatSessionThroughHandler(t *testing.T, handler *ChatHandler, identity chatSessionIdentity) app.ChatSession {
+	t.Helper()
 	response := httptest.NewRecorder()
-	writeContextError(response, "project import", context.DeadlineExceeded)
-	var body struct {
-		Message string `json:"message"`
+	handler.OpenSession(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions", bytes.NewReader(marshalChatBody(t, ChatSessionRequest{ProjectID: identity.projectID, ProjectRevision: identity.revision, BaseFileHash: identity.hash, OpenPath: "sample.go", Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: "Run"}))))
+	if response.Code != http.StatusCreated {
+		t.Fatalf("open status = %d: %s", response.Code, response.Body.String())
 	}
-	if err := json.NewDecoder(response.Result().Body).Decode(&body); err != nil {
+	var session app.ChatSession
+	if err := json.NewDecoder(response.Body).Decode(&session); err != nil {
 		t.Fatal(err)
 	}
-	if body.Message != "project import timed out" {
-		t.Fatalf("message = %q", body.Message)
-	}
+	return session
 }
 
-func TestContextPreviewUsesOneFileManifestForAnalysis(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "sample.go"), []byte("package sample\nfunc Run() {}\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	manager, err := project.NewManager(root)
+func marshalChatBody(t *testing.T, value any) []byte {
+	t.Helper()
+	body, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.Set(root, &project.Analysis{}); err != nil {
-		t.Fatal(err)
-	}
-	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
-	if err != nil {
-		t.Fatal(err)
-	}
+	return body
+}
 
-	response := httptest.NewRecorder()
-	NewContextHandler(service).Preview(response, httptest.NewRequest(http.MethodGet, "/api/projects/current/context?path=sample.go&action=analyze_file", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
-	}
-	var manifest project.ContextManifest
-	if err := json.NewDecoder(response.Body).Decode(&manifest); err != nil {
-		t.Fatal(err)
-	}
-	if len(manifest.Included) != 1 || manifest.Included[0].Path != "sample.go" || manifest.ByteLimit != 64*1024 {
-		t.Fatalf("analysis context manifest = %+v", manifest)
+func waitForChatTestSignal(t *testing.T, signal <-chan struct{}, description string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for %s", description)
 	}
 }

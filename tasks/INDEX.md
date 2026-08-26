@@ -46,8 +46,8 @@ Source roadmap: [`../PLAN.md`](../PLAN.md)
 | 38 | [Go declaration edit engine](completed/38_go_declaration_edit_engine.md) | 32 | Complete |
 | 39 | [Editable draft lifecycle](completed/39_editable_draft_lifecycle.md) | 38 | Complete |
 | 40 | [Draft validation, checks, Apply, and undo](completed/40_draft_validation_checks_apply.md) | 39 | Complete |
-| 41 | [File-scoped chat sessions](41_file_scoped_chat_sessions.md) | 38, 39, 40 | Pending |
-| 42 | [Desktop shell decomposition](42_desktop_shell_decomposition.md) | 32 | Pending |
+| 41 | [File-scoped chat sessions](completed/41_file_scoped_chat_sessions.md) | 38, 39, 40 | Complete |
+| 42 | [Desktop shell decomposition](completed/42_desktop_shell_decomposition.md) | 32 | Complete |
 | 43 | [Desktop API contracts](43_desktop_api_contracts.md) | 37, 40, 41 | Pending |
 | 44 | [Desktop workspace and workflow state](44_desktop_workspace_state.md) | 42, 43 | Pending |
 | 45 | [Desktop top-level navigation](45_desktop_top_level_navigation.md) | 44 | Pending |

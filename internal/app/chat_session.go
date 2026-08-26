@@ -68,9 +68,9 @@ type DeclarationDraftResponse struct {
 }
 
 type ChatDraftProposal struct {
-	SessionID        string             `json:"session_id"`
-	Draft            Draft              `json:"draft"`
-	AssistantMessage ChatSessionMessage `json:"assistant_message"`
+	SessionID        string                  `json:"session_id"`
+	Draft            Draft                   `json:"draft"`
+	AssistantMessage ChatSessionMessage      `json:"assistant_message"`
 	ContextManifest  project.ContextManifest `json:"context_manifest"`
 }
 
@@ -157,7 +157,11 @@ func (s *Service) SendChatSessionMessage(ctx context.Context, request ChatSessio
 	if err != nil {
 		return nil, fmt.Errorf("build session context: %w", err)
 	}
-	input, err := agent.DeclarationDraftInput(request.Message, projectContext, session.OpenPath, session.TargetSymbol, string(session.Mode))
+	conversation, err := s.chatConversation(session, request.ParentDraftID)
+	if err != nil {
+		return nil, err
+	}
+	input, err := agent.DeclarationDraftInput(request.Message, conversation, projectContext, session.OpenPath, session.TargetSymbol, string(session.Mode))
 	if err != nil {
 		return nil, err
 	}
@@ -187,6 +191,30 @@ func (s *Service) SendChatSessionMessage(ctx context.Context, request ChatSessio
 		return nil, err
 	}
 	return &ChatDraftProposal{SessionID: session.ID, Draft: *draft, AssistantMessage: assistantMessage, ContextManifest: manifest}, nil
+}
+
+func (s *Service) chatConversation(session ChatSession, parentDraftID string) (string, error) {
+	if parentDraftID == "" {
+		return "", nil
+	}
+	draft, err := s.Draft(parentDraftID)
+	if err != nil {
+		return "", project.ErrRevisionConflict
+	}
+	if draft.ProjectID != session.ProjectID || draft.ProjectRevision != session.ProjectRevision || draft.BaseFileHash != session.BaseFileHash || draft.TargetPath != session.OpenPath || draft.Mode != session.Mode || draft.TargetSymbol != session.TargetSymbol {
+		return "", project.ErrRevisionConflict
+	}
+	var conversation strings.Builder
+	conversation.WriteString("The user asked to revise the current proposal. Keep the same immutable target.\n")
+	conversation.WriteString("Current declaration proposal:\n```go\n")
+	conversation.WriteString(draft.Declaration)
+	conversation.WriteString("\n```\n")
+	if len(draft.Imports) > 0 {
+		conversation.WriteString("Current requested imports: ")
+		conversation.WriteString(strings.Join(draft.Imports, ", "))
+		conversation.WriteString("\n")
+	}
+	return conversation.String(), nil
 }
 
 func (s *Service) chatSessionForMessage(id, parentDraftID string) (ChatSession, error) {

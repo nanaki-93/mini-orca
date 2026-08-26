@@ -1,30 +1,22 @@
 package handlers
 
-import (
-	"time"
+import "github.com/nanaki-93/mini-orca/v2/internal/project"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
-)
-
-// ChatRequest represents a chat message request from the client.
-type ChatRequest struct {
-	Message               string             `json:"message"`
-	FilePath              string             `json:"file_path"`     // target file being edited
-	TargetSymbol          string             `json:"target_symbol"` // exact function or class to generate
-	ScopeMode             workflow.ScopeMode `json:"scope_mode,omitempty"`
-	ProjectID             string             `json:"project_id"`
-	ProjectRevision       string             `json:"project_revision"`
-	BaseFileHash          string             `json:"base_file_hash"`
-	LineNumber            int                `json:"line_number,omitempty"` // optional: cursor position
-	ConfirmRemoteProvider bool               `json:"confirm_remote_provider,omitempty"`
-	Action                workflow.Action    `json:"action,omitempty"`
-	TemplateID            string             `json:"template_id,omitempty"`
+// ChatSessionRequest creates one conversation pinned to an open Go file and
+// one immutable declaration target.
+type ChatSessionRequest struct {
+	ProjectID       string                      `json:"project_id"`
+	ProjectRevision string                      `json:"project_revision"`
+	BaseFileHash    string                      `json:"base_file_hash"`
+	OpenPath        string                      `json:"open_path"`
+	Mode            project.DeclarationEditMode `json:"mode"`
+	TargetSymbol    string                      `json:"target_symbol"`
 }
 
-// ChatResponse represents a chat message response from the system.
-type ChatResponse struct {
-	Role      string    `json:"role"` // "assistant" or "user"
-	Content   string    `json:"content"`
-	Phase     string    `json:"phase"` // "coding", "testing", "review"
-	Timestamp time.Time `json:"timestamp"`
+// ChatMessageRequest cannot contain a file, symbol, mode, or project identity.
+// Those values are immutable properties of the session.
+type ChatMessageRequest struct {
+	Message               string `json:"message"`
+	ParentDraftID         string `json:"parent_draft_id,omitempty"`
+	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }

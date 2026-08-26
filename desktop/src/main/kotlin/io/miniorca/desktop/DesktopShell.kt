@@ -1,5 +1,56 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.AlertDialog
+import androidx.compose.material.Button
+import androidx.compose.material.DrawerValue
+import androidx.compose.material.ModalDrawer
+import androidx.compose.material.Surface
+import androidx.compose.material.Tab
+import androidx.compose.material.TabRow
+import androidx.compose.material.Text
+import androidx.compose.material.rememberDrawerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import java.util.prefs.Preferences
 
 data class ExplorerRow(
@@ -80,4 +131,220 @@ class PaneWidthStore(private val preferences: Preferences = Preferences.userNode
         preferences.putFloat("explorer-width", widths.explorer)
         preferences.putFloat("action-width", widths.action)
     }
+}
+
+@Composable
+internal fun DesktopShell(
+    appState: DesktopState,
+    paneWidths: PaneWidths,
+    onPaneWidths: (PaneWidths) -> Unit,
+    onSavePaneWidths: () -> Unit,
+    connection: ConnectionState,
+    activeTab: Int,
+    onActiveTab: (Int) -> Unit,
+    analysisInProgress: Boolean,
+    generating: Boolean,
+    showContext: Boolean,
+    contextManifest: ContextManifest?,
+    remoteProvider: Boolean,
+    onDismissContext: () -> Unit,
+    paletteMode: PaletteMode,
+    paletteQuery: String,
+    showPalette: Boolean,
+    onPaletteQuery: (String) -> Unit,
+    onDismissPalette: () -> Unit,
+    onOpenPalette: (PaletteMode) -> Unit,
+    onSelectPaletteFile: (String) -> Unit,
+    onSelectPaletteSymbol: (SymbolInfo) -> Unit,
+    onSelectPaletteAction: (String) -> Unit,
+    explorer: @Composable (Modifier, () -> Unit) -> Unit,
+    focusedAction: @Composable (Modifier) -> Unit,
+    onImport: () -> Unit,
+    onReanalyze: () -> Unit,
+    onReconnect: () -> Unit,
+    onAnalyze: () -> Unit,
+    onRefreshAnalysis: () -> Unit,
+    onCancelAnalysis: () -> Unit,
+    onSelectSymbol: (SymbolInfo) -> Unit,
+    onPrepareSuggestion: (Suggestion) -> Unit,
+    applied: ApplyResult?,
+    onDiscard: () -> Unit,
+    onAskForRevision: () -> Unit,
+    onRunChecks: () -> Unit,
+    onGenerateAlternate: () -> Unit,
+    onCompare: () -> Unit,
+    onExport: () -> Unit,
+    comparisonBaseNote: String,
+    comparisonCandidateNote: String,
+    onComparisonBaseNote: (String) -> Unit,
+    onComparisonCandidateNote: (String) -> Unit,
+    onApply: () -> Unit,
+    onUndo: () -> Unit,
+    activity: List<ActivityEntry>,
+    showActivity: Boolean,
+    onToggleActivity: () -> Unit,
+    onGenerate: () -> Unit,
+    onCancelGeneration: () -> Unit,
+    onCancelAll: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    var narrowDrawer by remember { mutableStateOf(NarrowDrawer.Explorer) }
+    fun openDrawer(drawer: NarrowDrawer) {
+        narrowDrawer = drawer
+        scope.launch { drawerState.open() }
+    }
+    Surface(
+        modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val key = when (event.key) {
+                Key.P -> "P"
+                Key.O -> "O"
+                Key.K -> "K"
+                Key.Enter -> "Enter"
+                Key.Escape -> "Escape"
+                Key.Tab -> "Tab"
+                else -> ""
+            }
+            when (desktopShortcut(key, event.isMetaPressed || event.isCtrlPressed, event.isShiftPressed)) {
+                DesktopShortcut.OpenFile -> onOpenPalette(PaletteMode.Files)
+                DesktopShortcut.OpenSymbol -> onOpenPalette(PaletteMode.Symbols)
+                DesktopShortcut.OpenAction -> onOpenPalette(PaletteMode.Actions)
+                DesktopShortcut.Generate -> if (generating) onCancelGeneration() else onGenerate()
+                DesktopShortcut.Cancel -> onCancelAll()
+                DesktopShortcut.NextTab -> onActiveTab((activeTab + 1) % 3)
+                null -> return@onPreviewKeyEvent false
+            }
+            true
+        },
+        color = AppBackground,
+    ) {
+        BoxWithConstraints {
+            val narrow = useNarrowLayout(maxWidth.value)
+            ModalDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    if (narrowDrawer == NarrowDrawer.Explorer) {
+                        explorer(Modifier.fillMaxHeight().width(320.dp)) { scope.launch { drawerState.close() } }
+                    } else {
+                        focusedAction(Modifier.fillMaxHeight().width(360.dp))
+                    }
+                },
+            ) {
+                Column {
+                    DesktopHeader(appState.project, appState.loading, connection, onImport, onReanalyze, { onOpenPalette(PaletteMode.Actions) }, narrow, { openDrawer(NarrowDrawer.Explorer) }, { openDrawer(NarrowDrawer.Action) })
+                    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        if (!narrow) {
+                            explorer(Modifier.width(paneWidths.explorer.dp).fillMaxHeight()) {}
+                            ResizableDivider(onDelta = { onPaneWidths(paneWidths.withExplorer(paneWidths.explorer + it)) }, onCommit = onSavePaneWidths)
+                        }
+                        ContentPane(
+                            project = appState.project, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis, selectedSymbol = appState.selectedSymbol,
+                            activeTab = activeTab, analysisInProgress = analysisInProgress, onTab = onActiveTab, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis,
+                            onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, candidate = appState.candidate, comparisonBase = appState.comparisonBase, comparison = appState.comparison,
+                            checks = appState.checks, applied = applied, onDiscard = onDiscard, onAskForRevision = onAskForRevision, onRunChecks = onRunChecks, onGenerateAlternate = onGenerateAlternate,
+                            onCompare = onCompare, onExport = onExport, comparisonBaseNote = comparisonBaseNote, comparisonCandidateNote = comparisonCandidateNote, onComparisonBaseNote = onComparisonBaseNote,
+                            onComparisonCandidateNote = onComparisonCandidateNote, onApply = onApply, onUndo = onUndo, activity = activity, showActivity = showActivity, onToggleActivity = onToggleActivity,
+                            impact = appState.impact, gitStatus = appState.gitStatus, modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
+                        if (!narrow) {
+                            ResizableDivider(onDelta = { onPaneWidths(paneWidths.withAction(paneWidths.action - it)) }, onCommit = onSavePaneWidths)
+                            focusedAction(Modifier.width(paneWidths.action.dp).fillMaxHeight())
+                        }
+                    }
+                    DesktopStatusBar(appState.status, appState.error, connection, onReconnect)
+                }
+            }
+        }
+        if (showContext) ContextInspectorDialog(contextManifest ?: ContextManifest(), remoteProvider, onDismissContext)
+        if (showPalette) CommandPaletteDialog(paletteMode, paletteQuery, onPaletteQuery, appState.index?.files.orEmpty(), appState.symbols, onSelectPaletteFile, onSelectPaletteSymbol, onSelectPaletteAction, onDismissPalette)
+    }
+}
+
+@Composable
+private fun ContentPane(
+    project: ProjectAnalysis?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, activeTab: Int,
+    analysisInProgress: Boolean, onTab: (Int) -> Unit, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit,
+    onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, candidate: GenerationResult?, comparisonBase: GenerationResult?, comparison: CandidateComparison?, checks: CandidateCheckReport?, applied: ApplyResult?,
+    onDiscard: () -> Unit, onAskForRevision: () -> Unit, onRunChecks: () -> Unit, onGenerateAlternate: () -> Unit, onCompare: () -> Unit, onExport: () -> Unit,
+    comparisonBaseNote: String, comparisonCandidateNote: String, onComparisonBaseNote: (String) -> Unit, onComparisonCandidateNote: (String) -> Unit, onApply: () -> Unit, onUndo: () -> Unit,
+    activity: List<ActivityEntry>, showActivity: Boolean, onToggleActivity: () -> Unit, impact: ImpactPreview?, gitStatus: GitStatus?, modifier: Modifier,
+) {
+    Column(modifier.background(AppBackground)) {
+        InfoStrip(project, selected)
+        TabRow(selectedTabIndex = activeTab, backgroundColor = Panel, contentColor = Accent) {
+            listOf("Code", "Summary", "Changes").forEachIndexed { index, title -> Tab(selected = activeTab == index, onClick = { onTab(index) }, text = { Text(title) }) }
+        }
+        when (activeTab) {
+            0 -> CodePane(project, selected)
+            1 -> SummaryPane(selected, symbols, analysis, selectedSymbol, analysisInProgress, onAnalyze, onRefreshAnalysis, onCancelAnalysis, onSelectSymbol, onPrepareSuggestion)
+            else -> ReviewPane(candidate, comparisonBase, comparison, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onGenerateAlternate, onCompare, onExport, comparisonBaseNote, comparisonCandidateNote, onComparisonBaseNote, onComparisonCandidateNote, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
+        }
+    }
+}
+
+@Composable
+private fun InfoStrip(project: ProjectAnalysis?, file: ProjectFileInfo?) {
+    Row(Modifier.fillMaxWidth().background(Panel).border(BorderStroke(1.dp, Border)).padding(10.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        if (project == null) Metric("PROJECT", "Not imported", Modifier.weight(1f))
+        else {
+            Metric("PROJECT", "${project.type} · ${project.fileCount} files", Modifier.weight(1f))
+            Metric("SOURCE", "${project.sourceFileCount} files · ${project.totalLines} lines", Modifier.weight(1f))
+            Metric("AI ANALYSIS", project.aiStatus, Modifier.weight(1f))
+        }
+        if (file != null) Metric("SELECTED FILE", "${file.language} · ${formatBytes(file.sizeBytes)} · ${file.lineCount} lines", Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun Metric(label: String, value: String, modifier: Modifier) {
+    Column(modifier.background(Card, RoundedCornerShape(6.dp)).padding(9.dp)) {
+        Text(label, color = SecondaryText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(3.dp))
+        Text(value, color = PrimaryText, fontSize = 12.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
+    val density = LocalDensity.current
+    Box(
+        Modifier.fillMaxHeight().width(6.dp).background(Border).pointerInput(Unit) {
+            detectDragGestures(
+                onDrag = { change, amount ->
+                    change.consume()
+                    onDelta(with(density) { amount.x.toDp().value })
+                },
+                onDragEnd = onCommit,
+            )
+        },
+    )
+}
+
+@Composable
+private fun DesktopStatusBar(status: String, error: String?, connection: ConnectionState, onReconnect: () -> Unit) {
+    Row(Modifier.fillMaxWidth().height(30.dp).background(Panel).border(BorderStroke(1.dp, Border)).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(7.dp).background(if (error == null && connection.connected) Success else Error, RoundedCornerShape(50)))
+        Spacer(Modifier.width(7.dp))
+        Text(error ?: status, color = if (error == null) SecondaryText else Error, fontSize = 11.sp, maxLines = 1)
+        Spacer(Modifier.weight(1f))
+        Button(onClick = onReconnect, modifier = Modifier.height(24.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 7.dp, vertical = 0.dp)) { Text("Reconnect", fontSize = 10.sp) }
+        Spacer(Modifier.width(8.dp))
+        Text(if (connection.version.isBlank()) "Mini-Orca" else "Mini-Orca v${connection.version}", color = SecondaryText, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun ContextInspectorDialog(manifest: ContextManifest, remoteProvider: Boolean, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Context inspector") }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            Text("${manifest.estimatedTokens} / ${manifest.tokenLimit.takeIf { it > 0 } ?: "?"} estimated tokens${if (manifest.truncated) " · truncated" else ""}", color = SecondaryText, fontSize = 12.sp)
+            if (manifest.byteLimit > 0) Text("${formatBytes(manifest.byteLimit.toLong())} byte limit", color = SecondaryText, fontSize = 11.sp)
+            if (remoteProvider) Text("Warning: this provider is not loopback/local. Confirm the destination before sending project context.", color = Warning, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            Text("Included", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
+            manifest.included.forEach { Text(it.path, fontSize = 11.sp) }
+            Text("Excluded", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
+            manifest.excluded.forEach { Text("${it.path} · ${it.reason}", color = SecondaryText, fontSize = 11.sp) }
+        }
+    }, confirmButton = { Button(onClick = onDismiss) { Text("Close") } })
 }
