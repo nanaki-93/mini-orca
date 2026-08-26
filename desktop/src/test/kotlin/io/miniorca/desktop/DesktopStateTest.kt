@@ -11,7 +11,10 @@ class DesktopStateTest {
     @Test fun projectLoadClearsPriorSelectionAndCandidate() {
         val project = ProjectAnalysis("id", "revision", "fixture", "/tmp/fixture", "go", fileCount = 1, sourceFileCount = 1, totalLines = 2, analysisFile = ".mini-orca/analysis.md", summary = "", aiStatus = "fresh", analyzedAt = "")
         val index = ProjectIndex("id", "revision")
-        val state = DesktopState(selectedFile = ProjectFileInfo("main.go", "hash", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false), candidate = sampleCandidate()).reduce(DesktopEvent.ProjectLoaded(project, index))
+        val state = DesktopState(
+            selection = FileSelectionState(selectedFile = ProjectFileInfo("main.go", "hash", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)),
+            review = DraftReviewState(candidate = sampleCandidate()),
+        ).reduce(DesktopEvent.ProjectLoaded(project, index))
         assertNull(state.selectedFile)
         assertNull(state.candidate)
         assertEquals(project, state.project)
@@ -54,7 +57,7 @@ class DesktopStateTest {
     @Test fun reindexKeepsSelectedFileAndClearsLoadingState() {
         val selected = ProjectFileInfo("main.go", "hash", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
         val refreshed = ProjectIndex("id", "new-revision")
-        val state = DesktopState(selectedFile = selected, loading = true).reduce(DesktopEvent.IndexRefreshed(refreshed))
+        val state = DesktopState(selection = FileSelectionState(selectedFile = selected), jobs = JobState(loading = true)).reduce(DesktopEvent.IndexRefreshed(refreshed))
         assertEquals(selected, state.selectedFile)
         assertEquals(refreshed, state.index)
         assertTrue(!state.loading)
@@ -62,7 +65,7 @@ class DesktopStateTest {
 
     @Test fun suggestionPreparesButDoesNotGenerateARequest() {
         val symbol = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
-        val state = DesktopState(candidate = sampleCandidate()).reduce(DesktopEvent.SuggestionPrepared("fix", "Handle empty input", symbol))
+        val state = DesktopState(review = DraftReviewState(candidate = sampleCandidate())).reduce(DesktopEvent.SuggestionPrepared("fix", "Handle empty input", symbol))
         assertEquals(symbol, state.selectedSymbol)
         assertEquals("fix", state.preparedAction)
         assertEquals("Handle empty input", state.preparedRequest)
@@ -83,11 +86,85 @@ class DesktopStateTest {
     }
 
     @Test fun discardingPreviewAlsoClearsItsChecks() {
-        val state = DesktopState(candidate = sampleCandidate(), checks = CandidateCheckReport("main.go", true)).reduce(DesktopEvent.CandidateDiscarded)
+        val state = DesktopState(review = DraftReviewState(candidate = sampleCandidate(), checks = CandidateCheckReport("main.go", true))).reduce(DesktopEvent.CandidateDiscarded)
 
         assertNull(state.candidate)
         assertNull(state.checks)
         assertEquals("Discarded preview", state.status)
+    }
+
+    @Test fun fileSwitchRejectsLateEnrichmentAndClearsFileBoundState() {
+        val controller = DesktopWorkflowController(projectState())
+        val first = controller.beginFileLoad("first.go")!!
+        assertTrue(controller.fileLoaded(first, file("first.go", "first"), emptyList()))
+        val loadedFirst = controller.currentFileRequest()!!
+        assertTrue(controller.chatLoaded(controller.beginChatLoad()!!.first, loadedFirst, session("first.go", "first")))
+
+        val second = controller.beginFileLoad("second.go")!!
+        assertNull(controller.state.selectedFile)
+        assertNull(controller.state.chat.session)
+        assertNull(controller.state.review.draft)
+        assertTrue(!controller.analysisLoaded(loadedFirst, FileAnalysis("first.go", "fresh")))
+        assertTrue(controller.fileLoaded(second, file("second.go", "second"), emptyList()))
+        assertEquals("second.go", controller.state.selectedFile?.path)
+    }
+
+    @Test fun projectAndCanceledFileRequestsRejectStaleResponses() {
+        val controller = DesktopWorkflowController()
+        val firstProjectRequest = controller.beginProjectLoad()
+        val secondProjectRequest = controller.beginProjectLoad()
+        val project = project()
+        val index = ProjectIndex("project", "revision")
+
+        assertTrue(!controller.projectLoaded(firstProjectRequest, project, index))
+        assertTrue(controller.projectLoaded(secondProjectRequest, project, index))
+        val fileRequest = controller.beginFileLoad("main.go")!!
+        assertTrue(controller.cancelFileLoad(fileRequest))
+        assertTrue(!controller.fileLoaded(fileRequest, file("main.go", "hash"), emptyList()))
+    }
+
+    @Test fun draftEligibilityRequiresMatchingLatestValidationAndChecks() {
+        val selected = file("main.go", "base")
+        val draft = DeclarationDraft(id = "draft", baseFileHash = "base", targetPath = "main.go", revision = 2, hash = "latest", validation = GenerationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
+        val staleChecks = CandidateCheckReport("main.go", true, draftId = "draft", draftRevision = 1, draftHash = "old")
+        val currentChecks = CandidateCheckReport("main.go", true, draftId = "draft", draftRevision = 2, draftHash = "latest")
+
+        assertTrue(!draftApplyEligibility(draft, staleChecks, selected).eligible)
+        assertTrue(draftApplyEligibility(draft, currentChecks, selected).eligible)
+    }
+
+    @Test fun workspaceSwitchKeepsTheOpenFileAndDirtyDraft() {
+        val selected = file("main.go", "base")
+        val draft = DeclarationDraft(id = "draft", targetPath = "main.go", baseFileHash = "base", declaration = "func Run() {}", revision = 3)
+        val initial = DesktopState(
+            workspace = Workspace.Editor,
+            selection = FileSelectionState(selectedFile = selected),
+            review = DraftReviewState(draft = draft),
+        )
+
+        val switched = initial.reduce(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
+
+        assertEquals(Workspace.Bugs, switched.workspace)
+        assertEquals(selected, switched.selectedFile)
+        assertEquals(draft, switched.review.draft)
+    }
+
+    @Test fun findingNavigationOnlyUsesTheActiveProjectIndexAndKeepsItsContext() {
+        val index = ProjectIndex("project", "revision", files = listOf(IndexedFile("internal/main.go", "hash", "Go", false)))
+        val finding = UnifiedFinding(location = FindingLocation("internal/main.go", startLine = 7, symbol = "Run"))
+
+        assertEquals(EditorNavigationTarget("internal/main.go", "Run", 7), findingNavigationTarget(finding, index))
+        assertNull(findingNavigationTarget(finding.copy(location = FindingLocation("../outside.go", startLine = 7)), index))
+    }
+
+    @Test fun findingNavigationPrefersExactSymbolThenLineRange() {
+        val symbols = listOf(
+            SymbolInfo("Other", "function", startLine = 1, endLine = 3, confidence = "exact", atomicTarget = true),
+            SymbolInfo("Run", "function", startLine = 10, endLine = 15, confidence = "exact", atomicTarget = true),
+        )
+
+        assertEquals(symbols[1], symbolForNavigation(symbols, EditorNavigationTarget("main.go", "Run", 2)))
+        assertEquals(symbols[1], symbolForNavigation(symbols, EditorNavigationTarget("main.go", line = 12)))
     }
 
     @Test fun contextInspectorClientKeepsOnlySourceFreeManifestMetadata() {
@@ -104,4 +181,9 @@ class DesktopStateTest {
     }
 
     private fun sampleCandidate() = GenerationResult("g", "p", "r", "base", "main.go", "Run", "strict_symbol", "", "hash", GenerationValidation(true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")), ContextManifest())
+
+    private fun project() = ProjectAnalysis("project", "revision", "fixture", "/tmp/fixture", "go", fileCount = 1, sourceFileCount = 1, totalLines = 2, analysisFile = ".mini-orca/analysis.md", summary = "", aiStatus = "fresh", analyzedAt = "")
+    private fun projectState() = DesktopState(projectState = ProjectWorkspaceState(project(), ProjectIndex("project", "revision")))
+    private fun file(path: String, hash: String) = ProjectFileInfo(path, hash, path, language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
+    private fun session(path: String, hash: String) = ChatSession(id = "session", projectId = "project", projectRevision = "revision", baseFileHash = hash, openPath = path)
 }

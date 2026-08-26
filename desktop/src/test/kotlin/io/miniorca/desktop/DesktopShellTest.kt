@@ -7,8 +7,8 @@ import kotlin.test.assertTrue
 class DesktopShellTest {
     @Test fun explorerGroupsRelativePathsAndKeepsOnlyMatchingBranches() {
         val files = listOf(
-            IndexedFile("internal/project/index.go", "a", "Go", false, "fresh"),
-            IndexedFile("internal/project/path.go", "b", "Go", false, "stale"),
+            IndexedFile("internal/project/index.go", "a", "Go", false, analysisStatus = "fresh"),
+            IndexedFile("internal/project/path.go", "b", "Go", false, analysisStatus = "stale"),
             IndexedFile("README.md", "c", "Markdown", false),
         )
 
@@ -37,7 +37,7 @@ class DesktopShellTest {
 
     @Test fun largeExplorerKeepsAStableFilteredSelectionPath() {
         val files = (1..2_000).map { number ->
-            IndexedFile("src/module$number/File$number.kt", "hash-$number", "Kotlin", false, if (number % 2 == 0) "fresh" else "missing")
+            IndexedFile("src/module$number/File$number.kt", "hash-$number", "Kotlin", false, analysisStatus = if (number % 2 == 0) "fresh" else "missing")
         }
 
         val rows = explorerRows(files, "File1999.kt")
@@ -72,5 +72,21 @@ class DesktopShellTest {
             listOf("cmd", "cmd/sub", "cmd/sub/child.go", "cmd/root.go", "model", "model/item.go", "README.md"),
             explorerRows(files).map { it.path },
         )
+    }
+
+    @Test fun workspaceNavigationUsesLabelsAndTextCounts() {
+        val counts = WorkspaceCounts(analyzedFiles = 4, verifiedFindings = 2, aiSuggestions = 3, drafts = 1)
+
+        assertEquals("Summary", workspaceNavigationLabel(Workspace.Summary, counts))
+        assertEquals("Analysis · 4 analyzed", workspaceNavigationLabel(Workspace.Analysis, counts))
+        assertEquals("Bugs · 2 verified · 3 AI", workspaceNavigationLabel(Workspace.Bugs, counts))
+        assertEquals("Editor · 1 drafts", workspaceNavigationLabel(Workspace.Editor, counts))
+    }
+
+    @Test fun keyboardWorkspaceOrderCoversAllFourWorkspaces() {
+        assertEquals(Workspace.Analysis, nextWorkspace(Workspace.Summary))
+        assertEquals(Workspace.Bugs, nextWorkspace(Workspace.Analysis))
+        assertEquals(Workspace.Editor, nextWorkspace(Workspace.Bugs))
+        assertEquals(Workspace.Summary, nextWorkspace(Workspace.Editor))
     }
 }

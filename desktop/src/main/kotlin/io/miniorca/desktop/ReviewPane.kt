@@ -88,9 +88,9 @@ internal fun ReviewPane(
             Button(onClick = onExport, colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText)) { Text("Export review Markdown") }
             Text("Exports source-free summary, findings, candidate metadata, checks, and audit reference only.", color = SecondaryText, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(8.dp))
-            val applyEnabled = candidate.validation.applicable && checks?.applicable == true && candidate.baseFileHash == selected?.contentHash
-            Button(onClick = onApply, enabled = applyEnabled, colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = Color.White)) { Text("Apply") }
-            if (!applyEnabled) Text("Apply is enabled only when the selected file base hash, scope validation, and required checks all pass.", color = SecondaryText, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+            val eligibility = candidateApplyEligibility(candidate, checks, selected)
+            Button(onClick = onApply, enabled = eligibility.eligible, colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = Color.White)) { Text("Apply") }
+            if (!eligibility.eligible) Text(eligibility.reason, color = SecondaryText, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
         }
         Spacer(Modifier.height(18.dp))
         Text("ADVISORY IMPACT", color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)

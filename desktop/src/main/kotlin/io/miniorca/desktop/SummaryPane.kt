@@ -90,14 +90,22 @@ internal fun SummaryPane(
 }
 
 @Composable
-internal fun CodePane(project: ProjectAnalysis?, selected: ProjectFileInfo?) {
+internal fun CodePane(project: ProjectAnalysis?, selected: ProjectFileInfo?, selectedSymbol: SymbolInfo?, focusedLine: Int) {
     val source = when {
         selected != null -> if (selected.binary) "Binary file: source preview is unavailable." else selected.content
         project != null -> project.summary
         else -> "Select Import to analyze a project. Mini-Orca indexes only policy-eligible project files."
     }
     SelectionContainer {
-        Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
+            if (focusedLine > 0) {
+                Text(
+                    "Editor context · ${selectedSymbol?.name ?: "line $focusedLine"} · line $focusedLine",
+                    color = SecondaryText,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+            }
             Text(text = highlightedCode(source), color = PrimaryText, fontFamily = if (selected != null) FontFamily.Monospace else FontFamily.Default, fontSize = 13.sp, lineHeight = 20.sp)
         }
     }

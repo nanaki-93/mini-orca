@@ -24,8 +24,6 @@ import androidx.compose.material.Button
 import androidx.compose.material.DrawerValue
 import androidx.compose.material.ModalDrawer
 import androidx.compose.material.Surface
-import androidx.compose.material.Tab
-import androidx.compose.material.TabRow
 import androidx.compose.material.Text
 import androidx.compose.material.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -140,8 +138,9 @@ internal fun DesktopShell(
     onPaneWidths: (PaneWidths) -> Unit,
     onSavePaneWidths: () -> Unit,
     connection: ConnectionState,
-    activeTab: Int,
-    onActiveTab: (Int) -> Unit,
+    workspace: Workspace,
+    onWorkspace: (Workspace) -> Unit,
+    workspaceCounts: WorkspaceCounts,
     analysisInProgress: Boolean,
     generating: Boolean,
     showContext: Boolean,
@@ -157,6 +156,7 @@ internal fun DesktopShell(
     onSelectPaletteFile: (String) -> Unit,
     onSelectPaletteSymbol: (SymbolInfo) -> Unit,
     onSelectPaletteAction: (String) -> Unit,
+    onOpenFinding: (UnifiedFinding) -> Unit,
     explorer: @Composable (Modifier, () -> Unit) -> Unit,
     focusedAction: @Composable (Modifier) -> Unit,
     onImport: () -> Unit,
@@ -212,7 +212,7 @@ internal fun DesktopShell(
                 DesktopShortcut.OpenAction -> onOpenPalette(PaletteMode.Actions)
                 DesktopShortcut.Generate -> if (generating) onCancelGeneration() else onGenerate()
                 DesktopShortcut.Cancel -> onCancelAll()
-                DesktopShortcut.NextTab -> onActiveTab((activeTab + 1) % 3)
+                DesktopShortcut.NextTab -> onWorkspace(nextWorkspace(workspace))
                 null -> return@onPreviewKeyEvent false
             }
             true
@@ -233,6 +233,7 @@ internal fun DesktopShell(
             ) {
                 Column {
                     DesktopHeader(appState.project, appState.loading, connection, onImport, onReanalyze, { onOpenPalette(PaletteMode.Actions) }, narrow, { openDrawer(NarrowDrawer.Explorer) }, { openDrawer(NarrowDrawer.Action) })
+                    WorkspaceNavigation(workspace, workspaceCounts, onWorkspace)
                     Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         if (!narrow) {
                             explorer(Modifier.width(paneWidths.explorer.dp).fillMaxHeight()) {}
@@ -240,12 +241,13 @@ internal fun DesktopShell(
                         }
                         ContentPane(
                             project = appState.project, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis, selectedSymbol = appState.selectedSymbol,
-                            activeTab = activeTab, analysisInProgress = analysisInProgress, onTab = onActiveTab, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis,
+                            workspace = workspace, analysisInProgress = analysisInProgress, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis,
                             onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, candidate = appState.candidate, comparisonBase = appState.comparisonBase, comparison = appState.comparison,
                             checks = appState.checks, applied = applied, onDiscard = onDiscard, onAskForRevision = onAskForRevision, onRunChecks = onRunChecks, onGenerateAlternate = onGenerateAlternate,
                             onCompare = onCompare, onExport = onExport, comparisonBaseNote = comparisonBaseNote, comparisonCandidateNote = comparisonCandidateNote, onComparisonBaseNote = onComparisonBaseNote,
                             onComparisonCandidateNote = onComparisonCandidateNote, onApply = onApply, onUndo = onUndo, activity = activity, showActivity = showActivity, onToggleActivity = onToggleActivity,
-                            impact = appState.impact, gitStatus = appState.gitStatus, modifier = Modifier.weight(1f).fillMaxHeight(),
+                            impact = appState.impact, gitStatus = appState.gitStatus, findings = appState.findings.findings, onOpenFinding = onOpenFinding,
+                            focusedLine = appState.selection.focusedLine, modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
                         if (!narrow) {
                             ResizableDivider(onDelta = { onPaneWidths(paneWidths.withAction(paneWidths.action - it)) }, onCommit = onSavePaneWidths)
@@ -263,22 +265,46 @@ internal fun DesktopShell(
 
 @Composable
 private fun ContentPane(
-    project: ProjectAnalysis?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, activeTab: Int,
-    analysisInProgress: Boolean, onTab: (Int) -> Unit, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit,
+    project: ProjectAnalysis?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, workspace: Workspace,
+    analysisInProgress: Boolean, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit,
     onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, candidate: GenerationResult?, comparisonBase: GenerationResult?, comparison: CandidateComparison?, checks: CandidateCheckReport?, applied: ApplyResult?,
     onDiscard: () -> Unit, onAskForRevision: () -> Unit, onRunChecks: () -> Unit, onGenerateAlternate: () -> Unit, onCompare: () -> Unit, onExport: () -> Unit,
     comparisonBaseNote: String, comparisonCandidateNote: String, onComparisonBaseNote: (String) -> Unit, onComparisonCandidateNote: (String) -> Unit, onApply: () -> Unit, onUndo: () -> Unit,
-    activity: List<ActivityEntry>, showActivity: Boolean, onToggleActivity: () -> Unit, impact: ImpactPreview?, gitStatus: GitStatus?, modifier: Modifier,
+    activity: List<ActivityEntry>, showActivity: Boolean, onToggleActivity: () -> Unit, impact: ImpactPreview?, gitStatus: GitStatus?, findings: List<UnifiedFinding>, onOpenFinding: (UnifiedFinding) -> Unit,
+    focusedLine: Int, modifier: Modifier,
 ) {
     Column(modifier.background(AppBackground)) {
         InfoStrip(project, selected)
-        TabRow(selectedTabIndex = activeTab, backgroundColor = Panel, contentColor = Accent) {
-            listOf("Code", "Summary", "Changes").forEachIndexed { index, title -> Tab(selected = activeTab == index, onClick = { onTab(index) }, text = { Text(title) }) }
+        when (workspace) {
+            Workspace.Summary -> SummaryPane(selected, symbols, analysis, selectedSymbol, analysisInProgress, onAnalyze, onRefreshAnalysis, onCancelAnalysis, onSelectSymbol, onPrepareSuggestion)
+            Workspace.Editor -> if (candidate == null) CodePane(project, selected, selectedSymbol, focusedLine) else ReviewPane(candidate, comparisonBase, comparison, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onGenerateAlternate, onCompare, onExport, comparisonBaseNote, comparisonCandidateNote, onComparisonBaseNote, onComparisonCandidateNote, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
+            Workspace.Analysis -> WorkspacePlaceholder("Project Analysis", "Analysis controls will be available here.")
+            Workspace.Bugs -> BugsNavigationPane(findings, onOpenFinding)
         }
-        when (activeTab) {
-            0 -> CodePane(project, selected)
-            1 -> SummaryPane(selected, symbols, analysis, selectedSymbol, analysisInProgress, onAnalyze, onRefreshAnalysis, onCancelAnalysis, onSelectSymbol, onPrepareSuggestion)
-            else -> ReviewPane(candidate, comparisonBase, comparison, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onGenerateAlternate, onCompare, onExport, comparisonBaseNote, comparisonCandidateNote, onComparisonBaseNote, onComparisonCandidateNote, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
+    }
+}
+
+@Composable
+private fun WorkspacePlaceholder(title: String, detail: String) {
+    Column(Modifier.fillMaxSize().padding(18.dp)) {
+        Text(title, color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Text(detail, color = SecondaryText, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun BugsNavigationPane(findings: List<UnifiedFinding>, onOpenFinding: (UnifiedFinding) -> Unit) {
+    if (findings.isEmpty()) {
+        WorkspacePlaceholder("Project Bugs", "Verified findings and AI suggestions will be available here.")
+        return
+    }
+    Column(Modifier.fillMaxSize().padding(18.dp)) {
+        Text("Project Bugs", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        findings.take(8).forEach { finding ->
+            Button(onClick = { onOpenFinding(finding) }, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Open ${finding.location.path.ifBlank { "finding" }} in Editor")
+            }
         }
     }
 }
