@@ -1,6 +1,6 @@
-# Mini-Orca desktop-only implementation tasks
+# Mini-Orca implementation tasks
 
-Source roadmap: [`../docs/NEXT_FUNCTIONS_FIXES_UI.md`](../docs/NEXT_FUNCTIONS_FIXES_UI.md)
+Source roadmap: [`../PLAN.md`](../PLAN.md)
 
 ## Execution order
 
@@ -37,12 +37,43 @@ Source roadmap: [`../docs/NEXT_FUNCTIONS_FIXES_UI.md`](../docs/NEXT_FUNCTIONS_FI
 | 29 | [Retire the web UI](completed/29_retire_web_ui.md) | 03, 20, 21, 22, 23, 24, 28 | Complete |
 | 30 | [Tooling and verification](completed/30_tooling_and_verification.md) | 03, 06, 11, 14, 19, 20, 29 | Complete |
 | 31 | [Release acceptance](completed/31_release_acceptance.md) | 15, 25, 26, 27, 28, 29, 30 | Complete |
+| 32 | [Restore green validation baseline](32_restore_green_validation_baseline.md) | 31 | Pending |
+| 33 | [Repository configuration and version hygiene](33_repository_config_version_hygiene.md) | 32 | Pending |
+| 34 | [Structured project analysis](34_structured_project_analysis.md) | 32, 33 | Pending |
+| 35 | [Unified finding model and store](35_unified_finding_model_store.md) | 34 | Pending |
+| 36 | [Go verified project scan](36_go_verified_project_scan.md) | 35 | Pending |
+| 37 | [Project overview, scan, and findings APIs](37_project_overview_findings_apis.md) | 34, 35, 36 | Pending |
+| 38 | [Go declaration edit engine](38_go_declaration_edit_engine.md) | 32 | Pending |
+| 39 | [Editable draft lifecycle](39_editable_draft_lifecycle.md) | 38 | Pending |
+| 40 | [Draft validation, checks, Apply, and undo](40_draft_validation_checks_apply.md) | 39 | Pending |
+| 41 | [File-scoped chat sessions](41_file_scoped_chat_sessions.md) | 38, 39, 40 | Pending |
+| 42 | [Desktop shell decomposition](42_desktop_shell_decomposition.md) | 32 | Pending |
+| 43 | [Desktop API contracts](43_desktop_api_contracts.md) | 37, 40, 41 | Pending |
+| 44 | [Desktop workspace and workflow state](44_desktop_workspace_state.md) | 42, 43 | Pending |
+| 45 | [Desktop top-level navigation](45_desktop_top_level_navigation.md) | 44 | Pending |
+| 46 | [Desktop Project Summary](46_desktop_project_summary.md) | 37, 43, 44, 45 | Pending |
+| 47 | [Desktop Project Analysis](47_desktop_analysis_workspace.md) | 43, 44, 45 | Pending |
+| 48 | [Desktop Bugs workspace](48_desktop_bugs_workspace.md) | 37, 43, 44, 45 | Pending |
+| 49 | [Desktop Editor file/symbol brief](49_desktop_editor_file_symbol_brief.md) | 44, 45 | Pending |
+| 50 | [Desktop file-scoped chat](50_desktop_file_scoped_chat.md) | 41, 43, 44, 49 | Pending |
+| 51 | [Desktop editable declaration draft](51_desktop_editable_declaration_draft.md) | 40, 43, 44, 50 | Pending |
+| 52 | [Desktop draft review and Apply](52_desktop_draft_review_apply.md) | 40, 51 | Pending |
+| 53 | [Desktop accessibility and responsive interaction](53_desktop_accessibility_responsive.md) | 45, 46, 47, 48, 49, 50, 51, 52 | Pending |
+| 54 | [Desktop integration coverage](54_desktop_integration_coverage.md) | 46, 47, 48, 49, 50, 51, 52, 53 | Pending |
+| 55 | [API, migration, and release documentation](55_api_docs_migration_release_notes.md) | 37, 41, 52, 54 | Pending |
+| 56 | [Focused AI IDE release acceptance](56_release_acceptance.md) | 33–55 | Pending |
 
 ## Delivery boundaries
 
-- Tasks 01–19 create the safe backend and persistence contract.
-- Tasks 20–24 deliver the core desktop-only workflow.
-- Tasks 25–28 add the roadmap's focused follow-on functions and polish.
-- Tasks 29–31 remove the legacy web interface and verify the release.
+- Tasks 01–31 are the completed desktop-only safety foundation and release history.
+- Tasks 32–33 restore a trustworthy validation, configuration, and version baseline.
+- Tasks 34–37 deliver structured project intelligence, findings, and verified scans.
+- Tasks 38–41 deliver Go declaration drafts and file-scoped chat backend contracts.
+- Tasks 42–49 restructure Desktop and add Summary, Analysis, Bugs, and Editor.
+- Tasks 50–52 deliver file chat, editable drafts, and the final review workflow.
+- Tasks 53–56 complete accessibility, integration coverage, documentation, and release acceptance.
 
-No task may introduce autonomous multi-file edits, silent writes, automatic commits, or background agents that mutate a project.
+One Air implementation agent owns one ready task at a time. Read-only research or
+review agents may work in parallel, but shared-worktree writers must not overlap.
+No task may introduce direct source editing, autonomous multi-file edits, silent
+writes, automatic commits, or background agents that mutate a project.

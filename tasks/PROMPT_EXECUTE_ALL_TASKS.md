@@ -1,53 +1,64 @@
-# Prompt template — execute all tasks sequentially
+# Prompt template — execute the backlog with Air agents
 
-Copy this prompt to execute the complete task backlog in dependency order.
+Use this prompt with one primary Air coordinator. The coordinator delegates one
+ready implementation task at a time and owns integration and final verification.
 
 ```text
-You are executing the complete Mini-Orca improvement backlog, one task at a time.
+You are the primary Air coordinator for the Mini-Orca implementation backlog.
 
-Read, in this order:
-1. Plan.md
-2. tasks/README.md
-3. tasks/INDEX.md
-4. Every task file listed in tasks/INDEX.md, in phase and dependency order
+Read completely, in this order:
+1. AGENTS.md
+2. PLAN.md
+3. tasks/README.md
+4. tasks/INDEX.md
+5. Every Pending task file in dependency order
 
 Objective:
-Deliver the Plan.md scope while keeping the repository simple, well structured, and clean:
-- one Go daemon remains the backend and LLM integration point;
-- imported projects are safely analyzed into `.mini-orca/analysis.md`;
-- generation is constrained to one selected function/class in one selected file while receiving bounded project-wide context;
-- the Kotlin Compose Desktop app remains one window, one API client, and no database or unnecessary layers.
+Deliver PLAN.md while preserving Mini-Orca's local-first, preview-first contract:
+one active project, one open file, one selected or new Go symbol, one editable AI
+declaration draft, validation, checks, and explicit Apply.
 
-Execution protocol:
-1. Inspect the worktree before starting. Preserve all unrelated user changes.
+Coordination protocol:
+1. Inspect and preserve the starting worktree.
 2. Build a dependency-aware queue from tasks/INDEX.md.
-3. Execute exactly one ready task at a time. Do not parallelize tasks.
-4. Before each task, read its dependencies and inspect the source/tests it names.
-5. For a Pending or In Progress task, implement only the documented scope.
-6. For a Complete task, verify its acceptance criteria without reimplementing it. Repair only demonstrated regressions.
-7. Run the task's focused verification commands immediately after that task.
-8. Mark the task Complete and update tasks/INDEX.md only after its checks pass.
-9. Proceed to the next ready task only when the preceding task is complete and clean.
-10. Stop on a real blocker: report the task, evidence, failed command, and required user decision. Do not skip or fabricate completion.
+3. Select exactly one ready Pending task.
+4. Delegate that task to one implementation agent using the single-task prompt.
+5. Do not run overlapping implementation writers in the shared worktree. Read-only
+   research/review agents may run in parallel when their scope is explicit.
+6. Review the agent's diff, acceptance evidence, and commands yourself.
+7. Fix only task-scoped integration problems, then ensure the task is moved to
+   tasks/completed/ and INDEX.md is truthful.
+8. Report a short task-boundary update and select the next ready task.
+9. Stop on a real blocker; do not skip it, duplicate its behavior, or mark dependent
+   tasks Complete.
 
-Code-quality rules:
-- Prefer deletion and simplification over new abstractions.
-- Keep changes small and local; do not introduce a new framework, service, database, global mutable state, or duplicated API client.
-- Use idiomatic Go and Kotlin, explicit error handling, focused functions, and meaningful names.
-- Preserve canonical path and symlink protections, exact safe-shell matching, and preview-only code generation.
-- Do not make generated code write automatically to user projects.
-- Add a focused regression test for each bug fixed or behavior changed.
-- Do not perform unrelated formatting, refactoring, dependency upgrades, or cleanup.
+Implementation rules:
+- Keep changes narrow and delete superseded implementations instead of retaining
+  legacy and replacement paths.
+- Reuse the Go daemon, project/app packages, loopback API, Compose Desktop client,
+  revision/hash guards, context policy, checks, audit, and Gradle wrapper.
+- Do not add a database, framework, second UI/service, global mutable shortcut, or
+  speculative language abstraction.
+- Keep imported source and diff read-only; only the isolated declaration draft is
+  manually editable.
+- Never add multi-file candidates, automatic Apply, commits, scans, tests, or fixes.
+- Preserve unrelated user changes and never edit generated build output.
 
-Verification gates:
-- After Go changes: `go fmt ./...`, relevant `go test`, and `go vet` for affected packages.
-- After concurrency, filesystem, executor, or security changes: relevant `go test -race`.
-- After Compose Desktop changes: `gradle -p desktop test`.
-- Before final completion: run every Phase 5 command, including `go test -race ./...`, `go vet ./...`, the desktop test, and `git diff --check`.
+Per-task verification:
+- Run the selected task's focused checks immediately.
+- Go: formatting, relevant tests, vet; focused race tests for concurrency/filesystem.
+- Desktop: `./desktop/gradlew -p desktop test`.
+- Every task: `git diff --check` and final diff inspection.
 
-Status and reporting:
-- Keep task files and tasks/INDEX.md truthful at all times.
-- Do not mark a task Complete merely because most code exists; its acceptance criteria and checks must pass.
-- At each task boundary, report the completed task, files changed, and verification result in one short progress update.
-- At the end, provide a compact phase-by-phase summary, the final test results, and any intentionally deferred work.
+Final release gate after Task 56:
+- Confirm every task 32–56 is Complete and moved under tasks/completed/.
+- Run `make check`, desktop integration/semantics tests, and the release fixture
+  checklist documented by Task 56.
+- Verify live routes, OpenAPI, README, desktop README, release notes, configuration,
+  and canonical version agree.
+- Verify no local configuration or credential is tracked.
+- Verify one complete keyboard flow: Summary/Bugs → Editor → select/create target →
+  chat → manually edit draft → Validate → Checks → Apply → Undo.
+- Report phase-by-phase results, commands, known limitations, and deferred non-Go
+  safe editing. Do not commit unless explicitly requested.
 ```
