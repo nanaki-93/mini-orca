@@ -6,6 +6,7 @@ enum class Workspace { Summary, Analysis, Bugs, Editor }
 data class ProjectWorkspaceState(
     val project: ProjectAnalysis? = null,
     val index: ProjectIndex? = null,
+    val overview: ProjectOverview? = null,
 )
 
 data class FileSelectionState(
@@ -105,6 +106,7 @@ data class DesktopState(
 ) {
     val project get() = projectState.project
     val index get() = projectState.index
+    val overview get() = projectState.overview
     val selectedFile get() = selection.selectedFile
     val symbols get() = selection.symbols
     val selectedSymbol get() = selection.selectedSymbol
@@ -128,6 +130,10 @@ sealed interface DesktopEvent {
     data class ConnectionUpdated(val connection: ConnectionState) : DesktopEvent
     data class ProjectLoaded(val project: ProjectAnalysis, val index: ProjectIndex) : DesktopEvent
     data class IndexRefreshed(val index: ProjectIndex) : DesktopEvent
+    data class OverviewLoaded(val overview: ProjectOverview) : DesktopEvent
+    data class FindingsLoaded(val findings: List<UnifiedFinding>) : DesktopEvent
+    data class AnalyzeAllLoaded(val job: AnalyzeAllJob?) : DesktopEvent
+    data class GoScanLoaded(val scan: GoScanReport?) : DesktopEvent
     data class FileLoaded(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) : DesktopEvent
     data class SymbolSelected(val symbol: SymbolInfo) : DesktopEvent
     data class EditorContextSelected(val symbol: SymbolInfo?, val line: Int) : DesktopEvent
@@ -161,6 +167,10 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState = when (event) {
         projectState = projectState.copy(project = project?.copy(projectRevision = event.index.projectRevision), index = event.index),
         jobs = jobs.copy(loading = false, status = "Re-analyzed project index", error = null),
     )
+    is DesktopEvent.OverviewLoaded -> copy(projectState = projectState.copy(overview = event.overview))
+    is DesktopEvent.FindingsLoaded -> copy(findings = findings.copy(findings = event.findings))
+    is DesktopEvent.AnalyzeAllLoaded -> copy(findings = findings.copy(analyzeAll = event.job))
+    is DesktopEvent.GoScanLoaded -> copy(findings = findings.copy(scan = event.scan))
     is DesktopEvent.FileLoaded -> copy(
         selection = FileSelectionState(selectedFile = event.file, symbols = event.symbols),
         chat = ChatState(), review = DraftReviewState(applied = review.applied),

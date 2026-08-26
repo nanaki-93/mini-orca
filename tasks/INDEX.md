@@ -50,11 +50,11 @@ Source roadmap: [`../PLAN.md`](../PLAN.md)
 | 42 | [Desktop shell decomposition](completed/42_desktop_shell_decomposition.md) | 32 | Complete |
 | 43 | [Desktop API contracts](completed/43_desktop_api_contracts.md) | 37, 40, 41 | Complete |
 | 44 | [Desktop workspace and workflow state](completed/44_desktop_workspace_state.md) | 42, 43 | Complete |
-| 45 | [Desktop top-level navigation](45_desktop_top_level_navigation.md) | 44 | Pending |
-| 46 | [Desktop Project Summary](46_desktop_project_summary.md) | 37, 43, 44, 45 | Pending |
-| 47 | [Desktop Project Analysis](47_desktop_analysis_workspace.md) | 43, 44, 45 | Pending |
-| 48 | [Desktop Bugs workspace](48_desktop_bugs_workspace.md) | 37, 43, 44, 45 | Pending |
-| 49 | [Desktop Editor file/symbol brief](49_desktop_editor_file_symbol_brief.md) | 44, 45 | Pending |
+| 45 | [Desktop top-level navigation](completed/45_desktop_top_level_navigation.md) | 44 | Complete |
+| 46 | [Desktop Project Summary](completed/46_desktop_project_summary.md) | 37, 43, 44, 45 | Complete |
+| 47 | [Desktop Project Analysis](47_desktop_analysis_workspace.md) | 43, 44, 45 | In Progress |
+| 48 | [Desktop Bugs workspace](48_desktop_bugs_workspace.md) | 37, 43, 44, 45 | In Progress |
+| 49 | [Desktop Editor file/symbol brief](49_desktop_editor_file_symbol_brief.md) | 44, 45 | In Progress |
 | 50 | [Desktop file-scoped chat](50_desktop_file_scoped_chat.md) | 41, 43, 44, 49 | Pending |
 | 51 | [Desktop editable declaration draft](51_desktop_editable_declaration_draft.md) | 40, 43, 44, 50 | Pending |
 | 52 | [Desktop draft review and Apply](52_desktop_draft_review_apply.md) | 40, 51 | Pending |
