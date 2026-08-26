@@ -10,6 +10,19 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
+    @Test fun fileAnalysisSendsRemoteProviderConfirmation() {
+        val client = ApiClient(transport = DaemonTransport { method, path, body ->
+            assertEquals("POST", method)
+            assertEquals("/api/projects/current/files/analysis", path)
+            assertContains(body.orEmpty(), "\"path\":\"main.go\"")
+            assertContains(body.orEmpty(), "\"project_revision\":\"revision\"")
+            assertContains(body.orEmpty(), "\"confirm_remote_provider\":true")
+            TransportResponse(200, """{"path":"main.go","status":"fresh"}""")
+        })
+
+        assertEquals("fresh", client.analyze("main.go", "revision", confirmRemoteProvider = true).status)
+    }
+
     @Test fun workspaceResponsesDecodeToTypedModelsAndIgnoreUnknownFields() {
         val client = ApiClient(transport = DaemonTransport { method, path, _ ->
             when (method to path) {

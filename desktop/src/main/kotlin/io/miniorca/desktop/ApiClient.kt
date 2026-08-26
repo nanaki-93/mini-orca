@@ -31,7 +31,7 @@ class ApiClient(
     fun fileInfo(path: String): ProjectFileInfo = decode(send("GET", "/api/projects/current/files/info?path=${encode(path)}"))
     fun symbols(path: String): SymbolsResponse = decode(send("GET", "/api/projects/current/files/symbols?path=${encode(path)}"))
     fun analysis(path: String, revision: String): FileAnalysis = decode(send("GET", "/api/projects/current/files/analysis?path=${encode(path)}&project_revision=${encode(revision)}"))
-    fun analyze(path: String, revision: String, refresh: Boolean = false): FileAnalysis = decode(send("POST", "/api/projects/current/files/analysis", jsonBody("path" to path, "project_revision" to revision, "refresh" to refresh)))
+    fun analyze(path: String, revision: String, refresh: Boolean = false, confirmRemoteProvider: Boolean = false): FileAnalysis = decode(send("POST", "/api/projects/current/files/analysis", jsonBody("path" to path, "project_revision" to revision, "refresh" to refresh, "confirm_remote_provider" to confirmRemoteProvider)))
     fun context(path: String, action: String = "fix"): ContextManifest = decode(send("GET", "/api/projects/current/context?path=${encode(path)}&action=${encode(action)}"))
     fun effectiveModel(): EffectiveModel = decode(send("GET", "/api/models/current"))
     fun status(): DaemonStatus = decode(send("GET", "/status"))

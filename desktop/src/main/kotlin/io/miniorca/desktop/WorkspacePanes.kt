@@ -25,6 +25,9 @@ import androidx.compose.ui.unit.sp
 internal fun AnalysisWorkspacePane(
     job: AnalyzeAllJob?,
     coverage: AnalysisCoverage?,
+    remoteProvider: Boolean,
+    remoteProviderConfirmed: Boolean,
+    onRemoteProviderConfirmed: (Boolean) -> Unit,
     onStart: (AnalyzeAllRunOptions) -> Unit,
     onPause: () -> Unit,
     onResume: (Boolean) -> Unit,
@@ -33,11 +36,10 @@ internal fun AnalysisWorkspacePane(
 ) {
     var maxFiles by remember { mutableStateOf(defaultAnalyzeAllFileLimit.toString()) }
     var maxRetries by remember { mutableStateOf(defaultAnalyzeAllRetryLimit.toString()) }
-    var remoteConfirmed by remember { mutableStateOf(false) }
     val options = AnalyzeAllRunOptions(
         maxFiles = maxFiles.toIntOrNull() ?: defaultAnalyzeAllFileLimit,
         maxRetries = maxRetries.toIntOrNull() ?: defaultAnalyzeAllRetryLimit,
-        confirmRemoteProvider = remoteConfirmed,
+        confirmRemoteProvider = remoteProviderConfirmed,
     ).bounded()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
         Text("PROJECT ANALYSIS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
@@ -47,12 +49,12 @@ internal fun AnalysisWorkspacePane(
             "running" -> { Text("Analyze-all running", color = PrimaryText); Button(onClick = onPause) { Text("Pause") }; Button(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") } }
             "paused" -> {
                 Text("Analyze-all paused; completed results remain visible.", color = SecondaryText)
-                RemoteProviderConfirmation(remoteConfirmed, { remoteConfirmed = it })
-                Button(onClick = { onResume(remoteConfirmed) }) { Text("Resume") }
+                if (remoteProvider) RemoteProviderConfirmation(remoteProviderConfirmed, onRemoteProviderConfirmed)
+                Button(onClick = { onResume(remoteProviderConfirmed) }, enabled = !remoteProvider || remoteProviderConfirmed) { Text("Resume") }
                 Button(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
             }
-            "canceled" -> { Text("Analyze-all canceled; start a new explicit job to continue.", color = SecondaryText); AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteConfirmed, { remoteConfirmed = it }, options, onStart) }
-            else -> { Text(if (job == null) "No Analyze-all job (204 No Content). Import and reindex never start one automatically." else "Analyze-all ${job.status}; stale jobs cannot resume on a newer revision.", color = SecondaryText); AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteConfirmed, { remoteConfirmed = it }, options, onStart) }
+            "canceled" -> { Text("Analyze-all canceled; start a new explicit job to continue.", color = SecondaryText); AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart) }
+            else -> { Text(if (job == null) "No Analyze-all job (204 No Content). Import and reindex never start one automatically." else "Analyze-all ${job.status}; stale jobs cannot resume on a newer revision.", color = SecondaryText); AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart) }
         }
         job?.let { Text("Bounded to ${it.maxFiles} files and ${it.maxRetries} retries per file.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp)) }
         job?.files.orEmpty().forEach { file ->
@@ -68,6 +70,7 @@ private fun AnalyzeAllStartControls(
     onMaxFiles: (String) -> Unit,
     maxRetries: String,
     onMaxRetries: (String) -> Unit,
+    remoteProvider: Boolean,
     remoteConfirmed: Boolean,
     onRemoteConfirmed: (Boolean) -> Unit,
     options: AnalyzeAllRunOptions,
@@ -75,12 +78,12 @@ private fun AnalyzeAllStartControls(
 ) {
     TextField(maxFiles, onMaxFiles, label = { Text("File limit (1–500)") }, modifier = Modifier.padding(top = 6.dp))
     TextField(maxRetries, onMaxRetries, label = { Text("Retry limit (0–3)") }, modifier = Modifier.padding(top = 6.dp))
-    RemoteProviderConfirmation(remoteConfirmed, onRemoteConfirmed)
-    Button(onClick = { onStart(options) }, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
+    if (remoteProvider) RemoteProviderConfirmation(remoteConfirmed, onRemoteConfirmed)
+    Button(onClick = { onStart(options) }, enabled = !remoteProvider || remoteConfirmed, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
 }
 
 @Composable
-private fun RemoteProviderConfirmation(confirmed: Boolean, onConfirmed: (Boolean) -> Unit) {
+internal fun RemoteProviderConfirmation(confirmed: Boolean, onConfirmed: (Boolean) -> Unit) {
     androidx.compose.foundation.layout.Row(modifier = Modifier.padding(top = 6.dp)) {
         Checkbox(checked = confirmed, onCheckedChange = onConfirmed)
         Text("Confirm if the configured provider is remote", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))

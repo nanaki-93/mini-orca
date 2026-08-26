@@ -66,6 +66,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     var newChatSymbol by remember { mutableStateOf("") }
     var chatMessage by remember { mutableStateOf("") }
     var remoteProviderConfirmed by remember { mutableStateOf(false) }
+    var remoteProvider by remember { mutableStateOf(false) }
 
     fun update(event: DesktopEvent) {
         appState = workflow.dispatch(event)
@@ -93,6 +94,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             runCatching { withContext(Dispatchers.IO) { api.status() to api.effectiveModel() } }
                 .onSuccess { (status, model) ->
                     val elapsed = (System.nanoTime() - startedAt) / 1_000_000
+                    remoteProvider = model.remoteProvider
                     update(DesktopEvent.ConnectionUpdated(ConnectionState("Daemon connected", "${model.profile} · ${model.model}", status.version, true, api.endpointLocality(), "${elapsed}ms")))
                 }
                 .onFailure { update(DesktopEvent.ConnectionUpdated(ConnectionState(label = "Daemon unavailable", model = "Retry from the status bar", locality = api.endpointLocality()))) }
@@ -344,7 +346,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         update(DesktopEvent.Status("${if (refresh) "Refreshing" else "Analyzing"} ${file.path}…"))
         analysisJob = scope.launch {
             try {
-                val analysis = withContext(Dispatchers.IO) { runInterruptible { api.analyze(file.path, project.projectRevision, refresh) } }
+                val analysis = withContext(Dispatchers.IO) { runInterruptible { api.analyze(file.path, project.projectRevision, refresh, remoteProviderConfirmed) } }
                 if (workflow.analysisCompleted(requestId, requestIdentity, analysis)) {
                     appState = workflow.state
                     update(DesktopEvent.Status("Summary ${analysis.status}"))
@@ -706,7 +708,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             newSymbol = newChatSymbol,
             message = chatMessage,
             sending = chatJob != null,
-            remoteProvider = !api.isLoopbackEndpoint(),
+            remoteProvider = remoteProvider,
             remoteConfirmed = remoteProviderConfirmed,
             onSelectSymbol = { update(DesktopEvent.SymbolSelected(it)) },
             onMode = { chatMode = it },
@@ -723,7 +725,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         ) }
         if (appState.workspace == Workspace.Editor && appState.candidate == null) {
             Column(modifier) {
-                EditorBriefPane(appState.selectedFile, appState.analysis, appState.selectedSymbol, appState.symbols, { update(DesktopEvent.SymbolSelected(it)) }, { analyzeSelected(false) }, { analyzeSelected(true) })
+                EditorBriefPane(appState.selectedFile, appState.analysis, appState.selectedSymbol, appState.symbols, remoteProvider, remoteProviderConfirmed, { remoteProviderConfirmed = it }, { update(DesktopEvent.SymbolSelected(it)) }, { analyzeSelected(false) }, { analyzeSelected(true) })
                 actionPane(Modifier.weight(1f).fillMaxWidth())
             }
         } else {
@@ -743,7 +745,9 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         generating = chatJob != null,
         showContext = showContext,
         contextManifest = contextManifest,
-        remoteProvider = !api.isLoopbackEndpoint(),
+        remoteProvider = remoteProvider,
+        remoteProviderConfirmed = remoteProviderConfirmed,
+        onRemoteProviderConfirmed = { remoteProviderConfirmed = it },
         onDismissContext = { showContext = false },
         paletteMode = paletteMode,
         paletteQuery = paletteQuery,

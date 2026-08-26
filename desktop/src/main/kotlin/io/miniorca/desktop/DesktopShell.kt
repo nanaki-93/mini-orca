@@ -146,6 +146,8 @@ internal fun DesktopShell(
     showContext: Boolean,
     contextManifest: ContextManifest?,
     remoteProvider: Boolean,
+    remoteProviderConfirmed: Boolean,
+    onRemoteProviderConfirmed: (Boolean) -> Unit,
     onDismissContext: () -> Unit,
     paletteMode: PaletteMode,
     paletteQuery: String,
@@ -273,7 +275,7 @@ internal fun DesktopShell(
                         }
                         ContentPane(
                             project = appState.project, overview = appState.overview, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis, selectedSymbol = appState.selectedSymbol,
-                            workspace = workspace, analysisInProgress = analysisInProgress, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis,
+                            workspace = workspace, analysisInProgress = analysisInProgress, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis, remoteProvider = remoteProvider, remoteProviderConfirmed = remoteProviderConfirmed, onRemoteProviderConfirmed = onRemoteProviderConfirmed,
                             onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, candidate = appState.candidate, comparisonBase = appState.comparisonBase, comparison = appState.comparison,
                             checks = appState.checks, draft = appState.review.draft, editor = appState.review.editor, applied = applied, onRunDraftChecks = onRunDraftChecks, onApplyDraft = onApplyDraft, onDiscard = onDiscard, onAskForRevision = onAskForRevision, onRunChecks = onRunChecks, onGenerateAlternate = onGenerateAlternate,
                             onCompare = onCompare, onExport = onExport, comparisonBaseNote = comparisonBaseNote, comparisonCandidateNote = comparisonCandidateNote, onComparisonBaseNote = onComparisonBaseNote,
@@ -299,7 +301,7 @@ internal fun DesktopShell(
 @Composable
 private fun ContentPane(
     project: ProjectAnalysis?, overview: ProjectOverview?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, workspace: Workspace,
-    analysisInProgress: Boolean, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit,
+    analysisInProgress: Boolean, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit, remoteProvider: Boolean, remoteProviderConfirmed: Boolean, onRemoteProviderConfirmed: (Boolean) -> Unit,
     onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, candidate: GenerationResult?, comparisonBase: GenerationResult?, comparison: CandidateComparison?, checks: CandidateCheckReport?, draft: DeclarationDraft?, editor: EditableDraftState?, applied: ApplyResult?, onRunDraftChecks: () -> Unit, onApplyDraft: () -> Unit,
     onDiscard: () -> Unit, onAskForRevision: () -> Unit, onRunChecks: () -> Unit, onGenerateAlternate: () -> Unit, onCompare: () -> Unit, onExport: () -> Unit,
     comparisonBaseNote: String, comparisonCandidateNote: String, onComparisonBaseNote: (String) -> Unit, onComparisonCandidateNote: (String) -> Unit, onApply: () -> Unit, onUndo: () -> Unit,
@@ -313,10 +315,10 @@ private fun ContentPane(
             Workspace.Summary -> ProjectSummaryPane(overview, project, onWorkspace)
             Workspace.Editor -> when {
                 draft != null -> DraftReviewPane(project, selected, editor, draft, checks, impact, gitStatus, applied, onRunDraftChecks, onApplyDraft, onUndo)
-                candidate == null -> EditorPane(project, selected, symbols, analysis, selectedSymbol, focusedLine, showCompactEditorBrief, onSelectSymbol, onAnalyze, onRefreshAnalysis)
+                candidate == null -> EditorPane(project, selected, symbols, analysis, selectedSymbol, focusedLine, showCompactEditorBrief, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, onSelectSymbol, onAnalyze, onRefreshAnalysis)
                 else -> ReviewPane(candidate, comparisonBase, comparison, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onGenerateAlternate, onCompare, onExport, comparisonBaseNote, comparisonCandidateNote, onComparisonBaseNote, onComparisonCandidateNote, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
             }
-            Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll) { path -> onOpenFinding(UnifiedFinding(location = FindingLocation(path = path))) }
+            Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll) { path -> onOpenFinding(UnifiedFinding(location = FindingLocation(path = path))) }
             Workspace.Bugs -> BugsWorkspacePane(findings, scan, onOpenFinding, onPrepareFinding, onTriageFinding, onStartScan, onCancelScan)
         }
     }
