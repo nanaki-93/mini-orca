@@ -32,7 +32,7 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "fixture-model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs the selected command.","responsibilities":["dispatches work"],"dependencies":["fmt"],"side_effects":["writes stdout"],"risks":[{"severity":"low","summary":"No input validation."}],"suggestions":[{"title":"Validate input","summary":"Reject blank names.","target_symbol":"Run","action":"fix"}],"symbol_explanations":{"Run":"Dispatches the command."}}`}}}})
 	}))
 	defer server.Close()
-	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	service, root := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
 	result, err := service.AnalyzeFile(context.Background(), "main.go", false, false)
 	if err != nil {
 		t.Fatal(err)
@@ -336,13 +336,23 @@ func analyzeAllRequestPath(r *http.Request) (string, error) {
 }
 
 func newSemanticAnalysisService(t *testing.T, baseURL string, analysisSeconds int) (*Service, string) {
+	return newSemanticAnalysisServiceFixture(t, baseURL, analysisSeconds, false)
+}
+
+func newSemanticAnalysisServiceWithHelper(t *testing.T, baseURL string, analysisSeconds int) (*Service, string) {
+	return newSemanticAnalysisServiceFixture(t, baseURL, analysisSeconds, true)
+}
+
+func newSemanticAnalysisServiceFixture(t *testing.T, baseURL string, analysisSeconds int, includeHelper bool) (*Service, string) {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nimport \"fmt\"\n\nfunc Run() { fmt.Println(\"run\") }\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "helper.go"), []byte("package main\n\nfunc Helper() { println(\"helper secret\") }\n"), 0644); err != nil {
-		t.Fatal(err)
+	if includeHelper {
+		if err := os.WriteFile(filepath.Join(root, "helper.go"), []byte("package main\n\nfunc Helper() { println(\"helper secret\") }\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	manager, err := project.NewManager(root)
 	if err != nil {

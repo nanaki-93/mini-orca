@@ -78,6 +78,39 @@ func TestScanGoProjectRejectsStaleRevisionAndCancels(t *testing.T) {
 	}
 }
 
+func TestGoScanLifecycleStartsReadsAndCancels(t *testing.T) {
+	service, _, revision := newGoScanService(t, map[string]string{
+		"go.mod":       "module fixture\n\ngo 1.22\n",
+		"main.go":      "package fixture\n",
+		"main_test.go": "package fixture\nimport (\"testing\"; \"time\")\nfunc TestSlow(t *testing.T) { time.Sleep(time.Second) }\n",
+	})
+	if _, err := service.StartGoScan("stale"); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("stale start = %v", err)
+	}
+	started, err := service.StartGoScan(revision)
+	if err != nil || started.Status != "running" {
+		t.Fatalf("started scan = %+v, %v", started, err)
+	}
+	if _, err := service.GoScanProgress(revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.CancelGoScan(revision); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		report, err := service.GoScanProgress(revision)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if report != nil && report.Status == "canceled" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("scan did not report cancellation")
+}
+
 func newGoScanService(t *testing.T, files map[string]string) (*Service, string, string) {
 	t.Helper()
 	root := t.TempDir()

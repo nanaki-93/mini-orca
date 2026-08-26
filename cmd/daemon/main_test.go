@@ -63,6 +63,12 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 		{http.MethodGet, "/api/projects/current/context"},
 		{http.MethodPost, "/api/projects/import"},
 		{http.MethodGet, "/api/projects/current"},
+		{http.MethodGet, "/api/projects/current/overview"},
+		{http.MethodGet, "/api/projects/current/findings"},
+		{http.MethodPatch, "/api/projects/current/findings/{findingID}"},
+		{http.MethodGet, "/api/projects/current/scan"},
+		{http.MethodPost, "/api/projects/current/scan"},
+		{http.MethodDelete, "/api/projects/current/scan"},
 		{http.MethodGet, "/api/projects/current/index"},
 		{http.MethodGet, "/api/projects/current/files/info"},
 		{http.MethodGet, "/api/projects/current/files/symbols"},
@@ -107,6 +113,9 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 			path := route.path
 			if path == "/api/projects/current/files/info" || path == "/api/projects/current/files/symbols" || path == "/api/projects/current/files/analysis" || path == "/api/projects/current/context" {
 				path += "?path=missing.go"
+			}
+			if route.path == "/api/projects/current/overview" || route.path == "/api/projects/current/findings" || route.path == "/api/projects/current/scan" {
+				path += "?project_revision=sha256:missing"
 			}
 			req := httptest.NewRequest(route.method, path, nil)
 			response := httptest.NewRecorder()

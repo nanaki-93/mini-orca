@@ -126,7 +126,11 @@ func TestApplyRejectsFileConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 	service.rememberCandidate(&GenerationPreview{GenerationID: "candidate", ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run", CandidateContent: "package main\nfunc Run() {}\n", Validation: project.GenerationValidation{Applicable: true}})
-	service.candidates["candidate"].checks = &CandidateCheckReport{Applicable: true}
+	preview, err := service.Candidate("candidate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.drafts["candidate"].checks = &draftCheckEvidence{Revision: 1, CandidateHash: preview.CandidateHash, Report: CandidateCheckReport{Applicable: true}}
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() { println(\"external\") }\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
