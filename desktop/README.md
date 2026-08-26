@@ -7,18 +7,20 @@ go run ./cmd/daemon
 ./desktop/gradlew -p desktop run
 ```
 
-The client uses `http://localhost:9090` by default. Set `MINI_ORCA_URL` to point it at another daemon URL.
+The client uses `http://localhost:9090` by default. Set `MINI_ORCA_URL` to point it at another daemon URL. The daemon is loopback-only by default; if its configured LLM provider is non-loopback, the user must confirm that destination before any prompt-bearing request. Keep provider credentials in the ignored local `config.yaml`.
+
+The Editor workflow is Go-first: exact replace/create declaration drafts receive composition and focused validation. Other language views remain analysis-only until equivalent validators are available.
 
 ## Desktop shell smoke check
 
-With a project containing a few nested directories (or a larger fixture), import it and verify that filtering keeps matching paths selected, directory disclosure controls expand and collapse, pane dividers resize and retain their widths after restarting the app, and the `Code`, `Summary`, and `Changes` tabs keep the selected file. Use `Re-analyze` and confirm the selected file remains selected while freshness badges update with text as well as icons.
+With a project containing a few nested directories (or a larger fixture), import it and verify Summary, Analysis, Bugs, and Editor navigation; filtering keeps matching paths selected; disclosure controls expand and collapse; and pane dividers retain their widths after restarting the app. In Editor, confirm the source is selectable and read-only, the file/symbol brief remains visible, and a chat proposal stays bound to the selected file. Edit only the declaration draft, validate it, run checks, confirm Apply names the file and symbol, then use Undo. Re-analyze and verify old drafts become stale while textual freshness badges update.
 
 ## Keyboard and accessibility checklist
 
 With the same fixture, verify the focused workflow without a mouse:
 
-- `⌘P` opens file navigation, `⌘⇧O` opens the selected-file symbol picker, and `⌘K` opens focused actions.
-- Select a file and symbol through the palettes, enter a request, then use `⌘Enter` to generate a preview; press `Esc` while analysis or generation is active to cancel it.
-- Use `⌘Tab` to move between Code, Summary, and Changes. Confirm focusable controls expose text labels and freshness, validation, severity, and connection state have text or icons in addition to color.
+- `⌘P` opens file navigation, `⌘⇧O` opens the selected-file symbol picker, and `⌘K` opens the file-scoped action route. `⌘1`–`⌘4` select Summary, Analysis, Bugs, and Editor; `⌘Tab` cycles them.
+- Select or create one target, enter a chat request, then use `⌘Enter` to send. Edit only the declaration draft, use `⌘⇧V` to validate and `⌘⇧C` for focused checks. Press `Esc` only to close the active dialog or cancel the active request.
+- Use `⌘⇧F` to return to Bugs and Tab through filters and finding actions. Confirm focusable controls expose text labels and selected/disabled state; freshness, validation, severity, confidence, scan/job state, and connection state remain understandable without color.
 - Resize the window below 1000dp and verify the Files and Action controls open drawers rather than compressing all three panes.
-- Check source and diff views remain read-only, preserve text selection, and highlight comments, strings, and language keywords without changing their content.
+- Check source and composed diff views remain read-only, preserve text selection, and highlight comments, strings, and language keywords without changing their content. The compact brief must remain above source in the narrow layout.

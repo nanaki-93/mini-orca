@@ -1,18 +1,22 @@
 openapi: 3.0.3
 info:
   title: Mini-Orca local daemon API
-  version: 4.1.0
+  version: 4.3.0
   description: |
     Local REST API used by the Mini-Orca Compose Desktop client. The daemon is the
-    LLM boundary and produces one-file, one-symbol previews; it does not expose a
-    browser IDE or an autonomous multi-agent workflow. Generated code is preview-only.
+    LLM boundary. A user opens one Go file and declaration, starts a file-scoped
+    conversation, then reviews an editable declaration draft before explicitly
+    applying it. Source and diff views are read-only; no route creates multi-file
+    changes, writes automatically, or exposes a browser IDE.
 servers:
   - url: http://localhost:9090
     description: Local daemon
 tags:
   - name: Daemon
   - name: Projects
-  - name: Generation
+  - name: Chat
+  - name: Drafts
+  - name: Compatibility
 paths:
   /health:
     get:
@@ -44,6 +48,47 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SystemInfo'}
+  /api/projects/current/chat/sessions:
+    post:
+      tags: [Chat]
+      summary: Open a conversation pinned to one file and declaration
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChatSessionRequest'}}}
+      responses:
+        '201': {description: Active file-scoped session, content: {application/json: {schema: {$ref: '#/components/schemas/ChatSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/chat/sessions/{sessionID}:
+    get:
+      tags: [Chat]
+      summary: Read one file-scoped conversation and its proposals
+      parameters:
+        - {$ref: '#/components/parameters/SessionID'}
+      responses:
+        '200': {description: Session messages and immutable file/declaration identity, content: {application/json: {schema: {$ref: '#/components/schemas/ChatSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+  /api/projects/current/chat/sessions/{sessionID}/messages:
+    post:
+      tags: [Chat]
+      summary: Request a declaration proposal in an existing session
+      description: The message body cannot change the session's project, file, mode, or declaration target.
+      parameters:
+        - {$ref: '#/components/parameters/SessionID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChatMessageRequest'}}}
+      responses:
+        '200': {description: New editable declaration draft proposal, content: {application/json: {schema: {$ref: '#/components/schemas/ChatDraftProposal'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/activity:
+    get:
+      tags: [Chat]
+      summary: Read project-scoped, source-free activity
+      description: This is not a conversation transcript; messages belong to their file-scoped session.
+      responses:
+        '200': {description: Source-free project activity, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ChatEntry'}}}}}
   /api/models/current:
     get:
       tags: [Daemon]
@@ -340,18 +385,80 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/drafts/{draftID}:
+    get:
+      tags: [Drafts]
+      summary: Read one isolated editable declaration draft
+      parameters:
+        - {$ref: '#/components/parameters/DraftID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Draft metadata and declaration only; never a complete source file, content: {application/json: {schema: {$ref: '#/components/schemas/Draft'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Drafts]
+      summary: Create the next draft revision from a declaration/import edit
+      parameters:
+        - {$ref: '#/components/parameters/DraftID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DraftUpdateRequest'}}}
+      responses:
+        '200': {description: Updated draft revision with prior validation and check evidence cleared, content: {application/json: {schema: {$ref: '#/components/schemas/Draft'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/drafts/{draftID}/validate:
+    post:
+      tags: [Drafts]
+      summary: Compose and validate one exact declaration draft revision
+      parameters:
+        - {$ref: '#/components/parameters/DraftID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DraftValidationRequest'}}}
+      responses:
+        '200': {description: Valid or invalid draft with read-only composition evidence, content: {application/json: {schema: {$ref: '#/components/schemas/Draft'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/drafts/{draftID}/checks:
+    post:
+      tags: [Drafts]
+      summary: Run focused checks for one validated declaration revision
+      parameters:
+        - {$ref: '#/components/parameters/DraftID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DraftCheckRequest'}}}
+      responses:
+        '200': {description: Isolated check report for the displayed revision and hash, content: {application/json: {schema: {$ref: '#/components/schemas/CandidateCheckReport'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/drafts/{draftID}/review:
+    get:
+      tags: [Drafts]
+      summary: Read validation, check evidence, and Apply eligibility for a draft
+      parameters:
+        - {$ref: '#/components/parameters/DraftID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Read-only declaration review, content: {application/json: {schema: {$ref: '#/components/schemas/DraftReview'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/candidates/checks:
     post:
-      tags: [Generation]
-      summary: Run focused checks for one validated candidate in an isolated workspace
+      tags: [Compatibility]
+      deprecated: true
+      summary: Compatibility check route for a pre-draft candidate
       responses:
         '200': {description: Source-free candidate check report}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/candidates/compare:
     post:
-      tags: [Generation]
-      summary: Compare two validated preview-only candidates for one focused base
+      tags: [Compatibility]
+      deprecated: true
+      summary: Compatibility comparison for pre-draft candidate metadata
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/CandidateComparisonRequest'}}}
@@ -363,8 +470,9 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/candidates/export:
     post:
-      tags: [Generation]
-      summary: Build a source-free Markdown focused-review export
+      tags: [Compatibility]
+      deprecated: true
+      summary: Compatibility export for pre-draft review metadata
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/CandidateExportRequest'}}}
@@ -376,23 +484,29 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/apply:
     post:
-      tags: [Generation]
-      summary: Explicitly apply one checked candidate
+      tags: [Drafts]
+      summary: Explicitly apply one validated and checked declaration draft
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ApplyRequest'}}}
       responses:
         '200': {description: Atomic one-file apply result with Undo metadata}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/undo:
     post:
-      tags: [Generation]
+      tags: [Drafts]
       summary: Undo the immediately preceding unchanged apply
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/UndoRequest'}}}
       responses:
         '200': {description: Atomic one-file undo result}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/audit:
     get:
-      tags: [Generation]
+      tags: [Drafts]
       summary: Return source-free project mutation audit history
       parameters:
         - {$ref: '#/components/parameters/ProjectRevision'}
@@ -414,26 +528,18 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
   /api/chat/message:
     post:
-      tags: [Generation]
-      summary: Generate one focused preview
-      description: Generates a preview for one selected symbol in one selected file. No generated code is written.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/GenerationRequest'}
+      tags: [Compatibility]
+      deprecated: true
+      summary: Retired one-shot chat endpoint
+      description: Always returns 410 Gone. Open a file-scoped chat session and send a message to its immutable declaration target instead.
       responses:
-        '200':
-          description: Preview result
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/GenerationResponse'}
-        '400': {$ref: '#/components/responses/Error'}
-        '500': {$ref: '#/components/responses/Error'}
+        '410': {$ref: '#/components/responses/Error'}
   /api/chat/history:
     get:
-      tags: [Generation]
-      summary: Current activity history
+      tags: [Compatibility]
+      deprecated: true
+      summary: Compatibility alias for source-free project activity
+      description: Use /api/projects/current/activity in new clients. This route is not a file-scoped conversation transcript.
       responses:
         '200':
           description: Current project-scoped source-free activity history.
@@ -444,6 +550,16 @@ paths:
                 items: {$ref: '#/components/schemas/ChatEntry'}
 components:
   parameters:
+    SessionID:
+      name: sessionID
+      in: path
+      required: true
+      schema: {type: string}
+    DraftID:
+      name: draftID
+      in: path
+      required: true
+      schema: {type: string}
     ProjectPath:
       name: path
       in: query
@@ -801,6 +917,138 @@ components:
         path: {type: string}
         include: {type: boolean}
         reason: {type: string}
+    ChatSessionRequest:
+      type: object
+      required: [project_id, project_revision, base_file_hash, open_path, mode, target_symbol]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        base_file_hash: {type: string}
+        open_path: {type: string, description: Project-relative open Go source file.}
+        mode: {type: string, enum: [replace_symbol, create_symbol]}
+        target_symbol: {type: string, description: Exact existing symbol for replacement or absent top-level identifier for creation.}
+    ChatMessageRequest:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string}
+        parent_draft_id: {type: string, description: Optional earlier draft in this same session.}
+        confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
+    ChatSession:
+      type: object
+      required: [id, project_id, project_revision, base_file_hash, open_path, mode, target_symbol, state, messages, created_at, updated_at]
+      properties:
+        id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        base_file_hash: {type: string}
+        open_path: {type: string}
+        mode: {type: string, enum: [replace_symbol, create_symbol]}
+        target_symbol: {type: string}
+        state: {type: string, enum: [active, stale]}
+        latest_draft_id: {type: string}
+        messages: {type: array, items: {$ref: '#/components/schemas/ChatSessionMessage'}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ChatSessionMessage:
+      type: object
+      required: [role, content, created_at]
+      properties:
+        role: {type: string, enum: [user, assistant]}
+        content: {type: string}
+        draft_id: {type: string}
+        created_at: {type: string, format: date-time}
+    ChatDraftProposal:
+      type: object
+      required: [session_id, draft, assistant_message, context_manifest]
+      properties:
+        session_id: {type: string}
+        draft: {$ref: '#/components/schemas/Draft'}
+        assistant_message: {$ref: '#/components/schemas/ChatSessionMessage'}
+        context_manifest: {$ref: '#/components/schemas/ContextManifest'}
+    Draft:
+      type: object
+      required: [id, project_id, project_revision, base_file_hash, target_path, mode, target_symbol, declaration, revision, hash, state]
+      properties:
+        id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        base_file_hash: {type: string}
+        target_path: {type: string}
+        mode: {type: string, enum: [replace_symbol, create_symbol]}
+        target_symbol: {type: string}
+        declaration: {type: string, description: The editable declaration only.}
+        imports: {type: array, items: {type: string}}
+        revision: {type: integer, format: int64}
+        hash: {type: string}
+        candidate_hash: {type: string}
+        parent_draft_id: {type: string}
+        previous_hash: {type: string}
+        state: {type: string, enum: [generated, dirty, validating, valid, invalid, stale]}
+        validation: {$ref: '#/components/schemas/GenerationValidation'}
+    DraftUpdateRequest:
+      type: object
+      required: [project_revision, expected_revision, declaration]
+      properties:
+        project_revision: {type: string}
+        expected_revision: {type: integer, format: int64}
+        declaration: {type: string, description: Replacement text for the isolated declaration, not the source file.}
+        imports: {type: array, items: {type: string}}
+    DraftValidationRequest:
+      type: object
+      required: [project_revision, expected_revision]
+      properties:
+        project_revision: {type: string}
+        expected_revision: {type: integer, format: int64}
+    DraftCheckRequest:
+      type: object
+      required: [project_revision, expected_revision, expected_hash]
+      properties:
+        project_revision: {type: string}
+        expected_revision: {type: integer, format: int64}
+        expected_hash: {type: string}
+        run_lint: {type: boolean}
+        run_tests: {type: boolean}
+    DraftReview:
+      type: object
+      required: [draft, apply_eligible]
+      properties:
+        draft: {$ref: '#/components/schemas/Draft'}
+        checks: {$ref: '#/components/schemas/CandidateCheckReport'}
+        apply_eligible: {type: boolean}
+    CandidateCheckReport:
+      type: object
+      required: [target_path, applicable, checks]
+      properties:
+        draft_id: {type: string}
+        draft_revision: {type: integer, format: int64}
+        draft_hash: {type: string}
+        candidate_hash: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        base_file_hash: {type: string}
+        target_path: {type: string}
+        applicable: {type: boolean}
+        checks: {type: array, items: {type: object}}
+    ApplyRequest:
+      type: object
+      required: [draft_id, draft_revision, draft_hash, project_id, project_revision, base_file_hash, confirm]
+      properties:
+        draft_id: {type: string}
+        draft_revision: {type: integer, format: int64}
+        draft_hash: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        base_file_hash: {type: string}
+        confirm: {type: boolean, description: Must be true after the user reviews the file and declaration named by the draft.}
+    UndoRequest:
+      type: object
+      required: [project_id, project_revision, post_apply_hash, confirm]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        post_apply_hash: {type: string}
+        confirm: {type: boolean, description: Must be true after the user confirms restoration of the immediately preceding unchanged apply.}
     GenerationRequest:
       type: object
       required: [message, file_path, target_symbol, project_id, project_revision, base_file_hash]

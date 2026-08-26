@@ -98,8 +98,11 @@ class ApiClientContractTest {
                     assertContains(body.orEmpty(), "\"target_symbol\":\"Run\"")
                     TransportResponse(201, """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":null}""")
                 }
+                "GET" to "/api/projects/current/chat/sessions/session" ->
+                    TransportResponse(200, """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[{"role":"user","content":"Improve Run"}]}""")
                 "POST" to "/api/projects/current/chat/sessions/session/messages" -> {
                     assertContains(body.orEmpty(), "\"parent_draft_id\":\"older\"")
+                    assertContains(body.orEmpty(), "\"confirm_remote_provider\":true")
                     TransportResponse(200, """{"session_id":"session","draft":{"id":"draft","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","mode":"replace_symbol","target_symbol":"Run","declaration":"func Run() {}","revision":1,"hash":"hash","state":"generated"},"assistant_message":{"role":"assistant","content":"Proposal ready"},"context_manifest":{"included":null}}""")
                 }
                 "PATCH" to "/api/projects/current/drafts/draft" -> {
@@ -123,7 +126,8 @@ class ApiClientContractTest {
         })
 
         val session = client.openChatSession("project", "revision", "base", "main.go", "replace_symbol", "Run")
-        val proposal = client.sendChatMessage(session.id, "Improve Run", "older")
+        val resumed = client.chatSession(session.id)
+        val proposal = client.sendChatMessage(session.id, "Improve Run", "older", confirmRemoteProvider = true)
         val updated = client.updateDraft("draft", "revision", 1, "func Run() {}", listOf("fmt"))
         val validated = client.validateDraft("draft", "revision", updated.revision)
         val checks = client.checkDraft("draft", "revision", validated.revision, validated.hash)
@@ -131,6 +135,7 @@ class ApiClientContractTest {
         val applied = client.applyDraft(validated)
 
         assertEquals(emptyList(), session.messages)
+        assertEquals("Improve Run", resumed.messages.single().content)
         assertEquals("draft", proposal.draft.id)
         assertEquals(emptyList(), proposal.contextManifest.included)
         assertEquals("draft", checks.draftId)

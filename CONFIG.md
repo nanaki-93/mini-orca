@@ -2,6 +2,13 @@
 
 Mini-Orca is configured using a YAML file, typically named `config.yaml`. This document provides a detailed reference for all available configuration options.
 
+Keep `config.yaml` on the local machine; it is intentionally ignored by Git.
+Start from `config.example.yaml` and do not add provider credentials to tracked
+files. The daemon binds to loopback by default. If `llm.base_url` is a
+non-loopback provider, the desktop user must explicitly confirm the destination
+for every request that sends prompt content. That confirmation is part of the
+request, not a configuration switch that silently enables remote delivery.
+
 ## LLM Configuration (`llm`)
 
 Defines the LLM provider settings. This is a flat configuration (no nested providers).
@@ -15,7 +22,9 @@ Defines the LLM provider settings. This is a flat configuration (no nested provi
 ## Agents Configuration (`agents`)
 
 Configure the active `coder` profile. Tester and reviewer settings are retained
-for optional focused checks but are not an automatic generation pipeline.
+for optional focused checks but are not an automatic generation pipeline. The
+workflow remains one file-scoped chat session and one editable declaration draft
+at a time; profiles cannot authorize automatic writes or multi-file changes.
 
 ### Agent Configuration
 
@@ -67,7 +76,7 @@ values cap the daemon operation even when the client remains connected.
 
 - `import_seconds` (int): Project import and architectural analysis deadline. Default: `300`.
 - `analysis_seconds` (int): One-file semantic analysis deadline. Default: `300`.
-- `generation_seconds` (int): Focused candidate generation deadline. Default: `300`.
+- `generation_seconds` (int): File-scoped declaration proposal deadline. Default: `300`.
 - `focused_check_seconds` (int): Isolated formatter/parser/check deadline. Default: `60`.
 
 ## Logging Configuration (`logging`)

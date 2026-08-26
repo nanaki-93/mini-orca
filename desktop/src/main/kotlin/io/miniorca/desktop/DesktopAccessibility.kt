@@ -13,13 +13,30 @@ enum class DesktopShortcut {
     Generate,
     Cancel,
     NextTab,
+    SummaryWorkspace,
+    AnalysisWorkspace,
+    BugsWorkspace,
+    EditorWorkspace,
+    FocusBugsFilters,
+    FocusChat,
+    FocusDraft,
+    ValidateDraft,
+    RunDraftChecks,
 }
 
 fun desktopShortcut(key: String, primaryModifier: Boolean, shift: Boolean = false): DesktopShortcut? = when {
     key == "Escape" -> DesktopShortcut.Cancel
+    primaryModifier && key == "1" -> DesktopShortcut.SummaryWorkspace
+    primaryModifier && key == "2" -> DesktopShortcut.AnalysisWorkspace
+    primaryModifier && key == "3" -> DesktopShortcut.BugsWorkspace
+    primaryModifier && key == "4" -> DesktopShortcut.EditorWorkspace
     primaryModifier && key == "P" -> DesktopShortcut.OpenFile
     primaryModifier && shift && key == "O" -> DesktopShortcut.OpenSymbol
-    primaryModifier && key == "K" -> DesktopShortcut.OpenAction
+    primaryModifier && key == "K" -> DesktopShortcut.FocusChat
+    primaryModifier && shift && key == "F" -> DesktopShortcut.FocusBugsFilters
+    primaryModifier && shift && key == "D" -> DesktopShortcut.FocusDraft
+    primaryModifier && shift && key == "V" -> DesktopShortcut.ValidateDraft
+    primaryModifier && shift && key == "C" -> DesktopShortcut.RunDraftChecks
     primaryModifier && key == "Enter" -> DesktopShortcut.Generate
     primaryModifier && key == "Tab" -> DesktopShortcut.NextTab
     else -> null

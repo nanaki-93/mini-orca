@@ -1,141 +1,116 @@
 # Mini-Orca desktop API contract
 
-**Version:** 4.1.0
-**Base URL:** `http://localhost:9090`
-**Client:** the local Compose Desktop application
+**Version:** 4.3.0  
+**Base URL:** `http://localhost:9090`  
 **Content type:** `application/json`
 
-The daemon is the local LLM boundary. It supports one active project and returns
-preview-only output for one selected symbol in one selected file. It does not
-offer a browser IDE, autonomous multi-file changes, automatic commits, or a
-coder/tester/reviewer pipeline.
+Mini-Orca is a local Compose Desktop client and loopback daemon for one active
+project. Its primary editing flow is deliberately narrow: open one Go file,
+select or name one declaration, talk in a conversation pinned to that target,
+edit the returned declaration draft, validate it, run scoped checks, and then
+explicitly confirm a one-file Apply. Source and composed-diff views are
+read-only. The daemon never creates multi-file changes, scans automatically,
+writes automatically, commits, or pushes.
+
+`docs/openapi.yaml` is the machine-readable request/response contract. The
+route test in `cmd/daemon/main_test.go` compares both this table and the OpenAPI
+paths with the daemon registrations.
 
 ## Live routes
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Liveness and daemon version. |
-| GET | `/status` | Daemon state and `single_coder_preview` workflow identifier. |
+| GET | `/status` | Daemon status and `single_coder_preview` workflow identifier. |
 | GET | `/api/system/info` | Local daemon system details. |
-| GET | `/api/models/current` | Effective coder model/profile without credentials. |
-| POST | `/api/projects/import` | Import and analyze a selected project. |
-| GET | `/api/projects/current` | Current project analysis. |
-| GET | `/api/projects/current/index` | Deterministic index of eligible project files and symbols. |
-| GET | `/api/projects/current/files/info?path=…` | Safe selected-file information. |
-| GET | `/api/projects/current/files/symbols?path=…` | Valid atomic targets for one eligible file. |
-| GET | `/api/projects/current/impact?path=…&symbol=…` | Advisory source-free impact references; never expands model context. |
-| GET | `/api/projects/current/git?path=…` | Read-only target-file Git availability, branch, and status. |
-| GET | `/api/projects/current/files/analysis?path=…&project_revision=…` | Cached one-file semantic-analysis status. |
-| POST | `/api/projects/current/files/analysis` | Analyze exactly one selected file. |
-| DELETE | `/api/projects/current/files/analysis?path=…&project_revision=…` | Clear one selected-file analysis cache entry. |
-| GET | `/api/projects/current/analysis-job?project_revision=…` | Source-free Analyze-all progress for the active project revision. |
-| POST | `/api/projects/current/analysis-job` | Explicitly start bounded, sequential semantic analysis. |
-| POST | `/api/projects/current/analysis-job/pause?project_revision=…` | Pause after the active one-file request completes. |
-| POST | `/api/projects/current/analysis-job/resume` | Resume a persisted paused job. |
-| POST | `/api/projects/current/analysis-job/cancel?project_revision=…` | Cancel the active request and pending work. |
-| POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM call. |
-| POST | `/api/projects/current/candidates/checks` | Run focused checks in an isolated candidate workspace. |
-| POST | `/api/projects/current/candidates/compare` | Compare two validated preview-only candidates for the same focused base. |
-| POST | `/api/projects/current/candidates/export` | Return a source-free Markdown focused-review export for an explicitly selected preview. |
-| POST | `/api/projects/current/apply` | Explicitly apply one checked, validated candidate. |
-| POST | `/api/projects/current/undo` | Restore the immediately preceding unchanged applied file. |
-| GET | `/api/projects/current/audit?project_revision=…` | Source-free apply/undo audit history. |
-| GET | `/api/projects/current/context?path=…&action=…` | Exact bounded context manifest without source text; `action=analyze_file` previews the semantic-analysis request. |
-| POST | `/api/chat/message` | Generate one focused preview; never writes code. |
-| GET | `/api/chat/history` | Current project-scoped, source-free activity history. |
+| POST | `/api/projects/current/chat/sessions` | Open a Go declaration conversation pinned to project/file/revision/hash, mode, and target. |
+| GET | `/api/projects/current/chat/sessions/{sessionID}` | Read one file-scoped conversation, including its draft proposal references. |
+| POST | `/api/projects/current/chat/sessions/{sessionID}/messages` | Request one declaration proposal; the body cannot retarget the session. |
+| GET | `/api/projects/current/activity` | Read source-free project activity, distinct from file conversation messages. |
+| POST | `/api/chat/message` | Retired compatibility route; always returns `410 Gone`. |
+| GET | `/api/chat/history` | Deprecated source-free activity alias; new clients use `/api/projects/current/activity`. |
+| GET | `/api/models/current` | Effective local coder profile without credentials. |
+| GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
+| POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
+| GET | `/api/projects/current` | Read the active project analysis. |
+| GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, coverage, and finding counts for `project_revision`. |
+| GET | `/api/projects/current/findings` | List source-free verified findings and AI suggestions with provenance, filters, and freshness. |
+| PATCH | `/api/projects/current/findings/{findingID}` | Record an explicit user triage status for one finding. |
+| GET | `/api/projects/current/scan` | Read an explicitly started isolated Go scan for `project_revision`. |
+| POST | `/api/projects/current/scan` | Start an explicit isolated Go parser/vet/test scan. |
+| DELETE | `/api/projects/current/scan` | Cancel the active explicit Go scan. |
+| GET | `/api/projects/current/index` | Read deterministic eligible-file and symbol facts. |
+| GET | `/api/projects/current/files/info` | Read safe selected-file information for project-relative `path`. |
+| GET | `/api/projects/current/files/symbols` | List atomic targets in one selected eligible file. |
+| GET | `/api/projects/current/impact` | Read advisory source-free impact references for one file or symbol. |
+| GET | `/api/projects/current/git` | Read target-file Git availability, branch, and status. |
+| GET | `/api/projects/current/files/analysis` | Read cached semantic analysis for one selected file and revision. |
+| POST | `/api/projects/current/files/analysis` | Explicitly analyze exactly one selected file. |
+| DELETE | `/api/projects/current/files/analysis` | Clear one selected-file semantic-analysis cache entry. |
+| GET | `/api/projects/current/analysis-job` | Read explicit bounded Analyze-all progress. |
+| POST | `/api/projects/current/analysis-job` | Start bounded sequential Analyze-all cache warming. |
+| POST | `/api/projects/current/analysis-job/pause` | Pause Analyze-all after its active file finishes. |
+| POST | `/api/projects/current/analysis-job/resume` | Resume a persisted paused Analyze-all job. |
+| POST | `/api/projects/current/analysis-job/cancel` | Cancel active/pending Analyze-all work. |
+| POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM request. |
+| GET | `/api/projects/current/drafts/{draftID}` | Read one editable declaration draft for the required project revision. |
+| PATCH | `/api/projects/current/drafts/{draftID}` | Replace only the declaration/import list and create the next draft revision. |
+| POST | `/api/projects/current/drafts/{draftID}/validate` | Compose and validate one exact draft revision. |
+| POST | `/api/projects/current/drafts/{draftID}/checks` | Run scoped checks for one validated draft revision and hash. |
+| GET | `/api/projects/current/drafts/{draftID}/review` | Read draft validation/check evidence and Apply eligibility. |
+| POST | `/api/projects/current/candidates/checks` | Deprecated compatibility check route for pre-draft candidate metadata. |
+| POST | `/api/projects/current/candidates/compare` | Deprecated compatibility comparison for pre-draft candidate metadata. |
+| POST | `/api/projects/current/candidates/export` | Deprecated compatibility export for pre-draft review metadata. |
+| POST | `/api/projects/current/apply` | Apply one validated, checked declaration draft only after `confirm: true`. |
+| POST | `/api/projects/current/undo` | Restore only the immediately preceding unchanged apply after `confirm: true`. |
+| GET | `/api/projects/current/audit` | Read source-free one-file Apply/Undo audit history for `project_revision`. |
 
-`docs/openapi.yaml` is the machine-readable source for request and response
-schemas. The route-contract test compares this table's API inventory with the
-registered desktop API routes.
+## Focused draft lifecycle
 
-## Focused generation
+Create a session with the imported `project_id`, current `project_revision`,
+selected-file `base_file_hash`, project-relative `open_path`, and either
+`replace_symbol` or `create_symbol` mode. A replace target must be one exact Go
+symbol; a create target must be an absent valid top-level Go identifier. Those
+values are immutable for session messages.
 
-```json
-{
-  "message": "Return a typed error for blank names",
-  "file_path": "internal/user/service.go",
-  "target_symbol": "UserService.Create",
-  "project_id": "sha256:...",
-  "project_revision": "sha256:...",
-  "base_file_hash": "sha256:..."
-}
-```
+A successful session message yields an isolated `Draft`: declaration text,
+optional imports, revision, hash, target identity, and state. It never returns
+an editable source file. `PATCH` accepts only declaration/import changes and an
+expected revision. Any edit clears earlier validation and checks. Validate and
+checks each pin the revision (and checks also pin its hash), so stale or changed
+drafts cannot be applied.
 
-The active generation action is `fix` with `strict_symbol` scope. The requested
-file and symbol, active project id/revision, and selected-file base hash are
-mandatory; stale project or file state returns `409 Conflict`. `scope_mode` is
-optional and defaults to `strict_symbol`; `symbol_plus_imports` requests the
-later validated minimal-import exception. The response contains a generation id,
-captured base hash, effective profile, source-free context manifest, normalized
-candidate hash, and unvalidated candidate content. It is preview-only and is
-never persisted or applied by this endpoint.
+`POST /api/projects/current/apply` requires the displayed draft id, revision,
+hash, project identity, base file hash, and an explicit `confirm: true`. It
+re-reads the target and rejects stale state before its atomic one-file write.
+Undo similarly requires the post-apply hash and explicit confirmation; it
+restores only the immediately preceding unchanged apply. The audit omits source,
+draft text, prompts, and secret-like values.
 
-The daemon asks models for one versioned JSON object with matching target path,
-symbol, and scope. For compatible local models it also accepts exactly one
-complete-file fenced code block. Multiple blocks, prose, unknown response
-fields, mismatched target metadata, and missing candidate content are rejected.
+## Project intelligence and limits
 
-When the configured model endpoint is not loopback/local, include
-`"confirm_remote_provider": true` in an import or generation request after the
-desktop user has reviewed the destination. The daemon rejects remote prompt
-delivery without that explicit signal.
+Import and reindex build deterministic metadata; neither starts a verified scan
+or Analyze-all. Go scans and semantic analysis are always user-started. Findings
+keep source (`ai`, parser, vet, or test), confidence, severity, status, and
+freshness separate so a model suggestion is never presented as a verified tool
+result.
 
-## Candidate comparison and review export
+Declaration editing, exact symbol targeting, composition, and mandatory parse /
+format checks are Go-first. Other languages may have conservative approximate
+symbol extraction and analysis, but do not receive exact declaration editing or
+equivalent validators.
 
-`POST /api/projects/current/candidates/compare` accepts two distinct generation
-ids plus the active `project_revision`. Both previews must already have passed
-independent scope validation and must share project revision, base file hash,
-target file, target symbol, and action. The response compares source-free diff
-size, scope, focused-check state, effective model, and optional user notes. It
-never creates or applies either candidate.
+## Privacy, configuration, and errors
 
-`POST /api/projects/current/candidates/export` accepts one generation id and
-the active revision. It returns a suggested filename and Markdown containing
-only the file summary, selected symbol, findings, candidate metadata, focused
-check states, and an audit reference when one exists. Prompts, source content,
-candidate content, excluded paths, and secret-like values are omitted or
-redacted. The desktop app writes the export only after the user chooses a file.
+The daemon binds to loopback by default. It filters ignored, generated,
+configuration, and secret-like paths before assembling model context. If
+`llm.base_url` is non-loopback, any request that can send prompt content must
+include `confirm_remote_provider: true` after the desktop user reviews the
+destination; otherwise the request is rejected.
 
-## Error shape
+Configuration is local-only in `config.yaml` (ignored by Git); begin with
+`config.example.yaml`. The API never returns configured credentials. All API
+failures use a structured error object with `type`, `message`, `user_message`,
+and `code`. Project paths are canonical project-relative paths and revision/hash
+guards return `409 Conflict` when their captured base is no longer current.
 
-Every API failure uses this shape:
-
-```json
-{
-  "type": "bad_request",
-  "message": "technical error description",
-  "user_message": "actionable message for the desktop user",
-  "code": 400
-}
-```
-
-Paths supplied to selected-file endpoints must be project-relative and pass the
-daemon's canonical-path and symlink protections.
-
-## Project index and symbols
-
-`GET /api/projects/current/index` returns deterministic metadata only: eligible
-project-relative paths, hashes, language facts, imports, diagnostics, and symbol
-locations. It never returns source text. `GET /api/projects/current/files/symbols`
-returns the selected file's `name`, `kind`, `signature`, line range, confidence,
-and `atomic_target` flag.
-
-`POST /api/projects/current/reindex` accepts an optional
-`{"project_revision":"sha256:..."}` body. If supplied, it must match the active
-revision or the daemon returns `409 Conflict`; a successful response is the new
-deterministic index and revision. Missing projects return `404`, excluded files
-return `403`, invalid paths return `400`, and binary files return `422`.
-
-## Sequential Analyze-all
-
-Analyze-all is an explicit cache-warming operation; importing or reindexing a
-project never starts it. `POST /api/projects/current/analysis-job` requires the
-active `project_revision` and accepts optional `max_files` (at most 500) and
-`max_retries` (at most 3). It analyzes only eligible stale or missing text-file
-summaries, strictly one model request at a time. Progress is persisted as
-source-free metadata in `.mini-orca/sessions/analyze-all.json`.
-
-Pause lets the current request finish and retains its valid cache entry. Cancel
-propagates cancellation to the current model request and preserves previously
-completed entries. Reindexing invalidates an active job; resume is allowed only
-for a paused job at the same project revision.
