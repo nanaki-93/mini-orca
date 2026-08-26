@@ -52,14 +52,14 @@ Source roadmap: [`../PLAN.md`](../PLAN.md)
 | 44 | [Desktop workspace and workflow state](completed/44_desktop_workspace_state.md) | 42, 43 | Complete |
 | 45 | [Desktop top-level navigation](completed/45_desktop_top_level_navigation.md) | 44 | Complete |
 | 46 | [Desktop Project Summary](completed/46_desktop_project_summary.md) | 37, 43, 44, 45 | Complete |
-| 47 | [Desktop Project Analysis](47_desktop_analysis_workspace.md) | 43, 44, 45 | In Progress |
-| 48 | [Desktop Bugs workspace](48_desktop_bugs_workspace.md) | 37, 43, 44, 45 | In Progress |
-| 49 | [Desktop Editor file/symbol brief](49_desktop_editor_file_symbol_brief.md) | 44, 45 | In Progress |
-| 50 | [Desktop file-scoped chat](50_desktop_file_scoped_chat.md) | 41, 43, 44, 49 | Pending |
-| 51 | [Desktop editable declaration draft](51_desktop_editable_declaration_draft.md) | 40, 43, 44, 50 | Pending |
-| 52 | [Desktop draft review and Apply](52_desktop_draft_review_apply.md) | 40, 51 | Pending |
-| 53 | [Desktop accessibility and responsive interaction](53_desktop_accessibility_responsive.md) | 45, 46, 47, 48, 49, 50, 51, 52 | Pending |
-| 54 | [Desktop integration coverage](54_desktop_integration_coverage.md) | 46, 47, 48, 49, 50, 51, 52, 53 | Pending |
+| 47 | [Desktop Project Analysis](completed/47_desktop_analysis_workspace.md) | 43, 44, 45 | Complete |
+| 48 | [Desktop Bugs workspace](completed/48_desktop_bugs_workspace.md) | 37, 43, 44, 45 | Complete |
+| 49 | [Desktop Editor file/symbol brief](completed/49_desktop_editor_file_symbol_brief.md) | 44, 45 | Complete |
+| 50 | [Desktop file-scoped chat](completed/50_desktop_file_scoped_chat.md) | 41, 43, 44, 49 | Complete |
+| 51 | [Desktop editable declaration draft](completed/51_desktop_editable_declaration_draft.md) | 40, 43, 44, 50 | Complete |
+| 52 | [Desktop draft review and Apply](completed/52_desktop_draft_review_apply.md) | 40, 51 | Complete |
+| 53 | [Desktop accessibility and responsive interaction](completed/53_desktop_accessibility_responsive.md) | 45, 46, 47, 48, 49, 50, 51, 52 | Complete |
+| 54 | [Desktop integration coverage](completed/54_desktop_integration_coverage.md) | 46, 47, 48, 49, 50, 51, 52, 53 | Complete |
 | 55 | [API, migration, and release documentation](55_api_docs_migration_release_notes.md) | 37, 41, 52, 54 | Pending |
 | 56 | [Focused AI IDE release acceptance](56_release_acceptance.md) | 33–55 | Pending |
 

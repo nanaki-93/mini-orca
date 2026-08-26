@@ -2,17 +2,20 @@
 # This file demonstrates all available configuration options.
 
 # ─── LLM ──────────────────────────────────────────────────────────────────────
-# Configure the single LLM endpoint used by all agents.
+# Configure the single LLM endpoint used for file-scoped declaration proposals.
+# Keep real credentials in an ignored local config.yaml. A non-loopback endpoint
+# still requires per-request desktop confirmation before prompt content is sent.
 
 llm:
   base_url: "http://localhost:1234"
   api_key: ""            # Only required for remote providers (OpenAI, etc.)
   model: ""              # Optional: specify a model name
-  temperature: 0.7       # Default temperature for all phases
-  max_tokens: 8192       # Default max tokens for all phases
+  temperature: 0.7       # Default sampling temperature
+  max_tokens: 8192       # Default response limit
 
 # ─── Agents ───────────────────────────────────────────────────────────────────
-# Configure the orchestrator agents with their skills and optional model overrides.
+# Configure the active profile and optional focused-check profiles. These do not
+# form an autonomous pipeline and cannot create multi-file or automatic writes.
 
 agents:
   coder:

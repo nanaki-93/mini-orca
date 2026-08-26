@@ -20,6 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,7 +67,10 @@ internal fun WorkspaceNavigation(selected: Workspace, counts: WorkspaceCounts, o
             val label = workspaceNavigationLabel(workspace, counts)
             Button(
                 onClick = { onSelect(workspace) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).semantics {
+                    contentDescription = workspaceSemanticsLabel(workspace, workspace == selected, counts)
+                    this.selected = workspace == selected
+                },
                 colors = ButtonDefaults.buttonColors(
                     backgroundColor = if (workspace == selected) Accent else Card,
                     contentColor = if (workspace == selected) Color.White else PrimaryText,
@@ -80,3 +86,6 @@ fun workspaceNavigationLabel(workspace: Workspace, counts: WorkspaceCounts): Str
     Workspace.Bugs -> "Bugs · ${counts.verifiedFindings} verified · ${counts.aiSuggestions} AI"
     Workspace.Editor -> "Editor · ${counts.drafts} drafts"
 }
+
+fun workspaceSemanticsLabel(workspace: Workspace, selected: Boolean, counts: WorkspaceCounts): String =
+    "${workspaceNavigationLabel(workspace, counts)}${if (selected) ", selected" else ", not selected"}"

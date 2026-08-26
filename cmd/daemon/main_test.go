@@ -57,6 +57,10 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 		{http.MethodGet, "/health"},
 		{http.MethodGet, "/status"},
 		{http.MethodGet, "/api/system/info"},
+		{http.MethodPost, "/api/projects/current/chat/sessions"},
+		{http.MethodGet, "/api/projects/current/chat/sessions/{sessionID}"},
+		{http.MethodPost, "/api/projects/current/chat/sessions/{sessionID}/messages"},
+		{http.MethodGet, "/api/projects/current/activity"},
 		{http.MethodPost, "/api/chat/message"},
 		{http.MethodGet, "/api/chat/history"},
 		{http.MethodGet, "/api/models/current"},
@@ -83,6 +87,11 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 		{http.MethodPost, "/api/projects/current/analysis-job/resume"},
 		{http.MethodPost, "/api/projects/current/analysis-job/cancel"},
 		{http.MethodPost, "/api/projects/current/reindex"},
+		{http.MethodGet, "/api/projects/current/drafts/{draftID}"},
+		{http.MethodPatch, "/api/projects/current/drafts/{draftID}"},
+		{http.MethodPost, "/api/projects/current/drafts/{draftID}/validate"},
+		{http.MethodPost, "/api/projects/current/drafts/{draftID}/checks"},
+		{http.MethodGet, "/api/projects/current/drafts/{draftID}/review"},
 		{http.MethodPost, "/api/projects/current/candidates/checks"},
 		{http.MethodPost, "/api/projects/current/candidates/compare"},
 		{http.MethodPost, "/api/projects/current/candidates/export"},
@@ -93,6 +102,9 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 
 	if got := openAPIRoutes(t); !sameRoutes(got, routes) {
 		t.Fatalf("OpenAPI routes = %v, want %v", got, routes)
+	}
+	if got := apiContractRoutes(t); !sameRoutes(got, routes) {
+		t.Fatalf("API contract routes = %v, want %v", got, routes)
 	}
 
 	root := t.TempDir()
@@ -200,4 +212,24 @@ func sameRoutes(left, right []documentedRoute) bool {
 		}
 	}
 	return true
+}
+
+func apiContractRoutes(t *testing.T) []documentedRoute {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "api-contract.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var routes []documentedRoute
+	for _, line := range strings.Split(string(data), "\n") {
+		columns := strings.Split(line, "|")
+		if len(columns) < 4 || !strings.HasPrefix(strings.TrimSpace(columns[1]), "GET") && !strings.HasPrefix(strings.TrimSpace(columns[1]), "POST") && !strings.HasPrefix(strings.TrimSpace(columns[1]), "PATCH") && !strings.HasPrefix(strings.TrimSpace(columns[1]), "DELETE") {
+			continue
+		}
+		routes = append(routes, documentedRoute{
+			method: strings.TrimSpace(columns[1]),
+			path:   strings.Trim(strings.TrimSpace(columns[2]), "`"),
+		})
+	}
+	return routes
 }

@@ -20,6 +20,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -90,6 +91,56 @@ internal fun SummaryPane(
     }
 }
 
+enum class EditorBriefPlacement { WideActionPane, CompactSourcePane }
+
+data class EditorBriefState(
+    val path: String,
+    val language: String,
+    val sizeBytes: Long,
+    val lineCount: Int,
+    val contentHash: String,
+    val freshness: String,
+    val purpose: String = "",
+    val responsibilities: List<String> = emptyList(),
+    val dependencies: List<String> = emptyList(),
+    val sideEffects: List<String> = emptyList(),
+    val advisoryImpact: List<String> = emptyList(),
+    val analysisFailure: String = "",
+    val selectedSymbol: SymbolInfo? = null,
+    val symbolExplanation: String = "",
+)
+
+fun editorBriefPlacement(widthDp: Float): EditorBriefPlacement =
+    if (useNarrowLayout(widthDp)) EditorBriefPlacement.CompactSourcePane else EditorBriefPlacement.WideActionPane
+
+fun editorBriefState(selected: ProjectFileInfo?, analysis: FileAnalysis?, symbol: SymbolInfo?): EditorBriefState? {
+    selected ?: return null
+    return EditorBriefState(
+        path = selected.path,
+        language = selected.language,
+        sizeBytes = selected.sizeBytes,
+        lineCount = selected.lineCount,
+        contentHash = selected.contentHash,
+        freshness = analysis?.status?.lowercase()?.ifBlank { "not analyzed" } ?: "not analyzed",
+        purpose = analysis?.purpose.orEmpty(),
+        responsibilities = analysis?.responsibilities.orEmpty(),
+        dependencies = analysis?.dependencies.orEmpty(),
+        sideEffects = analysis?.sideEffects.orEmpty(),
+        advisoryImpact = analysis?.risks.orEmpty().map { "${it.severity.uppercase()} · ${it.summary}" },
+        analysisFailure = analysis?.failure.orEmpty(),
+        selectedSymbol = symbol,
+        symbolExplanation = symbol?.let { analysis?.symbolExplanations?.get(it.name) }.orEmpty(),
+    )
+}
+
+enum class SourceLineEmphasis { None, FocusedLocation, SelectedSymbol }
+
+fun sourceLineEmphasis(line: Int, selectedSymbol: SymbolInfo?, focusedLine: Int): SourceLineEmphasis = when {
+    selectedSymbol != null && line in selectedSymbol.startLine..selectedSymbol.endLine -> SourceLineEmphasis.SelectedSymbol
+    line == focusedLine && focusedLine > 0 -> SourceLineEmphasis.FocusedLocation
+    else -> SourceLineEmphasis.None
+}
+
 @Composable
 internal fun CodePane(project: ProjectAnalysis?, selected: ProjectFileInfo?, selectedSymbol: SymbolInfo?, focusedLine: Int) {
     val source = when {
@@ -107,52 +158,91 @@ internal fun CodePane(project: ProjectAnalysis?, selected: ProjectFileInfo?, sel
                     modifier = Modifier.padding(bottom = 10.dp),
                 )
             }
-            Text(text = highlightedCode(source), color = PrimaryText, fontFamily = if (selected != null) FontFamily.Monospace else FontFamily.Default, fontSize = 13.sp, lineHeight = 20.sp)
+            source.lines().forEachIndexed { index, sourceLine ->
+                val lineNumber = index + 1
+                val emphasis = sourceLineEmphasis(lineNumber, selectedSymbol, focusedLine)
+                Row(
+                    Modifier.fillMaxWidth().background(
+                        when (emphasis) {
+                            SourceLineEmphasis.SelectedSymbol -> Card
+                            SourceLineEmphasis.FocusedLocation -> Accent.copy(alpha = 0.18f)
+                            SourceLineEmphasis.None -> Color.Transparent
+                        },
+                    ),
+                ) {
+                    Text(
+                        lineNumber.toString().padStart(4),
+                        color = SecondaryText,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.width(46.dp),
+                    )
+                    Text(
+                        text = highlightedCode(sourceLine),
+                        color = PrimaryText,
+                        fontFamily = if (selected != null) FontFamily.Monospace else FontFamily.Default,
+                        fontSize = 13.sp,
+                        lineHeight = 20.sp,
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-internal fun EditorPane(project: ProjectAnalysis?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, focusedLine: Int, onSelectSymbol: (SymbolInfo) -> Unit, onAnalyze: () -> Unit, onRefresh: () -> Unit) {
+internal fun EditorPane(project: ProjectAnalysis?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, focusedLine: Int, showCompactBrief: Boolean, onSelectSymbol: (SymbolInfo) -> Unit, onAnalyze: () -> Unit, onRefresh: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        FileSymbolBrief(selected, analysis, selectedSymbol, symbols, onSelectSymbol, onAnalyze, onRefresh)
-        CodePane(project, selected, selectedSymbol, focusedLine)
+        if (showCompactBrief) EditorBriefPane(selected, analysis, selectedSymbol, symbols, onSelectSymbol, onAnalyze, onRefresh)
+        Box(Modifier.weight(1f)) { CodePane(project, selected, selectedSymbol, focusedLine) }
     }
 }
 
 /** The source stays in SelectionContainer; this separate brief is the only editor-side control surface. */
 @Composable
-private fun FileSymbolBrief(selected: ProjectFileInfo?, analysis: FileAnalysis?, symbol: SymbolInfo?, symbols: List<SymbolInfo>, onSelectSymbol: (SymbolInfo) -> Unit, onAnalyze: () -> Unit, onRefresh: () -> Unit) {
+internal fun EditorBriefPane(selected: ProjectFileInfo?, analysis: FileAnalysis?, symbol: SymbolInfo?, symbols: List<SymbolInfo>, onSelectSymbol: (SymbolInfo) -> Unit, onAnalyze: () -> Unit, onRefresh: () -> Unit) {
+    val state = editorBriefState(selected, analysis, symbol)
     Column(Modifier.fillMaxWidth().background(Panel).padding(12.dp)) {
-        if (selected == null) {
+        if (state == null) {
             Text("Open a file to view its deterministic brief.", color = SecondaryText, fontSize = 12.sp)
             return
         }
-        Text("FILE BRIEF · ${selected.path}", color = PrimaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        Text("${selected.language} · ${formatBytes(selected.sizeBytes)} · ${selected.lineCount} lines · ${selected.contentHash.take(12)}", color = SecondaryText, fontSize = 11.sp)
+        Text("FILE BRIEF · ${state.path}", color = PrimaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text("${state.language} · ${formatBytes(state.sizeBytes)} · ${state.lineCount} lines · Hash: ${state.contentHash}", color = SecondaryText, fontSize = 11.sp)
+        Text("Analysis freshness: ${state.freshness}", color = SecondaryText, fontSize = 11.sp)
         Row {
             Button(onClick = onAnalyze, modifier = Modifier.padding(top = 6.dp)) { Text("Analyze") }
             Button(onClick = onRefresh, modifier = Modifier.padding(start = 6.dp, top = 6.dp)) { Text("Refresh") }
+            if (state.freshness == "failed") Button(onClick = onRefresh, modifier = Modifier.padding(start = 6.dp, top = 6.dp)) { Text("Retry") }
         }
         if (symbols.isNotEmpty()) {
-            Text("Target: ${symbol?.signature ?: "Select a function or type"}", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-            symbol?.let { selectedSymbol ->
+            Text("Target: ${state.selectedSymbol?.signature ?: "Select a function or type"}", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            state.selectedSymbol?.let { selectedSymbol ->
                 Text("${selectedSymbol.kind} · lines ${selectedSymbol.startLine}–${selectedSymbol.endLine}", color = SecondaryText, fontSize = 11.sp)
-                analysis?.symbolExplanations?.get(selectedSymbol.name)?.let { Text(it, color = SecondaryText, fontSize = 11.sp) }
+                if (state.symbolExplanation.isNotBlank()) Text(state.symbolExplanation, color = SecondaryText, fontSize = 11.sp)
             }
-            symbols.take(8).forEach { candidate ->
+            symbols.forEach { candidate ->
                 Button(onClick = { onSelectSymbol(candidate) }, modifier = Modifier.padding(top = 3.dp)) { Text(candidate.name) }
             }
         }
-        when (analysis?.status?.lowercase()) {
+        when (state.freshness) {
             "fresh", "stale" -> {
-                Text(analysis.purpose, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-                if (analysis.risks.isNotEmpty()) Text("Advisory impact: ${analysis.risks.joinToString { it.summary }}", color = Warning, fontSize = 11.sp)
+                if (state.purpose.isNotBlank()) Text(state.purpose, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                BriefItems("Responsibilities", state.responsibilities)
+                BriefItems("Dependencies", state.dependencies)
+                BriefItems("Side effects", state.sideEffects)
+                if (state.advisoryImpact.isNotEmpty()) Text("Advisory impact: ${state.advisoryImpact.joinToString()}", color = Warning, fontSize = 11.sp)
             }
-            "failed" -> Text("Analysis unavailable: ${analysis.failure}", color = Error, fontSize = 11.sp)
+            "failed" -> Text("Analysis unavailable: ${state.analysisFailure.ifBlank { "Retry the analysis." }}", color = Error, fontSize = 11.sp)
             else -> Text("Deterministic brief only — semantic analysis is optional.", color = SecondaryText, fontSize = 11.sp)
         }
     }
+}
+
+@Composable
+private fun BriefItems(label: String, values: List<String>) {
+    if (values.isNotEmpty()) Text("$label: ${values.joinToString()}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
 }
 
 @Composable

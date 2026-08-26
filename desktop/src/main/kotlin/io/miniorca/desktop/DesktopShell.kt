@@ -158,9 +158,10 @@ internal fun DesktopShell(
     onSelectPaletteAction: (String) -> Unit,
     onOpenFinding: (UnifiedFinding) -> Unit,
     onPrepareFinding: (UnifiedFinding) -> Unit,
-    onStartAnalyzeAll: () -> Unit,
+    onTriageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
+    onStartAnalyzeAll: (AnalyzeAllRunOptions) -> Unit,
     onPauseAnalyzeAll: () -> Unit,
-    onResumeAnalyzeAll: () -> Unit,
+    onResumeAnalyzeAll: (Boolean) -> Unit,
     onCancelAnalyzeAll: () -> Unit,
     onStartScan: () -> Unit,
     onCancelScan: () -> Unit,
@@ -174,6 +175,9 @@ internal fun DesktopShell(
     onCancelAnalysis: () -> Unit,
     onSelectSymbol: (SymbolInfo) -> Unit,
     onPrepareSuggestion: (Suggestion) -> Unit,
+    onValidateDraft: () -> Unit,
+    onRunDraftChecks: () -> Unit,
+    onApplyDraft: () -> Unit,
     applied: ApplyResult?,
     onDiscard: () -> Unit,
     onAskForRevision: () -> Unit,
@@ -208,6 +212,14 @@ internal fun DesktopShell(
                 Key.P -> "P"
                 Key.O -> "O"
                 Key.K -> "K"
+                Key.One -> "1"
+                Key.Two -> "2"
+                Key.Three -> "3"
+                Key.Four -> "4"
+                Key.F -> "F"
+                Key.D -> "D"
+                Key.V -> "V"
+                Key.C -> "C"
                 Key.Enter -> "Enter"
                 Key.Escape -> "Escape"
                 Key.Tab -> "Tab"
@@ -216,9 +228,22 @@ internal fun DesktopShell(
             when (desktopShortcut(key, event.isMetaPressed || event.isCtrlPressed, event.isShiftPressed)) {
                 DesktopShortcut.OpenFile -> onOpenPalette(PaletteMode.Files)
                 DesktopShortcut.OpenSymbol -> onOpenPalette(PaletteMode.Symbols)
-                DesktopShortcut.OpenAction -> onOpenPalette(PaletteMode.Actions)
+                DesktopShortcut.OpenAction, DesktopShortcut.FocusChat, DesktopShortcut.FocusDraft -> onOpenPalette(PaletteMode.Actions)
+                DesktopShortcut.FocusBugsFilters -> onWorkspace(Workspace.Bugs)
+                DesktopShortcut.ValidateDraft -> onValidateDraft()
+                DesktopShortcut.RunDraftChecks -> onRunDraftChecks()
+                DesktopShortcut.SummaryWorkspace -> onWorkspace(Workspace.Summary)
+                DesktopShortcut.AnalysisWorkspace -> onWorkspace(Workspace.Analysis)
+                DesktopShortcut.BugsWorkspace -> onWorkspace(Workspace.Bugs)
+                DesktopShortcut.EditorWorkspace -> onWorkspace(Workspace.Editor)
                 DesktopShortcut.Generate -> if (generating) onCancelGeneration() else onGenerate()
-                DesktopShortcut.Cancel -> onCancelAll()
+                DesktopShortcut.Cancel -> when {
+                    showPalette -> onDismissPalette()
+                    showContext -> onDismissContext()
+                    generating -> onCancelGeneration()
+                    analysisInProgress -> onCancelAnalysis()
+                    else -> return@onPreviewKeyEvent false
+                }
                 DesktopShortcut.NextTab -> onWorkspace(nextWorkspace(workspace))
                 null -> return@onPreviewKeyEvent false
             }
@@ -250,12 +275,12 @@ internal fun DesktopShell(
                             project = appState.project, overview = appState.overview, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis, selectedSymbol = appState.selectedSymbol,
                             workspace = workspace, analysisInProgress = analysisInProgress, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis,
                             onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, candidate = appState.candidate, comparisonBase = appState.comparisonBase, comparison = appState.comparison,
-                            checks = appState.checks, applied = applied, onDiscard = onDiscard, onAskForRevision = onAskForRevision, onRunChecks = onRunChecks, onGenerateAlternate = onGenerateAlternate,
+                            checks = appState.checks, draft = appState.review.draft, editor = appState.review.editor, applied = applied, onRunDraftChecks = onRunDraftChecks, onApplyDraft = onApplyDraft, onDiscard = onDiscard, onAskForRevision = onAskForRevision, onRunChecks = onRunChecks, onGenerateAlternate = onGenerateAlternate,
                             onCompare = onCompare, onExport = onExport, comparisonBaseNote = comparisonBaseNote, comparisonCandidateNote = comparisonCandidateNote, onComparisonBaseNote = onComparisonBaseNote,
                             onComparisonCandidateNote = onComparisonCandidateNote, onApply = onApply, onUndo = onUndo, activity = activity, showActivity = showActivity, onToggleActivity = onToggleActivity,
-                            impact = appState.impact, gitStatus = appState.gitStatus, findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding,
+                            impact = appState.impact, gitStatus = appState.gitStatus, findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding, onTriageFinding = onTriageFinding,
                             onStartAnalyzeAll = onStartAnalyzeAll, onPauseAnalyzeAll = onPauseAnalyzeAll, onResumeAnalyzeAll = onResumeAnalyzeAll, onCancelAnalyzeAll = onCancelAnalyzeAll, onStartScan = onStartScan, onCancelScan = onCancelScan,
-                            focusedLine = appState.selection.focusedLine, onWorkspace = onWorkspace, modifier = Modifier.weight(1f).fillMaxHeight(),
+                            focusedLine = appState.selection.focusedLine, showCompactEditorBrief = narrow, onWorkspace = onWorkspace, modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
                         if (!narrow) {
                             ResizableDivider(onDelta = { onPaneWidths(paneWidths.withAction(paneWidths.action - it)) }, onCommit = onSavePaneWidths)
@@ -275,20 +300,24 @@ internal fun DesktopShell(
 private fun ContentPane(
     project: ProjectAnalysis?, overview: ProjectOverview?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, workspace: Workspace,
     analysisInProgress: Boolean, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit,
-    onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, candidate: GenerationResult?, comparisonBase: GenerationResult?, comparison: CandidateComparison?, checks: CandidateCheckReport?, applied: ApplyResult?,
+    onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, candidate: GenerationResult?, comparisonBase: GenerationResult?, comparison: CandidateComparison?, checks: CandidateCheckReport?, draft: DeclarationDraft?, editor: EditableDraftState?, applied: ApplyResult?, onRunDraftChecks: () -> Unit, onApplyDraft: () -> Unit,
     onDiscard: () -> Unit, onAskForRevision: () -> Unit, onRunChecks: () -> Unit, onGenerateAlternate: () -> Unit, onCompare: () -> Unit, onExport: () -> Unit,
     comparisonBaseNote: String, comparisonCandidateNote: String, onComparisonBaseNote: (String) -> Unit, onComparisonCandidateNote: (String) -> Unit, onApply: () -> Unit, onUndo: () -> Unit,
-    activity: List<ActivityEntry>, showActivity: Boolean, onToggleActivity: () -> Unit, impact: ImpactPreview?, gitStatus: GitStatus?, findings: List<UnifiedFinding>, scan: GoScanReport?, analyzeAll: AnalyzeAllJob?, coverage: AnalysisCoverage?, onOpenFinding: (UnifiedFinding) -> Unit, onPrepareFinding: (UnifiedFinding) -> Unit,
-    onStartAnalyzeAll: () -> Unit, onPauseAnalyzeAll: () -> Unit, onResumeAnalyzeAll: () -> Unit, onCancelAnalyzeAll: () -> Unit, onStartScan: () -> Unit, onCancelScan: () -> Unit,
-    focusedLine: Int, onWorkspace: (Workspace) -> Unit, modifier: Modifier,
+    activity: List<ActivityEntry>, showActivity: Boolean, onToggleActivity: () -> Unit, impact: ImpactPreview?, gitStatus: GitStatus?, findings: List<UnifiedFinding>, scan: GoScanReport?, analyzeAll: AnalyzeAllJob?, coverage: AnalysisCoverage?, onOpenFinding: (UnifiedFinding) -> Unit, onPrepareFinding: (UnifiedFinding) -> Unit, onTriageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
+    onStartAnalyzeAll: (AnalyzeAllRunOptions) -> Unit, onPauseAnalyzeAll: () -> Unit, onResumeAnalyzeAll: (Boolean) -> Unit, onCancelAnalyzeAll: () -> Unit, onStartScan: () -> Unit, onCancelScan: () -> Unit,
+    focusedLine: Int, showCompactEditorBrief: Boolean, onWorkspace: (Workspace) -> Unit, modifier: Modifier,
 ) {
     Column(modifier.background(AppBackground)) {
         InfoStrip(project, selected)
         when (workspace) {
             Workspace.Summary -> ProjectSummaryPane(overview, project, onWorkspace)
-            Workspace.Editor -> if (candidate == null) EditorPane(project, selected, symbols, analysis, selectedSymbol, focusedLine, onSelectSymbol, onAnalyze, onRefreshAnalysis) else ReviewPane(candidate, comparisonBase, comparison, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onGenerateAlternate, onCompare, onExport, comparisonBaseNote, comparisonCandidateNote, onComparisonBaseNote, onComparisonCandidateNote, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
+            Workspace.Editor -> when {
+                draft != null -> DraftReviewPane(project, selected, editor, draft, checks, impact, gitStatus, applied, onRunDraftChecks, onApplyDraft, onUndo)
+                candidate == null -> EditorPane(project, selected, symbols, analysis, selectedSymbol, focusedLine, showCompactEditorBrief, onSelectSymbol, onAnalyze, onRefreshAnalysis)
+                else -> ReviewPane(candidate, comparisonBase, comparison, checks, applied, selected, onDiscard, onAskForRevision, onRunChecks, onGenerateAlternate, onCompare, onExport, comparisonBaseNote, comparisonCandidateNote, onComparisonBaseNote, onComparisonCandidateNote, onApply, onUndo, activity, showActivity, onToggleActivity, impact, gitStatus)
+            }
             Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll) { path -> onOpenFinding(UnifiedFinding(location = FindingLocation(path = path))) }
-            Workspace.Bugs -> BugsWorkspacePane(findings, scan, onOpenFinding, onPrepareFinding, onStartScan, onCancelScan)
+            Workspace.Bugs -> BugsWorkspacePane(findings, scan, onOpenFinding, onPrepareFinding, onTriageFinding, onStartScan, onCancelScan)
         }
     }
 }

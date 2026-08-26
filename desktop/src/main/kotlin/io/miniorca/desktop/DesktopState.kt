@@ -77,6 +77,7 @@ data class DraftReviewState(
     val comparison: CandidateComparison? = null,
     val checks: CandidateCheckReport? = null,
     val draft: DeclarationDraft? = null,
+    val editor: EditableDraftState? = null,
     val review: DraftReview? = null,
     val applied: ApplyResult? = null,
 )
@@ -132,6 +133,7 @@ sealed interface DesktopEvent {
     data class IndexRefreshed(val index: ProjectIndex) : DesktopEvent
     data class OverviewLoaded(val overview: ProjectOverview) : DesktopEvent
     data class FindingsLoaded(val findings: List<UnifiedFinding>) : DesktopEvent
+    data class FindingStatusUpdated(val findingId: String, val status: String) : DesktopEvent
     data class AnalyzeAllLoaded(val job: AnalyzeAllJob?) : DesktopEvent
     data class GoScanLoaded(val scan: GoScanReport?) : DesktopEvent
     data class FileLoaded(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) : DesktopEvent
@@ -147,6 +149,10 @@ sealed interface DesktopEvent {
     data object CandidateDiscarded : DesktopEvent
     data class ChecksLoaded(val checks: CandidateCheckReport) : DesktopEvent
     data class ChatLoaded(val session: ChatSession) : DesktopEvent
+    data class ChatProposalLoaded(val session: ChatSession, val userMessage: String, val proposal: ChatDraftProposal) : DesktopEvent
+    data class DraftEdited(val declaration: String? = null, val imports: List<String>? = null) : DesktopEvent
+    data object DraftValidationStarted : DesktopEvent
+    data object DraftMarkedStale : DesktopEvent
     data class DraftLoaded(val draft: DeclarationDraft, val review: DraftReview? = null) : DesktopEvent
     data class Applied(val result: ApplyResult?) : DesktopEvent
     data class Failed(val message: String) : DesktopEvent
@@ -163,12 +169,20 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState = when (event) {
         selection = FileSelectionState(), findings = FindingsState(), chat = ChatState(), review = DraftReviewState(),
         jobs = jobs.copy(loading = false, status = "Imported ${event.project.name}", error = null),
     )
-    is DesktopEvent.IndexRefreshed -> copy(
-        projectState = projectState.copy(project = project?.copy(projectRevision = event.index.projectRevision), index = event.index),
-        jobs = jobs.copy(loading = false, status = "Re-analyzed project index", error = null),
-    )
+    is DesktopEvent.IndexRefreshed -> {
+        val revisionChanged = project?.projectRevision != event.index.projectRevision
+        copy(
+            projectState = projectState.copy(project = project?.copy(projectRevision = event.index.projectRevision), index = event.index),
+            chat = if (revisionChanged) ChatState() else chat,
+            review = if (revisionChanged) DraftReviewState(applied = review.applied) else review,
+            jobs = jobs.copy(loading = false, status = "Re-analyzed project index", error = null),
+        )
+    }
     is DesktopEvent.OverviewLoaded -> copy(projectState = projectState.copy(overview = event.overview))
     is DesktopEvent.FindingsLoaded -> copy(findings = findings.copy(findings = event.findings))
+    is DesktopEvent.FindingStatusUpdated -> copy(findings = findings.copy(findings = findings.findings.map { finding ->
+        if (finding.id == event.findingId) finding.copy(status = event.status) else finding
+    }))
     is DesktopEvent.AnalyzeAllLoaded -> copy(findings = findings.copy(analyzeAll = event.job))
     is DesktopEvent.GoScanLoaded -> copy(findings = findings.copy(scan = event.scan))
     is DesktopEvent.FileLoaded -> copy(
@@ -185,10 +199,28 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState = when (event) {
     is DesktopEvent.CandidateLoaded -> copy(review = review.copy(candidate = event.candidate, comparisonBase = null, comparison = null, checks = null), jobs = jobs.copy(loading = false, error = null))
     is DesktopEvent.AlternateCandidateLoaded -> copy(review = review.copy(candidate = event.candidate, comparisonBase = event.base, comparison = null, checks = null), jobs = jobs.copy(loading = false, error = null))
     is DesktopEvent.ComparisonLoaded -> copy(review = review.copy(comparison = event.comparison), jobs = jobs.copy(loading = false, error = null))
-    DesktopEvent.CandidateDiscarded -> copy(review = review.copy(candidate = null, comparisonBase = null, comparison = null, checks = null, draft = null, review = null), jobs = jobs.copy(loading = false, status = "Discarded preview", error = null))
+    DesktopEvent.CandidateDiscarded -> copy(review = review.copy(candidate = null, comparisonBase = null, comparison = null, checks = null, draft = null, editor = null, review = null), jobs = jobs.copy(loading = false, status = "Discarded preview", error = null))
     is DesktopEvent.ChecksLoaded -> copy(review = review.copy(checks = event.checks), jobs = jobs.copy(loading = false, error = null))
     is DesktopEvent.ChatLoaded -> copy(chat = chat.copy(session = event.session))
-    is DesktopEvent.DraftLoaded -> copy(review = review.copy(draft = event.draft, review = event.review))
+    is DesktopEvent.ChatProposalLoaded -> {
+        val messages = event.session.messages + ChatSessionMessage(role = "user", content = event.userMessage) + event.proposal.assistantMessage
+        copy(
+            chat = chat.copy(session = event.session.copy(latestDraftId = event.proposal.draft.id, messages = messages)),
+            review = review.copy(draft = event.proposal.draft, editor = editableDraft(event.proposal.draft), checks = null, review = null),
+            jobs = jobs.copy(loading = false, error = null),
+        )
+    }
+    is DesktopEvent.DraftEdited -> review.editor?.let { editor ->
+        val changed = editDraft(editor, event.declaration ?: editor.declaration, event.imports ?: editor.imports)
+        copy(review = review.copy(draft = changed.serverDraft.copy(validation = null), editor = changed, candidate = null, comparisonBase = null, comparison = null, checks = null, review = null))
+    } ?: this
+    DesktopEvent.DraftValidationStarted -> review.editor?.let { editor ->
+        copy(review = review.copy(editor = editor.copy(status = DraftEditorStatus.Validating), checks = null, comparison = null, review = null))
+    } ?: this
+    DesktopEvent.DraftMarkedStale -> review.editor?.let { editor ->
+        copy(review = review.copy(draft = editor.serverDraft.copy(validation = null), editor = editor.copy(status = DraftEditorStatus.Stale), checks = null, comparison = null, review = null))
+    } ?: this
+    is DesktopEvent.DraftLoaded -> copy(review = review.copy(draft = event.draft, editor = editableDraft(event.draft), checks = null, review = event.review))
     is DesktopEvent.Applied -> copy(review = review.copy(applied = event.result))
     is DesktopEvent.Failed -> copy(jobs = jobs.copy(loading = false, error = event.message))
     is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))
@@ -293,9 +325,30 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
     fun chatLoaded(requestId: Long, file: RequestIdentity, session: ChatSession): Boolean =
         if (requestId == chatRequest && matchesFile(file) && sessionMatches(file, session.projectId, session.projectRevision, session.openPath, session.baseFileHash)) accept(DesktopEvent.ChatLoaded(session)) else false
 
+    fun chatProposalLoaded(requestId: Long, file: RequestIdentity, session: ChatSession, userMessage: String, proposal: ChatDraftProposal): Boolean =
+        if (
+            requestId == chatRequest && matchesFile(file) &&
+            sessionMatches(file, session.projectId, session.projectRevision, session.openPath, session.baseFileHash) &&
+            proposal.sessionId == session.id &&
+            sessionMatches(file, proposal.draft.projectId, proposal.draft.projectRevision, proposal.draft.targetPath, proposal.draft.baseFileHash)
+        ) accept(DesktopEvent.ChatProposalLoaded(session, userMessage, proposal)) else false
+
+    fun cancelChatLoad(requestId: Long, file: RequestIdentity): Boolean =
+        if (requestId == chatRequest && matchesFile(file)) {
+            chatRequest = 0
+            accept(DesktopEvent.Status("Chat request canceled"))
+        } else false
+
     fun beginDraftLoad(): Pair<Long, RequestIdentity>? = fileRequest?.let { file -> nextId().also { draftRequest = it } to file }
     fun draftLoaded(requestId: Long, file: RequestIdentity, draft: DeclarationDraft, review: DraftReview? = null): Boolean =
         if (requestId == draftRequest && matchesFile(file) && sessionMatches(file, draft.projectId, draft.projectRevision, draft.targetPath, draft.baseFileHash)) accept(DesktopEvent.DraftLoaded(draft, review)) else false
+
+    fun draftChecksLoaded(requestId: Long, file: RequestIdentity, draft: DeclarationDraft, checks: CandidateCheckReport): Boolean =
+        if (
+            requestId == draftRequest && matchesFile(file) &&
+            sessionMatches(file, draft.projectId, draft.projectRevision, draft.targetPath, draft.baseFileHash) &&
+            checks.draftId == draft.id && checks.draftRevision == draft.revision && checks.draftHash == draft.hash
+        ) accept(DesktopEvent.ChecksLoaded(checks)) else false
 
     fun currentFileRequest(): RequestIdentity? = fileRequest
 
@@ -325,6 +378,16 @@ fun draftApplyEligibility(draft: DeclarationDraft?, checks: CandidateCheckReport
     if (draft.validation?.applicable != true) return ApplyEligibility(false, "Validate the latest draft before applying it.")
     if (checks?.applicable != true || checks.draftId != draft.id || checks.draftRevision != draft.revision || checks.draftHash != draft.hash) return ApplyEligibility(false, "Run checks for the latest draft before applying it.")
     return ApplyEligibility(true, "Ready to apply.")
+}
+
+fun draftReviewEligibility(editor: EditableDraftState?, draft: DeclarationDraft?, checks: CandidateCheckReport?, selectedFile: ProjectFileInfo?, project: ProjectAnalysis?): ApplyEligibility {
+    if (editor == null || draft == null) return ApplyEligibility(false, "Select a draft first.")
+    if (editor.status == DraftEditorStatus.Stale) return ApplyEligibility(false, "The draft is stale; start a new file-scoped conversation.")
+    if (editor.status == DraftEditorStatus.Dirty) return ApplyEligibility(false, "Manual edits require validation and fresh checks.")
+    if (editor.status == DraftEditorStatus.Invalid) return ApplyEligibility(false, "Fix validation diagnostics before checks or Apply.")
+    if (editor.status == DraftEditorStatus.Validating) return ApplyEligibility(false, "Wait for validation to finish.")
+    if (!draftEditorMatchesOpenFile(editor, selectedFile, project)) return ApplyEligibility(false, "Draft project, file, revision, or base hash no longer matches the open file.")
+    return draftApplyEligibility(draft, checks, selectedFile)
 }
 
 fun candidateApplyEligibility(candidate: GenerationResult?, checks: CandidateCheckReport?, selectedFile: ProjectFileInfo?): ApplyEligibility {
