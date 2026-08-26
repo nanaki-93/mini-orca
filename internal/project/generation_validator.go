@@ -213,19 +213,47 @@ func goDeclarations(fset *token.FileSet, file *ast.File) (declarationSet, error)
 			if declaration.Recv != nil && len(declaration.Recv.List) > 0 {
 				name = receiverName(declaration.Recv.List[0].Type) + "." + name
 			}
-			set[name] = append(set[name], renderGoNode(fset, declaration))
+			set[name] = append(set[name], renderGoDeclaration(fset, declaration, declaration.Doc))
 		case *ast.GenDecl:
 			if declaration.Tok != token.TYPE && declaration.Tok != token.VAR && declaration.Tok != token.CONST {
 				continue
 			}
-			for _, spec := range declaration.Specs {
+			for index, spec := range declaration.Specs {
+				comments := declarationSpecComments(spec)
+				if index == 0 {
+					comments = append([]*ast.CommentGroup{declaration.Doc}, comments...)
+				}
 				for _, name := range declarationNames(spec) {
-					set[name] = append(set[name], renderGoNode(fset, spec))
+					set[name] = append(set[name], renderGoDeclaration(fset, spec, comments...))
 				}
 			}
 		}
 	}
 	return set, nil
+}
+
+func declarationSpecComments(spec ast.Spec) []*ast.CommentGroup {
+	switch spec := spec.(type) {
+	case *ast.TypeSpec:
+		return []*ast.CommentGroup{spec.Doc, spec.Comment}
+	case *ast.ValueSpec:
+		return []*ast.CommentGroup{spec.Doc, spec.Comment}
+	default:
+		return nil
+	}
+}
+
+func renderGoDeclaration(fset *token.FileSet, node ast.Node, comments ...*ast.CommentGroup) string {
+	var output strings.Builder
+	for _, group := range comments {
+		if group == nil {
+			continue
+		}
+		output.WriteString(group.Text())
+		output.WriteByte('\n')
+	}
+	output.WriteString(renderGoNode(fset, node))
+	return output.String()
 }
 
 func declarationNames(spec ast.Spec) []string {
@@ -287,18 +315,40 @@ func sameImports(fset *token.FileSet, before, after *ast.File) bool {
 
 func buildUnifiedDiff(path, original, candidate string) UnifiedDiff {
 	before, after := strings.Split(original, "\n"), strings.Split(candidate, "\n")
-	lines := make([]DiffLine, 0)
-	for i := 0; i < len(before) || i < len(after); i++ {
+	common := longestCommonSubsequence(before, after)
+	lines := make([]DiffLine, 0, len(before)+len(after))
+	for oldLine, newLine := 0, 0; oldLine < len(before) || newLine < len(after); {
 		switch {
-		case i < len(before) && i < len(after) && before[i] == after[i]:
-			lines = append(lines, DiffLine{Kind: "context", OldLine: i + 1, NewLine: i + 1, Text: before[i]})
-		case i < len(before) && i < len(after):
-			lines = append(lines, DiffLine{Kind: "removed", OldLine: i + 1, Text: before[i]}, DiffLine{Kind: "added", NewLine: i + 1, Text: after[i]})
-		case i < len(before):
-			lines = append(lines, DiffLine{Kind: "removed", OldLine: i + 1, Text: before[i]})
+		case oldLine < len(before) && newLine < len(after) && before[oldLine] == after[newLine]:
+			lines = append(lines, DiffLine{Kind: "context", OldLine: oldLine + 1, NewLine: newLine + 1, Text: before[oldLine]})
+			oldLine++
+			newLine++
+		case newLine < len(after) && (oldLine == len(before) || common[oldLine][newLine+1] >= common[oldLine+1][newLine]):
+			lines = append(lines, DiffLine{Kind: "added", NewLine: newLine + 1, Text: after[newLine]})
+			newLine++
 		default:
-			lines = append(lines, DiffLine{Kind: "added", NewLine: i + 1, Text: after[i]})
+			lines = append(lines, DiffLine{Kind: "removed", OldLine: oldLine + 1, Text: before[oldLine]})
+			oldLine++
 		}
 	}
 	return UnifiedDiff{OldPath: path, NewPath: path, Lines: lines}
+}
+
+func longestCommonSubsequence(before, after []string) [][]int {
+	common := make([][]int, len(before)+1)
+	for index := range common {
+		common[index] = make([]int, len(after)+1)
+	}
+	for oldLine := len(before) - 1; oldLine >= 0; oldLine-- {
+		for newLine := len(after) - 1; newLine >= 0; newLine-- {
+			if before[oldLine] == after[newLine] {
+				common[oldLine][newLine] = common[oldLine+1][newLine+1] + 1
+			} else if common[oldLine+1][newLine] >= common[oldLine][newLine+1] {
+				common[oldLine][newLine] = common[oldLine+1][newLine]
+			} else {
+				common[oldLine][newLine] = common[oldLine][newLine+1]
+			}
+		}
+	}
+	return common
 }

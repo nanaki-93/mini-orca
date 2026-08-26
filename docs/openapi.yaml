@@ -82,6 +82,91 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ProjectAnalysis'}
         '404': {$ref: '#/components/responses/Error'}
+  /api/projects/current/overview:
+    get:
+      tags: [Projects]
+      summary: Source-free project workspace overview
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Deterministic metrics, optional structured analysis, coverage, and source-separated finding counts, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectOverview'}}}}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/findings:
+    get:
+      tags: [Projects]
+      summary: List source-free verified findings and AI suggestions
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+        - name: source
+          in: query
+          schema: {type: string, enum: [ai, parser, vet, test]}
+        - name: confidence
+          in: query
+          schema: {type: string, enum: [suggested, tool_reported]}
+        - name: severity
+          in: query
+          schema: {type: string, enum: [low, medium, high]}
+        - name: status
+          in: query
+          schema: {type: string, enum: [open, dismissed, fixed, retired]}
+        - name: freshness
+          in: query
+          schema: {type: string, enum: [fresh, stale]}
+      responses:
+        '200': {description: Sanitized findings with their provenance and lifecycle, content: {application/json: {schema: {$ref: '#/components/schemas/FindingsResponse'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/findings/{findingID}:
+    patch:
+      tags: [Projects]
+      summary: Update a finding's user triage status
+      parameters:
+        - name: findingID
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FindingTriageRequest'}}}
+      responses:
+        '204': {description: Triage status recorded.}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/scan:
+    get:
+      tags: [Projects]
+      summary: Read explicit isolated Go scan progress
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Source-free parser, vet, and test progress, content: {application/json: {schema: {$ref: '#/components/schemas/GoScanReport'}}}}
+        '204': {description: No verified scan exists for this project revision.}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Explicitly start an isolated Go verified scan
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/GoScanRequest'}}}
+      responses:
+        '202': {description: Scan started, content: {application/json: {schema: {$ref: '#/components/schemas/GoScanReport'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    delete:
+      tags: [Projects]
+      summary: Cancel the active isolated Go scan
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Cancellation requested; completed phases remain available, content: {application/json: {schema: {$ref: '#/components/schemas/GoScanReport'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/index:
     get:
       tags: [Projects]
@@ -431,7 +516,129 @@ components:
         analysis_file: {type: string}
         summary: {type: string}
         ai_status: {type: string}
+        report: {$ref: '#/components/schemas/ProjectAnalysisReport'}
         analyzed_at: {type: string, format: date-time}
+    ProjectOverview:
+      type: object
+      required: [project_id, project_revision, metrics, analysis, analysis_coverage, finding_counts]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        metrics: {$ref: '#/components/schemas/ProjectMetrics'}
+        analysis: {$ref: '#/components/schemas/ProjectAnalysisReport'}
+        analysis_coverage: {$ref: '#/components/schemas/AnalysisCoverage'}
+        finding_counts: {$ref: '#/components/schemas/FindingCounts'}
+    ProjectMetrics:
+      type: object
+      required: [type, file_count, source_file_count, total_lines, languages]
+      properties:
+        type: {type: string}
+        build_file: {type: string}
+        file_count: {type: integer}
+        source_file_count: {type: integer}
+        total_lines: {type: integer}
+        languages: {type: object, additionalProperties: {type: integer}}
+    ProjectAnalysisReport:
+      type: object
+      required: [schema_version, project_id, project_revision, components, entry_points, flows, risks, next_steps, status, model, profile, prompt_version, generated_at]
+      properties:
+        schema_version: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        purpose: {type: string}
+        architecture: {type: string}
+        components: {type: array, items: {type: string}}
+        entry_points: {type: array, items: {type: string}}
+        flows: {type: array, items: {type: string}}
+        risks: {type: array, items: {$ref: '#/components/schemas/Finding'}}
+        next_steps: {type: array, items: {type: string}}
+        status: {type: string, enum: [fresh, stale, failed, unavailable]}
+        failure: {type: string}
+        model: {type: string}
+        profile: {type: string}
+        prompt_version: {type: string}
+        generated_at: {type: string, format: date-time}
+    AnalysisCoverage:
+      type: object
+      required: [total, fresh, stale, missing, failed, running]
+      properties:
+        total: {type: integer}
+        fresh: {type: integer}
+        stale: {type: integer}
+        missing: {type: integer}
+        failed: {type: integer}
+        running: {type: integer}
+    FindingCounts:
+      type: object
+      required: [verified, ai_suggestions]
+      properties:
+        verified: {type: integer, description: Count with non-AI source and tool_reported confidence.}
+        ai_suggestions: {type: integer, description: Count with AI source and suggested confidence.}
+    FindingsResponse:
+      type: object
+      required: [project_id, project_revision, findings]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        findings: {type: array, items: {$ref: '#/components/schemas/UnifiedFinding'}}
+    UnifiedFinding:
+      type: object
+      required: [id, source, confidence, severity, title, message, project_id, project_revision, location, status, freshness, detected_at]
+      properties:
+        id: {type: string}
+        source: {type: string, enum: [ai, parser, vet, test]}
+        confidence: {type: string, enum: [suggested, tool_reported]}
+        severity: {type: string, enum: [low, medium, high]}
+        title: {type: string}
+        message: {type: string}
+        rule: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        file_hash: {type: string}
+        location: {$ref: '#/components/schemas/FindingLocation'}
+        evidence: {type: string, description: Sanitized and bounded tool or model evidence.}
+        status: {type: string, enum: [open, dismissed, fixed, retired]}
+        freshness: {type: string, enum: [fresh, stale]}
+        detected_at: {type: string, format: date-time}
+        originating_analysis: {type: string, enum: [project, file]}
+    FindingLocation:
+      type: object
+      properties:
+        path: {type: string, description: Project-relative path.}
+        start_line: {type: integer}
+        end_line: {type: integer}
+        symbol: {type: string}
+    FindingTriageRequest:
+      type: object
+      required: [project_revision, status]
+      properties:
+        project_revision: {type: string}
+        status: {type: string, enum: [open, dismissed, fixed]}
+    GoScanRequest:
+      type: object
+      required: [project_revision]
+      properties:
+        project_revision: {type: string}
+    GoScanReport:
+      type: object
+      required: [project_id, project_revision, status, started_at, updated_at, phases]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        status: {type: string, enum: [running, completed, canceled, failed]}
+        started_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+        phases: {type: array, items: {$ref: '#/components/schemas/GoScanPhase'}}
+    GoScanPhase:
+      type: object
+      required: [name, state]
+      properties:
+        name: {type: string, enum: [parse, vet, tests]}
+        state: {type: string, enum: [passed, failed, canceled]}
+        command: {type: array, items: {type: string}}
+        output: {type: string, description: Sanitized and bounded output.}
+        exit_code: {type: integer}
     FileInfo:
       type: object
       properties:

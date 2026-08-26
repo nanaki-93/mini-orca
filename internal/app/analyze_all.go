@@ -115,7 +115,17 @@ func (s *Service) AnalyzeAllJob() (*AnalyzeAllJob, error) {
 		if s.analysisAll.job.ProjectID == analysis.ProjectID && s.analysisAll.job.ProjectRevision == analysis.ProjectRevision {
 			return cloneAnalyzeAllJob(s.analysisAll.job), nil
 		}
-		return nil, project.ErrRevisionConflict
+		if s.analysisAll.job.Status != analysisAllStateStale {
+			s.analysisAll.job.Status = analysisAllStateStale
+			s.analysisAll.job.UpdatedAt = time.Now().UTC()
+			if s.analysisAll.cancel != nil {
+				s.analysisAll.cancel()
+			}
+			if err := s.storeAnalyzeAllJobLocked(s.analysisAll.job); err != nil {
+				return nil, err
+			}
+		}
+		return cloneAnalyzeAllJob(s.analysisAll.job), nil
 	}
 	job, err := loadAnalyzeAllJob(s.manager.Root())
 	if err != nil {
@@ -185,11 +195,28 @@ func (s *Service) ResumeAnalyzeAll(ctx context.Context, confirmRemoteProvider bo
 // Reindex invalidates an active job before deterministic facts are refreshed.
 func (s *Service) Reindex() (*project.ProjectIndex, error) {
 	s.invalidateAnalyzeAll("project index was refreshed")
-	return s.manager.Reindex()
+	s.cancelGoScan()
+	index, err := s.manager.Reindex()
+	if err == nil {
+		s.ExpireDraftsForOpenFile(index.ProjectID, index.ProjectRevision, "", "")
+	}
+	return index, err
 }
 
 // ProjectChanged stops a job before an imported project replaces the active project.
-func (s *Service) ProjectChanged() { s.invalidateAnalyzeAll("active project changed") }
+func (s *Service) ProjectChanged() {
+	s.invalidateAnalyzeAll("active project changed")
+	s.cancelGoScan()
+	s.clearDraftsForProjectChange()
+}
+
+func (s *Service) cancelGoScan() {
+	s.goScan.mu.Lock()
+	defer s.goScan.mu.Unlock()
+	if s.goScan.cancel != nil {
+		s.goScan.cancel()
+	}
+}
 
 func (s *Service) changeAnalyzeAllState(next string, cancelWorker, allowCompleted bool) (*AnalyzeAllJob, error) {
 	if _, err := s.manager.Analysis(); err != nil {

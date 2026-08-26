@@ -49,6 +49,15 @@ type analyzeAllRequest struct {
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }
 
+type findingStatusRequest struct {
+	ProjectRevision string `json:"project_revision"`
+	Status          string `json:"status"`
+}
+
+type goScanRequest struct {
+	ProjectRevision string `json:"project_revision"`
+}
+
 func NewProjectHandler(manager *project.Manager, service *app.Service) *ProjectHandler {
 	return &ProjectHandler{manager: manager, service: service}
 }
@@ -100,6 +109,101 @@ func (h *ProjectHandler) Current(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, analysis)
+}
+
+// Overview combines source-free deterministic metrics with optional model and
+// scan state for the project-level workspaces.
+func (h *ProjectHandler) Overview(w http.ResponseWriter, r *http.Request) {
+	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	overview, err := h.service.ProjectOverview()
+	if err != nil {
+		writeProjectError(w, "project overview failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, overview)
+}
+
+// Findings lists source-free verified reports and AI suggestions with their
+// provenance, confidence, lifecycle, location, and freshness intact.
+func (h *ProjectHandler) Findings(w http.ResponseWriter, r *http.Request) {
+	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	findings, err := h.service.ListFindings(app.FindingFilter{
+		Source: r.URL.Query().Get("source"), Confidence: r.URL.Query().Get("confidence"),
+		Severity: r.URL.Query().Get("severity"), Status: r.URL.Query().Get("status"), Freshness: r.URL.Query().Get("freshness"),
+	})
+	if err != nil {
+		writeProjectError(w, "finding lookup failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, struct {
+		ProjectID       string                   `json:"project_id"`
+		ProjectRevision string                   `json:"project_revision"`
+		Findings        []project.UnifiedFinding `json:"findings"`
+	}{ProjectID: findingsProjectID(h.manager), ProjectRevision: r.URL.Query().Get("project_revision"), Findings: findings})
+}
+
+// UpdateFindingStatus changes only user triage for one deterministic finding.
+func (h *ProjectHandler) UpdateFindingStatus(w http.ResponseWriter, r *http.Request) {
+	var request findingStatusRequest
+	if !decodeStrictJSON(w, r, &request, "invalid finding triage request", "Provide project_revision and status.") || !h.requireRevision(w, request.ProjectRevision) {
+		return
+	}
+	if err := h.service.UpdateFindingStatus(request.ProjectRevision, r.PathValue("findingID"), request.Status); err != nil {
+		writeProjectError(w, "update finding triage failed", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// StartGoScan explicitly starts parser, vet, and test verification in an
+// isolated copy; no imported source is modified.
+func (h *ProjectHandler) StartGoScan(w http.ResponseWriter, r *http.Request) {
+	var request goScanRequest
+	if !decodeStrictJSON(w, r, &request, "invalid verified scan request", "Provide project_revision.") || !h.requireRevision(w, request.ProjectRevision) {
+		return
+	}
+	report, err := h.service.StartGoScan(request.ProjectRevision)
+	if err != nil {
+		writeProjectError(w, "start verified scan failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusAccepted, report)
+}
+
+// GoScanProgress reads source-free persisted progress for the active revision.
+func (h *ProjectHandler) GoScanProgress(w http.ResponseWriter, r *http.Request) {
+	revision := r.URL.Query().Get("project_revision")
+	if !h.requireRevision(w, revision) {
+		return
+	}
+	report, err := h.service.GoScanProgress(revision)
+	if err != nil {
+		writeProjectError(w, "verified scan lookup failed", err)
+		return
+	}
+	if report == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, report)
+}
+
+// CancelGoScan requests cancellation for the active isolated scan.
+func (h *ProjectHandler) CancelGoScan(w http.ResponseWriter, r *http.Request) {
+	revision := r.URL.Query().Get("project_revision")
+	if !h.requireRevision(w, revision) {
+		return
+	}
+	report, err := h.service.CancelGoScan(revision)
+	if err != nil {
+		writeProjectError(w, "cancel verified scan failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, report)
 }
 
 func (h *ProjectHandler) FileInfo(w http.ResponseWriter, r *http.Request) {
@@ -321,6 +425,24 @@ func (h *ProjectHandler) decodeFileAnalysisRequest(w http.ResponseWriter, r *htt
 		return request, false
 	}
 	return request, true
+}
+
+func decodeStrictJSON(w http.ResponseWriter, r *http.Request, value any, message, userMessage string) bool {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(value); err != nil {
+		api.WriteAppError(w, apperrors.BadRequest(message, userMessage, err))
+		return false
+	}
+	return true
+}
+
+func findingsProjectID(manager *project.Manager) string {
+	analysis, err := manager.Analysis()
+	if err != nil {
+		return ""
+	}
+	return analysis.ProjectID
 }
 
 func (h *ProjectHandler) decodeAnalyzeAllRequest(w http.ResponseWriter, r *http.Request) (analyzeAllRequest, bool) {

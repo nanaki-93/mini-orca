@@ -151,6 +151,61 @@ func (s *FindingStore) Reconcile(input FindingInput, reported []UnifiedFinding) 
 	return cloneFindings(current), nil
 }
 
+// ReconcileSource updates findings from one producer without retiring findings
+// from the other producers. This keeps explicit scan results and cached AI
+// suggestions independently refreshable.
+func (s *FindingStore) ReconcileSource(input FindingInput, source string, reported []UnifiedFinding) ([]UnifiedFinding, error) {
+	if !validFindingSource(source) {
+		return nil, fmt.Errorf("finding source is invalid")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if input.ProjectID == "" || input.ProjectRevision == "" {
+		return nil, fmt.Errorf("finding project identity is required")
+	}
+	previous, err := s.loadLocked()
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]UnifiedFinding, len(previous))
+	current := make([]UnifiedFinding, 0, len(previous)+len(reported))
+	for _, finding := range previous {
+		if finding.Source == source {
+			byID[finding.ID] = finding
+			continue
+		}
+		current = append(current, finding)
+	}
+	seen := make(map[string]bool, len(reported))
+	for _, finding := range reported {
+		if finding.Source != source {
+			return nil, fmt.Errorf("finding source does not match reconciliation source")
+		}
+		finding = normalizeFinding(finding, input)
+		if err := validateFinding(finding); err != nil {
+			return nil, err
+		}
+		if prior, ok := byID[finding.ID]; ok && prior.Status != FindingStatusRetired {
+			finding.Status = prior.Status
+		}
+		seen[finding.ID] = true
+		current = append(current, finding)
+	}
+	for id, finding := range byID {
+		if seen[id] {
+			continue
+		}
+		finding.Status = FindingStatusRetired
+		finding.Freshness = FindingFreshnessStale
+		current = append(current, finding)
+	}
+	sort.Slice(current, func(i, j int) bool { return current[i].ID < current[j].ID })
+	if err := s.storeLocked(current); err != nil {
+		return nil, err
+	}
+	return cloneFindings(current), nil
+}
+
 // SetStatus records an explicit user triage decision for one persisted finding.
 func (s *FindingStore) SetStatus(id, status string) error {
 	if id == "" || !validFindingStatus(status) || status == FindingStatusRetired {
@@ -205,9 +260,9 @@ func recoverCorruptFindingStore(path string) error {
 func normalizeFinding(finding UnifiedFinding, input FindingInput) UnifiedFinding {
 	finding.ProjectID = input.ProjectID
 	finding.ProjectRevision = input.ProjectRevision
-	finding.Title = sanitizeFindingText(finding.Title)
-	finding.Message = sanitizeFindingText(finding.Message)
-	finding.Evidence = sanitizeFindingText(finding.Evidence)
+	finding.Title = sanitizeFindingText(finding.Title, maxProjectAnalysisItemBytes)
+	finding.Message = sanitizeFindingText(finding.Message, maxProjectAnalysisItemBytes)
+	finding.Evidence = sanitizeFindingText(finding.Evidence, maxProjectAnalysisBytes)
 	finding.Location.Path = filepath.ToSlash(strings.TrimSpace(finding.Location.Path))
 	finding.Location.Symbol = strings.TrimSpace(finding.Location.Symbol)
 	if finding.Status == "" {
@@ -263,8 +318,12 @@ func validFindingConfidence(source, confidence string) bool {
 func validFindingStatus(value string) bool {
 	return value == FindingStatusOpen || value == FindingStatusDismissed || value == FindingStatusFixed || value == FindingStatusRetired
 }
-func sanitizeFindingText(value string) string {
-	return strings.TrimSpace(findingSecret.ReplaceAllString(value, "[redacted]"))
+func sanitizeFindingText(value string, limit int) string {
+	value = strings.TrimSpace(findingSecret.ReplaceAllString(value, "[redacted]"))
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit-len("[truncated]")] + "[truncated]"
 }
 func cloneFindings(source []UnifiedFinding) []UnifiedFinding {
 	return append([]UnifiedFinding(nil), source...)

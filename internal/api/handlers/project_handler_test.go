@@ -134,6 +134,79 @@ func TestFileAnalysisAPIsRequireRevisionAndExposeStates(t *testing.T) {
 	}
 }
 
+func TestProjectWorkspaceAPIsAreRevisionGuardedAndSourceFree(t *testing.T) {
+	root := t.TempDir()
+	writeProjectHandlerFixture(t, root, "go.mod", "module fixture\n\ngo 1.22\n")
+	writeProjectHandlerFixture(t, root, "main.go", "package fixture\nfunc Run() {}\n")
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewProjectHandler(manager, service)
+	index, err := manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	overview := httptest.NewRecorder()
+	handler.Overview(overview, httptest.NewRequest(http.MethodGet, "/api/projects/current/overview?project_revision="+index.ProjectRevision, nil))
+	if overview.Code != http.StatusOK || strings.Contains(overview.Body.String(), "package fixture") {
+		t.Fatalf("overview = %d %s", overview.Code, overview.Body.String())
+	}
+
+	findings := httptest.NewRecorder()
+	handler.Findings(findings, httptest.NewRequest(http.MethodGet, "/api/projects/current/findings?project_revision="+index.ProjectRevision+"&confidence=suggested", nil))
+	if findings.Code != http.StatusOK || !strings.Contains(findings.Body.String(), `"findings":[]`) {
+		t.Fatalf("findings = %d %s", findings.Code, findings.Body.String())
+	}
+
+	noScan := httptest.NewRecorder()
+	handler.GoScanProgress(noScan, httptest.NewRequest(http.MethodGet, "/api/projects/current/scan?project_revision="+index.ProjectRevision, nil))
+	if noScan.Code != http.StatusNoContent {
+		t.Fatalf("scan without job = %d %s", noScan.Code, noScan.Body.String())
+	}
+
+	for _, call := range []struct {
+		name string
+		call func(*httptest.ResponseRecorder)
+	}{
+		{name: "overview", call: func(response *httptest.ResponseRecorder) {
+			handler.Overview(response, httptest.NewRequest(http.MethodGet, "/api/projects/current/overview?project_revision=stale", nil))
+		}},
+		{name: "findings", call: func(response *httptest.ResponseRecorder) {
+			handler.Findings(response, httptest.NewRequest(http.MethodGet, "/api/projects/current/findings?project_revision=stale", nil))
+		}},
+		{name: "scan start", call: func(response *httptest.ResponseRecorder) {
+			handler.StartGoScan(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/scan", bytes.NewBufferString(`{"project_revision":"stale"}`)))
+		}},
+		{name: "scan progress", call: func(response *httptest.ResponseRecorder) {
+			handler.GoScanProgress(response, httptest.NewRequest(http.MethodGet, "/api/projects/current/scan?project_revision=stale", nil))
+		}},
+		{name: "scan cancel", call: func(response *httptest.ResponseRecorder) {
+			handler.CancelGoScan(response, httptest.NewRequest(http.MethodDelete, "/api/projects/current/scan?project_revision=stale", nil))
+		}},
+		{name: "triage", call: func(response *httptest.ResponseRecorder) {
+			handler.UpdateFindingStatus(response, httptest.NewRequest(http.MethodPatch, "/api/projects/current/findings/finding:test", bytes.NewBufferString(`{"project_revision":"stale","status":"dismissed"}`)))
+		}},
+	} {
+		t.Run(call.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			call.call(response)
+			if response.Code != http.StatusConflict {
+				t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusConflict, response.Body.String())
+			}
+			assertStructuredError(t, response)
+		})
+	}
+}
+
 func TestProjectIndexAPIsRequireAnActiveProject(t *testing.T) {
 	root := t.TempDir()
 	manager, err := project.NewManager(root)

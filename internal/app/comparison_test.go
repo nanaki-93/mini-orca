@@ -70,7 +70,7 @@ func comparisonService(t *testing.T) *Service {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	return &Service{manager: manager, candidates: make(map[string]*storedCandidate)}
+	return &Service{manager: manager, drafts: make(map[string]*storedDraft)}
 }
 
 func comparisonPreview(t *testing.T, service *Service, id, content string) GenerationPreview {

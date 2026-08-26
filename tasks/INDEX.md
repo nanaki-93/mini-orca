@@ -42,8 +42,8 @@ Source roadmap: [`../PLAN.md`](../PLAN.md)
 | 34 | [Structured project analysis](completed/34_structured_project_analysis.md) | 32, 33 | Complete |
 | 35 | [Unified finding model and store](completed/35_unified_finding_model_store.md) | 34 | Complete |
 | 36 | [Go verified project scan](completed/36_go_verified_project_scan.md) | 35 | Complete |
-| 37 | [Project overview, scan, and findings APIs](37_project_overview_findings_apis.md) | 34, 35, 36 | Pending |
-| 38 | [Go declaration edit engine](38_go_declaration_edit_engine.md) | 32 | Pending |
+| 37 | [Project overview, scan, and findings APIs](completed/37_project_overview_findings_apis.md) | 34, 35, 36 | Complete |
+| 38 | [Go declaration edit engine](completed/38_go_declaration_edit_engine.md) | 32 | Complete |
 | 39 | [Editable draft lifecycle](39_editable_draft_lifecycle.md) | 38 | Pending |
 | 40 | [Draft validation, checks, Apply, and undo](40_draft_validation_checks_apply.md) | 39 | Pending |
 | 41 | [File-scoped chat sessions](41_file_scoped_chat_sessions.md) | 38, 39, 40 | Pending |

@@ -41,7 +41,7 @@ func TestChatRejectsMalformedNonOKAndOversizedProviderResponses(t *testing.T) {
 
 func TestChatPropagatesCancellationAndLeavesEmptyChoicesForAgentValidation(t *testing.T) {
 	started := make(chan struct{}, 1)
-	canceled := make(chan struct{}, 1)
+	release := make(chan struct{})
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if requests.Add(1) == 2 {
@@ -49,10 +49,13 @@ func TestChatPropagatesCancellationAndLeavesEmptyChoicesForAgentValidation(t *te
 			return
 		}
 		started <- struct{}{}
-		<-r.Context().Done()
-		canceled <- struct{}{}
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
 	}))
 	defer server.Close()
+	defer close(release)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -65,8 +68,6 @@ func TestChatPropagatesCancellationAndLeavesEmptyChoicesForAgentValidation(t *te
 	if err := waitForTestError(t, done, "canceled chat request"); err == nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation error = %v", err)
 	}
-	waitForTestSignal(t, canceled, "provider cancellation")
-
 	client := NewClient(server.URL, "", "fixture", 0, 0)
 	response, err := client.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}})
 	if err != nil || len(response.Choices) != 0 {

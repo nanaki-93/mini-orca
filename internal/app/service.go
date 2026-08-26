@@ -41,8 +41,10 @@ type Service struct {
 	retryMax            time.Duration
 	remoteProvider      bool
 	analysisAll         *analysisAllController
-	candidates          map[string]*storedCandidate
-	candidateMu         sync.Mutex
+	goScan              *goScanController
+	drafts              map[string]*storedDraft
+	draftAudit          []DraftAuditMetadata
+	draftMu             sync.Mutex
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
@@ -92,7 +94,8 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		retryMax:            time.Duration(backoffMax) * time.Millisecond,
 		remoteProvider:      !isLoopbackURL(cfg.LLM.BaseURL),
 		analysisAll:         newAnalysisAllController(),
-		candidates:          make(map[string]*storedCandidate),
+		goScan:              newGoScanController(),
+		drafts:              make(map[string]*storedDraft),
 	}, nil
 }
 

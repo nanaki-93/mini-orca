@@ -40,22 +40,17 @@ func (s *Service) CompareCandidates(leftID, rightID, leftNote, rightNote string)
 	if leftID == "" || rightID == "" || leftID == rightID {
 		return CandidateComparison{}, fmt.Errorf("two distinct validated candidates are required")
 	}
-	s.candidateMu.Lock()
-	leftStored, rightStored := s.candidates[leftID], s.candidates[rightID]
-	if leftStored == nil || rightStored == nil {
-		s.candidateMu.Unlock()
+	leftDraft, leftCopy, leftChecks, err := s.candidateReviewState(leftID)
+	if err != nil {
 		return CandidateComparison{}, fmt.Errorf("both validated candidates are required")
 	}
-	left, right := &leftStored.preview, &rightStored.preview
-	if left.ProjectID != right.ProjectID || left.ProjectRevision != right.ProjectRevision || left.BaseFileHash != right.BaseFileHash || left.TargetPath != right.TargetPath || left.TargetSymbol != right.TargetSymbol || left.Action != right.Action {
-		s.candidateMu.Unlock()
-		return CandidateComparison{}, fmt.Errorf("candidates must share project revision, base hash, file, symbol, and action")
+	rightDraft, rightCopy, rightChecks, err := s.candidateReviewState(rightID)
+	if err != nil {
+		return CandidateComparison{}, fmt.Errorf("both validated candidates are required")
 	}
-	leftCopy := cloneGenerationPreview(left)
-	rightCopy := cloneGenerationPreview(right)
-	leftChecks := cloneOptionalCheckReport(leftStored.checks)
-	rightChecks := cloneOptionalCheckReport(rightStored.checks)
-	s.candidateMu.Unlock()
+	if leftCopy.ProjectID != rightCopy.ProjectID || leftCopy.ProjectRevision != rightCopy.ProjectRevision || leftCopy.BaseFileHash != rightCopy.BaseFileHash || leftCopy.TargetPath != rightCopy.TargetPath || leftCopy.TargetSymbol != rightCopy.TargetSymbol || leftDraft.Mode != rightDraft.Mode || leftCopy.Action != rightCopy.Action {
+		return CandidateComparison{}, fmt.Errorf("candidates must share project revision, base hash, file, symbol, mode, and action")
+	}
 	if err := s.ValidateMutableRequest(leftCopy.ProjectID, leftCopy.ProjectRevision, leftCopy.TargetPath, leftCopy.BaseFileHash); err != nil {
 		return CandidateComparison{}, err
 	}
@@ -86,19 +81,10 @@ func comparisonItem(candidate *GenerationPreview, checksReport *CandidateCheckRe
 // project state. Candidate source, prompt content, and check output stay in
 // memory and are never placed in the exported artifact.
 func (s *Service) ExportCandidateReviewMarkdown(generationID string) (ReviewExport, error) {
-	s.candidateMu.Lock()
-	stored := s.candidates[generationID]
-	if stored == nil {
-		s.candidateMu.Unlock()
-		return ReviewExport{}, fmt.Errorf("validated candidate not found; generate a new preview")
+	_, preview, checks, err := s.candidateReviewState(generationID)
+	if err != nil {
+		return ReviewExport{}, err
 	}
-	preview := cloneGenerationPreview(&stored.preview)
-	var checks *CandidateCheckReport
-	if stored.checks != nil {
-		copy := cloneCheckReport(*stored.checks)
-		checks = &copy
-	}
-	s.candidateMu.Unlock()
 	if err := s.ValidateMutableRequest(preview.ProjectID, preview.ProjectRevision, preview.TargetPath, preview.BaseFileHash); err != nil {
 		return ReviewExport{}, err
 	}
@@ -181,12 +167,4 @@ func reviewExportFilename(path, symbol string) string {
 		name = "review"
 	}
 	return "mini-orca-" + name + ".md"
-}
-
-func cloneOptionalCheckReport(source *CandidateCheckReport) *CandidateCheckReport {
-	if source == nil {
-		return nil
-	}
-	copy := cloneCheckReport(*source)
-	return &copy
 }
