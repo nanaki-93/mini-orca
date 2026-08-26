@@ -54,3 +54,29 @@ internal fun DesktopHeader(
         Button(onClick = onImport, colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = Color.White)) { Text("Import") }
     }
 }
+
+@Composable
+internal fun WorkspaceNavigation(selected: Workspace, counts: WorkspaceCounts, onSelect: (Workspace) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(Panel).border(BorderStroke(1.dp, Border)).padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Workspace.entries.forEach { workspace ->
+            val label = workspaceNavigationLabel(workspace, counts)
+            Button(
+                onClick = { onSelect(workspace) },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = if (workspace == selected) Accent else Card,
+                    contentColor = if (workspace == selected) Color.White else PrimaryText,
+                ),
+            ) { Text(label, fontSize = 11.sp) }
+        }
+    }
+}
+
+fun workspaceNavigationLabel(workspace: Workspace, counts: WorkspaceCounts): String = when (workspace) {
+    Workspace.Summary -> "Summary"
+    Workspace.Analysis -> "Analysis · ${counts.analyzedFiles} analyzed"
+    Workspace.Bugs -> "Bugs · ${counts.verifiedFindings} verified · ${counts.aiSuggestions} AI"
+    Workspace.Editor -> "Editor · ${counts.drafts} drafts"
+}

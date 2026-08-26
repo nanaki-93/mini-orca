@@ -48,8 +48,8 @@ Source roadmap: [`../PLAN.md`](../PLAN.md)
 | 40 | [Draft validation, checks, Apply, and undo](completed/40_draft_validation_checks_apply.md) | 39 | Complete |
 | 41 | [File-scoped chat sessions](completed/41_file_scoped_chat_sessions.md) | 38, 39, 40 | Complete |
 | 42 | [Desktop shell decomposition](completed/42_desktop_shell_decomposition.md) | 32 | Complete |
-| 43 | [Desktop API contracts](43_desktop_api_contracts.md) | 37, 40, 41 | Pending |
-| 44 | [Desktop workspace and workflow state](44_desktop_workspace_state.md) | 42, 43 | Pending |
+| 43 | [Desktop API contracts](completed/43_desktop_api_contracts.md) | 37, 40, 41 | Complete |
+| 44 | [Desktop workspace and workflow state](completed/44_desktop_workspace_state.md) | 42, 43 | Complete |
 | 45 | [Desktop top-level navigation](45_desktop_top_level_navigation.md) | 44 | Pending |
 | 46 | [Desktop Project Summary](46_desktop_project_summary.md) | 37, 43, 44, 45 | Pending |
 | 47 | [Desktop Project Analysis](47_desktop_analysis_workspace.md) | 43, 44, 45 | Pending |

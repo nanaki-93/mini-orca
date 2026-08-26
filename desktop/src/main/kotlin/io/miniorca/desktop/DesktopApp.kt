@@ -17,8 +17,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import javax.swing.JFileChooser
 
-internal data class ConnectionState(val label: String = "Connecting", val model: String = "", val version: String = "", val connected: Boolean = false, val locality: String = "", val latency: String = "")
-private data class FileSelection(val file: ProjectFileInfo, val symbols: List<SymbolInfo>, val analysis: FileAnalysis, val impact: ImpactPreview, val gitStatus: GitStatus)
 internal enum class PaletteMode { Files, Symbols, Actions }
 internal enum class NarrowDrawer { Explorer, Action }
 
@@ -26,12 +24,11 @@ internal enum class NarrowDrawer { Explorer, Action }
 internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     val scope = rememberCoroutineScope()
     val widthStore = remember { PaneWidthStore() }
+    val workflow = remember { DesktopWorkflowController() }
     var appState by remember { mutableStateOf(DesktopState()) }
     var paneWidths by remember { mutableStateOf(widthStore.load()) }
     var filter by remember { mutableStateOf("") }
     var collapsedDirectories by remember { mutableStateOf(emptySet<String>()) }
-    var activeTab by remember { mutableStateOf(0) }
-    var connection by remember { mutableStateOf(ConnectionState()) }
     var analysisJob by remember { mutableStateOf<Job?>(null) }
     var analysisRequestId by remember { mutableStateOf(0) }
     var generationJob by remember { mutableStateOf<Job?>(null) }
@@ -51,6 +48,10 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     var paletteQuery by remember { mutableStateOf("") }
     var showPalette by remember { mutableStateOf(false) }
 
+    fun update(event: DesktopEvent) {
+        appState = workflow.dispatch(event)
+    }
+
     LaunchedEffect(appState.preparedAction, appState.preparedRequest, appState.selectedSymbol) {
         if (appState.preparedAction.isNotBlank()) action = appState.preparedAction
         if (appState.preparedRequest.isNotBlank()) request = appState.preparedRequest
@@ -62,9 +63,9 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             runCatching { withContext(Dispatchers.IO) { api.status() to api.effectiveModel() } }
                 .onSuccess { (status, model) ->
                     val elapsed = (System.nanoTime() - startedAt) / 1_000_000
-                    connection = ConnectionState("Daemon connected", "${model.profile} · ${model.model}", status.version, true, api.endpointLocality(), "${elapsed}ms")
+                    update(DesktopEvent.ConnectionUpdated(ConnectionState("Daemon connected", "${model.profile} · ${model.model}", status.version, true, api.endpointLocality(), "${elapsed}ms")))
                 }
-                .onFailure { connection = ConnectionState(label = "Daemon unavailable", model = "Retry from the status bar", locality = api.endpointLocality()) }
+                .onFailure { update(DesktopEvent.ConnectionUpdated(ConnectionState(label = "Daemon unavailable", model = "Retry from the status bar", locality = api.endpointLocality()))) }
         }
     }
 
@@ -75,72 +76,104 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     }
     fun importProject() {
         val directory = chooseDirectory() ?: return
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Importing ${directory.name}…"))
+        val requestId = workflow.beginProjectLoad()
+        appState = workflow.state
+        update(DesktopEvent.Status("Importing ${directory.name}…"))
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { api.importProject(directory.absolutePath) to api.index() } }
                 .onSuccess { (project, index) ->
-                    appState = appState.reduce(DesktopEvent.ProjectLoaded(project, index))
-                    collapsedDirectories = explorerDirectories(index.files)
-                    activeTab = 0
+                    if (workflow.projectLoaded(requestId, project, index)) {
+                        appState = workflow.state
+                        collapsedDirectories = explorerDirectories(index.files)
+                    }
                 }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Import failed")) }
+                .onFailure { if (workflow.isCurrentProjectRequest(requestId)) update(DesktopEvent.Failed(it.message ?: "Import failed")) }
         }
     }
     fun reanalyze() {
         val project = appState.project ?: return
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Refreshing deterministic project facts…"))
+        update(DesktopEvent.Loading)
+        update(DesktopEvent.Status("Refreshing deterministic project facts…"))
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { api.reindex(project.projectRevision) } }
-                .onSuccess { appState = appState.reduce(DesktopEvent.IndexRefreshed(it)) }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Re-analysis failed")) }
+                .onSuccess { update(DesktopEvent.IndexRefreshed(it)) }
+                .onFailure { update(DesktopEvent.Failed(it.message ?: "Re-analysis failed")) }
         }
     }
-    fun selectFile(path: String) {
-        val project = appState.project ?: return
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Loading $path…"))
+    fun selectFile(path: String, editorTarget: EditorNavigationTarget? = null) {
+        workflow.synchronize(appState)
+        val request = workflow.beginFileLoad(path) ?: return
+        appState = workflow.state
         scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val file = api.fileInfo(path)
-                    FileSelection(file, api.symbols(path).symbols, api.analysis(path, project.projectRevision), api.impact(path), api.gitStatus(path))
+            runCatching { withContext(Dispatchers.IO) { api.fileInfo(path) to api.symbols(path).symbols } }
+                .onSuccess { (file, symbols) ->
+                    if (!workflow.fileLoaded(request, file, symbols)) return@onSuccess
+                    appState = workflow.state
+                    editorTarget?.let { target ->
+                        update(DesktopEvent.EditorContextSelected(symbolForNavigation(symbols, target), target.line))
+                    }
+                    val loadedRequest = workflow.currentFileRequest() ?: return@onSuccess
+                    scope.launch {
+                        runCatching { withContext(Dispatchers.IO) { api.analysis(path, loadedRequest.projectRevision) } }
+                            .onSuccess { if (workflow.analysisLoaded(loadedRequest, it)) appState = workflow.state }
+                            .onFailure { workflow.optionalLoadFailed(loadedRequest) }
+                    }
+                    scope.launch {
+                        runCatching { withContext(Dispatchers.IO) { api.impact(path) } }
+                            .onSuccess { if (workflow.impactLoaded(loadedRequest, it)) appState = workflow.state }
+                            .onFailure { workflow.optionalLoadFailed(loadedRequest) }
+                    }
+                    scope.launch {
+                        runCatching { withContext(Dispatchers.IO) { api.gitStatus(path) } }
+                            .onSuccess { if (workflow.gitStatusLoaded(loadedRequest, it)) appState = workflow.state }
+                            .onFailure { workflow.optionalLoadFailed(loadedRequest) }
+                    }
                 }
-            }.onSuccess { selection ->
-                appState = appState.reduce(DesktopEvent.FileLoaded(selection.file, selection.symbols, selection.impact, selection.gitStatus))
-                    .reduce(DesktopEvent.AnalysisLoaded(selection.analysis))
-                activeTab = 0
-            }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "File load failed")) }
+                .onFailure { if (workflow.fileFailed(request, it.message ?: "File load failed")) appState = workflow.state }
         }
+    }
+    fun openFinding(finding: UnifiedFinding) {
+        val target = findingNavigationTarget(finding, appState.index)
+        if (target == null) {
+            update(DesktopEvent.Failed("This finding no longer points to a file in the active project."))
+            return
+        }
+        update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
+        selectFile(target.path, target)
     }
     fun analyzeSelected(refresh: Boolean) {
         val project = appState.project ?: return
         val file = appState.selectedFile ?: return
         analysisJob?.cancel()
-        analysisRequestId += 1
-        val requestId = analysisRequestId
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("${if (refresh) "Refreshing" else "Analyzing"} ${file.path}…"))
+        val (requestId, requestIdentity) = workflow.beginAnalysis() ?: return
+        analysisRequestId = requestId.toInt()
+        update(DesktopEvent.Loading)
+        update(DesktopEvent.Status("${if (refresh) "Refreshing" else "Analyzing"} ${file.path}…"))
         analysisJob = scope.launch {
             try {
                 val analysis = withContext(Dispatchers.IO) { runInterruptible { api.analyze(file.path, project.projectRevision, refresh) } }
-                appState = appState.reduce(DesktopEvent.AnalysisLoaded(analysis)).reduce(DesktopEvent.Status("Summary ${analysis.status}"))
+                if (workflow.analysisCompleted(requestId, requestIdentity, analysis)) {
+                    appState = workflow.state
+                    update(DesktopEvent.Status("Summary ${analysis.status}"))
+                }
             } catch (_: CancellationException) {
-                appState = appState.reduce(DesktopEvent.Status("Analysis canceled"))
+                update(DesktopEvent.Status("Analysis canceled"))
             } catch (error: Throwable) {
-                appState = appState.reduce(DesktopEvent.Failed(error.message ?: "Analysis failed"))
+                update(DesktopEvent.Failed(error.message ?: "Analysis failed"))
             } finally {
-                if (analysisRequestId == requestId) analysisJob = null
+                if (analysisRequestId == requestId.toInt()) analysisJob = null
             }
         }
     }
 
     fun prepareSuggestion(suggestion: Suggestion) {
         val target = appState.symbols.firstOrNull { it.name == suggestion.targetSymbol }
-        appState = appState.reduce(DesktopEvent.SuggestionPrepared(suggestion.action, suggestion.summary, target))
+        update(DesktopEvent.SuggestionPrepared(suggestion.action, suggestion.summary, target))
     }
     fun prepareTemplate(id: String) {
         val template = templateFor(id)
         if (!templateAllowed(template, appState.selectedFile)) {
-            appState = appState.reduce(DesktopEvent.Failed("Generate test requires a selected test file and test symbol."))
+            update(DesktopEvent.Failed("Generate test requires a selected test file and test symbol."))
             return
         }
         templateID = template.id
@@ -148,8 +181,8 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         scopeMode = template.scopeMode
         request = template.defaultRequest
         if (template.readOnly) {
-            appState = appState.reduce(DesktopEvent.SuggestionPrepared(template.action, template.defaultRequest, appState.selectedSymbol))
-            activeTab = 1
+            update(DesktopEvent.SuggestionPrepared(template.action, template.defaultRequest, appState.selectedSymbol))
+            update(DesktopEvent.WorkspaceSelected(Workspace.Summary))
         }
     }
     fun inspectContext() {
@@ -160,7 +193,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                     contextManifest = it
                     showContext = true
                 }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Context preview failed")) }
+                .onFailure { update(DesktopEvent.Failed(it.message ?: "Context preview failed")) }
         }
     }
 
@@ -168,24 +201,26 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { api.activity() } }
                 .onSuccess { activity = it }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Activity refresh failed")) }
+                .onFailure { update(DesktopEvent.Failed(it.message ?: "Activity refresh failed")) }
         }
     }
     fun generatePreview(compareWithCurrent: Boolean = false) {
         val project = appState.project ?: return
         val file = appState.selectedFile ?: return
+        val fileRequest = workflow.currentFileRequest() ?: return
         val currentCandidate = appState.candidate
         if (compareWithCurrent && currentCandidate == null) {
-            appState = appState.reduce(DesktopEvent.Failed("Generate one preview before requesting an alternate candidate."))
+            update(DesktopEvent.Failed("Generate one preview before requesting an alternate candidate."))
             return
         }
         val target = appState.selectedSymbol?.name ?: manualSymbol.trim()
         if (target.isBlank() || request.isBlank()) {
-            appState = appState.reduce(DesktopEvent.Failed("Select or enter one target symbol and describe the requested change."))
+            update(DesktopEvent.Failed("Select or enter one target symbol and describe the requested change."))
             return
         }
         generationJob?.cancel()
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Generating $target in ${file.path}…"))
+        update(DesktopEvent.Loading)
+        update(DesktopEvent.Status("Generating $target in ${file.path}…"))
         generationJob = scope.launch {
             try {
                 val candidate = withContext(Dispatchers.IO) {
@@ -193,14 +228,15 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                         api.generate("$action: ${request.trim()}", file.path, target, project.projectId, project.projectRevision, file.contentHash, scopeMode, action, templateID)
                     }
                 }
-                appState = if (compareWithCurrent) appState.reduce(DesktopEvent.AlternateCandidateLoaded(currentCandidate!!, candidate)) else appState.reduce(DesktopEvent.CandidateLoaded(candidate))
-                appState = appState.reduce(DesktopEvent.Status("Generated preview · ${candidate.scopeMode}"))
-                activeTab = 2
+                if (!workflow.candidateLoaded(fileRequest, candidate, if (compareWithCurrent) currentCandidate else null)) return@launch
+                appState = workflow.state
+                update(DesktopEvent.Status("Generated preview · ${candidate.scopeMode}"))
+                update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
                 refreshActivity()
             } catch (_: CancellationException) {
-                appState = appState.reduce(DesktopEvent.Status("Generation canceled"))
+                update(DesktopEvent.Status("Generation canceled"))
             } catch (error: Throwable) {
-                appState = appState.reduce(DesktopEvent.Failed(error.message ?: "Generation failed"))
+                update(DesktopEvent.Failed(error.message ?: "Generation failed"))
             } finally {
                 generationJob = null
             }
@@ -210,49 +246,54 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     fun comparePreviews() {
         val base = appState.comparisonBase ?: return
         val candidate = appState.candidate ?: return
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Comparing two preview-only candidates…"))
+        update(DesktopEvent.Loading)
+        update(DesktopEvent.Status("Comparing two preview-only candidates…"))
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
                     api.compareCandidates(base.generationId, candidate.generationId, candidate.projectRevision, comparisonBaseNote, comparisonCandidateNote)
                 }
             }.onSuccess {
-                appState = appState.reduce(DesktopEvent.ComparisonLoaded(it)).reduce(DesktopEvent.Status("Candidate comparison ready"))
+                update(DesktopEvent.ComparisonLoaded(it))
+                update(DesktopEvent.Status("Candidate comparison ready"))
             }.onFailure {
-                appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Candidate comparison failed"))
+                update(DesktopEvent.Failed(it.message ?: "Candidate comparison failed"))
             }
         }
     }
 
     fun exportReview() {
         val candidate = appState.candidate ?: return
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Preparing source-free review export…"))
+        update(DesktopEvent.Loading)
+        update(DesktopEvent.Status("Preparing source-free review export…"))
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { api.exportReview(candidate.generationId, candidate.projectRevision) } }
                 .onSuccess { review ->
                     val destination = chooseExportFile(review.filename)
                     if (destination == null) {
-                        appState = appState.reduce(DesktopEvent.Status("Review export canceled"))
+                        update(DesktopEvent.Status("Review export canceled"))
                     } else {
                         runCatching { withContext(Dispatchers.IO) { destination.writeText(review.markdown) } }
-                            .onSuccess { appState = appState.reduce(DesktopEvent.Status("Saved review export: ${destination.name}")) }
-                            .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Review export failed")) }
+                            .onSuccess { update(DesktopEvent.Status("Saved review export: ${destination.name}")) }
+                            .onFailure { update(DesktopEvent.Failed(it.message ?: "Review export failed")) }
                     }
                 }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Review export failed")) }
+                .onFailure { update(DesktopEvent.Failed(it.message ?: "Review export failed")) }
         }
     }
 
     fun runFocusedChecks() {
         val candidate = appState.candidate ?: return
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Running focused checks…"))
+        update(DesktopEvent.Loading)
+        update(DesktopEvent.Status("Running focused checks…"))
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { api.checks(candidate.generationId, candidate.projectRevision) } }
                 .onSuccess { report ->
                     val outcome = if (report.applicable) "passed" else "need attention"
-                    appState = appState.reduce(DesktopEvent.ChecksLoaded(report)).reduce(DesktopEvent.Status("Focused checks $outcome"))
+                    update(DesktopEvent.ChecksLoaded(report))
+                    update(DesktopEvent.Status("Focused checks $outcome"))
                 }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Focused checks failed")) }
+                .onFailure { update(DesktopEvent.Failed(it.message ?: "Focused checks failed")) }
         }
     }
 
@@ -260,25 +301,28 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { Triple(api.index(), api.fileInfo(path), api.symbols(path).symbols) } }
                 .onSuccess { (index, file, symbols) ->
-                    appState = appState.reduce(DesktopEvent.IndexRefreshed(index)).reduce(DesktopEvent.FileLoaded(file, symbols))
-                    appState = appState.reduce(DesktopEvent.Status("Project revision $revision is active"))
+                    update(DesktopEvent.IndexRefreshed(index))
+                    update(DesktopEvent.FileLoaded(file, symbols))
+                    update(DesktopEvent.Status("Project revision $revision is active"))
                 }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Project refresh failed")) }
+                .onFailure { update(DesktopEvent.Failed(it.message ?: "Project refresh failed")) }
         }
     }
 
     fun applyPreview() {
         val candidate = appState.candidate ?: return
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Applying reviewed preview…"))
+        update(DesktopEvent.Loading)
+        update(DesktopEvent.Status("Applying reviewed preview…"))
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { api.apply(candidate.generationId, candidate.projectId, candidate.projectRevision, candidate.baseFileHash) } }
                 .onSuccess { result ->
                     applied = result
-                    appState = appState.reduce(DesktopEvent.CandidateDiscarded).reduce(DesktopEvent.Status("Applied ${candidate.targetPath}; Undo is available."))
+                    update(DesktopEvent.CandidateDiscarded)
+                    update(DesktopEvent.Status("Applied ${candidate.targetPath}; Undo is available."))
                     reloadAfterMutation(candidate.targetPath, result.projectRevision)
                     refreshActivity()
                 }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Apply failed")) }
+                .onFailure { update(DesktopEvent.Failed(it.message ?: "Apply failed")) }
         }
     }
 
@@ -286,7 +330,8 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         val project = appState.project ?: return
         val result = applied ?: return
         val path = appState.selectedFile?.path ?: return
-        appState = appState.reduce(DesktopEvent.Loading).reduce(DesktopEvent.Status("Undoing the last applied preview…"))
+        update(DesktopEvent.Loading)
+        update(DesktopEvent.Status("Undoing the last applied preview…"))
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { api.undo(project.projectId, result.projectRevision, result.postApplyHash) } }
                 .onSuccess { undo ->
@@ -294,7 +339,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                     reloadAfterMutation(path, undo.projectRevision)
                     refreshActivity()
                 }
-                .onFailure { appState = appState.reduce(DesktopEvent.Failed(it.message ?: "Undo failed")) }
+                .onFailure { update(DesktopEvent.Failed(it.message ?: "Undo failed")) }
         }
     }
     LaunchedEffect(api) { refreshConnection() }
@@ -327,7 +372,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             manualSymbol = manualSymbol,
             scopeMode = scopeMode,
             generating = generationJob != null,
-            onSelectSymbol = { appState = appState.reduce(DesktopEvent.SymbolSelected(it)) },
+            onSelectSymbol = { update(DesktopEvent.SymbolSelected(it)) },
             onAction = { action = it },
             onRequest = { request = it },
             onManualSymbol = { manualSymbol = it },
@@ -338,8 +383,8 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             onCancel = { generationJob?.cancel() },
             onExplain = {
                 appState.selectedSymbol?.let { symbol ->
-                    appState = appState.reduce(DesktopEvent.SuggestionPrepared("explain_symbol", "Show the cached explanation for ${symbol.name}.", symbol))
-                    activeTab = 1
+                    update(DesktopEvent.SuggestionPrepared("explain_symbol", "Show the cached explanation for ${symbol.name}.", symbol))
+                    update(DesktopEvent.WorkspaceSelected(Workspace.Summary))
                 }
             },
             modifier = modifier,
@@ -350,9 +395,10 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         paneWidths = paneWidths,
         onPaneWidths = { paneWidths = it },
         onSavePaneWidths = { widthStore.save(paneWidths) },
-        connection = connection,
-        activeTab = activeTab,
-        onActiveTab = { activeTab = it },
+        connection = appState.connection,
+        workspace = appState.workspace,
+        onWorkspace = { update(DesktopEvent.WorkspaceSelected(it)) },
+        workspaceCounts = workspaceCounts(appState),
         analysisInProgress = analysisJob != null,
         generating = generationJob != null,
         showContext = showContext,
@@ -367,16 +413,20 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         onOpenPalette = ::openPalette,
         onSelectPaletteFile = {
             showPalette = false
+            update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
             selectFile(it)
         },
         onSelectPaletteSymbol = {
             showPalette = false
-            appState = appState.reduce(DesktopEvent.SymbolSelected(it))
+            update(DesktopEvent.SymbolSelected(it))
+            update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
         },
         onSelectPaletteAction = {
             showPalette = false
             action = it
+            update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
         },
+        onOpenFinding = ::openFinding,
         explorer = explorer,
         focusedAction = focusedAction,
         onImport = ::importProject,
@@ -385,11 +435,11 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         onAnalyze = { analyzeSelected(false) },
         onRefreshAnalysis = { analyzeSelected(true) },
         onCancelAnalysis = { analysisJob?.cancel() },
-        onSelectSymbol = { appState = appState.reduce(DesktopEvent.SymbolSelected(it)) },
+        onSelectSymbol = { update(DesktopEvent.SymbolSelected(it)) },
         onPrepareSuggestion = ::prepareSuggestion,
         applied = applied,
-        onDiscard = { appState = appState.reduce(DesktopEvent.CandidateDiscarded) },
-        onAskForRevision = { appState = appState.reduce(DesktopEvent.Status("Revise the request in Focused Action, then generate a new preview.")) },
+        onDiscard = { update(DesktopEvent.CandidateDiscarded) },
+        onAskForRevision = { update(DesktopEvent.Status("Revise the request in Focused Action, then generate a new preview.")) },
         onRunChecks = ::runFocusedChecks,
         onGenerateAlternate = { generatePreview(true) },
         onCompare = ::comparePreviews,
