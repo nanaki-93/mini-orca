@@ -169,6 +169,28 @@ func TestRunCoderForSymbol_RequiresTarget(t *testing.T) {
 	}
 }
 
+func TestDeclarationDraftInputUsesImmutableDeclarationOnlyContract(t *testing.T) {
+	input, err := DeclarationDraftInput("Revise it.", "Current declaration proposal:\nfunc Run() {}", "package main\nfunc Run() {}", "main.go", "Run", "replace_symbol")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"Target file: main.go",
+		"Target symbol: Run",
+		"Edit mode: replace_symbol",
+		"Current declaration proposal:",
+		"Do not return package clauses, a full file, a patch",
+		"declaration, imports",
+	} {
+		if !strings.Contains(input, required) {
+			t.Errorf("declaration prompt missing %q", required)
+		}
+	}
+	if strings.Contains(input, "candidate_content") || strings.Contains(input, "target_path") {
+		t.Fatalf("declaration prompt permits full-file response: %s", input)
+	}
+}
+
 func TestRunReviewer_EmptyCode(t *testing.T) {
 	client := llm.NewClient("http://localhost:1234", "test-key", "test-model", 0.7, 4096)
 	orch := NewOrchestrator(client, nil)

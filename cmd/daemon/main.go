@@ -154,9 +154,16 @@ func newHTTPMux(
 	// Initialize chat handler
 	chatHandler := handlers.NewChatHandler(application)
 
-	// Register chat endpoints
-	mux.HandleFunc("POST /api/chat/message", chatHandler.SendMessage)
-	mux.HandleFunc("GET /api/chat/history", chatHandler.GetHistory)
+	// File-scoped chat session endpoints. A message has no target fields; its
+	// immutable project/file/symbol identity is established at session creation.
+	mux.HandleFunc("POST /api/projects/current/chat/sessions", chatHandler.OpenSession)
+	mux.HandleFunc("GET /api/projects/current/chat/sessions/{sessionID}", chatHandler.Session)
+	mux.HandleFunc("POST /api/projects/current/chat/sessions/{sessionID}/messages", chatHandler.SendSessionMessage)
+	mux.HandleFunc("GET /api/projects/current/activity", chatHandler.Activity)
+	// Keep the retired discovery route from silently accepting an unsafe one-shot
+	// request until the desktop client moves to the typed session contract.
+	mux.HandleFunc("POST /api/chat/message", chatHandler.RemovedMessageEndpoint)
+	mux.HandleFunc("GET /api/chat/history", chatHandler.Activity)
 
 	modelHandler := handlers.NewModelHandler(application)
 	mux.HandleFunc("GET /api/models/current", modelHandler.Current)

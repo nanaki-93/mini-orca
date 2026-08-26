@@ -40,6 +40,45 @@ class ApiClient(
     fun impact(path: String, symbol: String = ""): ImpactPreview = decode(send("GET", "/api/projects/current/impact?path=${encode(path)}&symbol=${encode(symbol)}"))
     fun gitStatus(path: String): GitStatus = decode(send("GET", "/api/projects/current/git?path=${encode(path)}"))
 
+    fun overview(revision: String): ProjectOverview = decode(send("GET", "/api/projects/current/overview?project_revision=${encode(revision)}"))
+
+    fun findings(revision: String, filter: FindingFilter = FindingFilter()): FindingsResponse {
+        val query = listOf(
+            "project_revision" to revision,
+            "source" to filter.source,
+            "confidence" to filter.confidence,
+            "severity" to filter.severity,
+            "status" to filter.status,
+            "freshness" to filter.freshness,
+        ).filter { it.second.isNotBlank() }.joinToString("&") { "${it.first}=${encode(it.second)}" }
+        return decode(send("GET", "/api/projects/current/findings?$query"))
+    }
+
+    fun updateFindingStatus(findingId: String, revision: String, status: String) {
+        sendNoContent("PATCH", "/api/projects/current/findings/${encodePath(findingId)}", jsonBody("project_revision" to revision, "status" to status))
+    }
+
+    fun goScan(revision: String): GoScanReport? = decodeOptional(sendResponse("GET", "/api/projects/current/scan?project_revision=${encode(revision)}"))
+    fun startGoScan(revision: String): GoScanReport = decode(send("POST", "/api/projects/current/scan", jsonBody("project_revision" to revision)))
+    fun cancelGoScan(revision: String): GoScanReport = decode(send("DELETE", "/api/projects/current/scan?project_revision=${encode(revision)}"))
+
+    fun analyzeAllJob(revision: String): AnalyzeAllJob? = decodeOptional(sendResponse("GET", "/api/projects/current/analysis-job?project_revision=${encode(revision)}"))
+    fun startAnalyzeAll(revision: String, maxFiles: Int = 0, maxRetries: Int = 0, confirmRemoteProvider: Boolean = false): AnalyzeAllJob = decode(send("POST", "/api/projects/current/analysis-job", jsonBody("project_revision" to revision, "max_files" to maxFiles, "max_retries" to maxRetries, "confirm_remote_provider" to confirmRemoteProvider)))
+    fun pauseAnalyzeAll(revision: String): AnalyzeAllJob = decode(send("POST", "/api/projects/current/analysis-job/pause?project_revision=${encode(revision)}"))
+    fun resumeAnalyzeAll(revision: String, confirmRemoteProvider: Boolean = false): AnalyzeAllJob = decode(send("POST", "/api/projects/current/analysis-job/resume", jsonBody("project_revision" to revision, "confirm_remote_provider" to confirmRemoteProvider)))
+    fun cancelAnalyzeAll(revision: String): AnalyzeAllJob = decode(send("POST", "/api/projects/current/analysis-job/cancel?project_revision=${encode(revision)}"))
+
+    fun openChatSession(projectId: String, revision: String, baseFileHash: String, openPath: String, mode: String, targetSymbol: String): ChatSession = decode(send("POST", "/api/projects/current/chat/sessions", jsonBody("project_id" to projectId, "project_revision" to revision, "base_file_hash" to baseFileHash, "open_path" to openPath, "mode" to mode, "target_symbol" to targetSymbol)))
+    fun chatSession(sessionId: String): ChatSession = decode(send("GET", "/api/projects/current/chat/sessions/${encodePath(sessionId)}"))
+    fun sendChatMessage(sessionId: String, message: String, parentDraftId: String = "", confirmRemoteProvider: Boolean = false): ChatDraftProposal = decode(send("POST", "/api/projects/current/chat/sessions/${encodePath(sessionId)}/messages", jsonBody("message" to message, "parent_draft_id" to parentDraftId, "confirm_remote_provider" to confirmRemoteProvider)))
+
+    fun draft(draftId: String, revision: String): DeclarationDraft = decode(send("GET", "/api/projects/current/drafts/${encodePath(draftId)}?project_revision=${encode(revision)}"))
+    fun updateDraft(draftId: String, projectRevision: String, expectedRevision: Long, declaration: String, imports: List<String>): DeclarationDraft = decode(send("PATCH", "/api/projects/current/drafts/${encodePath(draftId)}", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision, "declaration" to declaration, "imports" to imports)))
+    fun validateDraft(draftId: String, projectRevision: String, expectedRevision: Long): DeclarationDraft = decode(send("POST", "/api/projects/current/drafts/${encodePath(draftId)}/validate", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision)))
+    fun checkDraft(draftId: String, projectRevision: String, expectedRevision: Long, expectedHash: String, runLint: Boolean = false, runTests: Boolean = false): CandidateCheckReport = decode(send("POST", "/api/projects/current/drafts/${encodePath(draftId)}/checks", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision, "expected_hash" to expectedHash, "run_lint" to runLint, "run_tests" to runTests)))
+    fun draftReview(draftId: String, revision: String): DraftReview = decode(send("GET", "/api/projects/current/drafts/${encodePath(draftId)}/review?project_revision=${encode(revision)}"))
+    fun applyDraft(draft: DeclarationDraft): ApplyResult = decode(send("POST", "/api/projects/current/apply", jsonBody("draft_id" to draft.id, "draft_revision" to draft.revision, "draft_hash" to draft.hash, "project_id" to draft.projectId, "project_revision" to draft.projectRevision, "base_file_hash" to draft.baseFileHash, "confirm" to true)))
+
     fun endpointLocality(): String {
         val host = endpoint.host?.lowercase().orEmpty()
         return if (host == "localhost" || host == "127.0.0.1" || host == "::1") "Local endpoint" else "Remote endpoint"
@@ -55,25 +94,31 @@ class ApiClient(
     fun undo(projectId: String, revision: String, postApplyHash: String): ApplyResult = decode(send("POST", "/api/projects/current/undo", jsonBody("project_id" to projectId, "project_revision" to revision, "post_apply_hash" to postApplyHash, "confirm" to true)))
 
     private inline fun <reified T> decode(body: String): T = json.decodeFromString(body)
-    private fun send(method: String, path: String, body: String? = null): String {
+    private inline fun <reified T> decodeOptional(response: TransportResponse): T? = if (response.status == 204 || response.body.isBlank()) null else decode(response.body)
+    private fun send(method: String, path: String, body: String? = null): String = sendResponse(method, path, body).body
+    private fun sendNoContent(method: String, path: String, body: String? = null) {
+        sendResponse(method, path, body)
+    }
+    private fun sendResponse(method: String, path: String, body: String? = null): TransportResponse {
         val response = transport.send(method, path, body)
         if (response.status !in 200..299) {
             val error = runCatching { json.decodeFromString<ApiError>(response.body) }.getOrNull()
-            throw ApiException(response.status, error?.userMessage?.ifBlank { error.message } ?: "Daemon returned ${response.status}")
+            throw ApiException(response.status, error, error?.userMessage?.ifBlank { error.message } ?: "Daemon returned ${response.status}")
         }
-        return response.body
+        return response
     }
     private fun encode(value: String) = URLEncoder.encode(value, StandardCharsets.UTF_8)
-    private fun jsonBody(vararg values: Pair<String, Any>): String = buildJsonObject { values.forEach { (key, value) -> when (value) { is String -> put(key, value); is Boolean -> put(key, value); else -> error("unsupported JSON value") } } }.toString()
+    private fun encodePath(value: String) = encode(value).replace("+", "%20")
+    private fun jsonBody(vararg values: Pair<String, Any>): String = buildJsonObject { values.forEach { (key, value) -> when (value) { is String -> put(key, value); is Boolean -> put(key, value); is Int -> put(key, value); is Long -> put(key, value); is List<*> -> put(key, kotlinx.serialization.json.JsonArray(value.map { kotlinx.serialization.json.JsonPrimitive(it as? String ?: error("unsupported JSON list value")) })); else -> error("unsupported JSON value") } } }.toString()
 }
 
-class ApiException(val status: Int, message: String) : IllegalStateException(message)
+class ApiException(val status: Int, val error: ApiError? = null, message: String) : IllegalStateException(message)
 
 private class HttpDaemonTransport(private val root: String) : DaemonTransport {
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
     override fun send(method: String, path: String, body: String?): TransportResponse {
         val builder = HttpRequest.newBuilder(URI.create(root + path)).timeout(Duration.ofMinutes(6)).header("Accept", "application/json")
-        if (body == null) builder.GET() else builder.header("Content-Type", "application/json").method(method, HttpRequest.BodyPublishers.ofString(body))
+        if (body == null && method == "GET") builder.GET() else if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody()) else builder.header("Content-Type", "application/json").method(method, HttpRequest.BodyPublishers.ofString(body))
         val response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString())
         return TransportResponse(response.statusCode(), response.body())
     }
