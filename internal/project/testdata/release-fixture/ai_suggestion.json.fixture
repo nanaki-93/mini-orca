@@ -1,0 +1,6 @@
+{
+  "source": "ai",
+  "confidence": "suggested",
+  "severity": "low",
+  "summary": "Review the greeting response for user-facing terminology."
+}

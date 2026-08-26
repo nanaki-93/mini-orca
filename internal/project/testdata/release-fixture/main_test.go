@@ -7,3 +7,9 @@ func TestRun(t *testing.T) {
 		t.Fatalf("Run() = %q", got)
 	}
 }
+
+func TestWorker(t *testing.T) {
+	if got := (Worker{Name: "orca"}).Name; got != "orca" {
+		t.Fatalf("Worker.Name = %q", got)
+	}
+}

@@ -47,8 +47,19 @@ go run ./cmd/daemon
 
 The daemon binds to `http://localhost:9090` on loopback by default. The desktop
 uses that URL unless `MINI_ORCA_URL` is set. A non-loopback provider must be
-explicitly confirmed in each prompt-bearing request after the user reviews the
-destination. Keep `config.yaml` local; it is ignored by Git.
+explicitly confirmed in each request that can send prompt content—project
+analysis, file analysis, Analyze-all, or a chat message—after the user reviews
+the destination. Keep `config.yaml` local; it is ignored by Git.
+
+## Migrating from the preview workflow
+
+The former whole-file generation and activity-oriented UI is retired. Do not
+send a request to `POST /api/chat/message`: it deliberately returns `410 Gone`.
+New integrations open a file-scoped session, send its messages, then read or
+edit the resulting declaration draft before validation, checks, review, and an
+explicit Apply. `GET /api/chat/history` remains only as a deprecated alias for
+source-free activity; it is not a conversation transcript. See the [API guide](API.md)
+for the exact route contract.
 
 ## Documentation
 
@@ -69,4 +80,3 @@ make check
 ## License
 
 MIT
-

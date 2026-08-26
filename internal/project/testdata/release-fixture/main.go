@@ -7,3 +7,7 @@ func Run(name string) string {
 func Keep() string {
 	return "unchanged"
 }
+
+type Worker struct {
+	Name string
+}

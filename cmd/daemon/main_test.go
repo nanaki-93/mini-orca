@@ -47,6 +47,24 @@ func TestDaemonStatusReportsCanonicalVersion(t *testing.T) {
 	}
 }
 
+func TestReleaseDocumentationUsesCanonicalVersion(t *testing.T) {
+	root := filepath.Join("..", "..")
+	for path, expected := range map[string]string{
+		"docs/openapi.yaml":    "version: " + version.Version,
+		"docs/api-contract.md": "**Version:** " + version.Version,
+		"RELEASE_NOTES.md":     "## v" + version.Version + " —",
+		"DOCKER.md":            "mini-orca:" + version.Version,
+	} {
+		data, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if !strings.Contains(string(data), expected) {
+			t.Errorf("%s does not contain canonical version marker %q", path, expected)
+		}
+	}
+}
+
 type documentedRoute struct {
 	method string
 	path   string
@@ -231,5 +249,6 @@ func apiContractRoutes(t *testing.T) []documentedRoute {
 			path:   strings.Trim(strings.TrimSpace(columns[2]), "`"),
 		})
 	}
+	sort.Slice(routes, func(i, j int) bool { return routes[i].method+routes[i].path < routes[j].method+routes[j].path })
 	return routes
 }

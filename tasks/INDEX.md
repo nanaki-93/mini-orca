@@ -60,8 +60,8 @@ Source roadmap: [`../PLAN.md`](../PLAN.md)
 | 52 | [Desktop draft review and Apply](completed/52_desktop_draft_review_apply.md) | 40, 51 | Complete |
 | 53 | [Desktop accessibility and responsive interaction](completed/53_desktop_accessibility_responsive.md) | 45, 46, 47, 48, 49, 50, 51, 52 | Complete |
 | 54 | [Desktop integration coverage](completed/54_desktop_integration_coverage.md) | 46, 47, 48, 49, 50, 51, 52, 53 | Complete |
-| 55 | [API, migration, and release documentation](55_api_docs_migration_release_notes.md) | 37, 41, 52, 54 | Pending |
-| 56 | [Focused AI IDE release acceptance](56_release_acceptance.md) | 33–55 | Pending |
+| 55 | [API, migration, and release documentation](completed/55_api_docs_migration_release_notes.md) | 37, 41, 52, 54 | Complete |
+| 56 | [Focused AI IDE release acceptance](completed/56_release_acceptance.md) | 33–55 | Complete |
 
 ## Delivery boundaries
 
