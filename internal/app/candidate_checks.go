@@ -37,9 +37,16 @@ type CandidateCheck struct {
 // CandidateCheckReport determines whether a scope-valid candidate can be
 // applied. It contains no source content and all commands run in a copy.
 type CandidateCheckReport struct {
-	TargetPath string           `json:"target_path"`
-	Applicable bool             `json:"applicable"`
-	Checks     []CandidateCheck `json:"checks"`
+	DraftID         string           `json:"draft_id,omitempty"`
+	DraftRevision   int64            `json:"draft_revision,omitempty"`
+	DraftHash       string           `json:"draft_hash,omitempty"`
+	CandidateHash   string           `json:"candidate_hash,omitempty"`
+	ProjectID       string           `json:"project_id,omitempty"`
+	ProjectRevision string           `json:"project_revision,omitempty"`
+	BaseFileHash    string           `json:"base_file_hash,omitempty"`
+	TargetPath      string           `json:"target_path"`
+	Applicable      bool             `json:"applicable"`
+	Checks          []CandidateCheck `json:"checks"`
 }
 
 // CandidateCheckOptions keeps expensive checks explicit. Parsing and formatting

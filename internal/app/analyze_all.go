@@ -208,6 +208,7 @@ func (s *Service) ProjectChanged() {
 	s.invalidateAnalyzeAll("active project changed")
 	s.cancelGoScan()
 	s.clearDraftsForProjectChange()
+	s.clearChatSessions()
 }
 
 func (s *Service) cancelGoScan() {

@@ -82,7 +82,11 @@ func TestApplyUndoAndAuditAreConflictSafeAndSourceFree(t *testing.T) {
 	if _, err := service.CheckCandidate(context.Background(), preview.GenerationID, CandidateCheckOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	applied, err := service.ApplyCandidate(context.Background(), ApplyRequest{GenerationID: preview.GenerationID, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true})
+	draft, err := service.Draft(preview.GenerationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied, err := service.ApplyCandidate(context.Background(), ApplyRequest{DraftID: preview.GenerationID, DraftRevision: draft.Revision, DraftHash: draft.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,10 +135,14 @@ func TestApplyRejectsFileConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 	service.drafts["candidate"].checks = &draftCheckEvidence{Revision: 1, CandidateHash: preview.CandidateHash, Report: CandidateCheckReport{Applicable: true}}
+	draft, err := service.Draft("candidate")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() { println(\"external\") }\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ApplyCandidate(context.Background(), ApplyRequest{GenerationID: "candidate", ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true}); !errors.Is(err, project.ErrRevisionConflict) {
+	if _, err := service.ApplyCandidate(context.Background(), ApplyRequest{DraftID: "candidate", DraftRevision: draft.Revision, DraftHash: draft.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true}); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("apply conflict = %v", err)
 	}
 }

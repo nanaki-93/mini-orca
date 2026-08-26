@@ -19,7 +19,9 @@ const (
 )
 
 type ApplyRequest struct {
-	GenerationID    string `json:"generation_id"`
+	DraftID         string `json:"draft_id"`
+	DraftRevision   int64  `json:"draft_revision"`
+	DraftHash       string `json:"draft_hash"`
 	ProjectID       string `json:"project_id"`
 	ProjectRevision string `json:"project_revision"`
 	BaseFileHash    string `json:"base_file_hash"`
@@ -89,7 +91,17 @@ func (s *Service) ApplyCandidate(ctx context.Context, request ApplyRequest) (*Ap
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	preview, checks, err := s.checkedCandidate(request.GenerationID)
+	if request.DraftID == "" || request.DraftRevision < 1 || request.DraftHash == "" {
+		return nil, fmt.Errorf("draft_id, draft_revision, and draft_hash are required")
+	}
+	currentDraft, err := s.Draft(request.DraftID)
+	if err != nil {
+		return nil, err
+	}
+	if currentDraft.Revision != request.DraftRevision || currentDraft.Hash != request.DraftHash {
+		return nil, project.ErrRevisionConflict
+	}
+	preview, checks, err := s.checkedCandidate(request.DraftID)
 	if err != nil {
 		return nil, err
 	}

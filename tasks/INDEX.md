@@ -44,8 +44,8 @@ Source roadmap: [`../PLAN.md`](../PLAN.md)
 | 36 | [Go verified project scan](completed/36_go_verified_project_scan.md) | 35 | Complete |
 | 37 | [Project overview, scan, and findings APIs](completed/37_project_overview_findings_apis.md) | 34, 35, 36 | Complete |
 | 38 | [Go declaration edit engine](completed/38_go_declaration_edit_engine.md) | 32 | Complete |
-| 39 | [Editable draft lifecycle](39_editable_draft_lifecycle.md) | 38 | Pending |
-| 40 | [Draft validation, checks, Apply, and undo](40_draft_validation_checks_apply.md) | 39 | Pending |
+| 39 | [Editable draft lifecycle](completed/39_editable_draft_lifecycle.md) | 38 | Complete |
+| 40 | [Draft validation, checks, Apply, and undo](completed/40_draft_validation_checks_apply.md) | 39 | Complete |
 | 41 | [File-scoped chat sessions](41_file_scoped_chat_sessions.md) | 38, 39, 40 | Pending |
 | 42 | [Desktop shell decomposition](42_desktop_shell_decomposition.md) | 32 | Pending |
 | 43 | [Desktop API contracts](43_desktop_api_contracts.md) | 37, 40, 41 | Pending |

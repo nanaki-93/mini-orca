@@ -45,6 +45,8 @@ type Service struct {
 	drafts              map[string]*storedDraft
 	draftAudit          []DraftAuditMetadata
 	draftMu             sync.Mutex
+	chatSessions        map[string]*chatSession
+	chatSessionMu       sync.Mutex
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
@@ -96,6 +98,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		analysisAll:         newAnalysisAllController(),
 		goScan:              newGoScanController(),
 		drafts:              make(map[string]*storedDraft),
+		chatSessions:        make(map[string]*chatSession),
 	}, nil
 }
 
