@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -34,4 +34,3 @@ Task 70.
 
 - Extend finding filter/classification/action/semantics tests.
 - Run `./desktop/gradlew -p desktop test` and `git diff --check`.
-

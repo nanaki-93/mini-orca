@@ -86,7 +86,7 @@ private fun currentDraftMatchesSession(editor: EditableDraftState?, draft: Decla
     editor != null && draft != null && chatDraftMatchesSession(draft, session) &&
         editor.serverDraft.id == draft.id && editor.serverDraft.revision == draft.revision && editor.serverDraft.hash == draft.hash
 
-private fun checksMatchDraft(checks: CandidateCheckReport?, draft: DeclarationDraft?): Boolean =
+internal fun checksMatchDraft(checks: CandidateCheckReport?, draft: DeclarationDraft?): Boolean =
     checks?.applicable == true && draft != null && checks.draftId == draft.id &&
         checks.draftRevision == draft.revision && checks.draftHash == draft.hash
 
@@ -136,7 +136,7 @@ private fun draftSummary(boundSession: Boolean, currentDraft: Boolean, draft: De
     else -> "A bound conversation is ready for its next draft."
 }
 
-private fun validationSummary(editor: EditableDraftState?, validationCurrent: Boolean): String = when {
+internal fun validationSummary(editor: EditableDraftState?, validationCurrent: Boolean): String = when {
     validationCurrent -> "Validated for the latest draft revision."
     editor == null -> "No editable draft is loaded."
     editor.status == DraftEditorStatus.Dirty -> "Manual edits require validation and fresh checks."

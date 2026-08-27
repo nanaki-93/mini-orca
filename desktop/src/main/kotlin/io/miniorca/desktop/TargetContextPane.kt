@@ -38,7 +38,7 @@ internal fun TargetContextPane(
                     Button(onClick = onRefresh, enabled = !remoteProvider || remoteConfirmed) { Text("Refresh") }
                 }
             }
-            if (remoteProvider) RemoteProviderConfirmation(remoteConfirmed, onRemoteConfirmed)
+            RemoteProviderConfirmation(remoteProvider, remoteConfirmed, onRemoteConfirmed)
         }
         FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 10.dp), raised = true) {
             SectionLabel("DECLARATION SCOPE")

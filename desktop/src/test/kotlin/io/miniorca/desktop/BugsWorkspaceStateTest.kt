@@ -52,6 +52,13 @@ class BugsWorkspaceStateTest {
         assertEquals(null, findingNavigationTarget(verified.copy(location = FindingLocation("other.go")), index))
     }
 
+    @Test fun findingPresentationLabelsExposeProvenanceLocationLifecycleFreshnessAndRevision() {
+        assertTrue(findingProvenanceLabel(verified).contains("VERIFIED / TOOL-REPORTED"))
+        assertTrue(findingProvenanceLabel(verified).contains("source vet"))
+        assertTrue(findingStatusLabel(verified).contains("open · fresh · revision revision"))
+        assertEquals("main.go:7 · Run", findingLocationLabel(verified))
+    }
+
     @Test fun verifiedScanProgressOnlyPollsActiveScansAndShowsWarnings() {
         assertFalse(shouldPollVerifiedScan(null))
         assertTrue(shouldPollVerifiedScan(GoScanReport(status = "running")))

@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -38,4 +38,3 @@ Task 67.
 
 - Extend apply-copy, eligibility, fake-transport Apply/Undo, refresh, and conflict tests.
 - Run `./desktop/gradlew -p desktop test`, `make check`, and `git diff --check`.
-

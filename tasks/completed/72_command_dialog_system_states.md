@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -36,4 +36,3 @@ Task 71.
 
 - Extend palette routing, shortcut priority, context-manifest, and status-label tests.
 - Run `./desktop/gradlew -p desktop test` and `git diff --check`.
-

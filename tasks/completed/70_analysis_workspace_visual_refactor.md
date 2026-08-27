@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -33,4 +33,3 @@ Task 69.
 
 - Extend Analyze-all state/progress/navigation tests.
 - Run `./desktop/gradlew -p desktop test` and `git diff --check`.
-

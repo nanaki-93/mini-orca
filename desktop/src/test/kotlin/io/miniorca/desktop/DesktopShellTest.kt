@@ -122,4 +122,16 @@ class DesktopShellTest {
         assertTrue(!findingCanPrepareFix(UnifiedFinding(freshness = "stale", location = FindingLocation(path = "main.go"))))
         assertTrue(!findingCanPrepareFix(UnifiedFinding(freshness = "fresh")))
     }
+
+    @Test fun providerDestinationAndContextManifestCountsAreExplicit() {
+        assertTrue(contextDestinationLabel(remoteProvider = true).contains("remote provider"))
+        assertTrue(contextDestinationLabel(remoteProvider = true).contains("confirmation required"))
+        assertTrue(contextDestinationLabel(remoteProvider = false).contains("local provider"))
+        assertEquals("1 included · 1 excluded · 12 estimated tokens · truncated", contextManifestSummary(ContextManifest(
+            included = listOf(ContextFile("main.go", 12, "hash", 6)),
+            excluded = listOf(ContextDecision("secret.env", false, "secret")),
+            estimatedTokens = 12,
+            truncated = true,
+        )))
+    }
 }

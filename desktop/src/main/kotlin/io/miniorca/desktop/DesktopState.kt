@@ -356,9 +356,13 @@ fun draftApplyEligibility(draft: DeclarationDraft?, checks: CandidateCheckReport
     if (draft == null || selectedFile == null) return ApplyEligibility(false, "Select a file and draft first.")
     if (draft.targetPath != selectedFile.path || draft.baseFileHash != selectedFile.contentHash) return ApplyEligibility(false, "The draft no longer matches the selected file.")
     if (draft.validation?.applicable != true) return ApplyEligibility(false, "Validate the latest draft before applying it.")
-    if (checks?.applicable != true || checks.draftId != draft.id || checks.draftRevision != draft.revision || checks.draftHash != draft.hash) return ApplyEligibility(false, "Run checks for the latest draft before applying it.")
+    if (!checksPassForDraft(checks, draft)) return ApplyEligibility(false, "Run checks for the latest draft before applying it.")
     return ApplyEligibility(true, "Ready to apply.")
 }
+
+private fun checksPassForDraft(checks: CandidateCheckReport?, draft: DeclarationDraft): Boolean =
+    checks?.applicable == true && checks.draftId == draft.id && checks.draftRevision == draft.revision && checks.draftHash == draft.hash &&
+        checks.checks.all { it.state.lowercase() in setOf("passed", "skipped") }
 
 fun draftReviewEligibility(editor: EditableDraftState?, draft: DeclarationDraft?, checks: CandidateCheckReport?, selectedFile: ProjectFileInfo?, project: ProjectAnalysis?): ApplyEligibility {
     if (editor == null || draft == null) return ApplyEligibility(false, "Select a draft first.")

@@ -49,6 +49,25 @@ class AnalysisWorkspaceStateTest {
         assertTrue(AnalyzeAllRunOptions(confirmRemoteProvider = true).bounded().confirmRemoteProvider)
     }
 
+    @Test fun analysisPresentationKeepsPartialResultsAndExplicitTerminalActions() {
+        val running = analyzeAllPresentation(AnalyzeAllJob(projectRevision = "revision", status = "running", files = listOf(AnalyzeAllFileJob("main.go", "completed"), AnalyzeAllFileJob("other.go", "running"))), AnalysisCoverage(fresh = 1, running = 1))
+        val failed = analyzeAllPresentation(AnalyzeAllJob(projectRevision = "revision", status = "failed", files = listOf(AnalyzeAllFileJob("main.go", "completed"))), AnalysisCoverage(fresh = 1, failed = 1))
+
+        assertEquals("Running", running.statusLabel)
+        assertTrue(running.statusDetail.contains("Completed results remain available"))
+        assertTrue(running.statusDetail.contains("1 fresh"))
+        assertEquals("Retry", failed.controls)
+        assertTrue(failed.statusDetail.contains("Completed results remain available"))
+    }
+
+    @Test fun missingAnalysisJobStatesThatImportAndReindexNeverStartIt() {
+        val presentation = analyzeAllPresentation(null, null)
+
+        assertEquals("Not started", presentation.statusLabel)
+        assertTrue(presentation.statusDetail.contains("never start one automatically"))
+        assertEquals("Start", presentation.controls)
+    }
+
     private fun job(status: String, revision: String = "revision") = AnalyzeAllJob(
         projectId = "project",
         projectRevision = revision,

@@ -1,14 +1,12 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
-import androidx.compose.material.Checkbox
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -41,7 +39,7 @@ internal fun DraftContextPane(
                 }
             } else Text("The first explicit message will create a conversation bound to this exact target.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
             OutlinedTextField(message, onMessage, enabled = !sending && target != null, label = { Text("Message") }, placeholder = { Text("Describe one declaration change") }, minLines = 3, modifier = Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(chatFocus))
-            if (remoteProvider) Row(Modifier.padding(top = 7.dp)) { Checkbox(remoteConfirmed, onRemoteConfirmed, enabled = !sending); Text("Confirm before sending bounded context to the remote provider", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp)) }
+            RemoteProviderConfirmation(remoteProvider, remoteConfirmed, onRemoteConfirmed)
             Button(onClick = onInspectContext, enabled = selected != null && !sending, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Inspect context") }
             if (sending) Button(onClick = onCancel, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Cancel request") }
             else Button(onClick = onSend, enabled = target != null && message.isNotBlank() && (!remoteProvider || remoteConfirmed), modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Send message") }

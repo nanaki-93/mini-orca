@@ -1,10 +1,14 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
@@ -17,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,25 +46,56 @@ internal fun AnalysisWorkspacePane(
         maxRetries = maxRetries.toIntOrNull() ?: defaultAnalyzeAllRetryLimit,
         confirmRemoteProvider = remoteProviderConfirmed,
     ).bounded()
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
-        Text("PROJECT ANALYSIS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        Text("${coverage?.fresh ?: 0} fresh · ${coverage?.stale ?: 0} stale · ${coverage?.missing ?: 0} missing · ${coverage?.running ?: 0} running · ${coverage?.failed ?: 0} failed", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-        Spacer(Modifier.height(10.dp))
-        when (job?.status?.lowercase()) {
-            "running" -> { Text("Analyze-all running", color = PrimaryText); Button(onClick = onPause) { Text("Pause") }; Button(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") } }
-            "paused" -> {
-                Text("Analyze-all paused; completed results remain visible.", color = SecondaryText)
-                if (remoteProvider) RemoteProviderConfirmation(remoteProviderConfirmed, onRemoteProviderConfirmed)
-                Button(onClick = { onResume(remoteProviderConfirmed) }, enabled = !remoteProvider || remoteProviderConfirmed) { Text("Resume") }
-                Button(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
+    val presentation = analyzeAllPresentation(job, coverage)
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
+        item {
+            Text("PROJECT ANALYSIS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text("Analyze-all is explicit, revision-bound, and never starts during import or reindex.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            Spacer(Modifier.height(12.dp))
+            FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+                SectionLabel("ANALYSIS COVERAGE")
+                Text(presentation.statusLabel, color = PrimaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 7.dp))
+                Text(presentation.statusDetail, color = if (presentation.statusLabel == "Failed") Error else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             }
-            "canceled" -> { Text("Analyze-all canceled; start a new explicit job to continue.", color = SecondaryText); AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart) }
-            else -> { Text(if (job == null) "No Analyze-all job (204 No Content). Import and reindex never start one automatically." else "Analyze-all ${job.status}; stale jobs cannot resume on a newer revision.", color = SecondaryText); AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart) }
+            Spacer(Modifier.height(10.dp))
+            FocusFlowPanel(Modifier.fillMaxWidth()) {
+                SectionLabel("ANALYZE-ALL CONTROLS")
+                when (job?.status?.lowercase()) {
+                    "running" -> {
+                        Text("Processing ${job.files.count { it.status.lowercase() in setOf("completed", "fresh", "success") }} of ${job.files.size} listed files.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                        Button(onClick = onPause, modifier = Modifier.padding(top = 8.dp)) { Text("Pause") }
+                        Button(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
+                    }
+                    "pausing", "canceling" -> {
+                        Text(presentation.controls, color = Warning, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                        Button(onClick = onCancel, enabled = job.status.lowercase() == "pausing", modifier = Modifier.padding(top = 8.dp)) { Text("Cancel") }
+                    }
+                    "paused" -> {
+                        Text("Completed results remain visible while paused.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                        RemoteProviderConfirmation(remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed)
+                        Button(onClick = { onResume(remoteProviderConfirmed) }, enabled = !remoteProvider || remoteProviderConfirmed, modifier = Modifier.padding(top = 8.dp)) { Text("Resume") }
+                        Button(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
+                    }
+                    else -> {
+                        Text(presentation.statusDetail.substringAfter(". "), color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                        AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart)
+                    }
+                }
+                job?.let { Text("Bounded to ${it.maxFiles} files and ${it.maxRetries} retries per file.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp)) }
+            }
+            Spacer(Modifier.height(10.dp))
+            SectionLabel("FILE RESULTS")
         }
-        job?.let { Text("Bounded to ${it.maxFiles} files and ${it.maxRetries} retries per file.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp)) }
-        job?.files.orEmpty().forEach { file ->
-            Button(onClick = { onOpen(file.path) }, modifier = Modifier.padding(top = 6.dp)) { Text("${file.path} · ${file.status} · attempt ${file.attempts}") }
-            if (file.error.isNotBlank()) Text(file.error, color = Error, fontSize = 11.sp)
+        if (job?.files.isNullOrEmpty()) {
+            item { Text("No file results yet. Start Analyze-all explicitly to populate this list.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp)) }
+        } else {
+            items(job!!.files, key = { it.path }) { file ->
+                FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 7.dp)) {
+                    Button(onClick = { onOpen(file.path) }) { Text("Open ${file.path}") }
+                    Text("${file.status} · attempt ${file.attempts}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                    if (file.error.isNotBlank()) Text(file.error, color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
         }
     }
 }
@@ -78,15 +114,21 @@ private fun AnalyzeAllStartControls(
 ) {
     TextField(maxFiles, onMaxFiles, label = { Text("File limit (1–500)") }, modifier = Modifier.padding(top = 6.dp))
     TextField(maxRetries, onMaxRetries, label = { Text("Retry limit (0–3)") }, modifier = Modifier.padding(top = 6.dp))
-    if (remoteProvider) RemoteProviderConfirmation(remoteConfirmed, onRemoteConfirmed)
+    RemoteProviderConfirmation(remoteProvider, remoteConfirmed, onRemoteConfirmed)
     Button(onClick = { onStart(options) }, enabled = !remoteProvider || remoteConfirmed, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
 }
 
 @Composable
-internal fun RemoteProviderConfirmation(confirmed: Boolean, onConfirmed: (Boolean) -> Unit) {
-    androidx.compose.foundation.layout.Row(modifier = Modifier.padding(top = 6.dp)) {
+internal fun RemoteProviderConfirmation(remoteProvider: Boolean, confirmed: Boolean, onConfirmed: (Boolean) -> Unit) {
+    Text(
+        contextDestinationLabel(remoteProvider),
+        color = if (remoteProvider) Warning else SecondaryText,
+        fontSize = 11.sp,
+        modifier = Modifier.padding(top = 7.dp),
+    )
+    if (remoteProvider) androidx.compose.foundation.layout.Row(modifier = Modifier.padding(top = 2.dp)) {
         Checkbox(checked = confirmed, onCheckedChange = onConfirmed)
-        Text("Confirm if the configured provider is remote", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
+        Text("Confirm remote destination", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp))
     }
 }
 
@@ -107,44 +149,84 @@ internal fun BugsWorkspacePane(
     var lifecycle by remember { mutableStateOf("") }
     val visible = filterFindings(findings, BugsFilters(query, source, severity, freshness, lifecycle))
     val progress = verifiedScanProgress(scan)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
-        Text("PROJECT BUGS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        Text("Verified/tool-reported issues are isolated scan results. AI suggestions are model interpretation.", color = SecondaryText, fontSize = 12.sp)
-        TextField(query, { query = it }, label = { Text("Search findings") }, modifier = Modifier.padding(top = 10.dp))
-        TextField(source, { source = it }, label = { Text("Source filter (for example: vet, test, ai)") }, modifier = Modifier.padding(top = 6.dp))
-        TextField(severity, { severity = it }, label = { Text("Severity filter") }, modifier = Modifier.padding(top = 6.dp))
-        TextField(freshness, { freshness = it }, label = { Text("Freshness filter") }, modifier = Modifier.padding(top = 6.dp))
-        TextField(lifecycle, { lifecycle = it }, label = { Text("Lifecycle filter") }, modifier = Modifier.padding(top = 6.dp))
-        Text(progress.summary, color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
-        progress.warnings.forEach { warning -> Text("Warning: $warning", color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp)) }
-        if (progress.canCancel) Button(onClick = onCancelScan, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel verified scan") }
-        else Button(onClick = onStartScan, modifier = Modifier.padding(top = 6.dp)) { Text("Run verified scan") }
-        FindingSection(FindingClassification.Verified, visible.filter { classifyFinding(it) == FindingClassification.Verified }, onOpen, onPrepare, onTriage)
-        FindingSection(FindingClassification.Suggested, visible.filter { classifyFinding(it) == FindingClassification.Suggested }, onOpen, onPrepare, onTriage)
-        FindingSection(FindingClassification.Unclassified, visible.filter { classifyFinding(it) == FindingClassification.Unclassified }, onOpen, onPrepare, onTriage)
-    }
-}
-
-@Composable private fun FindingSection(classification: FindingClassification, findings: List<UnifiedFinding>, onOpen: (UnifiedFinding) -> Unit, onPrepare: (UnifiedFinding) -> Unit, onTriage: (UnifiedFinding, FindingLifecycleAction) -> Unit) {
-    Text(classification.sectionLabel, color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
-    Text(classification.description, color = SecondaryText, fontSize = 11.sp)
-    if (findings.isEmpty()) Text("None", color = SecondaryText, fontSize = 12.sp)
-    findings.forEach { finding ->
-        Text("${finding.severity.uppercase()} · ${finding.title}", color = PrimaryText, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
-        Text("Provenance: ${finding.source.ifBlank { "unknown" }} · Confidence: ${finding.confidence.ifBlank { "unknown" }}", color = SecondaryText, fontSize = 11.sp)
-        Text("Location: ${findingLocationLabel(finding)} · Status: ${finding.status.ifBlank { "unknown" }} · Freshness: ${finding.freshness.ifBlank { "unknown" }}", color = SecondaryText, fontSize = 11.sp)
-        Text("Revision: ${finding.projectRevision.ifBlank { "unknown" }}", color = SecondaryText, fontSize = 11.sp)
-        Text(finding.message, color = SecondaryText, fontSize = 12.sp)
-        if (finding.evidence.isNotBlank()) Text("Evidence: ${finding.evidence}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
-        Button(onClick = { onOpen(finding) }, enabled = finding.location.path.isNotBlank(), modifier = Modifier.padding(top = 4.dp)) { Text("Open in Editor") }
-        Button(onClick = { onPrepare(finding) }, enabled = findingCanPrepareFix(finding), modifier = Modifier.padding(start = 6.dp)) { Text("Prepare fix") }
-        findingLifecycleActions(finding).forEach { action ->
-            Button(onClick = { onTriage(finding, action) }, modifier = Modifier.padding(start = 6.dp)) { Text(action.label) }
+    val grouped = FindingClassification.entries.associateWith { classification -> visible.filter { classifyFinding(it) == classification } }
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
+        item {
+            Text("PROJECT BUGS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text("Verified/tool-reported issues and AI suggestions remain separate, located, and revision-aware.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            Spacer(Modifier.height(12.dp))
+            FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+                SectionLabel("SEARCH AND FILTER")
+                TextField(query, { query = it }, label = { Text("Search findings") }, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextField(source, { source = it }, label = { Text("Source") }, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.padding(horizontal = 3.dp))
+                    TextField(severity, { severity = it }, label = { Text("Severity") }, modifier = Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextField(freshness, { freshness = it }, label = { Text("Freshness") }, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.padding(horizontal = 3.dp))
+                    TextField(lifecycle, { lifecycle = it }, label = { Text("Lifecycle") }, modifier = Modifier.weight(1f))
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            FocusFlowPanel(Modifier.fillMaxWidth()) {
+                SectionLabel("VERIFIED SCAN")
+                Text(progress.summary, color = if (progress.warnings.isNotEmpty()) Warning else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                progress.warnings.forEach { warning -> Text("Warning: $warning", color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp)) }
+                if (progress.canCancel) {
+                    Button(onClick = onCancelScan, enabled = scan?.status?.lowercase() == "running", modifier = Modifier.padding(top = 8.dp)) { Text(if (scan?.status?.lowercase() == "canceling") "Canceling…" else "Cancel verified scan") }
+                } else {
+                    Button(onClick = onStartScan, modifier = Modifier.padding(top = 8.dp)) { Text("Run verified scan") }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            SectionLabel("FINDINGS · ${visible.size} MATCHING")
+        }
+        FindingClassification.entries.forEach { classification ->
+            val section = grouped.getValue(classification)
+            item {
+                SectionLabel(classification.sectionLabel, Modifier.padding(top = 9.dp))
+                Text(classification.description, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                if (section.isEmpty()) Text("No matching findings.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+            }
+            items(section, key = { finding -> "${classification.name}:${finding.id}:${finding.location.path}:${finding.location.startLine}" }) { finding ->
+                FindingCard(finding, onOpen, onPrepare, onTriage)
+            }
         }
     }
 }
 
-private fun findingLocationLabel(finding: UnifiedFinding): String {
+@Composable
+private fun FindingCard(
+    finding: UnifiedFinding,
+    onOpen: (UnifiedFinding) -> Unit,
+    onPrepare: (UnifiedFinding) -> Unit,
+    onTriage: (UnifiedFinding, FindingLifecycleAction) -> Unit,
+) {
+    FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 7.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("${finding.severity.ifBlank { "unknown" }.uppercase()} · ${finding.title.ifBlank { "Untitled finding" }}", color = PrimaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            StatusBadge(finding.freshness.ifBlank { "missing" })
+        }
+        Text(findingProvenanceLabel(finding), color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
+        Text("Location: ${findingLocationLabel(finding)}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+        Text("Status: ${findingStatusLabel(finding)}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+        Text(finding.message.ifBlank { "No message supplied." }, color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+        if (finding.evidence.isNotBlank()) Text("Evidence: ${finding.evidence}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+        Row(Modifier.fillMaxWidth().padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { onOpen(finding) }, enabled = finding.location.path.isNotBlank()) { Text("Open in Editor") }
+            Spacer(Modifier.padding(horizontal = 3.dp))
+            Button(onClick = { onPrepare(finding) }, enabled = findingCanPrepareFix(finding)) { Text("Prepare fix") }
+            findingLifecycleActions(finding).forEach { action ->
+                Spacer(Modifier.padding(horizontal = 3.dp))
+                Button(onClick = { onTriage(finding, action) }) { Text(action.label) }
+            }
+        }
+    }
+}
+
+internal fun findingLocationLabel(finding: UnifiedFinding): String {
     val location = finding.location
     if (location.path.isBlank()) return "project-wide"
     val line = if (location.startLine > 0) ":${location.startLine}" else ""

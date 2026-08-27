@@ -14,6 +14,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +54,7 @@ internal fun EditorStageBar(flow: EditorFlowUiState, onStageSelected: (EditorSta
                     modifier = Modifier.weight(1f).semantics {
                         selected = current
                         contentDescription = editorStageSemanticsLabel(stage, current)
+                        if (!stage.unlocked) disabled()
                     },
                 ) { Text(editorStageLabel(stage, current), fontSize = 11.sp, fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal) }
             }

@@ -10,7 +10,12 @@ import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -26,26 +31,40 @@ internal fun CommandPaletteDialog(
         PaletteMode.Symbols -> "Go to symbol · ⌘⇧O"
         PaletteMode.Actions -> "Focused action · ⌘K"
     }
+    val filterFocusRequester = FocusRequester()
+    val filteredFiles = files.filter { it.path.contains(query, ignoreCase = true) }.take(12)
+    val filteredSymbols = symbols.filter { it.name.contains(query, ignoreCase = true) }.take(12)
+    val filteredActions = listOf("fix", "refactor", "document").filter { it.contains(query, ignoreCase = true) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column {
-                OutlinedTextField(value = query, onValueChange = onQuery, singleLine = true, label = { Text("Filter") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = query, onValueChange = onQuery, singleLine = true, label = { Text("Filter") }, modifier = Modifier.fillMaxWidth().focusRequester(filterFocusRequester))
                 Spacer(Modifier.height(8.dp))
                 when (mode) {
-                    PaletteMode.Files -> files.filter { it.path.contains(query, ignoreCase = true) }.take(12).forEach { file ->
-                        Button(onClick = { onSelectFile(file.path) }, modifier = Modifier.fillMaxWidth().padding(top = 3.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText)) { Text(file.path, fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
+                    PaletteMode.Files -> if (filteredFiles.isEmpty()) SystemStateMessage("No file matches", "Change the filter to search indexed relative paths.") else filteredFiles.forEach { file ->
+                        PaletteEntry("File ${file.path}", file.path, onClick = { onSelectFile(file.path) })
                     }
-                    PaletteMode.Symbols -> symbols.filter { it.name.contains(query, ignoreCase = true) }.take(12).forEach { symbol ->
-                        Button(onClick = { onSelectSymbol(symbol) }, modifier = Modifier.fillMaxWidth().padding(top = 3.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText)) { Text("${symbol.kind} · ${symbol.name}", fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
+                    PaletteMode.Symbols -> if (filteredSymbols.isEmpty()) SystemStateMessage("No symbol matches", "Open a file with an indexed symbol or change the filter.") else filteredSymbols.forEach { symbol ->
+                        PaletteEntry("Symbol ${symbol.kind} ${symbol.name}", "${symbol.kind} · ${symbol.name}", onClick = { onSelectSymbol(symbol) })
                     }
-                    PaletteMode.Actions -> listOf("fix", "refactor", "document").filter { it.contains(query, ignoreCase = true) }.forEach { action ->
-                        Button(onClick = { onSelectAction(action) }, modifier = Modifier.fillMaxWidth().padding(top = 3.dp), colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText)) { Text(action.replaceFirstChar { it.uppercase() }) }
+                    PaletteMode.Actions -> if (filteredActions.isEmpty()) SystemStateMessage("No action matches", "Change the filter to view available focused actions.") else filteredActions.forEach { action ->
+                        PaletteEntry("Action ${action.replaceFirstChar { it.uppercase() }}", action.replaceFirstChar { it.uppercase() }, onClick = { onSelectAction(action) })
                     }
                 }
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text("Close") } },
     )
+    LaunchedEffect(Unit) { filterFocusRequester.requestFocus() }
+}
+
+@Composable
+private fun PaletteEntry(description: String, label: String, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(top = 3.dp).semantics { contentDescription = description },
+        colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText),
+    ) { Text(label, fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
 }

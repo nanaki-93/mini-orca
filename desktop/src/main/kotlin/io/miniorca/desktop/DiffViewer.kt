@@ -4,11 +4,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,13 +37,35 @@ fun sideBySideDiffRows(diff: UnifiedDiff): List<DiffRow> {
 }
 
 @Composable
-internal fun DiffViewer(diff: UnifiedDiff?, sideBySide: Boolean = true, modifier: Modifier = Modifier) {
+internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
     if (diff == null) { SystemStateMessage("Composed diff unavailable", "Validate the latest draft to view the read-only composed diff.", modifier = modifier); return }
-    SelectionContainer { Column(modifier.background(Card).padding(8.dp)) {
-        Text(if (sideBySide) "BEFORE (READ-ONLY)                                      PROPOSED (READ-ONLY)" else "UNIFIED COMPOSED DIFF (READ-ONLY)", color = SecondaryText, fontSize = 10.sp)
+    var sideBySide by remember(diff) { mutableStateOf(true) }
+    SelectionContainer { Column(modifier.background(Card).horizontalScroll(rememberScrollState()).semantics { contentDescription = "Read-only composed diff" }.padding(8.dp)) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(if (sideBySide) "BEFORE / PROPOSED (READ-ONLY)" else "UNIFIED COMPOSED DIFF (READ-ONLY)", color = SecondaryText, fontSize = 10.sp, modifier = Modifier.weight(1f))
+            TextButton(onClick = { sideBySide = true }, enabled = !sideBySide) { Text("Side-by-side", fontSize = 10.sp) }
+            TextButton(onClick = { sideBySide = false }, enabled = sideBySide) { Text("Unified", fontSize = 10.sp) }
+        }
         if (sideBySide) sideBySideDiffRows(diff).forEach { row -> Row(Modifier.fillMaxWidth()) { DiffCellText(row.before, "Before", Modifier.weight(1f)); DiffCellText(row.proposed, "Proposed", Modifier.weight(1f)) } }
-        else diff.lines.forEach { line -> Text("${line.kind.uppercase()} ${line.oldLine.takeIf { it > 0 } ?: line.newLine} ${line.text}", color = if (line.kind == "added") Success else if (line.kind == "removed") Error else PrimaryText, fontFamily = FontFamily.Monospace, fontSize = 10.sp) }
+        else diff.lines.forEach { line ->
+            Text(
+                "${line.kind.uppercase()} ${line.oldLine.takeIf { it > 0 } ?: line.newLine} ${line.text}",
+                color = if (line.kind == "added") Success else if (line.kind == "removed") Error else PrimaryText,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                modifier = Modifier.semantics { contentDescription = "${line.kind} diff line ${line.oldLine.takeIf { it > 0 } ?: line.newLine}" },
+            )
+        }
     } }
 }
 
-@Composable private fun DiffCellText(cell: DiffCell?, side: String, modifier: Modifier) { Text(cell?.let { "${it.change.uppercase()} ${it.lineNumber ?: ""} ${it.text}" } ?: "$side unchanged", color = when (cell?.change) { "added" -> Success; "removed" -> Error; else -> PrimaryText }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, modifier = modifier) }
+@Composable
+private fun DiffCellText(cell: DiffCell?, side: String, modifier: Modifier) {
+    Text(
+        cell?.let { "${it.change.uppercase()} ${it.lineNumber ?: ""} ${it.text}" } ?: "$side unchanged",
+        color = when (cell?.change) { "added" -> Success; "removed" -> Error; else -> PrimaryText },
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.sp,
+        modifier = modifier.semantics { contentDescription = cell?.let { "$side ${it.change} line ${it.lineNumber ?: "unknown"}" } ?: "$side unchanged" },
+    )
+}

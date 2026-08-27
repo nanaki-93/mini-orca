@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -33,4 +33,3 @@ Task 68.
 
 - Extend Summary state/render-label tests where presentation logic is pure.
 - Run `./desktop/gradlew -p desktop test` and `git diff --check`.
-
