@@ -1,6 +1,7 @@
 # Mini-Orca implementation tasks
 
-Source roadmap: [`../PLAN.md`](../PLAN.md)
+Source roadmaps: [`../PLAN.md`](../PLAN.md) and
+[`../design/ui-mocks/IMPLEMENTATION_PLAN.md`](../design/ui-mocks/IMPLEMENTATION_PLAN.md)
 
 ## Execution order
 
@@ -62,6 +63,24 @@ Source roadmap: [`../PLAN.md`](../PLAN.md)
 | 54 | [Desktop integration coverage](completed/54_desktop_integration_coverage.md) | 46, 47, 48, 49, 50, 51, 52, 53 | Complete |
 | 55 | [API, migration, and release documentation](completed/55_api_docs_migration_release_notes.md) | 37, 41, 52, 54 | Complete |
 | 56 | [Focused AI IDE release acceptance](completed/56_release_acceptance.md) | 33–55 | Complete |
+| 57 | [Editor flow presentation contract](completed/57_editor_flow_presentation_contract.md) | 56 | Complete |
+| 58 | [Retire legacy candidate Desktop UI](completed/58_retire_legacy_candidate_desktop_ui.md) | 57 | Complete |
+| 59 | [Focus Flow theme foundation](completed/59_focus_flow_theme_foundation.md) | 58 | Complete |
+| 60 | [Desktop top bar and workspace rail](completed/60_desktop_top_bar_workspace_rail.md) | 59 | Complete |
+| 61 | [Responsive Desktop scaffold](completed/61_responsive_desktop_scaffold.md) | 60 | Complete |
+| 62 | [Workbench project explorer](completed/62_workbench_project_explorer.md) | 61 | Complete |
+| 63 | [Editor workspace stage navigation](completed/63_editor_workspace_stage_navigation.md) | 62 | Complete |
+| 64 | [Editor Target stage](completed/64_editor_target_stage.md) | 63 | Complete |
+| 65 | [Editor Draft stage](completed/65_editor_draft_stage.md) | 64 | Complete |
+| 66 | [Selectable diff viewer](completed/66_selectable_diff_viewer.md) | 65 | Complete |
+| 67 | [Editor Verify stage](67_editor_verify_stage.md) | 66 | In Progress |
+| 68 | [Editor Apply and receipt stage](68_editor_apply_receipt_stage.md) | 67 | Pending |
+| 69 | [Project Summary visual refactor](69_project_summary_visual_refactor.md) | 68 | Pending |
+| 70 | [Analysis workspace visual refactor](70_analysis_workspace_visual_refactor.md) | 69 | Pending |
+| 71 | [Bugs workspace visual refactor](71_bugs_workspace_visual_refactor.md) | 70 | Pending |
+| 72 | [Command, dialog, and system states](72_command_dialog_system_states.md) | 71 | Pending |
+| 73 | [Accessibility, responsive, and performance polish](73_accessibility_responsive_performance_polish.md) | 72 | Pending |
+| 74 | [UI refactor integration acceptance](74_ui_refactor_integration_acceptance.md) | 57–73 | Pending |
 
 ## Delivery boundaries
 
@@ -72,6 +91,11 @@ Source roadmap: [`../PLAN.md`](../PLAN.md)
 - Tasks 42–49 restructure Desktop and add Summary, Analysis, Bugs, and Editor.
 - Tasks 50–52 deliver file chat, editable drafts, and the final review workflow.
 - Tasks 53–56 complete accessibility, integration coverage, documentation, and release acceptance.
+- Tasks 57–58 lock the staged presentation contract and remove the retired parallel Desktop UI.
+- Tasks 59–62 install the Focus Flow visual system and Workbench shell/explorer.
+- Tasks 63–68 deliver Target, Draft, Verify, and Apply as one guarded Editor flow.
+- Tasks 69–72 bring every workspace, command surface, dialog, and system state into the design.
+- Tasks 73–74 complete accessibility, responsive/performance polish, documentation, and acceptance.
 
 One Air implementation agent owns one ready task at a time. Read-only research or
 review agents may work in parallel, but shared-worktree writers must not overlap.

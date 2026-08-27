@@ -7,7 +7,10 @@ This directory contains the implementation backlog for [`../PLAN.md`](../PLAN.md
 - Pending tasks live in this directory as `NN_snake_case.md`.
 - Completed tasks move to `completed/` without changing their identifier.
 - [`INDEX.md`](INDEX.md) is the authoritative dependency order and status list.
-- Tasks 01–31 are completed history. The focused AI IDE roadmap begins at 32.
+- [`PROMPT_EXECUTE_UI_REFACTOR.md`](PROMPT_EXECUTE_UI_REFACTOR.md) runs the
+  approved Tasks 57–74 sequentially with one implementation writer.
+- Tasks 01–31 are completed history. The focused AI IDE roadmap begins at 32,
+  and the approved Desktop UI refactor begins at 57.
 
 ## Status lifecycle
 
@@ -27,6 +30,8 @@ task Complete based only on partial implementation.
 ## Shared implementation rules
 
 - Read `AGENTS.md`, `PLAN.md`, this file, `INDEX.md`, and the selected task first.
+- For Tasks 57–74, also read `design/ui-mocks/IMPLEMENTATION_PLAN.md` and inspect
+  the approved mock sources named by the selected task.
 - Preserve the one-project, one-open-file, one-symbol, preview-first workflow.
 - Keep source and diff views read-only; only the isolated AI declaration draft is
   editable.

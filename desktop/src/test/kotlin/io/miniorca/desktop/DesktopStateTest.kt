@@ -8,15 +8,15 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class DesktopStateTest {
-    @Test fun projectLoadClearsPriorSelectionAndCandidate() {
+    @Test fun projectLoadClearsPriorSelectionAndDraft() {
         val project = ProjectAnalysis("id", "revision", "fixture", "/tmp/fixture", "go", fileCount = 1, sourceFileCount = 1, totalLines = 2, analysisFile = ".mini-orca/analysis.md", summary = "", aiStatus = "fresh", analyzedAt = "")
         val index = ProjectIndex("id", "revision")
         val state = DesktopState(
             selection = FileSelectionState(selectedFile = ProjectFileInfo("main.go", "hash", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)),
-            review = DraftReviewState(candidate = sampleCandidate()),
+            review = DraftReviewState(draft = DeclarationDraft(id = "draft")),
         ).reduce(DesktopEvent.ProjectLoaded(project, index))
         assertNull(state.selectedFile)
-        assertNull(state.candidate)
+        assertNull(state.review.draft)
         assertEquals(project, state.project)
     }
 
@@ -63,13 +63,14 @@ class DesktopStateTest {
         assertTrue(!state.loading)
     }
 
-    @Test fun suggestionPreparesButDoesNotGenerateARequest() {
+    @Test fun suggestionPreparesARequestWithoutChangingTheCurrentDraft() {
         val symbol = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
-        val state = DesktopState(review = DraftReviewState(candidate = sampleCandidate())).reduce(DesktopEvent.SuggestionPrepared("fix", "Handle empty input", symbol))
+        val draft = DeclarationDraft(id = "draft")
+        val state = DesktopState(review = DraftReviewState(draft = draft)).reduce(DesktopEvent.SuggestionPrepared("fix", "Handle empty input", symbol))
         assertEquals(symbol, state.selectedSymbol)
         assertEquals("fix", state.preparedAction)
         assertEquals("Handle empty input", state.preparedRequest)
-        assertEquals("g", state.candidate?.generationId)
+        assertEquals(draft, state.review.draft)
     }
 
     @Test fun explainSymbolRemainsAReadOnlyPreparedAction() {
@@ -82,15 +83,7 @@ class DesktopStateTest {
         assertEquals(symbol, state.selectedSymbol)
         assertEquals("explain_symbol", state.preparedAction)
         assertEquals("Show the cached explanation for Run.", state.preparedRequest)
-        assertNull(state.candidate)
-    }
-
-    @Test fun discardingPreviewAlsoClearsItsChecks() {
-        val state = DesktopState(review = DraftReviewState(candidate = sampleCandidate(), checks = CandidateCheckReport("main.go", true))).reduce(DesktopEvent.CandidateDiscarded)
-
-        assertNull(state.candidate)
-        assertNull(state.checks)
-        assertEquals("Discarded preview", state.status)
+        assertNull(state.review.draft)
     }
 
     @Test fun fileSwitchRejectsLateEnrichmentAndClearsFileBoundState() {
@@ -179,8 +172,6 @@ class DesktopStateTest {
         assertEquals("secret", manifest.excluded.single().reason)
         assertTrue(!Json.encodeToString(manifest).contains("private source"))
     }
-
-    private fun sampleCandidate() = GenerationResult("g", "p", "r", "base", "main.go", "Run", "strict_symbol", "", "hash", GenerationValidation(true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")), ContextManifest())
 
     private fun project() = ProjectAnalysis("project", "revision", "fixture", "/tmp/fixture", "go", fileCount = 1, sourceFileCount = 1, totalLines = 2, analysisFile = ".mini-orca/analysis.md", summary = "", aiStatus = "fresh", analyzedAt = "")
     private fun projectState() = DesktopState(projectState = ProjectWorkspaceState(project(), ProjectIndex("project", "revision")))

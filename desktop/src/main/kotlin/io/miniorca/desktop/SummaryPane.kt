@@ -40,7 +40,7 @@ internal fun SummaryPane(
         androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
             Text("SUMMARY", fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(10.dp))
-            Text(analysisBadge(state.status), color = badgeColor(state.status), fontSize = 12.sp)
+            StatusBadge(state.status)
             Spacer(Modifier.weight(1f))
             if (analysisInProgress) Button(onClick = onCancel) { Text("Cancel") }
             else {
@@ -192,74 +192,18 @@ internal fun CodePane(project: ProjectAnalysis?, selected: ProjectFileInfo?, sel
 }
 
 @Composable
-internal fun EditorPane(project: ProjectAnalysis?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, focusedLine: Int, showCompactBrief: Boolean, remoteProvider: Boolean, remoteProviderConfirmed: Boolean, onRemoteProviderConfirmed: (Boolean) -> Unit, onSelectSymbol: (SymbolInfo) -> Unit, onAnalyze: () -> Unit, onRefresh: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        if (showCompactBrief) EditorBriefPane(selected, analysis, selectedSymbol, symbols, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, onSelectSymbol, onAnalyze, onRefresh)
-        Box(Modifier.weight(1f)) { CodePane(project, selected, selectedSymbol, focusedLine) }
-    }
-}
-
-/** The source stays in SelectionContainer; this separate brief is the only editor-side control surface. */
-@Composable
-internal fun EditorBriefPane(selected: ProjectFileInfo?, analysis: FileAnalysis?, symbol: SymbolInfo?, symbols: List<SymbolInfo>, remoteProvider: Boolean, remoteProviderConfirmed: Boolean, onRemoteProviderConfirmed: (Boolean) -> Unit, onSelectSymbol: (SymbolInfo) -> Unit, onAnalyze: () -> Unit, onRefresh: () -> Unit) {
-    val state = editorBriefState(selected, analysis, symbol)
-    Column(Modifier.fillMaxWidth().background(Panel).padding(12.dp)) {
-        if (state == null) {
-            Text("Open a file to view its deterministic brief.", color = SecondaryText, fontSize = 12.sp)
-            return
-        }
-        Text("FILE BRIEF · ${state.path}", color = PrimaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        Text("${state.language} · ${formatBytes(state.sizeBytes)} · ${state.lineCount} lines · Hash: ${state.contentHash}", color = SecondaryText, fontSize = 11.sp)
-        Text("Analysis freshness: ${state.freshness}", color = SecondaryText, fontSize = 11.sp)
-        Row {
-            Button(onClick = onAnalyze, enabled = !remoteProvider || remoteProviderConfirmed, modifier = Modifier.padding(top = 6.dp)) { Text("Analyze") }
-            Button(onClick = onRefresh, enabled = !remoteProvider || remoteProviderConfirmed, modifier = Modifier.padding(start = 6.dp, top = 6.dp)) { Text("Refresh") }
-            if (state.freshness == "failed") Button(onClick = onRefresh, enabled = !remoteProvider || remoteProviderConfirmed, modifier = Modifier.padding(start = 6.dp, top = 6.dp)) { Text("Retry") }
-        }
-        if (remoteProvider) RemoteProviderConfirmation(remoteProviderConfirmed, onRemoteProviderConfirmed)
-        if (symbols.isNotEmpty()) {
-            Text("Target: ${state.selectedSymbol?.signature ?: "Select a function or type"}", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-            state.selectedSymbol?.let { selectedSymbol ->
-                Text("${selectedSymbol.kind} · lines ${selectedSymbol.startLine}–${selectedSymbol.endLine}", color = SecondaryText, fontSize = 11.sp)
-                if (state.symbolExplanation.isNotBlank()) Text(state.symbolExplanation, color = SecondaryText, fontSize = 11.sp)
-            }
-            symbols.forEach { candidate ->
-                Button(onClick = { onSelectSymbol(candidate) }, modifier = Modifier.padding(top = 3.dp)) { Text(candidate.name) }
-            }
-        }
-        when (state.freshness) {
-            "fresh", "stale" -> {
-                if (state.purpose.isNotBlank()) Text(state.purpose, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-                BriefItems("Responsibilities", state.responsibilities)
-                BriefItems("Dependencies", state.dependencies)
-                BriefItems("Side effects", state.sideEffects)
-                if (state.advisoryImpact.isNotEmpty()) Text("Advisory impact: ${state.advisoryImpact.joinToString()}", color = Warning, fontSize = 11.sp)
-            }
-            "failed" -> Text("Analysis unavailable: ${state.analysisFailure.ifBlank { "Retry the analysis." }}", color = Error, fontSize = 11.sp)
-            else -> Text("Deterministic brief only — semantic analysis is optional.", color = SecondaryText, fontSize = 11.sp)
-        }
-    }
-}
-
-@Composable
-private fun BriefItems(label: String, values: List<String>) {
-    if (values.isNotEmpty()) Text("$label: ${values.joinToString()}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+internal fun EditorPane(project: ProjectAnalysis?, selected: ProjectFileInfo?, selectedSymbol: SymbolInfo?, focusedLine: Int) {
+    Box(Modifier.fillMaxSize()) { CodePane(project, selected, selectedSymbol, focusedLine) }
 }
 
 @Composable
 internal fun EmptyPane(title: String, message: String) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.TopCenter) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, color = PrimaryText, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
-            Text(message, color = SecondaryText, fontSize = 13.sp)
-        }
-    }
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.TopCenter) { SystemStateMessage(title, message) }
 }
 
 @Composable
 private fun SummarySection(title: String, content: @Composable () -> Unit) {
-    Text(title, color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    SectionLabel(title)
     Spacer(Modifier.height(6.dp))
     content()
 }
