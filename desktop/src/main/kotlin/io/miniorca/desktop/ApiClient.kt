@@ -36,7 +36,6 @@ class ApiClient(
     fun effectiveModel(): EffectiveModel = decode(send("GET", "/api/models/current"))
     fun status(): DaemonStatus = decode(send("GET", "/status"))
     fun audit(revision: String): List<AuditEntry> = decode(send("GET", "/api/projects/current/audit?project_revision=${encode(revision)}"))
-    fun activity(): List<ActivityEntry> = decode(send("GET", "/api/chat/history"))
     fun impact(path: String, symbol: String = ""): ImpactPreview = decode(send("GET", "/api/projects/current/impact?path=${encode(path)}&symbol=${encode(symbol)}"))
     fun gitStatus(path: String): GitStatus = decode(send("GET", "/api/projects/current/git?path=${encode(path)}"))
 
@@ -76,7 +75,6 @@ class ApiClient(
     fun updateDraft(draftId: String, projectRevision: String, expectedRevision: Long, declaration: String, imports: List<String>): DeclarationDraft = decode(send("PATCH", "/api/projects/current/drafts/${encodePath(draftId)}", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision, "declaration" to declaration, "imports" to imports)))
     fun validateDraft(draftId: String, projectRevision: String, expectedRevision: Long): DeclarationDraft = decode(send("POST", "/api/projects/current/drafts/${encodePath(draftId)}/validate", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision)))
     fun checkDraft(draftId: String, projectRevision: String, expectedRevision: Long, expectedHash: String, runLint: Boolean = false, runTests: Boolean = false): CandidateCheckReport = decode(send("POST", "/api/projects/current/drafts/${encodePath(draftId)}/checks", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision, "expected_hash" to expectedHash, "run_lint" to runLint, "run_tests" to runTests)))
-    fun draftReview(draftId: String, revision: String): DraftReview = decode(send("GET", "/api/projects/current/drafts/${encodePath(draftId)}/review?project_revision=${encode(revision)}"))
     fun applyDraft(draft: DeclarationDraft): ApplyResult = decode(send("POST", "/api/projects/current/apply", jsonBody("draft_id" to draft.id, "draft_revision" to draft.revision, "draft_hash" to draft.hash, "project_id" to draft.projectId, "project_revision" to draft.projectRevision, "base_file_hash" to draft.baseFileHash, "confirm" to true)))
 
     fun endpointLocality(): String {
@@ -86,11 +84,6 @@ class ApiClient(
 
     fun isLoopbackEndpoint(): Boolean = endpointLocality() == "Local endpoint"
 
-    fun generate(message: String, filePath: String, targetSymbol: String, projectId: String, projectRevision: String, baseFileHash: String, scopeMode: String = "strict_symbol", action: String = "fix", templateId: String = ""): GenerationResult = decode(send("POST", "/api/chat/message", jsonBody("message" to message, "file_path" to filePath, "target_symbol" to targetSymbol, "project_id" to projectId, "project_revision" to projectRevision, "base_file_hash" to baseFileHash, "scope_mode" to scopeMode, "action" to action, "template_id" to templateId)))
-    fun checks(generationId: String, revision: String, runLint: Boolean = false, runTests: Boolean = false): CandidateCheckReport = decode(send("POST", "/api/projects/current/candidates/checks", jsonBody("generation_id" to generationId, "project_revision" to revision, "run_lint" to runLint, "run_tests" to runTests)))
-    fun compareCandidates(leftGenerationId: String, rightGenerationId: String, revision: String, leftNote: String = "", rightNote: String = ""): CandidateComparison = decode(send("POST", "/api/projects/current/candidates/compare", jsonBody("left_generation_id" to leftGenerationId, "right_generation_id" to rightGenerationId, "project_revision" to revision, "left_note" to leftNote, "right_note" to rightNote)))
-    fun exportReview(generationId: String, revision: String): ReviewExport = decode(send("POST", "/api/projects/current/candidates/export", jsonBody("generation_id" to generationId, "project_revision" to revision)))
-    fun apply(generationId: String, projectId: String, revision: String, baseHash: String): ApplyResult = decode(send("POST", "/api/projects/current/apply", jsonBody("generation_id" to generationId, "project_id" to projectId, "project_revision" to revision, "base_file_hash" to baseHash, "confirm" to true)))
     fun undo(projectId: String, revision: String, postApplyHash: String): ApplyResult = decode(send("POST", "/api/projects/current/undo", jsonBody("project_id" to projectId, "project_revision" to revision, "post_apply_hash" to postApplyHash, "confirm" to true)))
 
     private inline fun <reified T> decode(body: String): T = json.decodeFromString(body)

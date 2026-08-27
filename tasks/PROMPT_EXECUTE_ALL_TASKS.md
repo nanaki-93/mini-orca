@@ -1,5 +1,9 @@
 # Prompt template — execute the backlog with Air agents
 
+> This prompt records the completed Tasks 32–56 delivery. For the current
+> sequential Desktop UI refactor backlog, use
+> [`PROMPT_EXECUTE_UI_REFACTOR.md`](PROMPT_EXECUTE_UI_REFACTOR.md).
+
 Use this prompt with one primary Air coordinator. The coordinator delegates one
 ready implementation task at a time and owns integration and final verification.
 

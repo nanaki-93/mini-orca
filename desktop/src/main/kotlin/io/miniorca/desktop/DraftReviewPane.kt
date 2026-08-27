@@ -60,7 +60,7 @@ internal fun DraftReviewPane(
         Text("VALIDATION", color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         Text(editor.status.name.lowercase(), color = if (draft.validation?.applicable == true) Success else Warning, fontSize = 12.sp)
         draft.validation?.diagnostics.orEmpty().take(8).forEach { diagnostic -> Text("${diagnostic.code}: ${diagnostic.message}", color = Error, fontSize = 11.sp) }
-        ReadOnlyDiff(draft.validation?.diff)
+        DiffViewer(draft.validation?.diff)
         Spacer(Modifier.height(12.dp))
         Text("FOCUSED CHECKS", color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         if (checks == null) Text("Run checks after validating this exact draft revision and hash.", color = Warning, fontSize = 12.sp)
@@ -74,7 +74,7 @@ internal fun DraftReviewPane(
         Text("GIT (READ-ONLY)", color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         Text(if (gitStatus?.available == true) "${gitStatus.branch} · ${gitStatus.fileState.ifBlank { "clean" }} · ${gitStatus.diffState}" else "Git is unavailable for this project.", color = SecondaryText, fontSize = 11.sp)
         Spacer(Modifier.height(14.dp))
-        Button(onClick = { confirmApply = true }, enabled = eligibility.eligible, colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = Color.White)) { Text("Apply draft") }
+        Button(onClick = { confirmApply = true }, enabled = eligibility.eligible, colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = OnAccent)) { Text("Apply draft") }
         if (!eligibility.eligible) Text(eligibility.reason, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
     }
     if (confirmApply && draft != null) {
@@ -85,22 +85,5 @@ internal fun DraftReviewPane(
             confirmButton = { Button(onClick = { confirmApply = false; onApply() }) { Text("Apply ${draft.targetSymbol}") } },
             dismissButton = { Button(onClick = { confirmApply = false }) { Text("Cancel") } },
         )
-    }
-}
-
-@Composable
-private fun ReadOnlyDiff(diff: UnifiedDiff?) {
-    Spacer(Modifier.height(8.dp))
-    Text("COMPOSED DIFF (READ-ONLY)", color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-    if (diff == null) Text("Validate the draft to view the composed diff.", color = SecondaryText, fontSize = 11.sp)
-    else SelectionContainer {
-        Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(6.dp)).padding(8.dp)) {
-            diff.lines.forEach { line ->
-                Row {
-                    Text("${when (line.kind) { "added" -> "+"; "removed" -> "-"; else -> " " }} ${line.newLine.takeIf { it > 0 } ?: line.oldLine}  ", fontFamily = FontFamily.Monospace, fontSize = 10.sp)
-                    Text(highlightedCode(line.text), color = when (line.kind) { "added" -> Success; "removed" -> Error; else -> PrimaryText }, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
-                }
-            }
-        }
     }
 }

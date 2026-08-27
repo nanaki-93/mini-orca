@@ -128,7 +128,6 @@ class ApiClientContractTest {
                     assertContains(body.orEmpty(), "\"expected_hash\":\"hash\"")
                     TransportResponse(200, """{"target_path":"main.go","applicable":true,"checks":null,"draft_id":"draft","draft_revision":1,"draft_hash":"hash"}""")
                 }
-                "GET" to "/api/projects/current/drafts/draft/review?project_revision=revision" -> TransportResponse(200, """{"draft":${draftResponse()},"checks":null,"apply_eligible":true}""")
                 "POST" to "/api/projects/current/apply" -> {
                     assertContains(body.orEmpty(), "\"draft_id\":\"draft\"")
                     assertContains(body.orEmpty(), "\"confirm\":true")
@@ -144,7 +143,6 @@ class ApiClientContractTest {
         val updated = client.updateDraft("draft", "revision", 1, "func Run() {}", listOf("fmt"))
         val validated = client.validateDraft("draft", "revision", updated.revision)
         val checks = client.checkDraft("draft", "revision", validated.revision, validated.hash)
-        val review = client.draftReview("draft", "revision")
         val applied = client.applyDraft(validated)
 
         assertEquals(emptyList(), session.messages)
@@ -152,7 +150,6 @@ class ApiClientContractTest {
         assertEquals("draft", proposal.draft.id)
         assertEquals(emptyList(), proposal.contextManifest.included)
         assertEquals("draft", checks.draftId)
-        assertTrue(review.applyEligible)
         assertEquals("next", applied.projectRevision)
     }
 

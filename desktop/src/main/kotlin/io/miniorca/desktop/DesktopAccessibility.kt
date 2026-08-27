@@ -1,6 +1,5 @@
 package io.miniorca.desktop
 
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -51,9 +50,9 @@ fun highlightedCode(source: String): AnnotatedString = buildAnnotatedString {
         append(source.substring(cursor, match.range.first))
         val token = match.value
         val color = when {
-            token.startsWith("//") || token.startsWith("#") -> Color(0xFF8B949E)
-            token.startsWith('"') -> Color(0xFFA5D6FF)
-            else -> Color(0xFFD2A8FF)
+            token.startsWith("//") || token.startsWith("#") -> CodeComment
+            token.startsWith('"') -> CodeString
+            else -> CodeKeyword
         }
         withStyle(SpanStyle(color = color)) { append(token) }
         cursor = match.range.last + 1

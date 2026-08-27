@@ -1,0 +1,269 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: default;
+}
+
+.mono {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.caps {
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+}
+
+.orca-mark {
+  position: relative;
+  width: 31px;
+  height: 31px;
+  overflow: hidden;
+  border-radius: 10px 12px 10px 15px;
+  background: var(--accent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.orca-mark::before {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 17px;
+  height: 13px;
+  border-radius: 60% 48% 55% 45%;
+  background: white;
+  content: "";
+  transform: rotate(-11deg);
+}
+
+.orca-mark::after {
+  position: absolute;
+  top: 10px;
+  left: 16px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #0c1518;
+  box-shadow: -12px 8px 0 1px var(--accent);
+  content: "";
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 13%, transparent);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tag.success {
+  border-color: color-mix(in srgb, var(--success) 34%, var(--line));
+  color: var(--success);
+}
+
+.tag.accent {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  color: var(--accent);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--surface-2) 84%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.code-line {
+  display: grid;
+  grid-template-columns: 38px 18px 1fr;
+  min-height: 23px;
+  padding: 0 14px 0 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 23px;
+  white-space: pre;
+}
+
+.line-no {
+  color: var(--faint);
+  text-align: right;
+  user-select: none;
+}
+
+.change-mark {
+  color: var(--faint);
+  text-align: center;
+}
+
+.code-line.added {
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.code-line.added .change-mark {
+  color: var(--success);
+}
+
+.code-line.removed {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.code-line.removed .change-mark {
+  color: var(--danger);
+}
+
+.kw {
+  color: var(--syntax-kw);
+}
+
+.fn {
+  color: var(--syntax-fn);
+}
+
+.str {
+  color: var(--syntax-str);
+}
+
+.cm {
+  color: var(--syntax-comment);
+}
+
+.type {
+  color: var(--syntax-type);
+}
+
+.check-icon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.soft-button,
+.primary-button,
+.ghost-button {
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 670;
+}
+
+.soft-button {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.ghost-button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.primary-button {
+  border: 1px solid color-mix(in srgb, var(--accent) 76%, black);
+  background: var(--accent);
+  color: var(--on-accent, #061316);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+}
+
+.avatar {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.sr-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}

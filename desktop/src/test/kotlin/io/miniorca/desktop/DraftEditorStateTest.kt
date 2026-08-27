@@ -13,7 +13,6 @@ class DraftEditorStateTest {
             review = DraftReviewState(
                 draft = original,
                 editor = editableDraft(original),
-                comparison = CandidateComparison(sampleCandidate(), sampleCandidate()),
                 checks = CandidateCheckReport("main.go", true, draftId = original.id, draftRevision = original.revision, draftHash = original.hash),
             ),
         ).reduce(DesktopEvent.DraftEdited(declaration = "func Run() error { return nil }", imports = listOf("fmt")))
@@ -23,7 +22,6 @@ class DraftEditorStateTest {
         assertEquals(listOf("fmt"), state.review.editor?.imports)
         assertNull(state.review.draft?.validation)
         assertNull(state.review.checks)
-        assertNull(state.review.comparison)
         assertFalse(draftApplyEligibility(state.review.draft, state.review.checks, file()).eligible)
     }
 
@@ -77,5 +75,4 @@ class DraftEditorStateTest {
     private fun draft(validation: GenerationValidation? = null) = DeclarationDraft("draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}", revision = 2, hash = "hash", validation = validation)
     private fun file(hash: String = "base") = ProjectFileInfo("main.go", hash, "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
     private fun project(revision: String = "revision") = ProjectAnalysis("project", revision, "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
-    private fun sampleCandidate() = CandidateComparisonItem("candidate", "hash", "main.go", "Run", "fix", "replace_symbol", 1, true, "passed", "local")
 }

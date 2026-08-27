@@ -18,10 +18,10 @@ class DesktopShellTest {
         assertTrue(rows.last().analysisStatus == "fresh")
     }
 
-    @Test fun analysisBadgesUseWordsAsWellAsSymbols() {
-        assertEquals("✓ Fresh", analysisBadge("fresh"))
-        assertEquals("○ Not analyzed", analysisBadge("missing"))
-        assertEquals("! Failed", analysisBadge("failed"))
+    @Test fun analysisBadgesUseTextualFreshnessLabels() {
+        assertEquals("Fresh", statusBadgeStyle("fresh").label)
+        assertEquals("Not analyzed", statusBadgeStyle("missing").label)
+        assertEquals("Failed", statusBadgeStyle("failed").label)
     }
 
     @Test fun paneWidthsRemainWithinUsableBounds() {
@@ -33,6 +33,8 @@ class DesktopShellTest {
     @Test fun narrowWindowsUseDrawersInsteadOfSqueezingThreePanes() {
         assertTrue(useNarrowLayout(999f))
         assertTrue(!useNarrowLayout(1_000f))
+        assertEquals("Files", narrowDrawerLabel(NarrowDrawer.Files))
+        assertEquals("Context", narrowDrawerLabel(NarrowDrawer.Context))
     }
 
     @Test fun largeExplorerKeepsAStableFilteredSelectionPath() {
@@ -43,6 +45,16 @@ class DesktopShellTest {
         val rows = explorerRows(files, "File1999.kt")
 
         assertEquals(listOf("src", "src/module1999", "src/module1999/File1999.kt"), rows.map { it.path })
+    }
+
+    @Test fun explorerDescriptionsExposeRolesLanguageFreshnessAndExpansion() {
+        val file = ExplorerRow("internal/main.go", "main.go", 1, false, "stale", "Go")
+        val folder = ExplorerRow("internal", "internal", 0, true)
+
+        assertEquals("Go file main.go, Stale, selected", explorerRowDescription(file, selected = true, expanded = false))
+        assertEquals("Folder internal, collapsed", explorerRowDescription(folder, selected = false, expanded = false))
+        assertEquals("DIR −", explorerRoleLabel(folder, expanded = true))
+        assertEquals("12 indexed files · project revision revision", explorerProjectLabel(ProjectIndex("project", "revision", files = List(12) { IndexedFile("$it.go", "hash", "Go", false) })))
     }
 
     @Test fun collapsedFolderShowsItsChildrenAfterItIsExpanded() {
@@ -74,13 +86,21 @@ class DesktopShellTest {
         )
     }
 
-    @Test fun workspaceNavigationUsesLabelsAndTextCounts() {
+    @Test fun workspaceRailUsesLabelsAndTextCounts() {
         val counts = WorkspaceCounts(analyzedFiles = 4, verifiedFindings = 2, aiSuggestions = 3, drafts = 1)
 
-        assertEquals("Summary", workspaceNavigationLabel(Workspace.Summary, counts))
-        assertEquals("Analysis · 4 analyzed", workspaceNavigationLabel(Workspace.Analysis, counts))
-        assertEquals("Bugs · 2 verified · 3 AI", workspaceNavigationLabel(Workspace.Bugs, counts))
-        assertEquals("Editor · 1 drafts", workspaceNavigationLabel(Workspace.Editor, counts))
+        assertEquals("Summary", workspaceRailLabel(Workspace.Summary, counts))
+        assertEquals("Analysis · 4 analyzed", workspaceRailLabel(Workspace.Analysis, counts))
+        assertEquals("Bugs · 2 verified · 3 AI", workspaceRailLabel(Workspace.Bugs, counts))
+        assertEquals("Editor · 1 drafts", workspaceRailLabel(Workspace.Editor, counts))
+    }
+
+    @Test fun topBarTextNamesProjectRevisionAndConnectionState() {
+        val project = ProjectAnalysis("project", "revision-hash", "Long project name", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+
+        assertEquals("Long project name · revision revision-has", projectBreadcrumbLabel(project))
+        assertTrue(connectionLabel(ConnectionState(connected = true, locality = "Local endpoint", model = "local model", latency = "12ms")).contains("Connected · Local endpoint"))
+        assertTrue(connectionLabel(ConnectionState(label = "Daemon unavailable", locality = "Remote endpoint")).contains("Disconnected · Remote endpoint"))
     }
 
     @Test fun keyboardWorkspaceOrderCoversAllFourWorkspaces() {

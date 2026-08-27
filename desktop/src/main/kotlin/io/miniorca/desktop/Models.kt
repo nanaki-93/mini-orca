@@ -36,21 +36,6 @@ data class ProjectFileInfo(
     val content: String = "",
 )
 
-@Serializable
-data class GenerationResult(
-    @SerialName("generation_id") val generationId: String,
-    @SerialName("project_id") val projectId: String,
-    @SerialName("project_revision") val projectRevision: String,
-    @SerialName("base_file_hash") val baseFileHash: String,
-    @SerialName("target_path") val targetPath: String,
-    @SerialName("target_symbol") val targetSymbol: String,
-    @SerialName("scope_mode") val scopeMode: String,
-    @SerialName("candidate_content") val candidateContent: String,
-    @SerialName("candidate_hash") val candidateHash: String,
-    val validation: GenerationValidation,
-    @SerialName("context_manifest") val contextManifest: ContextManifest,
-)
-
 @Serializable data class ProjectIndex(@SerialName("project_id") val projectId: String, @SerialName("project_revision") val projectRevision: String, @SerialName("schema_version") val schemaVersion: String = "", @SerialName("generated_at") val generatedAt: String = "", val files: List<IndexedFile> = emptyList())
 @Serializable data class IndexedFile(val path: String, @SerialName("content_hash") val contentHash: String, val language: String, val binary: Boolean, @SerialName("size_bytes") val sizeBytes: Long = 0, @SerialName("line_count") val lineCount: Int = 0, @SerialName("modified_at") val modifiedAt: String = "", val imports: List<String> = emptyList(), @SerialName("analysis_status") val analysisStatus: String = "missing", val symbols: List<SymbolInfo> = emptyList(), val diagnostics: List<IndexDiagnostic> = emptyList())
 @Serializable data class IndexDiagnostic(val message: String, val line: Int = 0)
@@ -68,15 +53,11 @@ data class GenerationResult(
 @Serializable data class DiffLine(val kind: String, @SerialName("old_line") val oldLine: Int = 0, @SerialName("new_line") val newLine: Int = 0, val text: String)
 @Serializable data class CandidateCheckReport(@SerialName("target_path") val targetPath: String, val applicable: Boolean, val checks: List<CandidateCheck> = emptyList(), @SerialName("draft_id") val draftId: String = "", @SerialName("draft_revision") val draftRevision: Long = 0, @SerialName("draft_hash") val draftHash: String = "", @SerialName("candidate_hash") val candidateHash: String = "", @SerialName("project_id") val projectId: String = "", @SerialName("project_revision") val projectRevision: String = "", @SerialName("base_file_hash") val baseFileHash: String = "")
 @Serializable data class CandidateCheck(val name: String, val required: Boolean = false, val state: String, val command: List<String> = emptyList(), val output: String = "", @SerialName("exit_code") val exitCode: Int = 0)
-@Serializable data class CandidateComparison(val left: CandidateComparisonItem, val right: CandidateComparisonItem)
-@Serializable data class CandidateComparisonItem(@SerialName("generation_id") val generationId: String, @SerialName("candidate_hash") val candidateHash: String, @SerialName("target_path") val targetPath: String, @SerialName("target_symbol") val targetSymbol: String, val action: String, @SerialName("scope_mode") val scopeMode: String, @SerialName("diff_lines") val diffLines: Int, val applicable: Boolean, val checks: String, val model: String, @SerialName("user_note") val userNote: String = "")
-@Serializable data class ReviewExport(val filename: String, val markdown: String)
 @Serializable data class ApplyResult(@SerialName("project_revision") val projectRevision: String, @SerialName("post_apply_hash") val postApplyHash: String, @SerialName("undo_available") val undoAvailable: Boolean, val audit: AuditEntry? = null, val index: ProjectIndex? = null)
 @Serializable data class AuditEntry(val action: String, @SerialName("target_path") val targetPath: String, val outcome: String, val timestamp: String)
 @Serializable data class ImpactPreview(@SerialName("target_path") val targetPath: String, @SerialName("target_symbol") val targetSymbol: String = "", val references: List<ImpactReference> = emptyList())
 @Serializable data class ImpactReference(val path: String, val symbol: String = "", val confidence: String, val reason: String)
 @Serializable data class GitStatus(val available: Boolean, val branch: String = "", @SerialName("file_state") val fileState: String = "", @SerialName("diff_state") val diffState: String = "")
-@Serializable data class ActivityEntry(val role: String, val content: String, val phase: String, val timestamp: String, @SerialName("target_file") val targetFile: String = "", @SerialName("target_symbol") val targetSymbol: String = "")
 @Serializable data class EffectiveModel(val profile: String, val model: String, @SerialName("remote_provider") val remoteProvider: Boolean = false, val timeout: String = "")
 @Serializable data class DaemonStatus(val status: String, val version: String, val workflow: String = "")
 @Serializable data class ApiError(val type: String = "", val message: String = "", @SerialName("user_message") val userMessage: String = "")
@@ -121,4 +102,3 @@ data class GenerationResult(
 @Serializable data class ChatDraftProposal(@SerialName("session_id") val sessionId: String = "", val draft: DeclarationDraft = DeclarationDraft(), @SerialName("assistant_message") val assistantMessage: ChatSessionMessage = ChatSessionMessage(), @SerialName("context_manifest") val contextManifest: ContextManifest = ContextManifest())
 
 @Serializable data class DeclarationDraft(@SerialName("id") val id: String = "", @SerialName("project_id") val projectId: String = "", @SerialName("project_revision") val projectRevision: String = "", @SerialName("base_file_hash") val baseFileHash: String = "", @SerialName("target_path") val targetPath: String = "", val mode: String = "", @SerialName("target_symbol") val targetSymbol: String = "", val declaration: String = "", val imports: List<String> = emptyList(), val revision: Long = 0, val hash: String = "", @SerialName("candidate_hash") val candidateHash: String = "", @SerialName("parent_draft_id") val parentDraftId: String = "", @SerialName("previous_hash") val previousHash: String = "", val state: String = "", val validation: GenerationValidation? = null)
-@Serializable data class DraftReview(val draft: DeclarationDraft = DeclarationDraft(), val checks: CandidateCheckReport? = null, @SerialName("apply_eligible") val applyEligible: Boolean = false)
