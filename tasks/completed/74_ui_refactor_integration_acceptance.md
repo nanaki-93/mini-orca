@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -37,6 +37,13 @@ Tasks 57–73.
 
 ## Verification
 
-- Run focused Desktop integration/semantics tests and the complete UI smoke checklist.
-- Run `./desktop/gradlew -p desktop test`, `make check`, and `git diff --check`.
-- Inspect final diff and report behavior, files, commands, limitations, and deferred work.
+- Focused Desktop integration, state, and semantics tests pass, including the complete
+  Summary → Analysis → Bugs → Editor → Verify → Apply/Undo workflow.
+- `./desktop/gradlew -p desktop test` passes.
+- `make check` passes (Go formatting/tests/vet and Desktop tests).
+- `git diff --check` passes.
+- The manual GUI smoke checklist is environment-limited in the headless validation host;
+  wide, exact-1000dp, below-1000dp, and text-scaling checks are documented in
+  `desktop/KEYBOARD_SMOKE_CHECKLIST.md` for a desktop run.
+- Final audit confirms no retired whole-file candidate review surface, duplicate
+  presentation facts, generated build output, credentials, or configuration migration.

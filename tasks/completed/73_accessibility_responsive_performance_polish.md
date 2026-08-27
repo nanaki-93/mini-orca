@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -38,4 +38,3 @@ Task 72.
 - Run Desktop accessibility/semantics, shell, explorer, and integration tests.
 - Run the updated manual keyboard/responsive smoke checklist.
 - Run `./desktop/gradlew -p desktop test` and `git diff --check`.
-

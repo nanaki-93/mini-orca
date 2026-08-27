@@ -35,5 +35,5 @@ With the same fixture, verify the focused workflow without a mouse:
 - `⌘P` opens file navigation, `⌘⇧O` opens the selected-file symbol picker, and `⌘K` opens the file-scoped action route. `⌘1`–`⌘4` select Summary, Analysis, Bugs, and Editor; `⌘Tab` cycles them.
 - Select or create one target, enter a chat request, then use `⌘Enter` to send. Edit only the declaration draft, use `⌘⇧V` to validate and `⌘⇧C` for focused checks. Press `Esc` only to close the active dialog or cancel the active request.
 - Use `⌘⇧F` to return to Bugs and Tab through filters and finding actions. Confirm focusable controls expose text labels and selected/disabled state; freshness, validation, severity, confidence, scan/job state, and connection state remain understandable without color.
-- Resize the window below 1000dp and verify the Files and Action controls open drawers rather than compressing all three panes.
+- Resize the window to exactly 1000dp and below 1000dp; verify the wide panes remain stable at the breakpoint and labeled Files and Context controls open drawers below it rather than compressing all three panes.
 - Check source and composed diff views remain read-only, preserve text selection, and highlight comments, strings, and language keywords without changing their content. The compact brief must remain above source in the narrow layout.

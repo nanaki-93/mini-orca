@@ -73,14 +73,14 @@ Source roadmaps: [`../PLAN.md`](../PLAN.md) and
 | 64 | [Editor Target stage](completed/64_editor_target_stage.md) | 63 | Complete |
 | 65 | [Editor Draft stage](completed/65_editor_draft_stage.md) | 64 | Complete |
 | 66 | [Selectable diff viewer](completed/66_selectable_diff_viewer.md) | 65 | Complete |
-| 67 | [Editor Verify stage](67_editor_verify_stage.md) | 66 | In Progress |
-| 68 | [Editor Apply and receipt stage](68_editor_apply_receipt_stage.md) | 67 | Pending |
-| 69 | [Project Summary visual refactor](69_project_summary_visual_refactor.md) | 68 | Pending |
-| 70 | [Analysis workspace visual refactor](70_analysis_workspace_visual_refactor.md) | 69 | Pending |
-| 71 | [Bugs workspace visual refactor](71_bugs_workspace_visual_refactor.md) | 70 | Pending |
-| 72 | [Command, dialog, and system states](72_command_dialog_system_states.md) | 71 | Pending |
-| 73 | [Accessibility, responsive, and performance polish](73_accessibility_responsive_performance_polish.md) | 72 | Pending |
-| 74 | [UI refactor integration acceptance](74_ui_refactor_integration_acceptance.md) | 57–73 | Pending |
+| 67 | [Editor Verify stage](completed/67_editor_verify_stage.md) | 66 | Complete |
+| 68 | [Editor Apply and receipt stage](completed/68_editor_apply_receipt_stage.md) | 67 | Complete |
+| 69 | [Project Summary visual refactor](completed/69_project_summary_visual_refactor.md) | 68 | Complete |
+| 70 | [Analysis workspace visual refactor](completed/70_analysis_workspace_visual_refactor.md) | 69 | Complete |
+| 71 | [Bugs workspace visual refactor](completed/71_bugs_workspace_visual_refactor.md) | 70 | Complete |
+| 72 | [Command, dialog, and system states](completed/72_command_dialog_system_states.md) | 71 | Complete |
+| 73 | [Accessibility, responsive, and performance polish](completed/73_accessibility_responsive_performance_polish.md) | 72 | Complete |
+| 74 | [UI refactor integration acceptance](completed/74_ui_refactor_integration_acceptance.md) | 57–73 | Complete |
 
 ## Delivery boundaries
 

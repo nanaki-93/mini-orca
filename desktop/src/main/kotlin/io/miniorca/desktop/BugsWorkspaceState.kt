@@ -50,6 +50,12 @@ fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress = when {
 fun findingCanPrepareFix(finding: UnifiedFinding): Boolean =
     finding.freshness.lowercase() == "fresh" && finding.location.path.isNotBlank()
 
+internal fun findingProvenanceLabel(finding: UnifiedFinding): String =
+    "${classifyFinding(finding).sectionLabel} · source ${finding.source.ifBlank { "unknown" }} · confidence ${finding.confidence.ifBlank { "unknown" }}"
+
+internal fun findingStatusLabel(finding: UnifiedFinding): String =
+    "${finding.status.ifBlank { "unknown" }} · ${finding.freshness.ifBlank { "unknown" }} · revision ${finding.projectRevision.ifBlank { "unknown" }}"
+
 private fun matchesFindingQuery(finding: UnifiedFinding, query: String): Boolean {
     val normalized = query.trim()
     if (normalized.isBlank()) return true

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
@@ -267,9 +268,8 @@ internal fun DesktopShell(
                             project = appState.project, overview = appState.overview, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis, selectedSymbol = appState.selectedSymbol,
                             workspace = workspace, analysisInProgress = analysisInProgress, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis, remoteProvider = remoteProvider, remoteProviderConfirmed = remoteProviderConfirmed, onRemoteProviderConfirmed = onRemoteProviderConfirmed,
                             editorFlow = editorFlow, onEditorStage = onEditorStage,
-                            onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, checks = appState.checks, draft = appState.review.draft, editor = appState.review.editor,
-                            applied = appState.review.applied, onRunDraftChecks = onRunDraftChecks, onApplyDraft = onApplyDraft, onUndo = onUndo,
-                            impact = appState.impact, gitStatus = appState.gitStatus, findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding, onTriageFinding = onTriageFinding,
+                            onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, checks = appState.checks, draft = appState.review.draft, editor = appState.review.editor, applied = appState.review.applied, onApplyDraft = onApplyDraft, onUndo = onUndo,
+                            findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding, onTriageFinding = onTriageFinding,
                             onStartAnalyzeAll = onStartAnalyzeAll, onPauseAnalyzeAll = onPauseAnalyzeAll, onResumeAnalyzeAll = onResumeAnalyzeAll, onCancelAnalyzeAll = onCancelAnalyzeAll, onStartScan = onStartScan, onCancelScan = onCancelScan,
                             focusedLine = appState.selection.focusedLine, showCompactEditorBrief = narrow, onWorkspace = onWorkspace, modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
@@ -292,8 +292,8 @@ private fun ContentPane(
     project: ProjectAnalysis?, overview: ProjectOverview?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, workspace: Workspace,
     analysisInProgress: Boolean, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit, remoteProvider: Boolean, remoteProviderConfirmed: Boolean, onRemoteProviderConfirmed: (Boolean) -> Unit,
     editorFlow: EditorFlowUiState, onEditorStage: (EditorStage) -> Unit,
-    onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, checks: CandidateCheckReport?, draft: DeclarationDraft?, editor: EditableDraftState?, applied: ApplyResult?, onRunDraftChecks: () -> Unit, onApplyDraft: () -> Unit, onUndo: () -> Unit,
-    impact: ImpactPreview?, gitStatus: GitStatus?, findings: List<UnifiedFinding>, scan: GoScanReport?, analyzeAll: AnalyzeAllJob?, coverage: AnalysisCoverage?, onOpenFinding: (UnifiedFinding) -> Unit, onPrepareFinding: (UnifiedFinding) -> Unit, onTriageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
+    onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, checks: CandidateCheckReport?, draft: DeclarationDraft?, editor: EditableDraftState?, applied: ApplyResult?, onApplyDraft: () -> Unit, onUndo: () -> Unit,
+    findings: List<UnifiedFinding>, scan: GoScanReport?, analyzeAll: AnalyzeAllJob?, coverage: AnalysisCoverage?, onOpenFinding: (UnifiedFinding) -> Unit, onPrepareFinding: (UnifiedFinding) -> Unit, onTriageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
     onStartAnalyzeAll: (AnalyzeAllRunOptions) -> Unit, onPauseAnalyzeAll: () -> Unit, onResumeAnalyzeAll: (Boolean) -> Unit, onCancelAnalyzeAll: () -> Unit, onStartScan: () -> Unit, onCancelScan: () -> Unit,
     focusedLine: Int, showCompactEditorBrief: Boolean, onWorkspace: (Workspace) -> Unit, modifier: Modifier,
 ) {
@@ -301,10 +301,10 @@ private fun ContentPane(
         when (workspace) {
             Workspace.Summary -> ProjectSummaryPane(overview, project, onWorkspace)
             Workspace.Editor -> EditorWorkspace(editorFlow, onEditorStage, canvas = {
-                if (draft != null) {
-                    DraftReviewPane(project, selected, editor, draft, checks, impact, gitStatus, applied, onRunDraftChecks, onApplyDraft, onUndo)
-                } else {
-                    EditorPane(project, selected, selectedSymbol, focusedLine)
+                when (editorFlow.activeStage) {
+                    EditorStage.Verify -> VerifyDiffCanvas(draft)
+                    EditorStage.Apply -> ApplyDiffCanvas(draft, applied)
+                    else -> EditorPane(project, selected, selectedSymbol, focusedLine)
                 }
             })
             Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll) { path -> onOpenFinding(UnifiedFinding(location = FindingLocation(path = path))) }
@@ -334,7 +334,9 @@ private fun DesktopStatusBar(status: String, error: String?, connection: Connect
     Row(Modifier.fillMaxWidth().height(30.dp).background(Panel).border(BorderStroke(1.dp, Border)).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(7.dp).background(if (error == null && connection.connected) Success else Error, RoundedCornerShape(50)))
         Spacer(Modifier.width(7.dp))
-        Text(error ?: status, color = if (error == null) SecondaryText else Error, fontSize = 11.sp, maxLines = 1)
+        Text(error ?: connectionLabel(connection), color = if (error == null) SecondaryText else Error, fontSize = 11.sp, maxLines = 1)
+        Spacer(Modifier.width(8.dp))
+        Text("· Preview-first mode · ${status.ifBlank { "Ready" }}", color = SecondaryText, fontSize = 10.sp, maxLines = 1)
         Spacer(Modifier.weight(1f))
         Button(onClick = onReconnect, modifier = Modifier.height(24.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 7.dp, vertical = 0.dp)) { Text("Reconnect", fontSize = 10.sp) }
         Spacer(Modifier.width(8.dp))
@@ -342,17 +344,36 @@ private fun DesktopStatusBar(status: String, error: String?, connection: Connect
     }
 }
 
+internal fun contextDestinationLabel(remoteProvider: Boolean): String = if (remoteProvider) {
+    "Destination: remote provider · confirmation required before sending project context"
+} else {
+    "Destination: local provider · project context stays on this machine"
+}
+
+internal fun contextManifestSummary(manifest: ContextManifest): String =
+    "${manifest.included.size} included · ${manifest.excluded.size} excluded · ${manifest.estimatedTokens} estimated tokens${if (manifest.truncated) " · truncated" else ""}"
+
 @Composable
 private fun ContextInspectorDialog(manifest: ContextManifest, remoteProvider: Boolean, onDismiss: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Context inspector") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Context inspector · read-only") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            Text("${manifest.estimatedTokens} / ${manifest.tokenLimit.takeIf { it > 0 } ?: "?"} estimated tokens${if (manifest.truncated) " · truncated" else ""}", color = SecondaryText, fontSize = 12.sp)
-            if (manifest.byteLimit > 0) Text("${formatBytes(manifest.byteLimit.toLong())} byte limit", color = SecondaryText, fontSize = 11.sp)
-            if (remoteProvider) Text("Warning: this provider is not loopback/local. Confirm the destination before sending project context.", color = Warning, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-            Text("Included", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
-            manifest.included.forEach { Text(it.path, fontSize = 11.sp) }
-            Text("Excluded", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
-            manifest.excluded.forEach { Text("${it.path} · ${it.reason}", color = SecondaryText, fontSize = 11.sp) }
+            FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+                SectionLabel("DESTINATION")
+                Text(contextDestinationLabel(remoteProvider), color = if (remoteProvider) Warning else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+            }
+            Text(contextManifestSummary(manifest), color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+            if (manifest.tokenLimit > 0) Text("Token budget: ${manifest.estimatedTokens} / ${manifest.tokenLimit}", color = SecondaryText, fontSize = 11.sp)
+            if (manifest.byteLimit > 0) Text("Byte limit: ${formatBytes(manifest.byteLimit.toLong())}", color = SecondaryText, fontSize = 11.sp)
+            SelectionContainer {
+                Column {
+                    Text("Included", color = PrimaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
+                    if (manifest.included.isEmpty()) Text("No files included.", color = SecondaryText, fontSize = 11.sp)
+                    manifest.included.forEach { Text("${it.path} · ${formatBytes(it.sizeBytes)} · ${it.estimatedTokens} tokens", color = SecondaryText, fontSize = 11.sp) }
+                    Text("Excluded", color = PrimaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
+                    if (manifest.excluded.isEmpty()) Text("No files excluded.", color = SecondaryText, fontSize = 11.sp)
+                    manifest.excluded.forEach { Text("${it.path} · ${it.reason}", color = SecondaryText, fontSize = 11.sp) }
+                }
+            }
         }
     }, confirmButton = { Button(onClick = onDismiss) { Text("Close") } })
 }

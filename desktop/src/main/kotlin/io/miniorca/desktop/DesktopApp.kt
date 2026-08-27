@@ -560,11 +560,15 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         )
     }
     val contextPane: @Composable (Modifier) -> Unit = { modifier ->
-        if (appState.workspace == Workspace.Editor && activeEditorStage == EditorStage.Target) {
+        if (appState.workspace == Workspace.Editor && editorFlow.activeStage == EditorStage.Target) {
             TargetContextPane(appState.selectedFile, appState.analysis, appState.symbols, appState.selectedSymbol, chatMode, newChatSymbol, remoteProvider, remoteProviderConfirmed, { remoteProviderConfirmed = it }, { update(DesktopEvent.SymbolSelected(it)) }, { chatMode = it }, { newChatSymbol = it }, { analyzeSelected(false) }, { analyzeSelected(true) }, modifier)
-        } else if (appState.workspace == Workspace.Editor && activeEditorStage == EditorStage.Draft) {
+        } else if (appState.workspace == Workspace.Editor && editorFlow.activeStage == EditorStage.Draft) {
             val target = validateChatTarget(appState.selectedFile, appState.symbols, appState.selectedSymbol, chatMode, newChatSymbol).target
             DraftContextPane(appState.project, appState.selectedFile, appState.chat.session, appState.review.draft, appState.review.editor, target, chatMessage, chatJob != null, remoteProvider, remoteProviderConfirmed, chatFocusRequester, draftFocusRequester, { chatMessage = it }, { remoteProviderConfirmed = it }, ::inspectContext, { update(DesktopEvent.DraftEdited(declaration = it)) }, { update(DesktopEvent.DraftEdited(imports = it)) }, ::validateEditableDraft, ::sendChatMessage, { chatJob?.cancel() }, modifier)
+        } else if (appState.workspace == Workspace.Editor && editorFlow.activeStage == EditorStage.Verify) {
+            VerifyEvidencePane(appState.project, appState.selectedFile, appState.review.editor, appState.review.draft, appState.checks, appState.impact, appState.gitStatus, appState.loading, ::runDraftChecks, { activeEditorStage = EditorStage.Apply }, modifier)
+        } else if (appState.workspace == Workspace.Editor && editorFlow.activeStage == EditorStage.Apply) {
+            ApplyDecisionPane(appState.project, appState.selectedFile, appState.review.editor, appState.review.draft, appState.checks, appState.impact, appState.gitStatus, appState.review.applied, ::applyEditableDraft, ::undoAppliedDraft, modifier)
         } else {
             SystemStateMessage("Editor context", "Select Target or Draft to continue the guarded declaration workflow.", modifier = modifier)
         }

@@ -3,68 +3,132 @@ package io.miniorca.desktop
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Project facts are rendered independently from optional model interpretation. */
+internal data class ProjectSummaryPresentation(
+    val hasProject: Boolean,
+    val projectType: String,
+    val buildMetadata: String,
+    val inventory: String,
+    val languages: String,
+    val revision: String,
+    val analysisStatus: String,
+    val analysisMessage: String,
+    val coverage: String,
+    val findings: String,
+)
+
+internal fun projectSummaryPresentation(overview: ProjectOverview?, project: ProjectAnalysis?): ProjectSummaryPresentation {
+    val metrics = overview?.metrics
+    val value = metrics ?: ProjectMetrics(
+        type = project?.type.orEmpty(),
+        buildFile = project?.buildFile.orEmpty(),
+        fileCount = project?.fileCount ?: 0,
+        sourceFileCount = project?.sourceFileCount ?: 0,
+        totalLines = project?.totalLines ?: 0,
+        languages = project?.languages.orEmpty(),
+    )
+    val analysis = overview?.analysis
+    val analysisStatus = (analysis?.status ?: project?.aiStatus).orEmpty().lowercase().ifBlank { "missing" }
+    val analysisMessage = when (analysisStatus) {
+        "fresh" -> "Fresh model interpretation is available. It is advisory and separate from indexed facts."
+        "stale" -> "Model interpretation is stale for this revision. Refresh analysis before relying on it."
+        "failed" -> analysis?.failure?.ifBlank { "Model analysis failed. Deterministic facts remain available." }
+            ?: "Model analysis failed. Deterministic facts remain available."
+        "running" -> "Model analysis is running; deterministic facts remain available."
+        else -> "No current model interpretation is available. Deterministic facts remain available."
+    }
+    val coverage = overview?.analysisCoverage
+    val findingCounts = overview?.findingCounts
+    return ProjectSummaryPresentation(
+        hasProject = overview != null || project != null,
+        projectType = value.type.ifBlank { "Unknown project type" },
+        buildMetadata = value.buildFile.ifBlank { "No build metadata" },
+        inventory = "${value.fileCount} files · ${value.sourceFileCount} source files · ${value.totalLines} lines",
+        languages = value.languages.entries.sortedBy { it.key }.joinToString(" · ") { "${it.key}: ${it.value}" },
+        revision = overview?.projectRevision ?: project?.projectRevision.orEmpty(),
+        analysisStatus = analysisStatus,
+        analysisMessage = analysisMessage,
+        coverage = "${coverage?.fresh ?: 0} fresh · ${coverage?.stale ?: 0} stale · ${coverage?.missing ?: 0} missing · ${coverage?.failed ?: 0} failed · ${coverage?.running ?: 0} running",
+        findings = "${findingCounts?.verified ?: 0} verified · ${findingCounts?.aiSuggestions ?: 0} AI suggestions",
+    )
+}
+
+/** Scan-friendly project overview. Indexed facts never depend on model analysis being present. */
 @Composable
 internal fun ProjectSummaryPane(overview: ProjectOverview?, project: ProjectAnalysis?, onWorkspace: (Workspace) -> Unit) {
-    val metrics = overview?.metrics
-    val analysis = overview?.analysis
+    val presentation = projectSummaryPresentation(overview, project)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
         Text("PROJECT SUMMARY", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Text("One project · indexed facts, model interpretation, and workspace coverage", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(12.dp))
-        SummaryHeading("DETERMINISTIC PROJECT FACTS")
-        if (metrics == null && project == null) {
-            Text("Import a project to view its indexed facts.", color = SecondaryText, fontSize = 13.sp)
-        } else {
-            val value = metrics ?: ProjectMetrics(project?.type.orEmpty(), project?.buildFile.orEmpty(), project?.fileCount ?: 0, project?.sourceFileCount ?: 0, project?.totalLines ?: 0)
-            Text("${value.type.ifBlank { "Unknown" }} · ${value.buildFile.ifBlank { "No build metadata" }}", color = PrimaryText, fontSize = 13.sp)
-            Text("${value.fileCount} files · ${value.sourceFileCount} source files · ${value.totalLines} lines", color = SecondaryText, fontSize = 12.sp)
-            if (value.languages.isNotEmpty()) Text(value.languages.entries.sortedBy { it.key }.joinToString(" · ") { "${it.key}: ${it.value}" }, color = SecondaryText, fontSize = 12.sp)
-            Text("Revision: ${overview?.projectRevision ?: project?.projectRevision.orEmpty()}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+
+        FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+            SectionLabel("DETERMINISTIC PROJECT FACTS")
+            if (!presentation.hasProject) {
+                Text("Import a project to view its indexed facts.", color = SecondaryText, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+            } else {
+                SelectionContainer {
+                    Column(Modifier.padding(top = 6.dp)) {
+                        Text("${presentation.projectType} · ${presentation.buildMetadata}", color = PrimaryText, fontSize = 13.sp)
+                        Text(presentation.inventory, color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        if (presentation.languages.isNotBlank()) Text(presentation.languages, color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        Text("Project revision: ${presentation.revision}", color = SecondaryText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(16.dp))
-        SummaryHeading("MODEL INTERPRETATION")
-        when (analysis?.status?.lowercase()) {
-            "fresh" -> ProjectInterpretation(analysis)
-            "stale" -> { Text("Stale model interpretation — refresh analysis after this revision.", color = Warning, fontSize = 13.sp); ProjectInterpretation(analysis) }
-            "failed" -> Text(analysis.failure.ifBlank { "Model analysis failed. Deterministic facts remain available." }, color = Error, fontSize = 13.sp)
-            else -> Text("No current model interpretation is available. Deterministic facts remain available.", color = SecondaryText, fontSize = 13.sp)
+
+        Spacer(Modifier.height(10.dp))
+        FocusFlowPanel(Modifier.fillMaxWidth()) {
+            SectionLabel("MODEL INTERPRETATION · ADVISORY")
+            StatusBadge(presentation.analysisStatus, Modifier.padding(top = 7.dp))
+            Text(presentation.analysisMessage, color = if (presentation.analysisStatus == "failed") Error else if (presentation.analysisStatus == "stale") Warning else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+            if (presentation.analysisStatus == "fresh" || presentation.analysisStatus == "stale") {
+                val analysis = overview?.analysis
+                ProjectInterpretation(analysis)
+            }
         }
-        Spacer(Modifier.height(16.dp))
-        SummaryHeading("WORKSPACE COVERAGE")
-        val coverage = overview?.analysisCoverage
-        Text("Analysis: ${coverage?.fresh ?: 0} fresh · ${coverage?.stale ?: 0} stale · ${coverage?.missing ?: 0} missing", color = SecondaryText, fontSize = 12.sp)
-        Text("Findings: ${overview?.findingCounts?.verified ?: 0} verified · ${overview?.findingCounts?.aiSuggestions ?: 0} AI suggestions", color = SecondaryText, fontSize = 12.sp)
-        Button(onClick = { onWorkspace(Workspace.Analysis) }, modifier = Modifier.padding(top = 8.dp)) { Text("Open Analysis") }
-        Button(onClick = { onWorkspace(Workspace.Bugs) }, modifier = Modifier.padding(top = 6.dp)) { Text("Open Bugs") }
+
+        Spacer(Modifier.height(10.dp))
+        FocusFlowPanel(Modifier.fillMaxWidth()) {
+            SectionLabel("WORKSPACE COVERAGE")
+            Text("File analysis: ${presentation.coverage}", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+            Text("Findings: ${presentation.findings}", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            Button(onClick = { onWorkspace(Workspace.Analysis) }, modifier = Modifier.padding(top = 9.dp)) { Text("Open Analysis") }
+            Button(onClick = { onWorkspace(Workspace.Bugs) }, modifier = Modifier.padding(top = 6.dp)) { Text("Open Bugs") }
+        }
     }
 }
 
-@Composable private fun SummaryHeading(value: String) = Text(value, color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 6.dp))
-
-@Composable private fun ProjectInterpretation(analysis: StructuredProjectAnalysis) {
-    Text(analysis.purpose.ifBlank { "No purpose returned." }, color = PrimaryText, fontSize = 13.sp)
+@Composable
+private fun ProjectInterpretation(analysis: StructuredProjectAnalysis?) {
+    if (analysis == null) return
+    Text(analysis.purpose.ifBlank { "No purpose returned." }, color = PrimaryText, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
     if (analysis.architecture.isNotBlank()) Text("Architecture: ${analysis.architecture}", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
     projectList("Components", analysis.components)
     projectList("Entry points", analysis.entryPoints)
     projectList("Flows", analysis.flows)
-    projectList("Risks (model suggestions)", analysis.risks.map { "${it.severity.uppercase()} · ${it.summary}" })
+    projectList("Risks (AI suggestions)", analysis.risks.map { "${it.severity.uppercase()} · ${it.summary}" })
     projectList("Next steps", analysis.nextSteps)
 }
 
-@Composable private fun projectList(label: String, values: List<String>) {
+@Composable
+private fun projectList(label: String, values: List<String>) {
     if (values.isEmpty()) return
     Text(label, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
-    values.forEach { Text("• $it", color = PrimaryText, fontSize = 12.sp) }
+    values.forEach { Text("• $it", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp)) }
 }

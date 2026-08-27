@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -149,7 +150,7 @@ internal fun CodePane(project: ProjectAnalysis?, selected: ProjectFileInfo?, sel
         else -> "Select Import to analyze a project. Mini-Orca indexes only policy-eligible project files."
     }
     SelectionContainer {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(18.dp)) {
             if (focusedLine > 0) {
                 Text(
                     "Editor context · ${selectedSymbol?.name ?: "line $focusedLine"} · line $focusedLine",
