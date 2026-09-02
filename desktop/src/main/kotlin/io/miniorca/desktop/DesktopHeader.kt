@@ -43,7 +43,7 @@ internal fun AppTopBar(
     onImport: () -> Unit,
     onReanalyze: () -> Unit,
     onPalette: () -> Unit,
-    narrow: Boolean,
+    showEditorDrawerActions: Boolean,
     onOpenExplorer: () -> Unit,
     onOpenContext: () -> Unit,
 ) {
@@ -63,7 +63,7 @@ internal fun AppTopBar(
             CircularProgressIndicator(Modifier.size(16.dp), color = CyanAccent, strokeWidth = 2.dp)
         }
         Spacer(Modifier.width(12.dp))
-        if (narrow) {
+        if (showEditorDrawerActions) {
             TopBarButton("Files", onOpenExplorer)
             Spacer(Modifier.width(6.dp))
             TopBarButton("Context", onOpenContext)

@@ -28,6 +28,7 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +69,13 @@ internal fun narrowDrawerLabel(drawer: NarrowDrawer): String = when (drawer) {
 }
 
 fun useNarrowLayout(widthDp: Float): Boolean = widthDp < 1000f
+
+internal fun editorChromeVisible(workspace: Workspace): Boolean = workspace == Workspace.Editor
+
+internal fun editorDrawerActionsVisible(workspace: Workspace, widthDp: Float): Boolean =
+    useNarrowLayout(widthDp) && editorChromeVisible(workspace)
+
+internal fun fileInspectionWorkspace(): Workspace = Workspace.Editor
 
 /** Builds a stable project-relative explorer without exposing filesystem paths. */
 fun explorerRows(files: List<IndexedFile>, filter: String = ""): List<ExplorerRow> {
@@ -192,9 +200,18 @@ internal fun DesktopShell(
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     var narrowDrawer by remember { mutableStateOf(NarrowDrawer.Files) }
+    val showsEditorChrome = editorChromeVisible(workspace)
     fun openDrawer(drawer: NarrowDrawer) {
+        if (!showsEditorChrome) return
         narrowDrawer = drawer
         scope.launch { drawerState.open() }
+    }
+    fun selectWorkspace(nextWorkspace: Workspace) {
+        if (!editorChromeVisible(nextWorkspace)) scope.launch { drawerState.close() }
+        onWorkspace(nextWorkspace)
+    }
+    LaunchedEffect(showsEditorChrome) {
+        if (!showsEditorChrome) drawerState.close()
     }
     Surface(
         modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
@@ -222,13 +239,13 @@ internal fun DesktopShell(
                 DesktopShortcut.OpenAction -> onOpenPalette(PaletteMode.Actions)
                 DesktopShortcut.FocusChat -> onFocusChat()
                 DesktopShortcut.FocusDraft -> onFocusDraft()
-                DesktopShortcut.FocusBugsFilters -> onWorkspace(Workspace.Bugs)
+                DesktopShortcut.FocusBugsFilters -> selectWorkspace(Workspace.Bugs)
                 DesktopShortcut.ValidateDraft -> onValidateDraft()
                 DesktopShortcut.RunDraftChecks -> onRunDraftChecks()
-                DesktopShortcut.SummaryWorkspace -> onWorkspace(Workspace.Summary)
-                DesktopShortcut.AnalysisWorkspace -> onWorkspace(Workspace.Analysis)
-                DesktopShortcut.BugsWorkspace -> onWorkspace(Workspace.Bugs)
-                DesktopShortcut.EditorWorkspace -> onWorkspace(Workspace.Editor)
+                DesktopShortcut.SummaryWorkspace -> selectWorkspace(Workspace.Summary)
+                DesktopShortcut.AnalysisWorkspace -> selectWorkspace(Workspace.Analysis)
+                DesktopShortcut.BugsWorkspace -> selectWorkspace(Workspace.Bugs)
+                DesktopShortcut.EditorWorkspace -> selectWorkspace(Workspace.Editor)
                 DesktopShortcut.Generate -> if (generating) onCancelGeneration() else onGenerate()
                 DesktopShortcut.Cancel -> when {
                     showPalette -> onDismissPalette()
@@ -237,7 +254,7 @@ internal fun DesktopShell(
                     analysisInProgress -> onCancelAnalysis()
                     else -> return@onPreviewKeyEvent false
                 }
-                DesktopShortcut.NextTab -> onWorkspace(nextWorkspace(workspace))
+                DesktopShortcut.NextTab -> selectWorkspace(nextWorkspace(workspace))
                 null -> return@onPreviewKeyEvent false
             }
             true
@@ -246,21 +263,24 @@ internal fun DesktopShell(
     ) {
         BoxWithConstraints {
             val narrow = useNarrowLayout(maxWidth.value)
+            val showEditorDrawers = editorDrawerActionsVisible(workspace, maxWidth.value)
             ModalDrawer(
                 drawerState = drawerState,
                 drawerContent = {
-                    if (narrowDrawer == NarrowDrawer.Files) {
-                        explorer(Modifier.fillMaxHeight().width(320.dp)) { scope.launch { drawerState.close() } }
-                    } else {
-                        contextPane(Modifier.fillMaxHeight().width(360.dp))
+                    if (showsEditorChrome) {
+                        if (narrowDrawer == NarrowDrawer.Files) {
+                            explorer(Modifier.fillMaxHeight().width(320.dp)) { scope.launch { drawerState.close() } }
+                        } else {
+                            contextPane(Modifier.fillMaxHeight().width(360.dp))
+                        }
                     }
                 },
             ) {
                 Column {
-                    AppTopBar(appState.project, appState.loading, connection, onImport, onReanalyze, { onOpenPalette(PaletteMode.Actions) }, narrow, { openDrawer(NarrowDrawer.Files) }, { openDrawer(NarrowDrawer.Context) })
+                    AppTopBar(appState.project, appState.loading, connection, onImport, onReanalyze, { onOpenPalette(PaletteMode.Actions) }, showEditorDrawers, { openDrawer(NarrowDrawer.Files) }, { openDrawer(NarrowDrawer.Context) })
                     Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        WorkspaceRail(workspace, workspaceCounts, onWorkspace, Modifier.width(176.dp).fillMaxHeight())
-                        if (!narrow) {
+                        WorkspaceRail(workspace, workspaceCounts, ::selectWorkspace, Modifier.width(176.dp).fillMaxHeight())
+                        if (!narrow && showsEditorChrome) {
                             explorer(Modifier.width(paneWidths.explorer.dp).fillMaxHeight()) {}
                             ResizableDivider(onDelta = { onPaneWidths(paneWidths.withExplorer(paneWidths.explorer + it)) }, onCommit = onSavePaneWidths)
                         }
@@ -271,9 +291,9 @@ internal fun DesktopShell(
                             onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, checks = appState.checks, draft = appState.review.draft, editor = appState.review.editor, applied = appState.review.applied, onApplyDraft = onApplyDraft, onUndo = onUndo,
                             findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding, onTriageFinding = onTriageFinding,
                             onStartAnalyzeAll = onStartAnalyzeAll, onPauseAnalyzeAll = onPauseAnalyzeAll, onResumeAnalyzeAll = onResumeAnalyzeAll, onCancelAnalyzeAll = onCancelAnalyzeAll, onStartScan = onStartScan, onCancelScan = onCancelScan,
-                            focusedLine = appState.selection.focusedLine, showCompactEditorBrief = narrow, onWorkspace = onWorkspace, modifier = Modifier.weight(1f).fillMaxHeight(),
+                            focusedLine = appState.selection.focusedLine, showCompactEditorBrief = showEditorDrawers, onWorkspace = ::selectWorkspace, modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
-                        if (!narrow) {
+                        if (!narrow && showsEditorChrome) {
                             ResizableDivider(onDelta = { onPaneWidths(paneWidths.withAction(paneWidths.action - it)) }, onCommit = onSavePaneWidths)
                             contextPane(Modifier.width(paneWidths.action.dp).fillMaxHeight())
                         }

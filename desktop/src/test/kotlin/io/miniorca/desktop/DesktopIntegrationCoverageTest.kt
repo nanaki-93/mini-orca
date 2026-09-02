@@ -57,6 +57,20 @@ class DesktopIntegrationCoverageTest {
         assertNull(findingNavigationTarget(UnifiedFinding(location = FindingLocation("other.go")), index))
     }
 
+    @Test fun fileInspectionReturnsToEditorWithoutDiscardingTheOpenFile() {
+        val controller = loadedController()
+        controller.dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+        val request = controller.beginFileLoad("main.go")!!
+        assertTrue(controller.fileLoaded(request, file(), listOf(symbol())))
+
+        controller.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Analysis))
+        assertEquals("main.go", controller.state.selectedFile?.path)
+        controller.dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+
+        assertEquals(Workspace.Editor, controller.state.workspace)
+        assertEquals("main.go", controller.state.selectedFile?.path)
+    }
+
     private fun loadedController() = DesktopWorkflowController().also { controller ->
         val projectRequest = controller.beginProjectLoad()
         assertTrue(controller.projectLoaded(projectRequest, project(), ProjectIndex("project", "revision")))

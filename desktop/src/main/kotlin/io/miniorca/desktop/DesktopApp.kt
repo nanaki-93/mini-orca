@@ -304,14 +304,25 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                 .onFailure { if (workflow.fileFailed(request, it.message ?: "File load failed")) appState = workflow.state }
         }
     }
+    fun openFileInEditor(
+        path: String,
+        editorTarget: EditorNavigationTarget? = null,
+        preparedFixRequest: String? = null,
+    ) {
+        if (appState.index?.files?.any { it.path == path } != true) {
+            update(DesktopEvent.Failed("This file no longer points to an indexed file in the active project."))
+            return
+        }
+        update(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+        selectFile(path, editorTarget, preparedFixRequest)
+    }
     fun openFinding(finding: UnifiedFinding) {
         val target = findingNavigationTarget(finding, appState.index)
         if (target == null) {
             update(DesktopEvent.Failed("This finding no longer points to a file in the active project."))
             return
         }
-        update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
-        selectFile(target.path, target)
+        openFileInEditor(target.path, target)
     }
     fun prepareFinding(finding: UnifiedFinding) {
         if (!findingCanPrepareFix(finding)) { update(DesktopEvent.Failed("Refresh this finding before preparing a fix.")); return }
@@ -320,8 +331,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             update(DesktopEvent.Failed("This finding no longer points to a file in the active project."))
             return
         }
-        update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
-        selectFile(target.path, target, "Address ${finding.title}: ${finding.message}")
+        openFileInEditor(target.path, target, "Address ${finding.title}: ${finding.message}")
     }
     fun triageFinding(finding: UnifiedFinding, action: FindingLifecycleAction) {
         val project = appState.project ?: return
@@ -552,7 +562,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             onFilter = { filter = it },
             onToggleDirectory = { path -> collapsedDirectories = if (path in collapsedDirectories) collapsedDirectories - path else collapsedDirectories + path },
             onSelect = { path ->
-                selectFile(path)
+                openFileInEditor(path)
                 onSelected()
             },
             loading = appState.loading,
@@ -602,8 +612,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         onOpenPalette = ::openPalette,
         onSelectPaletteFile = {
             showPalette = false
-            update(DesktopEvent.WorkspaceSelected(Workspace.Editor))
-            selectFile(it)
+            openFileInEditor(it)
         },
         onSelectPaletteSymbol = {
             showPalette = false

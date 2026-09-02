@@ -37,6 +37,16 @@ class DesktopShellTest {
         assertEquals("Context", narrowDrawerLabel(NarrowDrawer.Context))
     }
 
+    @Test fun editorChromeAndDrawerActionsAreScopedToEditor() {
+        assertTrue(editorChromeVisible(Workspace.Editor))
+        assertTrue(!editorChromeVisible(Workspace.Summary))
+        assertTrue(!editorChromeVisible(Workspace.Analysis))
+        assertTrue(!editorChromeVisible(Workspace.Bugs))
+        assertTrue(editorDrawerActionsVisible(Workspace.Editor, 999f))
+        assertTrue(!editorDrawerActionsVisible(Workspace.Editor, 1_000f))
+        assertTrue(!editorDrawerActionsVisible(Workspace.Analysis, 999f))
+    }
+
     @Test fun largeExplorerKeepsAStableFilteredSelectionPath() {
         val files = (1..2_000).map { number ->
             IndexedFile("src/module$number/File$number.kt", "hash-$number", "Kotlin", false, analysisStatus = if (number % 2 == 0) "fresh" else "missing")
