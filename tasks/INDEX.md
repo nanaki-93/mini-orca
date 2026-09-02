@@ -1,7 +1,9 @@
 # Mini-Orca implementation tasks
 
-Source roadmaps: [`../PLAN.md`](../PLAN.md) and
-[`../design/ui-mocks/IMPLEMENTATION_PLAN.md`](../design/ui-mocks/IMPLEMENTATION_PLAN.md)
+Current roadmap: [`../PLAN.md`](../PLAN.md)
+
+Tasks 57–74 retain the completed Desktop visual-refactor history documented in
+[`../design/ui-mocks/IMPLEMENTATION_PLAN.md`](../design/ui-mocks/IMPLEMENTATION_PLAN.md).
 
 ## Execution order
 
@@ -81,6 +83,11 @@ Source roadmaps: [`../PLAN.md`](../PLAN.md) and
 | 72 | [Command, dialog, and system states](completed/72_command_dialog_system_states.md) | 71 | Complete |
 | 73 | [Accessibility, responsive, and performance polish](completed/73_accessibility_responsive_performance_polish.md) | 72 | Complete |
 | 74 | [UI refactor integration acceptance](completed/74_ui_refactor_integration_acceptance.md) | 57–73 | Complete |
+| 75 | [Analysis and Editor UX execution baseline](completed/75_analysis_editor_ux_execution_baseline.md) | 74 | Complete |
+| 76 | [Analyze-all summary presentation](76_analysis_run_summary_presentation.md) | 75 | Pending |
+| 77 | [Analysis workspace summary UI](77_analysis_workspace_summary_ui.md) | 76 | Pending |
+| 78 | [Editor-only explorer and file navigation](78_editor_only_explorer_navigation.md) | 77 | Pending |
+| 79 | [Analysis and Editor UX acceptance](79_analysis_editor_ux_acceptance.md) | 75–78 | Pending |
 
 ## Delivery boundaries
 
@@ -96,8 +103,14 @@ Source roadmaps: [`../PLAN.md`](../PLAN.md) and
 - Tasks 63–68 deliver Target, Draft, Verify, and Apply as one guarded Editor flow.
 - Tasks 69–72 bring every workspace, command surface, dialog, and system state into the design.
 - Tasks 73–74 complete accessibility, responsive/performance polish, documentation, and acceptance.
+- Task 75 records the approved Analysis/Editor UX contract and safe per-task commit workflow.
+- Tasks 76–78 implement the Analysis summary, failures-only results, Editor-only chrome,
+  and consistent file navigation.
+- Task 79 completes regression, responsive, documentation, and commit-history acceptance.
 
-One Air implementation agent owns one ready task at a time. Read-only research or
-review agents may work in parallel, but shared-worktree writers must not overlap.
+One implementation agent owns one ready task at a time. Read-only research or review
+agents may work in parallel, but shared-worktree writers must not overlap. Tasks 75–79
+execute strictly in numeric order using [`PROMPT_EXECUTE_ALL_TASKS.md`](PROMPT_EXECUTE_ALL_TASKS.md)
+and require exactly one reviewed commit per task.
 No task may introduce direct source editing, autonomous multi-file edits, silent
 writes, automatic commits, or background agents that mutate a project.

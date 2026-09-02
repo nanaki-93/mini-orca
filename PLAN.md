@@ -1,256 +1,191 @@
-# Mini-Orca focused AI IDE roadmap
+# Analysis summary and Editor-only explorer plan
 
-Date: 2026-08-26
+Date: 2026-09-02
 
-Status: Approved product direction; implementation backlog pending
+Status: Approved; implementation pending
 
 Task source: [`tasks/INDEX.md`](tasks/INDEX.md)
 
-## 1. Product outcome
+Execution prompt: [`tasks/PROMPT_EXECUTE_ALL_TASKS.md`](tasks/PROMPT_EXECUTE_ALL_TASKS.md)
 
-Mini-Orca will be a local-first, Go-first coding assistant organized around one
-deliberate unit of work:
+## 1. Outcome
 
-> One active project → one open file → one selected or new symbol → one editable
-> AI draft → validation → focused checks → explicit Apply.
+Improve the Desktop UX so each workspace has one clear responsibility:
 
-The source viewer remains read-only. The user may manually edit the AI-generated
-declaration before accepting it, but Mini-Orca never becomes a general text
-editor and never writes a draft automatically.
+- **Summary** presents project facts and the structured project interpretation.
+- **Analysis** presents Analyze-all coverage, run progress, controls, and failures.
+- **Bugs** presents verified findings and AI suggestions.
+- **Editor** owns file browsing, per-file analysis, source inspection, and the guarded
+  Target → Draft → Verify → Apply workflow.
 
-## 2. Confirmed product decisions
+The Analysis workspace must no longer require the user to inspect a card for every
+successfully analyzed file. The file explorer and Editor context must no longer consume
+space in project-level workspaces.
 
-1. **Four workspaces:** Summary, Analysis, Bugs, and Editor.
-2. **Read-only source:** normal source files are selectable and inspectable but
-   cannot be typed into directly.
-3. **Editable AI draft:** the generated function or type is editable before
-   validation and Apply.
-4. **Verified and AI findings:** tool-reported issues and model suggestions are
-   shown separately and never presented with the same confidence.
-5. **Go first:** safe changed candidates are supported for Go before adding
-   parser-backed adapters for other languages.
-6. **Existing or new symbol:** a draft may replace one exact selected function
-   or type, or create one new top-level function or type in the open file.
-7. **Preview first:** every changed draft must pass scope validation and required
-   checks after its most recent manual edit.
-8. **One-file boundary:** chat, draft composition, diff, checks, and Apply stay
-   pinned to the file that was open when the session was created.
+## 2. Approved decisions
 
-## 3. Current foundation
+### 2.1 Analysis is an operational summary
 
-The repository already provides most safety primitives needed for this product:
+Interpret “analysis summary” as a summary of Analyze-all execution and project coverage.
+The existing API already exposes the required source-free data:
 
-- one active project with project ID, revision, and selected-file hash guards;
-- a context policy, context manifest, and loopback-only daemon default;
-- deterministic file indexing and exact Go symbol extraction;
-- lazy semantic analysis for one file and sequential Analyze-all cache warming;
-- one-file generation previews with Go scope validation;
-- isolated candidate checks, diff review, explicit Apply, undo, and audit;
-- a Compose Desktop file explorer, read-only source view, summary, and review UI.
+- project coverage: total, fresh, stale, missing, running, and failed;
+- job state and configured file/retry limits;
+- per-job-file status, attempts, and sanitized error text.
 
-The work should replace or extend these implementations rather than create a
-second workflow, service, database, or orchestration layer.
+Analysis will display:
 
-## 4. Gaps to close
+1. **Project coverage** — the current revision’s coverage counts.
+2. **Current or last run** — status, total candidates, completed, failed, running,
+   remaining, and configured limits.
+3. **Analyze-all controls** — Start, Pause, Resume, Cancel, and remote-provider
+   confirmation with the existing guards.
+4. **Analysis errors** — only files whose job status is failed or whose error is nonblank,
+   showing relative path, attempt count, and error text.
 
-### 4.1 Project workspaces
+Successful and pending files will not be rendered as individual cards. When there are no
+failures, Analysis will show an explicit “No analysis errors in this run” state.
 
-The desktop currently has file-level Code, Summary, and Changes tabs. It lacks
-dedicated project-level navigation and aggregated data for Summary, Analysis,
-and Bugs.
+This plan does not synthesize a new semantic report from all file-analysis contents. That
+would require a separate backend aggregation feature and different privacy/token decisions.
 
-The project AI analysis is a single Markdown string. It must become a structured,
-versioned report so the desktop can render purpose, architecture, components,
-entry points, flows, risks, and next steps without parsing presentation text.
+### 2.2 The explorer belongs to Editor
 
-### 4.2 File and symbol brief
+Choose the Editor-only layout:
 
-File analysis and symbol explanations exist, but they are hidden behind the
-Summary tab. The Editor must keep a compact deterministic brief visible beside
-the read-only source, then enrich it with cached model interpretation when
-available. Selecting a symbol must update its signature, range, explanation,
-and advisory impact without leaving the Editor.
+- On wide windows, Summary, Analysis, and Bugs show the workspace rail plus a full-width
+  workspace canvas.
+- On wide windows, Editor shows the workspace rail, file explorer, Editor canvas, and
+  contextual panel.
+- Below 1000dp, Files and Context drawer actions appear only in Editor.
+- Leaving Editor preserves the selected file and Editor stage; returning restores them.
+- Selecting a file from the explorer or global file palette always activates Editor and
+  opens that file.
+- `Cmd/Ctrl+P` remains available from every workspace as the global route to a file.
 
-### 4.3 Bugs and findings
+The contextual panel is hidden together with the explorer outside Editor because it is
+Editor-specific and currently shows only an empty Editor-context state there.
 
-Current AI risks contain only severity and summary. There is no stable identity,
-location, evidence, provenance, revision, freshness, lifecycle state, or project
-aggregation. Verified project scans also do not exist as a first-class workflow.
+## 3. Current defects
 
-The Bugs workspace needs a unified finding contract with two clear groups:
+- `AnalysisWorkspacePane` renders every Analyze-all file and gives each one a
+  “View file analysis” action.
+- The wide shell always reserves space for both the explorer and context panel, including
+  in project-level workspaces.
+- Narrow layouts always expose Files and Context drawer actions regardless of workspace.
+- Explorer selection loads a file but does not itself enforce the Editor destination,
+  while command-palette and finding routes implement that transition separately.
 
-- **Verified/tool-reported:** parser diagnostics, `go vet`, and `go test` output
-  from an explicit isolated scan.
-- **AI suggestions:** risks from fresh cached project/file analyses, always
-  labeled as model interpretation.
+## 4. Implementation design
 
-### 4.4 File-scoped chat and editable drafts
+### 4.1 Pure Analysis presentation
 
-The current chat endpoint is a one-shot generation form. Its durable history is
-source-free activity, not a conversation. Generation asks the model for a whole
-file, only replaces an existing symbol, and stores only applicable candidates.
+Extend `AnalysisWorkspaceState.kt` with one pure presentation model derived from
+`AnalyzeAllJob` and `AnalysisCoverage`. It must:
 
-The target workflow requires a session pinned to project revision, open file,
-base hash, and edit mode. The model should return one complete Go declaration
-and required imports. The daemon—not the model or UI—composes the complete file.
+- keep coverage counts distinct from current/last-job counts;
+- recognize the daemon job-file states `pending`, `running`, `completed`, and `failed`;
+- treat a nonblank error as a failure even if an unknown status is received;
+- calculate remaining work without negative values;
+- retain file order for deterministic failure presentation;
+- provide safe empty states for no project/job and no failures.
 
-Manual draft edits must create a new draft revision and immediately invalidate
-old validation, checks, comparison, and Apply eligibility.
+The Compose layer consumes this model and must not duplicate status classification.
 
-## 5. Target information architecture
+### 4.2 Analysis workspace replacement
 
-### Summary
+Replace the existing file-results list with compact summary panels and a failures-only
+lazy list. Remove the Analysis-to-file callback chain and the dedicated
+`openFileAnalysis` route made obsolete by the removed buttons.
 
-- deterministic project type, build metadata, languages, files, and line totals;
-- structured architecture report with explicit freshness and model status;
-- analysis coverage and verified/AI finding totals;
-- links into Analysis and Bugs.
+Do not remove per-file analysis from Editor. Selecting a file in Editor and explicitly
+running or refreshing its analysis must continue to use `EditorSurface.FileAnalysis`.
 
-### Analysis
+### 4.3 Workspace-aware shell
 
-- fresh, stale, missing, failed, and running file-analysis counts;
-- explicit Start, Pause, Resume, and Cancel controls for Analyze-all;
-- per-file progress with retry limits and open-in-Editor navigation;
-- no automatic Analyze-all on import or reindex.
+Derive one explicit `editorChromeVisible` decision from the active workspace. Use it for:
 
-### Bugs
-
-- Verified issues and AI suggestions in separate sections;
-- severity, provenance, evidence, file, line/symbol, revision, and freshness;
-- source/severity/status filters and lifecycle actions;
-- Prepare fix opens the associated file and prefills chat, but does not generate
-  or apply automatically.
-
-### Editor
-
-- file explorer on the left;
-- read-only, selectable source in the center;
-- always-visible file/symbol brief above file-scoped chat on wide layouts;
-- responsive drawers below 1000dp without losing the compact brief;
-- editable declaration draft, read-only diff, validation, checks, and Apply
-  review after generation.
-
-## 6. Core domain contracts
-
-### 6.1 Structured project analysis
-
-The authoritative report is versioned structured data containing:
-
-- project ID and revision;
-- purpose and architecture summary;
-- components and entry points;
-- data/control flows;
-- risks and suggested next steps;
-- model/profile, prompt version, generated time, and status.
-
-The existing Markdown analysis remains only as a human-readable projection of
-the structured report, not a second parsing or storage implementation.
-
-### 6.2 Unified finding
-
-Each finding contains a stable ID, source, confidence, severity, title, message,
-optional rule/tool, project revision, optional file hash, project-relative path,
-optional line range and symbol, sanitized evidence, status, detected time, and
-freshness. Finding IDs must be deterministic enough to preserve triage across
-an unchanged rerun.
-
-AI findings are `suggested`; parser, vet, and test results are `tool_reported`.
-Neither label claims that a tool or model is infallible.
-
-### 6.3 Go declaration draft
-
-A draft uses one of two modes:
-
-- `replace_symbol`: the exact selected symbol exists once before and after;
-- `create_symbol`: the requested symbol is absent before and exists once after.
-
-The draft stores only the declaration and requested imports plus immutable base
-identity, edit mode, draft revision/hash, lineage, validation, and check state.
-The daemon parses and formats the declaration, composes a full candidate in
-memory, and proves every unrelated declaration is unchanged.
-
-### 6.4 File chat session
-
-A chat session is bound to project ID, project revision, open path, base file
-hash, edit mode, and selected/new symbol. Messages cannot retarget the session.
-Opening another file makes the previous session inactive or stale. Asking for a
-revision creates a new draft linked to its predecessor.
-
-## 7. Safety invariants
-
-- No model or tool may mutate the imported project before explicit Apply.
-- A project scan is explicit and runs in an isolated copy; tests are never run
-  silently during import or file analysis.
-- No draft may change more than the open file and one selected/new Go symbol,
-  except validated required imports.
-- A dirty, invalid, unchecked, stale, or hash-mismatched draft cannot apply.
-- Every manual draft edit invalidates all earlier approval evidence.
-- Source and diff views remain read-only.
-- Apply and undo remain revision-guarded and auditable.
-- AI interpretation is visually and structurally distinct from deterministic or
-  tool-reported facts.
-- Provider credentials, prompt bodies, source, and local configuration are not
-  written into findings, activity, logs, or review exports.
-
-## 8. Delivery phases
-
-### Phase A — Restore a trustworthy baseline
-
-Tasks 32–33 fix the hanging test fixtures, make validation green, stop tracking
-local configuration, and remove version drift before feature implementation.
-
-### Phase B — Project intelligence and Bugs backend
-
-Tasks 34–37 add structured project analysis, the unified finding store, explicit
-isolated Go scans, project overview data, and findings APIs.
-
-### Phase C — Declaration drafts and file-scoped chat backend
-
-Tasks 38–41 implement exact replace/create declaration composition, editable
-draft revisions, real diff/check/apply invalidation, and conversation sessions
-pinned to the open file.
-
-### Phase D — Desktop application structure and workspaces
-
-Tasks 42–49 decompose the desktop shell, add typed API/state support, introduce
-the four workspaces, and implement Summary, Analysis, Bugs, and the always-visible
-Editor brief.
-
-### Phase E — Desktop chat and editable review
-
-Tasks 50–52 deliver file-scoped conversation, editable declaration drafts, and
-the complete Validate → Checks → Apply review flow.
-
-### Phase F — Accessibility, verification, and release
-
-Tasks 53–56 complete keyboard/responsive behavior, automated desktop integration
-coverage, synchronized API/user documentation, and release acceptance.
-
-## 9. Explicit non-goals
-
-- Direct editing or saving in the source viewer.
-- Arbitrary cursor/range insertion in the first Go release.
-- Multiple open projects or simultaneous project mutations.
-- Multi-file AI candidates or repository-wide autonomous refactors.
-- Automatic commits, pushes, dependency installation, or background fixes.
-- A database, plugin platform, second UI, or replacement framework.
-- Parser-backed safe edits for Kotlin, Java, TypeScript, Python, or Rust in this
-  milestone; those remain analysis-only until separate adapters are designed.
-
-## 10. Definition of done
-
-The milestone is complete when:
-
-1. Summary, Analysis, Bugs, and Editor are distinct accessible workspaces.
-2. Every open file shows a deterministic brief and optional fresh semantic brief.
-3. Verified/tool-reported issues cannot be confused with AI suggestions.
-4. Chat cannot target a file other than its bound open file.
-5. A user can replace one selected Go function/type or create one new function/type.
-6. The generated declaration is manually editable before acceptance.
-7. Manual edits invalidate old validation and checks.
-8. Only the most recently validated and checked draft can be applied.
-9. Apply changes exactly one file; undo remains conflict-safe.
-10. The complete keyboard workflow works below and above 1000dp.
-11. Documentation and live API routes agree.
-12. `make check`, desktop integration tests, and the release fixture checklist
-    pass on a clean worktree.
+- wide explorer and its resize divider;
+- wide context panel and its resize divider;
+- narrow Files and Context top-bar actions;
+- narrow drawer content and closure when leaving Editor.
+
+Do not copy the workspace condition into unrelated composables. Preserve the 1000dp
+breakpoint, saved pane widths, keyboard workspace navigation, and read-only views.
+
+### 4.4 Consistent file navigation
+
+Use one app-level file-opening action for routes whose intent is to inspect a file. It must
+select `Workspace.Editor` before starting the existing guarded asynchronous file load.
+Reuse it for explorer and file-palette selection. Finding navigation may retain its symbol
+and line target while following the same workspace-first rule.
+
+Do not change project revision/file hash guards, cancelation, or optional analysis/impact/
+Git-status loading.
+
+## 5. Delivery tasks and commits
+
+| Task | Outcome | Required commit |
+|---:|---|---|
+| 75 | Record the approved plan, task queue, and safe commit workflow | `docs(tasks): define analysis workspace UX backlog` |
+| 76 | Add the pure Analyze-all summary/failure presentation model and tests | `feat(desktop): summarize analyze-all results` |
+| 77 | Replace per-file Analysis results with summary and failures only | `feat(desktop): simplify analysis workspace results` |
+| 78 | Make explorer/context Editor-only and normalize file navigation | `feat(desktop): scope file navigation to editor` |
+| 79 | Complete regression, responsive, and documentation acceptance | `test(desktop): verify analysis and editor workspace UX` |
+
+Tasks execute strictly in numeric order. Each task receives exactly one commit after its
+acceptance criteria pass. Task metadata changes belong in the same task commit. The agent
+must stage and inspect only task-owned hunks so unrelated pre-existing worktree changes are
+never included.
+
+## 6. Safety and compatibility boundaries
+
+- No daemon route, persisted data, OpenAPI schema, or configuration migration is needed.
+- Analyze-all remains explicit and never starts during import or reindex.
+- Remote-provider confirmation remains mandatory before prompt-bearing requests.
+- Source and diff remain selectable and read-only.
+- Only the isolated declaration/import draft remains editable.
+- No automatic Apply, project mutation, scan, fix, push, or product-generated commit.
+- No generated build output or local configuration may be edited or committed.
+- Existing unrelated worktree changes must be preserved.
+- The UI displays the daemon’s sanitized error string; exposing provider/internal failure
+  details is outside this plan.
+
+## 7. Verification
+
+Focused verification:
+
+- presentation and status-classification tests in `AnalysisWorkspaceStateTest`;
+- shell, explorer visibility, navigation, and breakpoint tests in `DesktopShellTest`;
+- keyboard/semantics checks in `DesktopAccessibilityTest`;
+- guarded cross-workspace flow checks in `DesktopIntegrationCoverageTest`.
+
+Task-level command:
+
+```text
+./desktop/gradlew -p desktop test
+```
+
+Every task also runs `git diff --check` and inspects both the worktree diff and staged diff.
+The final task runs `make check` when the environment permits and records any manual GUI
+checks that could not run.
+
+## 8. Definition of done
+
+1. Analysis shows project coverage and current/last-run totals without listing successful
+   or pending files individually.
+2. Only failed/error-bearing files are listed, with relative path, attempts, and sanitized
+   error text.
+3. Analyze-all lifecycle, limits, polling, cancellation, revision binding, and remote
+   confirmation are unchanged.
+4. Summary, Analysis, and Bugs do not render or reserve space for Editor side panes.
+5. Editor retains the explorer and contextual panel on wide layouts and their drawers on
+   narrow layouts.
+6. Explorer and file-palette selection always open the requested indexed file in Editor.
+7. Selected file and Editor flow state survive workspace changes.
+8. Keyboard, textual semantics, 1000dp breakpoint behavior, source/diff read-only rules,
+   and preview-first safety all remain covered.
+9. Tasks 75–79 are Complete, moved under `tasks/completed/`, and represented by five
+   reviewed commits with no unrelated user changes.
+10. Desktop tests, `git diff --check`, and the supported final validation pass, with any
+    environment-limited check reported honestly.

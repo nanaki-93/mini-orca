@@ -1,11 +1,13 @@
-# Prompt template — execute one task with an Air agent
+# Prompt template — execute one task
 
-Copy this prompt and replace `{TASK_FILE}` with one Pending task file from
-[`INDEX.md`](INDEX.md).
+Use the all-tasks prompt for the normal Tasks 75–79 sequence. This template is for
+resuming exactly one incomplete task. Replace `{TASK_FILE}` and `{TASK_ID}` with the
+selected Pending/In Progress task from [`INDEX.md`](INDEX.md).
 
 ```text
-You are the implementation agent for one Mini-Orca task.
+You are the sole implementation agent for one Mini-Orca task.
 
+Task ID: {TASK_ID}
 Task file: tasks/{TASK_FILE}
 
 Read completely, in this order:
@@ -14,46 +16,60 @@ Read completely, in this order:
 3. tasks/README.md
 4. tasks/INDEX.md
 5. tasks/{TASK_FILE}
-6. The production files and tests named or implicated by the task
+6. Every completed dependency task named by the selected task
+7. The current production files, tests, and documentation implicated by the task
 
 Before editing:
-- Inspect `git status --short` and preserve every unrelated user change.
-- Verify every listed dependency is Complete and its relevant acceptance behavior
-  still exists. If not, stop and report the exact blocker.
-- Summarize the task boundary, files likely to change, and focused checks.
+- Run `git status --short`, `git diff --name-only`, and
+  `git diff --cached --name-only`.
+- Preserve all pre-existing changes as user-owned. Relevant Desktop files may already be
+  dirty; do not assume the entire file belongs to this task.
+- Verify every dependency is Complete and its acceptance behavior still exists.
+- State the task boundary, likely files, focused checks, and pre-existing changes that
+  must remain outside the commit.
+- Stop if the task is not the first ready incomplete task in dependency order.
 
 Implementation rules:
-- Implement only the selected task. Do not absorb a later task for convenience.
-- Reuse existing packages, handlers, storage, API client, Compose state, and safety
-  guards. Do not add a framework, database, second service, or duplicate workflow.
-- Keep source/diff read-only and AI declaration drafts isolated until explicit Apply.
-- Preserve the one-project, one-open-file, one selected/new symbol boundary.
-- Never introduce automatic project writes, commits, scans, tests, or multi-file edits.
-- Add focused regression tests for every changed behavior.
-- Use `apply_patch` for manual file edits and do not edit generated build output.
+- Implement only the selected task; do not absorb later work.
+- Follow AGENTS.md, Clean Code, KISS, and existing package/state boundaries.
+- Preserve the one-project, one-file, one-symbol, preview-first workflow.
+- Keep source/diff read-only and the declaration/import draft isolated until explicit Apply.
+- Preserve Analyze-all and remote-provider guards, revision/hash/request identity, and
+  explicit mutation actions.
+- Add focused regression tests for changed behavior.
+- Use apply_patch for manual edits and do not edit generated output or local configuration.
+- Do not start another implementation writer or create another Codex task.
 
-Air-agent coordination:
-- You own all writes for this task until handoff.
-- You may delegate bounded read-only research or review to sub-agents.
-- Do not allow another implementation agent to edit the same shared worktree files.
-- Integrate and verify delegated findings yourself.
+Pre-existing-change and staging rules:
+- Never use reset, checkout, restore, stash, clean, rebase, or destructive history commands.
+- Never use `git add -A`, `git add .`, or stage a whole pre-modified file blindly.
+- Stage only task-owned hunks using hunk-level or equivalent index-only staging.
+- If a task hunk cannot be separated from an overlapping user-owned hunk, stop before
+  committing and report the exact overlap.
 
 Verification:
-- Run every command in the task that applies.
-- Go changes: format, run focused tests, and vet affected packages.
-- Concurrency/filesystem/security changes: run focused race tests.
-- Desktop changes: run `./desktop/gradlew -p desktop test`.
-- Always run `git diff --check` and inspect the final diff.
+- Run every command listed by the task.
+- For Desktop changes, run `./desktop/gradlew -p desktop test`.
+- Always run `git diff --check` and inspect the complete task diff.
+- Verify every acceptance criterion one by one.
 
-Completion:
-- Only after all acceptance criteria pass, change the task status to Complete,
-  move it to tasks/completed/, and update its link/status in tasks/INDEX.md.
-- If blocked, leave it Pending or mark it In Progress truthfully; do not fabricate
-  completion or bypass a failed dependency.
-- Do not create a commit unless the user explicitly asks.
+Completion and authorized commit:
+- The user has authorized exactly one commit for this completed task.
+- Only after all criteria pass, mark the task Complete, move it to tasks/completed/, and
+  update its tasks/INDEX.md link/status.
+- Stage only task implementation/tests/docs plus its task/index metadata.
+- Inspect `git diff --cached --stat` and the complete `git diff --cached`.
+- Create the exact commit message required by the task's Commit section.
+- Do not amend, squash, rebase, push, tag, or create an extra cleanup commit.
+- Confirm pre-existing unrelated changes remain unstaged after the commit.
 
-Finish with: task ID/status, behavior changed, files changed, acceptance evidence,
-commands/results, and any blocker or intentionally deferred follow-up.
+Finish with the task status, commit hash, behavior changed, files changed, acceptance
+evidence, commands/results, and any blocker or deliberately deferred follow-up.
 ```
 
-Example task value: `32_restore_green_validation_baseline.md`.
+Example current task value:
+
+```text
+Task ID: 76
+Task file: 76_analysis_run_summary_presentation.md
+```
