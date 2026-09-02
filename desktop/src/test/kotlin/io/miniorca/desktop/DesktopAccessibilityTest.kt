@@ -33,12 +33,19 @@ class DesktopAccessibilityTest {
         assertEquals("Bugs, not selected", workspaceSemanticsLabel(Workspace.Bugs, false))
     }
 
-    @Test fun editorProgressKeepsTheCurrentStateInPlainTextWithoutNavigationControls() {
-        val progress = EditorProgressUiState(EditorProgress.Review, "Validation is current for Run.")
+    @Test fun editorFileHeaderExposesTheSelectedFileIdentityWithoutProgressState() {
+        val header = editorFileHeaderUiState(ProjectFileInfo(
+            path = "cmd/miniorca/main.go",
+            contentHash = "hash",
+            name = "main.go",
+            language = "Go",
+            sizeBytes = 0,
+            lineCount = 0,
+            modifiedAt = "",
+            binary = false,
+        ))
 
-        assertEquals(listOf("Inspect", "Edit", "Review"), editorProgressSteps(progress.progress).map { it.label })
-        assertTrue(editorProgressSemanticsLabel(progress).contains("Current: Review"))
-        assertTrue(editorProgressSemanticsLabel(progress).contains("Review: Current"))
+        assertEquals("main.go. cmd/miniorca/main.go", editorFileHeaderDescription(header))
     }
 
     @Test fun landingModeAcceptsOnlyTheOpenProjectShortcut() {

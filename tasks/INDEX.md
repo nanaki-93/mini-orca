@@ -98,7 +98,7 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 87 | [Direct selected-symbol editing](completed/87_direct_selected_symbol_editing.md) | 86 | Complete |
 | 88 | [Contextual Editor Review flow](completed/88_contextual_editor_review_flow.md) | 87 | Complete |
 | 89 | [Direct-symbol Editor UX acceptance](completed/89_direct_symbol_ux_acceptance.md) | 85–88 | Complete |
-| 90 | [Active Editor file header](90_editor_active_file_header.md) | 89 | Pending |
+| 90 | [Active Editor file header](completed/90_editor_active_file_header.md) | 89 | Complete |
 | 91 | [Remove Editor source instruction](91_remove_editor_source_instruction.md) | 90 | Pending |
 | 92 | [Hide empty Required imports](92_hide_empty_required_imports.md) | 91 | Pending |
 | 93 | [Group Bugs by priority](93_group_bugs_by_priority.md) | 92 | Pending |

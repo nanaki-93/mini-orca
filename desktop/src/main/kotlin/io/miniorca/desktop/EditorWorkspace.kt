@@ -1,8 +1,8 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -15,74 +15,45 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal data class EditorProgressStep(
-    val label: String,
-    val status: String,
+internal data class EditorFileHeaderUiState(
+    val title: String,
+    val detail: String,
 )
 
-internal fun editorProgressSteps(progress: EditorProgress): List<EditorProgressStep> = when (progress) {
-    EditorProgress.Inspect -> listOf(
-        EditorProgressStep("Inspect", "Current"),
-        EditorProgressStep("Edit", "Next"),
-        EditorProgressStep("Review", "Next"),
-    )
-    EditorProgress.Edit -> listOf(
-        EditorProgressStep("Inspect", "Complete"),
-        EditorProgressStep("Edit", "Current"),
-        EditorProgressStep("Review", "Next"),
-    )
-    EditorProgress.Review -> listOf(
-        EditorProgressStep("Inspect", "Complete"),
-        EditorProgressStep("Edit", "Complete"),
-        EditorProgressStep("Review", "Current"),
-    )
-    EditorProgress.Receipt -> listOf(
-        EditorProgressStep("Inspect", "Complete"),
-        EditorProgressStep("Edit", "Complete"),
-        EditorProgressStep("Review", "Complete"),
-    )
-}
+internal fun editorFileHeaderUiState(file: ProjectFileInfo?): EditorFileHeaderUiState = file?.let {
+    EditorFileHeaderUiState(title = it.name, detail = it.path)
+} ?: EditorFileHeaderUiState(title = "No file open", detail = "No file selected")
 
-internal fun editorProgressSemanticsLabel(progress: EditorProgressUiState): String =
-    "Editor progress. Current: ${progress.progress.label}. ${progress.detail} " +
-        editorProgressSteps(progress.progress).joinToString(". ") { "${it.label}: ${it.status}" }
+internal fun editorFileHeaderDescription(header: EditorFileHeaderUiState): String =
+    "${header.title}. ${header.detail}"
 
 @Composable
 internal fun EditorWorkspace(
-    progress: EditorProgressUiState,
+    selected: ProjectFileInfo?,
     canvas: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().background(AppBackground)) {
-        EditorProgressBar(progress)
-        canvas()
+        EditorFileHeader(selected)
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            canvas()
+        }
     }
 }
 
 @Composable
-internal fun EditorProgressBar(progress: EditorProgressUiState) {
-    val steps = editorProgressSteps(progress.progress)
+internal fun EditorFileHeader(file: ProjectFileInfo?) {
+    val header = editorFileHeaderUiState(file)
     Column(
         Modifier.fillMaxWidth().background(Panel).padding(horizontal = 14.dp, vertical = 10.dp)
-            .semantics { contentDescription = editorProgressSemanticsLabel(progress) },
+            .semantics { contentDescription = editorFileHeaderDescription(header) },
     ) {
-        SectionLabel("EDITOR PROGRESS")
         Text(
-            "Current: ${progress.progress.label} · ${progress.detail}",
-            color = SecondaryText,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 4.dp),
+            header.title,
+            color = PrimaryText,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
         )
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-            steps.forEachIndexed { index, step ->
-                if (index > 0) Text(" → ", color = SecondaryText, fontSize = 11.sp)
-                Text(
-                    "${step.label} · ${step.status}",
-                    color = if (step.status == "Current") PrimaryText else SecondaryText,
-                    fontSize = 11.sp,
-                    fontWeight = if (step.status == "Current") FontWeight.SemiBold else FontWeight.Normal,
-                )
-            }
-        }
+        Text(header.detail, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
     }
 }
