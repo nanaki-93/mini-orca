@@ -381,7 +381,7 @@ private fun ContentPane(
     Column(modifier.background(AppBackground)) {
         when (workspace) {
             Workspace.Summary -> ProjectSummaryPane(overview, project, onWorkspace)
-            Workspace.Editor -> EditorWorkspace(editorProgress, canvas = {
+            Workspace.Editor -> EditorWorkspace(selected, canvas = {
                 if (editorProgress.progress == EditorProgress.Review) {
                     ReviewDiffCanvas(draft)
                 } else {

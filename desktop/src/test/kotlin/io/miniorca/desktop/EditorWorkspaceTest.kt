@@ -2,21 +2,35 @@ package io.miniorca.desktop
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class EditorWorkspaceTest {
-    @Test fun compactProgressShowsOnlyInspectEditAndReviewWithExplicitCurrentState() {
-        assertEquals(
-            listOf("Inspect", "Edit", "Review"),
-            editorProgressSteps(EditorProgress.Review).map { it.label },
-        )
-        assertEquals("Current", editorProgressSteps(EditorProgress.Edit)[1].status)
-        assertEquals("Complete", editorProgressSteps(EditorProgress.Receipt).last().status)
+    @Test fun fileHeaderShowsTheBasenameAndProjectRelativePathWithoutProgressCopy() {
+        val header = editorFileHeaderUiState(testFile(path = "internal/runner/run.go", name = "run.go"))
 
-        val semantics = editorProgressSemanticsLabel(EditorProgressUiState(EditorProgress.Edit, "Editing Run."))
-
-        assertTrue(semantics.contains("Current: Edit"))
-        assertTrue(semantics.contains("Inspect: Complete"))
-        assertTrue(semantics.contains("Review: Next"))
+        assertEquals("run.go", header.title)
+        assertEquals("internal/runner/run.go", header.detail)
+        assertTrue(editorFileHeaderDescription(header).contains("run.go"))
+        assertFalse(editorFileHeaderDescription(header).contains("progress", ignoreCase = true))
     }
+
+    @Test fun fileHeaderUsesANeutralNoFileState() {
+        val header = editorFileHeaderUiState(null)
+
+        assertEquals("No file open", header.title)
+        assertEquals("No file selected", header.detail)
+        assertEquals("No file open. No file selected", editorFileHeaderDescription(header))
+    }
+
+    private fun testFile(path: String, name: String) = ProjectFileInfo(
+        path = path,
+        contentHash = "hash",
+        name = name,
+        language = "Go",
+        sizeBytes = 0,
+        lineCount = 0,
+        modifiedAt = "",
+        binary = false,
+    )
 }
