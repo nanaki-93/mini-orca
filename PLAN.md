@@ -2,7 +2,8 @@
 
 Date: 2026-09-02
 
-Status: Proposed — implementation not started.
+Status: Complete — automated validation passed; manual GUI acceptance remains unavailable
+in this non-interactive environment and is recorded in `docs/RELEASE_ACCEPTANCE.md`.
 
 ## Outcome
 
@@ -141,11 +142,11 @@ task commit.
 
 | Task | Outcome | Required commit |
 | ---: | --- | --- |
-| [90](tasks/90_editor_active_file_header.md) | Replace visible Editor progress UI with a prominent active-file header | `feat(desktop): emphasize active editor file` |
-| [91](tasks/91_remove_editor_source_instruction.md) | Remove the visible “Click a…” source instruction without changing interaction | `refactor(desktop): remove source helper subtitle` |
-| [92](tasks/92_hide_empty_required_imports.md) | Hide `Required imports` when the draft import list is empty | `fix(desktop): hide empty required imports` |
-| [93](tasks/93_group_bugs_by_priority.md) | Group filtered Bugs findings by high, medium, low, then fallback priority | `feat(desktop): group bugs by priority` |
-| [94](tasks/94_desktop_ux_refinement_acceptance.md) | Complete integration, documentation, responsive, accessibility, and regression acceptance | `test(desktop): complete UX refinement acceptance` |
+| [90](tasks/completed/90_editor_active_file_header.md) | Replace visible Editor progress UI with a prominent active-file header | `feat(desktop): emphasize active editor file` |
+| [91](tasks/completed/91_remove_editor_source_instruction.md) | Remove the visible “Click a…” source instruction without changing interaction | `refactor(desktop): remove source helper subtitle` |
+| [92](tasks/completed/92_hide_empty_required_imports.md) | Hide `Required imports` when the draft import list is empty | `fix(desktop): hide empty required imports` |
+| [93](tasks/completed/93_group_bugs_by_priority.md) | Group filtered Bugs findings by high, medium, low, then fallback priority | `feat(desktop): group bugs by priority` |
+| [94](tasks/completed/94_desktop_ux_refinement_acceptance.md) | Complete integration, documentation, responsive, accessibility, and regression acceptance | `test(desktop): complete UX refinement acceptance` |
 
 Tasks execute strictly in numeric order with one implementation writer. Each task must
 pass its focused checks and the complete Desktop test suite, update its own task/index
