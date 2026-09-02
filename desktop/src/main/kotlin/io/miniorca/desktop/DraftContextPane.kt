@@ -57,12 +57,19 @@ private fun DraftEditorCard(editor: EditableDraftState, draftFocus: FocusRequest
         SectionLabel("EDITABLE DECLARATION DRAFT · ${editor.status.name.lowercase()}")
         Text(draft.targetSymbol, color = SecondaryText, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
         OutlinedTextField(editor.declaration, onDeclaration, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), label = { Text("Declaration only") }, minLines = 5, textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp), modifier = Modifier.fillMaxWidth().padding(top = 7.dp).focusRequester(draftFocus))
-        CompactSingleLineField(editor.imports.joinToString(", "), { value -> onImports(value.split(',').map { it.trim() }.filter { it.isNotBlank() }) }, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), label = { Text("Required imports") }, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
+        if (requiredImportsVisible(editor)) {
+            CompactSingleLineField(editor.imports.joinToString(", "), { value -> onImports(parseRequiredImports(value)) }, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), label = { Text("Required imports") }, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
+        }
         editor.diagnostics.forEach { Text("${it.code}: ${it.message}", color = Error, fontSize = 10.sp) }
         Text(draftEditorStatusMessage(editor.status), color = draftEditorStatusColor(editor.status), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
         FocusFlowButton(onClick = onValidate, enabled = canValidate, tone = ActionTone.Primary, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text(if (editor.status == DraftEditorStatus.Validating) "Validating declaration…" else "Validate draft") }
     }
 }
+
+internal fun requiredImportsVisible(editor: EditableDraftState): Boolean = editor.imports.isNotEmpty()
+
+internal fun parseRequiredImports(value: String): List<String> =
+    value.split(',').map { it.trim() }.filter { it.isNotBlank() }
 
 internal fun draftEditorStatusMessage(status: DraftEditorStatus): String = when (status) {
     DraftEditorStatus.Generated -> "Validate this generated draft before review."

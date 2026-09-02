@@ -25,6 +25,16 @@ class DraftEditorStateTest {
         assertFalse(draftApplyEligibility(state.review.draft, state.review.checks, file()).eligible)
     }
 
+    @Test fun requiredImportsAreVisibleOnlyWhenTheDraftAlreadyHasImports() {
+        val emptyImports = editableDraft(draft())
+        val populatedImports = editableDraft(draft(imports = listOf("fmt", "io")))
+
+        assertFalse(requiredImportsVisible(emptyImports))
+        assertTrue(requiredImportsVisible(populatedImports))
+        assertEquals(listOf("fmt", "io"), populatedImports.imports)
+        assertEquals(listOf("fmt", "io"), parseRequiredImports(" fmt, io, "))
+    }
+
     @Test fun validationResponseReplacesLocalTextWithDaemonNormalizedDraft() {
         val generated = draft()
         val normalized = generated.copy(
@@ -72,7 +82,7 @@ class DraftEditorStateTest {
         assertFalse(draftEditorMatchesOpenFile(editor, file(), project(revision = "next")))
     }
 
-    private fun draft(validation: GenerationValidation? = null) = DeclarationDraft("draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}", revision = 2, hash = "hash", validation = validation)
+    private fun draft(validation: GenerationValidation? = null, imports: List<String> = emptyList()) = DeclarationDraft("draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}", imports = imports, revision = 2, hash = "hash", validation = validation)
     private fun file(hash: String = "base") = ProjectFileInfo("main.go", hash, "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
     private fun project(revision: String = "revision") = ProjectAnalysis("project", revision, "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
 }
