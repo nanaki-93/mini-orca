@@ -35,10 +35,13 @@ class DesktopIntegrationCoverageTest {
         controller.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Summary))
         controller.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
         assertEquals(Workspace.Bugs, controller.state.workspace)
-        val verified = UnifiedFinding(confidence = "tool_reported", location = FindingLocation("main.go"))
-        val suggested = UnifiedFinding(confidence = "suggested", location = FindingLocation("main.go"))
+        val verified = UnifiedFinding(confidence = "tool_reported", severity = "high", location = FindingLocation("main.go"))
+        val suggested = UnifiedFinding(confidence = "suggested", severity = "high", location = FindingLocation("main.go"))
         assertEquals(FindingClassification.Verified, classifyFinding(verified))
         assertEquals(FindingClassification.Suggested, classifyFinding(suggested))
+        assertEquals(FindingPriority.High, groupFindingsByPriority(listOf(verified, suggested)).single().priority)
+        assertTrue(findingProvenanceLabel(verified).contains("VERIFIED / TOOL-REPORTED"))
+        assertTrue(findingProvenanceLabel(suggested).contains("AI SUGGESTIONS"))
 
         controller.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
         val load = controller.beginFileLoad("main.go")!!

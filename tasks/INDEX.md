@@ -101,7 +101,7 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 90 | [Active Editor file header](completed/90_editor_active_file_header.md) | 89 | Complete |
 | 91 | [Remove Editor source instruction](completed/91_remove_editor_source_instruction.md) | 90 | Complete |
 | 92 | [Hide empty Required imports](completed/92_hide_empty_required_imports.md) | 91 | Complete |
-| 93 | [Group Bugs by priority](93_group_bugs_by_priority.md) | 92 | Pending |
+| 93 | [Group Bugs by priority](completed/93_group_bugs_by_priority.md) | 92 | Complete |
 | 94 | [Desktop UX refinement acceptance](94_desktop_ux_refinement_acceptance.md) | 90–93 | Pending |
 
 ## Delivery boundaries
