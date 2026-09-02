@@ -43,6 +43,13 @@ internal fun sourceLineDescription(line: Int, emphasis: SourceLineEmphasis): Str
     SourceLineEmphasis.FocusedSelectedSymbol -> "Line $line, focused location in selected declaration"
 }
 
+internal fun sourceLineContentDescription(
+    line: Int,
+    emphasis: SourceLineEmphasis,
+    declarationSymbol: SymbolInfo?,
+): String = sourceLineDescription(line, emphasis) +
+    declarationSymbol?.let { ", selectable declaration ${it.name}" }.orEmpty()
+
 @Composable
 internal fun SourceEditorPane(
     project: ProjectAnalysis?,
@@ -60,14 +67,6 @@ internal fun SourceEditorPane(
     val canSelectSource = selected != null && !selected.binary
     SelectionContainer {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(18.dp)) {
-            if (canSelectSource && symbols.isNotEmpty()) {
-                Text(
-                    "Click within a highlighted declaration to inspect it. Drag anywhere to select source text.",
-                    color = SecondaryText,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(bottom = 10.dp),
-                )
-            }
             if (focusedLine > 0) {
                 Text(
                     "Editor context · ${selectedSymbol?.name ?: "line $focusedLine"} · line $focusedLine",
@@ -85,8 +84,7 @@ internal fun SourceEditorPane(
                     Modifier.fillMaxWidth()
                         .background(sourceLineBackground(emphasis, declarationSymbol != null))
                         .semantics {
-                            contentDescription = sourceLineDescription(lineNumber, emphasis) +
-                                declarationSymbol?.let { ", selectable declaration ${it.name}" }.orEmpty()
+                            contentDescription = sourceLineContentDescription(lineNumber, emphasis, declarationSymbol)
                         }
                         .sourceLineSelectionTap(sourceSelection) {
                             onSourceLineSelected(requireNotNull(sourceSelection))
