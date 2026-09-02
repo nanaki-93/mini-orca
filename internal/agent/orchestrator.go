@@ -117,7 +117,7 @@ func DeclarationDraftInput(userPrompt, conversation, projectContext, targetFile,
 	input.WriteString("Target file: " + targetFile + "\n")
 	input.WriteString("Target symbol: " + targetSymbol + "\n")
 	input.WriteString("Edit mode: " + mode + "\n")
-	input.WriteString("Return exactly one complete Go function, method, or type declaration for this symbol. Do not return package clauses, a full file, a patch, or any declaration for another symbol. Imports must be listed separately.\n\n")
+	input.WriteString("Return exactly one complete Go function, method, type, or single top-level var declaration for this symbol. Do not return package clauses, a full file, a patch, or any declaration for another symbol. Imports must be listed separately.\n\n")
 	if strings.TrimSpace(conversation) != "" {
 		input.WriteString("## Earlier file-scoped conversation\n" + conversation + "\n\n")
 	}

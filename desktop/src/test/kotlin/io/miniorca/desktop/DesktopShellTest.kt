@@ -52,6 +52,9 @@ class DesktopShellTest {
         assertTrue(editorDrawerActionsVisible(Workspace.Editor, 999f))
         assertTrue(!editorDrawerActionsVisible(Workspace.Editor, 1_000f))
         assertTrue(!editorDrawerActionsVisible(Workspace.Analysis, 999f))
+        assertEquals(NarrowDrawer.Context, contextDrawerForSourceSelection(Workspace.Editor, 999f))
+        assertEquals(null, contextDrawerForSourceSelection(Workspace.Editor, 1_000f))
+        assertEquals(null, contextDrawerForSourceSelection(Workspace.Analysis, 999f))
     }
 
     @Test fun largeExplorerKeepsAStableFilteredSelectionPath() {

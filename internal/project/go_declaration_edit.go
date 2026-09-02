@@ -45,15 +45,16 @@ type GoDeclarationComposition struct {
 }
 
 // ComposeGoDeclaration composes one isolated Go declaration into a complete
-// file. It accepts only exact functions, methods, and types, and proves that
-// every unrelated declaration and every pre-existing import remains unchanged.
+// file. It accepts exact functions, methods, types, and single-name top-level
+// variables, and proves that every unrelated declaration and every pre-existing
+// import remains unchanged.
 func ComposeGoDeclaration(path, original string, edit GoDeclarationEdit) GoDeclarationComposition {
 	result := GoDeclarationComposition{Validation: GenerationValidation{ScopeMode: workflow.ScopeSymbolPlusImports}}
 	if !validDeclarationEditMode(edit.Mode) {
 		return invalidDeclarationComposition(result, "invalid_mode", "The requested declaration edit mode is not supported.")
 	}
 	if !validDeclarationTarget(edit.TargetSymbol) {
-		return invalidDeclarationComposition(result, "invalid_target", "The requested symbol name is not a supported Go function, method, or type name.")
+		return invalidDeclarationComposition(result, "invalid_target", "The requested symbol name is not a supported Go declaration name.")
 	}
 
 	fset := token.NewFileSet()
@@ -61,7 +62,7 @@ func ComposeGoDeclaration(path, original string, edit GoDeclarationEdit) GoDecla
 	if err != nil {
 		return invalidDeclarationComposition(result, "original_syntax", "The original Go file cannot be parsed for declaration composition.")
 	}
-	declaration, normalized, err := parseIsolatedGoDeclaration(edit.Declaration)
+	declaration, normalized, err := parseIsolatedGoDeclaration(edit.Declaration, edit.Mode)
 	if err != nil {
 		return invalidDeclarationComposition(result, "invalid_declaration", err.Error())
 	}
@@ -74,6 +75,9 @@ func ComposeGoDeclaration(path, original string, edit GoDeclarationEdit) GoDecla
 	}
 	if err := validateEditTarget(before, edit); err != nil {
 		return invalidDeclarationComposition(result, "target_identity", err.Error())
+	}
+	if err := validateReplacementKind(before, edit, declaration); err != nil {
+		return invalidDeclarationComposition(result, "target_kind", err.Error())
 	}
 
 	candidateSource, err := composeDeclarationSource(original, fset, before, declaration, normalized, edit.Mode, requestedImports)
@@ -112,7 +116,7 @@ func validDeclarationTarget(target string) bool {
 	return true
 }
 
-func parseIsolatedGoDeclaration(source string) (ast.Decl, string, error) {
+func parseIsolatedGoDeclaration(source string, mode DeclarationEditMode) (ast.Decl, string, error) {
 	if strings.TrimSpace(source) == "" {
 		return nil, "", fmt.Errorf("a Go declaration is required")
 	}
@@ -131,20 +135,37 @@ func parseIsolatedGoDeclaration(source string) (ast.Decl, string, error) {
 			return nil, "", fmt.Errorf("the function or method declaration has no name")
 		}
 	case *ast.GenDecl:
-		if declaration.Tok != token.TYPE || len(declaration.Specs) != 1 {
-			return nil, "", fmt.Errorf("only one type declaration is supported")
-		}
-		if _, ok := declaration.Specs[0].(*ast.TypeSpec); !ok {
-			return nil, "", fmt.Errorf("only type declarations are supported")
+		switch declaration.Tok {
+		case token.TYPE:
+			if len(declaration.Specs) != 1 {
+				return nil, "", fmt.Errorf("only one type declaration is supported")
+			}
+			if _, ok := declaration.Specs[0].(*ast.TypeSpec); !ok {
+				return nil, "", fmt.Errorf("only type declarations are supported")
+			}
+		case token.VAR:
+			if mode != DeclarationEditReplaceSymbol || !isAtomicVariableDeclaration(declaration, valueSpec(declaration)) {
+				return nil, "", fmt.Errorf("only one existing top-level variable declaration is supported")
+			}
+		default:
+			return nil, "", fmt.Errorf("only function, method, type, and single top-level variable declarations are supported")
 		}
 	default:
-		return nil, "", fmt.Errorf("only function, method, and type declarations are supported")
+		return nil, "", fmt.Errorf("only function, method, type, and single top-level variable declarations are supported")
 	}
 	var output bytes.Buffer
 	if err := format.Node(&output, fset, declaration); err != nil {
 		return nil, "", fmt.Errorf("format declaration: %w", err)
 	}
 	return declaration, strings.TrimSpace(output.String()), nil
+}
+
+func valueSpec(declaration *ast.GenDecl) *ast.ValueSpec {
+	if len(declaration.Specs) != 1 {
+		return nil
+	}
+	spec, _ := declaration.Specs[0].(*ast.ValueSpec)
+	return spec
 }
 
 func declarationName(declaration ast.Decl) string {
@@ -155,7 +176,16 @@ func declarationName(declaration ast.Decl) string {
 		}
 		return receiverName(declaration.Recv.List[0].Type) + "." + declaration.Name.Name
 	case *ast.GenDecl:
-		return declaration.Specs[0].(*ast.TypeSpec).Name.Name
+		if len(declaration.Specs) != 1 {
+			return ""
+		}
+		if typeSpec, ok := declaration.Specs[0].(*ast.TypeSpec); declaration.Tok == token.TYPE && ok {
+			return typeSpec.Name.Name
+		}
+		if variable := valueSpec(declaration); isAtomicVariableDeclaration(declaration, variable) {
+			return variable.Names[0].Name
+		}
+		return ""
 	default:
 		return ""
 	}
@@ -174,6 +204,39 @@ func validateEditTarget(file *ast.File, edit GoDeclarationEdit) error {
 		}
 	}
 	return nil
+}
+
+func validateReplacementKind(file *ast.File, edit GoDeclarationEdit, replacement ast.Decl) error {
+	if edit.Mode != DeclarationEditReplaceSymbol {
+		return nil
+	}
+	location, found := declarationLocation(file, edit.TargetSymbol)
+	if !found || replaceableDeclarationKind(location.node) == "" {
+		return fmt.Errorf("replace mode requires an existing supported declaration")
+	}
+	if replaceableDeclarationKind(location.node) != replaceableDeclarationKind(replacement) {
+		return fmt.Errorf("the replacement must preserve the requested declaration kind")
+	}
+	return nil
+}
+
+func replaceableDeclarationKind(node ast.Node) string {
+	switch declaration := node.(type) {
+	case *ast.FuncDecl:
+		return "function"
+	case *ast.TypeSpec:
+		return "type"
+	case *ast.GenDecl:
+		if declaration.Tok == token.TYPE && len(declaration.Specs) == 1 {
+			if _, ok := declaration.Specs[0].(*ast.TypeSpec); ok {
+				return "type"
+			}
+		}
+		if isAtomicVariableDeclaration(declaration, valueSpec(declaration)) {
+			return "var"
+		}
+	}
+	return ""
 }
 
 func composeDeclarationSource(original string, fset *token.FileSet, file *ast.File, replacement ast.Decl, replacementText string, mode DeclarationEditMode, imports []string) ([]byte, error) {
@@ -282,6 +345,9 @@ func declarationNameOf(declaration ast.Decl) string {
 			if spec, ok := declaration.Specs[0].(*ast.TypeSpec); ok {
 				return spec.Name.Name
 			}
+		}
+		if variable := valueSpec(declaration); isAtomicVariableDeclaration(declaration, variable) {
+			return variable.Names[0].Name
 		}
 	}
 	return ""

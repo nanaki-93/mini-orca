@@ -93,6 +93,16 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 82 | [Technical metadata and copy simplification](completed/82_desktop_metadata_copy_simplification.md) | 81 | Complete |
 | 83 | [Workspace density and visual-priority polish](completed/83_desktop_workspace_density_polish.md) | 82 | Complete |
 | 84 | [Desktop UX refinement acceptance](completed/84_desktop_ux_refinement_acceptance.md) | 80–83 | Complete |
+| 85 | [Editor symbol selection and inspection contracts](completed/85_editor_symbol_selection_contract.md) | 84 | Complete |
+| 86 | [Interactive source and symbol inspector](completed/86_interactive_source_symbol_inspector.md) | 85 | Complete |
+| 87 | [Direct selected-symbol editing](completed/87_direct_selected_symbol_editing.md) | 86 | Complete |
+| 88 | [Contextual Editor Review flow](completed/88_contextual_editor_review_flow.md) | 87 | Complete |
+| 89 | [Direct-symbol Editor UX acceptance](completed/89_direct_symbol_ux_acceptance.md) | 85–88 | Complete |
+| 90 | [Active Editor file header](90_editor_active_file_header.md) | 89 | Pending |
+| 91 | [Remove Editor source instruction](91_remove_editor_source_instruction.md) | 90 | Pending |
+| 92 | [Hide empty Required imports](92_hide_empty_required_imports.md) | 91 | Pending |
+| 93 | [Group Bugs by priority](93_group_bugs_by_priority.md) | 92 | Pending |
+| 94 | [Desktop UX refinement acceptance](94_desktop_ux_refinement_acceptance.md) | 90–93 | Pending |
 
 ## Delivery boundaries
 
@@ -117,11 +127,35 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 - Task 82 removes routine counts, revisions, hashes, and redundant explanatory copy.
 - Task 83 consolidates status, filters, stage navigation, and responsive action groups.
 - Task 84 completes regression, accessibility, documentation, and visual acceptance.
+- Task 85 defines deterministic source-line selection, selected-symbol inspection, edit
+  eligibility, and workflow progress contracts.
+- Task 86 makes source clicks drive the contextual symbol inspector and removes the
+  duplicate File analysis and all-symbol surfaces.
+- Task 87 routes eligible selected symbols directly into guarded Replace editing and
+  moves Create declaration into Commands.
+- Task 88 replaces persistent Editor navigation buttons with contextual progress and a
+  consolidated Review/check/Apply surface.
+- Task 89 completes pointer, keyboard, responsive, accessibility, documentation, and
+  regression acceptance for the direct-symbol workflow.
+- Task 90 replaces visible Editor progress presentation with a prominent active-file
+  header while retaining workflow routing state internally.
+- Task 91 removes the source instruction subtitle without changing pointer, selection,
+  keyboard, or accessibility behavior.
+- Task 92 hides the Required imports control only when the editable draft has no imports.
+- Task 93 makes high-to-low severity the default Bugs grouping while retaining
+  card-level provenance.
+- Task 94 completes integration, responsive, accessibility, documentation, and full
+  regression acceptance for the focused Desktop UX refinement.
 
 One implementation agent owns one ready task at a time. Read-only research or review
 agents may work in parallel, but shared-worktree writers must not overlap. The current
-Tasks 80–84 execute strictly in numeric order using
+Tasks 85–89 execute strictly in numeric order using
 [`PROMPT_EXECUTE_ALL_TASKS.md`](PROMPT_EXECUTE_ALL_TASKS.md). The execution prompt must
 post a user-facing start and completion commentary update for every task.
+After Task 89 is Complete and its overlapping work has a stable commit boundary, Tasks
+90–94 execute strictly in numeric order using
+[`PROMPT_EXECUTE_DESKTOP_UX_REFINEMENTS.md`](PROMPT_EXECUTE_DESKTOP_UX_REFINEMENTS.md),
+with exactly one reviewed local commit after each completed task.
 No task may introduce direct source editing, autonomous multi-file edits, silent
-writes, automatic commits, or background agents that mutate a project.
+writes, background fixes, or background agents that mutate a project. Tasks 90–94
+authorize only their specified local commits and never authorize a push.

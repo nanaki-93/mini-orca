@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class ApplyDecisionPaneTest {
+class ReviewContextPaneTest {
     @Test fun eligibleDecisionNamesExactlyOneSymbolAndFile() {
         val current = draft()
         val checks = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)

@@ -632,9 +632,16 @@ func declarationTargetName(declaration ast.Decl) string {
 		return receiverTypeName(function.Recv.List[0].Type) + "." + function.Name.Name
 	}
 	group, ok := declaration.(*ast.GenDecl)
-	if ok && group.Tok == token.TYPE && len(group.Specs) == 1 {
-		if typeSpec, ok := group.Specs[0].(*ast.TypeSpec); ok {
-			return typeSpec.Name.Name
+	if ok && len(group.Specs) == 1 {
+		if group.Tok == token.TYPE {
+			if typeSpec, ok := group.Specs[0].(*ast.TypeSpec); ok {
+				return typeSpec.Name.Name
+			}
+		}
+		if group.Tok == token.VAR && !group.Lparen.IsValid() {
+			if variable, ok := group.Specs[0].(*ast.ValueSpec); ok && len(variable.Names) == 1 {
+				return variable.Names[0].Name
+			}
 		}
 	}
 	return ""

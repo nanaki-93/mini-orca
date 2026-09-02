@@ -80,6 +80,9 @@ internal fun editorChromeVisible(workspace: Workspace): Boolean = workspace == W
 internal fun editorDrawerActionsVisible(workspace: Workspace, widthDp: Float): Boolean =
     useNarrowLayout(widthDp) && editorChromeVisible(workspace)
 
+internal fun contextDrawerForSourceSelection(workspace: Workspace, widthDp: Float): NarrowDrawer? =
+    NarrowDrawer.Context.takeIf { editorDrawerActionsVisible(workspace, widthDp) }
+
 internal fun fileInspectionWorkspace(): Workspace = Workspace.Editor
 
 /** Builds a stable project-relative explorer without exposing filesystem paths. */
@@ -153,10 +156,14 @@ internal fun DesktopShell(
     connection: ConnectionState,
     workspace: Workspace,
     onWorkspace: (Workspace) -> Unit,
-    editorFlow: EditorFlowUiState,
-    onEditorStage: (EditorStage) -> Unit,
+    editorProgress: EditorProgressUiState,
     onFocusChat: () -> Unit,
     onFocusDraft: () -> Unit,
+    canFocusChat: Boolean,
+    canFocusDraft: Boolean,
+    canGenerate: Boolean,
+    canValidateDraft: Boolean,
+    canRunDraftChecks: Boolean,
     analysisInProgress: Boolean,
     generating: Boolean,
     showContext: Boolean,
@@ -188,17 +195,10 @@ internal fun DesktopShell(
     onImport: () -> Unit,
     onReanalyze: () -> Unit,
     onReconnect: () -> Unit,
-    onAnalyze: () -> Unit,
-    onRefreshAnalysis: () -> Unit,
     onCancelAnalysis: () -> Unit,
-    editorSurface: EditorSurface,
-    onEditorSurface: (EditorSurface) -> Unit,
-    onSelectSymbol: (SymbolInfo) -> Unit,
-    onPrepareSuggestion: (Suggestion) -> Unit,
+    onSourceLineSelected: (SourceLineSelection) -> Unit,
     onValidateDraft: () -> Unit,
     onRunDraftChecks: () -> Unit,
-    onApplyDraft: () -> Unit,
-    onUndo: () -> Unit,
     onGenerate: () -> Unit,
     onCancelGeneration: () -> Unit,
     onCancelAll: () -> Unit,
@@ -247,16 +247,16 @@ internal fun DesktopShell(
                 DesktopShortcut.OpenFile -> onOpenPalette(PaletteMode.Files)
                 DesktopShortcut.OpenSymbol -> onOpenPalette(PaletteMode.Symbols)
                 DesktopShortcut.OpenAction -> onOpenPalette(PaletteMode.Actions)
-                DesktopShortcut.FocusChat -> onFocusChat()
-                DesktopShortcut.FocusDraft -> onFocusDraft()
+                DesktopShortcut.FocusChat -> if (canFocusChat) onFocusChat() else return@onPreviewKeyEvent false
+                DesktopShortcut.FocusDraft -> if (canFocusDraft) onFocusDraft() else return@onPreviewKeyEvent false
                 DesktopShortcut.FocusBugsFilters -> selectWorkspace(Workspace.Bugs)
-                DesktopShortcut.ValidateDraft -> onValidateDraft()
-                DesktopShortcut.RunDraftChecks -> onRunDraftChecks()
+                DesktopShortcut.ValidateDraft -> if (canValidateDraft) onValidateDraft() else return@onPreviewKeyEvent false
+                DesktopShortcut.RunDraftChecks -> if (canRunDraftChecks) onRunDraftChecks() else return@onPreviewKeyEvent false
                 DesktopShortcut.SummaryWorkspace -> selectWorkspace(Workspace.Summary)
                 DesktopShortcut.AnalysisWorkspace -> selectWorkspace(Workspace.Analysis)
                 DesktopShortcut.BugsWorkspace -> selectWorkspace(Workspace.Bugs)
                 DesktopShortcut.EditorWorkspace -> selectWorkspace(Workspace.Editor)
-                DesktopShortcut.Generate -> if (generating) onCancelGeneration() else onGenerate()
+                DesktopShortcut.Generate -> if (generating) onCancelGeneration() else if (canGenerate) onGenerate() else return@onPreviewKeyEvent false
                 DesktopShortcut.Cancel -> when {
                     showPalette -> onDismissPalette()
                     showContext -> onDismissContext()
@@ -275,8 +275,9 @@ internal fun DesktopShell(
             ProjectLanding(appState, onImport)
         } else {
             BoxWithConstraints {
-                val narrow = useNarrowLayout(maxWidth.value)
-                val showEditorDrawers = editorDrawerActionsVisible(workspace, maxWidth.value)
+                val widthDp = maxWidth.value
+                val narrow = useNarrowLayout(widthDp)
+                val showEditorDrawers = editorDrawerActionsVisible(workspace, widthDp)
                 ModalDrawer(
                 drawerState = drawerState,
                 drawerContent = {
@@ -298,13 +299,17 @@ internal fun DesktopShell(
                             ResizableDivider(onDelta = { onPaneWidths(paneWidths.withExplorer(paneWidths.explorer + it)) }, onCommit = onSavePaneWidths)
                         }
                         ContentPane(
-                            project = appState.project, overview = appState.overview, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis, selectedSymbol = appState.selectedSymbol,
-                            workspace = workspace, analysisInProgress = analysisInProgress, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis, remoteProvider = remoteProvider, remoteProviderConfirmed = remoteProviderConfirmed, onRemoteProviderConfirmed = onRemoteProviderConfirmed,
-                            editorFlow = editorFlow, onEditorStage = onEditorStage, editorSurface = editorSurface, onEditorSurface = onEditorSurface,
-                            onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, checks = appState.checks, draft = appState.review.draft, editor = appState.review.editor, applied = appState.review.applied, onApplyDraft = onApplyDraft, onUndo = onUndo,
+                            project = appState.project, overview = appState.overview, selected = appState.selectedFile, symbols = appState.symbols, selectedSymbol = appState.selectedSymbol,
+                            workspace = workspace, remoteProvider = remoteProvider, remoteProviderConfirmed = remoteProviderConfirmed, onRemoteProviderConfirmed = onRemoteProviderConfirmed,
+                            editorProgress = editorProgress, draft = appState.review.draft,
                             findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding, onTriageFinding = onTriageFinding,
                             onStartAnalyzeAll = onStartAnalyzeAll, onPauseAnalyzeAll = onPauseAnalyzeAll, onResumeAnalyzeAll = onResumeAnalyzeAll, onCancelAnalyzeAll = onCancelAnalyzeAll, onStartScan = onStartScan, onCancelScan = onCancelScan,
-                            focusedLine = appState.selection.focusedLine, showCompactEditorBrief = showEditorDrawers, onWorkspace = ::selectWorkspace, modifier = Modifier.weight(1f).fillMaxHeight(),
+                            focusedLine = appState.selection.focusedLine,
+                            onSourceLineSelected = { selection ->
+                                onSourceLineSelected(selection)
+                                contextDrawerForSourceSelection(workspace, widthDp)?.let(::openDrawer)
+                            },
+                            onWorkspace = ::selectWorkspace, modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
                         if (!narrow && showsEditorChrome) {
                             ResizableDivider(onDelta = { onPaneWidths(paneWidths.withAction(paneWidths.action - it)) }, onCommit = onSavePaneWidths)
@@ -314,9 +319,25 @@ internal fun DesktopShell(
                         DesktopStatusBar(appState.status, appState.error, appState.loading)
                     }
                 }
+                if (showPalette) {
+                    CommandPaletteDialog(
+                        paletteMode,
+                        paletteQuery,
+                        onPaletteQuery,
+                        appState.index?.files.orEmpty(),
+                        appState.symbols,
+                        appState.analysis,
+                        onSelectPaletteFile,
+                        { symbol ->
+                            onSelectPaletteSymbol(symbol)
+                            contextDrawerForSourceSelection(Workspace.Editor, widthDp)?.let(::openDrawer)
+                        },
+                        onSelectPaletteAction,
+                        onDismissPalette,
+                    )
+                }
             }
             if (showContext) ContextInspectorDialog(contextManifest ?: ContextManifest(), remoteProvider, onDismissContext)
-            if (showPalette) CommandPaletteDialog(paletteMode, paletteQuery, onPaletteQuery, appState.index?.files.orEmpty(), appState.symbols, onSelectPaletteFile, onSelectPaletteSymbol, onSelectPaletteAction, onDismissPalette)
         }
     }
 }
@@ -350,39 +371,22 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
 
 @Composable
 private fun ContentPane(
-    project: ProjectAnalysis?, overview: ProjectOverview?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, workspace: Workspace,
-    analysisInProgress: Boolean, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit, remoteProvider: Boolean, remoteProviderConfirmed: Boolean, onRemoteProviderConfirmed: (Boolean) -> Unit,
-    editorFlow: EditorFlowUiState, onEditorStage: (EditorStage) -> Unit, editorSurface: EditorSurface, onEditorSurface: (EditorSurface) -> Unit,
-    onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, checks: CandidateCheckReport?, draft: DeclarationDraft?, editor: EditableDraftState?, applied: ApplyResult?, onApplyDraft: () -> Unit, onUndo: () -> Unit,
+    project: ProjectAnalysis?, overview: ProjectOverview?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, selectedSymbol: SymbolInfo?, workspace: Workspace,
+    remoteProvider: Boolean, remoteProviderConfirmed: Boolean, onRemoteProviderConfirmed: (Boolean) -> Unit,
+    editorProgress: EditorProgressUiState, draft: DeclarationDraft?,
     findings: List<UnifiedFinding>, scan: GoScanReport?, analyzeAll: AnalyzeAllJob?, coverage: AnalysisCoverage?, onOpenFinding: (UnifiedFinding) -> Unit, onPrepareFinding: (UnifiedFinding) -> Unit, onTriageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
     onStartAnalyzeAll: (AnalyzeAllRunOptions) -> Unit, onPauseAnalyzeAll: () -> Unit, onResumeAnalyzeAll: (Boolean) -> Unit, onCancelAnalyzeAll: () -> Unit, onStartScan: () -> Unit, onCancelScan: () -> Unit,
-    focusedLine: Int, showCompactEditorBrief: Boolean, onWorkspace: (Workspace) -> Unit, modifier: Modifier,
+    focusedLine: Int, onSourceLineSelected: (SourceLineSelection) -> Unit, onWorkspace: (Workspace) -> Unit, modifier: Modifier,
 ) {
     Column(modifier.background(AppBackground)) {
         when (workspace) {
             Workspace.Summary -> ProjectSummaryPane(overview, project, onWorkspace)
-            Workspace.Editor -> EditorWorkspace(editorFlow, onEditorStage, editorSurface, onEditorSurface, canvas = {
-                when (editorFlow.activeStage) {
-                    EditorStage.Verify -> VerifyDiffCanvas(draft)
-                    EditorStage.Apply -> ApplyDiffCanvas(draft, applied)
-                    else -> EditorPane(project, selected, selectedSymbol, focusedLine)
+            Workspace.Editor -> EditorWorkspace(editorProgress, canvas = {
+                if (editorProgress.progress == EditorProgress.Review) {
+                    ReviewDiffCanvas(draft)
+                } else {
+                    EditorPane(project, selected, symbols, selectedSymbol, focusedLine, onSourceLineSelected)
                 }
-            }, analysis = {
-                SummaryPane(
-                    selected = selected,
-                    symbols = symbols,
-                    analysis = analysis,
-                    selectedSymbol = selectedSymbol,
-                    analysisInProgress = analysisInProgress,
-                    remoteProvider = remoteProvider,
-                    remoteProviderConfirmed = remoteProviderConfirmed,
-                    onRemoteProviderConfirmed = onRemoteProviderConfirmed,
-                    onAnalyze = onAnalyze,
-                    onRefresh = onRefreshAnalysis,
-                    onCancel = onCancelAnalysis,
-                    onSelectSymbol = onSelectSymbol,
-                    onPrepareSuggestion = onPrepareSuggestion,
-                )
             })
             Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll)
             Workspace.Bugs -> BugsWorkspacePane(findings, scan, onOpenFinding, onPrepareFinding, onTriageFinding, onStartScan, onCancelScan)

@@ -160,6 +160,63 @@ class DesktopStateTest {
         assertEquals(symbols[1], symbolForNavigation(symbols, EditorNavigationTarget("main.go", line = 12)))
     }
 
+    @Test fun sourceLineSelectionUsesTheMostSpecificValidDeclaration() {
+        val symbols = listOf(
+            SymbolInfo("Invalid", "function", startLine = 0, endLine = 4, confidence = "exact", atomicTarget = true),
+            SymbolInfo("Container", "type", startLine = 1, endLine = 20, confidence = "exact", atomicTarget = true),
+            SymbolInfo("Nested", "function", startLine = 5, endLine = 8, confidence = "approximate", atomicTarget = false),
+            SymbolInfo("ApproximateTie", "function", startLine = 10, endLine = 12, confidence = "approximate", atomicTarget = false),
+            SymbolInfo("AtomicTie", "function", startLine = 10, endLine = 12, confidence = "exact", atomicTarget = true),
+            SymbolInfo("FirstAtomicTie", "function", startLine = 14, endLine = 16, confidence = "exact", atomicTarget = true),
+            SymbolInfo("SecondAtomicTie", "function", startLine = 14, endLine = 16, confidence = "exact", atomicTarget = true),
+            SymbolInfo("Reversed", "function", startLine = 22, endLine = 21, confidence = "exact", atomicTarget = true),
+            SymbolInfo("Empty", "function", startLine = 0, endLine = 0, confidence = "exact", atomicTarget = true),
+            SymbolInfo("Disjoint", "function", startLine = 30, endLine = 31, confidence = "exact", atomicTarget = true),
+        )
+
+        assertEquals("Nested", symbolAtLine(symbols, 6)?.name)
+        assertEquals("AtomicTie", symbolAtLine(symbols, 11)?.name)
+        assertEquals("FirstAtomicTie", symbolAtLine(symbols, 15)?.name)
+        assertEquals("Disjoint", symbolAtLine(symbols, 30)?.name)
+        assertNull(symbolAtLine(symbols, 21))
+
+        val draft = DeclarationDraft(id = "draft")
+        val state = DesktopState(
+            selection = FileSelectionState(selectedSymbol = symbols[1], focusedLine = 2),
+            review = DraftReviewState(draft = draft),
+        ).reduce(DesktopEvent.SourceLineSelected(SourceLineSelection(6, symbols[2])))
+
+        assertEquals(symbols[2], state.selectedSymbol)
+        assertEquals(6, state.selection.focusedLine)
+        assertEquals(draft, state.review.draft)
+
+        val outsideDeclaration = state.reduce(DesktopEvent.SourceLineSelected(sourceLineSelection(symbols, 21)))
+
+        assertNull(outsideDeclaration.selectedSymbol)
+        assertEquals(21, outsideDeclaration.selection.focusedLine)
+        assertEquals(draft, outsideDeclaration.review.draft)
+    }
+
+    @Test fun discardingForANewEditClearsOnlyTheInMemoryConversationDraftAndChecks() {
+        val selected = ProjectFileInfo("main.go", "hash", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
+        val draft = DeclarationDraft(id = "draft")
+        val receipt = ApplyResult("revision", "post-apply", true)
+        val initial = DesktopState(
+            selection = FileSelectionState(selectedFile = selected),
+            chat = ChatState(ChatSession(id = "session")),
+            review = DraftReviewState(draft = draft, editor = editableDraft(draft), checks = CandidateCheckReport("main.go", true), applied = receipt),
+        )
+
+        val discarded = initial.reduce(DesktopEvent.DraftDiscarded)
+
+        assertEquals(selected, discarded.selectedFile)
+        assertNull(discarded.chat.session)
+        assertNull(discarded.review.draft)
+        assertNull(discarded.review.editor)
+        assertNull(discarded.review.checks)
+        assertEquals(receipt, discarded.review.applied)
+    }
+
     @Test fun contextInspectorClientKeepsOnlySourceFreeManifestMetadata() {
         val client = ApiClient("https://provider.example", DaemonTransport { _, _, _ ->
             TransportResponse(200, """{"included":[{"path":"main.go","size_bytes":20,"hash":"sha256:base","estimated_tokens":5}],"excluded":[{"path":".env","include":false,"reason":"secret"}],"estimated_tokens":5,"byte_limit":1024,"token_limit":256,"content":"private source must not reach the UI model"}""")

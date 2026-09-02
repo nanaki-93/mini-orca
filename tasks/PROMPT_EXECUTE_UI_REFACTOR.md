@@ -1,7 +1,7 @@
 # Historical prompt — completed Desktop UI refactor (Tasks 57–74)
 
 > Tasks 57–74 are Complete. Do not use this prompt for the current backlog. Use
-> [`PROMPT_EXECUTE_ALL_TASKS.md`](PROMPT_EXECUTE_ALL_TASKS.md) for Tasks 75–79.
+> [`PROMPT_EXECUTE_ALL_TASKS.md`](PROMPT_EXECUTE_ALL_TASKS.md) for the current backlog.
 
 Use this prompt with one primary Codex/Air implementation agent. The agent owns
 the shared worktree and executes Tasks 57–74 one at a time in dependency order.

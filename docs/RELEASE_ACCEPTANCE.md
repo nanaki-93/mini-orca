@@ -36,7 +36,7 @@ context and findings.
 | File-bound chat, offline/remote confirmation, cancellation, stale sessions, and draft lineage | `go test ./internal/app ./internal/api/handlers -run 'ChatSession|Draft'` |
 | Manual draft edit invalidates old validation/checks; invalid or stale drafts cannot Apply | `go test ./internal/app -run 'DraftLifecycle|DraftValidateCheckApply'` |
 | One-file guarded Apply/Undo, comparison, export, and source-free audit | `go test ./internal/app -run 'Apply|Undo|Compare|Export'` |
-| Empty landing/open-project transition, shortcut gate, compact semantic controls, concise workspace labels, Bugs filter disclosure, Analyze-all limits, responsive groups, Editor stage semantics, Editor-only explorer/context panes, read-only source/diff, and revision/file guards | `./desktop/gradlew -p desktop test` |
+| Empty landing/open-project transition, shortcut gate, compact semantic controls, concise workspace labels, Bugs filter disclosure, Analyze-all limits, responsive groups, direct source-symbol selection, contextual Inspect/Edit/Review progress, Editor-only explorer/context panes, read-only source/diff, and revision/file guards | `./desktop/gradlew -p desktop test` |
 | Live routes, OpenAPI, API reference, version, and retired browser routes | `go test ./cmd/daemon ./internal/api/handlers` |
 | All supported formatting, unit, race, vet, and desktop checks | `make check` |
 
@@ -70,23 +70,36 @@ window narrower than 1000dp:
    finding triage state, and use Prepare fix only to open the associated file
    and prefill chat. It must not generate or apply a change.
 5. From a non-Editor workspace, use `Cmd/Ctrl+P` to open an indexed file and
-   confirm it activates Editor with that exact path. In Editor, select `Run` to
-   replace it, then repeat with an absent
-   `ReleaseNote` type to create it. Confirm the source and composed diff remain
-   selectable and read-only and the file/symbol brief remains visible above the
-   source, including in the narrow drawer layout.
-6. Open a file-scoped chat session, send one request with `Cmd/Ctrl+Enter`, and
-   verify a different file cannot be targeted. Edit only the declaration/import
-   draft, use `Cmd/Ctrl+Shift+V` to validate and `Cmd/Ctrl+Shift+C` for checks.
-   A manual edit must make the old evidence unusable.
-7. Confirm Apply names the expected file and symbol. Apply only after the fresh
-   validation and checks, then use the displayed Undo action. Verify
-   exactly that one file changes and stale sessions/drafts cannot apply.
-8. Confirm compact controls remain focusable and text-labeled at supported text scaling.
+   confirm it activates Editor with that exact path. Hover and click within `Run`'s
+   declaration and confirm the selected declaration range and Context explanation update
+   immediately. Confirm nested declarations select the narrowest containing declaration,
+   and clicking between declarations clears stale symbol Context while retaining the
+   focused line. Drag source text to confirm selection works without an edit or retarget.
+   Repeat from the symbol palette and,
+   below 1000dp, confirm both paths open the Context drawer. The source and composed
+   diff must remain selectable and read-only.
+6. Confirm exact atomic `Run` exposes one **Edit Run** action. Activate it and verify
+   the bound Replace composer opens without a provider call or source write. Use
+   Commands → **Create declaration** for absent `ReleaseNote`; the new-name field must
+   appear only on that route. With a live draft, request another target and confirm the
+   explicit draft-discard decision names both targets and does not silently clear the
+   existing work.
+7. Open a file-scoped chat session, send one request with `Cmd/Ctrl+Enter`, and
+   verify a different file cannot be targeted. Edit only the declaration/import draft,
+   use `Cmd/Ctrl+Shift+V` to validate and `Cmd/Ctrl+Shift+C` for checks when each
+   contextual action is available. A manual edit must make the old evidence unusable.
+   Confirm the non-interactive **Inspect → Edit → Review** status advances only from
+   those guarded results, and successful validation opens the read-only diff.
+8. In Review, confirm scope identity, validation evidence, focused checks, collapsed
+   diagnostic/command detail, and read-only impact/Git context appear together. Confirm
+   Apply names the expected file and symbol and appears only after fresh checks. Apply
+   only then, use the displayed Undo action, and verify exactly one file changes while
+   stale sessions/drafts cannot apply.
+9. Confirm compact controls remain focusable and text-labeled at supported text scaling.
    Verify action meaning is not color-only: primary, navigation, positive, attention,
    destructive, and neutral actions each retain readable labels and disabled/selected
    state. Check long labels, focused fields, pressed buttons, and blocked reasons.
-9. At exactly 1000dp, confirm Editor retains its wide Explorer and Context panes.
+10. At exactly 1000dp, confirm Editor retains its wide Explorer and Context panes.
    Below 1000dp, confirm Files and Context drawer actions appear only in Editor
    and leaving Editor closes an open drawer. In both Git and non-Git copies,
    inspect the advisory Git status. Exercise a
@@ -96,6 +109,15 @@ window narrower than 1000dp:
 Use `desktop/KEYBOARD_SMOKE_CHECKLIST.md` for the key-by-key version of the
 same flow. Record the release operator, date, fixture variant, and any failure
 next to the release candidate; do not record prompts, source, or credentials.
+
+## Current execution record
+
+On 2026-09-02, the automated Desktop suite and `make check` passed for the
+direct-symbol workflow. Manual desktop acceptance is **not recorded as passed**:
+this non-interactive execution environment cannot inspect a running Compose Desktop
+window at wide, exactly 1000dp, or below 1000dp, and no release-fixture GUI session
+was available. A release operator must complete the manual flow above before treating
+this release checklist as fully accepted.
 
 ## Supported scope and release decision
 

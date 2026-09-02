@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestComposeGoDeclarationReplacesExactFunctionMethodAndType(t *testing.T) {
+func TestComposeGoDeclarationReplacesExactFunctionMethodTypeAndVariable(t *testing.T) {
 	original := `package fixture
 
 import "fmt"
@@ -16,6 +16,11 @@ func Run() { fmt.Println("old") }
 type Worker struct{}
 
 func (Worker) Work() string { return "old" }
+
+var diffCmd = &cobra.Command{
+	Use:   "diff",
+	Short: "old",
+}
 
 func Other() {}
 `
@@ -28,6 +33,7 @@ func Other() {}
 		{name: "function", target: "Run", declaration: "// Run has new behavior.\nfunc Run() { fmt.Println(\"new\") }", want: "fmt.Println(\"new\")"},
 		{name: "method", target: "Worker.Work", declaration: "func (Worker) Work() string { return \"new\" }", want: "return \"new\""},
 		{name: "type", target: "Worker", declaration: "type Worker struct { Name string }", want: "type Worker struct{ Name string }"},
+		{name: "variable", target: "diffCmd", declaration: "// diffCmd has new behavior.\nvar diffCmd = &cobra.Command{Use: \"diff\", Short: \"new\"}", want: "Short: \"new\""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result := ComposeGoDeclaration("fixture.go", original, GoDeclarationEdit{
@@ -124,7 +130,7 @@ func Other() {}
 		{name: "target mismatch", edit: GoDeclarationEdit{Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run", Declaration: "func Other() {}"}, code: "target_mismatch"},
 		{name: "multiple declarations", edit: GoDeclarationEdit{Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run", Declaration: "func Run() {}\nfunc Added() {}"}, code: "invalid_declaration"},
 		{name: "package clause", edit: GoDeclarationEdit{Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run", Declaration: "package other\nfunc Run() {}"}, code: "invalid_declaration"},
-		{name: "unsupported variable", edit: GoDeclarationEdit{Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run", Declaration: "var Run = 1"}, code: "invalid_declaration"},
+		{name: "replacement kind changed", edit: GoDeclarationEdit{Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run", Declaration: "var Run = 1"}, code: "target_kind"},
 		{name: "malformed declaration", edit: GoDeclarationEdit{Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run", Declaration: "func Run( {"}, code: "invalid_declaration"},
 		{name: "duplicate requested import", edit: GoDeclarationEdit{Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run", Declaration: "func Run() {}", Imports: []string{"fmt", `"fmt"`}}, code: "invalid_import"},
 	} {

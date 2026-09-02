@@ -12,6 +12,9 @@ class FileChatStateTest {
         val approximate = exact.copy(confidence = "approximate")
 
         assertTrue(validateChatTarget(file(), listOf(exact), exact, ChatEditMode.ReplaceSymbol, "").valid)
+        val variable = exact.copy(name = "diffCmd", kind = "var")
+        assertFalse(validateChatTarget(file(), listOf(variable), variable, ChatEditMode.ReplaceSymbol, "").valid)
+        assertFalse(validateChatTarget(file(), listOf(exact.copy(atomicTarget = false)), exact.copy(atomicTarget = false), ChatEditMode.ReplaceSymbol, "").valid)
         assertFalse(validateChatTarget(file(), listOf(approximate), approximate, ChatEditMode.ReplaceSymbol, "").valid)
         assertFalse(validateChatTarget(file(), listOf(exact), null, ChatEditMode.ReplaceSymbol, "").valid)
     }
@@ -22,6 +25,21 @@ class FileChatStateTest {
         assertEquals("NewRun", validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, "NewRun").target?.symbol)
         assertFalse(validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, "Run").valid)
         assertFalse(validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, "not valid").valid)
+    }
+
+    @Test fun directEditUsesReplaceAndMakesAnotherDraftAnExplicitDecision() {
+        val run = symbol("Run")
+        val other = symbol("Other")
+        val currentDraft = CurrentEditIdentity(ChatEditMode.ReplaceSymbol, "main.go", "Run", hasDraft = true)
+
+        val different = directEditRequest(file(), listOf(run, other), other, currentDraft)!!
+        val same = directEditRequest(file(), listOf(run, other), run, currentDraft)!!
+
+        assertEquals(ChatEditMode.ReplaceSymbol, different.target.mode)
+        assertEquals("Other", different.target.symbol)
+        assertTrue(different.requiresDraftDiscard)
+        assertEquals("Discard draft for Run and edit Other?", different.discardPrompt)
+        assertFalse(same.requiresDraftDiscard)
     }
 
     @Test fun activeSessionMustMatchTheOpenFileRevisionHashAndTarget() {
@@ -69,6 +87,17 @@ class FileChatStateTest {
         ).reduce(DesktopEvent.IndexRefreshed(ProjectIndex("project", "next")))
         assertNull(state.chat.session)
         assertNull(state.review.draft)
+    }
+
+    @Test fun discardingForAnotherTargetRejectsLateChatResults() {
+        val controller = loadedController()
+        val request = controller.beginFileLoad("main.go")!!
+        assertTrue(controller.fileLoaded(request, file(), listOf(symbol("Run"))))
+        val (chatRequest, chatFile) = controller.beginChatLoad()!!
+
+        controller.dispatch(DesktopEvent.DraftDiscarded)
+
+        assertFalse(controller.chatProposalLoaded(chatRequest, chatFile, session(), "Late", ChatDraftProposal("session", draft(), ChatSessionMessage("assistant", "Late"))))
     }
 
     private fun loadedController() = DesktopWorkflowController().also { controller ->

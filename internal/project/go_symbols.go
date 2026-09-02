@@ -55,13 +55,20 @@ func extractGoFacts(filename string, source []byte) ([]string, []SymbolInfo, []D
 						kind = "const"
 					}
 					for _, name := range spec.Names {
-						symbols = append(symbols, newGoSymbol(fset, name.Pos(), spec.End(), name.Name, kind, "", name.Name, false))
+						symbols = append(symbols, newGoSymbol(fset, name.Pos(), spec.End(), name.Name, kind, "", name.Name, isAtomicVariableDeclaration(declaration, spec)))
 					}
 				}
 			}
 		}
 	}
 	return imports, symbols, diagnostics
+}
+
+// isAtomicVariableDeclaration accepts only a single-name, ungrouped top-level var.
+// Replacing that entire declaration cannot affect a neighboring binding.
+func isAtomicVariableDeclaration(declaration *ast.GenDecl, spec *ast.ValueSpec) bool {
+	return spec != nil && declaration.Tok == token.VAR && !declaration.Lparen.IsValid() &&
+		len(declaration.Specs) == 1 && len(spec.Names) == 1
 }
 
 func newGoSymbol(fset *token.FileSet, start, end token.Pos, name, kind, signature, visibilityName string, atomicTarget bool) SymbolInfo {
