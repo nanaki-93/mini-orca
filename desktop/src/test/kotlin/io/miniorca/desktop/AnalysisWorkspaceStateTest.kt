@@ -129,6 +129,13 @@ class AnalysisWorkspaceStateTest {
         assertEquals("sanitized failure", presentation.failures.single().error)
     }
 
+    @Test fun emptyFailureListUsesAnExplicitNoErrorsMessage() {
+        val presentation = analyzeAllPresentation(job("completed", files = listOf(file("main.go", "completed"))), null)
+
+        assertTrue(presentation.failures.isEmpty())
+        assertEquals("No analysis errors in this run.", presentation.noErrorsMessage)
+    }
+
     @Test fun missingAnalysisJobStatesThatImportAndReindexNeverStartIt() {
         val presentation = analyzeAllPresentation(null, null)
 

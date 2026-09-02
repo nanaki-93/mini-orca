@@ -307,7 +307,7 @@ private fun ContentPane(
                     else -> EditorPane(project, selected, selectedSymbol, focusedLine)
                 }
             })
-            Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll) { path -> onOpenFinding(UnifiedFinding(location = FindingLocation(path = path))) }
+            Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll)
             Workspace.Bugs -> BugsWorkspacePane(findings, scan, onOpenFinding, onPrepareFinding, onTriageFinding, onStartScan, onCancelScan)
         }
     }

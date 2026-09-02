@@ -37,7 +37,6 @@ internal fun AnalysisWorkspacePane(
     onPause: () -> Unit,
     onResume: (Boolean) -> Unit,
     onCancel: () -> Unit,
-    onOpen: (String) -> Unit,
 ) {
     var maxFiles by remember { mutableStateOf(defaultAnalyzeAllFileLimit.toString()) }
     var maxRetries by remember { mutableStateOf(defaultAnalyzeAllRetryLimit.toString()) }
@@ -53,47 +52,72 @@ internal fun AnalysisWorkspacePane(
             Text("Analyze-all is explicit, revision-bound, and never starts during import or reindex.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(12.dp))
             FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-                SectionLabel("ANALYSIS COVERAGE")
-                Text(presentation.statusLabel, color = PrimaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 7.dp))
-                Text(presentation.statusDetail, color = if (presentation.statusLabel == "Failed") Error else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                SectionLabel("PROJECT COVERAGE")
+                Text(
+                    "Total: ${presentation.coverage.total} · Fresh: ${presentation.coverage.fresh} · Stale: ${presentation.coverage.stale}",
+                    color = PrimaryText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 7.dp),
+                )
+                Text(
+                    "Missing: ${presentation.coverage.missing} · Running: ${presentation.coverage.running} · Failed: ${presentation.coverage.failed}",
+                    color = SecondaryText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            FocusFlowPanel(Modifier.fillMaxWidth()) {
+                SectionLabel("CURRENT / LAST RUN")
+                Text(presentation.run.statusLabel, color = if (presentation.run.statusLabel == "Failed") Error else PrimaryText, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 7.dp))
+                Text(presentation.run.statusDetail, color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                Text(
+                    "Candidates: ${presentation.run.candidates} · Completed: ${presentation.run.completed} · Failed: ${presentation.run.failed} · Running: ${presentation.run.running} · Remaining: ${presentation.run.remaining}",
+                    color = SecondaryText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                job?.let {
+                    Text("Limits: ${presentation.run.maxFiles} files · ${presentation.run.maxRetries} retries per file", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                }
             }
             Spacer(Modifier.height(10.dp))
             FocusFlowPanel(Modifier.fillMaxWidth()) {
                 SectionLabel("ANALYZE-ALL CONTROLS")
-                when (job?.status?.lowercase()) {
-                    "running" -> {
-                        Text("Processing ${job.files.count { it.status.lowercase() in setOf("completed", "fresh", "success") }} of ${job.files.size} listed files.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
-                        Button(onClick = onPause, modifier = Modifier.padding(top = 8.dp)) { Text("Pause") }
-                        Button(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
+                when (presentation.run.statusLabel) {
+                    "Running" -> {
+                        Text("Processing ${presentation.run.completed + presentation.run.failed} of ${presentation.run.candidates} candidates.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                        FocusFlowButton(onClick = onPause, modifier = Modifier.padding(top = 8.dp)) { Text("Pause") }
+                        FocusFlowButton(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
                     }
-                    "pausing", "canceling" -> {
+                    "Pausing", "Canceling" -> {
                         Text(presentation.controls, color = Warning, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
-                        Button(onClick = onCancel, enabled = job.status.lowercase() == "pausing", modifier = Modifier.padding(top = 8.dp)) { Text("Cancel") }
+                        FocusFlowButton(onClick = onCancel, enabled = presentation.run.statusLabel == "Pausing", modifier = Modifier.padding(top = 8.dp)) { Text("Cancel") }
                     }
-                    "paused" -> {
-                        Text("Completed results remain visible while paused.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                    "Paused" -> {
+                        Text(presentation.run.statusDetail, color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
                         RemoteProviderConfirmation(remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed)
-                        Button(onClick = { onResume(remoteProviderConfirmed) }, enabled = !remoteProvider || remoteProviderConfirmed, modifier = Modifier.padding(top = 8.dp)) { Text("Resume") }
-                        Button(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
+                        FocusFlowButton(onClick = { onResume(remoteProviderConfirmed) }, enabled = !remoteProvider || remoteProviderConfirmed, modifier = Modifier.padding(top = 8.dp)) { Text("Resume") }
+                        FocusFlowButton(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
                     }
                     else -> {
-                        Text(presentation.statusDetail.substringAfter(". "), color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                        Text(presentation.run.statusDetail, color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
                         AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart)
                     }
                 }
-                job?.let { Text("Bounded to ${it.maxFiles} files and ${it.maxRetries} retries per file.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp)) }
             }
             Spacer(Modifier.height(10.dp))
-            SectionLabel("FILE RESULTS")
+            SectionLabel("ANALYSIS ERRORS")
         }
-        if (job?.files.isNullOrEmpty()) {
-            item { Text("No file results yet. Start Analyze-all explicitly to populate this list.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp)) }
+        if (presentation.failures.isEmpty()) {
+            item { Text(presentation.noErrorsMessage, color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp)) }
         } else {
-            items(job!!.files, key = { it.path }) { file ->
+            items(presentation.failures, key = { it.path }) { failure ->
                 FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 7.dp)) {
-                    Button(onClick = { onOpen(file.path) }) { Text("Open ${file.path}") }
-                    Text("${file.status} · attempt ${file.attempts}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-                    if (file.error.isNotBlank()) Text(file.error, color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(failure.path, color = PrimaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Attempt ${failure.attempts}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(failure.error, color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                 }
             }
         }
