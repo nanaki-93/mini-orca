@@ -7,13 +7,18 @@ import kotlin.test.assertTrue
 
 class EditorInspectionStateTest {
 
-    @Test fun sourceLinesEmphasizeTheSelectedSymbolOrFindingLocation() {
+    @Test fun sourceLinesKeepDirectSelectableSemanticsWithoutAnInstructionalSubtitle() {
         val symbol = SymbolInfo("Run", "function", startLine = 5, endLine = 7, confidence = "exact", atomicTarget = true)
 
         assertEquals(SourceLineEmphasis.FocusedSelectedSymbol, sourceLineEmphasis(6, symbol, 6))
         assertEquals(SourceLineEmphasis.FocusedLocation, sourceLineEmphasis(12, symbol, 12))
         assertEquals(SourceLineEmphasis.None, sourceLineEmphasis(1, symbol, 12))
         assertEquals("Line 6, focused location in selected declaration", sourceLineDescription(6, SourceLineEmphasis.FocusedSelectedSymbol))
+        assertEquals(
+            "Line 5, selected declaration, selectable declaration Run",
+            sourceLineContentDescription(5, SourceLineEmphasis.SelectedSymbol, symbol),
+        )
+        assertFalse(sourceLineContentDescription(5, SourceLineEmphasis.SelectedSymbol, symbol).contains("Click"))
         assertTrue(symbolAtLine(listOf(symbol), 6) != null)
         assertFalse(symbolAtLine(listOf(symbol), 12) != null)
         assertEquals(SourceLineSelection(6, symbol), sourceLineSelection(listOf(symbol), 6))
