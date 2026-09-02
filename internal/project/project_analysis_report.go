@@ -126,7 +126,7 @@ func parseProjectAnalysisResponse(output string) (projectAnalysisResponse, error
 	}
 	for index := range response.Risks {
 		risk := &response.Risks[index]
-		risk.Severity = strings.TrimSpace(risk.Severity)
+		risk.Severity = strings.ToLower(strings.TrimSpace(risk.Severity))
 		risk.Summary = strings.TrimSpace(risk.Summary)
 		if !validProjectAnalysisSeverity(risk.Severity) || risk.Summary == "" || len(risk.Summary) > maxProjectAnalysisItemBytes {
 			return response, fmt.Errorf("project analysis contains an invalid risk")

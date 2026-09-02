@@ -8,11 +8,12 @@ This directory contains the implementation backlog for [`../PLAN.md`](../PLAN.md
 - Completed tasks move to `completed/` without changing their identifier.
 - [`INDEX.md`](INDEX.md) is the authoritative dependency order and status list.
 - [`PROMPT_EXECUTE_ALL_TASKS.md`](PROMPT_EXECUTE_ALL_TASKS.md) runs the current
-  Tasks 75–79 sequentially with one implementation writer and one commit per task.
+  Tasks 80–84 sequentially with one implementation writer and a required user-facing
+  start/completion commentary update for every task.
 - [`PROMPT_EXECUTE_UI_REFACTOR.md`](PROMPT_EXECUTE_UI_REFACTOR.md) is retained as
   execution history for the completed Tasks 57–74 UI refactor.
-- Tasks 01–74 are completed history. The current Analysis/Editor UX backlog begins
-  at Task 75.
+- Tasks 01–79 are completed history. The current Desktop UX simplification backlog begins
+  at Task 80.
 
 ## Status lifecycle
 
@@ -25,8 +26,8 @@ Each task has exactly one status: `Pending`, `In Progress`, or `Complete`.
 4. The implementation agent runs the task's focused checks and `git diff --check`.
 5. Only after every acceptance criterion passes does the agent set the task to
    Complete, move it under `completed/`, and update `INDEX.md`.
-6. For Tasks 75–79, the agent stages only task-owned hunks, inspects
-   `git diff --cached`, and creates the exact commit named by the task.
+6. The agent posts the task's required completion commentary and continues to the next
+   ready task without waiting for a separate “continue” message.
 
 Do not skip a blocked dependency, copy its behavior into another package, or mark a
 task Complete based only on partial implementation.
@@ -34,8 +35,9 @@ task Complete based only on partial implementation.
 ## Shared implementation rules
 
 - Read `AGENTS.md`, `PLAN.md`, this file, `INDEX.md`, and the selected task first.
-- For the current Tasks 75–79, follow the approved decisions in `PLAN.md`. The old
-  UI mocks are historical context, not acceptance requirements for this UX fix.
+- For the current Tasks 80–84, follow the UX simplification decisions in `PLAN.md`.
+  The old UI mocks and Tasks 57–79 are historical context, not acceptance requirements
+  except where the current plan explicitly preserves their safety behavior.
 - Preserve the one-project, one-open-file, one-symbol, preview-first workflow.
 - Keep source and diff views read-only; only the isolated AI declaration draft is
   editable.
@@ -45,11 +47,10 @@ task Complete based only on partial implementation.
   context policy, revision guards, checks, and audit boundaries.
 - Add focused regression tests for every behavior change.
 - Preserve unrelated user changes and never edit generated build output.
-- Never use `git add -A` or stage a whole pre-modified file blindly. Use hunk-level
-  staging and stop if task changes cannot be separated safely from user-owned edits.
-- The user has authorized one repository commit for each completed Task 75–79. This
-  does not authorize product-generated commits, pushes, rebases, or commits of
-  unrelated worktree changes.
+- Post the required user-facing commentary before and after every task, with concise
+  progress updates during work lasting more than 60 seconds.
+- The task comments are conversation commentary, not a reason to add source-code comments.
+- Tasks 80–84 do not authorize commits, staging, pushes, rebases, or tags.
 
 ## Verification baseline
 
@@ -61,6 +62,6 @@ task Complete based only on partial implementation.
 - Full release gate: `make check`
 - Every task: `git diff --check`
 
-The final task report must state the task ID/status, commit hash, files changed,
-acceptance criteria verified, commands run, and any blocker or intentionally
-deferred work.
+The final task report must state each task ID/status, behavior changed, files changed,
+acceptance criteria verified, commands run, and any blocker or intentionally deferred
+work.

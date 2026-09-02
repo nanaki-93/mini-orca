@@ -88,6 +88,45 @@ func TestReindexChangesOnlyModifiedEntryAndRevision(t *testing.T) {
 	}
 }
 
+func TestManagerPersistsFileAnalysisStatus(t *testing.T) {
+	root := t.TempDir()
+	writeIndexFixture(t, root, "main.go", "package main\nfunc main() {}\n")
+	manager, err := NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &Analysis{}); err != nil {
+		t.Fatal(err)
+	}
+	index, err := manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.UpdateFileAnalysisStatus(index.ProjectID, index.ProjectRevision, "main.go", AnalysisStatusFresh); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file := findIndexFile(updated, "main.go"); file == nil || file.AnalysisStatus != AnalysisStatusFresh {
+		t.Fatalf("updated index file = %+v", file)
+	}
+
+	data, err := os.ReadFile(filepath.Join(root, indexRelativePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted ProjectIndex
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if file := findIndexFile(&persisted, "main.go"); file == nil || file.AnalysisStatus != AnalysisStatusFresh {
+		t.Fatalf("persisted index file = %+v", file)
+	}
+}
+
 func TestBuildIndexRebuildsCorruptCacheAtomically(t *testing.T) {
 	root := t.TempDir()
 	writeIndexFixture(t, root, "main.go", "package main\n")

@@ -1,6 +1,6 @@
 # Prompt template — execute one task
 
-Use the all-tasks prompt for the normal Tasks 75–79 sequence. This template is for
+Use the all-tasks prompt for the normal Tasks 80–84 sequence. This template is for
 resuming exactly one incomplete task. Replace `{TASK_FILE}` and `{TASK_ID}` with the
 selected Pending/In Progress task from [`INDEX.md`](INDEX.md).
 
@@ -34,18 +34,21 @@ Implementation rules:
 - Follow AGENTS.md, Clean Code, KISS, and existing package/state boundaries.
 - Preserve the one-project, one-file, one-symbol, preview-first workflow.
 - Keep source/diff read-only and the declaration/import draft isolated until explicit Apply.
-- Preserve Analyze-all and remote-provider guards, revision/hash/request identity, and
-  explicit mutation actions.
+- Preserve Open project, Analyze-all, remote-provider confirmation,
+  revision/hash/request identity, and explicit mutation actions.
 - Add focused regression tests for changed behavior.
 - Use apply_patch for manual edits and do not edit generated output or local configuration.
 - Do not start another implementation writer or create another Codex task.
+- Post a user-facing commentary update beginning with `Starting Task {TASK_ID}` before
+  implementation, brief progress updates during work longer than 60 seconds, and a
+  separate `Task {TASK_ID} complete` commentary update after verification.
+- These required task comments are conversation commentary, not source-code comments.
 
-Pre-existing-change and staging rules:
+Pre-existing-change rules:
 - Never use reset, checkout, restore, stash, clean, rebase, or destructive history commands.
-- Never use `git add -A`, `git add .`, or stage a whole pre-modified file blindly.
-- Stage only task-owned hunks using hunk-level or equivalent index-only staging.
-- If a task hunk cannot be separated from an overlapping user-owned hunk, stop before
-  committing and report the exact overlap.
+- Do not stage or commit any file. Tasks 80–84 do not authorize commits.
+- If required work cannot be separated safely from an overlapping user-owned hunk, stop
+  and report the exact overlap.
 
 Verification:
 - Run every command listed by the task.
@@ -53,23 +56,19 @@ Verification:
 - Always run `git diff --check` and inspect the complete task diff.
 - Verify every acceptance criterion one by one.
 
-Completion and authorized commit:
-- The user has authorized exactly one commit for this completed task.
+Completion:
 - Only after all criteria pass, mark the task Complete, move it to tasks/completed/, and
   update its tasks/INDEX.md link/status.
-- Stage only task implementation/tests/docs plus its task/index metadata.
-- Inspect `git diff --cached --stat` and the complete `git diff --cached`.
-- Create the exact commit message required by the task's Commit section.
-- Do not amend, squash, rebase, push, tag, or create an extra cleanup commit.
-- Confirm pre-existing unrelated changes remain unstaged after the commit.
+- Do not commit, push, tag, rebase, or stage the implementation or task metadata.
+- Confirm pre-existing unrelated changes remain present and unaltered.
 
-Finish with the task status, commit hash, behavior changed, files changed, acceptance
-evidence, commands/results, and any blocker or deliberately deferred follow-up.
+Finish with the task status, behavior changed, files changed, acceptance evidence,
+commands/results, and any blocker or deliberately deferred follow-up.
 ```
 
 Example current task value:
 
 ```text
-Task ID: 76
-Task file: 76_analysis_run_summary_presentation.md
+Task ID: 80
+Task file: 80_desktop_compact_semantic_controls.md
 ```

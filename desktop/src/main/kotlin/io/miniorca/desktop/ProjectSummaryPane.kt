@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -108,8 +107,8 @@ internal fun ProjectSummaryPane(overview: ProjectOverview?, project: ProjectAnal
             SectionLabel("WORKSPACE COVERAGE")
             Text("File analysis: ${presentation.coverage}", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
             Text("Findings: ${presentation.findings}", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            Button(onClick = { onWorkspace(Workspace.Analysis) }, modifier = Modifier.padding(top = 9.dp)) { Text("Open Analysis") }
-            Button(onClick = { onWorkspace(Workspace.Bugs) }, modifier = Modifier.padding(top = 6.dp)) { Text("Open Bugs") }
+            FocusFlowButton(onClick = { onWorkspace(Workspace.Analysis) }, modifier = Modifier.padding(top = 9.dp)) { Text("Open Analysis") }
+            FocusFlowButton(onClick = { onWorkspace(Workspace.Bugs) }, modifier = Modifier.padding(top = 6.dp)) { Text("Open Bugs") }
         }
     }
 }

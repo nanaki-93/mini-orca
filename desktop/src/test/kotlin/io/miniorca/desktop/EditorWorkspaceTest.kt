@@ -14,4 +14,10 @@ class EditorWorkspaceTest {
         assertEquals("Apply · Locked", editorStageLabel(locked, current = false))
         assertTrue(editorStageSemanticsLabel(locked, current = false).contains("Run focused checks"))
     }
+
+    @Test fun editorSurfacesExposeTheSourceAndFileAnalysisViews() {
+        assertEquals("Source / diff · Current", editorSurfaceLabel(EditorSurface.Source, current = true))
+        assertEquals("File analysis", editorSurfaceLabel(EditorSurface.FileAnalysis, current = false))
+        assertTrue(editorSurfaceSemanticsLabel(EditorSurface.FileAnalysis, current = true).contains("Current"))
+    }
 }

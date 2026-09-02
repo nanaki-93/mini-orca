@@ -145,6 +145,9 @@ func (s *Service) analysisCoverage(analysis *project.Analysis, index *project.Pr
 		if err != nil {
 			return AnalysisCoverage{}, err
 		}
+		if err := s.syncFileAnalysisStatus(input, cached.Status); err != nil {
+			return AnalysisCoverage{}, err
+		}
 		coverage.Total++
 		switch cached.Status {
 		case project.AnalysisStatusFresh:

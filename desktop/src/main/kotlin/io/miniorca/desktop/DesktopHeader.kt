@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Text
@@ -79,13 +78,10 @@ internal fun AppTopBar(
 
 @Composable
 private fun TopBarButton(label: String, onClick: () -> Unit, enabled: Boolean = true, primary: Boolean = false) {
-    Button(
+    FocusFlowButton(
         onClick = onClick,
         enabled = enabled,
-        colors = ButtonDefaults.buttonColors(
-            backgroundColor = if (primary) Accent else Card,
-            contentColor = if (primary) OnAccent else PrimaryText,
-        ),
+        primary = primary,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 9.dp, vertical = 3.dp),
     ) { Text(label, fontSize = 11.sp, maxLines = 1) }
 }
@@ -96,7 +92,7 @@ internal fun WorkspaceRail(selected: Workspace, counts: WorkspaceCounts, onSelec
         SectionLabel("WORKSPACES", Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
         Workspace.entries.forEach { workspace ->
             val isSelected = workspace == selected
-            Button(
+            FocusFlowButton(
                 onClick = { onSelect(workspace) },
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp).semantics {
                     contentDescription = workspaceSemanticsLabel(workspace, isSelected, counts)

@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +29,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 internal fun SummaryPane(
     selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, analysisInProgress: Boolean,
+    remoteProvider: Boolean, remoteProviderConfirmed: Boolean, onRemoteProviderConfirmed: (Boolean) -> Unit,
     onAnalyze: () -> Unit, onRefresh: () -> Unit, onCancel: () -> Unit, onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit,
 ) {
     if (selected == null) {
@@ -43,13 +43,14 @@ internal fun SummaryPane(
             Spacer(Modifier.width(10.dp))
             StatusBadge(state.status)
             Spacer(Modifier.weight(1f))
-            if (analysisInProgress) Button(onClick = onCancel) { Text("Cancel") }
+            if (analysisInProgress) FocusFlowButton(onClick = onCancel) { Text("Cancel") }
             else {
-                Button(onClick = onAnalyze) { Text("Analyze") }
+                FocusFlowButton(onClick = onAnalyze, enabled = !remoteProvider || remoteProviderConfirmed, primary = true) { Text("Analyze") }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = onRefresh) { Text("Refresh") }
+                FocusFlowButton(onClick = onRefresh, enabled = !remoteProvider || remoteProviderConfirmed) { Text("Refresh") }
             }
         }
+        RemoteProviderConfirmation(remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed)
         Spacer(Modifier.height(18.dp))
         SummarySection("DETERMINISTIC FACTS") {
             Text("${selected.path} · ${selected.language} · ${selected.lineCount} lines · ${formatBytes(selected.sizeBytes)}", color = PrimaryText, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -80,7 +81,7 @@ internal fun SummaryPane(
                     LabeledItems("Findings (model suggestions)", analysis?.risks.orEmpty().map { "${it.severity.uppercase()} · ${it.summary}" })
                     Text("Suggested atomic tasks (model suggestions)", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp))
                     analysis?.suggestions.orEmpty().forEach { suggestion ->
-                        Button(onClick = { onPrepareSuggestion(suggestion) }, modifier = Modifier.padding(top = 5.dp)) { Text(suggestion.title) }
+                        FocusFlowButton(onClick = { onPrepareSuggestion(suggestion) }, modifier = Modifier.padding(top = 5.dp)) { Text(suggestion.title) }
                         Text(suggestion.summary, color = SecondaryText, fontSize = 11.sp)
                     }
                 }

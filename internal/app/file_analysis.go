@@ -59,6 +59,9 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 		return nil, err
 	}
 	if !refresh && (cached.Status == project.AnalysisStatusFresh || cached.Status == project.AnalysisStatusFailed || cached.Status == project.AnalysisStatusRunning) {
+		if err := s.syncFileAnalysisStatus(input, cached.Status); err != nil {
+			return nil, err
+		}
 		return cached, nil
 	}
 	index, err := s.manager.Index()
@@ -98,6 +101,9 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 	if err := cache.Store(fresh); err != nil {
 		return nil, err
 	}
+	if err := s.syncFileAnalysisStatus(input, fresh.Status); err != nil {
+		return nil, err
+	}
 	return &fresh, nil
 }
 
@@ -119,19 +125,34 @@ func (s *Service) CachedFileAnalysis(targetFile string) (*project.FileAnalysis, 
 	if err != nil {
 		return nil, err
 	}
-	return cache.Load(input)
+	cached, err := cache.Load(input)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.syncFileAnalysisStatus(input, cached.Status); err != nil {
+		return nil, err
+	}
+	return cached, nil
 }
 
 // ClearFileAnalysis removes one selected file's semantic cache entry.
 func (s *Service) ClearFileAnalysis(targetFile string) error {
-	if _, err := s.manager.IndexedFile(targetFile); err != nil {
+	file, err := s.manager.IndexedFile(targetFile)
+	if err != nil {
+		return err
+	}
+	analysis, err := s.manager.Analysis()
+	if err != nil {
 		return err
 	}
 	cache, err := project.NewFileAnalysisCache(s.manager.Root())
 	if err != nil {
 		return err
 	}
-	return cache.Delete(targetFile)
+	if err := cache.Delete(targetFile); err != nil {
+		return err
+	}
+	return s.syncFileAnalysisStatus(project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path}, project.AnalysisStatusMissing)
 }
 
 func (s *Service) fileAnalysisCacheInput(analysis *project.Analysis, file *project.IndexFile, contentHash string) (*project.FileAnalysisCache, project.FileAnalysisInput, error) {
@@ -146,12 +167,19 @@ func (s *Service) fileAnalysisCacheInput(analysis *project.Analysis, file *proje
 	return cache, project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: contentHash, Language: file.Language, Model: s.profile.Model, Profile: s.profile.Profile, PromptVersion: semanticAnalysisPromptVersion, ContextPolicyVersion: policy.Version()}, nil
 }
 
+func (s *Service) syncFileAnalysisStatus(input project.FileAnalysisInput, status string) error {
+	return s.manager.UpdateFileAnalysisStatus(input.ProjectID, input.ProjectRevision, input.Path, status)
+}
+
 func (s *Service) storeAnalysisFailure(cache *project.FileAnalysisCache, input project.FileAnalysisInput, cause error) (*project.FileAnalysis, error) {
 	if strings.Contains(cause.Error(), "context canceled") || strings.Contains(cause.Error(), "deadline exceeded") {
 		return nil, cause
 	}
 	failed := project.FileAnalysis{SchemaVersion: "1", ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: project.AnalysisStatusFailed, Failure: "The model returned an unusable file summary. Retry the analysis.", Model: input.Model, Profile: input.Profile, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion, GeneratedAt: time.Now().UTC()}
 	if err := cache.Store(failed); err != nil {
+		return nil, err
+	}
+	if err := s.syncFileAnalysisStatus(input, failed.Status); err != nil {
 		return nil, err
 	}
 	return &failed, nil
@@ -228,16 +256,39 @@ func parseSemanticAnalysis(output string, symbols []project.SymbolInfo) (semanti
 		return parsed, fmt.Errorf("semantic analysis JSON is incomplete or exceeds limits")
 	}
 	allowed := make(map[string]bool, len(symbols))
+	shortNames := make(map[string][]string)
 	for _, symbol := range symbols {
 		allowed[symbol.Name] = true
-	}
-	for name, explanation := range parsed.SymbolExplanations {
-		if !allowed[name] || strings.TrimSpace(explanation) == "" {
-			return parsed, fmt.Errorf("semantic analysis contains an unknown or empty symbol explanation")
+		if separator := strings.LastIndexByte(symbol.Name, '.'); separator >= 0 {
+			shortName := symbol.Name[separator+1:]
+			shortNames[shortName] = append(shortNames[shortName], symbol.Name)
 		}
 	}
-	for _, risk := range parsed.Risks {
-		if risk.Severity != "low" && risk.Severity != "medium" && risk.Severity != "high" || strings.TrimSpace(risk.Summary) == "" {
+	normalizedExplanations := make(map[string]string, len(parsed.SymbolExplanations))
+	for name, explanation := range parsed.SymbolExplanations {
+		normalizedName := name
+		if !allowed[name] {
+			candidates := shortNames[name]
+			if len(candidates) != 1 {
+				return parsed, fmt.Errorf("semantic analysis contains an unknown or ambiguous symbol explanation")
+			}
+			normalizedName = candidates[0]
+		}
+		explanation = strings.TrimSpace(explanation)
+		if explanation == "" {
+			return parsed, fmt.Errorf("semantic analysis contains an unknown or empty symbol explanation")
+		}
+		if _, exists := normalizedExplanations[normalizedName]; exists {
+			return parsed, fmt.Errorf("semantic analysis contains duplicate symbol explanations")
+		}
+		normalizedExplanations[normalizedName] = explanation
+	}
+	parsed.SymbolExplanations = normalizedExplanations
+	for index := range parsed.Risks {
+		risk := &parsed.Risks[index]
+		risk.Severity = strings.ToLower(strings.TrimSpace(risk.Severity))
+		risk.Summary = strings.TrimSpace(risk.Summary)
+		if risk.Severity != "low" && risk.Severity != "medium" && risk.Severity != "high" || risk.Summary == "" {
 			return parsed, fmt.Errorf("semantic analysis contains an invalid risk")
 		}
 	}

@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
-import androidx.compose.material.Button
 import androidx.compose.material.DrawerValue
 import androidx.compose.material.ModalDrawer
 import androidx.compose.material.Surface
@@ -187,6 +186,8 @@ internal fun DesktopShell(
     onAnalyze: () -> Unit,
     onRefreshAnalysis: () -> Unit,
     onCancelAnalysis: () -> Unit,
+    editorSurface: EditorSurface,
+    onEditorSurface: (EditorSurface) -> Unit,
     onSelectSymbol: (SymbolInfo) -> Unit,
     onPrepareSuggestion: (Suggestion) -> Unit,
     onValidateDraft: () -> Unit,
@@ -287,7 +288,7 @@ internal fun DesktopShell(
                         ContentPane(
                             project = appState.project, overview = appState.overview, selected = appState.selectedFile, symbols = appState.symbols, analysis = appState.analysis, selectedSymbol = appState.selectedSymbol,
                             workspace = workspace, analysisInProgress = analysisInProgress, onAnalyze = onAnalyze, onRefreshAnalysis = onRefreshAnalysis, onCancelAnalysis = onCancelAnalysis, remoteProvider = remoteProvider, remoteProviderConfirmed = remoteProviderConfirmed, onRemoteProviderConfirmed = onRemoteProviderConfirmed,
-                            editorFlow = editorFlow, onEditorStage = onEditorStage,
+                            editorFlow = editorFlow, onEditorStage = onEditorStage, editorSurface = editorSurface, onEditorSurface = onEditorSurface,
                             onSelectSymbol = onSelectSymbol, onPrepareSuggestion = onPrepareSuggestion, checks = appState.checks, draft = appState.review.draft, editor = appState.review.editor, applied = appState.review.applied, onApplyDraft = onApplyDraft, onUndo = onUndo,
                             findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding, onTriageFinding = onTriageFinding,
                             onStartAnalyzeAll = onStartAnalyzeAll, onPauseAnalyzeAll = onPauseAnalyzeAll, onResumeAnalyzeAll = onResumeAnalyzeAll, onCancelAnalyzeAll = onCancelAnalyzeAll, onStartScan = onStartScan, onCancelScan = onCancelScan,
@@ -311,7 +312,7 @@ internal fun DesktopShell(
 private fun ContentPane(
     project: ProjectAnalysis?, overview: ProjectOverview?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, analysis: FileAnalysis?, selectedSymbol: SymbolInfo?, workspace: Workspace,
     analysisInProgress: Boolean, onAnalyze: () -> Unit, onRefreshAnalysis: () -> Unit, onCancelAnalysis: () -> Unit, remoteProvider: Boolean, remoteProviderConfirmed: Boolean, onRemoteProviderConfirmed: (Boolean) -> Unit,
-    editorFlow: EditorFlowUiState, onEditorStage: (EditorStage) -> Unit,
+    editorFlow: EditorFlowUiState, onEditorStage: (EditorStage) -> Unit, editorSurface: EditorSurface, onEditorSurface: (EditorSurface) -> Unit,
     onSelectSymbol: (SymbolInfo) -> Unit, onPrepareSuggestion: (Suggestion) -> Unit, checks: CandidateCheckReport?, draft: DeclarationDraft?, editor: EditableDraftState?, applied: ApplyResult?, onApplyDraft: () -> Unit, onUndo: () -> Unit,
     findings: List<UnifiedFinding>, scan: GoScanReport?, analyzeAll: AnalyzeAllJob?, coverage: AnalysisCoverage?, onOpenFinding: (UnifiedFinding) -> Unit, onPrepareFinding: (UnifiedFinding) -> Unit, onTriageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
     onStartAnalyzeAll: (AnalyzeAllRunOptions) -> Unit, onPauseAnalyzeAll: () -> Unit, onResumeAnalyzeAll: (Boolean) -> Unit, onCancelAnalyzeAll: () -> Unit, onStartScan: () -> Unit, onCancelScan: () -> Unit,
@@ -320,12 +321,28 @@ private fun ContentPane(
     Column(modifier.background(AppBackground)) {
         when (workspace) {
             Workspace.Summary -> ProjectSummaryPane(overview, project, onWorkspace)
-            Workspace.Editor -> EditorWorkspace(editorFlow, onEditorStage, canvas = {
+            Workspace.Editor -> EditorWorkspace(editorFlow, onEditorStage, editorSurface, onEditorSurface, canvas = {
                 when (editorFlow.activeStage) {
                     EditorStage.Verify -> VerifyDiffCanvas(draft)
                     EditorStage.Apply -> ApplyDiffCanvas(draft, applied)
                     else -> EditorPane(project, selected, selectedSymbol, focusedLine)
                 }
+            }, analysis = {
+                SummaryPane(
+                    selected = selected,
+                    symbols = symbols,
+                    analysis = analysis,
+                    selectedSymbol = selectedSymbol,
+                    analysisInProgress = analysisInProgress,
+                    remoteProvider = remoteProvider,
+                    remoteProviderConfirmed = remoteProviderConfirmed,
+                    onRemoteProviderConfirmed = onRemoteProviderConfirmed,
+                    onAnalyze = onAnalyze,
+                    onRefresh = onRefreshAnalysis,
+                    onCancel = onCancelAnalysis,
+                    onSelectSymbol = onSelectSymbol,
+                    onPrepareSuggestion = onPrepareSuggestion,
+                )
             })
             Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll)
             Workspace.Bugs -> BugsWorkspacePane(findings, scan, onOpenFinding, onPrepareFinding, onTriageFinding, onStartScan, onCancelScan)
@@ -358,7 +375,7 @@ private fun DesktopStatusBar(status: String, error: String?, connection: Connect
         Spacer(Modifier.width(8.dp))
         Text("· Preview-first mode · ${status.ifBlank { "Ready" }}", color = SecondaryText, fontSize = 10.sp, maxLines = 1)
         Spacer(Modifier.weight(1f))
-        Button(onClick = onReconnect, modifier = Modifier.height(24.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 7.dp, vertical = 0.dp)) { Text("Reconnect", fontSize = 10.sp) }
+        FocusFlowButton(onClick = onReconnect, modifier = Modifier.height(24.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 7.dp, vertical = 0.dp)) { Text("Reconnect", fontSize = 10.sp) }
         Spacer(Modifier.width(8.dp))
         Text(if (connection.version.isBlank()) "Mini-Orca" else "Mini-Orca v${connection.version}", color = SecondaryText, fontSize = 10.sp)
     }
@@ -395,5 +412,5 @@ private fun ContextInspectorDialog(manifest: ContextManifest, remoteProvider: Bo
                 }
             }
         }
-    }, confirmButton = { Button(onClick = onDismiss) { Text("Close") } })
+    }, confirmButton = { FocusFlowButton(onClick = onDismiss) { Text("Close") } })
 }

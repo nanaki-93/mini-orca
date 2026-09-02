@@ -20,8 +20,8 @@ func (c projectAnalysisFixtureClient) Chat(context.Context, []llm.ChatMessage) (
 }
 
 func TestParseProjectAnalysisResponseRejectsMalformedUnknownAndOversizedOutput(t *testing.T) {
-	valid := `{"purpose":"Explains the project.","architecture":"One Go daemon.","components":["daemon"],"entry_points":["main.main"],"flows":["request to service"],"risks":[{"severity":"low","summary":"Add a regression test."}],"next_steps":["Document the API"]}`
-	if report, err := parseProjectAnalysisResponse(valid); err != nil || report.Purpose != "Explains the project." || len(report.Risks) != 1 {
+	valid := `{"purpose":"Explains the project.","architecture":"One Go daemon.","components":["daemon"],"entry_points":["main.main"],"flows":["request to service"],"risks":[{"severity":"HIGH","summary":"Add a regression test."}],"next_steps":["Document the API"]}`
+	if report, err := parseProjectAnalysisResponse(valid); err != nil || report.Purpose != "Explains the project." || len(report.Risks) != 1 || report.Risks[0].Severity != "high" {
 		t.Fatalf("parsed report = %+v, %v", report, err)
 	}
 	for _, output := range []string{
