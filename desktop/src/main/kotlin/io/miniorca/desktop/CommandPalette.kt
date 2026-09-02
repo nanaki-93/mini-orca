@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun CommandPaletteDialog(
-    mode: PaletteMode, query: String, onQuery: (String) -> Unit, files: List<IndexedFile>, symbols: List<SymbolInfo>,
+    mode: PaletteMode, query: String, onQuery: (String) -> Unit, files: List<IndexedFile>, symbols: List<SymbolInfo>, analysis: FileAnalysis?,
     onSelectFile: (String) -> Unit, onSelectSymbol: (SymbolInfo) -> Unit, onSelectAction: (String) -> Unit, onDismiss: () -> Unit,
 ) {
     val title = when (mode) {
@@ -31,7 +31,7 @@ internal fun CommandPaletteDialog(
     val filterFocusRequester = FocusRequester()
     val filteredFiles = files.filter { it.path.contains(query, ignoreCase = true) }.take(12)
     val filteredSymbols = symbols.filter { it.name.contains(query, ignoreCase = true) }.take(12)
-    val filteredActions = listOf("fix", "refactor", "document").filter { it.contains(query, ignoreCase = true) }
+    val filteredActions = availableCommandActions(analysis).filter { commandActionLabel(it).contains(query, ignoreCase = true) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -47,7 +47,8 @@ internal fun CommandPaletteDialog(
                         PaletteEntry("Symbol ${symbol.kind} ${symbol.name}", "${symbol.kind} · ${symbol.name}", onClick = { onSelectSymbol(symbol) })
                     }
                     PaletteMode.Actions -> if (filteredActions.isEmpty()) SystemStateMessage("No action matches", "Change the filter to view available focused actions.") else filteredActions.forEach { action ->
-                        PaletteEntry("Action ${action.replaceFirstChar { it.uppercase() }}", action.replaceFirstChar { it.uppercase() }, onClick = { onSelectAction(action) })
+                        val label = commandActionLabel(action)
+                        PaletteEntry("Action $label", label, onClick = { onSelectAction(action) })
                     }
                 }
             }
@@ -55,6 +56,17 @@ internal fun CommandPaletteDialog(
         confirmButton = { FocusFlowButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") } },
     )
     LaunchedEffect(Unit) { filterFocusRequester.requestFocus() }
+}
+
+internal fun availableCommandActions(analysis: FileAnalysis?): List<String> = buildList {
+    addAll(listOf("fix", "refactor", "document", "create_declaration"))
+    if (analysis?.status.equals("fresh", ignoreCase = true)) add("refresh_file_analysis")
+}
+
+internal fun commandActionLabel(action: String): String = when (action) {
+    "create_declaration" -> "Create declaration"
+    "refresh_file_analysis" -> "Refresh file analysis"
+    else -> action.replaceFirstChar { it.uppercase() }
 }
 
 @Composable

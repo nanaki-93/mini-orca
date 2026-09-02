@@ -33,13 +33,12 @@ class DesktopAccessibilityTest {
         assertEquals("Bugs, not selected", workspaceSemanticsLabel(Workspace.Bugs, false))
     }
 
-    @Test fun editorStageNavigationKeepsShortLabelsAndExplainsLockedForwardStages() {
-        val lockedApply = EditorStageUiState(EditorStage.Apply, unlocked = false, reason = "Run focused checks before applying.")
+    @Test fun editorProgressKeepsTheCurrentStateInPlainTextWithoutNavigationControls() {
+        val progress = EditorProgressUiState(EditorProgress.Review, "Validation is current for Run.")
 
-        assertEquals(listOf("Target", "Draft", "Verify", "Apply"), EditorStage.entries.map { it.label })
-        assertEquals("Apply", editorStageLabel(lockedApply, current = false))
-        assertTrue(editorStageSemanticsLabel(lockedApply, current = false).contains("Locked"))
-        assertTrue(editorStageSemanticsLabel(lockedApply, current = false).contains("Run focused checks"))
+        assertEquals(listOf("Inspect", "Edit", "Review"), editorProgressSteps(progress.progress).map { it.label })
+        assertTrue(editorProgressSemanticsLabel(progress).contains("Current: Review"))
+        assertTrue(editorProgressSemanticsLabel(progress).contains("Review: Current"))
     }
 
     @Test fun landingModeAcceptsOnlyTheOpenProjectShortcut() {

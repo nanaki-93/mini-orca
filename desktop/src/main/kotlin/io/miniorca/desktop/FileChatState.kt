@@ -1,7 +1,7 @@
 package io.miniorca.desktop
 
 enum class ChatEditMode(val wireValue: String, val label: String) {
-    ReplaceSymbol("replace_symbol", "Replace selected function/type"),
+    ReplaceSymbol("replace_symbol", "Replace selected declaration"),
     CreateSymbol("create_symbol", "Create new function/type"),
 }
 
@@ -25,8 +25,8 @@ fun validateChatTarget(
     return when (mode) {
         ChatEditMode.ReplaceSymbol -> {
             val symbol = selectedSymbol
-            if (symbol == null || symbol !in symbols || symbol.confidence.lowercase() != "exact" || !symbol.atomicTarget || symbol.kind.lowercase() !in setOf("function", "type")) {
-                ChatTargetValidation(message = "Replace requires an exact selected Go function or type.")
+            if (symbol == null || symbol !in symbols || symbol.confidence.lowercase() != "exact" || !symbol.atomicTarget || symbol.kind.lowercase() !in setOf("function", "method", "type", "struct", "interface")) {
+                ChatTargetValidation(message = "Replace requires an exact selected Go function, method, or type.")
             } else ChatTargetValidation(ChatTarget(mode, symbol.name))
         }
         ChatEditMode.CreateSymbol -> {

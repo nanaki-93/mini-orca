@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	indexSchemaVersion = "1"
+	indexSchemaVersion = "2"
 	indexRelativePath  = ".mini-orca/index.json"
 )
 

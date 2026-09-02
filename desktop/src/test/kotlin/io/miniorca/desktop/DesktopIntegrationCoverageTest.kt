@@ -93,6 +93,16 @@ class DesktopIntegrationCoverageTest {
         assertEquals("main.go", controller.state.selectedFile?.path)
     }
 
+    @Test fun directEditSelectionRemainsPreviewOnlyUntilTheExplicitSendAndDraftSteps() {
+        val run = symbol()
+        val other = run.copy(name = "Other", signature = "func Other()")
+        val request = directEditRequest(file(), listOf(run, other), other, currentEditIdentity = null)
+
+        assertEquals(ChatEditMode.ReplaceSymbol, request?.target?.mode)
+        assertEquals("Other", request?.target?.symbol)
+        assertFalse(request!!.requiresDraftDiscard)
+    }
+
     private fun loadedController() = DesktopWorkflowController().also { controller ->
         val projectRequest = controller.beginProjectLoad()
         assertTrue(controller.projectLoaded(projectRequest, project(), ProjectIndex("project", "revision")))

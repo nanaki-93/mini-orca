@@ -22,7 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal enum class VerifyEvidenceStatus(val label: String) {
+internal enum class ReviewEvidenceStatus(val label: String) {
     Missing("Missing"),
     Running("Running"),
     Failed("Failed"),
@@ -31,98 +31,107 @@ internal enum class VerifyEvidenceStatus(val label: String) {
     Passed("Passed"),
 }
 
-internal data class VerifyEvidenceRow(
+internal data class ReviewEvidenceRow(
     val label: String,
     val detail: String,
-    val status: VerifyEvidenceStatus,
+    val status: ReviewEvidenceStatus,
 )
 
-internal data class VerifyEvidenceUiState(
-    val validation: VerifyEvidenceRow,
-    val checks: VerifyEvidenceRow,
-    val identity: VerifyEvidenceRow,
+internal data class ReviewEvidenceUiState(
+    val validation: ReviewEvidenceRow,
+    val checks: ReviewEvidenceRow,
+    val identity: ReviewEvidenceRow,
     val canRunChecks: Boolean,
     val runChecksLabel: String,
-    val canContinueToApply: Boolean,
-    val continueReason: String,
 )
 
-/** Presentation-only verification state; the daemon-owned draft and check guards remain authoritative. */
-internal fun verifyEvidenceUiState(
+/** Presentation-only review evidence; daemon-owned draft and check guards remain authoritative. */
+internal fun reviewEvidenceUiState(
     project: ProjectAnalysis?,
     selected: ProjectFileInfo?,
     editor: EditableDraftState?,
     draft: DeclarationDraft?,
     checks: CandidateCheckReport?,
     checksRunning: Boolean = false,
-): VerifyEvidenceUiState {
+): ReviewEvidenceUiState {
     val validationCurrent = editor?.status == DraftEditorStatus.Valid && draft?.validation?.applicable == true
     val identityCurrent = draftEditorMatchesOpenFile(editor, selected, project)
     val checksRow = focusedChecksEvidence(checks, draft, checksRunning)
-    val eligibility = draftReviewEligibility(editor, draft, checks, selected, project)
 
-    return VerifyEvidenceUiState(
-        validation = VerifyEvidenceRow(
+    return ReviewEvidenceUiState(
+        validation = ReviewEvidenceRow(
             label = "Validation",
             detail = when {
                 validationCurrent -> "Validation is current."
                 editor == null -> "No editable draft is loaded."
-                else -> validationSummary(editor, validationCurrent)
+                else -> reviewValidationSummary(editor, validationCurrent)
             },
-            status = if (validationCurrent) VerifyEvidenceStatus.Passed else validationStatus(editor),
+            status = if (validationCurrent) ReviewEvidenceStatus.Passed else validationStatus(editor),
         ),
         checks = checksRow,
-        identity = VerifyEvidenceRow(
+        identity = ReviewEvidenceRow(
             label = "Scope identity",
             detail = when {
                 draft == null -> "No draft identity is available."
                 identityCurrent -> "${draft.targetPath} · ${draft.targetSymbol} matches the open file."
                 else -> "The draft no longer matches the open file."
             },
-            status = if (identityCurrent) VerifyEvidenceStatus.Passed else VerifyEvidenceStatus.Stale,
+            status = if (identityCurrent) ReviewEvidenceStatus.Passed else ReviewEvidenceStatus.Stale,
         ),
         canRunChecks = validationCurrent && identityCurrent && !checksRunning,
         runChecksLabel = if (checksRunning) "Focused checks are running" else "Run focused checks",
-        canContinueToApply = eligibility.eligible,
-        continueReason = if (eligibility.eligible) "Current validation and focused checks match this exact draft." else eligibility.reason,
     )
 }
 
-private fun validationStatus(editor: EditableDraftState?): VerifyEvidenceStatus = when (editor?.status) {
-    DraftEditorStatus.Validating -> VerifyEvidenceStatus.Running
-    DraftEditorStatus.Invalid -> VerifyEvidenceStatus.Failed
-    DraftEditorStatus.Stale -> VerifyEvidenceStatus.Stale
-    else -> VerifyEvidenceStatus.Missing
+private fun validationStatus(editor: EditableDraftState?): ReviewEvidenceStatus = when (editor?.status) {
+    DraftEditorStatus.Validating -> ReviewEvidenceStatus.Running
+    DraftEditorStatus.Invalid -> ReviewEvidenceStatus.Failed
+    DraftEditorStatus.Stale -> ReviewEvidenceStatus.Stale
+    else -> ReviewEvidenceStatus.Missing
 }
+
+internal fun reviewValidationSummary(editor: EditableDraftState?, validationCurrent: Boolean): String = when {
+    validationCurrent -> "Validated for the latest draft."
+    editor == null -> "No editable draft is loaded."
+    editor.status == DraftEditorStatus.Dirty -> "Manual edits require validation and fresh checks."
+    editor.status == DraftEditorStatus.Validating -> "Validation is running."
+    editor.status == DraftEditorStatus.Invalid -> "Fix validation diagnostics before continuing."
+    editor.status == DraftEditorStatus.Stale -> "The draft is stale; start a new file-scoped conversation."
+    else -> "Validate the latest declaration draft before continuing."
+}
+
+internal fun checksMatchDraft(checks: CandidateCheckReport?, draft: DeclarationDraft?): Boolean =
+    checks?.applicable == true && draft != null && checks.draftId == draft.id &&
+        checks.draftRevision == draft.revision && checks.draftHash == draft.hash
 
 private fun focusedChecksEvidence(
     checks: CandidateCheckReport?,
     draft: DeclarationDraft?,
     checksRunning: Boolean,
-): VerifyEvidenceRow {
-    if (checksRunning) return VerifyEvidenceRow("Focused checks", "Focused checks are running for the current draft.", VerifyEvidenceStatus.Running)
-    if (checks == null) return VerifyEvidenceRow("Focused checks", "Run checks after validating this draft.", VerifyEvidenceStatus.Missing)
-    if (!checksMatchDraft(checks, draft)) return VerifyEvidenceRow("Focused checks", "Check results no longer match the latest draft.", VerifyEvidenceStatus.Stale)
-    if (!checks.applicable) return VerifyEvidenceRow("Focused checks", "Focused checks could not produce applicable evidence for this draft.", VerifyEvidenceStatus.Failed)
+): ReviewEvidenceRow {
+    if (checksRunning) return ReviewEvidenceRow("Focused checks", "Focused checks are running for the current draft.", ReviewEvidenceStatus.Running)
+    if (checks == null) return ReviewEvidenceRow("Focused checks", "Run checks after validating this draft.", ReviewEvidenceStatus.Missing)
+    if (!checksMatchDraft(checks, draft)) return ReviewEvidenceRow("Focused checks", "Check results no longer match the latest draft.", ReviewEvidenceStatus.Stale)
+    if (!checks.applicable) return ReviewEvidenceRow("Focused checks", "Focused checks could not produce applicable evidence for this draft.", ReviewEvidenceStatus.Failed)
 
     val states = checks.checks.map { it.state.lowercase() }
     val status = when {
-        states.any { it == "running" } -> VerifyEvidenceStatus.Running
-        states.any { it in setOf("failed", "error", "canceled", "cancelled") } -> VerifyEvidenceStatus.Failed
-        states.isNotEmpty() && states.all { it == "skipped" } -> VerifyEvidenceStatus.Skipped
-        states.all { it in setOf("passed", "skipped") } -> VerifyEvidenceStatus.Passed
-        else -> VerifyEvidenceStatus.Missing
+        states.any { it == "running" } -> ReviewEvidenceStatus.Running
+        states.any { it in setOf("failed", "error", "canceled", "cancelled") } -> ReviewEvidenceStatus.Failed
+        states.isNotEmpty() && states.all { it == "skipped" } -> ReviewEvidenceStatus.Skipped
+        states.all { it in setOf("passed", "skipped") } -> ReviewEvidenceStatus.Passed
+        else -> ReviewEvidenceStatus.Missing
     }
     val required = checks.checks.count { it.required }
     val detail = when (status) {
-        VerifyEvidenceStatus.Passed -> "${checks.checks.size} checks (${required} required) are current."
-        VerifyEvidenceStatus.Skipped -> "${checks.checks.size} checks were skipped."
-        VerifyEvidenceStatus.Running -> "Focused checks are running."
-        VerifyEvidenceStatus.Failed -> "At least one focused check failed."
-        VerifyEvidenceStatus.Missing -> "Focused check state is unavailable for the latest draft."
-        VerifyEvidenceStatus.Stale -> error("Stale evidence returns before details are derived.")
+        ReviewEvidenceStatus.Passed -> "${checks.checks.size} checks (${required} required) are current."
+        ReviewEvidenceStatus.Skipped -> "${checks.checks.size} checks were skipped."
+        ReviewEvidenceStatus.Running -> "Focused checks are running."
+        ReviewEvidenceStatus.Failed -> "At least one focused check failed."
+        ReviewEvidenceStatus.Missing -> "Focused check state is unavailable for the latest draft."
+        ReviewEvidenceStatus.Stale -> error("Stale evidence returns before details are derived.")
     }
-    return VerifyEvidenceRow("Focused checks", detail, status)
+    return ReviewEvidenceRow("Focused checks", detail, status)
 }
 
 internal fun advisoryImpactLabel(impact: ImpactPreview?): String = when {
@@ -180,37 +189,16 @@ internal fun applyDecisionUiState(
 }
 
 @Composable
-internal fun VerifyDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Modifier) {
+internal fun ReviewDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
-        Text("Verify the candidate", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+        Text("Review the candidate", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
         Spacer(Modifier.height(12.dp))
         DiffViewer(draft?.validation?.diff, Modifier.fillMaxWidth())
     }
 }
 
 @Composable
-internal fun ApplyDiffCanvas(draft: DeclarationDraft?, applied: ApplyResult?, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
-        Text("Review this change", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-        Spacer(Modifier.height(12.dp))
-        if (draft != null) {
-            Text("${draft.targetPath} · ${draft.targetSymbol} · ${draft.mode}", color = SecondaryText, fontSize = 11.sp)
-            Spacer(Modifier.height(8.dp))
-            DiffViewer(draft.validation?.diff, Modifier.fillMaxWidth())
-        } else if (applied != null) {
-            SystemStateMessage(
-                applyReceiptTitle(applied),
-                "The selected file has been refreshed. Review the guarded receipt in Context.",
-                accent = Success,
-            )
-        } else {
-            SystemStateMessage("Apply unavailable", "Complete the current draft, validation, and focused checks before entering Apply.")
-        }
-    }
-}
-
-@Composable
-internal fun VerifyEvidencePane(
+internal fun ReviewContextPane(
     project: ProjectAnalysis?,
     selected: ProjectFileInfo?,
     editor: EditableDraftState?,
@@ -218,30 +206,56 @@ internal fun VerifyEvidencePane(
     checks: CandidateCheckReport?,
     impact: ImpactPreview?,
     gitStatus: GitStatus?,
+    applied: ApplyResult?,
     checksRunning: Boolean,
     onRunChecks: () -> Unit,
-    onContinueToApply: () -> Unit,
+    onEditDraft: () -> Unit,
+    onApply: () -> Unit,
+    onUndo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val evidence = verifyEvidenceUiState(project, selected, editor, draft, checks, checksRunning)
+    val evidence = reviewEvidenceUiState(project, selected, editor, draft, checks, checksRunning)
+    val decision = applyDecisionUiState(project, selected, editor, draft, checks, applied)
     var showCommandOutput by remember(checks?.draftId, checks?.draftRevision, checks?.draftHash) { mutableStateOf(false) }
+    var showDiagnostics by remember(draft?.id, draft?.revision, draft?.hash) { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+        if (decision.receiptTitle != null && applied != null) {
+            FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+                SectionLabel("APPLIED RECEIPT")
+                Text(decision.receiptTitle, color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
+                Text(decision.receiptDetail, color = SecondaryText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+                Text(if (applied.undoAvailable) "Undo is available for this applied change." else "Undo is no longer available for this applied change.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                FocusFlowButton(onClick = onUndo, enabled = applied.undoAvailable, tone = ActionTone.Attention, modifier = Modifier.padding(top = 10.dp)) { Text(decision.undoLabel) }
+            }
+            return@Column
+        }
         FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-            SectionLabel("VERIFY · GATE 3 OF 4")
-            Text(if (evidence.canContinueToApply) "Evidence is current" else "Evidence needs attention", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
+            SectionLabel("REVIEW")
+            Text("Current scope and validation", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(10.dp))
             EvidenceRow(evidence.identity)
             Spacer(Modifier.height(8.dp))
             EvidenceRow(evidence.validation)
-            editor?.diagnostics.orEmpty().take(8).forEach { diagnostic ->
-                Text("${diagnostic.code}: ${diagnostic.message}", color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            val diagnostics = editor?.diagnostics.orEmpty().take(8)
+            if (diagnostics.isNotEmpty()) {
+                FocusFlowButton(onClick = { showDiagnostics = !showDiagnostics }, tone = ActionTone.Neutral, modifier = Modifier.padding(top = 8.dp)) {
+                    Text(if (showDiagnostics) "Hide validation diagnostics" else "Show validation diagnostics (${diagnostics.size})")
+                }
+                if (showDiagnostics) SelectionContainer {
+                    Column(Modifier.padding(top = 5.dp)) {
+                        diagnostics.forEach { diagnostic ->
+                            Text("${diagnostic.code}: ${diagnostic.message}", color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+                        }
+                    }
+                }
             }
+            if (editor != null && draft != null) FocusFlowButton(onClick = onEditDraft, tone = ActionTone.Neutral, modifier = Modifier.padding(top = 8.dp)) { Text("Edit draft") }
         }
         Spacer(Modifier.height(10.dp))
         FocusFlowPanel(Modifier.fillMaxWidth()) {
             EvidenceRow(evidence.checks)
-            FocusFlowButton(onClick = onRunChecks, enabled = evidence.canRunChecks, tone = ActionTone.Primary, modifier = Modifier.padding(top = 8.dp)) { Text(evidence.runChecksLabel) }
+            if (evidence.canRunChecks) FocusFlowButton(onClick = onRunChecks, tone = ActionTone.Primary, modifier = Modifier.padding(top = 8.dp)) { Text(evidence.runChecksLabel) }
             checks?.checks.orEmpty().forEach { check ->
                 Text("${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}", color = evidenceColor(checkStatus(check.state)), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
             }
@@ -265,81 +279,20 @@ internal fun VerifyEvidencePane(
         ReadOnlyImpactPane(impact, gitStatus)
         Spacer(Modifier.height(12.dp))
         FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-            Text("Next: explicit Apply", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-            Text("The next step names the exact target again and requires your confirmation. Nothing has changed yet.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            FocusFlowButton(
-                onClick = onContinueToApply,
-                enabled = evidence.canContinueToApply,
-                tone = ActionTone.Positive,
-                modifier = Modifier.padding(top = 8.dp),
-            ) { Text("Continue to Apply") }
-            if (!evidence.canContinueToApply) Text(evidence.continueReason, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
-        }
-    }
-}
-
-@Composable
-internal fun ApplyDecisionPane(
-    project: ProjectAnalysis?,
-    selected: ProjectFileInfo?,
-    editor: EditableDraftState?,
-    draft: DeclarationDraft?,
-    checks: CandidateCheckReport?,
-    impact: ImpactPreview?,
-    gitStatus: GitStatus?,
-    applied: ApplyResult?,
-    onApply: () -> Unit,
-    onUndo: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val decision = applyDecisionUiState(project, selected, editor, draft, checks, applied)
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        if (decision.receiptTitle != null && applied != null) {
-            FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-                SectionLabel("APPLIED RECEIPT")
-                Text(decision.receiptTitle, color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
-                Text(decision.receiptDetail, color = SecondaryText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
-                Text(if (applied.undoAvailable) "Undo is available for this applied change." else "Undo is no longer available for this applied change.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                FocusFlowButton(onClick = onUndo, enabled = applied.undoAvailable, tone = ActionTone.Attention, modifier = Modifier.padding(top = 10.dp)) { Text(decision.undoLabel) }
+            if (decision.eligible) {
+                Text("Ready for the one guarded write", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+                Text("Nothing has changed yet. This action applies only the named declaration in the named file.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                FocusFlowButton(onClick = onApply, tone = ActionTone.Positive, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(decision.actionLabel) }
+            } else {
+                Text("Apply remains locked", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+                Text(decision.reason, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
             }
-            return@Column
-        }
-
-        if (draft == null || editor == null) {
-            SystemStateMessage("Apply is locked", decision.reason, modifier = Modifier.fillMaxWidth())
-            return@Column
-        }
-        val evidence = verifyEvidenceUiState(project, selected, editor, draft, checks)
-        FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-            SectionLabel("APPLY · GATE 4 OF 4")
-            Text("Safe to apply", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
-            Text("Nothing has changed yet. Review the exact scope and current proof before confirming the write.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            Spacer(Modifier.height(10.dp))
-            EvidenceRow(evidence.identity)
-            Spacer(Modifier.height(7.dp))
-            EvidenceRow(evidence.validation)
-            Spacer(Modifier.height(7.dp))
-            EvidenceRow(evidence.checks)
-            Text("Target: ${draft.targetPath} · ${draft.targetSymbol} · ${draft.mode}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
-            Text("Only this named file and isolated declaration can change. Apply remains protected by current-file checks.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-        }
-        Spacer(Modifier.height(10.dp))
-        ReadOnlyImpactPane(impact, gitStatus)
-        Spacer(Modifier.height(12.dp))
-        FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-            FocusFlowButton(
-                onClick = onApply,
-                enabled = decision.eligible,
-                tone = ActionTone.Positive,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(decision.actionLabel) }
-            if (!decision.eligible) Text(decision.reason, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
 
 @Composable
-private fun EvidenceRow(row: VerifyEvidenceRow) {
+private fun EvidenceRow(row: ReviewEvidenceRow) {
     Text(row.label, color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
     Text("${row.status.label} · ${row.detail}", color = evidenceColor(row.status), fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
 }
@@ -362,16 +315,16 @@ private fun ReadOnlyImpactPane(impact: ImpactPreview?, gitStatus: GitStatus?) {
     }
 }
 
-private fun checkStatus(state: String): VerifyEvidenceStatus = when (state.lowercase()) {
-    "passed" -> VerifyEvidenceStatus.Passed
-    "skipped" -> VerifyEvidenceStatus.Skipped
-    "running" -> VerifyEvidenceStatus.Running
-    "failed", "error", "canceled", "cancelled" -> VerifyEvidenceStatus.Failed
-    else -> VerifyEvidenceStatus.Missing
+private fun checkStatus(state: String): ReviewEvidenceStatus = when (state.lowercase()) {
+    "passed" -> ReviewEvidenceStatus.Passed
+    "skipped" -> ReviewEvidenceStatus.Skipped
+    "running" -> ReviewEvidenceStatus.Running
+    "failed", "error", "canceled", "cancelled" -> ReviewEvidenceStatus.Failed
+    else -> ReviewEvidenceStatus.Missing
 }
 
-private fun evidenceColor(status: VerifyEvidenceStatus): Color = when (status) {
-    VerifyEvidenceStatus.Passed -> Success
-    VerifyEvidenceStatus.Running, VerifyEvidenceStatus.Skipped, VerifyEvidenceStatus.Missing, VerifyEvidenceStatus.Stale -> Warning
-    VerifyEvidenceStatus.Failed -> Error
+private fun evidenceColor(status: ReviewEvidenceStatus): Color = when (status) {
+    ReviewEvidenceStatus.Passed -> Success
+    ReviewEvidenceStatus.Running, ReviewEvidenceStatus.Skipped, ReviewEvidenceStatus.Missing, ReviewEvidenceStatus.Stale -> Warning
+    ReviewEvidenceStatus.Failed -> Error
 }

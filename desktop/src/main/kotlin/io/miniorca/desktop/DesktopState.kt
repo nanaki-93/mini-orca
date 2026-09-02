@@ -118,6 +118,7 @@ sealed interface DesktopEvent {
     data class FileLoaded(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) : DesktopEvent
     data class SymbolSelected(val symbol: SymbolInfo) : DesktopEvent
     data class EditorContextSelected(val symbol: SymbolInfo?, val line: Int) : DesktopEvent
+    data class SourceLineSelected(val selection: SourceLineSelection) : DesktopEvent
     data class SuggestionPrepared(val action: String, val request: String, val symbol: SymbolInfo?) : DesktopEvent
     data class AnalysisLoaded(val analysis: FileAnalysis) : DesktopEvent
     data class ImpactLoaded(val impact: ImpactPreview) : DesktopEvent
@@ -129,6 +130,7 @@ sealed interface DesktopEvent {
     data object DraftValidationStarted : DesktopEvent
     data object DraftMarkedStale : DesktopEvent
     data class DraftLoaded(val draft: DeclarationDraft) : DesktopEvent
+    data object DraftDiscarded : DesktopEvent
     data class Applied(val result: ApplyResult?) : DesktopEvent
     data class Failed(val message: String) : DesktopEvent
     data class Status(val message: String) : DesktopEvent
@@ -167,6 +169,10 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState = when (event) {
     )
     is DesktopEvent.SymbolSelected -> copy(selection = selection.copy(selectedSymbol = event.symbol, focusedLine = event.symbol.startLine), jobs = jobs.copy(error = null))
     is DesktopEvent.EditorContextSelected -> copy(selection = selection.copy(selectedSymbol = event.symbol, focusedLine = event.line), jobs = jobs.copy(error = null))
+    is DesktopEvent.SourceLineSelected -> copy(
+        selection = selection.copy(selectedSymbol = event.selection.symbol, focusedLine = event.selection.line),
+        jobs = jobs.copy(error = null),
+    )
     is DesktopEvent.SuggestionPrepared -> copy(selection = selection.copy(selectedSymbol = event.symbol ?: selectedSymbol, preparedAction = event.action, preparedRequest = event.request), jobs = jobs.copy(error = null))
     is DesktopEvent.AnalysisLoaded -> copy(selection = selection.copy(analysis = event.analysis), jobs = jobs.copy(loading = false, error = null))
     is DesktopEvent.ImpactLoaded -> copy(selection = selection.copy(impact = event.impact))
@@ -192,6 +198,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState = when (event) {
         copy(review = review.copy(draft = editor.serverDraft.copy(validation = null), editor = editor.copy(status = DraftEditorStatus.Stale), checks = null))
     } ?: this
     is DesktopEvent.DraftLoaded -> copy(review = review.copy(draft = event.draft, editor = editableDraft(event.draft), checks = null))
+    DesktopEvent.DraftDiscarded -> copy(chat = ChatState(), review = DraftReviewState(applied = review.applied), jobs = jobs.copy(error = null))
     is DesktopEvent.Applied -> copy(review = review.copy(applied = event.result))
     is DesktopEvent.Failed -> copy(jobs = jobs.copy(loading = false, error = event.message))
     is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))
@@ -221,7 +228,13 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
     private var chatRequest: Long = 0
     private var draftRequest: Long = 0
 
-    fun dispatch(event: DesktopEvent): DesktopState = state.reduce(event).also { state = it }
+    fun dispatch(event: DesktopEvent): DesktopState {
+        if (event == DesktopEvent.DraftDiscarded) {
+            chatRequest = 0
+            draftRequest = 0
+        }
+        return state.reduce(event).also { state = it }
+    }
 
     fun synchronize(updated: DesktopState) {
         state = updated

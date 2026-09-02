@@ -1,6 +1,6 @@
 # Prompt template — execute one task
 
-Use the all-tasks prompt for the normal Tasks 80–84 sequence. This template is for
+Use the all-tasks prompt for the normal Tasks 85–89 sequence. This template is for
 resuming exactly one incomplete task. Replace `{TASK_FILE}` and `{TASK_ID}` with the
 selected Pending/In Progress task from [`INDEX.md`](INDEX.md).
 
@@ -34,7 +34,7 @@ Implementation rules:
 - Follow AGENTS.md, Clean Code, KISS, and existing package/state boundaries.
 - Preserve the one-project, one-file, one-symbol, preview-first workflow.
 - Keep source/diff read-only and the declaration/import draft isolated until explicit Apply.
-- Preserve Open project, Analyze-all, remote-provider confirmation,
+- Preserve Open project, Analyze-all, explicit prompt-bearing actions, remote-provider confirmation,
   revision/hash/request identity, and explicit mutation actions.
 - Add focused regression tests for changed behavior.
 - Use apply_patch for manual edits and do not edit generated output or local configuration.
@@ -46,7 +46,7 @@ Implementation rules:
 
 Pre-existing-change rules:
 - Never use reset, checkout, restore, stash, clean, rebase, or destructive history commands.
-- Do not stage or commit any file. Tasks 80–84 do not authorize commits.
+- Do not stage or commit any file. Tasks 85–89 do not authorize commits.
 - If required work cannot be separated safely from an overlapping user-owned hunk, stop
   and report the exact overlap.
 
@@ -69,6 +69,6 @@ commands/results, and any blocker or deliberately deferred follow-up.
 Example current task value:
 
 ```text
-Task ID: 80
-Task file: 80_desktop_compact_semantic_controls.md
+Task ID: 85
+Task file: 85_editor_symbol_selection_contract.md
 ```

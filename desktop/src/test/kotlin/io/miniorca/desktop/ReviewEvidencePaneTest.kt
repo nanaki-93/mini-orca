@@ -6,14 +6,12 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ReviewEvidencePaneTest {
-    @Test fun validatedButUncheckedDraftStaysInVerifyWithAnExplicitReason() {
-        val state = verifyEvidenceUiState(project(), file(), editableDraft(draft()), draft(), checks = null)
+    @Test fun validatedButUncheckedDraftStaysInReviewWithAnExplicitCheckAction() {
+        val state = reviewEvidenceUiState(project(), file(), editableDraft(draft()), draft(), checks = null)
 
-        assertEquals(VerifyEvidenceStatus.Passed, state.validation.status)
-        assertEquals(VerifyEvidenceStatus.Missing, state.checks.status)
+        assertEquals(ReviewEvidenceStatus.Passed, state.validation.status)
+        assertEquals(ReviewEvidenceStatus.Missing, state.checks.status)
         assertTrue(state.canRunChecks)
-        assertFalse(state.canContinueToApply)
-        assertTrue(state.continueReason.contains("Run checks"))
     }
 
     @Test fun staleOrFailedCheckEvidenceCannotEnableApply() {
@@ -21,19 +19,17 @@ class ReviewEvidencePaneTest {
         val stale = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = "old-hash")
         val failed = CandidateCheckReport("main.go", true, checks = listOf(CandidateCheck("go test", required = true, state = "failed")), draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
 
-        val staleEvidence = verifyEvidenceUiState(project(), file(), editableDraft(current), current, stale)
-        val failedEvidence = verifyEvidenceUiState(project(), file(), editableDraft(current), current, failed)
+        val staleEvidence = reviewEvidenceUiState(project(), file(), editableDraft(current), current, stale)
+        val failedEvidence = reviewEvidenceUiState(project(), file(), editableDraft(current), current, failed)
 
-        assertEquals(VerifyEvidenceStatus.Stale, staleEvidence.checks.status)
-        assertFalse(staleEvidence.canContinueToApply)
-        assertEquals(VerifyEvidenceStatus.Failed, failedEvidence.checks.status)
-        assertFalse(failedEvidence.canContinueToApply)
+        assertEquals(ReviewEvidenceStatus.Stale, staleEvidence.checks.status)
+        assertEquals(ReviewEvidenceStatus.Failed, failedEvidence.checks.status)
     }
 
     @Test fun verificationAndReceiptsKeepIdentityGuardsInternal() {
         val current = draft()
         val checks = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
-        val evidence = verifyEvidenceUiState(project(), file(), editableDraft(current), current, checks)
+        val evidence = reviewEvidenceUiState(project(), file(), editableDraft(current), current, checks)
         val receipt = applyDecisionUiState(project(), file(), editableDraft(current), current, checks, ApplyResult("revision", "post-hash", true, AuditEntry("apply", "main.go", "applied", "")))
 
         assertFalse(evidence.identity.detail.contains("revision"))
@@ -47,20 +43,19 @@ class ReviewEvidencePaneTest {
         val current = draft()
         val matchingChecks = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
         val edited = editDraft(editableDraft(current), declaration = "func Run() error { return nil }")
-        val evidence = verifyEvidenceUiState(project(), file(), edited, current.copy(validation = null), matchingChecks)
+        val evidence = reviewEvidenceUiState(project(), file(), edited, current.copy(validation = null), matchingChecks)
 
-        assertEquals(VerifyEvidenceStatus.Missing, evidence.validation.status)
+        assertEquals(ReviewEvidenceStatus.Missing, evidence.validation.status)
         assertFalse(evidence.canRunChecks)
-        assertFalse(evidence.canContinueToApply)
-        assertTrue(evidence.continueReason.contains("Manual edits"))
+        assertTrue(reviewValidationSummary(edited, validationCurrent = false).contains("Manual edits"))
     }
 
     @Test fun diagnosticsAndReadOnlyImpactAndGitContextRemainExplicit() {
         val invalid = draft().copy(validation = GenerationValidation(false, "replace_symbol", diagnostics = listOf(GenerationFinding("scope", "Only one declaration may change.")), diff = UnifiedDiff("main.go", "main.go")))
-        val evidence = verifyEvidenceUiState(project(), file(), editableDraft(invalid), invalid, checks = null)
+        val evidence = reviewEvidenceUiState(project(), file(), editableDraft(invalid), invalid, checks = null)
         val impact = ImpactPreview("main.go", "Run", listOf(ImpactReference("main_test.go", "Run", "high", "calls Run")))
 
-        assertEquals(VerifyEvidenceStatus.Failed, evidence.validation.status)
+        assertEquals(ReviewEvidenceStatus.Failed, evidence.validation.status)
         assertEquals("Only one declaration may change.", invalid.validation!!.diagnostics.single().message)
         assertTrue(advisoryImpactLabel(impact).contains("read-only"))
         assertTrue(gitContextLabel(GitStatus(true, "main", "modified", "changed")).contains("read-only"))

@@ -70,6 +70,62 @@ func TestChatSessionCreatesDeclarationDraftsWithRevisionLineage(t *testing.T) {
 	}
 }
 
+func TestChatSessionCreatesAndValidatesDraftForExactTopLevelVariable(t *testing.T) {
+	var prompt string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		prompt = request.Messages[0].Content
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{
+				"message": map[string]string{"content": `{"version":"v1","declaration":"var diffCmd = \"new\"","explanation":"Updates the command declaration."}`},
+			}},
+		})
+	}))
+	defer server.Close()
+
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nvar diffCmd = \"old\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	index, err := service.Reindex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := service.manager.IndexedFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := service.OpenChatSession(ChatSessionCreateRequest{
+		ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision,
+		BaseFileHash: file.ContentHash, OpenPath: file.Path,
+		Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: "diffCmd",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposal, err := service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, Message: "Update it."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proposal.Draft.TargetSymbol != "diffCmd" || proposal.Draft.Declaration != `var diffCmd = "new"` {
+		t.Fatalf("variable proposal = %+v", proposal.Draft)
+	}
+	validated, err := service.ValidateDraft(proposal.Draft.ID, proposal.Draft.Revision)
+	if err != nil || validated.State != DraftValid {
+		t.Fatalf("variable draft validation = %+v, %v", validated, err)
+	}
+	if !strings.Contains(prompt, "single top-level var declaration") {
+		t.Fatalf("variable prompt = %q", prompt)
+	}
+}
+
 func TestChatSessionRejectsInvalidTargetsAndStaleState(t *testing.T) {
 	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	if _, err := openChatSession(t, service, project.DeclarationEditReplaceSymbol, "Missing"); err == nil {

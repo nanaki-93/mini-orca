@@ -22,6 +22,11 @@ var cached int
 
 func Run[T any](value T) T { return value }
 func (b *Box[T]) Work(input string) error { fmt.Println(alias.TrimSpace(input)); return nil }
+
+var (
+	grouped = 1
+)
+var first, second = 1, 2
 `
 	if err := os.WriteFile(filepath.Join(root, "fixture.go"), []byte(source), 0644); err != nil {
 		t.Fatal(err)
@@ -42,7 +47,10 @@ func (b *Box[T]) Work(input string) error { fmt.Println(alias.TrimSpace(input));
 	assertGoSymbol(t, file, "Box", "struct", true, 8, 8)
 	assertGoSymbol(t, file, "Worker", "interface", true, 9, 9)
 	assertGoSymbol(t, file, "DefaultName", "const", false, 10, 10)
-	assertGoSymbol(t, file, "cached", "var", false, 11, 11)
+	assertGoSymbol(t, file, "cached", "var", true, 11, 11)
+	assertGoSymbol(t, file, "grouped", "var", false, 17, 17)
+	assertGoSymbol(t, file, "first", "var", false, 19, 19)
+	assertGoSymbol(t, file, "second", "var", false, 19, 19)
 	if len(file.Diagnostics) != 0 {
 		t.Fatalf("unexpected diagnostics: %#v", file.Diagnostics)
 	}
