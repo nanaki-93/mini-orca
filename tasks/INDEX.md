@@ -86,7 +86,7 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 75 | [Analysis and Editor UX execution baseline](completed/75_analysis_editor_ux_execution_baseline.md) | 74 | Complete |
 | 76 | [Analyze-all summary presentation](completed/76_analysis_run_summary_presentation.md) | 75 | Complete |
 | 77 | [Analysis workspace summary UI](completed/77_analysis_workspace_summary_ui.md) | 76 | Complete |
-| 78 | [Editor-only explorer and file navigation](78_editor_only_explorer_navigation.md) | 77 | Pending |
+| 78 | [Editor-only explorer and file navigation](completed/78_editor_only_explorer_navigation.md) | 77 | Complete |
 | 79 | [Analysis and Editor UX acceptance](79_analysis_editor_ux_acceptance.md) | 75–78 | Pending |
 
 ## Delivery boundaries
