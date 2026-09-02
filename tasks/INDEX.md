@@ -88,11 +88,11 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 77 | [Analysis workspace summary UI](completed/77_analysis_workspace_summary_ui.md) | 76 | Complete |
 | 78 | [Editor-only explorer and file navigation](completed/78_editor_only_explorer_navigation.md) | 77 | Complete |
 | 79 | [Analysis and Editor UX acceptance](completed/79_analysis_editor_ux_acceptance.md) | 75–78 | Complete |
-| 80 | [Compact semantic Desktop controls](80_desktop_compact_semantic_controls.md) | 79 | Pending |
-| 81 | [Exclusive no-project landing state](81_desktop_no_project_landing.md) | 80 | Pending |
-| 82 | [Technical metadata and copy simplification](82_desktop_metadata_copy_simplification.md) | 81 | Pending |
-| 83 | [Workspace density and visual-priority polish](83_desktop_workspace_density_polish.md) | 82 | Pending |
-| 84 | [Desktop UX refinement acceptance](84_desktop_ux_refinement_acceptance.md) | 80–83 | Pending |
+| 80 | [Compact semantic Desktop controls](completed/80_desktop_compact_semantic_controls.md) | 79 | Complete |
+| 81 | [Exclusive no-project landing state](completed/81_desktop_no_project_landing.md) | 80 | Complete |
+| 82 | [Technical metadata and copy simplification](completed/82_desktop_metadata_copy_simplification.md) | 81 | Complete |
+| 83 | [Workspace density and visual-priority polish](completed/83_desktop_workspace_density_polish.md) | 82 | Complete |
+| 84 | [Desktop UX refinement acceptance](completed/84_desktop_ux_refinement_acceptance.md) | 80–83 | Complete |
 
 ## Delivery boundaries
 

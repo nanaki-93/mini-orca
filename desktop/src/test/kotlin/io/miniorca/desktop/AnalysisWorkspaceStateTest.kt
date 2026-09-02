@@ -88,6 +88,7 @@ class AnalysisWorkspaceStateTest {
         assertEquals("Analysis failed", presentation.failures[2].error)
         assertTrue(presentation.statusDetail.contains("8 fresh"))
         assertTrue(presentation.run.statusDetail.contains("Run counts and analysis errors"))
+        assertFalse(presentation.run.statusDetail.contains("revision"))
     }
 
     @Test fun analysisPresentationUsesStableLifecycleTextForEveryJobState() {

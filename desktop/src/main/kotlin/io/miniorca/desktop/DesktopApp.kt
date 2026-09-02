@@ -100,7 +100,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                     remoteProvider = model.remoteProvider
                     update(DesktopEvent.ConnectionUpdated(ConnectionState("Daemon connected", "${model.profile} · ${model.model}", status.version, true, api.endpointLocality(), "${elapsed}ms")))
                 }
-                .onFailure { update(DesktopEvent.ConnectionUpdated(ConnectionState(label = "Daemon unavailable", model = "Retry from the status bar", locality = api.endpointLocality()))) }
+                .onFailure { update(DesktopEvent.ConnectionUpdated(ConnectionState(label = "Daemon unavailable", locality = api.endpointLocality()))) }
         }
     }
 
@@ -231,6 +231,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             .onFailure { update(DesktopEvent.Failed(it.message ?: "Unable to cancel verified scan")) } }
     }
     fun importProject() {
+        if (appState.loading) return
         val directory = chooseDirectory() ?: return
         analyzeAllPolling.stop()
         analyzeAllPollJob?.cancel()
@@ -342,7 +343,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     fun triageFinding(finding: UnifiedFinding, action: FindingLifecycleAction) {
         val project = appState.project ?: return
         if (finding.projectRevision.isNotBlank() && finding.projectRevision != project.projectRevision) {
-            update(DesktopEvent.Failed("Refresh findings before changing triage on an older revision."))
+            update(DesktopEvent.Failed("Refresh findings before changing triage for out-of-date results."))
             return
         }
         scope.launch {
@@ -433,7 +434,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                 if (workflow.chatProposalLoaded(requestId, requestIdentity, session, message, proposal)) {
                     appState = workflow.state
                     chatMessage = ""
-                    update(DesktopEvent.Status("Draft ${proposal.draft.revision} is ready for review."))
+                    update(DesktopEvent.Status("Draft is ready for review."))
                 }
             } catch (_: CancellationException) {
                 if (workflow.cancelChatLoad(requestId, requestIdentity)) appState = workflow.state
@@ -452,7 +453,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         val file = appState.selectedFile ?: return
         if (!draftEditorMatchesOpenFile(editor, file, project)) {
             update(DesktopEvent.DraftMarkedStale)
-            update(DesktopEvent.Failed("The draft no longer matches the open file and project revision."))
+            update(DesktopEvent.Failed("The draft no longer matches the open file."))
             return
         }
         val (requestId, requestIdentity) = workflow.beginDraftLoad() ?: return
@@ -517,7 +518,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                 .onSuccess { (index, file, symbols) ->
                     update(DesktopEvent.IndexRefreshed(index))
                     update(DesktopEvent.FileLoaded(file, symbols))
-                    update(DesktopEvent.Status("Project revision $revision is active"))
+                    update(DesktopEvent.Status("Project refreshed."))
                     refreshProjectWorkspace(revision)
                 }
                 .onFailure { update(DesktopEvent.Failed(it.message ?: "Project refresh failed")) }
@@ -598,7 +599,6 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         connection = appState.connection,
         workspace = appState.workspace,
         onWorkspace = { update(DesktopEvent.WorkspaceSelected(it)) },
-        workspaceCounts = workspaceCounts(appState),
         editorFlow = editorFlow,
         onEditorStage = { activeEditorStage = it },
         editorSurface = editorSurface,

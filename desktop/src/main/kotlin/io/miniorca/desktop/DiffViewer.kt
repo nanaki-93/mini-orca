@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,8 +42,8 @@ internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
     SelectionContainer { Column(modifier.background(Card).horizontalScroll(rememberScrollState()).semantics { contentDescription = "Read-only composed diff" }.padding(8.dp)) {
         Row(Modifier.fillMaxWidth()) {
             Text(if (sideBySide) "BEFORE / PROPOSED (READ-ONLY)" else "UNIFIED COMPOSED DIFF (READ-ONLY)", color = SecondaryText, fontSize = 10.sp, modifier = Modifier.weight(1f))
-            TextButton(onClick = { sideBySide = true }, enabled = !sideBySide) { Text("Side-by-side", fontSize = 10.sp) }
-            TextButton(onClick = { sideBySide = false }, enabled = sideBySide) { Text("Unified", fontSize = 10.sp) }
+            FocusFlowButton(onClick = { sideBySide = true }, enabled = !sideBySide, tone = ActionTone.Navigation, selected = sideBySide, density = ButtonDensity.Toolbar) { Text("Side-by-side", fontSize = 10.sp) }
+            FocusFlowButton(onClick = { sideBySide = false }, enabled = sideBySide, tone = ActionTone.Navigation, selected = !sideBySide, density = ButtonDensity.Toolbar) { Text("Unified", fontSize = 10.sp) }
         }
         if (sideBySide) sideBySideDiffRows(diff).forEach { row -> Row(Modifier.fillMaxWidth()) { DiffCellText(row.before, "Before", Modifier.weight(1f)); DiffCellText(row.proposed, "Proposed", Modifier.weight(1f)) } }
         else diff.lines.forEach { line ->

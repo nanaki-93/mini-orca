@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import androidx.compose.ui.unit.dp
 
 class DesktopThemeTest {
     @Test fun focusFlowPaletteUsesTheApprovedSemanticColors() {
@@ -29,6 +30,36 @@ class DesktopThemeTest {
         assertEquals(StatusBadgeStyle("Running", Warning), statusBadgeStyle("running"))
         assertEquals(StatusBadgeStyle("Failed", Error), statusBadgeStyle("failed"))
         assertEquals(StatusBadgeStyle("Not analyzed", SecondaryText), statusBadgeStyle("missing"))
+    }
+
+    @Test fun actionTonesUseSharedPaletteTokensForEverySemanticRole() {
+        assertEquals(Accent, actionToneStyle(ActionTone.Primary).background)
+        assertEquals(CyanAccent, actionToneStyle(ActionTone.Navigation).content)
+        assertEquals(Success, actionToneStyle(ActionTone.Positive).content)
+        assertEquals(Warning, actionToneStyle(ActionTone.Attention).content)
+        assertEquals(Error, actionToneStyle(ActionTone.Destructive).content)
+        assertEquals(PrimaryText, actionToneStyle(ActionTone.Neutral).content)
+        ActionTone.entries.forEach { tone ->
+            val style = actionToneStyle(tone)
+            assertNotEquals(style.background, style.disabledBackground)
+            assertNotEquals(style.content, style.disabledContent)
+            assertNotEquals(style.background, style.pressedBackground)
+            assertNotEquals(style.background, style.selectedBackground)
+        }
+    }
+
+    @Test fun compactButtonDensitiesStayWithinTheApprovedControlScale() {
+        assertEquals(35.dp, buttonDensityStyle(ButtonDensity.Standard).height)
+        assertEquals(31.dp, buttonDensityStyle(ButtonDensity.Toolbar).height)
+        assertEquals(10.dp, buttonDensityStyle(ButtonDensity.Standard).contentPadding.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr))
+        assertEquals(8.dp, buttonDensityStyle(ButtonDensity.Toolbar).contentPadding.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr))
+    }
+
+    @Test fun actionGroupsSwitchToVerticalBeforeTheyBecomeCrowded() {
+        assertEquals(ActionGroupLayout.Vertical, actionGroupLayout(459f))
+        assertEquals(ActionGroupLayout.Horizontal, actionGroupLayout(460f))
+        assertEquals(ActionGroupLayout.Vertical, actionGroupLayout(419f, minimumHorizontalWidthDp = 420f))
+        assertEquals(ActionGroupLayout.Horizontal, actionGroupLayout(420f, minimumHorizontalWidthDp = 420f))
     }
 
     @Test fun semanticSyntaxTokensDoNotChangeSourceText() {

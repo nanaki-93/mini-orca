@@ -6,6 +6,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 
 enum class DesktopShortcut {
+    OpenProject,
     OpenFile,
     OpenSymbol,
     OpenAction,
@@ -31,6 +32,7 @@ fun desktopShortcut(key: String, primaryModifier: Boolean, shift: Boolean = fals
     primaryModifier && key == "4" -> DesktopShortcut.EditorWorkspace
     primaryModifier && key == "P" -> DesktopShortcut.OpenFile
     primaryModifier && shift && key == "O" -> DesktopShortcut.OpenSymbol
+    primaryModifier && key == "O" -> DesktopShortcut.OpenProject
     primaryModifier && key == "K" -> DesktopShortcut.FocusChat
     primaryModifier && shift && key == "F" -> DesktopShortcut.FocusBugsFilters
     primaryModifier && shift && key == "D" -> DesktopShortcut.FocusDraft
@@ -40,6 +42,9 @@ fun desktopShortcut(key: String, primaryModifier: Boolean, shift: Boolean = fals
     primaryModifier && key == "Tab" -> DesktopShortcut.NextTab
     else -> null
 }
+
+internal fun shortcutAvailable(shellMode: DesktopShellMode, shortcut: DesktopShortcut?): Boolean =
+    shortcut != null && (shellMode == DesktopShellMode.ProjectWorkspace || shortcut == DesktopShortcut.OpenProject)
 
 private val codeToken = Regex("//.*$|#.*$|\\\"(?:\\\\.|[^\\\"])*\\\"|\\b(?:class|data|fun|func|interface|package|import|return|if|else|for|while|when|val|var|type|struct|impl|pub|def|async|await)\\b", RegexOption.MULTILINE)
 

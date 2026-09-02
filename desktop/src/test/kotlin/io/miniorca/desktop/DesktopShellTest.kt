@@ -5,6 +5,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class DesktopShellTest {
+    @Test fun shellUsesADedicatedLandingBranchUntilAProjectExists() {
+        assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(DesktopState()))
+        val project = ProjectAnalysis("project", "revision", "Mini", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+
+        assertEquals(DesktopShellMode.ProjectWorkspace, desktopShellMode(DesktopState(projectState = ProjectWorkspaceState(project))))
+    }
+
     @Test fun explorerGroupsRelativePathsAndKeepsOnlyMatchingBranches() {
         val files = listOf(
             IndexedFile("internal/project/index.go", "a", "Go", false, analysisStatus = "fresh"),
@@ -64,7 +71,6 @@ class DesktopShellTest {
         assertEquals("Go file main.go, Stale, selected", explorerRowDescription(file, selected = true, expanded = false))
         assertEquals("Folder internal, collapsed", explorerRowDescription(folder, selected = false, expanded = false))
         assertEquals("DIR −", explorerRoleLabel(folder, expanded = true))
-        assertEquals("12 indexed files · project revision revision", explorerProjectLabel(ProjectIndex("project", "revision", files = List(12) { IndexedFile("$it.go", "hash", "Go", false) })))
     }
 
     @Test fun collapsedFolderShowsItsChildrenAfterItIsExpanded() {
@@ -96,21 +102,28 @@ class DesktopShellTest {
         )
     }
 
-    @Test fun workspaceRailUsesLabelsAndTextCounts() {
-        val counts = WorkspaceCounts(analyzedFiles = 4, verifiedFindings = 2, aiSuggestions = 3, drafts = 1)
-
-        assertEquals("Summary", workspaceRailLabel(Workspace.Summary, counts))
-        assertEquals("Analysis · 4 analyzed", workspaceRailLabel(Workspace.Analysis, counts))
-        assertEquals("Bugs · 2 verified · 3 AI", workspaceRailLabel(Workspace.Bugs, counts))
-        assertEquals("Editor · 1 drafts", workspaceRailLabel(Workspace.Editor, counts))
+    @Test fun workspaceRailUsesConciseWorkspaceNames() {
+        assertEquals("Summary", workspaceRailLabel(Workspace.Summary))
+        assertEquals("Analysis", workspaceRailLabel(Workspace.Analysis))
+        assertEquals("Bugs", workspaceRailLabel(Workspace.Bugs))
+        assertEquals("Editor", workspaceRailLabel(Workspace.Editor))
     }
 
-    @Test fun topBarTextNamesProjectRevisionAndConnectionState() {
+    @Test fun topBarTextNamesTheProjectWithoutItsRevision() {
         val project = ProjectAnalysis("project", "revision-hash", "Long project name", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
 
-        assertEquals("Long project name · revision revision-has", projectBreadcrumbLabel(project))
-        assertTrue(connectionLabel(ConnectionState(connected = true, locality = "Local endpoint", model = "local model", latency = "12ms")).contains("Connected · Local endpoint"))
-        assertTrue(connectionLabel(ConnectionState(label = "Daemon unavailable", locality = "Remote endpoint")).contains("Disconnected · Remote endpoint"))
+        assertEquals("Long project name", projectBreadcrumbLabel(project))
+        assertEquals("Connected", connectionPresentation(ConnectionState(connected = true, locality = "Local endpoint", model = "local model", latency = "12ms")).label)
+        assertEquals("Disconnected", connectionPresentation(ConnectionState(label = "Daemon unavailable", locality = "Remote endpoint")).label)
+        assertEquals(ConnectionPresentation("Connected", Success, false), connectionPresentation(ConnectionState(connected = true)))
+        assertEquals(ConnectionPresentation("Connecting", Warning, false), connectionPresentation(ConnectionState(label = "Connecting")))
+        assertEquals(ConnectionPresentation("Disconnected", Error, true), connectionPresentation(ConnectionState(label = "Daemon unavailable")))
+    }
+
+    @Test fun statusBarOnlyAppearsForLoadingOrActionableErrors() {
+        assertTrue(!desktopStatusBarVisible(loading = false, error = null))
+        assertTrue(desktopStatusBarVisible(loading = true, error = null))
+        assertTrue(desktopStatusBarVisible(loading = false, error = "Connection lost"))
     }
 
     @Test fun keyboardWorkspaceOrderCoversAllFourWorkspaces() {

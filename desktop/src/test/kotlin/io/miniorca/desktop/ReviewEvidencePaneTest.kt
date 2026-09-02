@@ -30,6 +30,19 @@ class ReviewEvidencePaneTest {
         assertFalse(failedEvidence.canContinueToApply)
     }
 
+    @Test fun verificationAndReceiptsKeepIdentityGuardsInternal() {
+        val current = draft()
+        val checks = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
+        val evidence = verifyEvidenceUiState(project(), file(), editableDraft(current), current, checks)
+        val receipt = applyDecisionUiState(project(), file(), editableDraft(current), current, checks, ApplyResult("revision", "post-hash", true, AuditEntry("apply", "main.go", "applied", "")))
+
+        assertFalse(evidence.identity.detail.contains("revision"))
+        assertFalse(evidence.identity.detail.contains("hash"))
+        assertFalse(evidence.checks.detail.contains("revision"))
+        assertFalse(evidence.checks.detail.contains("hash"))
+        assertEquals("main.go was updated.", receipt.receiptDetail)
+    }
+
     @Test fun aManualEditInvalidatesCurrentCheckEvidenceAndReturnsTheUserToDraftRecovery() {
         val current = draft()
         val matchingChecks = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)

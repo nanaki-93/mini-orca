@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.DrawerValue
 import androidx.compose.material.ModalDrawer
 import androidx.compose.material.Surface
@@ -61,6 +62,11 @@ data class ExplorerRow(
 )
 
 internal enum class NarrowDrawer { Files, Context }
+
+internal enum class DesktopShellMode { ProjectLanding, ProjectWorkspace }
+
+internal fun desktopShellMode(appState: DesktopState): DesktopShellMode =
+    if (appState.project == null) DesktopShellMode.ProjectLanding else DesktopShellMode.ProjectWorkspace
 
 internal fun narrowDrawerLabel(drawer: NarrowDrawer): String = when (drawer) {
     NarrowDrawer.Files -> "Files"
@@ -147,7 +153,6 @@ internal fun DesktopShell(
     connection: ConnectionState,
     workspace: Workspace,
     onWorkspace: (Workspace) -> Unit,
-    workspaceCounts: WorkspaceCounts,
     editorFlow: EditorFlowUiState,
     onEditorStage: (EditorStage) -> Unit,
     onFocusChat: () -> Unit,
@@ -198,10 +203,11 @@ internal fun DesktopShell(
     onCancelGeneration: () -> Unit,
     onCancelAll: () -> Unit,
 ) {
+    val shellMode = desktopShellMode(appState)
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     var narrowDrawer by remember { mutableStateOf(NarrowDrawer.Files) }
-    val showsEditorChrome = editorChromeVisible(workspace)
+    val showsEditorChrome = shellMode == DesktopShellMode.ProjectWorkspace && editorChromeVisible(workspace)
     fun openDrawer(drawer: NarrowDrawer) {
         if (!showsEditorChrome) return
         narrowDrawer = drawer
@@ -234,7 +240,10 @@ internal fun DesktopShell(
                 Key.Tab -> "Tab"
                 else -> ""
             }
-            when (desktopShortcut(key, event.isMetaPressed || event.isCtrlPressed, event.isShiftPressed)) {
+            val shortcut = desktopShortcut(key, event.isMetaPressed || event.isCtrlPressed, event.isShiftPressed)
+            if (!shortcutAvailable(shellMode, shortcut)) return@onPreviewKeyEvent false
+            when (shortcut) {
+                DesktopShortcut.OpenProject -> if (!appState.loading) onImport()
                 DesktopShortcut.OpenFile -> onOpenPalette(PaletteMode.Files)
                 DesktopShortcut.OpenSymbol -> onOpenPalette(PaletteMode.Symbols)
                 DesktopShortcut.OpenAction -> onOpenPalette(PaletteMode.Actions)
@@ -262,10 +271,13 @@ internal fun DesktopShell(
         },
         color = AppBackground,
     ) {
-        BoxWithConstraints {
-            val narrow = useNarrowLayout(maxWidth.value)
-            val showEditorDrawers = editorDrawerActionsVisible(workspace, maxWidth.value)
-            ModalDrawer(
+        if (shellMode == DesktopShellMode.ProjectLanding) {
+            ProjectLanding(appState, onImport)
+        } else {
+            BoxWithConstraints {
+                val narrow = useNarrowLayout(maxWidth.value)
+                val showEditorDrawers = editorDrawerActionsVisible(workspace, maxWidth.value)
+                ModalDrawer(
                 drawerState = drawerState,
                 drawerContent = {
                     if (showsEditorChrome) {
@@ -276,11 +288,11 @@ internal fun DesktopShell(
                         }
                     }
                 },
-            ) {
-                Column {
-                    AppTopBar(appState.project, appState.loading, connection, onImport, onReanalyze, { onOpenPalette(PaletteMode.Actions) }, showEditorDrawers, { openDrawer(NarrowDrawer.Files) }, { openDrawer(NarrowDrawer.Context) })
+                ) {
+                    Column {
+                    AppTopBar(appState.project, appState.loading, connection, onImport, onReanalyze, onReconnect, { onOpenPalette(PaletteMode.Actions) }, showEditorDrawers, { openDrawer(NarrowDrawer.Files) }, { openDrawer(NarrowDrawer.Context) })
                     Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        WorkspaceRail(workspace, workspaceCounts, ::selectWorkspace, Modifier.width(176.dp).fillMaxHeight())
+                        WorkspaceRail(workspace, ::selectWorkspace, Modifier.width(176.dp).fillMaxHeight())
                         if (!narrow && showsEditorChrome) {
                             explorer(Modifier.width(paneWidths.explorer.dp).fillMaxHeight()) {}
                             ResizableDivider(onDelta = { onPaneWidths(paneWidths.withExplorer(paneWidths.explorer + it)) }, onCommit = onSavePaneWidths)
@@ -299,12 +311,40 @@ internal fun DesktopShell(
                             contextPane(Modifier.width(paneWidths.action.dp).fillMaxHeight())
                         }
                     }
-                    DesktopStatusBar(appState.status, appState.error, connection, onReconnect)
+                        DesktopStatusBar(appState.status, appState.error, appState.loading)
+                    }
                 }
             }
+            if (showContext) ContextInspectorDialog(contextManifest ?: ContextManifest(), remoteProvider, onDismissContext)
+            if (showPalette) CommandPaletteDialog(paletteMode, paletteQuery, onPaletteQuery, appState.index?.files.orEmpty(), appState.symbols, onSelectPaletteFile, onSelectPaletteSymbol, onSelectPaletteAction, onDismissPalette)
         }
-        if (showContext) ContextInspectorDialog(contextManifest ?: ContextManifest(), remoteProvider, onDismissContext)
-        if (showPalette) CommandPaletteDialog(paletteMode, paletteQuery, onPaletteQuery, appState.index?.files.orEmpty(), appState.symbols, onSelectPaletteFile, onSelectPaletteSymbol, onSelectPaletteAction, onDismissPalette)
+    }
+}
+
+@Composable
+private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            MiniOrcaMark()
+            Spacer(Modifier.height(12.dp))
+            Text("Mini-Orca", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+            FocusFlowButton(
+                onClick = onOpenProject,
+                enabled = !appState.loading,
+                tone = ActionTone.Primary,
+                modifier = Modifier.padding(top = 20.dp),
+            ) { Text("Open project") }
+            when {
+                appState.loading -> {
+                    Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(16.dp), color = CyanAccent, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Opening project…", color = SecondaryText, fontSize = 12.sp)
+                    }
+                }
+                appState.error != null -> Text("Could not open project. ${appState.error}", color = Error, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
+            }
+        }
     }
 }
 
@@ -366,18 +406,15 @@ private fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
     )
 }
 
+internal fun desktopStatusBarVisible(loading: Boolean, error: String?): Boolean = loading || error != null
+
 @Composable
-private fun DesktopStatusBar(status: String, error: String?, connection: ConnectionState, onReconnect: () -> Unit) {
+private fun DesktopStatusBar(status: String, error: String?, loading: Boolean) {
+    if (!desktopStatusBarVisible(loading, error)) return
     Row(Modifier.fillMaxWidth().height(30.dp).background(Panel).border(BorderStroke(1.dp, Border)).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(7.dp).background(if (error == null && connection.connected) Success else Error, RoundedCornerShape(50)))
+        Box(Modifier.size(7.dp).background(if (error == null) Warning else Error, RoundedCornerShape(50)))
         Spacer(Modifier.width(7.dp))
-        Text(error ?: connectionLabel(connection), color = if (error == null) SecondaryText else Error, fontSize = 11.sp, maxLines = 1)
-        Spacer(Modifier.width(8.dp))
-        Text("· Preview-first mode · ${status.ifBlank { "Ready" }}", color = SecondaryText, fontSize = 10.sp, maxLines = 1)
-        Spacer(Modifier.weight(1f))
-        FocusFlowButton(onClick = onReconnect, modifier = Modifier.height(24.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 7.dp, vertical = 0.dp)) { Text("Reconnect", fontSize = 10.sp) }
-        Spacer(Modifier.width(8.dp))
-        Text(if (connection.version.isBlank()) "Mini-Orca" else "Mini-Orca v${connection.version}", color = SecondaryText, fontSize = 10.sp)
+        Text(error ?: status, color = if (error == null) SecondaryText else Error, fontSize = 11.sp, maxLines = 1)
     }
 }
 
@@ -412,5 +449,5 @@ private fun ContextInspectorDialog(manifest: ContextManifest, remoteProvider: Bo
                 }
             }
         }
-    }, confirmButton = { FocusFlowButton(onClick = onDismiss) { Text("Close") } })
+    }, confirmButton = { FocusFlowButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") } })
 }

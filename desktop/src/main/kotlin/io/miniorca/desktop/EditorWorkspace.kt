@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -50,7 +49,8 @@ private fun EditorSurfaceBar(surface: EditorSurface, onSurfaceSelected: (EditorS
             val current = option == surface
             FocusFlowButton(
                 onClick = { onSurfaceSelected(option) },
-                primary = current,
+                tone = ActionTone.Navigation,
+                selected = current,
                 modifier = Modifier.weight(1f).semantics {
                     selected = current
                     contentDescription = editorSurfaceSemanticsLabel(option, current)
@@ -70,6 +70,7 @@ internal fun editorSurfaceSemanticsLabel(surface: EditorSurface, current: Boolea
 internal fun EditorStageBar(flow: EditorFlowUiState, onStageSelected: (EditorStage) -> Unit) {
     Column(Modifier.fillMaxWidth().background(Panel).padding(horizontal = 14.dp, vertical = 10.dp)) {
         SectionLabel("EDITOR FLOW")
+        Text("Current: ${flow.activeStage.label}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
             flow.stages.forEachIndexed { index, stage ->
                 if (index > 0) Spacer(Modifier.width(6.dp))
@@ -77,13 +78,8 @@ internal fun EditorStageBar(flow: EditorFlowUiState, onStageSelected: (EditorSta
                 FocusFlowButton(
                     onClick = { onStageSelected(stage.stage) },
                     enabled = stage.unlocked,
-                    primary = current,
-                    colors = ButtonDefaults.buttonColors(
-                        backgroundColor = if (current) Accent else Card,
-                        contentColor = if (current) OnAccent else PrimaryText,
-                        disabledBackgroundColor = Panel,
-                        disabledContentColor = FaintText,
-                    ),
+                    tone = ActionTone.Navigation,
+                    selected = current,
                     modifier = Modifier.weight(1f).semantics {
                         selected = current
                         contentDescription = editorStageSemanticsLabel(stage, current)
@@ -92,15 +88,16 @@ internal fun EditorStageBar(flow: EditorFlowUiState, onStageSelected: (EditorSta
                 ) { Text(editorStageLabel(stage, current), fontSize = 11.sp, fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal) }
             }
         }
-        Text(flow.stage(flow.activeStage).reason, color = if (flow.stage(flow.activeStage).unlocked) SecondaryText else Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
-internal fun editorStageLabel(stage: EditorStageUiState, current: Boolean): String = when {
-    current -> "${stage.stage.label} · Current"
-    stage.unlocked -> "${stage.stage.label} · Ready"
-    else -> "${stage.stage.label} · Locked"
+internal fun editorStageLabel(stage: EditorStageUiState, current: Boolean): String = stage.stage.label
+
+internal fun editorStageStateLabel(stage: EditorStageUiState, current: Boolean): String = when {
+    current -> "Current"
+    stage.unlocked -> "Ready"
+    else -> "Locked"
 }
 
 internal fun editorStageSemanticsLabel(stage: EditorStageUiState, current: Boolean): String =
-    "${editorStageLabel(stage, current)}. ${stage.reason}"
+    "${stage.stage.label}, ${editorStageStateLabel(stage, current)}. ${stage.reason}"
