@@ -9,11 +9,23 @@ data class BugsFilters(
     val lifecycle: String = "",
 )
 
-enum class FindingClassification(val sectionLabel: String) {
+enum class FindingClassification(val provenanceLabel: String) {
     Verified("VERIFIED / TOOL-REPORTED"),
     Suggested("AI SUGGESTIONS"),
     Unclassified("UNCLASSIFIED FINDINGS"),
 }
+
+enum class FindingPriority(val sectionLabel: String) {
+    High("HIGH PRIORITY"),
+    Medium("MEDIUM PRIORITY"),
+    Low("LOW PRIORITY"),
+    Other("OTHER PRIORITY"),
+}
+
+data class FindingPriorityGroup(
+    val priority: FindingPriority,
+    val findings: List<UnifiedFinding>,
+)
 
 data class FindingLifecycleAction(val label: String, val status: String)
 
@@ -32,6 +44,19 @@ fun filterFindings(findings: List<UnifiedFinding>, filters: BugsFilters): List<U
         matchesFindingField(finding.freshness, filters.freshness) &&
         matchesFindingField(finding.status, filters.lifecycle)
 }
+
+internal fun findingPriority(finding: UnifiedFinding): FindingPriority = when (finding.severity.trim().lowercase()) {
+    "high" -> FindingPriority.High
+    "medium" -> FindingPriority.Medium
+    "low" -> FindingPriority.Low
+    else -> FindingPriority.Other
+}
+
+internal fun groupFindingsByPriority(findings: List<UnifiedFinding>): List<FindingPriorityGroup> =
+    FindingPriority.entries.mapNotNull { priority ->
+        val groupedFindings = findings.filter { findingPriority(it) == priority }
+        groupedFindings.takeIf { it.isNotEmpty() }?.let { FindingPriorityGroup(priority, it) }
+    }
 
 internal fun activeBugsFilters(filters: BugsFilters): List<String> = buildList {
     filters.query.trim().takeIf { it.isNotBlank() }?.let { add("Search") }
@@ -59,7 +84,7 @@ fun findingCanPrepareFix(finding: UnifiedFinding): Boolean =
     finding.freshness.lowercase() == "fresh" && finding.location.path.isNotBlank()
 
 internal fun findingProvenanceLabel(finding: UnifiedFinding): String =
-    "${classifyFinding(finding).sectionLabel} · source ${finding.source.ifBlank { "unknown" }} · confidence ${finding.confidence.ifBlank { "unknown" }}"
+    "${classifyFinding(finding).provenanceLabel} · source ${finding.source.ifBlank { "unknown" }} · confidence ${finding.confidence.ifBlank { "unknown" }}"
 
 internal fun findingStatusLabel(finding: UnifiedFinding): String =
     "${finding.status.ifBlank { "unknown" }} · ${finding.freshness.ifBlank { "unknown" }}"

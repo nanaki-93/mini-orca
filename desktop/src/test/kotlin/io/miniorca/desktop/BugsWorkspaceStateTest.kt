@@ -40,6 +40,34 @@ class BugsWorkspaceStateTest {
         assertEquals(findings.drop(1), filterFindings(findings, BugsFilters(lifecycle = "dismissed", freshness = "stale")))
     }
 
+    @Test fun priorityGroupsNormalizeSeverityAndKeepBackendOrderWithinEachSection() {
+        val low = verified.copy(id = "low", severity = " low ")
+        val unknown = suggested.copy(id = "unknown", severity = "critical")
+        val medium = suggested.copy(id = "medium", severity = "MEDIUM")
+        val highFirst = verified.copy(id = "high-1", severity = "high")
+        val highSecond = suggested.copy(id = "high-2", severity = " HIGH ")
+        val blank = suggested.copy(id = "blank", severity = " ")
+
+        val groups = groupFindingsByPriority(listOf(low, unknown, medium, highFirst, highSecond, blank))
+
+        assertEquals(listOf(FindingPriority.High, FindingPriority.Medium, FindingPriority.Low, FindingPriority.Other), groups.map { it.priority })
+        assertEquals(listOf(highFirst, highSecond), groups[0].findings)
+        assertEquals(listOf(medium), groups[1].findings)
+        assertEquals(listOf(low), groups[2].findings)
+        assertEquals(listOf(unknown, blank), groups[3].findings)
+    }
+
+    @Test fun filtersApplyBeforePriorityGroupingWithoutEmptySections() {
+        val highVerified = verified.copy(id = "high-verified", severity = "high")
+        val highSuggested = suggested.copy(id = "high-suggested", severity = "high")
+        val filtered = filterFindings(listOf(highSuggested, highVerified, suggested.copy(id = "low", severity = "low")), BugsFilters(source = "vet"))
+        val groups = groupFindingsByPriority(filtered)
+
+        assertEquals(listOf(highVerified), filtered)
+        assertEquals(listOf(FindingPriority.High), groups.map { it.priority })
+        assertEquals(listOf(highVerified), groups.single().findings)
+    }
+
     @Test fun activeFiltersStayVisibleWhenAdvancedControlsAreCollapsed() {
         assertEquals(
             listOf("Search", "Source: vet", "Lifecycle: open"),

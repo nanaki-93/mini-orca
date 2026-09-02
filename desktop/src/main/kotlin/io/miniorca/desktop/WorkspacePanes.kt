@@ -173,9 +173,8 @@ internal fun BugsWorkspacePane(
     var showFilters by remember { mutableStateOf(false) }
     val filters = BugsFilters(query, source, severity, freshness, lifecycle)
     val activeFilters = activeBugsFilters(filters)
-    val visible = filterFindings(findings, filters)
+    val priorityGroups = groupFindingsByPriority(filterFindings(findings, filters))
     val progress = verifiedScanProgress(scan)
-    val grouped = FindingClassification.entries.associateWith { classification -> visible.filter { classifyFinding(it) == classification } }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
         item {
             Text("PROJECT BUGS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
@@ -212,14 +211,18 @@ internal fun BugsWorkspacePane(
             Spacer(Modifier.height(10.dp))
             SectionLabel("FINDINGS")
         }
-        FindingClassification.entries.forEach { classification ->
-            val section = grouped.getValue(classification)
+        if (priorityGroups.isEmpty()) {
             item {
-                SectionLabel(classification.sectionLabel, Modifier.padding(top = 9.dp))
-                if (section.isEmpty()) Text("No matching findings.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                Text("No matching findings.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 9.dp))
             }
-            items(section, key = { finding -> "${classification.name}:${finding.id}:${finding.location.path}:${finding.location.startLine}" }) { finding ->
-                FindingCard(finding, onOpen, onPrepare, onTriage)
+        } else {
+            priorityGroups.forEach { group ->
+                item {
+                    SectionLabel(group.priority.sectionLabel, Modifier.padding(top = 9.dp))
+                }
+                items(group.findings, key = { finding -> "${group.priority.name}:${finding.id}:${finding.location.path}:${finding.location.startLine}" }) { finding ->
+                    FindingCard(finding, onOpen, onPrepare, onTriage)
+                }
             }
         }
     }
