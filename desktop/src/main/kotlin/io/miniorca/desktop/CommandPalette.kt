@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.AlertDialog
-import androidx.compose.material.Button
-import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.LaunchedEffect
@@ -55,16 +53,15 @@ internal fun CommandPaletteDialog(
                 }
             }
         },
-        confirmButton = { Button(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { FocusFlowButton(onClick = onDismiss) { Text("Close") } },
     )
     LaunchedEffect(Unit) { filterFocusRequester.requestFocus() }
 }
 
 @Composable
 private fun PaletteEntry(description: String, label: String, onClick: () -> Unit) {
-    Button(
+    FocusFlowButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().padding(top = 3.dp).semantics { contentDescription = description },
-        colors = ButtonDefaults.buttonColors(backgroundColor = Card, contentColor = PrimaryText),
     ) { Text(label, fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
 }

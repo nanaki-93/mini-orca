@@ -236,7 +236,11 @@ func analysisMatches(analysis FileAnalysis, input FileAnalysisInput) bool {
 	// A project revision changes for every eligible source edit. Content hashes
 	// keep invalidation local to the edited file while the stored revision still
 	// records the project state that informed the original summary.
-	return analysis.SchemaVersion == fileAnalysisSchemaVersion && analysis.ProjectID == input.ProjectID && analysis.Path == normalizedAnalysisPath(input.Path) && analysis.ContentHash == input.ContentHash && analysis.Language == input.Language && analysis.Model == input.Model && analysis.Profile == input.Profile && analysis.PromptVersion == input.PromptVersion && analysis.ContextPolicyVersion == input.ContextPolicyVersion
+	return analysis.SchemaVersion == fileAnalysisSchemaVersion && analysis.ProjectID == input.ProjectID && analysis.Path == normalizedAnalysisPath(input.Path) && analysis.ContentHash == input.ContentHash && analysis.Language == input.Language && modelsMatch(analysis.Model, input.Model) && analysis.Profile == input.Profile && analysis.PromptVersion == input.PromptVersion && analysis.ContextPolicyVersion == input.ContextPolicyVersion
+}
+
+func modelsMatch(stored, requested string) bool {
+	return requested == "" || stored == "" || stored == requested
 }
 
 func validStoredAnalysis(analysis FileAnalysis) bool {

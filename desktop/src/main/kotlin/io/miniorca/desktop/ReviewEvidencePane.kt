@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Button
-import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -249,13 +247,13 @@ internal fun VerifyEvidencePane(
         FocusFlowPanel(Modifier.fillMaxWidth()) {
             EvidenceRow(evidence.checks)
             Text("Timing: the daemon does not report focused-check duration.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-            Button(onClick = onRunChecks, enabled = evidence.canRunChecks, modifier = Modifier.padding(top = 8.dp)) { Text(evidence.runChecksLabel) }
+            FocusFlowButton(onClick = onRunChecks, enabled = evidence.canRunChecks, modifier = Modifier.padding(top = 8.dp)) { Text(evidence.runChecksLabel) }
             checks?.checks.orEmpty().forEach { check ->
                 Text("${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}", color = evidenceColor(checkStatus(check.state)), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
             }
             val checksWithOutput = checks?.checks.orEmpty().filter { it.command.isNotEmpty() || it.output.isNotBlank() }
             if (checksWithOutput.isNotEmpty()) {
-                Button(onClick = { showCommandOutput = !showCommandOutput }, modifier = Modifier.padding(top = 8.dp)) {
+                FocusFlowButton(onClick = { showCommandOutput = !showCommandOutput }, modifier = Modifier.padding(top = 8.dp)) {
                     Text(if (showCommandOutput) "Hide command output" else "Show command output (${checksWithOutput.size})")
                 }
                 if (showCommandOutput) SelectionContainer {
@@ -275,10 +273,10 @@ internal fun VerifyEvidencePane(
         FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
             Text("Next: explicit Apply", color = PrimaryText, fontWeight = FontWeight.SemiBold)
             Text("The next step names the exact target again and requires your confirmation. Nothing has changed yet.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            Button(
+            FocusFlowButton(
                 onClick = onContinueToApply,
                 enabled = evidence.canContinueToApply,
-                colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = OnAccent),
+                primary = true,
                 modifier = Modifier.padding(top = 8.dp),
             ) { Text("Continue to Apply") }
             if (!evidence.canContinueToApply) Text(evidence.continueReason, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
@@ -308,7 +306,7 @@ internal fun ApplyDecisionPane(
                 Text(decision.receiptTitle, color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
                 Text(decision.receiptDetail, color = SecondaryText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
                 Text(if (applied.undoAvailable) "The guarded Undo action is available for this returned identity." else "The returned identity no longer has an available Undo action.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                Button(onClick = onUndo, enabled = applied.undoAvailable, modifier = Modifier.padding(top = 10.dp)) { Text(decision.undoLabel) }
+                FocusFlowButton(onClick = onUndo, enabled = applied.undoAvailable, modifier = Modifier.padding(top = 10.dp)) { Text(decision.undoLabel) }
             }
             return@Column
         }
@@ -335,10 +333,10 @@ internal fun ApplyDecisionPane(
         ReadOnlyImpactPane(impact, gitStatus)
         Spacer(Modifier.height(12.dp))
         FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-            Button(
+            FocusFlowButton(
                 onClick = onApply,
                 enabled = decision.eligible,
-                colors = ButtonDefaults.buttonColors(backgroundColor = Accent, contentColor = OnAccent),
+                primary = true,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(decision.actionLabel) }
             if (!decision.eligible) Text(decision.reason, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))

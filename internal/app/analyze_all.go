@@ -281,7 +281,10 @@ func (s *Service) analysisAllCandidates(index *project.ProjectIndex, limit int) 
 		if err != nil {
 			return nil, err
 		}
-		if cached.Status == project.AnalysisStatusMissing || cached.Status == project.AnalysisStatusStale {
+		if err := s.syncFileAnalysisStatus(input, cached.Status); err != nil {
+			return nil, err
+		}
+		if cached.Status == project.AnalysisStatusMissing || cached.Status == project.AnalysisStatusStale || cached.Status == project.AnalysisStatusFailed {
 			files = append(files, AnalyzeAllFileJob{Path: file.Path, Status: analysisAllFilePending})
 		}
 	}
@@ -304,11 +307,11 @@ func (s *Service) runAnalyzeAll(ctx context.Context) {
 		s.analysisAll.mu.Unlock()
 	}()
 	for {
-		file, retry, ok := s.nextAnalyzeAllFile()
+		file, ok := s.nextAnalyzeAllFile()
 		if !ok {
 			return
 		}
-		result, err := s.AnalyzeFile(ctx, file, retry, true)
+		result, err := s.AnalyzeFile(ctx, file, true, true)
 		if err == nil && result.Status == project.AnalysisStatusFailed {
 			err = fmt.Errorf("semantic analysis failed")
 		}
@@ -320,34 +323,33 @@ func (s *Service) runAnalyzeAll(ctx context.Context) {
 	}
 }
 
-func (s *Service) nextAnalyzeAllFile() (string, bool, bool) {
+func (s *Service) nextAnalyzeAllFile() (string, bool) {
 	s.analysisAll.mu.Lock()
 	defer s.analysisAll.mu.Unlock()
 	job := s.analysisAll.job
 	if job == nil || job.Status != analysisAllStateRunning {
-		return "", false, false
+		return "", false
 	}
 	if err := s.verifyAnalyzeAllRevisionLocked(job); err != nil {
 		job.Status = analysisAllStateStale
 		job.UpdatedAt = time.Now().UTC()
 		_ = s.storeAnalyzeAllJobLocked(job)
-		return "", false, false
+		return "", false
 	}
 	for i := range job.Files {
 		if job.Files[i].Status == analysisAllFilePending || job.Files[i].Status == analysisAllFileFailed && job.Files[i].Attempts <= job.MaxRetries {
-			retry := job.Files[i].Attempts > 0
 			job.Files[i].Status = analysisAllFileRunning
 			job.Files[i].Attempts++
 			job.Files[i].Error = ""
 			job.UpdatedAt = time.Now().UTC()
 			_ = s.storeAnalyzeAllJobLocked(job)
-			return job.Files[i].Path, retry, true
+			return job.Files[i].Path, true
 		}
 	}
 	job.Status = analysisAllStateCompleted
 	job.UpdatedAt = time.Now().UTC()
 	_ = s.storeAnalyzeAllJobLocked(job)
-	return "", false, false
+	return "", false
 }
 
 func (s *Service) recordAnalyzeAllResult(path string, cause error) {

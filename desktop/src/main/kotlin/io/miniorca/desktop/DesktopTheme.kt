@@ -5,10 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Button
+import androidx.compose.material.ButtonColors
+import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Shapes
 import androidx.compose.material.Surface
@@ -67,8 +71,51 @@ internal val MiniOrcaTypography = Typography(
     h6 = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 18.sp),
     body1 = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
     body2 = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+    button = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Normal, fontSize = 12.sp, letterSpacing = 0.25.sp),
     caption = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
 )
+
+internal object MiniOrcaButtonDefaults {
+    val shape = RoundedCornerShape(8.dp)
+    val contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+
+    @Composable
+    fun colors(primary: Boolean): ButtonColors = ButtonDefaults.buttonColors(
+        backgroundColor = if (primary) Accent else Card,
+        contentColor = if (primary) OnAccent else PrimaryText,
+        disabledBackgroundColor = if (primary) Accent.copy(alpha = 0.18f) else Panel,
+        disabledContentColor = FaintText,
+    )
+
+    fun border(primary: Boolean): BorderStroke = BorderStroke(
+        1.dp,
+        if (primary) Accent.copy(alpha = 0.72f) else Border.copy(alpha = 0.9f),
+    )
+}
+
+@Composable
+internal fun FocusFlowButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    primary: Boolean = false,
+    colors: ButtonColors? = null,
+    border: BorderStroke? = null,
+    contentPadding: PaddingValues = MiniOrcaButtonDefaults.contentPadding,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        elevation = ButtonDefaults.elevation(defaultElevation = 0.dp, pressedElevation = 1.dp, disabledElevation = 0.dp),
+        shape = MiniOrcaButtonDefaults.shape,
+        border = border ?: MiniOrcaButtonDefaults.border(primary),
+        colors = colors ?: MiniOrcaButtonDefaults.colors(primary),
+        contentPadding = contentPadding,
+        content = content,
+    )
+}
 
 @Composable
 internal fun MiniOrcaTheme(content: @Composable () -> Unit) {

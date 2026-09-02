@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Button
 import androidx.compose.material.Checkbox
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
@@ -139,7 +136,7 @@ private fun AnalyzeAllStartControls(
     TextField(maxFiles, onMaxFiles, label = { Text("File limit (1–500)") }, modifier = Modifier.padding(top = 6.dp))
     TextField(maxRetries, onMaxRetries, label = { Text("Retry limit (0–3)") }, modifier = Modifier.padding(top = 6.dp))
     RemoteProviderConfirmation(remoteProvider, remoteConfirmed, onRemoteConfirmed)
-    Button(onClick = { onStart(options) }, enabled = !remoteProvider || remoteConfirmed, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
+    FocusFlowButton(onClick = { onStart(options) }, enabled = !remoteProvider || remoteConfirmed, primary = true, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
 }
 
 @Composable
@@ -199,9 +196,9 @@ internal fun BugsWorkspacePane(
                 Text(progress.summary, color = if (progress.warnings.isNotEmpty()) Warning else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
                 progress.warnings.forEach { warning -> Text("Warning: $warning", color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp)) }
                 if (progress.canCancel) {
-                    Button(onClick = onCancelScan, enabled = scan?.status?.lowercase() == "running", modifier = Modifier.padding(top = 8.dp)) { Text(if (scan?.status?.lowercase() == "canceling") "Canceling…" else "Cancel verified scan") }
+                    FocusFlowButton(onClick = onCancelScan, enabled = scan?.status?.lowercase() == "running", modifier = Modifier.padding(top = 8.dp)) { Text(if (scan?.status?.lowercase() == "canceling") "Canceling…" else "Cancel verified scan") }
                 } else {
-                    Button(onClick = onStartScan, modifier = Modifier.padding(top = 8.dp)) { Text("Run verified scan") }
+                    FocusFlowButton(onClick = onStartScan, primary = true, modifier = Modifier.padding(top = 8.dp)) { Text("Run verified scan") }
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -239,12 +236,12 @@ private fun FindingCard(
         Text(finding.message.ifBlank { "No message supplied." }, color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
         if (finding.evidence.isNotBlank()) Text("Evidence: ${finding.evidence}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         Row(Modifier.fillMaxWidth().padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { onOpen(finding) }, enabled = finding.location.path.isNotBlank()) { Text("Open in Editor") }
+            FocusFlowButton(onClick = { onOpen(finding) }, enabled = finding.location.path.isNotBlank()) { Text("Open in Editor") }
             Spacer(Modifier.padding(horizontal = 3.dp))
-            Button(onClick = { onPrepare(finding) }, enabled = findingCanPrepareFix(finding)) { Text("Prepare fix") }
+            FocusFlowButton(onClick = { onPrepare(finding) }, enabled = findingCanPrepareFix(finding)) { Text("Prepare fix") }
             findingLifecycleActions(finding).forEach { action ->
                 Spacer(Modifier.padding(horizontal = 3.dp))
-                Button(onClick = { onTriage(finding, action) }) { Text(action.label) }
+                FocusFlowButton(onClick = { onTriage(finding, action) }) { Text(action.label) }
             }
         }
     }

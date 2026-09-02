@@ -88,6 +88,11 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 77 | [Analysis workspace summary UI](completed/77_analysis_workspace_summary_ui.md) | 76 | Complete |
 | 78 | [Editor-only explorer and file navigation](completed/78_editor_only_explorer_navigation.md) | 77 | Complete |
 | 79 | [Analysis and Editor UX acceptance](completed/79_analysis_editor_ux_acceptance.md) | 75–78 | Complete |
+| 80 | [Compact semantic Desktop controls](80_desktop_compact_semantic_controls.md) | 79 | Pending |
+| 81 | [Exclusive no-project landing state](81_desktop_no_project_landing.md) | 80 | Pending |
+| 82 | [Technical metadata and copy simplification](82_desktop_metadata_copy_simplification.md) | 81 | Pending |
+| 83 | [Workspace density and visual-priority polish](83_desktop_workspace_density_polish.md) | 82 | Pending |
+| 84 | [Desktop UX refinement acceptance](84_desktop_ux_refinement_acceptance.md) | 80–83 | Pending |
 
 ## Delivery boundaries
 
@@ -107,10 +112,16 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 - Tasks 76–78 implement the Analysis summary, failures-only results, Editor-only chrome,
   and consistent file navigation.
 - Task 79 completes regression, responsive, documentation, and commit-history acceptance.
+- Task 80 installs the compact semantic action and single-line input foundation.
+- Task 81 makes the no-project landing state exclusive and gates non-project shortcuts.
+- Task 82 removes routine counts, revisions, hashes, and redundant explanatory copy.
+- Task 83 consolidates status, filters, stage navigation, and responsive action groups.
+- Task 84 completes regression, accessibility, documentation, and visual acceptance.
 
 One implementation agent owns one ready task at a time. Read-only research or review
-agents may work in parallel, but shared-worktree writers must not overlap. Tasks 75–79
-execute strictly in numeric order using [`PROMPT_EXECUTE_ALL_TASKS.md`](PROMPT_EXECUTE_ALL_TASKS.md)
-and require exactly one reviewed commit per task.
+agents may work in parallel, but shared-worktree writers must not overlap. The current
+Tasks 80–84 execute strictly in numeric order using
+[`PROMPT_EXECUTE_ALL_TASKS.md`](PROMPT_EXECUTE_ALL_TASKS.md). The execution prompt must
+post a user-facing start and completion commentary update for every task.
 No task may introduce direct source editing, autonomous multi-file edits, silent
 writes, automatic commits, or background agents that mutate a project.

@@ -59,6 +59,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     var remoteProviderConfirmed by remember { mutableStateOf(false) }
     var remoteProvider by remember { mutableStateOf(false) }
     var activeEditorStage by remember { mutableStateOf(EditorStage.Target) }
+    var editorSurface by remember { mutableStateOf(EditorSurface.Source) }
     val chatFocusRequester = remember { FocusRequester() }
     val draftFocusRequester = remember { FocusRequester() }
 
@@ -267,9 +268,14 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                 .onFailure { update(DesktopEvent.Failed(it.message ?: "Re-analysis failed")) }
         }
     }
-    fun selectFile(path: String, editorTarget: EditorNavigationTarget? = null, preparedFixRequest: String? = null) {
+    fun selectFile(
+        path: String,
+        editorTarget: EditorNavigationTarget? = null,
+        preparedFixRequest: String? = null,
+    ) {
         chatJob?.cancel()
         draftValidationJob?.cancel()
+        editorSurface = EditorSurface.Source
         workflow.synchronize(appState)
         val request = workflow.beginFileLoad(path) ?: return
         appState = workflow.state
@@ -301,7 +307,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                             .onFailure { workflow.optionalLoadFailed(loadedRequest) }
                     }
                 }
-                .onFailure { if (workflow.fileFailed(request, it.message ?: "File load failed")) appState = workflow.state }
+            .onFailure { if (workflow.fileFailed(request, it.message ?: "File load failed")) appState = workflow.state }
         }
     }
     fun openFileInEditor(
@@ -361,6 +367,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                 val analysis = withContext(Dispatchers.IO) { runInterruptible { api.analyze(file.path, project.projectRevision, refresh, remoteProviderConfirmed) } }
                 if (workflow.analysisCompleted(requestId, requestIdentity, analysis)) {
                     appState = workflow.state
+                    editorSurface = EditorSurface.FileAnalysis
                     update(DesktopEvent.Status("Summary ${analysis.status}"))
                 }
             } catch (_: CancellationException) {
@@ -594,6 +601,8 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         workspaceCounts = workspaceCounts(appState),
         editorFlow = editorFlow,
         onEditorStage = { activeEditorStage = it },
+        editorSurface = editorSurface,
+        onEditorSurface = { editorSurface = it },
         onFocusChat = { focusDraftControl(chatFocusRequester) },
         onFocusDraft = { focusDraftControl(draftFocusRequester) },
         analysisInProgress = analysisJob != null,

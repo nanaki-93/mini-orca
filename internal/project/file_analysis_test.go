@@ -85,6 +85,26 @@ func TestFileAnalysisCacheInvalidatesOnlyChangedInputs(t *testing.T) {
 	}
 }
 
+func TestFileAnalysisCacheAllowsProviderSelectedModel(t *testing.T) {
+	root := t.TempDir()
+	writeIndexFixture(t, root, "main.go", "package main\nfunc Run() {}\n")
+	cache, err := NewFileAnalysisCache(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := analysisCacheInput("main.go", "sha256:one")
+	input.Model = ""
+	analysis := newFreshAnalysis(input)
+	analysis.Model = "provider-selected-model"
+	if err := cache.Store(analysis); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := cache.Load(input)
+	if err != nil || loaded.Status != AnalysisStatusFresh {
+		t.Fatalf("provider-selected analysis = %+v, %v; want fresh", loaded, err)
+	}
+}
+
 func TestFileAnalysisCacheInvalidatesWhenPolicyRulesChange(t *testing.T) {
 	root := t.TempDir()
 	writeIndexFixture(t, root, "main.go", "package main\nfunc Run() {}\n")

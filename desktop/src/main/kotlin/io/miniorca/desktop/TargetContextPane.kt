@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Button
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -33,9 +32,9 @@ internal fun TargetContextPane(
                 Text("${file.language} · ${formatBytes(file.sizeBytes)} · ${file.lineCount} lines · hash ${file.contentHash.take(12)}", color = SecondaryText, fontSize = 11.sp)
                 Text("Analysis freshness: ${analysis?.status?.ifBlank { "not analyzed" } ?: "not analyzed"}", color = SecondaryText, fontSize = 11.sp)
                 Row(Modifier.padding(top = 8.dp)) {
-                    Button(onClick = onAnalyze, enabled = !remoteProvider || remoteConfirmed) { Text("Analyze") }
+                    FocusFlowButton(onClick = onAnalyze, enabled = !remoteProvider || remoteConfirmed, primary = true) { Text("Analyze") }
                     Spacer(Modifier.width(6.dp))
-                    Button(onClick = onRefresh, enabled = !remoteProvider || remoteConfirmed) { Text("Refresh") }
+                    FocusFlowButton(onClick = onRefresh, enabled = !remoteProvider || remoteConfirmed) { Text("Refresh") }
                 }
             }
             RemoteProviderConfirmation(remoteProvider, remoteConfirmed, onRemoteConfirmed)
@@ -43,14 +42,14 @@ internal fun TargetContextPane(
         FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 10.dp), raised = true) {
             SectionLabel("DECLARATION SCOPE")
             ChatEditMode.entries.forEach { option ->
-                Button(onClick = { onMode(option) }, modifier = Modifier.padding(top = 6.dp), enabled = selected != null) { Text(option.label) }
+                FocusFlowButton(onClick = { onMode(option) }, primary = option == mode, modifier = Modifier.padding(top = 6.dp), enabled = selected != null) { Text(option.label) }
             }
             if (mode == ChatEditMode.CreateSymbol) {
                 OutlinedTextField(newSymbol, onNewSymbol, label = { Text("New Go function or type name") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
             } else {
                 Text("Select an exact, atomic Go function or type.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
                 symbols.filter { it.kind.lowercase() in setOf("function", "type") }.forEach { symbol ->
-                    Button(onClick = { onSelectSymbol(symbol) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    FocusFlowButton(onClick = { onSelectSymbol(symbol) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                         Text("${symbol.kind} · ${symbol.name} · ${symbol.confidence} · ${if (symbol.atomicTarget) "atomic" else "not atomic"}", fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                     }
                 }

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -21,18 +20,51 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+internal enum class EditorSurface(val label: String) {
+    Source("Source / diff"),
+    FileAnalysis("File analysis"),
+}
+
 @Composable
 internal fun EditorWorkspace(
     flow: EditorFlowUiState,
     onStageSelected: (EditorStage) -> Unit,
+    surface: EditorSurface,
+    onSurfaceSelected: (EditorSurface) -> Unit,
     canvas: @Composable () -> Unit,
+    analysis: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().background(AppBackground)) {
         EditorStageBar(flow, onStageSelected)
-        canvas()
+        EditorSurfaceBar(surface, onSurfaceSelected)
+        if (surface == EditorSurface.FileAnalysis) analysis() else canvas()
     }
 }
+
+@Composable
+private fun EditorSurfaceBar(surface: EditorSurface, onSurfaceSelected: (EditorSurface) -> Unit) {
+    Row(Modifier.fillMaxWidth().background(Panel).padding(horizontal = 14.dp, vertical = 7.dp)) {
+        EditorSurface.entries.forEachIndexed { index, option ->
+            if (index > 0) Spacer(Modifier.width(6.dp))
+            val current = option == surface
+            FocusFlowButton(
+                onClick = { onSurfaceSelected(option) },
+                primary = current,
+                modifier = Modifier.weight(1f).semantics {
+                    selected = current
+                    contentDescription = editorSurfaceSemanticsLabel(option, current)
+                },
+            ) { Text(editorSurfaceLabel(option, current), fontSize = 11.sp, fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal) }
+        }
+    }
+}
+
+internal fun editorSurfaceLabel(surface: EditorSurface, current: Boolean): String =
+    if (current) "${surface.label} · Current" else surface.label
+
+internal fun editorSurfaceSemanticsLabel(surface: EditorSurface, current: Boolean): String =
+    "${editorSurfaceLabel(surface, current)} view"
 
 @Composable
 internal fun EditorStageBar(flow: EditorFlowUiState, onStageSelected: (EditorStage) -> Unit) {
@@ -42,9 +74,10 @@ internal fun EditorStageBar(flow: EditorFlowUiState, onStageSelected: (EditorSta
             flow.stages.forEachIndexed { index, stage ->
                 if (index > 0) Spacer(Modifier.width(6.dp))
                 val current = stage.stage == flow.activeStage
-                Button(
+                FocusFlowButton(
                     onClick = { onStageSelected(stage.stage) },
                     enabled = stage.unlocked,
+                    primary = current,
                     colors = ButtonDefaults.buttonColors(
                         backgroundColor = if (current) Accent else Card,
                         contentColor = if (current) OnAccent else PrimaryText,

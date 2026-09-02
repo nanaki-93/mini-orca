@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Button
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -40,9 +39,9 @@ internal fun DraftContextPane(
             } else Text("The first explicit message will create a conversation bound to this exact target.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
             OutlinedTextField(message, onMessage, enabled = !sending && target != null, label = { Text("Message") }, placeholder = { Text("Describe one declaration change") }, minLines = 3, modifier = Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(chatFocus))
             RemoteProviderConfirmation(remoteProvider, remoteConfirmed, onRemoteConfirmed)
-            Button(onClick = onInspectContext, enabled = selected != null && !sending, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Inspect context") }
-            if (sending) Button(onClick = onCancel, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Cancel request") }
-            else Button(onClick = onSend, enabled = target != null && message.isNotBlank() && (!remoteProvider || remoteConfirmed), modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Send message") }
+            FocusFlowButton(onClick = onInspectContext, enabled = selected != null && !sending, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Inspect context") }
+            if (sending) FocusFlowButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Cancel request") }
+            else FocusFlowButton(onClick = onSend, enabled = target != null && message.isNotBlank() && (!remoteProvider || remoteConfirmed), primary = true, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Send message") }
             Text("Sending creates a preview-only declaration draft. It never writes project source.", color = SecondaryText, fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
         }
         if (draft != null && editor != null && chatDraftMatchesSession(draft, session)) DraftEditorCard(editor, draftFocus, onDraftDeclaration, onDraftImports, onValidateDraft)
@@ -59,7 +58,7 @@ private fun DraftEditorCard(editor: EditableDraftState, draftFocus: FocusRequest
         OutlinedTextField(editor.imports.joinToString(", "), { value -> onImports(value.split(',').map { it.trim() }.filter { it.isNotBlank() }) }, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), label = { Text("Required imports") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
         editor.diagnostics.forEach { Text("${it.code}: ${it.message}", color = Error, fontSize = 10.sp) }
         Text(draftEditorStatusMessage(editor.status), color = draftEditorStatusColor(editor.status), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
-        Button(onClick = onValidate, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text(if (editor.status == DraftEditorStatus.Validating) "Validating declaration…" else "Validate draft") }
+        FocusFlowButton(onClick = onValidate, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), primary = true, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text(if (editor.status == DraftEditorStatus.Validating) "Validating declaration…" else "Validate draft") }
     }
 }
 

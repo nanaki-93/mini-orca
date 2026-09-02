@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +21,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -72,6 +79,7 @@ internal fun ExplorerPane(
 @Composable
 private fun ExplorerItem(row: ExplorerRow, selected: Boolean, expanded: Boolean, onActivate: () -> Unit) {
     val description = explorerRowDescription(row, selected, expanded)
+    val nodeColor = explorerNodeColor(row, selected)
     Row(
         modifier = Modifier.fillMaxWidth()
             .semantics {
@@ -84,14 +92,107 @@ private fun ExplorerItem(row: ExplorerRow, selected: Boolean, expanded: Boolean,
             .padding(start = (8 + row.depth * 14).dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(explorerRoleLabel(row, expanded), color = if (selected) CyanAccent else FaintText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        ExplorerNodeIcon(row, expanded, nodeColor)
+        Spacer(Modifier.width(6.dp))
+        Text(explorerRoleLabel(row, expanded), color = nodeColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(7.dp))
-        Text(row.name, color = if (selected) PrimaryText else SecondaryText, fontFamily = FontFamily.Monospace, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            row.name,
+            color = if (selected || row.directory) PrimaryText else SecondaryText,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp,
+            fontWeight = if (row.directory) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (!row.directory) {
             Text(row.language.ifBlank { "Text" }.uppercase(), color = FaintText, fontSize = 9.sp, maxLines = 1)
             Spacer(Modifier.width(6.dp))
             StatusBadge(row.analysisStatus)
         }
+    }
+}
+
+private fun explorerNodeColor(row: ExplorerRow, selected: Boolean): Color = when {
+    row.directory -> Warning
+    selected -> CyanAccent
+    else -> SecondaryText
+}
+
+@Composable
+private fun ExplorerNodeIcon(row: ExplorerRow, expanded: Boolean, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (row.directory) {
+            ExplorerDisclosureIcon(expanded)
+        } else {
+            Spacer(Modifier.width(12.dp))
+        }
+        Spacer(Modifier.width(4.dp))
+        if (row.directory) ExplorerFolderIcon(color) else ExplorerFileIcon(color)
+    }
+}
+
+@Composable
+private fun ExplorerDisclosureIcon(expanded: Boolean) {
+    Canvas(Modifier.size(12.dp)) {
+        val strokeWidth = 1.5.dp.toPx()
+        val path = Path().apply {
+            if (expanded) {
+                moveTo(size.width * 0.18f, size.height * 0.36f)
+                lineTo(size.width * 0.5f, size.height * 0.68f)
+                lineTo(size.width * 0.82f, size.height * 0.36f)
+            } else {
+                moveTo(size.width * 0.36f, size.height * 0.18f)
+                lineTo(size.width * 0.68f, size.height * 0.5f)
+                lineTo(size.width * 0.36f, size.height * 0.82f)
+            }
+        }
+        drawPath(path, FaintText, style = Stroke(strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+@Composable
+private fun ExplorerFolderIcon(color: Color) {
+    Canvas(Modifier.size(17.dp)) {
+        val strokeWidth = 1.5.dp.toPx()
+        val path = Path().apply {
+            moveTo(size.width * 0.08f, size.height * 0.3f)
+            lineTo(size.width * 0.36f, size.height * 0.3f)
+            lineTo(size.width * 0.48f, size.height * 0.14f)
+            lineTo(size.width * 0.86f, size.height * 0.14f)
+            lineTo(size.width * 0.94f, size.height * 0.3f)
+            lineTo(size.width * 0.88f, size.height * 0.86f)
+            lineTo(size.width * 0.12f, size.height * 0.86f)
+            close()
+        }
+        drawPath(path, color.copy(alpha = 0.18f))
+        drawPath(path, color, style = Stroke(strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+@Composable
+private fun ExplorerFileIcon(color: Color) {
+    Canvas(Modifier.size(17.dp)) {
+        val strokeWidth = 1.5.dp.toPx()
+        val left = size.width * 0.18f
+        val top = size.height * 0.08f
+        val right = size.width * 0.82f
+        val bottom = size.height * 0.92f
+        val fold = size.width * 0.57f
+        val foldBottom = size.height * 0.34f
+        val path = Path().apply {
+            moveTo(left, top)
+            lineTo(fold, top)
+            lineTo(right, foldBottom)
+            lineTo(right, bottom)
+            lineTo(left, bottom)
+            close()
+        }
+        drawPath(path, color.copy(alpha = 0.1f))
+        drawPath(path, color, style = Stroke(strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawLine(color, Offset(fold, top), Offset(fold, foldBottom), strokeWidth, cap = StrokeCap.Round)
+        drawLine(color, Offset(fold, foldBottom), Offset(right, foldBottom), strokeWidth, cap = StrokeCap.Round)
     }
 }
 
