@@ -90,6 +90,7 @@ internal data class AnalyzeAllPresentation(
     val statusLabel: String get() = run.statusLabel
     val statusDetail: String get() = "Coverage: ${coverageSummary(coverage)}. ${run.statusDetail}"
     val controls: String get() = run.controls
+    val noErrorsMessage: String get() = "No analysis errors in this run."
 }
 
 internal fun analyzeAllPresentation(job: AnalyzeAllJob?, coverage: AnalysisCoverage?): AnalyzeAllPresentation {
