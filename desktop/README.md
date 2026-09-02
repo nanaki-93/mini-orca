@@ -11,6 +11,17 @@ The client uses `http://localhost:9090` by default. Set `MINI_ORCA_URL` to point
 
 The Editor workflow is Go-first: exact replace/create declaration drafts receive composition and focused validation. Other language views remain analysis-only until equivalent validators are available.
 
+## Opening a project
+
+Mini-Orca starts on a dedicated landing state. It shows only the product identity, an
+**Open project** action, and concise opening or retry feedback. Press `Cmd/Ctrl+O` to
+open the same project chooser from the keyboard. Until a project opens, workspace,
+file, symbol, draft, palette, and project-management shortcuts are unavailable.
+
+After import, the top bar shows the project name and one compact text-labeled connection
+state. Workspace navigation is deliberately concise: Summary, Analysis, Bugs, and
+Editor do not show inventory counters or implementation identifiers.
+
 ## Focused workflow
 
 Summary presents deterministic project facts and optional structured analysis.
@@ -26,9 +37,18 @@ A manual draft edit always creates a new revision and invalidates the prior
 validation and check results. Re-run both before Apply becomes available. The
 source and composed diff panes are intentionally selectable but read-only.
 
+## Compact controls and action meaning
+
+Buttons and single-line fields use a shared compact size while retaining text labels,
+keyboard focus, and disabled state. Violet identifies the dominant action; cyan is for
+navigation; mint indicates a positive guarded transition; amber signals attention or
+Undo; rose signals cancellation or destructive interruption; neutral controls support
+secondary actions. Color reinforces the visible label and status text rather than
+replacing them.
+
 ## Desktop shell smoke check
 
-With a project containing a few nested directories (or a larger fixture), import it and verify Summary, Analysis, Bugs, and Editor navigation. Summary, Analysis, and Bugs use the full workspace canvas without Explorer or Context panes. In Analysis, confirm coverage and current/last-run totals are visible, only analysis errors are listed, and no result opens a file. In Editor, filtering keeps matching paths selected; disclosure controls expand and collapse; pane dividers retain their widths after restarting the app; and the source is selectable and read-only. A chat proposal stays bound to the selected file. Edit only the declaration draft, validate it, run checks, confirm Apply names the file and symbol, then use Undo. Re-analyze and verify old drafts become stale while textual freshness badges update.
+With a project containing a few nested directories (or a larger fixture), import it and verify Summary, Analysis, Bugs, and Editor navigation. Summary, Analysis, and Bugs use the full workspace canvas without Explorer or Context panes. In Analysis, confirm coverage and current/last-run totals are visible, only analysis errors are listed, and no result opens a file. Confirm the Analyze-all limits share a compact row and related actions wrap rather than clip when space is narrow. In Bugs, use the Filters disclosure to reveal advanced fields only when needed. In Editor, filtering keeps matching paths selected; disclosure controls expand and collapse; pane dividers retain their widths after restarting the app; and the source is selectable and read-only. A chat proposal stays bound to the selected file. Edit only the declaration draft, validate it, run checks, confirm Apply names the file and symbol, then use Undo. Re-analyze and verify old drafts become stale while textual freshness badges update.
 
 ## Keyboard and accessibility checklist
 

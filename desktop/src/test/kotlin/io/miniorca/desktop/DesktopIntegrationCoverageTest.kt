@@ -8,6 +8,28 @@ import kotlin.test.assertTrue
 
 /** Deterministic cross-boundary smoke coverage; no daemon, model, or UI window is required. */
 class DesktopIntegrationCoverageTest {
+    @Test fun projectOpenCancelFailureAndSuccessKeepTheLandingTransitionExplicit() {
+        val controller = DesktopWorkflowController()
+        val beforeChooserCancel = controller.state
+
+        assertEquals(beforeChooserCancel, controller.state)
+        assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(controller.state))
+
+        val failedRequest = controller.beginProjectLoad()
+        assertTrue(controller.state.loading)
+        assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(controller.state))
+        assertTrue(controller.isCurrentProjectRequest(failedRequest))
+        controller.dispatch(DesktopEvent.Failed("Import failed"))
+        assertTrue(!controller.state.loading)
+        assertEquals("Import failed", controller.state.error)
+        assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(controller.state))
+
+        val successfulRequest = controller.beginProjectLoad()
+        assertTrue(controller.projectLoaded(successfulRequest, project(), ProjectIndex("project", "revision")))
+        assertTrue(!controller.state.loading)
+        assertEquals(DesktopShellMode.ProjectWorkspace, desktopShellMode(controller.state))
+    }
+
     @Test fun summaryToBugsToBoundChatToEditedDraftReviewNeverEscapesTheOpenFile() {
         val controller = loadedController()
         controller.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Summary))

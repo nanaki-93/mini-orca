@@ -4,22 +4,35 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonColors
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Shapes
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
+import androidx.compose.material.TextFieldColors
+import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.Typography
 import androidx.compose.material.darkColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -27,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -60,6 +74,49 @@ internal object MiniOrcaSpacing {
     val section = 16.dp
 }
 
+internal enum class ActionGroupLayout { Horizontal, Vertical }
+
+internal fun actionGroupLayout(widthDp: Float, minimumHorizontalWidthDp: Float = 460f): ActionGroupLayout =
+    if (widthDp >= minimumHorizontalWidthDp) ActionGroupLayout.Horizontal else ActionGroupLayout.Vertical
+
+@Composable
+internal fun ResponsiveActionGroup(
+    modifier: Modifier = Modifier,
+    minimumHorizontalWidth: androidx.compose.ui.unit.Dp = 460.dp,
+    content: @Composable () -> Unit,
+) {
+    BoxWithConstraints(modifier) {
+        if (actionGroupLayout(maxWidth.value, minimumHorizontalWidth.value) == ActionGroupLayout.Horizontal) {
+            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact), content = { content() })
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact), content = { content() })
+        }
+    }
+}
+
+@Composable
+internal fun ResponsiveFieldPair(
+    modifier: Modifier = Modifier,
+    minimumHorizontalWidth: androidx.compose.ui.unit.Dp = 420.dp,
+    first: @Composable (Modifier) -> Unit,
+    second: @Composable (Modifier) -> Unit,
+) {
+    BoxWithConstraints(modifier) {
+        if (actionGroupLayout(maxWidth.value, minimumHorizontalWidth.value) == ActionGroupLayout.Horizontal) {
+            androidx.compose.foundation.layout.Row {
+                first(Modifier.weight(1f))
+                Spacer(Modifier.width(MiniOrcaSpacing.compact))
+                second(Modifier.weight(1f))
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
+                first(Modifier.fillMaxWidth())
+                second(Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
 internal val MiniOrcaShapes = Shapes(
     small = RoundedCornerShape(8.dp),
     medium = RoundedCornerShape(10.dp),
@@ -75,44 +132,126 @@ internal val MiniOrcaTypography = Typography(
     caption = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
 )
 
+internal enum class ActionTone {
+    Primary,
+    Navigation,
+    Positive,
+    Attention,
+    Destructive,
+    Neutral,
+}
+
+internal enum class ButtonDensity {
+    Standard,
+    Toolbar,
+}
+
+internal data class ActionToneStyle(
+    val background: Color,
+    val pressedBackground: Color,
+    val selectedBackground: Color,
+    val content: Color,
+    val disabledBackground: Color,
+    val disabledContent: Color,
+    val border: Color,
+)
+
+internal fun actionToneStyle(tone: ActionTone): ActionToneStyle = when (tone) {
+    ActionTone.Primary -> ActionToneStyle(Accent, Accent.copy(alpha = 0.82f), Accent.copy(alpha = 0.92f), OnAccent, Accent.copy(alpha = 0.18f), FaintText, Accent.copy(alpha = 0.72f))
+    ActionTone.Navigation -> ActionToneStyle(Card, CyanAccent.copy(alpha = 0.25f), CyanAccent.copy(alpha = 0.26f), CyanAccent, Panel, FaintText, CyanAccent.copy(alpha = 0.72f))
+    ActionTone.Positive -> ActionToneStyle(Card, Success.copy(alpha = 0.25f), Success.copy(alpha = 0.28f), Success, Panel, FaintText, Success.copy(alpha = 0.72f))
+    ActionTone.Attention -> ActionToneStyle(Card, Warning.copy(alpha = 0.25f), Warning.copy(alpha = 0.28f), Warning, Panel, FaintText, Warning.copy(alpha = 0.72f))
+    ActionTone.Destructive -> ActionToneStyle(Card, Error.copy(alpha = 0.25f), Error.copy(alpha = 0.28f), Error, Panel, FaintText, Error.copy(alpha = 0.72f))
+    ActionTone.Neutral -> ActionToneStyle(Card, StrongSurface, StrongSurface, PrimaryText, Panel, FaintText, Border.copy(alpha = 0.9f))
+}
+
+internal data class ButtonDensityStyle(val height: androidx.compose.ui.unit.Dp, val contentPadding: PaddingValues)
+
+internal fun buttonDensityStyle(density: ButtonDensity): ButtonDensityStyle = when (density) {
+    ButtonDensity.Standard -> ButtonDensityStyle(35.dp, PaddingValues(horizontal = 10.dp, vertical = 4.dp))
+    ButtonDensity.Toolbar -> ButtonDensityStyle(31.dp, PaddingValues(horizontal = 8.dp, vertical = 4.dp))
+}
+
 internal object MiniOrcaButtonDefaults {
     val shape = RoundedCornerShape(8.dp)
-    val contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
 
     @Composable
-    fun colors(primary: Boolean): ButtonColors = ButtonDefaults.buttonColors(
-        backgroundColor = if (primary) Accent else Card,
-        contentColor = if (primary) OnAccent else PrimaryText,
-        disabledBackgroundColor = if (primary) Accent.copy(alpha = 0.18f) else Panel,
-        disabledContentColor = FaintText,
-    )
+    fun colors(tone: ActionTone, selected: Boolean, pressed: Boolean): ButtonColors {
+        val style = actionToneStyle(tone)
+        return ButtonDefaults.buttonColors(
+            backgroundColor = when {
+                pressed -> style.pressedBackground
+                selected -> style.selectedBackground
+                else -> style.background
+            },
+            contentColor = style.content,
+            disabledBackgroundColor = style.disabledBackground,
+            disabledContentColor = style.disabledContent,
+        )
+    }
 
-    fun border(primary: Boolean): BorderStroke = BorderStroke(
-        1.dp,
-        if (primary) Accent.copy(alpha = 0.72f) else Border.copy(alpha = 0.9f),
-    )
+    fun border(tone: ActionTone): BorderStroke = BorderStroke(1.dp, actionToneStyle(tone).border)
 }
+
+@Composable
+internal fun CompactSingleLineField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: @Composable (() -> Unit),
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    placeholder: @Composable (() -> Unit)? = null,
+    textStyle: TextStyle = TextStyle(fontSize = 12.sp),
+) {
+    androidx.compose.foundation.layout.Box(modifier.heightIn(min = 44.dp, max = 46.dp)) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            label = label,
+            placeholder = placeholder,
+            singleLine = true,
+            textStyle = textStyle,
+            colors = compactTextFieldColors(),
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun compactTextFieldColors(): TextFieldColors = TextFieldDefaults.outlinedTextFieldColors(
+    textColor = PrimaryText,
+    focusedBorderColor = CyanAccent,
+    unfocusedBorderColor = Border,
+    disabledBorderColor = Border.copy(alpha = 0.55f),
+    focusedLabelColor = CyanAccent,
+    unfocusedLabelColor = SecondaryText,
+    cursorColor = CyanAccent,
+)
 
 @Composable
 internal fun FocusFlowButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    primary: Boolean = false,
-    colors: ButtonColors? = null,
-    border: BorderStroke? = null,
-    contentPadding: PaddingValues = MiniOrcaButtonDefaults.contentPadding,
+    tone: ActionTone = ActionTone.Neutral,
+    density: ButtonDensity = ButtonDensity.Standard,
+    selected: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val densityStyle = buttonDensityStyle(density)
     Button(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.height(densityStyle.height),
         enabled = enabled,
+        interactionSource = interactionSource,
         elevation = ButtonDefaults.elevation(defaultElevation = 0.dp, pressedElevation = 1.dp, disabledElevation = 0.dp),
         shape = MiniOrcaButtonDefaults.shape,
-        border = border ?: MiniOrcaButtonDefaults.border(primary),
-        colors = colors ?: MiniOrcaButtonDefaults.colors(primary),
-        contentPadding = contentPadding,
+        border = MiniOrcaButtonDefaults.border(tone),
+        colors = MiniOrcaButtonDefaults.colors(tone, selected, pressed),
+        contentPadding = densityStyle.contentPadding,
         content = content,
     )
 }

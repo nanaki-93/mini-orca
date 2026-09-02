@@ -164,15 +164,15 @@ private fun AnalyzeAllJob?.statusLabel() = when (this?.status.normalizedAnalyzeA
 
 private fun AnalyzeAllJob?.statusDetail() = when (this?.status.normalizedAnalyzeAllStatus()) {
     null -> "No Analyze-all job is available (204 No Content). Import and reindex never start one automatically."
-    "running" -> "Analyze-all is processing candidates at project revision ${this?.projectRevision.orEmpty().ifBlank { "current" }}. Run counts and analysis errors update as work completes."
+    "running" -> "Analyze-all is processing candidates. Run counts and analysis errors update as work completes."
     "pausing" -> "Analyze-all is pausing; the run summary and analysis errors remain visible."
     "canceling" -> "Analyze-all is canceling; the run summary and analysis errors remain visible."
     "paused" -> "Analyze-all is paused. Resume explicitly to process the remaining candidates."
-    "completed" -> "Analyze-all completed for this project revision. Start a new run to refresh coverage."
+    "completed" -> "Analyze-all completed. Start a new run to refresh coverage."
     "canceled" -> "Analyze-all was canceled. Its run summary and recorded analysis errors remain visible; start a new explicit run to continue."
-    "failed" -> "Analyze-all failed for this revision. Inspect the analysis errors and retry explicitly."
-    "stale" -> "Analyze-all belongs to an earlier project revision and cannot resume. Start a new run."
-    else -> "Analyze-all is ${this?.status.orEmpty().ifBlank { "in an unknown state" }}; start a new run for the current revision."
+    "failed" -> "Analyze-all failed. Inspect the analysis errors and retry explicitly."
+    "stale" -> "Analyze-all is out of date and cannot resume. Start a new run."
+    else -> "Analyze-all is ${this?.status.orEmpty().ifBlank { "in an unknown state" }}; start a new run for the current project."
 }
 
 private fun AnalyzeAllJob?.controls() = when (this?.status.normalizedAnalyzeAllStatus()) {

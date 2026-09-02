@@ -9,10 +9,10 @@ data class BugsFilters(
     val lifecycle: String = "",
 )
 
-enum class FindingClassification(val sectionLabel: String, val description: String) {
-    Verified("VERIFIED / TOOL-REPORTED", "Reported by an isolated parser, vet, or test scan."),
-    Suggested("AI SUGGESTIONS", "Model interpretation; review before treating it as a defect."),
-    Unclassified("UNCLASSIFIED FINDINGS", "Unexpected finding confidence; it is not presented as verified."),
+enum class FindingClassification(val sectionLabel: String) {
+    Verified("VERIFIED / TOOL-REPORTED"),
+    Suggested("AI SUGGESTIONS"),
+    Unclassified("UNCLASSIFIED FINDINGS"),
 }
 
 data class FindingLifecycleAction(val label: String, val status: String)
@@ -31,6 +31,14 @@ fun filterFindings(findings: List<UnifiedFinding>, filters: BugsFilters): List<U
         matchesFindingField(finding.severity, filters.severity) &&
         matchesFindingField(finding.freshness, filters.freshness) &&
         matchesFindingField(finding.status, filters.lifecycle)
+}
+
+internal fun activeBugsFilters(filters: BugsFilters): List<String> = buildList {
+    filters.query.trim().takeIf { it.isNotBlank() }?.let { add("Search") }
+    filters.source.trim().takeIf { it.isNotBlank() }?.let { add("Source: $it") }
+    filters.severity.trim().takeIf { it.isNotBlank() }?.let { add("Severity: $it") }
+    filters.freshness.trim().takeIf { it.isNotBlank() }?.let { add("Freshness: $it") }
+    filters.lifecycle.trim().takeIf { it.isNotBlank() }?.let { add("Lifecycle: $it") }
 }
 
 fun findingLifecycleActions(finding: UnifiedFinding): List<FindingLifecycleAction> = when (finding.status.lowercase()) {
@@ -54,7 +62,7 @@ internal fun findingProvenanceLabel(finding: UnifiedFinding): String =
     "${classifyFinding(finding).sectionLabel} · source ${finding.source.ifBlank { "unknown" }} · confidence ${finding.confidence.ifBlank { "unknown" }}"
 
 internal fun findingStatusLabel(finding: UnifiedFinding): String =
-    "${finding.status.ifBlank { "unknown" }} · ${finding.freshness.ifBlank { "unknown" }} · revision ${finding.projectRevision.ifBlank { "unknown" }}"
+    "${finding.status.ifBlank { "unknown" }} · ${finding.freshness.ifBlank { "unknown" }}"
 
 private fun matchesFindingQuery(finding: UnifiedFinding, query: String): Boolean {
     val normalized = query.trim()

@@ -14,7 +14,6 @@ class EditorBriefTest {
         assertEquals("internal/main.go", brief.path)
         assertEquals("Go", brief.language)
         assertEquals(42, brief.lineCount)
-        assertEquals("sha256:base", brief.contentHash)
         assertEquals("not analyzed", brief.freshness)
         assertTrue(brief.purpose.isBlank())
     }

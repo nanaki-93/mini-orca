@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.AlertDialog
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
@@ -38,7 +37,7 @@ internal fun CommandPaletteDialog(
         title = { Text(title) },
         text = {
             Column {
-                OutlinedTextField(value = query, onValueChange = onQuery, singleLine = true, label = { Text("Filter") }, modifier = Modifier.fillMaxWidth().focusRequester(filterFocusRequester))
+                CompactSingleLineField(value = query, onValueChange = onQuery, label = { Text("Filter") }, modifier = Modifier.fillMaxWidth().focusRequester(filterFocusRequester))
                 Spacer(Modifier.height(8.dp))
                 when (mode) {
                     PaletteMode.Files -> if (filteredFiles.isEmpty()) SystemStateMessage("No file matches", "Change the filter to search indexed relative paths.") else filteredFiles.forEach { file ->
@@ -53,7 +52,7 @@ internal fun CommandPaletteDialog(
                 }
             }
         },
-        confirmButton = { FocusFlowButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { FocusFlowButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") } },
     )
     LaunchedEffect(Unit) { filterFocusRequester.requestFocus() }
 }
@@ -63,5 +62,6 @@ private fun PaletteEntry(description: String, label: String, onClick: () -> Unit
     FocusFlowButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().padding(top = 3.dp).semantics { contentDescription = description },
+        tone = ActionTone.Navigation,
     ) { Text(label, fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
 }

@@ -40,6 +40,14 @@ class BugsWorkspaceStateTest {
         assertEquals(findings.drop(1), filterFindings(findings, BugsFilters(lifecycle = "dismissed", freshness = "stale")))
     }
 
+    @Test fun activeFiltersStayVisibleWhenAdvancedControlsAreCollapsed() {
+        assertEquals(
+            listOf("Search", "Source: vet", "Lifecycle: open"),
+            activeBugsFilters(BugsFilters(query = "error", source = "vet", lifecycle = "open")),
+        )
+        assertTrue(activeBugsFilters(BugsFilters()).isEmpty())
+    }
+
     @Test fun triageAndPrepareFixRemainRevisionAndLocationSafe() {
         assertEquals(listOf(FindingLifecycleAction("Mark fixed", "fixed"), FindingLifecycleAction("Dismiss", "dismissed")), findingLifecycleActions(verified))
         assertEquals(listOf(FindingLifecycleAction("Reopen", "open")), findingLifecycleActions(suggested))
@@ -52,10 +60,11 @@ class BugsWorkspaceStateTest {
         assertEquals(null, findingNavigationTarget(verified.copy(location = FindingLocation("other.go")), index))
     }
 
-    @Test fun findingPresentationLabelsExposeProvenanceLocationLifecycleFreshnessAndRevision() {
+    @Test fun findingPresentationLabelsExposeProvenanceLocationLifecycleAndFreshness() {
         assertTrue(findingProvenanceLabel(verified).contains("VERIFIED / TOOL-REPORTED"))
         assertTrue(findingProvenanceLabel(verified).contains("source vet"))
-        assertTrue(findingStatusLabel(verified).contains("open · fresh · revision revision"))
+        assertEquals("open · fresh", findingStatusLabel(verified))
+        assertFalse(findingStatusLabel(verified).contains("revision"))
         assertEquals("main.go:7 · Run", findingLocationLabel(verified))
     }
 

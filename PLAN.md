@@ -2,7 +2,7 @@
 
 Date: 2026-09-02
 
-Status: Approved; implementation pending
+Status: Complete — automated validation passed; manual GUI checks are documented and were not run in this non-interactive session.
 
 Task source: [`tasks/INDEX.md`](tasks/INDEX.md)
 

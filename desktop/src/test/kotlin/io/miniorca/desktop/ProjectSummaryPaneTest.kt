@@ -2,6 +2,7 @@ package io.miniorca.desktop
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ProjectSummaryPaneTest {
@@ -12,7 +13,8 @@ class ProjectSummaryPaneTest {
 
         assertTrue(summary.hasProject)
         assertEquals("go · go.mod", "${summary.projectType} · ${summary.buildMetadata}")
-        assertEquals("4 files · 3 source files · 120 lines", summary.inventory)
+        assertEquals("Go", summary.languages)
+        assertFalse(summary.toString().contains("revision"))
         assertTrue(summary.analysisMessage.contains("Deterministic facts remain available"))
     }
 
@@ -29,7 +31,7 @@ class ProjectSummaryPaneTest {
         val summary = projectSummaryPresentation(overview, null)
 
         assertEquals("stale", summary.analysisStatus)
-        assertTrue(summary.analysisMessage.contains("stale"))
+        assertTrue(summary.analysisMessage.contains("out of date"))
         assertEquals("2 verified · 3 AI suggestions", summary.findings)
         assertTrue(summary.coverage.contains("1 failed"))
     }

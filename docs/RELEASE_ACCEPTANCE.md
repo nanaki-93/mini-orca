@@ -36,42 +36,57 @@ context and findings.
 | File-bound chat, offline/remote confirmation, cancellation, stale sessions, and draft lineage | `go test ./internal/app ./internal/api/handlers -run 'ChatSession|Draft'` |
 | Manual draft edit invalidates old validation/checks; invalid or stale drafts cannot Apply | `go test ./internal/app -run 'DraftLifecycle|DraftValidateCheckApply'` |
 | One-file guarded Apply/Undo, comparison, export, and source-free audit | `go test ./internal/app -run 'Apply|Undo|Compare|Export'` |
-| Analysis coverage/run/error summaries, Editor-only explorer/context panes, responsive drawers, keyboard controls, read-only source/diff, and revision/file guards | `./desktop/gradlew -p desktop test` |
+| Empty landing/open-project transition, shortcut gate, compact semantic controls, concise workspace labels, Bugs filter disclosure, Analyze-all limits, responsive groups, Editor stage semantics, Editor-only explorer/context panes, read-only source/diff, and revision/file guards | `./desktop/gradlew -p desktop test` |
 | Live routes, OpenAPI, API reference, version, and retired browser routes | `go test ./cmd/daemon ./internal/api/handlers` |
 | All supported formatting, unit, race, vet, and desktop checks | `make check` |
 
 ## Manual desktop acceptance
 
-Start the daemon and desktop client with the normal fixture. Complete this exact
-keyboard flow on both a wide layout and a window narrower than 1000dp:
+Start the daemon and desktop client with the normal fixture. First start with no project
+open, then complete this exact keyboard flow on a wide layout, exactly 1000dp, and a
+window narrower than 1000dp:
 
-1. Use `Cmd/Ctrl+1` through `Cmd/Ctrl+4` to visit Summary, Analysis, Bugs, and
+1. With no project open, confirm only product identity, **Open project**, and concise
+   opening/retry feedback are visible. Press `Cmd/Ctrl+O` to open the chooser, cancel
+   it, and confirm no workspace action becomes available. Exercise a failed open when
+   possible and confirm retry stays available. Then open the normal fixture and confirm
+   the landing state is fully replaced by the workspace.
+2. Use `Cmd/Ctrl+1` through `Cmd/Ctrl+4` to visit Summary, Analysis, Bugs, and
    Editor. Confirm labels, selected state, and freshness/confidence/severity
-   text are understandable without color. On wide windows, Summary, Analysis,
+   text are understandable without color. Confirm the top bar has one text-labeled
+   connection state and workspace labels have no numeric inventory counters or raw
+   revision/hash identifiers. On wide windows, Summary, Analysis,
    and Bugs must have no Explorer or Context pane; only Editor has them.
-2. On Summary, inspect deterministic facts and structured analysis. On Analysis,
+3. On Summary, inspect deterministic facts and structured analysis. On Analysis,
    explicitly Start, Pause, Resume, and Cancel Analyze-all; it must not begin on
    import or reindex. Confirm project coverage and current/last-run totals are
    distinct, only failed/error-bearing files are listed with attempts and
-   sanitized errors, and Analysis has no file-opening action. Run an explicit
+   sanitized errors, the file/retry limits share a compact row, and related action
+   buttons wrap rather than clip when narrow. Analysis has no file-opening action. Run an explicit
    verified scan and inspect its separate parser, vet, and test progress.
-3. On Bugs, filter verified findings separately from AI suggestions, change a
+4. On Bugs, confirm only the compact search field is initially visible; use Filters to
+   reveal Source, Severity, Freshness, and Lifecycle. Verify active filters are named
+   in text without a numeric badge. Filter verified findings separately from AI suggestions, change a
    finding triage state, and use Prepare fix only to open the associated file
    and prefill chat. It must not generate or apply a change.
-4. From a non-Editor workspace, use `Cmd/Ctrl+P` to open an indexed file and
+5. From a non-Editor workspace, use `Cmd/Ctrl+P` to open an indexed file and
    confirm it activates Editor with that exact path. In Editor, select `Run` to
    replace it, then repeat with an absent
    `ReleaseNote` type to create it. Confirm the source and composed diff remain
    selectable and read-only and the file/symbol brief remains visible above the
    source, including in the narrow drawer layout.
-5. Open a file-scoped chat session, send one request with `Cmd/Ctrl+Enter`, and
+6. Open a file-scoped chat session, send one request with `Cmd/Ctrl+Enter`, and
    verify a different file cannot be targeted. Edit only the declaration/import
    draft, use `Cmd/Ctrl+Shift+V` to validate and `Cmd/Ctrl+Shift+C` for checks.
    A manual edit must make the old evidence unusable.
-6. Confirm Apply names the expected file and symbol. Apply only after the fresh
-   validation and checks, then Undo with the displayed confirmation. Verify
+7. Confirm Apply names the expected file and symbol. Apply only after the fresh
+   validation and checks, then use the displayed Undo action. Verify
    exactly that one file changes and stale sessions/drafts cannot apply.
-7. At exactly 1000dp, confirm Editor retains its wide Explorer and Context panes.
+8. Confirm compact controls remain focusable and text-labeled at supported text scaling.
+   Verify action meaning is not color-only: primary, navigation, positive, attention,
+   destructive, and neutral actions each retain readable labels and disabled/selected
+   state. Check long labels, focused fields, pressed buttons, and blocked reasons.
+9. At exactly 1000dp, confirm Editor retains its wide Explorer and Context panes.
    Below 1000dp, confirm Files and Context drawer actions appear only in Editor
    and leaving Editor closes an open drawer. In both Git and non-Git copies,
    inspect the advisory Git status. Exercise a

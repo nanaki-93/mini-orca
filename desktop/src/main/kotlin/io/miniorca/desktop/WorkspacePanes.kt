@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Checkbox
 import androidx.compose.material.Text
-import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,7 +45,6 @@ internal fun AnalysisWorkspacePane(
     LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
         item {
             Text("PROJECT ANALYSIS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Text("Analyze-all is explicit, revision-bound, and never starts during import or reindex.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(12.dp))
             FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
                 SectionLabel("PROJECT COVERAGE")
@@ -84,22 +82,23 @@ internal fun AnalysisWorkspacePane(
                 SectionLabel("ANALYZE-ALL CONTROLS")
                 when (presentation.run.statusLabel) {
                     "Running" -> {
-                        Text("Processing ${presentation.run.completed + presentation.run.failed} of ${presentation.run.candidates} candidates.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
-                        FocusFlowButton(onClick = onPause, modifier = Modifier.padding(top = 8.dp)) { Text("Pause") }
-                        FocusFlowButton(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
+                        ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            FocusFlowButton(onClick = onPause, tone = ActionTone.Attention) { Text("Pause") }
+                            FocusFlowButton(onClick = onCancel, tone = ActionTone.Destructive) { Text("Cancel") }
+                        }
                     }
                     "Pausing", "Canceling" -> {
                         Text(presentation.controls, color = Warning, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
-                        FocusFlowButton(onClick = onCancel, enabled = presentation.run.statusLabel == "Pausing", modifier = Modifier.padding(top = 8.dp)) { Text("Cancel") }
+                        FocusFlowButton(onClick = onCancel, enabled = presentation.run.statusLabel == "Pausing", tone = ActionTone.Destructive, modifier = Modifier.padding(top = 8.dp)) { Text("Cancel") }
                     }
                     "Paused" -> {
-                        Text(presentation.run.statusDetail, color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
                         RemoteProviderConfirmation(remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed)
-                        FocusFlowButton(onClick = { onResume(remoteProviderConfirmed) }, enabled = !remoteProvider || remoteProviderConfirmed, modifier = Modifier.padding(top = 8.dp)) { Text("Resume") }
-                        FocusFlowButton(onClick = onCancel, modifier = Modifier.padding(top = 6.dp)) { Text("Cancel") }
+                        ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            FocusFlowButton(onClick = { onResume(remoteProviderConfirmed) }, enabled = !remoteProvider || remoteProviderConfirmed, tone = ActionTone.Primary) { Text("Resume") }
+                            FocusFlowButton(onClick = onCancel, tone = ActionTone.Destructive) { Text("Cancel") }
+                        }
                     }
                     else -> {
-                        Text(presentation.run.statusDetail, color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
                         AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart)
                     }
                 }
@@ -133,10 +132,13 @@ private fun AnalyzeAllStartControls(
     options: AnalyzeAllRunOptions,
     onStart: (AnalyzeAllRunOptions) -> Unit,
 ) {
-    TextField(maxFiles, onMaxFiles, label = { Text("File limit (1–500)") }, modifier = Modifier.padding(top = 6.dp))
-    TextField(maxRetries, onMaxRetries, label = { Text("Retry limit (0–3)") }, modifier = Modifier.padding(top = 6.dp))
+    ResponsiveFieldPair(
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+        first = { modifier -> CompactSingleLineField(maxFiles, onMaxFiles, label = { Text("File limit (1–500)") }, modifier = modifier) },
+        second = { modifier -> CompactSingleLineField(maxRetries, onMaxRetries, label = { Text("Retry limit (0–3)") }, modifier = modifier) },
+    )
     RemoteProviderConfirmation(remoteProvider, remoteConfirmed, onRemoteConfirmed)
-    FocusFlowButton(onClick = { onStart(options) }, enabled = !remoteProvider || remoteConfirmed, primary = true, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
+    FocusFlowButton(onClick = { onStart(options) }, enabled = !remoteProvider || remoteConfirmed, tone = ActionTone.Primary, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
 }
 
 @Composable
@@ -168,26 +170,32 @@ internal fun BugsWorkspacePane(
     var severity by remember { mutableStateOf("") }
     var freshness by remember { mutableStateOf("") }
     var lifecycle by remember { mutableStateOf("") }
-    val visible = filterFindings(findings, BugsFilters(query, source, severity, freshness, lifecycle))
+    var showFilters by remember { mutableStateOf(false) }
+    val filters = BugsFilters(query, source, severity, freshness, lifecycle)
+    val activeFilters = activeBugsFilters(filters)
+    val visible = filterFindings(findings, filters)
     val progress = verifiedScanProgress(scan)
     val grouped = FindingClassification.entries.associateWith { classification -> visible.filter { classifyFinding(it) == classification } }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
         item {
             Text("PROJECT BUGS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Text("Verified/tool-reported issues and AI suggestions remain separate, located, and revision-aware.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(12.dp))
             FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
                 SectionLabel("SEARCH AND FILTER")
-                TextField(query, { query = it }, label = { Text("Search findings") }, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextField(source, { source = it }, label = { Text("Source") }, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.padding(horizontal = 3.dp))
-                    TextField(severity, { severity = it }, label = { Text("Severity") }, modifier = Modifier.weight(1f))
-                }
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextField(freshness, { freshness = it }, label = { Text("Freshness") }, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.padding(horizontal = 3.dp))
-                    TextField(lifecycle, { lifecycle = it }, label = { Text("Lifecycle") }, modifier = Modifier.weight(1f))
+                CompactSingleLineField(query, { query = it }, label = { Text("Search findings") }, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
+                FocusFlowButton(onClick = { showFilters = !showFilters }, tone = ActionTone.Neutral, selected = showFilters, modifier = Modifier.padding(top = 6.dp)) { Text(if (showFilters) "Hide filters" else "Filters") }
+                if (activeFilters.isNotEmpty()) Text("Filters active: ${activeFilters.joinToString(" · ")}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
+                if (showFilters) {
+                    ResponsiveFieldPair(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        first = { modifier -> CompactSingleLineField(source, { source = it }, label = { Text("Source") }, modifier = modifier) },
+                        second = { modifier -> CompactSingleLineField(severity, { severity = it }, label = { Text("Severity") }, modifier = modifier) },
+                    )
+                    ResponsiveFieldPair(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        first = { modifier -> CompactSingleLineField(freshness, { freshness = it }, label = { Text("Freshness") }, modifier = modifier) },
+                        second = { modifier -> CompactSingleLineField(lifecycle, { lifecycle = it }, label = { Text("Lifecycle") }, modifier = modifier) },
+                    )
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -196,19 +204,18 @@ internal fun BugsWorkspacePane(
                 Text(progress.summary, color = if (progress.warnings.isNotEmpty()) Warning else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
                 progress.warnings.forEach { warning -> Text("Warning: $warning", color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp)) }
                 if (progress.canCancel) {
-                    FocusFlowButton(onClick = onCancelScan, enabled = scan?.status?.lowercase() == "running", modifier = Modifier.padding(top = 8.dp)) { Text(if (scan?.status?.lowercase() == "canceling") "Canceling…" else "Cancel verified scan") }
+                    FocusFlowButton(onClick = onCancelScan, enabled = scan?.status?.lowercase() == "running", tone = ActionTone.Destructive, modifier = Modifier.padding(top = 8.dp)) { Text(if (scan?.status?.lowercase() == "canceling") "Canceling…" else "Cancel verified scan") }
                 } else {
-                    FocusFlowButton(onClick = onStartScan, primary = true, modifier = Modifier.padding(top = 8.dp)) { Text("Run verified scan") }
+                    FocusFlowButton(onClick = onStartScan, tone = ActionTone.Primary, modifier = Modifier.padding(top = 8.dp)) { Text("Run verified scan") }
                 }
             }
             Spacer(Modifier.height(10.dp))
-            SectionLabel("FINDINGS · ${visible.size} MATCHING")
+            SectionLabel("FINDINGS")
         }
         FindingClassification.entries.forEach { classification ->
             val section = grouped.getValue(classification)
             item {
                 SectionLabel(classification.sectionLabel, Modifier.padding(top = 9.dp))
-                Text(classification.description, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                 if (section.isEmpty()) Text("No matching findings.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
             }
             items(section, key = { finding -> "${classification.name}:${finding.id}:${finding.location.path}:${finding.location.startLine}" }) { finding ->
@@ -235,13 +242,11 @@ private fun FindingCard(
         Text("Status: ${findingStatusLabel(finding)}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
         Text(finding.message.ifBlank { "No message supplied." }, color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
         if (finding.evidence.isNotBlank()) Text("Evidence: ${finding.evidence}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-        Row(Modifier.fillMaxWidth().padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            FocusFlowButton(onClick = { onOpen(finding) }, enabled = finding.location.path.isNotBlank()) { Text("Open in Editor") }
-            Spacer(Modifier.padding(horizontal = 3.dp))
-            FocusFlowButton(onClick = { onPrepare(finding) }, enabled = findingCanPrepareFix(finding)) { Text("Prepare fix") }
+        ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 7.dp)) {
+            FocusFlowButton(onClick = { onOpen(finding) }, enabled = finding.location.path.isNotBlank(), tone = ActionTone.Navigation) { Text("Open in Editor") }
+            FocusFlowButton(onClick = { onPrepare(finding) }, enabled = findingCanPrepareFix(finding), tone = ActionTone.Navigation) { Text("Prepare fix") }
             findingLifecycleActions(finding).forEach { action ->
-                Spacer(Modifier.padding(horizontal = 3.dp))
-                FocusFlowButton(onClick = { onTriage(finding, action) }) { Text(action.label) }
+                FocusFlowButton(onClick = { onTriage(finding, action) }, tone = if (action.status == "dismissed") ActionTone.Destructive else ActionTone.Neutral) { Text(action.label) }
             }
         }
     }

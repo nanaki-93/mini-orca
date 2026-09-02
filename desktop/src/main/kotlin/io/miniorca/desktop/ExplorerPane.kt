@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -45,14 +44,12 @@ internal fun ExplorerPane(
     val rows = visibleExplorerRows(index?.files.orEmpty(), filter, collapsedDirectories)
     FocusFlowPanel(modifier = modifier, contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
         SectionLabel("PROJECT EXPLORER")
-        Text(explorerProjectLabel(index), color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
-        Spacer(Modifier.height(10.dp))
-        OutlinedTextField(
+        Spacer(Modifier.height(8.dp))
+        CompactSingleLineField(
             value = filter,
             onValueChange = onFilter,
             label = { Text("Filter indexed files") },
             placeholder = { Text("Type a relative path", color = SecondaryText, fontSize = 12.sp) },
-            singleLine = true,
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Filter indexed relative file paths" },
         )
         Spacer(Modifier.height(8.dp))
@@ -72,7 +69,6 @@ internal fun ExplorerPane(
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text("Freshness labels: Fresh, Stale, Failed, Running, or Not analyzed.", color = SecondaryText, fontSize = 10.sp)
     }
 }
 
@@ -195,8 +191,6 @@ private fun ExplorerFileIcon(color: Color) {
         drawLine(color, Offset(fold, foldBottom), Offset(right, foldBottom), strokeWidth, cap = StrokeCap.Round)
     }
 }
-
-internal fun explorerProjectLabel(index: ProjectIndex?): String = index?.let { "${it.files.size} indexed files · project revision ${it.projectRevision.take(12)}" } ?: "Indexed relative paths only"
 
 internal fun explorerRoleLabel(row: ExplorerRow, expanded: Boolean): String = when {
     row.directory && expanded -> "DIR −"

@@ -33,24 +33,10 @@ data class FindingsState(
     val analyzeAll: AnalyzeAllJob? = null,
 )
 
-data class WorkspaceCounts(
-    val analyzedFiles: Int = 0,
-    val verifiedFindings: Int = 0,
-    val aiSuggestions: Int = 0,
-    val drafts: Int = 0,
-)
-
 data class EditorNavigationTarget(
     val path: String,
     val symbol: String = "",
     val line: Int = 0,
-)
-
-fun workspaceCounts(state: DesktopState): WorkspaceCounts = WorkspaceCounts(
-    analyzedFiles = state.index?.files?.count { it.analysisStatus.lowercase() in setOf("fresh", "stale", "running") } ?: 0,
-    verifiedFindings = state.findings.findings.count { it.confidence == "tool_reported" },
-    aiSuggestions = state.findings.findings.count { it.confidence == "suggested" },
-    drafts = if (state.review.draft == null) 0 else 1,
 )
 
 fun nextWorkspace(workspace: Workspace): Workspace = Workspace.entries[(workspace.ordinal + 1) % Workspace.entries.size]
@@ -370,6 +356,6 @@ fun draftReviewEligibility(editor: EditableDraftState?, draft: DeclarationDraft?
     if (editor.status == DraftEditorStatus.Dirty) return ApplyEligibility(false, "Manual edits require validation and fresh checks.")
     if (editor.status == DraftEditorStatus.Invalid) return ApplyEligibility(false, "Fix validation diagnostics before checks or Apply.")
     if (editor.status == DraftEditorStatus.Validating) return ApplyEligibility(false, "Wait for validation to finish.")
-    if (!draftEditorMatchesOpenFile(editor, selectedFile, project)) return ApplyEligibility(false, "Draft project, file, revision, or base hash no longer matches the open file.")
+    if (!draftEditorMatchesOpenFile(editor, selectedFile, project)) return ApplyEligibility(false, "The draft no longer matches the open file.")
     return draftApplyEligibility(draft, checks, selectedFile)
 }

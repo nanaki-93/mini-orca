@@ -42,12 +42,12 @@ internal fun SummaryPane(
             Text("SUMMARY", fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(10.dp))
             StatusBadge(state.status)
-            Spacer(Modifier.weight(1f))
-            if (analysisInProgress) FocusFlowButton(onClick = onCancel) { Text("Cancel") }
+        }
+        ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            if (analysisInProgress) FocusFlowButton(onClick = onCancel, tone = ActionTone.Destructive) { Text("Cancel") }
             else {
-                FocusFlowButton(onClick = onAnalyze, enabled = !remoteProvider || remoteProviderConfirmed, primary = true) { Text("Analyze") }
-                Spacer(Modifier.width(8.dp))
-                FocusFlowButton(onClick = onRefresh, enabled = !remoteProvider || remoteProviderConfirmed) { Text("Refresh") }
+                FocusFlowButton(onClick = onAnalyze, enabled = !remoteProvider || remoteProviderConfirmed, tone = ActionTone.Primary) { Text("Analyze") }
+                FocusFlowButton(onClick = onRefresh, enabled = !remoteProvider || remoteProviderConfirmed, tone = ActionTone.Neutral) { Text("Refresh") }
             }
         }
         RemoteProviderConfirmation(remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed)
@@ -81,8 +81,7 @@ internal fun SummaryPane(
                     LabeledItems("Findings (model suggestions)", analysis?.risks.orEmpty().map { "${it.severity.uppercase()} · ${it.summary}" })
                     Text("Suggested atomic tasks (model suggestions)", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp))
                     analysis?.suggestions.orEmpty().forEach { suggestion ->
-                        FocusFlowButton(onClick = { onPrepareSuggestion(suggestion) }, modifier = Modifier.padding(top = 5.dp)) { Text(suggestion.title) }
-                        Text(suggestion.summary, color = SecondaryText, fontSize = 11.sp)
+                        FocusFlowButton(onClick = { onPrepareSuggestion(suggestion) }, tone = ActionTone.Navigation, modifier = Modifier.padding(top = 5.dp)) { Text(suggestion.title) }
                     }
                 }
                 "failed" -> Text(state.failure.ifBlank { "The model could not produce a usable summary. Retry the analysis." }, color = Error, fontSize = 13.sp)
@@ -100,7 +99,6 @@ data class EditorBriefState(
     val language: String,
     val sizeBytes: Long,
     val lineCount: Int,
-    val contentHash: String,
     val freshness: String,
     val purpose: String = "",
     val responsibilities: List<String> = emptyList(),
@@ -122,7 +120,6 @@ fun editorBriefState(selected: ProjectFileInfo?, analysis: FileAnalysis?, symbol
         language = selected.language,
         sizeBytes = selected.sizeBytes,
         lineCount = selected.lineCount,
-        contentHash = selected.contentHash,
         freshness = analysis?.status?.lowercase()?.ifBlank { "not analyzed" } ?: "not analyzed",
         purpose = analysis?.purpose.orEmpty(),
         responsibilities = analysis?.responsibilities.orEmpty(),

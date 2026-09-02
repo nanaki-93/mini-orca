@@ -65,7 +65,7 @@ internal fun verifyEvidenceUiState(
         validation = VerifyEvidenceRow(
             label = "Validation",
             detail = when {
-                validationCurrent -> "Validation is current for draft revision ${draft?.revision}."
+                validationCurrent -> "Validation is current."
                 editor == null -> "No editable draft is loaded."
                 else -> validationSummary(editor, validationCurrent)
             },
@@ -76,8 +76,8 @@ internal fun verifyEvidenceUiState(
             label = "Scope identity",
             detail = when {
                 draft == null -> "No draft identity is available."
-                identityCurrent -> "${draft.targetPath} · ${draft.targetSymbol} · revision ${draft.revision} · hash ${draft.hash.take(12)}."
-                else -> "The draft project, file, revision, or base hash no longer matches the open file."
+                identityCurrent -> "${draft.targetPath} · ${draft.targetSymbol} matches the open file."
+                else -> "The draft no longer matches the open file."
             },
             status = if (identityCurrent) VerifyEvidenceStatus.Passed else VerifyEvidenceStatus.Stale,
         ),
@@ -101,8 +101,8 @@ private fun focusedChecksEvidence(
     checksRunning: Boolean,
 ): VerifyEvidenceRow {
     if (checksRunning) return VerifyEvidenceRow("Focused checks", "Focused checks are running for the current draft.", VerifyEvidenceStatus.Running)
-    if (checks == null) return VerifyEvidenceRow("Focused checks", "Run checks after validating this exact draft revision and hash.", VerifyEvidenceStatus.Missing)
-    if (!checksMatchDraft(checks, draft)) return VerifyEvidenceRow("Focused checks", "Check results do not match the latest draft revision or hash.", VerifyEvidenceStatus.Stale)
+    if (checks == null) return VerifyEvidenceRow("Focused checks", "Run checks after validating this draft.", VerifyEvidenceStatus.Missing)
+    if (!checksMatchDraft(checks, draft)) return VerifyEvidenceRow("Focused checks", "Check results no longer match the latest draft.", VerifyEvidenceStatus.Stale)
     if (!checks.applicable) return VerifyEvidenceRow("Focused checks", "Focused checks could not produce applicable evidence for this draft.", VerifyEvidenceStatus.Failed)
 
     val states = checks.checks.map { it.state.lowercase() }
@@ -115,10 +115,10 @@ private fun focusedChecksEvidence(
     }
     val required = checks.checks.count { it.required }
     val detail = when (status) {
-        VerifyEvidenceStatus.Passed -> "${checks.checks.size} checks (${required} required) are current for draft revision ${draft?.revision}."
-        VerifyEvidenceStatus.Skipped -> "${checks.checks.size} checks were skipped for draft revision ${draft?.revision}."
-        VerifyEvidenceStatus.Running -> "Focused checks are running for draft revision ${draft?.revision}."
-        VerifyEvidenceStatus.Failed -> "At least one focused check failed for draft revision ${draft?.revision}."
+        VerifyEvidenceStatus.Passed -> "${checks.checks.size} checks (${required} required) are current."
+        VerifyEvidenceStatus.Skipped -> "${checks.checks.size} checks were skipped."
+        VerifyEvidenceStatus.Running -> "Focused checks are running."
+        VerifyEvidenceStatus.Failed -> "At least one focused check failed."
         VerifyEvidenceStatus.Missing -> "Focused check state is unavailable for the latest draft."
         VerifyEvidenceStatus.Stale -> error("Stale evidence returns before details are derived.")
     }
@@ -167,7 +167,7 @@ internal fun applyDecisionUiState(
             actionLabel = "Apply unavailable after receipt",
             reason = "The previous guarded operation must be reviewed before another draft can be applied.",
             receiptTitle = action,
-            receiptDetail = "Project revision ${applied.projectRevision} · resulting file hash ${applied.postApplyHash}.",
+            receiptDetail = "${applied.audit?.targetPath?.takeIf { it.isNotBlank() } ?: "Selected file"} ${if (action == "Change undone") "was restored" else "was updated"}.",
             undoLabel = if (applied.undoAvailable) "Undo this change" else "Undo is no longer available",
         )
     }
@@ -183,10 +183,8 @@ internal fun applyDecisionUiState(
 internal fun VerifyDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
         Text("Verify the candidate", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-        Text("Compare the composed declaration before moving to the final Apply step.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(12.dp))
         DiffViewer(draft?.validation?.diff, Modifier.fillMaxWidth())
-        Text("The composed diff is selectable and read-only. Only the isolated declaration draft was editable.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 10.dp))
     }
 }
 
@@ -194,17 +192,15 @@ internal fun VerifyDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Mod
 internal fun ApplyDiffCanvas(draft: DeclarationDraft?, applied: ApplyResult?, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
         Text("Review this change", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-        Text("Read the exact composed result before the one explicit write action.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(12.dp))
         if (draft != null) {
             Text("${draft.targetPath} · ${draft.targetSymbol} · ${draft.mode}", color = SecondaryText, fontSize = 11.sp)
             Spacer(Modifier.height(8.dp))
             DiffViewer(draft.validation?.diff, Modifier.fillMaxWidth())
-            Text("Nothing has changed yet. The composed diff is selectable and read-only.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 10.dp))
         } else if (applied != null) {
             SystemStateMessage(
                 applyReceiptTitle(applied),
-                "The selected file has been refreshed at project revision ${applied.projectRevision}. Review the guarded receipt in Context.",
+                "The selected file has been refreshed. Review the guarded receipt in Context.",
                 accent = Success,
             )
         } else {
@@ -234,7 +230,6 @@ internal fun VerifyEvidencePane(
         FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
             SectionLabel("VERIFY · GATE 3 OF 4")
             Text(if (evidence.canContinueToApply) "Evidence is current" else "Evidence needs attention", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
-            Text("Review the proof for this exact draft before enabling the final Apply confirmation.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(10.dp))
             EvidenceRow(evidence.identity)
             Spacer(Modifier.height(8.dp))
@@ -246,14 +241,13 @@ internal fun VerifyEvidencePane(
         Spacer(Modifier.height(10.dp))
         FocusFlowPanel(Modifier.fillMaxWidth()) {
             EvidenceRow(evidence.checks)
-            Text("Timing: the daemon does not report focused-check duration.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-            FocusFlowButton(onClick = onRunChecks, enabled = evidence.canRunChecks, modifier = Modifier.padding(top = 8.dp)) { Text(evidence.runChecksLabel) }
+            FocusFlowButton(onClick = onRunChecks, enabled = evidence.canRunChecks, tone = ActionTone.Primary, modifier = Modifier.padding(top = 8.dp)) { Text(evidence.runChecksLabel) }
             checks?.checks.orEmpty().forEach { check ->
                 Text("${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}", color = evidenceColor(checkStatus(check.state)), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
             }
             val checksWithOutput = checks?.checks.orEmpty().filter { it.command.isNotEmpty() || it.output.isNotBlank() }
             if (checksWithOutput.isNotEmpty()) {
-                FocusFlowButton(onClick = { showCommandOutput = !showCommandOutput }, modifier = Modifier.padding(top = 8.dp)) {
+                FocusFlowButton(onClick = { showCommandOutput = !showCommandOutput }, tone = ActionTone.Neutral, modifier = Modifier.padding(top = 8.dp)) {
                     Text(if (showCommandOutput) "Hide command output" else "Show command output (${checksWithOutput.size})")
                 }
                 if (showCommandOutput) SelectionContainer {
@@ -276,7 +270,7 @@ internal fun VerifyEvidencePane(
             FocusFlowButton(
                 onClick = onContinueToApply,
                 enabled = evidence.canContinueToApply,
-                primary = true,
+                tone = ActionTone.Positive,
                 modifier = Modifier.padding(top = 8.dp),
             ) { Text("Continue to Apply") }
             if (!evidence.canContinueToApply) Text(evidence.continueReason, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
@@ -305,8 +299,8 @@ internal fun ApplyDecisionPane(
                 SectionLabel("APPLIED RECEIPT")
                 Text(decision.receiptTitle, color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
                 Text(decision.receiptDetail, color = SecondaryText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
-                Text(if (applied.undoAvailable) "The guarded Undo action is available for this returned identity." else "The returned identity no longer has an available Undo action.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                FocusFlowButton(onClick = onUndo, enabled = applied.undoAvailable, modifier = Modifier.padding(top = 10.dp)) { Text(decision.undoLabel) }
+                Text(if (applied.undoAvailable) "Undo is available for this applied change." else "Undo is no longer available for this applied change.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                FocusFlowButton(onClick = onUndo, enabled = applied.undoAvailable, tone = ActionTone.Attention, modifier = Modifier.padding(top = 10.dp)) { Text(decision.undoLabel) }
             }
             return@Column
         }
@@ -327,7 +321,7 @@ internal fun ApplyDecisionPane(
             Spacer(Modifier.height(7.dp))
             EvidenceRow(evidence.checks)
             Text("Target: ${draft.targetPath} · ${draft.targetSymbol} · ${draft.mode}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
-            Text("Only this named file and isolated declaration can change. Apply remains revision/hash guarded.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            Text("Only this named file and isolated declaration can change. Apply remains protected by current-file checks.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         }
         Spacer(Modifier.height(10.dp))
         ReadOnlyImpactPane(impact, gitStatus)
@@ -336,7 +330,7 @@ internal fun ApplyDecisionPane(
             FocusFlowButton(
                 onClick = onApply,
                 enabled = decision.eligible,
-                primary = true,
+                tone = ActionTone.Positive,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(decision.actionLabel) }
             if (!decision.eligible) Text(decision.reason, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))

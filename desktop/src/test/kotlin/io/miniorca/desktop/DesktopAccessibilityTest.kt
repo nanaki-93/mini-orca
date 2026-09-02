@@ -8,12 +8,13 @@ import kotlin.test.assertTrue
 class DesktopAccessibilityTest {
     @Test fun keyboardShortcutsCoverFocusedWorkflowWithoutMouse() {
         assertEquals(DesktopShortcut.OpenFile, desktopShortcut("P", primaryModifier = true))
+        assertEquals(DesktopShortcut.OpenProject, desktopShortcut("O", primaryModifier = true))
         assertEquals(DesktopShortcut.OpenSymbol, desktopShortcut("O", primaryModifier = true, shift = true))
         assertEquals(DesktopShortcut.FocusChat, desktopShortcut("K", primaryModifier = true))
         assertEquals(DesktopShortcut.Generate, desktopShortcut("Enter", primaryModifier = true))
         assertEquals(DesktopShortcut.Cancel, desktopShortcut("Escape", primaryModifier = false))
         assertEquals(DesktopShortcut.NextTab, desktopShortcut("Tab", primaryModifier = true))
-        assertNull(desktopShortcut("O", primaryModifier = true))
+        assertNull(desktopShortcut("O", primaryModifier = false))
     }
 
     @Test fun keyboardRoutesCoverWorkspacesBugsDraftValidationAndChecks() {
@@ -27,11 +28,26 @@ class DesktopAccessibilityTest {
         assertEquals(DesktopShortcut.RunDraftChecks, desktopShortcut("C", primaryModifier = true, shift = true))
     }
 
-    @Test fun workspaceSemanticsIncludeTextualSelectedStateAndCounts() {
-        val counts = WorkspaceCounts(analyzedFiles = 2, verifiedFindings = 1, aiSuggestions = 3, drafts = 1)
+    @Test fun workspaceSemanticsKeepTextualSelectedStateWithoutCounters() {
+        assertEquals("Editor, selected", workspaceSemanticsLabel(Workspace.Editor, true))
+        assertEquals("Bugs, not selected", workspaceSemanticsLabel(Workspace.Bugs, false))
+    }
 
-        assertEquals("Editor · 1 drafts, selected", workspaceSemanticsLabel(Workspace.Editor, true, counts))
-        assertEquals("Bugs · 1 verified · 3 AI, not selected", workspaceSemanticsLabel(Workspace.Bugs, false, counts))
+    @Test fun editorStageNavigationKeepsShortLabelsAndExplainsLockedForwardStages() {
+        val lockedApply = EditorStageUiState(EditorStage.Apply, unlocked = false, reason = "Run focused checks before applying.")
+
+        assertEquals(listOf("Target", "Draft", "Verify", "Apply"), EditorStage.entries.map { it.label })
+        assertEquals("Apply", editorStageLabel(lockedApply, current = false))
+        assertTrue(editorStageSemanticsLabel(lockedApply, current = false).contains("Locked"))
+        assertTrue(editorStageSemanticsLabel(lockedApply, current = false).contains("Run focused checks"))
+    }
+
+    @Test fun landingModeAcceptsOnlyTheOpenProjectShortcut() {
+        DesktopShortcut.entries.forEach { shortcut ->
+            assertEquals(shortcut == DesktopShortcut.OpenProject, shortcutAvailable(DesktopShellMode.ProjectLanding, shortcut))
+            assertTrue(shortcutAvailable(DesktopShellMode.ProjectWorkspace, shortcut))
+        }
+        assertTrue(!shortcutAvailable(DesktopShellMode.ProjectLanding, null))
     }
 
     @Test fun highlightingLeavesSourceIntactAndStylesRecognizedTokens() {

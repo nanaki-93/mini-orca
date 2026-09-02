@@ -102,7 +102,7 @@ private fun draftStageReason(
 ): String = when {
     !target.valid -> "Choose a valid target before opening a draft."
     !boundSession -> "Draft is ready for the first message bound to this target."
-    currentDraft -> "Latest editable draft: ${draft?.targetSymbol}, revision ${draft?.revision}."
+    currentDraft -> "Latest editable draft: ${draft?.targetSymbol}."
     else -> "The current conversation has no loaded latest editable draft."
 }
 
@@ -114,7 +114,7 @@ private fun verifyStageReason(
 ): String = when {
     !draftUnlocked -> "Start a file-scoped conversation before verification."
     !currentDraft -> "Load the latest editable draft for this conversation."
-    validationCurrent -> "Validation is current for this exact draft revision."
+    validationCurrent -> "Validation is current for this draft."
     else -> validationSummary(editor, false)
 }
 
@@ -124,7 +124,7 @@ private fun applyStageReason(
     checksCurrent: Boolean,
     eligibility: ApplyEligibility,
 ): String = when {
-    appliedReceipt != null -> "Applied ${appliedReceipt.postApplyHash.take(12)}. Guarded Undo is available."
+    appliedReceipt != null -> "Change applied. Guarded Undo is available."
     !currentDraft -> "Load the latest editable draft before applying it."
     !checksCurrent -> "Run focused checks for the latest draft before applying it."
     else -> eligibility.reason
@@ -132,12 +132,12 @@ private fun applyStageReason(
 
 private fun draftSummary(boundSession: Boolean, currentDraft: Boolean, draft: DeclarationDraft?): String = when {
     !boundSession -> "No conversation is currently bound to this target."
-    currentDraft -> "${draft?.targetPath} · ${draft?.targetSymbol} · revision ${draft?.revision}."
+    currentDraft -> "${draft?.targetPath} · ${draft?.targetSymbol}."
     else -> "A bound conversation is ready for its next draft."
 }
 
 internal fun validationSummary(editor: EditableDraftState?, validationCurrent: Boolean): String = when {
-    validationCurrent -> "Validated for the latest draft revision."
+    validationCurrent -> "Validated for the latest draft."
     editor == null -> "No editable draft is loaded."
     editor.status == DraftEditorStatus.Dirty -> "Manual edits require validation and fresh checks."
     editor.status == DraftEditorStatus.Validating -> "Validation is running."
@@ -153,7 +153,7 @@ private fun checksSummary(
     draft: DeclarationDraft?,
 ): String = when {
     !currentDraft -> "No current draft is available for focused checks."
-    checksCurrent -> "Focused checks are current for draft revision ${draft?.revision}."
-    checks != null -> "Focused checks do not match the latest draft revision."
+    checksCurrent -> "Focused checks are current."
+    checks != null -> "Focused checks do not match the latest draft."
     else -> "Run focused checks after validating the latest draft."
 }

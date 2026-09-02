@@ -31,12 +31,12 @@ class ApplyDecisionPaneTest {
         assertTrue(failed.reason.contains("diagnostics"))
     }
 
-    @Test fun receiptUsesReturnedRevisionAndOnlyOffersReturnedUndo() {
+    @Test fun receiptUsesHumanReadableTargetAndOnlyOffersReturnedUndo() {
         val applied = applyDecisionUiState(project(), file(), null, null, null, ApplyResult("next", "after", true))
         val undone = applyDecisionUiState(project(), file(), null, null, null, ApplyResult("restored", "base", false, audit = AuditEntry("undo", "main.go", "applied", "now")))
 
         assertEquals("Change applied", applied.receiptTitle)
-        assertTrue(applied.receiptDetail.contains("next"))
+        assertEquals("Selected file was updated.", applied.receiptDetail)
         assertEquals("Undo this change", applied.undoLabel)
         assertEquals("Change undone", undone.receiptTitle)
         assertEquals("Undo is no longer available", undone.undoLabel)
