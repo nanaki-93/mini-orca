@@ -36,7 +36,7 @@ context and findings.
 | File-bound chat, offline/remote confirmation, cancellation, stale sessions, and draft lineage | `go test ./internal/app ./internal/api/handlers -run 'ChatSession|Draft'` |
 | Manual draft edit invalidates old validation/checks; invalid or stale drafts cannot Apply | `go test ./internal/app -run 'DraftLifecycle|DraftValidateCheckApply'` |
 | One-file guarded Apply/Undo, comparison, export, and source-free audit | `go test ./internal/app -run 'Apply|Undo|Compare|Export'` |
-| Empty landing/open-project transition, shortcut gate, compact semantic controls, concise workspace labels, Bugs filter disclosure, Analyze-all limits, responsive groups, direct source-symbol selection, contextual Inspect/Edit/Review progress, Editor-only explorer/context panes, read-only source/diff, and revision/file guards | `./desktop/gradlew -p desktop test` |
+| Empty landing/open-project transition, shortcut gate, compact semantic controls, concise workspace labels, Bugs filters and priority grouping with per-card provenance, Analyze-all limits, responsive groups, direct source-symbol selection, active-file header in source/review, removed Editor/source helper copy, conditional imports, Editor-only explorer/context panes, read-only source/diff, and revision/file guards | `./desktop/gradlew -p desktop test` |
 | Live routes, OpenAPI, API reference, version, and retired browser routes | `go test ./cmd/daemon ./internal/api/handlers` |
 | All supported formatting, unit, race, vet, and desktop checks | `make check` |
 
@@ -66,18 +66,22 @@ window narrower than 1000dp:
    verified scan and inspect its separate parser, vet, and test progress.
 4. On Bugs, confirm only the compact search field is initially visible; use Filters to
    reveal Source, Severity, Freshness, and Lifecycle. Verify active filters are named
-   in text without a numeric badge. Filter verified findings separately from AI suggestions, change a
-   finding triage state, and use Prepare fix only to open the associated file
-   and prefill chat. It must not generate or apply a change.
+   in text without a numeric badge. Confirm filtered findings are grouped in nonempty
+   high, medium, low, then fallback priority sections, while every card still exposes
+   verified/tool or AI provenance. Change a finding triage state, and use Prepare fix
+   only to open the associated file and prefill chat. It must not generate or apply a
+   change.
 5. From a non-Editor workspace, use `Cmd/Ctrl+P` to open an indexed file and
-   confirm it activates Editor with that exact path. Hover and click within `Run`'s
-   declaration and confirm the selected declaration range and Context explanation update
-   immediately. Confirm nested declarations select the narrowest containing declaration,
-   and clicking between declarations clears stale symbol Context while retaining the
-   focused line. Drag source text to confirm selection works without an edit or retarget.
-   Repeat from the symbol palette and,
-   below 1000dp, confirm both paths open the Context drawer. The source and composed
-   diff must remain selectable and read-only.
+   confirm it activates Editor with that exact path. Confirm the persistent header shows
+   its basename and project-relative path, including in review and for duplicate
+   basenames, without revealing an absolute path or retaining stale identity. Hover and
+   click within `Run`'s declaration and confirm the selected declaration range and
+   Context explanation update immediately. Confirm nested declarations select the
+   narrowest containing declaration, and clicking between declarations clears stale
+   symbol Context while retaining the focused line. Drag source text to confirm selection
+   works without an edit or retarget. Repeat from the symbol palette and, below 1000dp,
+   confirm both paths open the Context drawer. The source and composed diff must remain
+   selectable and read-only.
 6. Confirm exact atomic `Run` exposes one **Edit Run** action. Activate it and verify
    the bound Replace composer opens without a provider call or source write. Use
    Commands → **Create declaration** for absent `ReleaseNote`; the new-name field must
@@ -85,11 +89,13 @@ window narrower than 1000dp:
    explicit draft-discard decision names both targets and does not silently clear the
    existing work.
 7. Open a file-scoped chat session, send one request with `Cmd/Ctrl+Enter`, and
-   verify a different file cannot be targeted. Edit only the declaration/import draft,
-   use `Cmd/Ctrl+Shift+V` to validate and `Cmd/Ctrl+Shift+C` for checks when each
-   contextual action is available. A manual edit must make the old evidence unusable.
-   Confirm the non-interactive **Inspect → Edit → Review** status advances only from
-   those guarded results, and successful validation opens the read-only diff.
+   verify a different file cannot be targeted. For a draft without imports, confirm
+   `Required imports` is absent; for one with imports, confirm its values remain
+   editable. Edit only the declaration/import draft, use `Cmd/Ctrl+Shift+V` to validate
+   and `Cmd/Ctrl+Shift+C` for checks when each contextual action is available. A manual
+   edit must make the old evidence unusable. Confirm no Editor progress explanation or
+   source selection subtitle remains, and successful validation opens the read-only
+   diff below the active-file header.
 8. In Review, confirm scope identity, validation evidence, focused checks, collapsed
    diagnostic/command detail, and read-only impact/Git context appear together. Confirm
    Apply names the expected file and symbol and appears only after fresh checks. Apply
@@ -112,12 +118,13 @@ next to the release candidate; do not record prompts, source, or credentials.
 
 ## Current execution record
 
-On 2026-09-02, the automated Desktop suite and `make check` passed for the
-direct-symbol workflow. Manual desktop acceptance is **not recorded as passed**:
-this non-interactive execution environment cannot inspect a running Compose Desktop
-window at wide, exactly 1000dp, or below 1000dp, and no release-fixture GUI session
-was available. A release operator must complete the manual flow above before treating
-this release checklist as fully accepted.
+On 2026-09-02, the automated Desktop suite and `make check` passed for the focused
+Desktop UX refinement, including active-file identity, removed Editor/source copy,
+conditional imports, and priority-grouped Bugs. Manual desktop acceptance is **not
+recorded as passed**: this non-interactive execution environment cannot inspect a
+running Compose Desktop window at wide, exactly 1000dp, or below 1000dp, and no
+release-fixture GUI session was available. A release operator must complete the manual
+flow above before treating this release checklist as fully accepted.
 
 ## Supported scope and release decision
 
