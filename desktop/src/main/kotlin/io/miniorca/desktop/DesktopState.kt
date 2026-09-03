@@ -16,6 +16,7 @@ data class FileSelectionState(
     val focusedLine: Int = 0,
     val preparedAction: String = "",
     val preparedRequest: String = "",
+    val preparedTaskSpec: BugTaskSpec? = null,
     val analysis: FileAnalysis? = null,
     val impact: ImpactPreview? = null,
     val gitStatus: GitStatus? = null,
@@ -39,18 +40,52 @@ data class EditorNavigationTarget(
     val line: Int = 0,
 )
 
+data class EditorNavigationSelection(
+    val symbol: SymbolInfo?,
+    val focusLine: Int,
+)
+
 fun nextWorkspace(workspace: Workspace): Workspace = Workspace.entries[(workspace.ordinal + 1) % Workspace.entries.size]
 
 /** Rejects stale or external paths before a finding can open the Editor. */
 fun findingNavigationTarget(finding: UnifiedFinding, index: ProjectIndex?): EditorNavigationTarget? {
     val path = finding.location.path.trim()
-    if (path.isBlank() || index?.files?.none { it.path == path } != false) return null
-    return EditorNavigationTarget(path, finding.location.symbol, finding.location.startLine)
+    val file = index?.files?.firstOrNull { it.path == path } ?: return null
+    val symbol = findingNavigationSymbol(finding, file)
+    val line = finding.location.startLine.takeIf { it > 0 } ?: symbol?.startLine ?: 0
+    return EditorNavigationTarget(path, symbol?.name ?: finding.location.symbol, line)
 }
 
 fun symbolForNavigation(symbols: List<SymbolInfo>, target: EditorNavigationTarget): SymbolInfo? =
-    symbols.firstOrNull { target.symbol.isNotBlank() && it.name == target.symbol }
-        ?: symbols.firstOrNull { target.line > 0 && target.line in it.startLine..it.endLine }
+    namedNavigationSymbol(symbols, target.symbol) ?: symbolAtLine(symbols, target.line)
+
+fun resolveEditorNavigation(symbols: List<SymbolInfo>, target: EditorNavigationTarget): EditorNavigationSelection {
+    val symbol = symbolForNavigation(symbols, target)
+    return EditorNavigationSelection(symbol, navigationFocusLine(target, symbol))
+}
+
+/** Keeps a finding's precise line when known, otherwise brings its selected declaration into view. */
+fun navigationFocusLine(target: EditorNavigationTarget, symbol: SymbolInfo?): Int =
+    target.line.takeIf { it > 0 } ?: symbol?.startLine ?: 0
+
+private fun findingNavigationSymbol(finding: UnifiedFinding, file: IndexedFile): SymbolInfo? =
+    namedNavigationSymbol(file.symbols, finding.location.symbol)
+        ?: symbolAtLine(file.symbols, finding.location.startLine)
+        ?: mentionedNavigationSymbol(file.symbols, finding)
+
+private fun namedNavigationSymbol(symbols: List<SymbolInfo>, requestedSymbol: String): SymbolInfo? {
+    val requested = requestedSymbol.trim().removeSuffix("()")
+    if (requested.isBlank()) return null
+    return symbols.firstOrNull { it.name == requested }
+        ?: symbols.singleOrNull { it.name.substringAfterLast('.') == requested }
+}
+
+private fun mentionedNavigationSymbol(symbols: List<SymbolInfo>, finding: UnifiedFinding): SymbolInfo? {
+    val description = listOf(finding.title, finding.message, finding.evidence).joinToString("\n")
+    return symbols.filter { symbol ->
+        Regex("(?<![A-Za-z0-9_])${Regex.escape(symbol.name)}(?![A-Za-z0-9_])").containsMatchIn(description)
+    }.singleOrNull()
+}
 
 data class ChatState(
     val session: ChatSession? = null,
@@ -95,6 +130,7 @@ data class DesktopState(
     val selectedSymbol get() = selection.selectedSymbol
     val preparedAction get() = selection.preparedAction
     val preparedRequest get() = selection.preparedRequest
+    val preparedTaskSpec get() = selection.preparedTaskSpec
     val analysis get() = selection.analysis
     val impact get() = selection.impact
     val gitStatus get() = selection.gitStatus
@@ -119,7 +155,7 @@ sealed interface DesktopEvent {
     data class SymbolSelected(val symbol: SymbolInfo) : DesktopEvent
     data class EditorContextSelected(val symbol: SymbolInfo?, val line: Int) : DesktopEvent
     data class SourceLineSelected(val selection: SourceLineSelection) : DesktopEvent
-    data class SuggestionPrepared(val action: String, val request: String, val symbol: SymbolInfo?) : DesktopEvent
+    data class SuggestionPrepared(val action: String, val request: String, val symbol: SymbolInfo?, val taskSpec: BugTaskSpec? = null) : DesktopEvent
     data class AnalysisLoaded(val analysis: FileAnalysis) : DesktopEvent
     data class ImpactLoaded(val impact: ImpactPreview) : DesktopEvent
     data class GitStatusLoaded(val gitStatus: GitStatus) : DesktopEvent
@@ -173,7 +209,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState = when (event) {
         selection = selection.copy(selectedSymbol = event.selection.symbol, focusedLine = event.selection.line),
         jobs = jobs.copy(error = null),
     )
-    is DesktopEvent.SuggestionPrepared -> copy(selection = selection.copy(selectedSymbol = event.symbol ?: selectedSymbol, preparedAction = event.action, preparedRequest = event.request), jobs = jobs.copy(error = null))
+    is DesktopEvent.SuggestionPrepared -> copy(selection = selection.copy(selectedSymbol = event.symbol ?: selectedSymbol, preparedAction = event.action, preparedRequest = event.request, preparedTaskSpec = event.taskSpec), jobs = jobs.copy(error = null))
     is DesktopEvent.AnalysisLoaded -> copy(selection = selection.copy(analysis = event.analysis), jobs = jobs.copy(loading = false, error = null))
     is DesktopEvent.ImpactLoaded -> copy(selection = selection.copy(impact = event.impact))
     is DesktopEvent.GitStatusLoaded -> copy(selection = selection.copy(gitStatus = event.gitStatus))

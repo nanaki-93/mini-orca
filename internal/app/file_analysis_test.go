@@ -86,11 +86,11 @@ func TestClearFileAnalysisResetsIndexStatus(t *testing.T) {
 
 func TestAnalyzeFileAcceptsUnqualifiedMethodExplanations(t *testing.T) {
 	output := `{"purpose":"Explains the service.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{"FileSystemService":"The service implementation.","PrintFiles":"Prints files.","ListFiles":"Lists files."}}`
-	parsed, err := parseSemanticAnalysis(output, []project.SymbolInfo{
+	parsed, err := parseSemanticAnalysis(output, project.IndexFile{Path: "service.go", Language: "Go", Symbols: []project.SymbolInfo{
 		{Name: "FileSystemService"},
 		{Name: "FileSystemService.PrintFiles"},
 		{Name: "FileSystemService.ListFiles"},
-	})
+	}}, "package service")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,6 +99,80 @@ func TestAnalyzeFileAcceptsUnqualifiedMethodExplanations(t *testing.T) {
 	}
 	if _, exists := parsed.SymbolExplanations["PrintFiles"]; exists {
 		t.Fatalf("unqualified symbol explanation was not normalized: %+v", parsed.SymbolExplanations)
+	}
+}
+
+func TestAnalyzeFileValidatesAndCachesOneExactBugTaskWithoutAnotherModelCall(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Explains the file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"high","summary":"Run ignores an error.","task_spec":{"schema_version":"1","target_path":"main.go","target_symbol":"Run","target_signature":"hallucinated","acceptance_criteria":["Return the formatting error to the caller."],"non_goals":["Do not edit helper files."],"go_test_candidate":{"name":"TestRunReturnsError","content":"package main\n\nimport \"testing\"\n\nfunc TestRunReturnsError(t *testing.T) {}\n"}}}],"suggestions":[],"symbol_explanations":{}}`}}}})
+	}))
+	defer server.Close()
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+
+	first, err := service.AnalyzeFile(context.Background(), "main.go", false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := first.Risks[0].TaskSpec
+	if task == nil || task.TargetPath != "main.go" || task.TargetSymbol != "Run" || task.TargetSignature != "func()" || task.GoTestCandidate == nil {
+		t.Fatalf("validated task = %+v", task)
+	}
+	content, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil || string(content) != "package main\n\nimport \"fmt\"\n\nfunc Run() { fmt.Println(\"run\") }\n" {
+		t.Fatalf("analysis changed imported source: %q, %v", content, err)
+	}
+	second, err := service.AnalyzeFile(context.Background(), "main.go", false, false)
+	if err != nil || second.Risks[0].TaskSpec == nil || calls != 1 {
+		t.Fatalf("cached task = %+v, %v; calls = %d", second, err, calls)
+	}
+}
+
+func TestSemanticBugTaskRejectsUntrustedTargetsAndDropsInvalidOptionalTests(t *testing.T) {
+	target := project.IndexFile{Path: "main.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "exact", AtomicTarget: true}}}
+	valid := func(task string) string {
+		return `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"high","summary":"Risk.","task_spec":` + task + `}],"suggestions":[],"symbol_explanations":{}}`
+	}
+	spec := func(path, symbol string) string {
+		return `{"schema_version":"1","target_path":"` + path + `","target_symbol":"` + symbol + `","acceptance_criteria":["Handle the error."],"non_goals":[]}`
+	}
+	for _, output := range []string{
+		valid(spec("other.go", "Run")),
+		valid(spec("main.go", "Unknown")),
+		valid(`{"schema_version":"1","target_path":"main.go","target_symbol":"Run","acceptance_criteria":["` + strings.Repeat("x", project.MaxBugTaskItemBytes+1) + `"],"non_goals":[]}`),
+	} {
+		if _, err := parseSemanticAnalysis(output, target, "package main\nfunc Run() {}"); err == nil {
+			t.Fatalf("untrusted task was accepted: %s", output)
+		}
+	}
+	approximate := target
+	approximate.Symbols = []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "approximate", AtomicTarget: true}}
+	if _, err := parseSemanticAnalysis(valid(spec("main.go", "Run")), approximate, "package main\nfunc Run() {}"); err == nil {
+		t.Fatal("approximate target was accepted")
+	}
+	nonAtomic := target
+	nonAtomic.Symbols = append([]project.SymbolInfo(nil), target.Symbols...)
+	nonAtomic.Symbols[0].AtomicTarget = false
+	if _, err := parseSemanticAnalysis(valid(spec("main.go", "Run")), nonAtomic, "package main\nfunc Run() {}"); err == nil {
+		t.Fatal("non-atomic target was accepted")
+	}
+	duplicate := target
+	duplicate.Symbols = append(duplicate.Symbols, duplicate.Symbols[0])
+	if _, err := parseSemanticAnalysis(valid(spec("main.go", "Run")), duplicate, "package main\nfunc Run() {}"); err == nil {
+		t.Fatal("duplicate target was accepted")
+	}
+
+	for _, candidate := range []string{
+		`{"name":"TestRun","content":"package other\nfunc TestRun() {}"}`,
+		`{"name":"TestRun","content":"package main\nfunc TestRun( {"}`,
+		`{"name":"NotATest","content":"package main\nfunc NotATest() {}"}`,
+	} {
+		output := valid(`{"schema_version":"1","target_path":"main.go","target_symbol":"Run","acceptance_criteria":["Handle the error."],"non_goals":[],"go_test_candidate":` + candidate + `}`)
+		parsed, err := parseSemanticAnalysis(output, target, "package main\nfunc Run() {}")
+		if err != nil || parsed.Risks[0].TaskSpec == nil || parsed.Risks[0].TaskSpec.GoTestCandidate != nil {
+			t.Fatalf("invalid optional test = %+v, %v", parsed.Risks[0].TaskSpec, err)
+		}
 	}
 }
 

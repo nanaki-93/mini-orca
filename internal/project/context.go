@@ -28,6 +28,10 @@ type ContextManifest struct {
 	ByteLimit       int               `json:"byte_limit"`
 	TokenLimit      int               `json:"token_limit"`
 	Truncated       bool              `json:"truncated"`
+	Scope           string            `json:"scope,omitempty"`
+	Model           string            `json:"model,omitempty"`
+	ProviderOrigin  string            `json:"provider_origin,omitempty"`
+	RemoteProvider  bool              `json:"remote_provider,omitempty"`
 }
 
 type ContextFile struct {

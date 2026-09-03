@@ -9,7 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 const (
@@ -22,6 +25,8 @@ const (
 )
 
 const maxCheckOutputBytes = 8 * 1024
+
+var checkSecret = regexp.MustCompile(`(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|credential|authorization)\b\s*[:=]\s*[^\s,;]+`)
 
 // CandidateCheck is one parser, formatter, lint, or test result. Command is a
 // display-only argv preview; it is never executed through a shell.
@@ -60,6 +65,16 @@ type CandidateCheckOptions struct {
 // project. Neither the candidate nor a formatter/check process can write the
 // imported project.
 func (s *Service) RunCandidateChecks(ctx context.Context, targetPath, candidate string, options CandidateCheckOptions) (CandidateCheckReport, error) {
+	return s.runCandidateChecks(ctx, targetPath, candidate, options, nil)
+}
+
+// RunCandidateChecksForTask adds one reviewed task test to the same isolated
+// workspace used by the ordinary parser, formatter, lint, and test checks.
+func (s *Service) RunCandidateChecksForTask(ctx context.Context, targetPath, candidate string, options CandidateCheckOptions, test *project.GoTestCandidateSpec) (CandidateCheckReport, error) {
+	return s.runCandidateChecks(ctx, targetPath, candidate, options, test)
+}
+
+func (s *Service) runCandidateChecks(ctx context.Context, targetPath, candidate string, options CandidateCheckOptions, taskTest *project.GoTestCandidateSpec) (CandidateCheckReport, error) {
 	file, err := s.manager.IndexedFile(targetPath)
 	if err != nil {
 		return CandidateCheckReport{}, err
@@ -71,6 +86,19 @@ func (s *Service) RunCandidateChecks(ctx context.Context, targetPath, candidate 
 	defer os.RemoveAll(workspace)
 	if err := copyCandidateWorkspace(s.manager.Root(), workspace); err != nil {
 		return CandidateCheckReport{}, err
+	}
+	var taskChecks []CandidateCheck
+	var taskCommand []string
+	if taskTest != nil {
+		testPath, err := taskTestPath(workspace, file.Path)
+		if err != nil {
+			return CandidateCheckReport{}, err
+		}
+		if err := os.WriteFile(testPath, []byte(taskTest.Content), 0600); err != nil {
+			return CandidateCheckReport{}, fmt.Errorf("write task test workspace file: %w", err)
+		}
+		taskCommand = []string{"go", "test", "./...", "-run", "^" + taskTest.Name + "$"}
+		taskChecks = append(taskChecks, s.runTaskTestCheck(ctx, workspace, "task test baseline", taskCommand, false))
 	}
 	candidatePath := filepath.Join(workspace, filepath.FromSlash(file.Path))
 	if err := os.MkdirAll(filepath.Dir(candidatePath), 0700); err != nil {
@@ -103,8 +131,55 @@ func (s *Service) RunCandidateChecks(ctx context.Context, targetPath, candidate 
 			CandidateCheck{Name: "tests", State: CheckUnavailable},
 		)
 	}
+	if len(taskChecks) == 1 && taskChecks[0].State == CheckPassed {
+		taskChecks = append(taskChecks, s.runTaskTestCheck(ctx, workspace, "task test candidate", taskCommand, true))
+	}
+	report.Checks = append(report.Checks, taskChecks...)
 	report.Applicable = requiredChecksPassed(report.Checks)
 	return report, nil
+}
+
+func taskTestPath(workspace, targetPath string) (string, error) {
+	directory := filepath.Join(workspace, filepath.Dir(filepath.FromSlash(targetPath)))
+	for suffix := 0; suffix < 100; suffix++ {
+		name := "mini_orca_task_test.go"
+		if suffix > 0 {
+			name = fmt.Sprintf("mini_orca_task_%d_test.go", suffix)
+		}
+		path := filepath.Join(directory, name)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return path, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("no available generated task test filename")
+}
+
+func (s *Service) runTaskTestCheck(ctx context.Context, workspace, name string, command []string, expectPass bool) CandidateCheck {
+	check := CandidateCheck{Name: name, Required: true, Command: append([]string(nil), command...)}
+	if err := ctx.Err(); err != nil {
+		check.State = CheckCanceled
+		check.Output = err.Error()
+		return check
+	}
+	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
+	defer cancel()
+	output, exitCode, err := runCheckCommand(timed, workspace, command)
+	check.Output = sanitizeCheckOutput(output, workspace, s.manager.Root())
+	check.ExitCode = exitCode
+	if timed.Err() != nil {
+		check.State = CheckCanceled
+		check.Output = timed.Err().Error()
+		return check
+	}
+	passed := err == nil
+	if passed == expectPass {
+		check.State = CheckPassed
+	} else {
+		check.State = CheckFailed
+	}
+	return check
 }
 
 func parseGoCandidate(path, candidate string) CandidateCheck {
@@ -169,6 +244,7 @@ func requiredChecksPassed(checks []CandidateCheck) bool {
 func sanitizeCheckOutput(output, workspace, root string) string {
 	output = strings.ReplaceAll(output, workspace, "<workspace>")
 	output = strings.ReplaceAll(output, root, "<project>")
+	output = checkSecret.ReplaceAllString(output, "[redacted]")
 	if len(output) > maxCheckOutputBytes {
 		output = output[:maxCheckOutputBytes] + "\n[output truncated]"
 	}

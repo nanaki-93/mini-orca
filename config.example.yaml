@@ -2,7 +2,8 @@
 # This file demonstrates all available configuration options.
 
 # ─── LLM ──────────────────────────────────────────────────────────────────────
-# Configure the single LLM endpoint used for file-scoped declaration proposals.
+# Configure the legacy LLM endpoint. Existing configurations continue to use it for
+# all three model scopes unless a scope is explicitly configured below.
 # Keep real credentials in an ignored local config.yaml. A non-loopback endpoint
 # still requires per-request desktop confirmation before prompt content is sent.
 
@@ -12,6 +13,38 @@ llm:
   model: ""              # Optional: specify a model name
   temperature: 0.7       # Default sampling temperature
   max_tokens: 8192       # Default response limit
+
+# ─── Scoped model profiles ────────────────────────────────────────────────────
+# Optional fixed scopes. An explicit scope needs both api_base_url and model. API
+# bases use Chat Completions compatibility: OpenAI https://api.openai.com/v1;
+# Claude compatibility https://api.anthropic.com/v1; Gemini compatibility
+# https://generativelanguage.googleapis.com/v1beta/openai; Ollama
+# http://localhost:11434/v1; LM Studio http://localhost:1234/v1; or a custom
+# compatible gateway such as https://gateway.example/v1. Keep actual keys only
+# in ignored config.yaml. Restart the daemon after changing scopes.
+#
+# model_scopes:
+#   analyze:
+#     api_base_url: "https://api.openai.com/v1"
+#     api_key: "replace-with-personal-key"
+#     model: "replace-with-analysis-model-id"
+#     temperature: 0.1
+#     max_tokens: 16000
+#     context_max_tokens: 120000
+#   bug:
+#     api_base_url: "https://api.anthropic.com/v1"
+#     api_key: "replace-with-personal-key"
+#     model: "replace-with-bug-model-id"
+#     temperature: 0.1
+#     max_tokens: 12000
+#     context_max_tokens: 32000
+#   function:
+#     api_base_url: "http://localhost:11434/v1"
+#     api_key: "" # Empty keys are valid for local servers.
+#     model: "replace-with-local-function-model-id"
+#     temperature: 0.2
+#     max_tokens: 4096
+#     context_max_tokens: 4000
 
 # ─── Agents ───────────────────────────────────────────────────────────────────
 # Configure the active profile and optional focused-check profiles. These do not

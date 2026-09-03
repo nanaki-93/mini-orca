@@ -64,6 +64,7 @@ type UnifiedFinding struct {
 	Freshness           string          `json:"freshness"`
 	DetectedAt          time.Time       `json:"detected_at"`
 	OriginatingAnalysis string          `json:"originating_analysis,omitempty"`
+	TaskSpec            *BugTaskSpec    `json:"task_spec,omitempty"`
 }
 
 // FindingInput is the active deterministic state used to assess freshness.
@@ -263,6 +264,7 @@ func normalizeFinding(finding UnifiedFinding, input FindingInput) UnifiedFinding
 	finding.Title = sanitizeFindingText(finding.Title, maxProjectAnalysisItemBytes)
 	finding.Message = sanitizeFindingText(finding.Message, maxProjectAnalysisItemBytes)
 	finding.Evidence = sanitizeFindingText(finding.Evidence, maxProjectAnalysisBytes)
+	finding.TaskSpec = SanitizeBugTaskSpec(finding.TaskSpec)
 	finding.Location.Path = filepath.ToSlash(strings.TrimSpace(finding.Location.Path))
 	finding.Location.Symbol = strings.TrimSpace(finding.Location.Symbol)
 	if finding.Status == "" {
@@ -303,7 +305,28 @@ func validateFinding(finding UnifiedFinding) error {
 	if len(finding.Title) > maxProjectAnalysisItemBytes || len(finding.Message) > maxProjectAnalysisItemBytes || len(finding.Evidence) > maxProjectAnalysisBytes || finding.Location.StartLine < 0 || finding.Location.EndLine < finding.Location.StartLine {
 		return fmt.Errorf("finding exceeds limits")
 	}
+	if !validPersistedBugTaskSpec(finding.TaskSpec) {
+		return fmt.Errorf("finding task specification is invalid")
+	}
 	return nil
+}
+
+func validPersistedBugTaskSpec(spec *BugTaskSpec) bool {
+	if spec == nil {
+		return true
+	}
+	if spec.SchemaVersion != BugTaskSpecSchemaVersion || spec.TargetPath == "" || spec.TargetSymbol == "" || spec.TargetSignature == "" || len(spec.AcceptanceCriteria) == 0 || len(spec.AcceptanceCriteria) > MaxBugTaskItems || len(spec.NonGoals) > MaxBugTaskItems {
+		return false
+	}
+	for _, item := range append(append([]string(nil), spec.AcceptanceCriteria...), spec.NonGoals...) {
+		if item == "" || len(item) > MaxBugTaskItemBytes {
+			return false
+		}
+	}
+	if candidate := spec.GoTestCandidate; candidate != nil && (candidate.Name == "" || candidate.Content == "" || len(candidate.Name) > MaxBugTaskItemBytes || len(candidate.Content) > MaxBugTaskCandidateBytes) {
+		return false
+	}
+	return true
 }
 
 func validFindingSource(value string) bool {
@@ -326,7 +349,11 @@ func sanitizeFindingText(value string, limit int) string {
 	return value[:limit-len("[truncated]")] + "[truncated]"
 }
 func cloneFindings(source []UnifiedFinding) []UnifiedFinding {
-	return append([]UnifiedFinding(nil), source...)
+	result := append([]UnifiedFinding(nil), source...)
+	for index := range result {
+		result[index].TaskSpec = cloneBugTaskSpec(source[index].TaskSpec)
+	}
+	return result
 }
 
 // SuggestedFindingsForProject adapts fresh structured AI risks without ever
@@ -350,7 +377,18 @@ func SuggestedFindingsForFile(analysis FileAnalysis) []UnifiedFinding {
 	}
 	findings := make([]UnifiedFinding, 0, len(analysis.Risks))
 	for _, risk := range analysis.Risks {
-		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "File analysis suggestion", Message: risk.Summary, FileHash: analysis.ContentHash, Location: FindingLocation{Path: analysis.Path}, OriginatingAnalysis: "file"})
+		location := FindingLocation{Path: analysis.Path}
+		if spec := risk.TaskSpec; spec != nil {
+			location.Symbol = spec.TargetSymbol
+			for _, symbol := range analysis.Symbols {
+				if symbol.Name == spec.TargetSymbol {
+					location.StartLine = symbol.StartLine
+					location.EndLine = symbol.EndLine
+					break
+				}
+			}
+		}
+		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "File analysis suggestion", Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: cloneBugTaskSpec(risk.TaskSpec)})
 	}
 	return findings
 }

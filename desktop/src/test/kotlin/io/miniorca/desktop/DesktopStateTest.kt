@@ -158,6 +158,24 @@ class DesktopStateTest {
 
         assertEquals(symbols[1], symbolForNavigation(symbols, EditorNavigationTarget("main.go", "Run", 2)))
         assertEquals(symbols[1], symbolForNavigation(symbols, EditorNavigationTarget("main.go", line = 12)))
+        assertEquals(12, navigationFocusLine(EditorNavigationTarget("main.go", "Run", 12), symbols[1]))
+        assertEquals(10, navigationFocusLine(EditorNavigationTarget("main.go", "Run"), symbols[1]))
+        assertEquals(0, navigationFocusLine(EditorNavigationTarget("main.go"), null))
+    }
+
+    @Test fun findingNavigationResolvesAnUnambiguousMentionedDeclaration() {
+        val command = SymbolInfo("diffCmd", "var", startLine = 3, endLine = 9, confidence = "exact", atomicTarget = true)
+        val index = ProjectIndex("project", "revision", files = listOf(IndexedFile("command.go", "hash", "Go", false, symbols = listOf(command))))
+        val finding = UnifiedFinding(
+            title = "Cobra command behavior",
+            message = "diffCmd should validate its input before running.",
+            location = FindingLocation("command.go"),
+        )
+
+        val target = findingNavigationTarget(finding, index)
+
+        assertEquals(EditorNavigationTarget("command.go", "diffCmd", 3), target)
+        assertEquals(EditorNavigationSelection(command, 3), resolveEditorNavigation(listOf(command), requireNotNull(target)))
     }
 
     @Test fun sourceLineSelectionUsesTheMostSpecificValidDeclaration() {
@@ -219,7 +237,7 @@ class DesktopStateTest {
 
     @Test fun contextInspectorClientKeepsOnlySourceFreeManifestMetadata() {
         val client = ApiClient("https://provider.example", DaemonTransport { _, _, _ ->
-            TransportResponse(200, """{"included":[{"path":"main.go","size_bytes":20,"hash":"sha256:base","estimated_tokens":5}],"excluded":[{"path":".env","include":false,"reason":"secret"}],"estimated_tokens":5,"byte_limit":1024,"token_limit":256,"content":"private source must not reach the UI model"}""")
+            TransportResponse(200, """{"included":[{"path":"main.go","size_bytes":20,"hash":"sha256:base","estimated_tokens":5}],"excluded":[{"path":".env","include":false,"reason":"secret"}],"estimated_tokens":5,"byte_limit":1024,"token_limit":256,"scope":"function","model":"local-code","provider_origin":"http://localhost:11434","content":"private source must not reach the UI model"}""")
         })
 
         val manifest = client.context("main.go")
@@ -227,6 +245,9 @@ class DesktopStateTest {
         assertEquals("Remote endpoint", client.endpointLocality())
         assertEquals("main.go", manifest.included.single().path)
         assertEquals("secret", manifest.excluded.single().reason)
+        assertEquals("function", manifest.scope)
+        assertEquals("local-code", manifest.model)
+        assertEquals("http://localhost:11434", manifest.providerOrigin)
         assertTrue(!Json.encodeToString(manifest).contains("private source"))
     }
 

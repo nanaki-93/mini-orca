@@ -20,6 +20,7 @@ func TestFileAnalysisCacheRoundTripAndSourceFreePersistence(t *testing.T) {
 	analysis.Purpose = "Runs the command."
 	analysis.Responsibilities = []string{"dispatches work"}
 	analysis.SymbolExplanations = map[string]string{"Run": "Starts the command."}
+	analysis.Risks = []Finding{{Severity: "high", Summary: "Check errors.", TaskSpec: &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", TargetSymbol: "Run", TargetSignature: "func Run()", AcceptanceCriteria: []string{"Return errors."}, NonGoals: []string{}}}}
 	if err := cache.Store(analysis); err != nil {
 		t.Fatal(err)
 	}
@@ -27,14 +28,14 @@ func TestFileAnalysisCacheRoundTripAndSourceFreePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Status != AnalysisStatusFresh || loaded.Purpose != analysis.Purpose || loaded.SymbolExplanations["Run"] == "" {
+	if loaded.Status != AnalysisStatusFresh || loaded.Purpose != analysis.Purpose || loaded.SymbolExplanations["Run"] == "" || loaded.Risks[0].TaskSpec == nil || loaded.Risks[0].TaskSpec.TargetSymbol != "Run" {
 		t.Fatalf("loaded analysis = %+v", loaded)
 	}
 	data, err := os.ReadFile(cache.cachePath("main.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "package main") || strings.Contains(string(data), "func Run") {
+	if strings.Contains(string(data), "package main\\nfunc Run() {}") {
 		t.Fatalf("cache contains original source: %s", data)
 	}
 }
@@ -73,6 +74,8 @@ func TestFileAnalysisCacheInvalidatesOnlyChangedInputs(t *testing.T) {
 	for _, mutate := range []func(*FileAnalysisInput){
 		func(value *FileAnalysisInput) { value.Model = "new-model" },
 		func(value *FileAnalysisInput) { value.Profile = "new-profile" },
+		func(value *FileAnalysisInput) { value.Scope = "new-scope" },
+		func(value *FileAnalysisInput) { value.ProviderOrigin = "https://new-provider.example" },
 		func(value *FileAnalysisInput) { value.ContextPolicyVersion = "policy-v2" },
 		func(value *FileAnalysisInput) { value.PromptVersion = "prompt-v2" },
 	} {
@@ -186,9 +189,9 @@ func TestFileAnalysisCacheRecoversCorruptionAndConcurrentAccess(t *testing.T) {
 }
 
 func analysisCacheInput(path, hash string) FileAnalysisInput {
-	return FileAnalysisInput{ProjectID: "sha256:project", ProjectRevision: "sha256:revision", Path: path, ContentHash: hash, Language: "Go", Model: "local-model", Profile: "coder", PromptVersion: "prompt-v1", ContextPolicyVersion: "policy-v1"}
+	return FileAnalysisInput{ProjectID: "sha256:project", ProjectRevision: "sha256:revision", Path: path, ContentHash: hash, Language: "Go", Model: "local-model", Profile: "bug", Scope: "bug", ProviderOrigin: "http://localhost:11434", PromptVersion: "prompt-v1", ContextPolicyVersion: "policy-v1"}
 }
 
 func newFreshAnalysis(input FileAnalysisInput) FileAnalysis {
-	return FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusFresh, Model: input.Model, Profile: input.Profile, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
+	return FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusFresh, Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
 }

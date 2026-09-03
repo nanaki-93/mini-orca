@@ -23,8 +23,9 @@ class EditorProgressStateTest {
 
     @Test fun contextualShortcutsRequireTheSameCurrentActionsAsTheEditor() {
         val ready = stateWithDraft()
-        val review = editorContextualActions(ready, ChatEditMode.ReplaceSymbol, "", "", sending = false, remoteProvider = false, remoteProviderConfirmed = false)
-        val editable = editorContextualActions(ready.reduce(DesktopEvent.DraftEdited(declaration = "func Run() error { return nil }")), ChatEditMode.ReplaceSymbol, "", "Explain the change", sending = false, remoteProvider = false, remoteProviderConfirmed = false)
+        val localFunction = ScopedModel(scope = "function", profile = "function", model = "local")
+        val review = editorContextualActions(ready, ChatEditMode.ReplaceSymbol, "", "", sending = false, functionModel = localFunction, remoteProviderConfirmed = false)
+        val editable = editorContextualActions(ready.reduce(DesktopEvent.DraftEdited(declaration = "func Run() error { return nil }")), ChatEditMode.ReplaceSymbol, "", "Explain the change", sending = false, functionModel = localFunction, remoteProviderConfirmed = false)
 
         assertTrue(review.canFocusChat)
         assertTrue(review.canFocusDraft)
@@ -34,7 +35,7 @@ class EditorProgressStateTest {
         assertTrue(editable.canValidateDraft)
         assertFalse(editable.canRunFocusedChecks)
 
-        val hidden = editorContextualActions(ready.copy(workspace = Workspace.Summary), ChatEditMode.ReplaceSymbol, "", "Explain the change", sending = false, remoteProvider = false, remoteProviderConfirmed = false)
+        val hidden = editorContextualActions(ready.copy(workspace = Workspace.Summary), ChatEditMode.ReplaceSymbol, "", "Explain the change", sending = false, functionModel = localFunction, remoteProviderConfirmed = false)
 
         assertFalse(hidden.canGenerate)
         assertFalse(hidden.canValidateDraft)
@@ -43,13 +44,24 @@ class EditorProgressStateTest {
 
     @Test fun createComposerCannotSendUntilTheNewNameIsValid() {
         val state = stateWithDraft().copy(chat = ChatState(), review = DraftReviewState())
-        val invalid = editorContextualActions(state, ChatEditMode.CreateSymbol, "", "Create it", sending = false, remoteProvider = false, remoteProviderConfirmed = false)
-        val valid = editorContextualActions(state, ChatEditMode.CreateSymbol, "NewRun", "Create it", sending = false, remoteProvider = false, remoteProviderConfirmed = false)
+        val localFunction = ScopedModel(scope = "function", profile = "function", model = "local")
+        val invalid = editorContextualActions(state, ChatEditMode.CreateSymbol, "", "Create it", sending = false, functionModel = localFunction, remoteProviderConfirmed = false)
+        val valid = editorContextualActions(state, ChatEditMode.CreateSymbol, "NewRun", "Create it", sending = false, functionModel = localFunction, remoteProviderConfirmed = false)
 
         assertFalse(invalid.canFocusChat)
         assertFalse(invalid.canGenerate)
         assertTrue(valid.canFocusChat)
         assertTrue(valid.canGenerate)
+    }
+
+    @Test fun generationUsesFunctionProviderLocalityOnly() {
+        val state = stateWithDraft().copy(review = DraftReviewState(), chat = ChatState())
+        val remoteFunction = ScopedModel(scope = "function", profile = "function", model = "remote-code", remoteProvider = true)
+        val localFunction = remoteFunction.copy(model = "local-code", remoteProvider = false)
+
+        assertFalse(editorContextualActions(state, ChatEditMode.ReplaceSymbol, "", "Explain", sending = false, functionModel = remoteFunction, remoteProviderConfirmed = false).canGenerate)
+        assertTrue(editorContextualActions(state, ChatEditMode.ReplaceSymbol, "", "Explain", sending = false, functionModel = remoteFunction, remoteProviderConfirmed = true).canGenerate)
+        assertTrue(editorContextualActions(state, ChatEditMode.ReplaceSymbol, "", "Explain", sending = false, functionModel = localFunction, remoteProviderConfirmed = false).canGenerate)
     }
 
     private fun stateWithDraft(): DesktopState {

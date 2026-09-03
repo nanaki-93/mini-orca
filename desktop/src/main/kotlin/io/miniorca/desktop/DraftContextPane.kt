@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 internal fun DraftContextPane(
     project: ProjectAnalysis?, selected: ProjectFileInfo?, session: ChatSession?, draft: DeclarationDraft?, editor: EditableDraftState?, target: ChatTarget?, mode: ChatEditMode, newSymbol: String,
-    message: String, sending: Boolean, remoteProvider: Boolean, remoteConfirmed: Boolean, chatFocus: FocusRequester, draftFocus: FocusRequester,
+    message: String, sending: Boolean, functionModel: ScopedModel, remoteConfirmed: Boolean, chatFocus: FocusRequester, draftFocus: FocusRequester,
     onMessage: (String) -> Unit, onNewSymbol: (String) -> Unit, onRemoteConfirmed: (Boolean) -> Unit, onInspectContext: () -> Unit, onDraftDeclaration: (String) -> Unit,
     onDraftImports: (List<String>) -> Unit, onValidateDraft: () -> Unit, onSend: () -> Unit, onCancel: () -> Unit, modifier: Modifier,
 ) {
@@ -40,10 +40,10 @@ internal fun DraftContextPane(
                 CompactSingleLineField(newSymbol, onNewSymbol, label = { Text("New Go function or type name") }, modifier = Modifier.fillMaxWidth().padding(top = 9.dp))
             }
             OutlinedTextField(message, onMessage, enabled = !sending && target != null, label = { Text("Message") }, placeholder = { Text("Describe one declaration change") }, minLines = 3, modifier = Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(chatFocus))
-            RemoteProviderConfirmation(remoteProvider, remoteConfirmed, onRemoteConfirmed)
+            RemoteProviderConfirmation(ModelScope.Function, functionModel, remoteConfirmed, onRemoteConfirmed)
             FocusFlowButton(onClick = onInspectContext, enabled = selected != null && !sending, tone = ActionTone.Neutral, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Inspect context") }
             if (sending) FocusFlowButton(onClick = onCancel, tone = ActionTone.Destructive, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Cancel request") }
-            else FocusFlowButton(onClick = onSend, enabled = target != null && message.isNotBlank() && (!remoteProvider || remoteConfirmed), tone = ActionTone.Primary, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Send message") }
+            else FocusFlowButton(onClick = onSend, enabled = target != null && message.isNotBlank() && (!functionModel.remoteProvider || remoteConfirmed), tone = ActionTone.Primary, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Send message") }
         }
         if (draft != null && editor != null && chatDraftMatchesSession(draft, session)) DraftEditorCard(editor, draftFocus, onDraftDeclaration, onDraftImports, onValidateDraft)
     }

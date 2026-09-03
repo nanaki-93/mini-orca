@@ -80,8 +80,34 @@ fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress = when {
     else -> VerifiedScanProgress("Verified scan ${scan.status.lowercase()}; completed phase results remain available.", false, scanWarnings(scan))
 }
 
-fun findingCanPrepareFix(finding: UnifiedFinding): Boolean =
-    finding.freshness.lowercase() == "fresh" && finding.location.path.isNotBlank()
+fun findingCanPrepareFix(finding: UnifiedFinding): Boolean {
+    val task = finding.taskSpec ?: return false
+    return finding.freshness.lowercase() == "fresh" &&
+        task.schemaVersion == "1" &&
+        task.targetPath.isNotBlank() && task.targetPath == finding.location.path &&
+        task.targetSymbol.isNotBlank() && task.targetSymbol == finding.location.symbol &&
+        task.targetSignature.isNotBlank() && task.acceptanceCriteria.isNotEmpty()
+}
+
+fun findingTaskNavigationTarget(finding: UnifiedFinding): EditorNavigationTarget? =
+    finding.taskSpec?.takeIf { findingCanPrepareFix(finding) }?.let { EditorNavigationTarget(it.targetPath, it.targetSymbol) }
+
+fun findingTaskRequirement(finding: UnifiedFinding): String? {
+    val task = finding.taskSpec?.takeIf { findingCanPrepareFix(finding) } ?: return null
+    return buildString {
+        append("Implement the reviewed bug task for ").append(task.targetSymbol).append(".\n")
+        append("Target: ").append(task.targetPath).append("\n")
+        append("Signature: ").append(task.targetSignature).append("\n\n")
+        append("Acceptance criteria:\n")
+        task.acceptanceCriteria.forEach { append("- ").append(it).append('\n') }
+        append("Non-goals:\n")
+        if (task.nonGoals.isEmpty()) append("- None supplied.\n") else task.nonGoals.forEach { append("- ").append(it).append('\n') }
+        task.goTestCandidate?.let { candidate ->
+            append("Optional Go test candidate (review only; do not write automatically): ").append(candidate.name).append("\n")
+            append(candidate.content).append('\n')
+        }
+    }.trim()
+}
 
 internal fun findingProvenanceLabel(finding: UnifiedFinding): String =
     "${classifyFinding(finding).provenanceLabel} · source ${finding.source.ifBlank { "unknown" }} · confidence ${finding.confidence.ifBlank { "unknown" }}"

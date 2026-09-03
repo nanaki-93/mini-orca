@@ -22,7 +22,36 @@ All source-mutating behavior is confirmation-gated, hash/revision-guarded,
 one-file-only, and auditable. The daemon does not provide a browser IDE,
 automatic scans, automatic writes, multi-file changes, commits, or pushes.
 
-The API binds to loopback by default. For a non-loopback LLM provider, requests
-that send prompt content must include `confirm_remote_provider: true` after
-the user has reviewed the provider destination. Local credentials belong only in
-the ignored `config.yaml`; they are never returned by the API.
+## Scoped model and repair contract
+
+`GET /api/models/current` reports safe metadata for the fixed `analyze`, `bug`,
+and `function` profiles; legacy top-level fields remain the effective function
+profile. It never includes an API key. Import sends prompt content only to
+`analyze`, file analysis and Analyze-all only to `bug`, and declaration messages
+only to `function`. Confirmation is evaluated independently for each remote
+scope.
+
+An AI finding may include a validated `task_spec` for one exact Go declaration.
+Pass that spec only when opening a matching replace-symbol chat session. The
+daemon revalidates it against the current project revision, file hash, indexed
+symbol, and source before pinning it to the session and every resulting draft.
+An optional `go_test_candidate` is never written to the project: after a user
+validates a draft and starts checks, it runs under a daemon-selected temporary
+`_test.go` filename in the copied check workspace and must fail on the base then
+pass on the candidate.
+
+`POST /api/projects/current/chat/sessions/{sessionID}/messages` accepts
+`repair: true` only for the latest task-bound draft with current failed checks.
+The Desktop action supplies bounded sanitized check output as the ordinary next
+message in that same session and parent-draft chain. The daemon allows at most
+three repair requests per session; checks never start a provider call by
+themselves. Passing checks return to the normal human diff review and explicit
+Apply flow.
+
+The API binds to loopback by default. `/api/models/current` exposes safe model
+metadata for `analyze`, `bug`, and `function`; its top-level fields remain the
+effective `function` profile for compatibility. A request that sends prompt
+content must include `confirm_remote_provider: true` only when its own scope is
+non-loopback: import uses `analyze`, file analysis uses `bug`, and declaration
+generation uses `function`. Local credentials belong only in ignored
+`config.yaml`; they are never returned by the API.

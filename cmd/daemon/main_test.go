@@ -84,6 +84,7 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 		{http.MethodGet, "/api/models/current"},
 		{http.MethodGet, "/api/projects/current/context"},
 		{http.MethodPost, "/api/projects/import"},
+		{http.MethodPost, "/api/projects/restore"},
 		{http.MethodGet, "/api/projects/current"},
 		{http.MethodGet, "/api/projects/current/overview"},
 		{http.MethodGet, "/api/projects/current/findings"},

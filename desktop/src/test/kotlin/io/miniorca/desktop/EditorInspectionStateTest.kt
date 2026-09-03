@@ -27,6 +27,12 @@ class EditorInspectionStateTest {
         assertFalse(sourceTapSelectsContext(dragged = true))
     }
 
+    @Test fun sourceEditorExpandsLeadingIndentationWithoutChangingCodeContent() {
+        assertEquals("         return result", expandedEditorIndentation("    return result"))
+        assertEquals("\t\t result := run()", expandedEditorIndentation("\tresult := run()"))
+        assertEquals("result  := run()", expandedEditorIndentation("result  := run()"))
+    }
+
     @Test fun inspectorShowsOneSelectedSymbolAndOneAnalysisActionAtATime() {
         val selected = SymbolInfo("Run", "function", "func Run() error", 5, 12, "exact", true)
         val remoteUnconfirmed = InspectorProviderState(remoteProvider = true, remoteProviderConfirmed = false)
@@ -90,7 +96,9 @@ class EditorInspectionStateTest {
         assertFalse(symbolEditEligibility(file(), listOf(nonAtomic), nonAtomic).eligible)
         val unsupportedKind = selected.copy(kind = "variable")
         assertFalse(symbolEditEligibility(file(), listOf(unsupportedKind), unsupportedKind).eligible)
-        assertFalse(symbolEditEligibility(file(), listOf(selected.copy(kind = "var")), selected.copy(kind = "var")).eligible)
+        val commandWithClosure = selected.copy(name = "diffCmd", kind = "var", signature = "var diffCmd = func() {}")
+        assertTrue(symbolEditEligibility(file(), listOf(commandWithClosure), commandWithClosure).eligible)
+        assertFalse(symbolEditEligibility(file(), listOf(selected.copy(kind = "const")), selected.copy(kind = "const")).eligible)
     }
 
     private fun file() = ProjectFileInfo(

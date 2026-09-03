@@ -28,15 +28,16 @@ the current declaration-draft workflow.
 | GET | `/health` | Liveness and daemon version. |
 | GET | `/status` | Daemon status and `single_coder_preview` workflow identifier. |
 | GET | `/api/system/info` | Local daemon system details. |
-| POST | `/api/projects/current/chat/sessions` | Open a Go declaration conversation pinned to project/file/revision/hash, mode, and target. |
+| POST | `/api/projects/current/chat/sessions` | Open a Go declaration conversation pinned to project/file/revision/hash, mode, target, and optional reviewed task spec. |
 | GET | `/api/projects/current/chat/sessions/{sessionID}` | Read one file-scoped conversation, including its draft proposal references. |
-| POST | `/api/projects/current/chat/sessions/{sessionID}/messages` | Request one declaration proposal; the body cannot retarget the session. |
+| POST | `/api/projects/current/chat/sessions/{sessionID}/messages` | Request one declaration proposal; the body cannot retarget the session and may explicitly request a bounded task repair. |
 | GET | `/api/projects/current/activity` | Read source-free project activity, distinct from file conversation messages. |
 | POST | `/api/chat/message` | Retired compatibility route; always returns `410 Gone`. |
 | GET | `/api/chat/history` | Deprecated source-free activity alias; new clients use `/api/projects/current/activity`. |
-| GET | `/api/models/current` | Effective local coder profile without credentials. |
+| GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `function` model catalog; top-level fields remain the effective `function` compatibility projection. |
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
+| POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
 | GET | `/api/projects/current` | Read the active project analysis. |
 | GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, coverage, and finding counts for `project_revision`. |
 | GET | `/api/projects/current/findings` | List source-free verified findings and AI suggestions with provenance, filters, and freshness. |
@@ -85,6 +86,19 @@ expected revision. Any edit clears earlier validation and checks. Validate and
 checks each pin the revision (and checks also pin its hash), so stale or changed
 drafts cannot be applied.
 
+An optional `task_spec` may open only a matching `replace_symbol` session. The
+daemon validates its exact indexed target against the current revision and file
+hash, then carries it through that session and its drafts. Its optional Go test
+candidate is written only to the temporary copied check workspace under a
+non-conflicting generated `_test.go` name. It must fail on the captured base
+and pass with the composed candidate before its required check succeeds.
+
+When current task-bound checks fail, a client can send the next pinned session
+message with `repair: true`. The daemon requires that exact latest failed draft,
+uses bounded sanitized check evidence supplied by the client, and permits at
+most three such repair requests. Checks, temporary tests, validation, review,
+Apply, and Undo never start a provider request on their own.
+
 `POST /api/projects/current/apply` requires the displayed draft id, revision,
 hash, project identity, base file hash, and an explicit `confirm: true`. It
 re-reads the target and rejects stale state before its atomic one-file write.
@@ -108,13 +122,23 @@ equivalent validators.
 ## Privacy, configuration, and errors
 
 The daemon binds to loopback by default. It filters ignored, generated,
-configuration, and secret-like paths before assembling model context. If
-`llm.base_url` is non-loopback, any request that can send prompt content must
-include `confirm_remote_provider: true` after the desktop user reviews the
-destination; otherwise the request is rejected.
+configuration, and secret-like paths before assembling model context. Each
+prompt request checks the effective scope shown by `/api/models/current`: project
+import uses `analyze`, selected-file analysis and Analyze-all use `bug`, and
+declaration proposals use `function`. A non-loopback scope requires
+`confirm_remote_provider: true` for that request only; confirmation for one
+scope never authorizes another. Restore, reindex, scans, validation, checks,
+review, Apply, and Undo never require provider confirmation.
 
 Configuration is local-only in `config.yaml` (ignored by Git); begin with
 `config.example.yaml`. The API never returns configured credentials. All API
 failures use a structured error object with `type`, `message`, `user_message`,
 and `code`. Project paths are canonical project-relative paths and revision/hash
 guards return `409 Conflict` when their captured base is no longer current.
+
+`model_scopes` is loaded only when the daemon starts. Missing scopes use the
+legacy profile fallback, while a changed explicit model or provider makes old
+AI cache entries stale. Providers must support OpenAI Chat Completions JSON;
+native Anthropic/Gemini endpoints, vendor SDKs, streaming, tool calls, and
+credential-vault features are outside this API. Keys belong only in ignored
+local config and are neither logged nor returned.

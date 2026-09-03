@@ -7,16 +7,18 @@ go run ./cmd/daemon
 ./desktop/gradlew -p desktop run
 ```
 
-The client uses `http://localhost:9090` by default. Set `MINI_ORCA_URL` to point it at another daemon URL. The daemon is loopback-only by default; if its configured LLM provider is non-loopback, the user must confirm that destination before any prompt-bearing request. Keep provider credentials in the ignored local `config.yaml`.
+The client uses `http://localhost:9090` by default. Set `MINI_ORCA_URL` to point it at another daemon URL. The daemon is loopback-only by default. The Desktop labels the effective `analyze`, `bug`, and `function` destinations independently; each non-loopback scope needs confirmation before its own prompt-bearing request. Keep provider credentials in the ignored local `config.yaml`.
 
 The Editor workflow is Go-first: exact replace/create declaration drafts receive composition and focused validation. Other language views remain analysis-only until equivalent validators are available.
 
 ## Opening a project
 
-Mini-Orca starts on a dedicated landing state. It shows only the product identity, an
-**Open project** action, and concise opening or retry feedback. Press `Cmd/Ctrl+O` to
-open the same project chooser from the keyboard. Until a project opens, workspace,
-file, symbol, draft, palette, and project-management shortcuts are unavailable.
+After the first successful project open, Mini-Orca remembers the canonical local path.
+Later launches automatically restore that project from its persisted local analysis and
+refresh deterministic facts without contacting the model. If restoration is unavailable,
+Mini-Orca falls back to its dedicated landing state with concise retry feedback. Press
+`Cmd/Ctrl+O` to open the project chooser from the keyboard. Until a project opens,
+workspace, file, symbol, draft, palette, and project-management shortcuts are unavailable.
 
 After import, the top bar shows the project name and one compact text-labeled connection
 state. Workspace navigation is deliberately concise: Summary, Analysis, Bugs, and
@@ -37,7 +39,7 @@ declaration and show its explanation in Context. Click outside declarations to c
 stale symbol context while keeping the focused source line.
 Source remains read-only: dragging selects text and does not retarget or edit a draft.
 
-For an exact atomic Go function, method, or type, Context
+For an exact atomic Go function, method, type, or single top-level variable, Context
 offers **Edit `<symbol>`**. It opens the bound Replace composer without contacting a
 provider or changing source. To create
 a declaration, open Commands and choose **Create declaration**; that route alone asks
@@ -62,7 +64,7 @@ replacing them.
 
 ## Desktop shell smoke check
 
-With a project containing a few nested directories (or a larger fixture), import it and verify Summary, Analysis, Bugs, and Editor navigation. Summary, Analysis, and Bugs use the full workspace canvas without Explorer or Context panes. In Analysis, confirm coverage and current/last-run totals are visible, only analysis errors are listed, and no result opens a file. Confirm the Analyze-all limits share a compact row and related actions wrap rather than clip when space is narrow. In Bugs, use the Filters disclosure to reveal advanced fields only when needed; confirm high, medium, low, and fallback sections are nonempty, ordered, and retain card-level provenance. In Editor, filtering keeps matching paths selected; disclosure controls expand and collapse; pane dividers retain their widths after restarting the app; and the source is selectable and read-only. Confirm the header names the active basename and relative path in both source and review, including duplicate basenames, and never retains a previous file after it closes. Click within a declaration to open its Context explanation, or outside one to clear stale symbol context while retaining the focused line; drag to select source text without changing the declaration or draft. A chat proposal stays bound to the selected file. Use the direct Edit action for an exact declaration, or Commands for Create declaration. Drafts without imports omit the `Required imports` field; existing imports remain editable. Edit only the declaration draft, validate it, run focused checks in Review, confirm Apply names the file and symbol, then use Undo. Re-analyze and verify old drafts become stale while textual freshness badges update.
+With a project containing a few nested directories (or a larger fixture), import it and verify Summary, Analysis, Bugs, and Editor navigation. Summary, Analysis, and Bugs use the full workspace canvas without Explorer or Context panes. In Analysis, confirm coverage and current/last-run totals are visible, only analysis errors are listed, and no result opens a file. Confirm the Analyze-all limits share a compact row and related actions wrap rather than clip when space is narrow. In Bugs, use the Filters disclosure to reveal advanced fields only when needed; confirm high, medium, low, and fallback sections are nonempty, ordered, and retain card-level provenance. In Editor, filtering keeps matching paths selected; disclosure controls expand and collapse with clear nesting indentation; pane dividers retain their widths after restarting the app; and the source is selectable and read-only. Confirm fresh files use the compact green indicator with an accessible description while other analysis states retain text labels. Confirm the header names the active basename and relative path in both source and review, including duplicate basenames, and never retains a previous file after it closes. Click within a declaration to open its Context explanation, or outside one to clear stale symbol context while retaining the focused line; drag to select source text without changing the declaration or draft. A chat proposal stays bound to the selected file. A fresh exact task can use **Prepare fix** to prefill that target without generating or applying anything. Use the direct Edit action for an exact declaration, or Commands for Create declaration. Drafts without imports omit the `Required imports` field; existing imports remain editable. Edit only the declaration draft, validate it, run focused checks in Review, confirm Apply names the file and symbol, then use Undo. An optional task test exists only in the temporary check copy. If latest task-bound checks fail, **Revise with check output** sends bounded sanitized evidence through the pinned chat and stops after three repairs. Re-analyze and verify old drafts become stale while explorer freshness indicators update.
 
 ## Keyboard and accessibility checklist
 
@@ -70,6 +72,6 @@ With the same fixture, verify the focused workflow without a mouse:
 
 - `⌘P` opens file navigation from every workspace; choosing an indexed file activates Editor and opens that exact path. `⌘⇧O` opens the selected-file symbol picker, and `⌘K` opens the Replace composer only for an eligible selected declaration. `⌘1`–`⌘4` select Summary, Analysis, Bugs, and Editor; `⌘Tab` cycles them.
 - Select an eligible declaration, enter a chat request, then use `⌘Enter` to send. Use Commands for **Create declaration**. Edit only the declaration draft, use `⌘⇧V` to validate and `⌘⇧C` for focused checks when those actions are visible. Hidden or unavailable actions do not fire. Press `Esc` only to close the active dialog or cancel the active request.
-- Use `⌘⇧F` to return to Bugs and Tab through filters and finding actions. Confirm focusable controls expose text labels and selected/disabled state; freshness, validation, severity, confidence, scan/job state, and connection state remain understandable without color.
+- Use `⌘⇧F` to return to Bugs and Tab through filters and finding actions. Confirm focusable controls expose text labels and selected/disabled state; the explorer's fresh-file dot has an accessibility description, and validation, severity, confidence, scan/job state, connection state, and other freshness states remain understandable without color.
 - Resize the window to exactly 1000dp and below 1000dp. At 1000dp, confirm Editor retains its wide Explorer and Context panes. Below it, Files and Context drawers appear only in Editor; leaving Editor closes an open drawer and Summary, Analysis, and Bugs retain their full canvas. At every size, the Editor header remains above the scrollable source or diff canvas.
 - Check source and composed diff views remain read-only, preserve text selection, and highlight comments, strings, and language keywords without changing their content. Below 1000dp, clicking within a source declaration or choosing one in the symbol palette opens the labeled Context drawer without clearing its source highlight.

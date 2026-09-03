@@ -20,11 +20,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.yield
 import java.io.File
 import javax.swing.JFileChooser
 
 internal enum class PaletteMode { Files, Symbols, Actions }
+
+private enum class ComposerFocusTarget { Chat, Draft }
 
 private data class ProjectWorkspaceDetails(
     val overview: ProjectOverview,
@@ -52,7 +53,10 @@ private sealed interface PendingDraftDiscard {
 }
 
 @Composable
-internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
+internal fun MiniOrcaApp(
+    api: ApiClient = remember { ApiClient() },
+    lastProjectStore: LastProjectStore = remember { LastProjectStore() },
+) {
     val scope = rememberCoroutineScope()
     val widthStore = remember { PaneWidthStore() }
     val workflow = remember { DesktopWorkflowController() }
@@ -76,12 +80,17 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     var chatMode by remember { mutableStateOf(ChatEditMode.ReplaceSymbol) }
     var newChatSymbol by remember { mutableStateOf("") }
     var chatMessage by remember { mutableStateOf("") }
-    var remoteProviderConfirmed by remember { mutableStateOf(false) }
-    var remoteProvider by remember { mutableStateOf(false) }
+    var modelCatalog by remember { mutableStateOf(ModelCatalog()) }
+    var providerConfirmations by remember { mutableStateOf(ScopedConfirmationState()) }
+    var pendingImportPath by remember { mutableStateOf<String?>(null) }
     var composerRequested by remember { mutableStateOf(false) }
+    var pendingComposerFocus by remember { mutableStateOf<ComposerFocusTarget?>(null) }
     var pendingDraftDiscard by remember { mutableStateOf<PendingDraftDiscard?>(null) }
     val chatFocusRequester = remember { FocusRequester() }
     val draftFocusRequester = remember { FocusRequester() }
+    val analyzeModel = modelCatalog.forScope(ModelScope.Analyze)
+    val bugModel = modelCatalog.forScope(ModelScope.Bug)
+    val functionModel = modelCatalog.forScope(ModelScope.Function)
 
     val editorProgress = editorProgressUiState(appState)
     LaunchedEffect(editorProgress.progress) {
@@ -92,9 +101,15 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         appState = workflow.dispatch(event)
     }
 
-    fun focusDraftControl(requester: FocusRequester) {
+    fun modelRequestFailed(error: Throwable, scope: ModelScope, fallback: String) {
+        val staleConfirmation = staleRemoteConfirmationMessage(error, scope)
+        if (staleConfirmation != null) providerConfirmations = providerConfirmations.withConfirmation(scope, false)
+        update(DesktopEvent.Failed(staleConfirmation ?: error.message ?: fallback))
+    }
+
+    fun focusComposerControl(target: ComposerFocusTarget) {
         composerRequested = true
-        scope.launch { yield(); requester.requestFocus() }
+        pendingComposerFocus = target
     }
 
     fun selectSourceLine(selection: SourceLineSelection) {
@@ -106,7 +121,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         if (appState.selectedSymbol != request.selectedSymbol) update(DesktopEvent.SymbolSelected(request.selectedSymbol))
         chatMode = ChatEditMode.ReplaceSymbol
         newChatSymbol = ""
-        focusDraftControl(chatFocusRequester)
+        focusComposerControl(ComposerFocusTarget.Chat)
     }
 
     fun requestDirectEdit(symbol: SymbolInspectorSymbolState) {
@@ -122,7 +137,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     fun startCreateDeclaration() {
         chatMode = ChatEditMode.CreateSymbol
         newChatSymbol = ""
-        focusDraftControl(chatFocusRequester)
+        focusComposerControl(ComposerFocusTarget.Chat)
     }
 
     fun requestCreateDeclaration() {
@@ -169,6 +184,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     LaunchedEffect(appState.preparedAction, appState.preparedRequest, appState.selectedSymbol) {
         if (appState.preparedAction.isNotBlank()) contextAction = appState.preparedAction
         if (appState.preparedRequest.isNotBlank()) {
+            if (appState.preparedTaskSpec != null) chatMode = ChatEditMode.ReplaceSymbol
             chatMessage = appState.preparedRequest
             composerRequested = true
         }
@@ -176,11 +192,13 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     fun refreshConnection() {
         scope.launch {
             val startedAt = System.nanoTime()
-            runCatching { withContext(Dispatchers.IO) { api.status() to api.effectiveModel() } }
-                .onSuccess { (status, model) ->
+            runCatching { withContext(Dispatchers.IO) { api.status() to api.modelCatalog() } }
+                .onSuccess { (status, catalog) ->
                     val elapsed = (System.nanoTime() - startedAt) / 1_000_000
-                    remoteProvider = model.remoteProvider
-                    update(DesktopEvent.ConnectionUpdated(ConnectionState("Daemon connected", "${model.profile} · ${model.model}", status.version, true, api.endpointLocality(), "${elapsed}ms")))
+                    if (modelCatalog.identity() != catalog.identity()) providerConfirmations = ScopedConfirmationState()
+                    modelCatalog = catalog
+                    val function = catalog.forScope(ModelScope.Function)
+                    update(DesktopEvent.ConnectionUpdated(ConnectionState("Daemon connected", "${function.profile} · ${function.model}", status.version, true, api.endpointLocality(), "${elapsed}ms")))
                 }
                 .onFailure { update(DesktopEvent.ConnectionUpdated(ConnectionState(label = "Daemon unavailable", locality = api.endpointLocality()))) }
         }
@@ -279,7 +297,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         analyzeAllPolling.activate(project.projectRevision)
         scope.launch { runCatching { withContext(Dispatchers.IO) { api.startAnalyzeAll(project.projectRevision, options.maxFiles, options.maxRetries, options.confirmRemoteProvider) } }
             .onSuccess { publishAnalyzeAll(project.projectRevision, it) }
-            .onFailure { update(DesktopEvent.Failed(it.message ?: "Unable to start Analyze-all")) } }
+            .onFailure { modelRequestFailed(it, ModelScope.Bug, "Unable to start Analyze-all") } }
     }
     fun pauseAnalyzeAll() {
         val project = appState.project ?: return
@@ -292,7 +310,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         analyzeAllPolling.activate(project.projectRevision)
         scope.launch { runCatching { withContext(Dispatchers.IO) { api.resumeAnalyzeAll(project.projectRevision, confirmRemoteProvider) } }
             .onSuccess { publishAnalyzeAll(project.projectRevision, it) }
-            .onFailure { update(DesktopEvent.Failed(it.message ?: "Unable to update Analyze-all")) } }
+            .onFailure { modelRequestFailed(it, ModelScope.Bug, "Unable to update Analyze-all") } }
     }
     fun cancelAnalyzeAll() {
         val project = appState.project ?: return
@@ -312,26 +330,46 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             .onSuccess { update(DesktopEvent.GoScanLoaded(it)); scanPollJob?.cancel(); refreshFindings(project.projectRevision) }
             .onFailure { update(DesktopEvent.Failed(it.message ?: "Unable to cancel verified scan")) } }
     }
-    fun importProject() {
+    fun loadProject(path: String, restore: Boolean) {
         if (appState.loading) return
-        val directory = chooseDirectory() ?: return
         analyzeAllPolling.stop()
         analyzeAllPollJob?.cancel()
         scanPollJob?.cancel()
         val requestId = workflow.beginProjectLoad()
         appState = workflow.state
-        update(DesktopEvent.Status("Importing ${directory.name}…"))
+        val projectName = File(path).name
+        update(DesktopEvent.Status(if (restore) "Reopening $projectName…" else "Importing $projectName…"))
         scope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.importProject(directory.absolutePath) to api.index() } }
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val project = if (restore) api.restoreProject(path) else api.importProject(path, providerConfirmations.confirmed(ModelScope.Analyze))
+                    project to api.index()
+                }
+            }
                 .onSuccess { (project, index) ->
                     if (workflow.projectLoaded(requestId, project, index)) {
                         appState = workflow.state
+                        runCatching { lastProjectStore.save(project.path) }
+                        if (restore) update(DesktopEvent.Status("Reopened ${project.name}"))
                         analyzeAllPolling.activate(project.projectRevision)
                         collapsedDirectories = explorerDirectories(index.files)
                         refreshProjectWorkspace(project.projectRevision)
                     }
                 }
-                .onFailure { if (workflow.isCurrentProjectRequest(requestId)) update(DesktopEvent.Failed(it.message ?: "Import failed")) }
+                .onFailure {
+                    if (workflow.isCurrentProjectRequest(requestId)) {
+                        if (restore) update(DesktopEvent.Failed(it.message ?: "Could not reopen the last project"))
+                        else modelRequestFailed(it, ModelScope.Analyze, "Import failed")
+                    }
+                }
+        }
+    }
+    fun importProject() {
+        val directory = chooseDirectory() ?: return
+        if (analyzeModel.remoteProvider && !providerConfirmations.confirmed(ModelScope.Analyze)) {
+            pendingImportPath = directory.absolutePath
+        } else {
+            loadProject(directory.absolutePath, restore = false)
         }
     }
     fun reanalyze() {
@@ -355,6 +393,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         path: String,
         editorTarget: EditorNavigationTarget? = null,
         preparedFixRequest: String? = null,
+        preparedTaskSpec: BugTaskSpec? = null,
     ) {
         composerRequested = false
         chatJob?.cancel()
@@ -367,11 +406,13 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                 .onSuccess { (file, symbols) ->
                     if (!workflow.fileLoaded(request, file, symbols)) return@onSuccess
                     appState = workflow.state
-                    editorTarget?.let { target ->
-                        update(DesktopEvent.EditorContextSelected(symbolForNavigation(symbols, target), target.line))
+                    val navigation = editorTarget?.let { target ->
+                        resolveEditorNavigation(symbols, target).also { selection ->
+                            update(DesktopEvent.EditorContextSelected(selection.symbol, selection.focusLine))
+                        }
                     }
                     preparedFixRequest?.let { request ->
-                        update(DesktopEvent.SuggestionPrepared("fix", request, null))
+                        update(DesktopEvent.SuggestionPrepared("fix", request, navigation?.symbol, preparedTaskSpec))
                     }
                     val loadedRequest = workflow.currentFileRequest() ?: return@onSuccess
                     scope.launch {
@@ -397,13 +438,14 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         path: String,
         editorTarget: EditorNavigationTarget? = null,
         preparedFixRequest: String? = null,
+        preparedTaskSpec: BugTaskSpec? = null,
     ) {
         if (appState.index?.files?.any { it.path == path } != true) {
             update(DesktopEvent.Failed("This file no longer points to an indexed file in the active project."))
             return
         }
         update(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
-        selectFile(path, editorTarget, preparedFixRequest)
+        selectFile(path, editorTarget, preparedFixRequest, preparedTaskSpec)
     }
     fun openFinding(finding: UnifiedFinding) {
         val target = findingNavigationTarget(finding, appState.index)
@@ -415,12 +457,13 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     }
     fun prepareFinding(finding: UnifiedFinding) {
         if (!findingCanPrepareFix(finding)) { update(DesktopEvent.Failed("Refresh this finding before preparing a fix.")); return }
-        val target = findingNavigationTarget(finding, appState.index)
-        if (target == null) {
+        val target = findingTaskNavigationTarget(finding)
+        val requirement = findingTaskRequirement(finding)
+        if (target == null || requirement == null || appState.index?.files?.any { it.path == target.path } != true) {
             update(DesktopEvent.Failed("This finding no longer points to a file in the active project."))
             return
         }
-        openFileInEditor(target.path, target, "Address ${finding.title}: ${finding.message}")
+        openFileInEditor(target.path, target, requirement, finding.taskSpec)
     }
     fun triageFinding(finding: UnifiedFinding, action: FindingLifecycleAction) {
         val project = appState.project ?: return
@@ -440,8 +483,8 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
     fun analyzeSelected(refresh: Boolean) {
         val project = appState.project ?: return
         val file = appState.selectedFile ?: return
-        if (remoteProvider && !remoteProviderConfirmed) {
-            update(DesktopEvent.Failed("Confirm the remote provider before analyzing this file."))
+        if (bugModel.remoteProvider && !providerConfirmations.confirmed(ModelScope.Bug)) {
+            update(DesktopEvent.Failed("Confirm the Bugs model destination before analyzing this file."))
             return
         }
         analysisJob?.cancel()
@@ -451,7 +494,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         update(DesktopEvent.Status("${if (refresh) "Refreshing" else "Analyzing"} ${file.path}…"))
         analysisJob = scope.launch {
             try {
-                val analysis = withContext(Dispatchers.IO) { runInterruptible { api.analyze(file.path, project.projectRevision, refresh, remoteProviderConfirmed) } }
+                val analysis = withContext(Dispatchers.IO) { runInterruptible { api.analyze(file.path, project.projectRevision, refresh, providerConfirmations.confirmed(ModelScope.Bug)) } }
                 if (workflow.analysisCompleted(requestId, requestIdentity, analysis)) {
                     appState = workflow.state
                     update(DesktopEvent.Status("Summary ${analysis.status}"))
@@ -459,7 +502,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             } catch (_: CancellationException) {
                 update(DesktopEvent.Status("Analysis canceled"))
             } catch (error: Throwable) {
-                update(DesktopEvent.Failed(error.message ?: "Analysis failed"))
+                modelRequestFailed(error, ModelScope.Bug, "Analysis failed")
             } finally {
                 if (analysisRequestId == requestId.toInt()) analysisJob = null
             }
@@ -478,7 +521,7 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         }
     }
 
-    fun sendChatMessage() {
+    fun sendChatMessage(repair: Boolean = false, repairMessage: String? = null) {
         val project = appState.project ?: return
         val file = appState.selectedFile ?: return
         val target = validateChatTarget(file, appState.symbols, appState.selectedSymbol, chatMode, newChatSymbol)
@@ -486,33 +529,37 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             update(DesktopEvent.Failed(target.message))
             return
         }
-        if (chatMessage.isBlank()) {
+        val message = (repairMessage ?: chatMessage).trim()
+        if (message.isBlank()) {
             update(DesktopEvent.Failed("Write a message before sending."))
             return
         }
-        if (!api.isLoopbackEndpoint() && !remoteProviderConfirmed) {
-            update(DesktopEvent.Failed("Confirm the remote provider before sending context."))
+        if (functionModel.remoteProvider && !providerConfirmations.confirmed(ModelScope.Function)) {
+            update(DesktopEvent.Failed("Confirm the Function edits model destination before sending context."))
             return
         }
         val (requestId, requestIdentity) = workflow.beginChatLoad() ?: return
-        val message = chatMessage.trim()
         val targetIdentity = target.target!!
-        val matchingSession = appState.chat.session?.takeIf { chatSessionMatches(it, file, project, targetIdentity) }
+        val taskSpec = appState.preparedTaskSpec?.takeIf {
+            it.targetPath == file.path && it.targetSymbol == targetIdentity.symbol && targetIdentity.mode == ChatEditMode.ReplaceSymbol
+        }
+        val matchingSession = appState.chat.session?.takeIf { chatSessionMatches(it, file, project, targetIdentity, taskSpec) }
         update(DesktopEvent.Loading)
         update(DesktopEvent.Status("Sending a request for ${targetIdentity.symbol} in ${file.path}…"))
         chatJob = scope.launch {
             try {
                 val session = matchingSession ?: withContext(Dispatchers.IO) {
                     runInterruptible {
-                        api.openChatSession(project.projectId, project.projectRevision, file.contentHash, file.path, targetIdentity.mode.wireValue, targetIdentity.symbol)
+                        api.openChatSession(project.projectId, project.projectRevision, file.contentHash, file.path, targetIdentity.mode.wireValue, targetIdentity.symbol, taskSpec)
                     }
                 }
                 val proposal = withContext(Dispatchers.IO) {
                     runInterruptible {
-                        api.sendChatMessage(session.id, message, session.latestDraftId, remoteProviderConfirmed)
+                        api.sendChatMessage(session.id, message, session.latestDraftId, providerConfirmations.confirmed(ModelScope.Function), repair)
                     }
                 }
-                if (workflow.chatProposalLoaded(requestId, requestIdentity, session, message, proposal)) {
+                val updatedSession = session.copy(repairCount = session.repairCount + if (repair) 1 else 0)
+                if (workflow.chatProposalLoaded(requestId, requestIdentity, updatedSession, message, proposal)) {
                     appState = workflow.state
                     chatMessage = ""
                     update(DesktopEvent.Status("Draft is ready for review."))
@@ -521,11 +568,16 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                 if (workflow.cancelChatLoad(requestId, requestIdentity)) appState = workflow.state
             } catch (error: Throwable) {
                 if (workflow.cancelChatLoad(requestId, requestIdentity)) appState = workflow.state
-                update(DesktopEvent.Failed(error.message ?: "Chat request failed"))
+                modelRequestFailed(error, ModelScope.Function, "Chat request failed")
             } finally {
                 chatJob = null
             }
         }
+    }
+
+    fun reviseWithCheckOutput() {
+        val message = repairMessageForChecks(appState.chat.session, appState.review.draft, appState.checks) ?: return
+        sendChatMessage(repair = true, repairMessage = message)
     }
 
     fun validateEditableDraft() {
@@ -641,7 +693,10 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                 .onFailure { update(DesktopEvent.Failed(it.message ?: "Undo failed")) }
         }
     }
-    LaunchedEffect(api) { refreshConnection() }
+    LaunchedEffect(api, lastProjectStore) {
+        refreshConnection()
+        lastProjectStore.load()?.let { loadProject(it, restore = true) }
+    }
     val explorer: @Composable (Modifier, () -> Unit) -> Unit = { modifier, onSelected ->
         ExplorerPane(
             index = appState.index,
@@ -663,18 +718,29 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             SystemStateMessage("Editor context", "Open the Editor workspace to inspect one declaration.", modifier = modifier)
         } else if (editorProgress.progress == EditorProgress.Receipt) {
             ReviewContextPane(
-                appState.project, appState.selectedFile, appState.review.editor, appState.review.draft, appState.checks,
+                appState.project, appState.selectedFile, appState.chat.session, appState.review.editor, appState.review.draft, appState.checks,
                 appState.impact, appState.gitStatus, appState.review.applied, appState.loading,
-                ::runDraftChecks, { composerRequested = true }, ::applyEditableDraft, ::undoAppliedDraft, modifier,
+                ::runDraftChecks, ::reviseWithCheckOutput, { composerRequested = true }, ::applyEditableDraft, ::undoAppliedDraft, modifier,
             )
         } else if (composerRequested || editorProgress.progress == EditorProgress.Edit) {
             val target = validateChatTarget(appState.selectedFile, appState.symbols, appState.selectedSymbol, chatMode, newChatSymbol).target
-            DraftContextPane(appState.project, appState.selectedFile, appState.chat.session, appState.review.draft, appState.review.editor, target, chatMode, newChatSymbol, chatMessage, chatJob != null, remoteProvider, remoteProviderConfirmed, chatFocusRequester, draftFocusRequester, { chatMessage = it }, { newChatSymbol = it }, { remoteProviderConfirmed = it }, ::inspectContext, { update(DesktopEvent.DraftEdited(declaration = it)) }, { update(DesktopEvent.DraftEdited(imports = it)) }, ::validateEditableDraft, ::sendChatMessage, { chatJob?.cancel() }, modifier)
+            val draft = appState.review.draft
+            val draftEditorVisible = draft != null && appState.review.editor != null && chatDraftMatchesSession(draft, appState.chat.session)
+            val focusTarget = pendingComposerFocus
+            LaunchedEffect(focusTarget, draftEditorVisible) {
+                when (focusTarget) {
+                    ComposerFocusTarget.Chat -> chatFocusRequester.requestFocus()
+                    ComposerFocusTarget.Draft -> if (draftEditorVisible) draftFocusRequester.requestFocus()
+                    null -> Unit
+                }
+                if (pendingComposerFocus == focusTarget) pendingComposerFocus = null
+            }
+            DraftContextPane(appState.project, appState.selectedFile, appState.chat.session, appState.review.draft, appState.review.editor, target, chatMode, newChatSymbol, chatMessage, chatJob != null, functionModel, providerConfirmations.confirmed(ModelScope.Function), chatFocusRequester, draftFocusRequester, { chatMessage = it }, { newChatSymbol = it }, { providerConfirmations = providerConfirmations.withConfirmation(ModelScope.Function, it) }, ::inspectContext, { update(DesktopEvent.DraftEdited(declaration = it)) }, { update(DesktopEvent.DraftEdited(imports = it)) }, ::validateEditableDraft, ::sendChatMessage, { chatJob?.cancel() }, modifier)
         } else if (editorProgress.progress == EditorProgress.Review) {
             ReviewContextPane(
-                appState.project, appState.selectedFile, appState.review.editor, appState.review.draft, appState.checks,
+                appState.project, appState.selectedFile, appState.chat.session, appState.review.editor, appState.review.draft, appState.checks,
                 appState.impact, appState.gitStatus, appState.review.applied, appState.loading,
-                ::runDraftChecks, { composerRequested = true }, ::applyEditableDraft, ::undoAppliedDraft, modifier,
+                ::runDraftChecks, ::reviseWithCheckOutput, { composerRequested = true }, ::applyEditableDraft, ::undoAppliedDraft, modifier,
             )
         } else {
             SymbolInspectorPane(
@@ -684,12 +750,12 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
                     selectedSymbol = appState.selectedSymbol,
                     analysis = appState.analysis,
                     analysisInProgress = analysisJob != null,
-                    provider = InspectorProviderState(remoteProvider, remoteProviderConfirmed),
+                    provider = InspectorProviderState(bugModel.remoteProvider, providerConfirmations.confirmed(ModelScope.Bug)),
                     currentEditIdentity = currentEditIdentity(appState),
                 ),
-                remoteProvider = remoteProvider,
-                remoteProviderConfirmed = remoteProviderConfirmed,
-                onRemoteProviderConfirmed = { remoteProviderConfirmed = it },
+                bugModel = bugModel,
+                remoteProviderConfirmed = providerConfirmations.confirmed(ModelScope.Bug),
+                onRemoteProviderConfirmed = { providerConfirmations = providerConfirmations.withConfirmation(ModelScope.Bug, it) },
                 onAnalyze = { analyzeSelected(false) },
                 onRefresh = { analyzeSelected(true) },
                 onCancel = { analysisJob?.cancel() },
@@ -704,8 +770,8 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         newChatSymbol,
         chatMessage,
         sending = chatJob != null,
-        remoteProvider = remoteProvider,
-        remoteProviderConfirmed = remoteProviderConfirmed,
+        functionModel = functionModel,
+        remoteProviderConfirmed = providerConfirmations.confirmed(ModelScope.Function),
     )
     DesktopShell(
         appState = appState,
@@ -716,8 +782,8 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         workspace = appState.workspace,
         onWorkspace = { update(DesktopEvent.WorkspaceSelected(it)) },
         editorProgress = editorProgress,
-        onFocusChat = { focusDraftControl(chatFocusRequester) },
-        onFocusDraft = { focusDraftControl(draftFocusRequester) },
+        onFocusChat = { focusComposerControl(ComposerFocusTarget.Chat) },
+        onFocusDraft = { focusComposerControl(ComposerFocusTarget.Draft) },
         canFocusChat = contextualActions.canFocusChat,
         canFocusDraft = contextualActions.canFocusDraft,
         canGenerate = contextualActions.canGenerate,
@@ -727,9 +793,9 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
         generating = chatJob != null,
         showContext = showContext,
         contextManifest = contextManifest,
-        remoteProvider = remoteProvider,
-        remoteProviderConfirmed = remoteProviderConfirmed,
-        onRemoteProviderConfirmed = { remoteProviderConfirmed = it },
+        bugModel = bugModel,
+        bugProviderConfirmed = providerConfirmations.confirmed(ModelScope.Bug),
+        onBugProviderConfirmed = { providerConfirmations = providerConfirmations.withConfirmation(ModelScope.Bug, it) },
         onDismissContext = { showContext = false },
         paletteMode = paletteMode,
         paletteQuery = paletteQuery,
@@ -792,6 +858,44 @@ internal fun MiniOrcaApp(api: ApiClient = remember { ApiClient() }) {
             onCancel = { pendingDraftDiscard = null },
         )
     }
+    pendingImportPath?.let { path ->
+        ProjectImportConfirmationDialog(
+            model = analyzeModel,
+            confirmed = providerConfirmations.confirmed(ModelScope.Analyze),
+            onConfirmed = { providerConfirmations = providerConfirmations.withConfirmation(ModelScope.Analyze, it) },
+            onImport = {
+                pendingImportPath = null
+                loadProject(path, restore = false)
+            },
+            onCancel = { pendingImportPath = null },
+        )
+    }
+}
+
+@Composable
+private fun ProjectImportConfirmationDialog(
+    model: ScopedModel,
+    confirmed: Boolean,
+    onConfirmed: (Boolean) -> Unit,
+    onImport: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Confirm project analysis destination") },
+        text = {
+            Column {
+                Text("Import sends the selected project's analysis context to this provider.")
+                RemoteProviderConfirmation(ModelScope.Analyze, model, confirmed, onConfirmed)
+            }
+        },
+        confirmButton = {
+            FocusFlowButton(onClick = onImport, enabled = confirmed, tone = ActionTone.Primary) { Text("Import project") }
+        },
+        dismissButton = {
+            FocusFlowButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable
@@ -823,3 +927,8 @@ private fun chooseDirectory(): File? {
     }
     return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
 }
+
+internal fun staleRemoteConfirmationMessage(error: Throwable, scope: ModelScope): String? =
+    (error as? ApiException)
+        ?.takeIf { it.message?.contains("confirmation", ignoreCase = true) == true }
+        ?.let { "The ${scope.label.lowercase()} model destination changed. Confirm it again before retrying." }

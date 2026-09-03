@@ -144,15 +144,19 @@ class DesktopShellTest {
     }
 
     @Test fun onlyFreshLocatedFindingsCanPrepareFixes() {
-        assertTrue(findingCanPrepareFix(UnifiedFinding(freshness = "fresh", location = FindingLocation(path = "main.go"))))
-        assertTrue(!findingCanPrepareFix(UnifiedFinding(freshness = "stale", location = FindingLocation(path = "main.go"))))
+        val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return errors."))
+        assertTrue(findingCanPrepareFix(UnifiedFinding(freshness = "fresh", location = FindingLocation(path = "main.go", symbol = "Run"), taskSpec = task)))
+        assertTrue(!findingCanPrepareFix(UnifiedFinding(freshness = "stale", location = FindingLocation(path = "main.go", symbol = "Run"), taskSpec = task)))
         assertTrue(!findingCanPrepareFix(UnifiedFinding(freshness = "fresh")))
     }
 
     @Test fun providerDestinationAndContextManifestCountsAreExplicit() {
-        assertTrue(contextDestinationLabel(remoteProvider = true).contains("remote provider"))
-        assertTrue(contextDestinationLabel(remoteProvider = true).contains("confirmation required"))
-        assertTrue(contextDestinationLabel(remoteProvider = false).contains("local provider"))
+        val remote = ScopedModel(scope = "function", profile = "function", model = "cloud-model", remoteProvider = true)
+        val local = ScopedModel(scope = "bug", profile = "bug", model = "local-model")
+        assertTrue(modelDestinationLabel(ModelScope.Function, remote).contains("remote provider"))
+        assertTrue(modelDestinationLabel(ModelScope.Function, remote).contains("confirmation required"))
+        assertTrue(modelDestinationLabel(ModelScope.Bug, local).contains("local provider"))
+        assertTrue(modelDestinationLabel(ModelScope.Bug, local).contains("local-model"))
         assertEquals("1 included · 1 excluded · 12 estimated tokens · truncated", contextManifestSummary(ContextManifest(
             included = listOf(ContextFile("main.go", 12, "hash", 6)),
             excluded = listOf(ContextDecision("secret.env", false, "secret")),

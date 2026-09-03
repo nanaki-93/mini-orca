@@ -1,8 +1,8 @@
 # Prompt template — execute one task
 
-Use the all-tasks prompt for the normal Tasks 85–89 sequence. This template is for
-resuming exactly one incomplete task. Replace `{TASK_FILE}` and `{TASK_ID}` with the
-selected Pending/In Progress task from [`INDEX.md`](INDEX.md).
+Use the scoped-model execution prompt for the normal Tasks 95–102 sequence. This
+template is for resuming exactly one incomplete task. Replace `{TASK_FILE}` and
+`{TASK_ID}` with the selected Pending/In Progress task from [`INDEX.md`](INDEX.md).
 
 ```text
 You are the sole implementation agent for one Mini-Orca task.
@@ -22,11 +22,11 @@ Read completely, in this order:
 Before editing:
 - Run `git status --short`, `git diff --name-only`, and
   `git diff --cached --name-only`.
-- Preserve all pre-existing changes as user-owned. Relevant Desktop files may already be
-  dirty; do not assume the entire file belongs to this task.
+- Preserve all pre-existing changes as user-owned. Relevant files may already be dirty;
+  do not assume the entire file belongs to this task.
 - Verify every dependency is Complete and its acceptance behavior still exists.
 - State the task boundary, likely files, focused checks, and pre-existing changes that
-  must remain outside the commit.
+  must remain outside the task changes.
 - Stop if the task is not the first ready incomplete task in dependency order.
 
 Implementation rules:
@@ -46,7 +46,7 @@ Implementation rules:
 
 Pre-existing-change rules:
 - Never use reset, checkout, restore, stash, clean, rebase, or destructive history commands.
-- Do not stage or commit any file. Tasks 85–89 do not authorize commits.
+- Do not stage or commit any file. Tasks 95–102 do not authorize commits.
 - If required work cannot be separated safely from an overlapping user-owned hunk, stop
   and report the exact overlap.
 
@@ -69,6 +69,6 @@ commands/results, and any blocker or deliberately deferred follow-up.
 Example current task value:
 
 ```text
-Task ID: 85
-Task file: 85_editor_symbol_selection_contract.md
+Task ID: 95
+Task file: 95_scoped_model_configuration.md
 ```

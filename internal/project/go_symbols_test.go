@@ -74,6 +74,28 @@ func TestGoIndexKeepsMalformedFileWithDiagnostics(t *testing.T) {
 	}
 }
 
+func TestGoIndexTreatsSingleClosureVariableAsAnAtomicTarget(t *testing.T) {
+	root := t.TempDir()
+	source := `package fixture
+
+var diffCmd = func() error {
+	return nil
+}
+`
+	if err := os.WriteFile(filepath.Join(root, "command.go"), []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+	index, err := BuildIndex(root, "sha256:project", "sha256:revision")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := findIndexFile(index, "command.go")
+	if file == nil {
+		t.Fatal("Go file missing from index")
+	}
+	assertGoSymbol(t, file, "diffCmd", "var", true, 3, 5)
+}
+
 func assertGoSymbol(t *testing.T, file *IndexFile, name, kind string, atomic bool, start, end int) {
 	t.Helper()
 	for _, symbol := range file.Symbols {

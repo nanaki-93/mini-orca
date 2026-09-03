@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 internal fun SymbolInspectorPane(
     inspector: SymbolInspectorUiState?,
-    remoteProvider: Boolean,
+    bugModel: ScopedModel,
     remoteProviderConfirmed: Boolean,
     onRemoteProviderConfirmed: (Boolean) -> Unit,
     onAnalyze: () -> Unit,
@@ -40,7 +40,7 @@ internal fun SymbolInspectorPane(
             Spacer(Modifier.height(10.dp))
             FocusFlowPanel(Modifier.fillMaxWidth()) {
                 Text("Confirm before using Refresh file analysis from Commands.", color = SecondaryText, fontSize = 11.sp)
-                RemoteProviderConfirmation(remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed)
+                RemoteProviderConfirmation(ModelScope.Bug, bugModel, remoteProviderConfirmed, onRemoteProviderConfirmed)
             }
         }
         if (inspector.analysisAction != InspectorAnalysisAction.None) {
@@ -53,7 +53,7 @@ internal fun SymbolInspectorPane(
             FocusFlowPanel(Modifier.fillMaxWidth()) {
                 Text(inspector.analysisStatus.label, color = SecondaryText, fontSize = 11.sp)
                 if (inspector.remoteProviderConfirmationRequired) {
-                    RemoteProviderConfirmation(remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed)
+                    RemoteProviderConfirmation(ModelScope.Bug, bugModel, remoteProviderConfirmed, onRemoteProviderConfirmed)
                 }
                 FocusFlowButton(
                     onClick = onAnalysisAction,

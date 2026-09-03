@@ -7,13 +7,13 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class FileChatStateTest {
-    @Test fun replaceRequiresAnExactSelectedFunctionOrType() {
+    @Test fun replaceRequiresAnExactSelectedDeclaration() {
         val exact = symbol("Run")
         val approximate = exact.copy(confidence = "approximate")
 
         assertTrue(validateChatTarget(file(), listOf(exact), exact, ChatEditMode.ReplaceSymbol, "").valid)
-        val variable = exact.copy(name = "diffCmd", kind = "var")
-        assertFalse(validateChatTarget(file(), listOf(variable), variable, ChatEditMode.ReplaceSymbol, "").valid)
+        val commandWithClosure = exact.copy(name = "diffCmd", kind = "var", signature = "var diffCmd = func() {}")
+        assertTrue(validateChatTarget(file(), listOf(commandWithClosure), commandWithClosure, ChatEditMode.ReplaceSymbol, "").valid)
         assertFalse(validateChatTarget(file(), listOf(exact.copy(atomicTarget = false)), exact.copy(atomicTarget = false), ChatEditMode.ReplaceSymbol, "").valid)
         assertFalse(validateChatTarget(file(), listOf(approximate), approximate, ChatEditMode.ReplaceSymbol, "").valid)
         assertFalse(validateChatTarget(file(), listOf(exact), null, ChatEditMode.ReplaceSymbol, "").valid)
@@ -50,6 +50,10 @@ class FileChatStateTest {
         assertFalse(chatSessionMatches(session, file("other.go", "base"), project(), target))
         assertFalse(chatSessionMatches(session, file(), project("next"), target))
         assertFalse(chatSessionMatches(session.copy(state = "stale"), file(), project(), target))
+
+        val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return an error."))
+        assertTrue(chatSessionMatches(session.copy(taskSpec = task), file(), project(), target, task))
+        assertFalse(chatSessionMatches(session.copy(taskSpec = task), file(), project(), target, task.copy(targetSignature = "func Run() error")))
     }
 
     @Test fun proposalAddsOnlyBoundTurnsAndPreservesDraftLineage() {

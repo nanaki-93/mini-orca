@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 internal fun AnalysisWorkspacePane(
     job: AnalyzeAllJob?,
     coverage: AnalysisCoverage?,
-    remoteProvider: Boolean,
+    model: ScopedModel,
     remoteProviderConfirmed: Boolean,
     onRemoteProviderConfirmed: (Boolean) -> Unit,
     onStart: (AnalyzeAllRunOptions) -> Unit,
@@ -92,14 +92,14 @@ internal fun AnalysisWorkspacePane(
                         FocusFlowButton(onClick = onCancel, enabled = presentation.run.statusLabel == "Pausing", tone = ActionTone.Destructive, modifier = Modifier.padding(top = 8.dp)) { Text("Cancel") }
                     }
                     "Paused" -> {
-                        RemoteProviderConfirmation(remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed)
+                        RemoteProviderConfirmation(ModelScope.Bug, model, remoteProviderConfirmed, onRemoteProviderConfirmed)
                         ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                            FocusFlowButton(onClick = { onResume(remoteProviderConfirmed) }, enabled = !remoteProvider || remoteProviderConfirmed, tone = ActionTone.Primary) { Text("Resume") }
+                            FocusFlowButton(onClick = { onResume(remoteProviderConfirmed) }, enabled = !model.remoteProvider || remoteProviderConfirmed, tone = ActionTone.Primary) { Text("Resume") }
                             FocusFlowButton(onClick = onCancel, tone = ActionTone.Destructive) { Text("Cancel") }
                         }
                     }
                     else -> {
-                        AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart)
+                        AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, model, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart)
                     }
                 }
             }
@@ -126,7 +126,7 @@ private fun AnalyzeAllStartControls(
     onMaxFiles: (String) -> Unit,
     maxRetries: String,
     onMaxRetries: (String) -> Unit,
-    remoteProvider: Boolean,
+    model: ScopedModel,
     remoteConfirmed: Boolean,
     onRemoteConfirmed: (Boolean) -> Unit,
     options: AnalyzeAllRunOptions,
@@ -137,19 +137,19 @@ private fun AnalyzeAllStartControls(
         first = { modifier -> CompactSingleLineField(maxFiles, onMaxFiles, label = { Text("File limit (1–500)") }, modifier = modifier) },
         second = { modifier -> CompactSingleLineField(maxRetries, onMaxRetries, label = { Text("Retry limit (0–3)") }, modifier = modifier) },
     )
-    RemoteProviderConfirmation(remoteProvider, remoteConfirmed, onRemoteConfirmed)
-    FocusFlowButton(onClick = { onStart(options) }, enabled = !remoteProvider || remoteConfirmed, tone = ActionTone.Primary, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
+    RemoteProviderConfirmation(ModelScope.Bug, model, remoteConfirmed, onRemoteConfirmed)
+    FocusFlowButton(onClick = { onStart(options) }, enabled = !model.remoteProvider || remoteConfirmed, tone = ActionTone.Primary, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
 }
 
 @Composable
-internal fun RemoteProviderConfirmation(remoteProvider: Boolean, confirmed: Boolean, onConfirmed: (Boolean) -> Unit) {
+internal fun RemoteProviderConfirmation(scope: ModelScope, model: ScopedModel, confirmed: Boolean, onConfirmed: (Boolean) -> Unit) {
     Text(
-        contextDestinationLabel(remoteProvider),
-        color = if (remoteProvider) Warning else SecondaryText,
+        modelDestinationLabel(scope, model),
+        color = if (model.remoteProvider) Warning else SecondaryText,
         fontSize = 11.sp,
         modifier = Modifier.padding(top = 7.dp),
     )
-    if (remoteProvider) androidx.compose.foundation.layout.Row(modifier = Modifier.padding(top = 2.dp)) {
+    if (model.remoteProvider) androidx.compose.foundation.layout.Row(modifier = Modifier.padding(top = 2.dp)) {
         Checkbox(checked = confirmed, onCheckedChange = onConfirmed)
         Text("Confirm remote destination", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp))
     }
@@ -245,6 +245,11 @@ private fun FindingCard(
         Text("Status: ${findingStatusLabel(finding)}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
         Text(finding.message.ifBlank { "No message supplied." }, color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
         if (finding.evidence.isNotBlank()) Text("Evidence: ${finding.evidence}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+        finding.taskSpec?.let { task ->
+            Text("Fix task: ${task.targetSymbol} · ${task.targetSignature}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            Text("Acceptance: ${task.acceptanceCriteria.joinToString(" · ")}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+            if (task.nonGoals.isNotEmpty()) Text("Non-goals: ${task.nonGoals.joinToString(" · ")}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+        }
         ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 7.dp)) {
             FocusFlowButton(onClick = { onOpen(finding) }, enabled = finding.location.path.isNotBlank(), tone = ActionTone.Navigation) { Text("Open in Editor") }
             FocusFlowButton(onClick = { onPrepare(finding) }, enabled = findingCanPrepareFix(finding), tone = ActionTone.Navigation) { Text("Prepare fix") }

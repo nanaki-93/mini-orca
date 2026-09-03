@@ -17,5 +17,5 @@ func (h *ModelHandler) Current(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	api.WriteJSON(w, http.StatusOK, h.service.EffectiveModel())
+	api.WriteJSON(w, http.StatusOK, h.service.CurrentModelCatalog())
 }

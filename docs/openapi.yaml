@@ -55,7 +55,7 @@ paths:
   /api/projects/current/chat/sessions:
     post:
       tags: [Chat]
-      summary: Open a conversation pinned to one file and declaration
+      summary: Open a conversation pinned to one file, declaration, and optional reviewed task
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/ChatSessionRequest'}}}
@@ -76,7 +76,7 @@ paths:
     post:
       tags: [Chat]
       summary: Request a declaration proposal in an existing session
-      description: The message body cannot change the session's project, file, mode, or declaration target.
+      description: The message body cannot change the session's project, file, mode, or declaration target. A repair is explicit and limited to the latest failed task draft.
       parameters:
         - {$ref: '#/components/parameters/SessionID'}
       requestBody:
@@ -96,13 +96,13 @@ paths:
   /api/models/current:
     get:
       tags: [Daemon]
-      summary: Effective generation profile
+      summary: Effective scoped model catalog
       responses:
         '200':
-          description: Active coder profile
+          description: Function profile compatibility projection plus non-secret analyze, bug, and function scopes.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/EffectiveModel'}
+              schema: {$ref: '#/components/schemas/ModelCatalog'}
   /api/projects/import:
     post:
       tags: [Projects]
@@ -115,6 +115,23 @@ paths:
       responses:
         '200':
           description: Imported project analysis
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProjectAnalysis'}
+        '400': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/restore:
+    post:
+      tags: [Projects]
+      summary: Restore a previously imported project without model access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProjectRestoreRequest'}
+      responses:
+        '200':
+          description: Restored project analysis
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ProjectAnalysis'}
@@ -605,20 +622,55 @@ components:
       type: object
       required: [profile, model, remote_provider, temperature, max_tokens, skills, timeout, max_retries]
       properties:
-        profile: {type: string, example: coder}
+        scope: {type: string, example: function}
+        profile: {type: string, example: function}
         model: {type: string}
+        provider_origin: {type: string, description: Sanitized scheme, host, and optional port only.}
         remote_provider: {type: boolean, description: Whether model requests require explicit user confirmation before source is sent.}
         temperature: {type: number}
         max_tokens: {type: integer}
+        context_max_tokens: {type: integer}
         skills: {type: array, items: {type: string}}
         timeout: {type: string}
         max_retries: {type: integer}
+    ScopedModel:
+      type: object
+      required: [scope, profile, model, provider_origin, remote_provider, temperature, max_tokens, context_max_tokens, timeout, max_retries]
+      properties:
+        scope: {type: string, enum: [analyze, bug, function]}
+        profile: {type: string, enum: [analyze, bug, function]}
+        model: {type: string}
+        provider_origin: {type: string, description: Sanitized scheme, host, and optional port only.}
+        remote_provider: {type: boolean}
+        temperature: {type: number}
+        max_tokens: {type: integer}
+        context_max_tokens: {type: integer}
+        timeout: {type: string}
+        max_retries: {type: integer}
+    ModelCatalog:
+      allOf:
+        - {$ref: '#/components/schemas/EffectiveModel'}
+        - type: object
+          required: [scopes]
+          properties:
+            scopes:
+              type: object
+              required: [analyze, bug, function]
+              properties:
+                analyze: {$ref: '#/components/schemas/ScopedModel'}
+                bug: {$ref: '#/components/schemas/ScopedModel'}
+                function: {$ref: '#/components/schemas/ScopedModel'}
     ProjectImportRequest:
       type: object
       required: [project_path]
       properties:
         project_path: {type: string, description: Absolute path selected by the local user.}
         confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
+    ProjectRestoreRequest:
+      type: object
+      required: [project_path]
+      properties:
+        project_path: {type: string, description: Absolute path of a previously imported local project.}
     ProjectAnalysis:
       type: object
       required: [project_id, project_revision, name, path, type, file_count, source_file_count, total_lines, languages, files, analysis_file, summary, ai_status, analyzed_at]
@@ -895,7 +947,27 @@ components:
         error: {type: string, description: Sanitized per-file failure state.}
     Finding:
       type: object
-      properties: {severity: {type: string}, summary: {type: string}}
+      properties:
+        severity: {type: string}
+        summary: {type: string}
+        task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
+    BugTaskSpec:
+      type: object
+      required: [schema_version, target_path, target_symbol, target_signature, acceptance_criteria, non_goals]
+      properties:
+        schema_version: {type: string, enum: ['1']}
+        target_path: {type: string, description: Exact project-relative target file.}
+        target_symbol: {type: string, description: Exact atomic Go declaration.}
+        target_signature: {type: string, description: Daemon-validated indexed signature.}
+        acceptance_criteria: {type: array, items: {type: string}, maxItems: 8}
+        non_goals: {type: array, items: {type: string}, maxItems: 8}
+        go_test_candidate: {$ref: '#/components/schemas/GoTestCandidateSpec'}
+    GoTestCandidateSpec:
+      type: object
+      required: [name, content]
+      properties:
+        name: {type: string, description: One valid Go Test function name.}
+        content: {type: string, description: Reviewed test source used only in an isolated check copy.}
     Suggestion:
       type: object
       properties: {title: {type: string}, summary: {type: string}, target_symbol: {type: string}, action: {type: string}}
@@ -908,6 +980,10 @@ components:
         byte_limit: {type: integer}
         token_limit: {type: integer}
         truncated: {type: boolean}
+        scope: {type: string, enum: [analyze, bug, function]}
+        model: {type: string}
+        provider_origin: {type: string, description: Sanitized scheme, host, and optional port only.}
+        remote_provider: {type: boolean}
     ContextFile:
       type: object
       properties:
@@ -932,6 +1008,7 @@ components:
         open_path: {type: string, description: Project-relative open Go source file.}
         mode: {type: string, enum: [replace_symbol, create_symbol]}
         target_symbol: {type: string, description: Exact existing symbol for replacement or absent top-level identifier for creation.}
+        task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
     ChatMessageRequest:
       type: object
       required: [message]
@@ -939,6 +1016,7 @@ components:
         message: {type: string}
         parent_draft_id: {type: string, description: Optional earlier draft in this same session.}
         confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
+        repair: {type: boolean, description: Explicit check-driven repair for the latest task-bound failed draft; limited to three per session.}
     ChatSession:
       type: object
       required: [id, project_id, project_revision, base_file_hash, open_path, mode, target_symbol, state, messages, created_at, updated_at]
@@ -950,6 +1028,8 @@ components:
         open_path: {type: string}
         mode: {type: string, enum: [replace_symbol, create_symbol]}
         target_symbol: {type: string}
+        task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
+        repair_count: {type: integer, minimum: 0, maximum: 3}
         state: {type: string, enum: [active, stale]}
         latest_draft_id: {type: string}
         messages: {type: array, items: {$ref: '#/components/schemas/ChatSessionMessage'}}
@@ -991,6 +1071,7 @@ components:
         previous_hash: {type: string}
         state: {type: string, enum: [generated, dirty, validating, valid, invalid, stale]}
         validation: {$ref: '#/components/schemas/GenerationValidation'}
+        task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
     DraftUpdateRequest:
       type: object
       required: [project_revision, expected_revision, declaration]

@@ -9,7 +9,9 @@ import java.nio.charset.StandardCharsets
 import java.time.Duration
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 
 data class TransportResponse(val status: Int, val body: String)
@@ -25,7 +27,8 @@ class ApiClient(
         coerceInputValues = true
     }
 
-    fun importProject(path: String): ProjectAnalysis = decode(send("POST", "/api/projects/import", jsonBody("project_path" to path)))
+    fun importProject(path: String, confirmRemoteProvider: Boolean = false): ProjectAnalysis = decode(send("POST", "/api/projects/import", jsonBody("project_path" to path, "confirm_remote_provider" to confirmRemoteProvider)))
+    fun restoreProject(path: String): ProjectAnalysis = decode(send("POST", "/api/projects/restore", jsonBody("project_path" to path)))
     fun index(): ProjectIndex = decode(send("GET", "/api/projects/current/index"))
     fun reindex(revision: String): ProjectIndex = decode(send("POST", "/api/projects/current/reindex", jsonBody("project_revision" to revision)))
     fun fileInfo(path: String): ProjectFileInfo = decode(send("GET", "/api/projects/current/files/info?path=${encode(path)}"))
@@ -33,7 +36,7 @@ class ApiClient(
     fun analysis(path: String, revision: String): FileAnalysis = decode(send("GET", "/api/projects/current/files/analysis?path=${encode(path)}&project_revision=${encode(revision)}"))
     fun analyze(path: String, revision: String, refresh: Boolean = false, confirmRemoteProvider: Boolean = false): FileAnalysis = decode(send("POST", "/api/projects/current/files/analysis", jsonBody("path" to path, "project_revision" to revision, "refresh" to refresh, "confirm_remote_provider" to confirmRemoteProvider)))
     fun context(path: String, action: String = "fix"): ContextManifest = decode(send("GET", "/api/projects/current/context?path=${encode(path)}&action=${encode(action)}"))
-    fun effectiveModel(): EffectiveModel = decode(send("GET", "/api/models/current"))
+    fun modelCatalog(): ModelCatalog = decode(send("GET", "/api/models/current"))
     fun status(): DaemonStatus = decode(send("GET", "/status"))
     fun audit(revision: String): List<AuditEntry> = decode(send("GET", "/api/projects/current/audit?project_revision=${encode(revision)}"))
     fun impact(path: String, symbol: String = ""): ImpactPreview = decode(send("GET", "/api/projects/current/impact?path=${encode(path)}&symbol=${encode(symbol)}"))
@@ -67,9 +70,9 @@ class ApiClient(
     fun resumeAnalyzeAll(revision: String, confirmRemoteProvider: Boolean = false): AnalyzeAllJob = decode(send("POST", "/api/projects/current/analysis-job/resume", jsonBody("project_revision" to revision, "confirm_remote_provider" to confirmRemoteProvider)))
     fun cancelAnalyzeAll(revision: String): AnalyzeAllJob = decode(send("POST", "/api/projects/current/analysis-job/cancel?project_revision=${encode(revision)}"))
 
-    fun openChatSession(projectId: String, revision: String, baseFileHash: String, openPath: String, mode: String, targetSymbol: String): ChatSession = decode(send("POST", "/api/projects/current/chat/sessions", jsonBody("project_id" to projectId, "project_revision" to revision, "base_file_hash" to baseFileHash, "open_path" to openPath, "mode" to mode, "target_symbol" to targetSymbol)))
+    fun openChatSession(projectId: String, revision: String, baseFileHash: String, openPath: String, mode: String, targetSymbol: String, taskSpec: BugTaskSpec? = null): ChatSession = decode(send("POST", "/api/projects/current/chat/sessions", jsonBody("project_id" to projectId, "project_revision" to revision, "base_file_hash" to baseFileHash, "open_path" to openPath, "mode" to mode, "target_symbol" to targetSymbol, "task_spec" to taskSpec)))
     fun chatSession(sessionId: String): ChatSession = decode(send("GET", "/api/projects/current/chat/sessions/${encodePath(sessionId)}"))
-    fun sendChatMessage(sessionId: String, message: String, parentDraftId: String = "", confirmRemoteProvider: Boolean = false): ChatDraftProposal = decode(send("POST", "/api/projects/current/chat/sessions/${encodePath(sessionId)}/messages", jsonBody("message" to message, "parent_draft_id" to parentDraftId, "confirm_remote_provider" to confirmRemoteProvider)))
+    fun sendChatMessage(sessionId: String, message: String, parentDraftId: String = "", confirmRemoteProvider: Boolean = false, repair: Boolean = false): ChatDraftProposal = decode(send("POST", "/api/projects/current/chat/sessions/${encodePath(sessionId)}/messages", jsonBody("message" to message, "parent_draft_id" to parentDraftId, "confirm_remote_provider" to confirmRemoteProvider, "repair" to repair)))
 
     fun draft(draftId: String, revision: String): DeclarationDraft = decode(send("GET", "/api/projects/current/drafts/${encodePath(draftId)}?project_revision=${encode(revision)}"))
     fun updateDraft(draftId: String, projectRevision: String, expectedRevision: Long, declaration: String, imports: List<String>): DeclarationDraft = decode(send("PATCH", "/api/projects/current/drafts/${encodePath(draftId)}", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision, "declaration" to declaration, "imports" to imports)))
@@ -81,8 +84,6 @@ class ApiClient(
         val host = endpoint.host?.lowercase().orEmpty()
         return if (host == "localhost" || host == "127.0.0.1" || host == "::1") "Local endpoint" else "Remote endpoint"
     }
-
-    fun isLoopbackEndpoint(): Boolean = endpointLocality() == "Local endpoint"
 
     fun undo(projectId: String, revision: String, postApplyHash: String): ApplyResult = decode(send("POST", "/api/projects/current/undo", jsonBody("project_id" to projectId, "project_revision" to revision, "post_apply_hash" to postApplyHash, "confirm" to true)))
 
@@ -102,7 +103,7 @@ class ApiClient(
     }
     private fun encode(value: String) = URLEncoder.encode(value, StandardCharsets.UTF_8)
     private fun encodePath(value: String) = encode(value).replace("+", "%20")
-    private fun jsonBody(vararg values: Pair<String, Any>): String = buildJsonObject { values.forEach { (key, value) -> when (value) { is String -> put(key, value); is Boolean -> put(key, value); is Int -> put(key, value); is Long -> put(key, value); is List<*> -> put(key, kotlinx.serialization.json.JsonArray(value.map { kotlinx.serialization.json.JsonPrimitive(it as? String ?: error("unsupported JSON list value")) })); else -> error("unsupported JSON value") } } }.toString()
+    private fun jsonBody(vararg values: Pair<String, Any?>): String = buildJsonObject { values.forEach { (key, value) -> when (value) { is String -> put(key, value); is Boolean -> put(key, value); is Int -> put(key, value); is Long -> put(key, value); is BugTaskSpec -> put(key, json.encodeToJsonElement(value)); is List<*> -> put(key, kotlinx.serialization.json.JsonArray(value.map { kotlinx.serialization.json.JsonPrimitive(it as? String ?: error("unsupported JSON list value")) })); null -> put(key, JsonNull); else -> error("unsupported JSON value") } } }.toString()
 }
 
 class ApiException(val status: Int, val error: ApiError? = null, message: String) : IllegalStateException(message)

@@ -11,12 +11,13 @@ import (
 
 // Config is the top-level configuration struct.
 type Config struct {
-	LLM         LLMConfig     `json:"llm" yaml:"llm"`
-	Agents      AgentsConfig  `json:"agents" yaml:"agents"`
-	Retry       RetryConfig   `json:"retry" yaml:"retry"`
-	Timeouts    TimeoutConfig `json:"timeouts" yaml:"timeouts"`
-	Logging     LoggingConfig `json:"logging" yaml:"logging"`
-	ProjectPath string        `json:"project_path" yaml:"project_path"`
+	LLM         LLMConfig         `json:"llm" yaml:"llm"`
+	ModelScopes ModelScopesConfig `json:"model_scopes,omitempty" yaml:"model_scopes,omitempty"`
+	Agents      AgentsConfig      `json:"agents" yaml:"agents"`
+	Retry       RetryConfig       `json:"retry" yaml:"retry"`
+	Timeouts    TimeoutConfig     `json:"timeouts" yaml:"timeouts"`
+	Logging     LoggingConfig     `json:"logging" yaml:"logging"`
+	ProjectPath string            `json:"project_path" yaml:"project_path"`
 }
 
 // LoggingConfig holds configuration for the logger.
@@ -34,6 +35,25 @@ type LLMConfig struct {
 	Model       string  `json:"model" yaml:"model"`
 	Temperature float32 `json:"temperature,omitempty" yaml:"temperature,omitempty"`
 	MaxTokens   int     `json:"max_tokens,omitempty" yaml:"max_tokens,omitempty"`
+}
+
+// ModelScopesConfig contains the three fixed model profiles used by the daemon.
+// A profile becomes explicit when its api_base_url is configured.
+type ModelScopesConfig struct {
+	Analyze  ModelProfileConfig `json:"analyze,omitempty" yaml:"analyze,omitempty"`
+	Bug      ModelProfileConfig `json:"bug,omitempty" yaml:"bug,omitempty"`
+	Function ModelProfileConfig `json:"function,omitempty" yaml:"function,omitempty"`
+}
+
+// ModelProfileConfig is the configured portion of a scope profile. Pointer
+// numeric fields preserve the difference between an omitted value and zero.
+type ModelProfileConfig struct {
+	APIBaseURL       string   `json:"api_base_url,omitempty" yaml:"api_base_url,omitempty"`
+	APIKey           string   `json:"api_key,omitempty" yaml:"api_key,omitempty"`
+	Model            string   `json:"model,omitempty" yaml:"model,omitempty"`
+	Temperature      *float32 `json:"temperature,omitempty" yaml:"temperature,omitempty"`
+	MaxTokens        *int     `json:"max_tokens,omitempty" yaml:"max_tokens,omitempty"`
+	ContextMaxTokens *int     `json:"context_max_tokens,omitempty" yaml:"context_max_tokens,omitempty"`
 }
 
 // AgentsConfig holds agent-related configuration.
@@ -187,6 +207,9 @@ func LoadFromJSON(path string) (*Config, error) {
 func (c *Config) Validate() error {
 	if c.LLM.BaseURL == "" {
 		return fmt.Errorf("llm.base_url is required")
+	}
+	if _, err := ResolveModelProfiles(c); err != nil {
+		return err
 	}
 
 	return nil

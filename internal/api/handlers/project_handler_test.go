@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,37 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
+
+func TestProjectRestoreActivatesStoredAnalysisWithoutModelAccess(t *testing.T) {
+	root := t.TempDir()
+	writeProjectHandlerFixture(t, root, "main.go", "package main\nfunc Run() {}\n")
+	if _, err := project.NewAnalyzerWithProfile(nil, "", "analysis").Analyze(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewProjectHandler(manager, service)
+	body, err := json.Marshal(map[string]string{"project_path": root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+
+	handler.Restore(response, httptest.NewRequest(http.MethodPost, "/api/projects/restore", bytes.NewReader(body)))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("restore status = %d: %s", response.Code, response.Body.String())
+	}
+	if _, err := manager.Index(); err != nil {
+		t.Fatalf("restored index: %v", err)
+	}
+}
 
 func TestProjectIndexAndSymbolAPIs(t *testing.T) {
 	root := t.TempDir()
@@ -88,7 +120,7 @@ func TestProjectIndexAndSymbolAPIs(t *testing.T) {
 
 func TestFileAnalysisAPIsRequireRevisionAndExposeStates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`}}}})
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"high","summary":"Run ignores errors.","task_spec":{"schema_version":"1","target_path":"main.go","target_symbol":"Run","acceptance_criteria":["Return errors."],"non_goals":[]}}],"suggestions":[],"symbol_explanations":{}}`}}}})
 	}))
 	defer server.Close()
 	root := t.TempDir()
@@ -124,13 +156,89 @@ func TestFileAnalysisAPIsRequireRevisionAndExposeStates(t *testing.T) {
 	body := bytes.NewBufferString(`{"path":"main.go","project_revision":"` + index.ProjectRevision + `"}`)
 	analyzed := httptest.NewRecorder()
 	handler.AnalyzeFile(analyzed, httptest.NewRequest(http.MethodPost, "/api/projects/current/files/analysis", body))
-	if analyzed.Code != http.StatusOK || !strings.Contains(analyzed.Body.String(), `"status":"fresh"`) {
+	if analyzed.Code != http.StatusOK || !strings.Contains(analyzed.Body.String(), `"status":"fresh"`) || !strings.Contains(analyzed.Body.String(), `"task_spec"`) || !strings.Contains(analyzed.Body.String(), `"target_symbol":"Run"`) {
 		t.Fatalf("analyzed response = %d %s", analyzed.Code, analyzed.Body.String())
 	}
 	cleared := httptest.NewRecorder()
 	handler.DeleteFileAnalysis(cleared, httptest.NewRequest(http.MethodDelete, "/api/projects/current/files/analysis?path=main.go&project_revision="+index.ProjectRevision, nil))
 	if cleared.Code != http.StatusNoContent {
 		t.Fatalf("delete response = %d %s", cleared.Code, cleared.Body.String())
+	}
+}
+
+func TestPromptHandlersConfirmOnlyTheirOwnRemoteScope(t *testing.T) {
+	bugCalls := 0
+	bugProvider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		bugCalls++
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`}}}})
+	}))
+	defer bugProvider.Close()
+
+	root := t.TempDir()
+	writeProjectHandlerFixture(t, root, "main.go", "package main\nfunc Run() {}\n")
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(&config.Config{
+		LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy", Temperature: 0.2, MaxTokens: 1024},
+		ModelScopes: config.ModelScopesConfig{
+			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "hidden", Model: "analyze"},
+			Bug:      config.ModelProfileConfig{APIBaseURL: bugProvider.URL + "/v1", Model: "bug"},
+			Function: config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", APIKey: "hidden", Model: "function"},
+		},
+		Retry: config.RetryConfig{MaxRetries: 0, BackoffBase: 1, BackoffMax: 1},
+	}, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectHandler := NewProjectHandler(manager, service)
+	index, err := manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	importResponse := httptest.NewRecorder()
+	projectHandler.Import(importResponse, httptest.NewRequest(http.MethodPost, "/api/projects/import", bytes.NewBufferString(`{"project_path":"`+root+`"}`)))
+	if importResponse.Code != http.StatusBadRequest || bugCalls != 0 || strings.Contains(importResponse.Body.String(), "hidden") {
+		t.Fatalf("unconfirmed remote import = %d %s, bug calls %d", importResponse.Code, importResponse.Body.String(), bugCalls)
+	}
+
+	analysisResponse := httptest.NewRecorder()
+	projectHandler.AnalyzeFile(analysisResponse, httptest.NewRequest(http.MethodPost, "/api/projects/current/files/analysis", bytes.NewBufferString(`{"path":"main.go","project_revision":"`+index.ProjectRevision+`"}`)))
+	if analysisResponse.Code != http.StatusOK || bugCalls != 1 {
+		t.Fatalf("local bug analysis = %d %s, bug calls %d", analysisResponse.Code, analysisResponse.Body.String(), bugCalls)
+	}
+
+	chatHandler := NewChatHandler(service)
+	file, err := manager.IndexedFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := httptest.NewRecorder()
+	chatHandler.OpenSession(open, httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions", bytes.NewBufferString(`{"project_id":"`+index.ProjectID+`","project_revision":"`+index.ProjectRevision+`","base_file_hash":"`+file.ContentHash+`","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run"}`)))
+	if open.Code != http.StatusCreated {
+		t.Fatalf("open session = %d: %s", open.Code, open.Body.String())
+	}
+	var session app.ChatSession
+	if err := json.NewDecoder(open.Body).Decode(&session); err != nil {
+		t.Fatal(err)
+	}
+	message := httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions/"+session.ID+"/messages", bytes.NewBufferString(`{"message":"Change Run."}`))
+	message.SetPathValue("sessionID", session.ID)
+	functionResponse := httptest.NewRecorder()
+	chatHandler.SendSessionMessage(functionResponse, message)
+	if functionResponse.Code != http.StatusBadRequest || !strings.Contains(functionResponse.Body.String(), "remote function provider") || strings.Contains(functionResponse.Body.String(), "hidden") || bugCalls != 1 {
+		t.Fatalf("unconfirmed remote function = %d %s, bug calls %d", functionResponse.Code, functionResponse.Body.String(), bugCalls)
+	}
+
+	reindexResponse := httptest.NewRecorder()
+	projectHandler.Reindex(reindexResponse, httptest.NewRequest(http.MethodPost, "/api/projects/current/reindex", bytes.NewBufferString(`{"project_revision":"`+index.ProjectRevision+`"}`)))
+	if reindexResponse.Code != http.StatusOK || bugCalls != 1 {
+		t.Fatalf("model-free reindex = %d %s, bug calls %d", reindexResponse.Code, reindexResponse.Body.String(), bugCalls)
 	}
 }
 

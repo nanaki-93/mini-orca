@@ -101,8 +101,22 @@ internal fun reviewValidationSummary(editor: EditableDraftState?, validationCurr
 }
 
 internal fun checksMatchDraft(checks: CandidateCheckReport?, draft: DeclarationDraft?): Boolean =
-    checks?.applicable == true && draft != null && checks.draftId == draft.id &&
+    checks != null && draft != null && checks.draftId == draft.id &&
         checks.draftRevision == draft.revision && checks.draftHash == draft.hash
+
+internal fun repairMessageForChecks(session: ChatSession?, draft: DeclarationDraft?, checks: CandidateCheckReport?): String? {
+    if (session?.taskSpec == null || draft?.taskSpec == null || !sameTaskSpec(session.taskSpec, draft.taskSpec) || session.repairCount >= 3 || !checksMatchDraft(checks, draft)) return null
+    val failures = checks!!.checks.filter { it.state.lowercase() in setOf("failed", "error", "canceled", "cancelled") }
+    if (failures.isEmpty() && checks.applicable) return null
+    val evidence = failures.ifEmpty { checks.checks.filter { it.output.isNotBlank() } }
+        .joinToString("\n\n") { check -> "${check.name} (${check.state}):\n${check.output.take(2048)}" }
+        .take(4096)
+    return "Revise the current declaration to address this sanitized focused check evidence. Keep the pinned task scope and do not change unrelated code.\n\n$evidence".trim()
+}
+
+private fun repairLimitReached(session: ChatSession?, draft: DeclarationDraft?, checks: CandidateCheckReport?): Boolean =
+    session?.taskSpec != null && draft?.taskSpec != null && sameTaskSpec(session.taskSpec, draft.taskSpec) &&
+        session.repairCount >= 3 && checksMatchDraft(checks, draft) && !checks!!.applicable
 
 private fun focusedChecksEvidence(
     checks: CandidateCheckReport?,
@@ -201,6 +215,7 @@ internal fun ReviewDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Mod
 internal fun ReviewContextPane(
     project: ProjectAnalysis?,
     selected: ProjectFileInfo?,
+    session: ChatSession?,
     editor: EditableDraftState?,
     draft: DeclarationDraft?,
     checks: CandidateCheckReport?,
@@ -209,6 +224,7 @@ internal fun ReviewContextPane(
     applied: ApplyResult?,
     checksRunning: Boolean,
     onRunChecks: () -> Unit,
+    onReviseWithCheckOutput: () -> Unit,
     onEditDraft: () -> Unit,
     onApply: () -> Unit,
     onUndo: () -> Unit,
@@ -256,6 +272,12 @@ internal fun ReviewContextPane(
         FocusFlowPanel(Modifier.fillMaxWidth()) {
             EvidenceRow(evidence.checks)
             if (evidence.canRunChecks) FocusFlowButton(onClick = onRunChecks, tone = ActionTone.Primary, modifier = Modifier.padding(top = 8.dp)) { Text(evidence.runChecksLabel) }
+            val repairMessage = repairMessageForChecks(session, draft, checks)
+            if (repairMessage != null || repairLimitReached(session, draft, checks)) {
+                FocusFlowButton(onClick = onReviseWithCheckOutput, enabled = repairMessage != null && !checksRunning, tone = ActionTone.Attention, modifier = Modifier.padding(top = 8.dp)) {
+                    Text(if (repairMessage != null) "Revise with check output" else "Repair limit reached")
+                }
+            }
             checks?.checks.orEmpty().forEach { check ->
                 Text("${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}", color = evidenceColor(checkStatus(check.state)), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
             }

@@ -34,6 +34,7 @@ func (h *ChatHandler) OpenSession(w http.ResponseWriter, r *http.Request) {
 		ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision,
 		BaseFileHash: request.BaseFileHash, OpenPath: request.OpenPath,
 		Mode: request.Mode, TargetSymbol: request.TargetSymbol,
+		TaskSpec: request.TaskSpec,
 	})
 	if err != nil {
 		writeChatError(w, "open chat session failed", err)
@@ -81,7 +82,7 @@ func (h *ChatHandler) SendSessionMessage(w http.ResponseWriter, r *http.Request)
 	})
 	proposal, err := h.service.SendChatSessionMessage(r.Context(), app.ChatSessionMessageRequest{
 		SessionID: r.PathValue("sessionID"), Message: request.Message, ParentDraftID: request.ParentDraftID,
-		ConfirmRemoteProvider: request.ConfirmRemoteProvider,
+		ConfirmRemoteProvider: request.ConfirmRemoteProvider, Repair: request.Repair,
 	})
 	if err != nil {
 		_ = h.service.RecordActivity(session.ProjectID, session.ProjectRevision, project.Activity{

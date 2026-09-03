@@ -48,9 +48,11 @@ type Draft struct {
 	Hash            string                        `json:"hash"`
 	CandidateHash   string                        `json:"candidate_hash,omitempty"`
 	ParentDraftID   string                        `json:"parent_draft_id,omitempty"`
+	EffectiveModel  EffectiveModel                `json:"effective_model,omitempty"`
 	PreviousHash    string                        `json:"previous_hash,omitempty"`
 	State           DraftState                    `json:"state"`
 	Validation      *project.GenerationValidation `json:"validation,omitempty"`
+	TaskSpec        *project.BugTaskSpec          `json:"task_spec,omitempty"`
 }
 
 // DraftCreateRequest supplies immutable project identity and the first
@@ -66,6 +68,8 @@ type DraftCreateRequest struct {
 	Declaration     string
 	Imports         []string
 	ParentDraftID   string
+	EffectiveModel  EffectiveModel
+	TaskSpec        *project.BugTaskSpec
 }
 
 // DraftUpdateRequest changes only the isolated declaration/imports. Base
@@ -148,7 +152,7 @@ func (s *Service) CreateDraft(request DraftCreateRequest) (*Draft, error) {
 		ID: request.ID, ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision,
 		BaseFileHash: request.BaseFileHash, TargetPath: request.TargetPath, Mode: request.Mode,
 		TargetSymbol: request.TargetSymbol, Declaration: request.Declaration, Imports: append([]string(nil), request.Imports...),
-		Revision: 1, ParentDraftID: request.ParentDraftID, State: DraftGenerated,
+		Revision: 1, ParentDraftID: request.ParentDraftID, EffectiveModel: request.EffectiveModel, TaskSpec: project.SanitizeBugTaskSpec(request.TaskSpec), State: DraftGenerated,
 	}
 	draft.Hash = draftHash(draft.Declaration, draft.Imports)
 	s.draftMu.Lock()
@@ -326,7 +330,11 @@ func (s *Service) CheckDraft(ctx context.Context, request DraftCheckRequest) (*C
 	if !composition.Validation.Applicable || composition.CandidateHash != draft.CandidateHash {
 		return nil, project.ErrRevisionConflict
 	}
-	report, err := s.RunCandidateChecks(ctx, draft.TargetPath, composition.CandidateContent, request.Options)
+	var taskTest *project.GoTestCandidateSpec
+	if draft.TaskSpec != nil {
+		taskTest = draft.TaskSpec.GoTestCandidate
+	}
+	report, err := s.RunCandidateChecksForTask(ctx, draft.TargetPath, composition.CandidateContent, request.Options, taskTest)
 	if err != nil {
 		return nil, err
 	}
@@ -430,6 +438,7 @@ func draftHash(declaration string, imports []string) string {
 func cloneDraft(source Draft) Draft {
 	copy := source
 	copy.Imports = append([]string(nil), source.Imports...)
+	copy.TaskSpec = project.SanitizeBugTaskSpec(source.TaskSpec)
 	if source.Validation != nil {
 		validation := cloneValidation(*source.Validation)
 		copy.Validation = &validation
@@ -456,7 +465,7 @@ func (s *Service) rememberCandidate(preview *GenerationPreview) {
 	s.draftMu.Lock()
 	defer s.draftMu.Unlock()
 	validation := cloneValidation(preview.Validation)
-	draft := Draft{ID: request.ID, ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, BaseFileHash: request.BaseFileHash, TargetPath: request.TargetPath, Mode: request.Mode, TargetSymbol: request.TargetSymbol, Declaration: request.Declaration, Imports: append([]string(nil), request.Imports...), Revision: 1, ParentDraftID: request.ParentDraftID, State: DraftValid, Validation: &validation}
+	draft := Draft{ID: request.ID, ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, BaseFileHash: request.BaseFileHash, TargetPath: request.TargetPath, Mode: request.Mode, TargetSymbol: request.TargetSymbol, Declaration: request.Declaration, Imports: append([]string(nil), request.Imports...), Revision: 1, ParentDraftID: request.ParentDraftID, EffectiveModel: request.EffectiveModel, State: DraftValid, Validation: &validation}
 	draft.Hash = draftHash(draft.Declaration, draft.Imports)
 	s.drafts[draft.ID] = &storedDraft{draft: draft, meta: draftMetadata{Version: preview.Version, ScopeMode: preview.ScopeMode, Rationale: preview.Rationale, Action: preview.Action, TemplateID: preview.TemplateID, TemplateInputHash: preview.TemplateInputHash, EffectiveModel: preview.EffectiveModel, ContextManifest: cloneManifest(preview.ContextManifest)}}
 }
@@ -585,7 +594,7 @@ func (s *Service) draftRequestFromPreview(preview *GenerationPreview) (DraftCrea
 	if err != nil {
 		return DraftCreateRequest{}, err
 	}
-	return DraftCreateRequest{ProjectID: preview.ProjectID, ProjectRevision: preview.ProjectRevision, BaseFileHash: preview.BaseFileHash, TargetPath: preview.TargetPath, Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: preview.TargetSymbol, Declaration: declaration, Imports: imports}, nil
+	return DraftCreateRequest{ProjectID: preview.ProjectID, ProjectRevision: preview.ProjectRevision, BaseFileHash: preview.BaseFileHash, TargetPath: preview.TargetPath, Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: preview.TargetSymbol, Declaration: declaration, Imports: imports, EffectiveModel: preview.EffectiveModel}, nil
 }
 
 func extractDeclarationEdit(source, target string) (string, []string, error) {
