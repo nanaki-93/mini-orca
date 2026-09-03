@@ -193,6 +193,7 @@ internal data class DesktopShellProjectActions(
 
 internal data class DesktopShellEditorActions(
     val selectWorkspace: (Workspace) -> Unit,
+    val selectEditorSurface: (EditorSurface) -> Unit,
     val focusChat: () -> Unit,
     val focusDraft: () -> Unit,
     val cancelAnalysis: () -> Unit,
@@ -351,7 +352,7 @@ internal fun DesktopShell(
               }
               DesktopCanvas(
                   appState = appState,
-                  workspace = workspace,
+                  layout = layout,
                   editor = editor,
                   context = context,
                   widthDp = widthDp,
@@ -559,7 +560,7 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
 @Composable
 private fun DesktopCanvas(
     appState: DesktopState,
-    workspace: Workspace,
+    layout: DesktopLayoutState,
     editor: DesktopShellEditorState,
     context: DesktopShellContextState,
     widthDp: Float,
@@ -570,6 +571,7 @@ private fun DesktopCanvas(
     onOpenNarrowDrawer: (NarrowDrawer) -> Unit,
     modifier: Modifier,
 ) {
+  val workspace = appState.workspace
   EditorArea(
       content = {
         ContentPane(
@@ -581,7 +583,14 @@ private fun DesktopCanvas(
                     symbols = appState.symbols,
                     selectedSymbol = appState.selectedSymbol,
                     workspace = workspace,
-                    editorProgress = editor.progress,
+                    editorChrome =
+                        editorChromeUiState(
+                            file = appState.selectedFile,
+                            selectedSymbol = appState.selectedSymbol,
+                            requestedSurface = layout.editorSurface,
+                            progress = editor.progress,
+                            draft = appState.review.draft,
+                        ),
                     draft = appState.review.draft,
                     focusedLine = appState.selection.focusedLine,
                     analysis =
@@ -597,6 +606,7 @@ private fun DesktopCanvas(
             navigation =
                 ContentPaneNavigationActions(
                     selectWorkspace = onWorkspaceSelected,
+                    selectEditorSurface = editorActions.selectEditorSurface,
                     sourceLineSelected = { selection ->
                       editorActions.sourceLineSelected(selection)
                       contextDrawerForSourceSelection(workspace, widthDp)?.let(onOpenNarrowDrawer)
@@ -632,9 +642,10 @@ private fun ContentPane(
           ProjectSummaryPane(state.overview, state.project, navigation.selectWorkspace)
       Workspace.Editor ->
           EditorWorkspace(
-              state.selected,
+              chrome = state.editorChrome,
+              onSelectSurface = navigation.selectEditorSurface,
               canvas = {
-                if (state.editorProgress.progress == EditorProgress.Review) {
+                if (state.editorChrome.activeSurface == EditorSurface.Review) {
                   ReviewDiffCanvas(state.draft)
                 } else {
                   EditorPane(
@@ -659,7 +670,7 @@ private data class ContentPaneState(
     val symbols: List<SymbolInfo>,
     val selectedSymbol: SymbolInfo?,
     val workspace: Workspace,
-    val editorProgress: EditorProgressUiState,
+    val editorChrome: EditorChromeUiState,
     val draft: DeclarationDraft?,
     val focusedLine: Int,
     val analysis: AnalysisWorkspacePaneState,
@@ -668,6 +679,7 @@ private data class ContentPaneState(
 
 private data class ContentPaneNavigationActions(
     val selectWorkspace: (Workspace) -> Unit,
+    val selectEditorSurface: (EditorSurface) -> Unit,
     val sourceLineSelected: (SourceLineSelection) -> Unit,
 )
 
