@@ -593,6 +593,7 @@ private fun DesktopCanvas(
                         ),
                     draft = appState.review.draft,
                     focusedLine = appState.selection.focusedLine,
+                    findings = appState.findings.findings,
                     analysis =
                         AnalysisWorkspacePaneState(
                             job = appState.findings.analyzeAll,
@@ -654,6 +655,7 @@ private fun ContentPane(
                       state.symbols,
                       state.selectedSymbol,
                       state.focusedLine,
+                      state.findings,
                       navigation.sourceLineSelected)
                 }
               })
@@ -673,6 +675,7 @@ private data class ContentPaneState(
     val editorChrome: EditorChromeUiState,
     val draft: DeclarationDraft?,
     val focusedLine: Int,
+    val findings: List<UnifiedFinding>,
     val analysis: AnalysisWorkspacePaneState,
     val bugs: BugsWorkspacePaneState,
 )

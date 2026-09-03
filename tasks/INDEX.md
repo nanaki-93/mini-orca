@@ -48,7 +48,7 @@ The previous sequence remains reproducible through
 | 120 | [Build the IDE shell foundation](completed/120_ide_shell_foundation.md) | 119 | Complete |
 | 121 | [Rebuild Project as a navigation tool window](completed/121_project_tool_window.md) | 120 | Complete |
 | 122 | [Add active-file editor chrome](completed/122_editor_chrome.md) | 121 | Complete |
-| 123 | [Improve the source gutter and viewport](123_source_gutter_and_viewport.md) | 122 | Pending |
+| 123 | [Improve the source gutter and viewport](completed/123_source_gutter_and_viewport.md) | 122 | Complete |
 | 124 | [Add the Context tool window](124_context_tool_window.md) | 123 | Pending |
 | 125 | [Add Assistant and Review tool windows](125_assistant_review_tool_windows.md) | 124 | Pending |
 | 126 | [Add the Problems tool window](126_problems_tool_window.md) | 125 | Pending |
