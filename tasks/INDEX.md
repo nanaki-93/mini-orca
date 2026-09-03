@@ -122,7 +122,7 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 111 | [Unify project source traversal](completed/111_unify_project_traversal.md) | 110 | Complete |
 | 112 | [Unify metadata persistence](completed/112_unify_metadata_persistence.md) | 111 | Complete |
 | 113 | [Isolate Go workflow state](completed/113_isolate_go_workflow_state.md) | 112 | Complete |
-| 114 | [Extract the Desktop workflow presenter](114_extract_desktop_presenter.md) | 113 | Pending |
+| 114 | [Extract the Desktop workflow presenter](completed/114_extract_desktop_presenter.md) | 113 | Complete |
 | 115 | [Simplify Compose and API client contracts](115_simplify_desktop_ui_contracts.md) | 114 | Pending |
 | 116 | [Clean documentation and build residue](116_clean_docs_and_build.md) | 115 | Pending |
 | 117 | [Complete cleanup quality and acceptance](117_cleanup_acceptance.md) | 103–116 | Pending |
