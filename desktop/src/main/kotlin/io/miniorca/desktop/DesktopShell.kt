@@ -754,10 +754,6 @@ private fun handleDesktopShortcut(
       paletteActions.open(PaletteMode.Symbols)
       true
     }
-    DesktopShortcut.OpenAction -> {
-      paletteActions.open(PaletteMode.Actions)
-      true
-    }
     DesktopShortcut.FocusChat ->
         editor.contextualActions.canFocusChat.also { if (it) editorActions.focusChat() }
     DesktopShortcut.FocusDraft ->

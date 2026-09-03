@@ -192,7 +192,7 @@ internal class DesktopLayoutStore(
       }
 
   private companion object {
-    // These two keys intentionally preserve the existing PaneWidthStore preference contract.
+    // Keep these stable keys so pane-width preferences survive shell upgrades.
     const val EXPLORER_WIDTH_KEY = "explorer-width"
     const val ACTION_WIDTH_KEY = "action-width"
     const val BOTTOM_HEIGHT_KEY = "ide-bottom-height"

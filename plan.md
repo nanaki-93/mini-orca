@@ -1,6 +1,11 @@
 # Mini-Orca IDE-style desktop UI improvement plan
 
-**Status:** Proposed
+**Status:** Complete — automated implementation and acceptance are complete through Task 132.
+
+**Release-operator limitation:** This environment has no interactive Mini-Orca window or
+provider-backed fixture. The remaining live viewport, screen-reader, text-scaling, and
+provider-flow checks are recorded in `desktop/KEYBOARD_SMOKE_CHECKLIST.md`; they are not claimed
+as completed here.
 
 **Prepared:** 2026-09-04
 
