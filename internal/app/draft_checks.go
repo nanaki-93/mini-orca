@@ -149,20 +149,8 @@ func taskTestPath(workspace, targetPath string) (string, error) {
 }
 
 func (s *Service) runTaskTestCheck(ctx context.Context, workspace, name string, command []string, expectPass bool) DraftCheck {
-	check := DraftCheck{Name: name, Required: true, Command: append([]string(nil), command...)}
-	if err := ctx.Err(); err != nil {
-		check.State = CheckCanceled
-		check.Output = err.Error()
-		return check
-	}
-	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
-	defer cancel()
-	output, exitCode, err := runCheckCommand(timed, workspace, command)
-	check.Output = sanitizeCheckOutput(output, workspace, s.manager.Root())
-	check.ExitCode = exitCode
-	if timed.Err() != nil {
-		check.State = CheckCanceled
-		check.Output = timed.Err().Error()
+	check, err := s.executeDraftCheck(ctx, workspace, DraftCheck{Name: name, Required: true, Command: append([]string(nil), command...)})
+	if check.State == CheckCanceled {
 		return check
 	}
 	passed := err == nil
@@ -186,20 +174,8 @@ func parseGoDraft(path, source string) DraftCheck {
 }
 
 func (s *Service) runCheck(ctx context.Context, workspace, name string, required bool, command []string, failOnOutput bool) DraftCheck {
-	check := DraftCheck{Name: name, Required: required, Command: append([]string(nil), command...)}
-	if err := ctx.Err(); err != nil {
-		check.State = CheckCanceled
-		check.Output = err.Error()
-		return check
-	}
-	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
-	defer cancel()
-	output, exitCode, err := runCheckCommand(timed, workspace, command)
-	check.Output = sanitizeCheckOutput(output, workspace, s.manager.Root())
-	check.ExitCode = exitCode
-	if timed.Err() != nil {
-		check.State = CheckCanceled
-		check.Output = timed.Err().Error()
+	check, err := s.executeDraftCheck(ctx, workspace, DraftCheck{Name: name, Required: required, Command: append([]string(nil), command...)})
+	if check.State == CheckCanceled {
 		return check
 	}
 	if err != nil || failOnOutput && check.Output != "" {
@@ -208,6 +184,25 @@ func (s *Service) runCheck(ctx context.Context, workspace, name string, required
 	}
 	check.State = CheckPassed
 	return check
+}
+
+func (s *Service) executeDraftCheck(ctx context.Context, workspace string, check DraftCheck) (DraftCheck, error) {
+	if err := ctx.Err(); err != nil {
+		check.State = CheckCanceled
+		check.Output = err.Error()
+		return check, err
+	}
+	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
+	defer cancel()
+	output, exitCode, err := runCheckCommand(timed, workspace, check.Command)
+	check.Output = sanitizeCheckOutput(output, workspace, s.manager.Root())
+	check.ExitCode = exitCode
+	if timed.Err() != nil {
+		check.State = CheckCanceled
+		check.Output = timed.Err().Error()
+		return check, timed.Err()
+	}
+	return check, err
 }
 
 func runCheckCommand(ctx context.Context, directory string, command []string) (string, int, error) {

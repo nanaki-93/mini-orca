@@ -171,6 +171,18 @@ in this environment because no personal credentials, local model server, or inte
 Compose session is available. This is a recorded manual limitation, not a provider
 compatibility claim.
 
+On 2026-09-03, Task 117 ran the final automated acceptance matrix: `make
+fmt-check`, `go test ./...`, `make test-race`, `make vet`, `go mod tidy -diff`,
+`./desktop/gradlew -p desktop test`, `make check`, `make quality`, and `git diff
+--check` all passed. The pinned staticcheck, dead-code, clone, gocyclo, Spotless,
+and Detekt gates had no in-scope production finding; Go coverage was 75.6% and
+the Desktop suite contained 135 tests. A loopback daemon started with
+`config.example.yaml`; its `/health` and `/status` checks passed and it was shut
+down. The fixture flow requiring a local/remote model and an interactive Compose
+window remains **not run**, as does image build/health/size acceptance: Docker's
+daemon and Compose plugin are unavailable in this environment. These are release
+operator checks, not passed acceptance claims.
+
 ## Supported scope and release decision
 
 Mini-Orca is Go-first for safe declaration editing. Kotlin, Java, TypeScript,

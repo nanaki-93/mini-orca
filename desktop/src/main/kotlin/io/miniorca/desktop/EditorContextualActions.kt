@@ -18,37 +18,48 @@ internal fun editorContextualActions(
     functionModel: ScopedModel,
     remoteProviderConfirmed: Boolean,
 ): EditorContextualActions {
-    if (state.workspace != Workspace.Editor) {
-        return EditorContextualActions(
-            canFocusChat = false,
-            canFocusDraft = false,
-            canGenerate = false,
-            canValidateDraft = false,
-            canRunFocusedChecks = false,
-        )
-    }
-    val target = validateChatTarget(state.selectedFile, state.symbols, state.selectedSymbol, mode, requestedSymbol)
-    val editor = state.review.editor
-    val draft = state.review.draft
-    val draftCurrent = draftEditorMatchesOpenFile(editor, state.selectedFile, state.project)
-    val canValidate = draftCurrent && editor?.status in setOf(
-        DraftEditorStatus.Generated,
-        DraftEditorStatus.Dirty,
-        DraftEditorStatus.Invalid,
-    )
-    val canChecks = reviewEvidenceUiState(
-        state.project,
-        state.selectedFile,
-        editor,
-        draft,
-        state.review.checks,
-        checksRunning = state.loading,
-    ).canRunChecks
+  if (state.workspace != Workspace.Editor) {
     return EditorContextualActions(
-        canFocusChat = target.valid,
-        canFocusDraft = draftCurrent,
-        canGenerate = target.valid && message.isNotBlank() && !sending && (!functionModel.remoteProvider || remoteProviderConfirmed),
-        canValidateDraft = canValidate,
-        canRunFocusedChecks = canChecks,
+        canFocusChat = false,
+        canFocusDraft = false,
+        canGenerate = false,
+        canValidateDraft = false,
+        canRunFocusedChecks = false,
     )
+  }
+  val target =
+      validateChatTarget(
+          state.selectedFile, state.symbols, state.selectedSymbol, mode, requestedSymbol)
+  val editor = state.review.editor
+  val draft = state.review.draft
+  val draftCurrent = draftEditorMatchesOpenFile(editor, state.selectedFile, state.project)
+  val canValidate =
+      draftCurrent &&
+          editor?.status in
+              setOf(
+                  DraftEditorStatus.Generated,
+                  DraftEditorStatus.Dirty,
+                  DraftEditorStatus.Invalid,
+              )
+  val canChecks =
+      reviewEvidenceUiState(
+              state.project,
+              state.selectedFile,
+              editor,
+              draft,
+              state.review.checks,
+              checksRunning = state.loading,
+          )
+          .canRunChecks
+  return EditorContextualActions(
+      canFocusChat = target.valid,
+      canFocusDraft = draftCurrent,
+      canGenerate =
+          target.valid &&
+              message.isNotBlank() &&
+              !sending &&
+              (!functionModel.remoteProvider || remoteProviderConfirmed),
+      canValidateDraft = canValidate,
+      canRunFocusedChecks = canChecks,
+  )
 }

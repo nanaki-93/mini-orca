@@ -32,50 +32,78 @@ type semanticAnalysisResponse struct {
 	SymbolExplanations map[string]string    `json:"symbol_explanations"`
 }
 
+type preparedFileAnalysis struct {
+	analysis    *project.Analysis
+	indexedFile *project.IndexFile
+	source      string
+	cache       *project.FileAnalysisCache
+	input       project.FileAnalysisInput
+}
+
 // AnalyzeFile creates or refreshes a semantic summary for exactly one selected
 // file. It sends that file's source plus bounded, source-free project facts.
 func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, confirmRemoteProvider bool) (*project.FileAnalysis, error) {
 	if err := s.RequireRemoteConfirmation(config.BugModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
-	indexedFile, err := s.manager.IndexedFile(targetFile)
+	prepared, err := s.prepareFileAnalysis(targetFile)
 	if err != nil {
 		return nil, err
 	}
+	cached, err := prepared.cache.Load(prepared.input)
+	if err != nil {
+		return nil, err
+	}
+	if !refresh && reusableFileAnalysis(cached) {
+		return s.syncCachedFileAnalysis(prepared.input, cached)
+	}
+	return s.generateFileAnalysis(ctx, prepared)
+}
+
+func (s *Service) prepareFileAnalysis(targetFile string) (preparedFileAnalysis, error) {
+	indexedFile, err := s.manager.IndexedFile(targetFile)
+	if err != nil {
+		return preparedFileAnalysis{}, err
+	}
 	if indexedFile.Binary {
-		return nil, fmt.Errorf("target file must be text")
+		return preparedFileAnalysis{}, fmt.Errorf("target file must be text")
 	}
 	analysis, err := s.manager.Analysis()
 	if err != nil {
-		return nil, err
+		return preparedFileAnalysis{}, err
 	}
 	fileInfo, err := project.GetFileInfo(s.manager.Root(), indexedFile.Path)
 	if err != nil {
-		return nil, err
+		return preparedFileAnalysis{}, err
 	}
 	if fileInfo.ContentHash != indexedFile.ContentHash {
-		return nil, project.ErrRevisionConflict
+		return preparedFileAnalysis{}, project.ErrRevisionConflict
 	}
 	cache, input, err := s.fileAnalysisCacheInput(analysis, indexedFile, indexedFile.ContentHash)
 	if err != nil {
+		return preparedFileAnalysis{}, err
+	}
+	return preparedFileAnalysis{analysis: analysis, indexedFile: indexedFile, source: fileInfo.Content, cache: cache, input: input}, nil
+}
+
+func reusableFileAnalysis(cached *project.FileAnalysis) bool {
+	return cached.Status == project.AnalysisStatusFresh || cached.Status == project.AnalysisStatusFailed || cached.Status == project.AnalysisStatusRunning
+}
+
+func (s *Service) syncCachedFileAnalysis(input project.FileAnalysisInput, cached *project.FileAnalysis) (*project.FileAnalysis, error) {
+	if err := s.syncFileAnalysisStatus(input, cached.Status); err != nil {
 		return nil, err
 	}
-	cached, err := cache.Load(input)
-	if err != nil {
-		return nil, err
-	}
-	if !refresh && (cached.Status == project.AnalysisStatusFresh || cached.Status == project.AnalysisStatusFailed || cached.Status == project.AnalysisStatusRunning) {
-		if err := s.syncFileAnalysisStatus(input, cached.Status); err != nil {
-			return nil, err
-		}
-		return cached, nil
-	}
+	return cached, nil
+}
+
+func (s *Service) generateFileAnalysis(ctx context.Context, prepared preparedFileAnalysis) (*project.FileAnalysis, error) {
 	index, err := s.manager.Index()
 	if err != nil {
 		return nil, err
 	}
 	runtime := s.runtimes.bug
-	prompt, err := semanticPrompt(fileInfo.Content, *analysis, index, *indexedFile, s.contextManifestForRuntime(semanticManifest(*indexedFile), runtime))
+	prompt, err := semanticPrompt(prepared.source, *prepared.analysis, index, *prepared.indexedFile, s.contextManifestForRuntime(semanticManifest(*prepared.indexedFile), runtime))
 	if err != nil {
 		return nil, err
 	}
@@ -86,12 +114,27 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 		return nil, timed.Err()
 	}
 	if err != nil {
-		return s.storeAnalysisFailure(cache, input, err)
+		return s.storeAnalysisFailure(prepared.cache, prepared.input, err)
 	}
-	parsed, err := parseSemanticAnalysis(result.Content, *indexedFile, fileInfo.Content)
+	parsed, err := parseSemanticAnalysis(result.Content, *prepared.indexedFile, prepared.source)
 	if err != nil {
-		return s.storeAnalysisFailure(cache, input, err)
+		return s.storeAnalysisFailure(prepared.cache, prepared.input, err)
 	}
+	fresh := newFileAnalysis(prepared, parsed)
+	if model := result.Model; model != "" {
+		fresh.Model = model
+	}
+	if err := prepared.cache.Store(fresh); err != nil {
+		return nil, err
+	}
+	if err := s.syncFileAnalysisStatus(prepared.input, fresh.Status); err != nil {
+		return nil, err
+	}
+	return &fresh, nil
+}
+
+func newFileAnalysis(prepared preparedFileAnalysis, parsed semanticAnalysisResponse) project.FileAnalysis {
+	input, indexedFile := prepared.input, prepared.indexedFile
 	fresh := project.FileAnalysis{
 		SchemaVersion: "1", ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision,
 		Path: input.Path, ContentHash: input.ContentHash, Language: input.Language,
@@ -102,16 +145,7 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 		Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
 		GeneratedAt: time.Now().UTC(),
 	}
-	if model := result.Model; model != "" {
-		fresh.Model = model
-	}
-	if err := cache.Store(fresh); err != nil {
-		return nil, err
-	}
-	if err := s.syncFileAnalysisStatus(input, fresh.Status); err != nil {
-		return nil, err
-	}
-	return &fresh, nil
+	return fresh
 }
 
 // CachedFileAnalysis returns the existing semantic state without contacting the model.
@@ -233,67 +267,96 @@ func parseSemanticAnalysis(output string, target project.IndexFile, source strin
 	if len(output) == 0 || len(output) > maxSemanticAnalysisBytes {
 		return parsed, fmt.Errorf("semantic analysis response is empty or too large")
 	}
+	if err := decodeSemanticAnalysis(output, &parsed); err != nil {
+		return parsed, err
+	}
+	if err := validateSemanticAnalysisLimits(parsed); err != nil {
+		return parsed, err
+	}
+	explanations, err := normalizeSymbolExplanations(parsed.SymbolExplanations, target.Symbols)
+	if err != nil {
+		return parsed, err
+	}
+	parsed.SymbolExplanations = explanations
+	if err := validateSemanticRisks(parsed.Risks, target, source); err != nil {
+		return parsed, err
+	}
+	return parsed, nil
+}
+
+func decodeSemanticAnalysis(output string, parsed *semanticAnalysisResponse) error {
 	decoder := json.NewDecoder(strings.NewReader(output))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&parsed); err != nil {
-		return parsed, fmt.Errorf("parse semantic analysis JSON: %w", err)
+	if err := decoder.Decode(parsed); err != nil {
+		return fmt.Errorf("parse semantic analysis JSON: %w", err)
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return parsed, fmt.Errorf("semantic analysis JSON must contain one object")
+		return fmt.Errorf("semantic analysis JSON must contain one object")
 	}
-	if decoder.More() || strings.TrimSpace(parsed.Purpose) == "" || len(parsed.Responsibilities) > 32 || len(parsed.Dependencies) > 64 || len(parsed.SideEffects) > 32 || len(parsed.Risks) > 32 || len(parsed.Suggestions) > 32 {
-		return parsed, fmt.Errorf("semantic analysis JSON is incomplete or exceeds limits")
+	return nil
+}
+
+func validateSemanticAnalysisLimits(parsed semanticAnalysisResponse) error {
+	if strings.TrimSpace(parsed.Purpose) == "" || len(parsed.Responsibilities) > 32 || len(parsed.Dependencies) > 64 || len(parsed.SideEffects) > 32 || len(parsed.Risks) > 32 || len(parsed.Suggestions) > 32 {
+		return fmt.Errorf("semantic analysis JSON is incomplete or exceeds limits")
 	}
-	allowed := make(map[string]bool, len(target.Symbols))
+	return nil
+}
+
+func normalizeSymbolExplanations(explanations map[string]string, symbols []project.SymbolInfo) (map[string]string, error) {
+	allowed := make(map[string]bool, len(symbols))
 	shortNames := make(map[string][]string)
-	for _, symbol := range target.Symbols {
+	for _, symbol := range symbols {
 		allowed[symbol.Name] = true
 		if separator := strings.LastIndexByte(symbol.Name, '.'); separator >= 0 {
 			shortName := symbol.Name[separator+1:]
 			shortNames[shortName] = append(shortNames[shortName], symbol.Name)
 		}
 	}
-	normalizedExplanations := make(map[string]string, len(parsed.SymbolExplanations))
-	for name, explanation := range parsed.SymbolExplanations {
+	normalizedExplanations := make(map[string]string, len(explanations))
+	for name, explanation := range explanations {
 		normalizedName := name
 		if !allowed[name] {
 			candidates := shortNames[name]
 			if len(candidates) != 1 {
-				return parsed, fmt.Errorf("semantic analysis contains an unknown or ambiguous symbol explanation")
+				return nil, fmt.Errorf("semantic analysis contains an unknown or ambiguous symbol explanation")
 			}
 			normalizedName = candidates[0]
 		}
 		explanation = strings.TrimSpace(explanation)
 		if explanation == "" {
-			return parsed, fmt.Errorf("semantic analysis contains an unknown or empty symbol explanation")
+			return nil, fmt.Errorf("semantic analysis contains an unknown or empty symbol explanation")
 		}
 		if _, exists := normalizedExplanations[normalizedName]; exists {
-			return parsed, fmt.Errorf("semantic analysis contains duplicate symbol explanations")
+			return nil, fmt.Errorf("semantic analysis contains duplicate symbol explanations")
 		}
 		normalizedExplanations[normalizedName] = explanation
 	}
-	parsed.SymbolExplanations = normalizedExplanations
-	for index := range parsed.Risks {
-		risk := &parsed.Risks[index]
+	return normalizedExplanations, nil
+}
+
+func validateSemanticRisks(risks []project.Finding, target project.IndexFile, source string) error {
+	for index := range risks {
+		risk := &risks[index]
 		risk.Severity = strings.ToLower(strings.TrimSpace(risk.Severity))
 		risk.Summary = strings.TrimSpace(risk.Summary)
 		if risk.Severity != "low" && risk.Severity != "medium" && risk.Severity != "high" || risk.Summary == "" {
-			return parsed, fmt.Errorf("semantic analysis contains an invalid risk")
+			return fmt.Errorf("semantic analysis contains an invalid risk")
 		}
 		taskSpec, err := validateBugTaskSpec(risk.TaskSpec, target, source)
 		if err != nil {
-			return parsed, err
+			return err
 		}
 		risk.TaskSpec = taskSpec
 	}
-	return parsed, nil
+	return nil
 }
 
 func validateBugTaskSpec(spec *project.BugTaskSpec, target project.IndexFile, source string) (*project.BugTaskSpec, error) {
 	if spec == nil {
 		return nil, nil
 	}
-	if spec.SchemaVersion != project.BugTaskSpecSchemaVersion || len(spec.TargetPath) > 1024 || len(spec.TargetSymbol) > project.MaxBugTaskItemBytes || len(spec.TargetSignature) > 1024 || spec.TargetPath != target.Path || strings.TrimSpace(spec.TargetSymbol) == "" {
+	if !validBugTaskTarget(spec, target.Path) {
 		return nil, fmt.Errorf("semantic analysis contains an invalid bug task target")
 	}
 	if err := validateBugTaskItems(spec.AcceptanceCriteria, true); err != nil {
@@ -302,23 +365,37 @@ func validateBugTaskSpec(spec *project.BugTaskSpec, target project.IndexFile, so
 	if err := validateBugTaskItems(spec.NonGoals, false); err != nil {
 		return nil, err
 	}
-	matching := make([]project.SymbolInfo, 0, 1)
-	for _, symbol := range target.Symbols {
-		if symbol.Name == spec.TargetSymbol {
-			matching = append(matching, symbol)
-		}
-	}
-	if len(matching) != 1 || matching[0].Confidence != "exact" || !matching[0].AtomicTarget || matching[0].Signature == "" {
+	matching, ok := exactAtomicSymbol(target.Symbols, spec.TargetSymbol)
+	if !ok {
 		return nil, fmt.Errorf("semantic analysis bug task target is not one exact atomic symbol")
 	}
 	validated := project.SanitizeBugTaskSpec(spec)
 	validated.TargetPath = target.Path
-	validated.TargetSymbol = matching[0].Name
-	validated.TargetSignature = matching[0].Signature
+	validated.TargetSymbol = matching.Name
+	validated.TargetSignature = matching.Signature
 	if validated.GoTestCandidate != nil {
 		validated.GoTestCandidate = validateGoTestCandidate(validated.GoTestCandidate, target, source)
 	}
 	return validated, nil
+}
+
+func validBugTaskTarget(spec *project.BugTaskSpec, targetPath string) bool {
+	return spec.SchemaVersion == project.BugTaskSpecSchemaVersion && len(spec.TargetPath) <= 1024 &&
+		len(spec.TargetSymbol) <= project.MaxBugTaskItemBytes && len(spec.TargetSignature) <= 1024 &&
+		spec.TargetPath == targetPath && strings.TrimSpace(spec.TargetSymbol) != ""
+}
+
+func exactAtomicSymbol(symbols []project.SymbolInfo, name string) (project.SymbolInfo, bool) {
+	matching := make([]project.SymbolInfo, 0, 1)
+	for _, symbol := range symbols {
+		if symbol.Name == name {
+			matching = append(matching, symbol)
+		}
+	}
+	if len(matching) != 1 || matching[0].Confidence != "exact" || !matching[0].AtomicTarget || matching[0].Signature == "" {
+		return project.SymbolInfo{}, false
+	}
+	return matching[0], true
 }
 
 func validateBugTaskItems(items []string, required bool) error {

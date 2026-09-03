@@ -5,10 +5,11 @@ data class DirectEditRequest(
     val selectedSymbol: SymbolInfo,
     val currentDraft: CurrentEditIdentity? = null,
 ) {
-    val requiresDraftDiscard: Boolean = currentDraft?.hasDraft == true &&
-        !currentDraft.matchesTarget(target, selectedSymbol)
+  val requiresDraftDiscard: Boolean =
+      currentDraft?.hasDraft == true && !currentDraft.matchesTarget(target, selectedSymbol)
 
-    val discardPrompt: String = "Discard draft for ${currentDraft?.targetSymbol} and edit ${target.symbol}?"
+  val discardPrompt: String =
+      "Discard draft for ${currentDraft?.targetSymbol} and edit ${target.symbol}?"
 }
 
 fun directEditRequest(
@@ -17,9 +18,11 @@ fun directEditRequest(
     selectedSymbol: SymbolInfo?,
     currentEditIdentity: CurrentEditIdentity?,
 ): DirectEditRequest? {
-    val symbol = selectedSymbol ?: return null
-    val eligibility = symbolEditEligibility(selectedFile, symbols, symbol)
-    return eligibility.target?.let { target -> DirectEditRequest(target, symbol, currentEditIdentity) }
+  val symbol = selectedSymbol ?: return null
+  val eligibility = symbolEditEligibility(selectedFile, symbols, symbol)
+  return eligibility.target?.let { target ->
+    DirectEditRequest(target, symbol, currentEditIdentity)
+  }
 }
 
 private fun CurrentEditIdentity.matchesTarget(target: ChatTarget, symbol: SymbolInfo): Boolean =

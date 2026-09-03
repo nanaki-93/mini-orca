@@ -24,7 +24,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build build-linux clean test test-race vet fmt-check check desktop-test desktop-build desktop-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
+.PHONY: all build build-linux clean test test-race vet fmt-check quality check desktop-test desktop-build desktop-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
 
 # ─── Default Target ────────────────────────────────────────────────────────────
 all: help
@@ -70,6 +70,10 @@ vet: ## Vet all Go packages
 
 fmt-check: ## Verify Go formatting without modifying files
 	@files="$$(gofmt -l $$(find . -path '*/testdata/*' -prune -o -name '*.go' -type f -not -path './build/*' -print))"; test -z "$$files" || { echo "Run go fmt ./...:"; echo "$$files"; exit 1; }
+
+quality: ## Run Go and Desktop static, reachability, complexity, clone, and format checks
+	@./scripts/quality.sh
+	@$(GRADLE) spotlessCheck detekt
 
 desktop-test: ## Run desktop unit tests through the Gradle wrapper
 	@$(GRADLE) test

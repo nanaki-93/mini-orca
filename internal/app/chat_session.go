@@ -81,6 +81,12 @@ type chatSession struct {
 	session ChatSession
 }
 
+type preparedChatSessionMessage struct {
+	session          ChatSession
+	index            *project.ProjectIndex
+	priorDeclaration string
+}
+
 // OpenChatSession creates a bounded session only after proving the current
 // file, revision, target, and declaration mode are valid.
 func (s *Service) OpenChatSession(request ChatSessionCreateRequest) (*ChatSession, error) {
@@ -144,31 +150,13 @@ func (s *Service) ChatSession(id string) (*ChatSession, error) {
 // SendChatSessionMessage produces one declaration draft while retaining the
 // session's immutable file and target identity.
 func (s *Service) SendChatSessionMessage(ctx context.Context, request ChatSessionMessageRequest) (*ChatDraftProposal, error) {
-	if strings.TrimSpace(request.Message) == "" {
-		return nil, fmt.Errorf("chat message is required")
-	}
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
-		return nil, err
-	}
-	session, err := s.chatSessionForMessage(request.SessionID, request.ParentDraftID)
+	prepared, err := s.prepareChatSessionMessage(request)
 	if err != nil {
 		return nil, err
 	}
-	if request.Repair {
-		if err := s.reserveTaskRepair(session, request.ParentDraftID); err != nil {
-			return nil, err
-		}
-	}
-	index, err := s.manager.Index()
-	if err != nil {
-		return nil, err
-	}
-	priorDeclaration, err := s.chatConversation(session, request.ParentDraftID)
-	if err != nil {
-		return nil, err
-	}
+	session := prepared.session
 	runtime := s.runtimes.function
-	projectContext, manifest, err := project.NewContextBuilder().BuildFunctionWithManifest(s.manager.Root(), project.FunctionContextOptions{TargetPath: session.OpenPath, TargetSymbol: session.TargetSymbol, Mode: session.Mode, Index: index, TaskSpec: session.TaskSpec, PriorDeclaration: priorDeclaration, MaxTokens: sessionFunctionContextLimit(runtime.effective.ContextMaxTokens)})
+	projectContext, manifest, err := project.NewContextBuilder().BuildFunctionWithManifest(s.manager.Root(), project.FunctionContextOptions{TargetPath: session.OpenPath, TargetSymbol: session.TargetSymbol, Mode: session.Mode, Index: prepared.index, TaskSpec: session.TaskSpec, PriorDeclaration: prepared.priorDeclaration, MaxTokens: sessionFunctionContextLimit(runtime.effective.ContextMaxTokens)})
 	if err != nil {
 		return nil, fmt.Errorf("build session context: %w", err)
 	}
@@ -190,6 +178,37 @@ func (s *Service) SendChatSessionMessage(ctx context.Context, request ChatSessio
 	if err != nil {
 		return nil, err
 	}
+	return s.persistChatDraftProposal(session, request, response, manifest)
+}
+
+func (s *Service) prepareChatSessionMessage(request ChatSessionMessageRequest) (preparedChatSessionMessage, error) {
+	if strings.TrimSpace(request.Message) == "" {
+		return preparedChatSessionMessage{}, fmt.Errorf("chat message is required")
+	}
+	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+		return preparedChatSessionMessage{}, err
+	}
+	session, err := s.chatSessionForMessage(request.SessionID, request.ParentDraftID)
+	if err != nil {
+		return preparedChatSessionMessage{}, err
+	}
+	if request.Repair {
+		if err := s.reserveTaskRepair(session, request.ParentDraftID); err != nil {
+			return preparedChatSessionMessage{}, err
+		}
+	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return preparedChatSessionMessage{}, err
+	}
+	priorDeclaration, err := s.chatConversation(session, request.ParentDraftID)
+	if err != nil {
+		return preparedChatSessionMessage{}, err
+	}
+	return preparedChatSessionMessage{session: session, index: index, priorDeclaration: priorDeclaration}, nil
+}
+
+func (s *Service) persistChatDraftProposal(session ChatSession, request ChatSessionMessageRequest, response DeclarationDraftResponse, manifest project.ContextManifest) (*ChatDraftProposal, error) {
 	if err := s.ValidateMutableRequest(session.ProjectID, session.ProjectRevision, session.OpenPath, session.BaseFileHash); err != nil {
 		s.markChatSessionStale(session.ID)
 		return nil, err

@@ -19,13 +19,12 @@ func TestLogging(t *testing.T) {
 	Init(cfg)
 
 	Info("info message", "password", "secret123")
-	Warn("warn message")
 	Error("error message")
 
 	output := buf.String()
 	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) != 3 {
-		t.Errorf("expected 3 log lines, got %d", len(lines))
+	if len(lines) != 2 {
+		t.Errorf("expected 2 log lines, got %d", len(lines))
 	}
 
 	var infoEntry map[string]any

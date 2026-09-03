@@ -229,20 +229,17 @@ func (s *Service) ResumeAnalyzeAll(_ context.Context, confirmRemoteProvider bool
 	if err := s.verifyAnalyzeAllRevision(job); err != nil {
 		return nil, err
 	}
-	s.analysisAll.mu.Lock()
-	current := s.analysisAll.job
-	if current == nil || current.ProjectID != job.ProjectID || current.ProjectRevision != job.ProjectRevision {
-		s.analysisAll.mu.Unlock()
-		return nil, project.ErrRevisionConflict
+	published, _, err := s.updateCurrentAnalyzeAllJob(job, func(current *AnalyzeAllJob) error {
+		if current.Status != analysisAllStatePaused {
+			return fmt.Errorf("analyze-all job is not paused")
+		}
+		current.Status = analysisAllStateRunning
+		current.UpdatedAt = time.Now().UTC()
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	if current.Status != analysisAllStatePaused {
-		s.analysisAll.mu.Unlock()
-		return nil, fmt.Errorf("analyze-all job is not paused")
-	}
-	current.Status = analysisAllStateRunning
-	current.UpdatedAt = time.Now().UTC()
-	published := cloneAnalyzeAllJob(current)
-	s.analysisAll.mu.Unlock()
 	if err := s.persistAnalyzeAllJob(published); err != nil {
 		return nil, err
 	}
@@ -291,21 +288,17 @@ func (s *Service) changeAnalyzeAllState(next string, cancelWorker, allowComplete
 	if err := s.verifyAnalyzeAllRevision(job); err != nil {
 		return nil, err
 	}
-	s.analysisAll.mu.Lock()
-	current := s.analysisAll.job
-	if current == nil || current.ProjectID != job.ProjectID || current.ProjectRevision != job.ProjectRevision {
-		s.analysisAll.mu.Unlock()
-		return nil, project.ErrRevisionConflict
+	published, cancel, err := s.updateCurrentAnalyzeAllJob(job, func(current *AnalyzeAllJob) error {
+		if !allowCompleted && (current.Status == analysisAllStateCompleted || current.Status == analysisAllStateCanceled || current.Status == analysisAllStateStale) {
+			return fmt.Errorf("analyze-all job cannot be %s from %s", next, job.Status)
+		}
+		current.Status = next
+		current.UpdatedAt = time.Now().UTC()
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	if !allowCompleted && (current.Status == analysisAllStateCompleted || current.Status == analysisAllStateCanceled || current.Status == analysisAllStateStale) {
-		s.analysisAll.mu.Unlock()
-		return nil, fmt.Errorf("analyze-all job cannot be %s from %s", next, job.Status)
-	}
-	current.Status = next
-	current.UpdatedAt = time.Now().UTC()
-	cancel := s.analysisAll.cancel
-	published := cloneAnalyzeAllJob(current)
-	s.analysisAll.mu.Unlock()
 	if cancelWorker && cancel != nil {
 		cancel()
 	}
@@ -313,6 +306,19 @@ func (s *Service) changeAnalyzeAllState(next string, cancelWorker, allowComplete
 		return nil, err
 	}
 	return published, nil
+}
+
+func (s *Service) updateCurrentAnalyzeAllJob(job *AnalyzeAllJob, update func(*AnalyzeAllJob) error) (*AnalyzeAllJob, context.CancelFunc, error) {
+	s.analysisAll.mu.Lock()
+	defer s.analysisAll.mu.Unlock()
+	current := s.analysisAll.job
+	if current == nil || current.ProjectID != job.ProjectID || current.ProjectRevision != job.ProjectRevision {
+		return nil, nil, project.ErrRevisionConflict
+	}
+	if err := update(current); err != nil {
+		return nil, nil, err
+	}
+	return cloneAnalyzeAllJob(current), s.analysisAll.cancel, nil
 }
 
 func (s *Service) invalidateAnalyzeAll() {

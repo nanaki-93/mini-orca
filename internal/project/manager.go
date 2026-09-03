@@ -114,19 +114,38 @@ func (m *Manager) UpdateFileAnalysisStatus(projectID, projectRevision, relative,
 	if !validAnalysisStatus(status) {
 		return fmt.Errorf("invalid file analysis status %q", status)
 	}
-	normalized := filepath.ToSlash(filepath.Clean(relative))
-	if normalized == "." || normalized == ".." || strings.HasPrefix(normalized, "../") || filepath.IsAbs(relative) {
-		return fmt.Errorf("invalid indexed file path: %s", relative)
+	normalized, err := normalizedIndexedPath(relative)
+	if err != nil {
+		return err
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.validFileAnalysisStatusUpdate(projectID, projectRevision); err != nil {
+		return err
+	}
+	return m.updateIndexedFileStatus(normalized, status)
+}
+
+func normalizedIndexedPath(relative string) (string, error) {
+	normalized := filepath.ToSlash(filepath.Clean(relative))
+	if normalized == "." || normalized == ".." || strings.HasPrefix(normalized, "../") || filepath.IsAbs(relative) {
+		return "", fmt.Errorf("invalid indexed file path: %s", relative)
+	}
+	return normalized, nil
+}
+
+func (m *Manager) validFileAnalysisStatusUpdate(projectID, projectRevision string) error {
 	if m.analysis == nil || m.index == nil {
 		return ErrNoActiveProject
 	}
 	if m.analysis.ProjectID != projectID || m.analysis.ProjectRevision != projectRevision || m.index.ProjectID != projectID || m.index.ProjectRevision != projectRevision {
 		return ErrRevisionConflict
 	}
+	return nil
+}
+
+func (m *Manager) updateIndexedFileStatus(normalized, status string) error {
 	for index := range m.index.Files {
 		if m.index.Files[index].Path != normalized {
 			continue

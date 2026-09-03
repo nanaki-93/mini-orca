@@ -6,13 +6,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CommandPaletteTest {
-    @Test fun freshFileAnalysisCanBeRefreshedFromCommandsWithoutAddingASecondInspectorAction() {
-        val freshActions = availableCommandActions(FileAnalysis("main.go", "fresh"))
+  @Test
+  fun freshFileAnalysisCanBeRefreshedFromCommandsWithoutAddingASecondInspectorAction() {
+    val freshActions = availableCommandActions(FileAnalysis("main.go", "fresh"))
 
-        assertTrue("refresh_file_analysis" in freshActions)
-        assertTrue("create_declaration" in freshActions)
-        assertFalse("refresh_file_analysis" in availableCommandActions(FileAnalysis("main.go", "stale")))
-        assertEquals("Refresh file analysis", commandActionLabel("refresh_file_analysis"))
-        assertEquals("Create declaration", commandActionLabel("create_declaration"))
-    }
+    assertTrue("refresh_file_analysis" in freshActions)
+    assertTrue("create_declaration" in freshActions)
+    assertFalse(
+        "refresh_file_analysis" in availableCommandActions(FileAnalysis("main.go", "stale")))
+    assertEquals("Refresh file analysis", commandActionLabel("refresh_file_analysis"))
+    assertEquals("Create declaration", commandActionLabel("create_declaration"))
+  }
 }

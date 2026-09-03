@@ -174,19 +174,16 @@ func declarationName(declaration ast.Decl) string {
 		}
 		return receiverName(declaration.Recv.List[0].Type) + "." + declaration.Name.Name
 	case *ast.GenDecl:
-		if len(declaration.Specs) != 1 {
-			return ""
-		}
-		if typeSpec, ok := declaration.Specs[0].(*ast.TypeSpec); declaration.Tok == token.TYPE && ok {
-			return typeSpec.Name.Name
+		if declaration.Tok == token.TYPE && len(declaration.Specs) == 1 {
+			if typeSpec, ok := declaration.Specs[0].(*ast.TypeSpec); ok {
+				return typeSpec.Name.Name
+			}
 		}
 		if variable := valueSpec(declaration); isAtomicVariableDeclaration(declaration, variable) {
 			return variable.Names[0].Name
 		}
-		return ""
-	default:
-		return ""
 	}
+	return ""
 }
 
 func validateEditTarget(file *ast.File, edit GoDeclarationEdit) error {
@@ -294,7 +291,7 @@ type declarationSourceLocation struct {
 
 func declarationLocation(file *ast.File, target string) (declarationSourceLocation, bool) {
 	for _, declaration := range file.Decls {
-		if declarationNameOf(declaration) == target {
+		if declarationName(declaration) == target {
 			return declarationSourceLocation{node: declaration}, true
 		}
 		group, ok := declaration.(*ast.GenDecl)
@@ -329,26 +326,6 @@ func typeSpecText(normalizedDeclaration string) (string, error) {
 		return "", fmt.Errorf("the replacement type declaration has invalid source positions")
 	}
 	return strings.TrimSpace(normalizedDeclaration[:typeOffset] + normalizedDeclaration[specOffset:endOffset]), nil
-}
-
-func declarationNameOf(declaration ast.Decl) string {
-	switch declaration := declaration.(type) {
-	case *ast.FuncDecl:
-		if declaration.Recv == nil || len(declaration.Recv.List) == 0 {
-			return declaration.Name.Name
-		}
-		return receiverName(declaration.Recv.List[0].Type) + "." + declaration.Name.Name
-	case *ast.GenDecl:
-		if declaration.Tok == token.TYPE && len(declaration.Specs) == 1 {
-			if spec, ok := declaration.Specs[0].(*ast.TypeSpec); ok {
-				return spec.Name.Name
-			}
-		}
-		if variable := valueSpec(declaration); isAtomicVariableDeclaration(declaration, variable) {
-			return variable.Names[0].Name
-		}
-	}
-	return ""
 }
 
 func appendDeclaration(source, declaration string) string {
@@ -461,7 +438,7 @@ func validateGoDeclarationComposition(path, original, composed string, edit GoDe
 func countNamedDeclarations(file *ast.File, target string) int {
 	count := 0
 	for _, declaration := range file.Decls {
-		if declarationNameOf(declaration) == target {
+		if declarationName(declaration) == target {
 			count++
 			continue
 		}
@@ -497,7 +474,7 @@ func nonTargetDeclarationNames(file *ast.File, target string) []string {
 	for _, declaration := range file.Decls {
 		switch declaration := declaration.(type) {
 		case *ast.FuncDecl:
-			name := declarationNameOf(declaration)
+			name := declarationName(declaration)
 			if name != target {
 				names = append(names, name)
 			}

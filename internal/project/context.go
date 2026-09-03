@@ -52,101 +52,152 @@ func (b *ContextBuilder) Build(root, target string) (string, error) {
 // BuildWithManifest returns the exact prompt context plus safe inspection metadata.
 func (b *ContextBuilder) BuildWithManifest(root, target string) (string, ContextManifest, error) {
 	manifest := ContextManifest{Included: []ContextFile{}, Excluded: []ContextDecision{}, ByteLimit: maxContextBytes, TokenLimit: maxContextTokens}
-	canonical, err := CanonicalRoot(root)
+	canonical, files, excluded, err := contextFileInventory(root)
 	if err != nil {
 		return "", manifest, err
+	}
+	manifest.Excluded = excluded
+	var includedIndex map[string]int
+	manifest.Included, includedIndex = contextManifestFiles(canonical, files)
+	if err := validateContextTarget(canonical, target); err != nil {
+		return "", manifest, err
+	}
+	var result strings.Builder
+	writeContextInventory(&result, files)
+	b.appendContextSnippets(&result, canonical, target, files, includedIndex, &manifest)
+	manifest.EstimatedTokens = estimateTokens(result.String())
+	return result.String(), manifest, nil
+}
+
+func contextFileInventory(root string) (string, []string, []ContextDecision, error) {
+	canonical, err := CanonicalRoot(root)
+	if err != nil {
+		return "", nil, nil, err
 	}
 	policy, err := NewContextPolicy(canonical)
 	if err != nil {
-		return "", manifest, err
+		return "", nil, nil, err
 	}
-	allFiles, err := WalkProjectFiles(context.Background(), ProjectWalkOptions{
-		Root: canonical, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles,
-	})
+	allFiles, err := WalkProjectFiles(context.Background(), ProjectWalkOptions{Root: canonical, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles})
 	if err != nil {
-		return "", manifest, err
+		return "", nil, nil, err
 	}
-	files := make([]string, 0, len(allFiles))
+	files, excluded := make([]string, 0, len(allFiles)), make([]ContextDecision, 0)
 	for _, file := range allFiles {
 		decision := policy.Decide(file)
 		if decision.Include {
 			files = append(files, file)
 		} else {
-			manifest.Excluded = append(manifest.Excluded, decision)
+			excluded = append(excluded, decision)
 		}
 	}
-	includedIndex := make(map[string]int, len(files))
-	for _, file := range files {
-		entry := ContextFile{Path: file, Tokens: estimateTokens(file)}
-		if fullPath, resolveErr := ResolveFile(canonical, file); resolveErr == nil {
-			if info, statErr := os.Stat(fullPath); statErr == nil {
-				entry.SizeBytes = info.Size()
-			}
-		}
-		includedIndex[file] = len(manifest.Included)
-		manifest.Included = append(manifest.Included, entry)
-	}
-	if target != "" {
-		if _, err := ResolveFile(canonical, target); err != nil {
-			return "", manifest, fmt.Errorf("invalid target file: %w", err)
-		}
-	}
+	return canonical, files, excluded, nil
+}
 
-	var result strings.Builder
+func contextManifestFiles(root string, files []string) ([]ContextFile, map[string]int) {
+	included, includedIndex := make([]ContextFile, 0, len(files)), make(map[string]int, len(files))
+	for _, file := range files {
+		includedIndex[file] = len(included)
+		included = append(included, contextManifestFile(root, file))
+	}
+	return included, includedIndex
+}
+
+func contextManifestFile(root, file string) ContextFile {
+	entry := ContextFile{Path: file, Tokens: estimateTokens(file)}
+	if fullPath, resolveErr := ResolveFile(root, file); resolveErr == nil {
+		if info, statErr := os.Stat(fullPath); statErr == nil {
+			entry.SizeBytes = info.Size()
+		}
+	}
+	return entry
+}
+
+func validateContextTarget(root, target string) error {
+	if target == "" {
+		return nil
+	}
+	if _, err := ResolveFile(root, target); err != nil {
+		return fmt.Errorf("invalid target file: %w", err)
+	}
+	return nil
+}
+
+func writeContextInventory(result *strings.Builder, files []string) {
 	result.WriteString("## Complete project file inventory\n")
 	for _, file := range files {
 		result.WriteString("- " + file + "\n")
 	}
 	result.WriteString("\n")
+}
 
-	ordered := prioritize(files, filepath.ToSlash(target))
-	for _, relative := range ordered {
+func (b *ContextBuilder) appendContextSnippets(result *strings.Builder, root, target string, files []string, includedIndex map[string]int, manifest *ContextManifest) {
+	for _, relative := range prioritize(files, filepath.ToSlash(target)) {
 		if result.Len() >= maxContextBytes {
 			manifest.Truncated = true
-			break
+			return
 		}
-		fullPath, err := ResolveFile(canonical, relative)
-		if err != nil {
-			continue
-		}
-		if !contextCandidate(relative) {
-			continue
-		}
-		limit := int64(maxSnippetBytes)
-		if relative == filepath.ToSlash(target) {
-			limit = maxTargetBytes
-		}
-		data, err := readLimited(fullPath, limit)
-		if err != nil || isBinary(data) {
-			continue
-		}
-		remaining := maxContextBytes - result.Len()
-		if remaining <= 0 || estimateTokens(result.String()) >= maxContextTokens {
-			manifest.Truncated = true
-			break
-		}
-		originalSize := len(data)
-		if len(data) > remaining {
-			data = data[:remaining]
-		}
-		availableTokens := maxContextTokens - estimateTokens(result.String())
-		if tokens := estimateTokens(string(data)); tokens > availableTokens {
-			data = data[:min(len(data), availableTokens*4)]
-		}
-		if len(data) < originalSize {
-			manifest.Truncated = true
-		}
-		result.WriteString("## File: " + relative + "\n```\n")
-		result.Write(data)
-		result.WriteString("\n```\n\n")
-		hash := sha256.Sum256(data)
-		entry := ContextFile{Path: relative, SizeBytes: int64(len(data)), Hash: "sha256:" + hex.EncodeToString(hash[:]), Tokens: estimateTokens(string(data)), Truncated: len(data) < originalSize}
-		if index, found := includedIndex[relative]; found {
-			manifest.Included[index] = entry
+		if b.appendContextSnippet(result, root, target, relative, includedIndex, manifest) {
+			return
 		}
 	}
-	manifest.EstimatedTokens = estimateTokens(result.String())
-	return result.String(), manifest, nil
+}
+
+// appendContextSnippet reports whether a context boundary requires traversal to stop.
+func (b *ContextBuilder) appendContextSnippet(result *strings.Builder, root, target, relative string, includedIndex map[string]int, manifest *ContextManifest) bool {
+	data, originalSize, ok := contextSnippet(root, target, relative)
+	if !ok {
+		return false
+	}
+	remaining, availableTokens := maxContextBytes-result.Len(), maxContextTokens-estimateTokens(result.String())
+	if remaining <= 0 || availableTokens <= 0 {
+		manifest.Truncated = true
+		return true
+	}
+	data = boundedContextData(data, remaining, availableTokens)
+	if len(data) < originalSize {
+		manifest.Truncated = true
+	}
+	result.WriteString("## File: " + relative + "\n```\n")
+	result.Write(data)
+	result.WriteString("\n```\n\n")
+	b.updateManifestFile(relative, data, originalSize, includedIndex, manifest)
+	return false
+}
+
+func contextSnippet(root, target, relative string) ([]byte, int, bool) {
+	fullPath, err := ResolveFile(root, relative)
+	if err != nil || !contextCandidate(relative) {
+		return nil, 0, false
+	}
+	limit := int64(maxSnippetBytes)
+	if relative == filepath.ToSlash(target) {
+		limit = maxTargetBytes
+	}
+	data, err := readLimited(fullPath, limit)
+	if err != nil || isBinary(data) {
+		return nil, 0, false
+	}
+	return data, len(data), true
+}
+
+func boundedContextData(data []byte, remaining, availableTokens int) []byte {
+	if len(data) > remaining {
+		data = data[:remaining]
+	}
+	if estimateTokens(string(data)) > availableTokens {
+		data = data[:min(len(data), availableTokens*4)]
+	}
+	return data
+}
+
+func (b *ContextBuilder) updateManifestFile(relative string, data []byte, originalSize int, includedIndex map[string]int, manifest *ContextManifest) {
+	index, found := includedIndex[relative]
+	if !found {
+		return
+	}
+	hash := sha256.Sum256(data)
+	manifest.Included[index] = ContextFile{Path: relative, SizeBytes: int64(len(data)), Hash: "sha256:" + hex.EncodeToString(hash[:]), Tokens: estimateTokens(string(data)), Truncated: len(data) < originalSize}
 }
 
 func estimateTokens(text string) int {

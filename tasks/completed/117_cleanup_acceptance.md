@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -99,3 +99,39 @@ chore: complete legacy cleanup acceptance
 
 Do not amend, squash, tag, or push the commit. After committing, confirm nothing is
 staged and no Task 117 change remains uncommitted.
+
+## Final evidence
+
+Automated acceptance passed on 2026-09-03: `make fmt-check`, `go test ./...`,
+`make test-race`, `make vet`, `go mod tidy -diff`, `./desktop/gradlew -p desktop
+test`, `make check`, `make quality`, and `git diff --check`. The quality command
+pins Staticcheck 0.7.0, x/tools deadcode 0.40.0, gocyclo 0.6.0, and jscpd 4.0.5
+outside `go.mod` and the runtime image; it also runs checked-in Spotless and
+Detekt tasks. Static/dead-code/Detekt findings are zero, production Go clone
+rate is 0.00%, and every production Go function has cyclomatic complexity at
+most 15.
+
+Final/baseline metrics are Go production/test lines 9,483/5,425 (14,512/11,919),
+Desktop Kotlin production/test lines 8,109/3,838 (5,032/2,125), 10 retained
+runtime Go packages, 32 registered routes, 75.6% Go coverage (70.9%), and 135
+Desktop tests (124). The package graph has no runtime `internal/orchestrator`,
+`internal/agent`, `internal/tools`, `internal/workflow`, or `internal/errors`
+package; retained routes, OpenAPI, and the API guide are cross-checked by daemon
+tests. The eight residual dead paths and three residual clone groups found at
+Task 117 start were deleted/consolidated.
+
+The narrow reviewed over-500-line justifications are: `analyze_all.go` owns
+bounded pauseable analysis-job state; `go_declaration_edit.go` owns the
+parser-backed declaration safety boundary; the Desktop shell, pane, review, and
+app files each own a cohesive rendering boundary; `DesktopState.kt` owns the
+typed reducer; and `DesktopWorkflowPresenter.kt` owns asynchronous request,
+cancellation, and stale-response coordination. Compose routing is subject to a
+documented Detekt 65-branch ceiling rather than a baseline or suppression.
+
+Non-destructive manual smoke passed for a loopback daemon started with
+`config.example.yaml`: `/health` and `/status` returned successfully, then the
+daemon was shut down. The disposable fixture's provider/UI workflow is not
+recorded as passed because no model service, credentials, or interactive Compose
+window is available. Docker image build/health/size acceptance is also not
+recorded as passed: the Docker daemon and Compose plugin are unavailable. These
+are explicit release-operator checks, not fabricated passes.

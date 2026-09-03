@@ -1,6 +1,9 @@
 # Mini-Orca legacy cleanup and pragmatic refactor plan
 
-**Status:** Proposed
+**Status:** Complete — automated acceptance passed on 2026-09-03. Interactive
+Desktop/provider and container acceptance remain release-operator checks because
+this environment has no Compose window, model service, personal credentials, or
+Docker daemon.
 
 **Prepared:** 2026-09-03
 
@@ -714,6 +717,54 @@ implementation it replaced. The user has explicitly authorized exactly one isola
 commit per completed task; do not combine, amend, squash, tag, or push those commits.
 
 ## 13. Definition of done
+
+## 14. Final execution evidence
+
+Task 117 completed the cleanup sequence on 2026-09-03. The historical baseline
+above remains intentionally as the pre-cleanup audit; the maintained contract is
+the README, configuration guide, API guide/OpenAPI pair, and release acceptance
+record.
+
+| Metric | Task 103 baseline | Final result |
+| --- | ---: | ---: |
+| Go production/test lines | 14,512 / 11,919 | 9,483 / 5,425 |
+| Desktop Kotlin production/test lines | 5,032 / 2,125 | 8,109 / 3,838 |
+| Runtime Go packages | retired branches present | 10 (`cmd/daemon` plus nine retained internal packages) |
+| Registered routes | 45 | 32, each catalogued with a maintained consumer or operational purpose |
+| Go statement coverage | 70.9% | 75.6% |
+| Desktop tests | 124 | 135 |
+| Production dead-code findings | 213 pre-cleanup; 8 residual before Task 117 | 0 |
+| Production clone lines | 0.37% residual before Task 117 | 0.00% |
+| Go cyclomatic hotspot | 25 | all production functions at or below 15 |
+
+`make quality` pins Staticcheck 0.7.0, `deadcode` from x/tools 0.40.0,
+gocyclo 0.6.0, and jscpd 4.0.5 outside the runtime graph, then runs checked-in
+Spotless and Detekt tasks. It passed with no production finding. Detekt uses a
+65-branch ceiling for top-level Compose screen routers; their child composables
+and the presenter remain independently tested rather than hidden by a baseline
+or suppression.
+
+The Task 117 review also recorded the production files over 500 lines:
+
+- `internal/app/analyze_all.go` owns the bounded, pauseable analysis-job state
+  and its persistence; `internal/project/go_declaration_edit.go` owns the
+  parser-backed declaration composition safety boundary.
+- `DesktopShell.kt`, `WorkspacePanes.kt`, `ReviewEvidencePane.kt`, and
+  `DesktopApp.kt` are cohesive Compose layout/rendering boundaries;
+  `DesktopState.kt` is the typed reducer boundary; and
+  `DesktopWorkflowPresenter.kt` owns asynchronous request, cancellation, and
+  stale-response coordination. They are intentionally separate from one
+  another and verified by the Desktop suite.
+
+The full supported automated matrix passed: formatting, unit tests, race tests,
+vet, module-tidiness check, quality gates, Desktop tests, `make check`, route
+and documentation contract tests, and `git diff --check`. A local loopback
+daemon started with `config.example.yaml`; `GET /health` and `GET /status`
+passed before it was shut down. The disposable-fixture provider/UI flow and the
+container image size/health check are not recorded as passed: this environment
+has no running local model, personal provider credentials, interactive Compose
+Desktop session, Docker daemon, or Compose plugin. A release operator must run
+those documented manual checks before release.
 
 The cleanup is complete only when all of the following are true:
 

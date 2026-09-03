@@ -35,7 +35,7 @@ the delivery sequence without presenting pre-cleanup work as the active roadmap.
 | 114 | [Extract the Desktop workflow presenter](completed/114_extract_desktop_presenter.md) | 113 | Complete |
 | 115 | [Simplify Compose and API client contracts](completed/115_simplify_desktop_ui_contracts.md) | 114 | Complete |
 | 116 | [Clean documentation and build residue](completed/116_clean_docs_and_build.md) | 115 | Complete |
-| 117 | [Complete cleanup quality and acceptance](117_cleanup_acceptance.md) | 103–116 | Pending |
+| 117 | [Complete cleanup quality and acceptance](completed/117_cleanup_acceptance.md) | 103–116 | Complete |
 
 Tasks 103–117 execute strictly in numeric order through
 [`PROMPT_EXECUTE_LEGACY_CLEANUP.md`](PROMPT_EXECUTE_LEGACY_CLEANUP.md). Each

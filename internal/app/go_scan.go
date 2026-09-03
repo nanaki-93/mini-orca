@@ -42,66 +42,104 @@ type goScanController struct {
 	cancel context.CancelFunc
 }
 
+type preparedGoScan struct {
+	root       string
+	workspace  string
+	report     *GoScanReport
+	fileHashes map[string]string
+	findings   []project.UnifiedFinding
+}
+
 func newGoScanController() *goScanController { return &goScanController{} }
 
 // ScanGoProject performs parser, vet, and test phases only after an explicit
 // request for the active revision. Tool commands run in a copied workspace.
 func (s *Service) ScanGoProject(ctx context.Context, revision string) (*GoScanReport, error) {
+	scan, err := s.prepareGoScan(revision)
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(scan.workspace)
+	if err := copyCheckWorkspace(scan.root, scan.workspace); err != nil {
+		return nil, err
+	}
+	if err := s.recordGoScanPhase(scan.root, scan.report, scan.findings, scan.fileHashes, project.FindingSourceParser); err != nil {
+		return nil, err
+	}
+	if err := s.runGoScanToolPhases(ctx, &scan); err != nil {
+		return nil, err
+	}
+	return s.completeGoScan(ctx, scan.root, scan.report, scan.findings, scan.fileHashes)
+}
+
+func (s *Service) prepareGoScan(revision string) (preparedGoScan, error) {
 	analysis, err := s.manager.Analysis()
 	if err != nil {
-		return nil, err
+		return preparedGoScan{}, err
 	}
 	if revision == "" || revision != analysis.ProjectRevision {
-		return nil, project.ErrRevisionConflict
+		return preparedGoScan{}, project.ErrRevisionConflict
 	}
-	root := analysis.Path
 	index, err := s.manager.Index()
 	if err != nil {
-		return nil, err
+		return preparedGoScan{}, err
 	}
 	if index.ProjectID != analysis.ProjectID || index.ProjectRevision != analysis.ProjectRevision {
-		return nil, project.ErrRevisionConflict
+		return preparedGoScan{}, project.ErrRevisionConflict
 	}
-	now := time.Now().UTC()
-	report := &GoScanReport{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Status: "running", StartedAt: now, UpdatedAt: now, Phases: []GoScanPhase{}}
 	workspace, err := os.MkdirTemp("", "mini-orca-scan-")
 	if err != nil {
-		return nil, fmt.Errorf("create scan workspace: %w", err)
+		return preparedGoScan{}, fmt.Errorf("create scan workspace: %w", err)
 	}
-	defer os.RemoveAll(workspace)
-	if err := copyCheckWorkspace(root, workspace); err != nil {
-		return nil, err
-	}
-	fileHashes := make(map[string]string, len(index.Files))
-	for _, file := range index.Files {
-		fileHashes[file.Path] = file.ContentHash
-	}
+	report := newGoScanReport(analysis.ProjectID, analysis.ProjectRevision)
 	findings := parserScanFindings(index)
 	report.Phases = append(report.Phases, GoScanPhase{Name: "parse", State: scanPhaseState(findings)})
-	if err := s.finishGoScan(root, report, findings, fileHashes, project.FindingSourceParser); err != nil {
-		return nil, err
+	return preparedGoScan{root: analysis.Path, workspace: workspace, report: report, fileHashes: scanFileHashes(index), findings: findings}, nil
+}
+
+func newGoScanReport(projectID, revision string) *GoScanReport {
+	now := time.Now().UTC()
+	return &GoScanReport{ProjectID: projectID, ProjectRevision: revision, Status: "running", StartedAt: now, UpdatedAt: now, Phases: []GoScanPhase{}}
+}
+
+func scanFileHashes(index *project.ProjectIndex) map[string]string {
+	hashes := make(map[string]string, len(index.Files))
+	for _, file := range index.Files {
+		hashes[file.Path] = file.ContentHash
 	}
+	return hashes
+}
+
+func (s *Service) recordGoScanPhase(root string, report *GoScanReport, findings []project.UnifiedFinding, hashes map[string]string, source string) error {
+	return s.finishGoScan(root, report, findings, hashes, source)
+}
+
+func (s *Service) runGoScanToolPhases(ctx context.Context, scan *preparedGoScan) error {
 	for _, phase := range []struct {
 		name    string
 		command []string
 		source  string
 	}{{"vet", []string{"go", "vet", "./..."}, project.FindingSourceVet}, {"tests", []string{"go", "test", "./..."}, project.FindingSourceTest}} {
-		result := s.runGoScanPhase(ctx, workspace, root, phase.name, phase.command)
-		report.Phases = append(report.Phases, result)
-		findings = append(findings, toolScanFindings(result, phase.source, fileHashes)...)
-		if err := s.finishGoScan(root, report, findings, fileHashes, phase.source); err != nil {
-			return nil, err
+		result := s.runGoScanPhase(ctx, scan.workspace, scan.root, phase.name, phase.command)
+		scan.report.Phases = append(scan.report.Phases, result)
+		scan.findings = append(scan.findings, toolScanFindings(result, phase.source, scan.fileHashes)...)
+		if err := s.recordGoScanPhase(scan.root, scan.report, scan.findings, scan.fileHashes, phase.source); err != nil {
+			return err
 		}
 		if result.State == CheckCanceled {
 			break
 		}
 	}
+	return nil
+}
+
+func (s *Service) completeGoScan(ctx context.Context, root string, report *GoScanReport, findings []project.UnifiedFinding, hashes map[string]string) (*GoScanReport, error) {
 	report.Status = "completed"
 	if ctx.Err() != nil {
 		report.Status = "canceled"
 	}
 	report.CompletedAt = time.Now().UTC()
-	if err := s.finishGoScan(root, report, findings, fileHashes); err != nil {
+	if err := s.finishGoScan(root, report, findings, hashes); err != nil {
 		return nil, err
 	}
 	return cloneGoScanReport(report), nil

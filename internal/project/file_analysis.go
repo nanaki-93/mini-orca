@@ -165,25 +165,6 @@ func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 	return nil
 }
 
-// Delete removes one analysis cache entry after the same path-policy checks as
-// Load. A missing entry is already absent and therefore succeeds.
-func (c *FileAnalysisCache) Delete(relative string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	input := FileAnalysisInput{Path: relative, ProjectID: "cache", ProjectRevision: "cache", ContentHash: "cache", Language: "Text", PromptVersion: "cache", ContextPolicyVersion: contextPolicyVersion}
-	if err := c.validateInput(input); err != nil {
-		return err
-	}
-	err := os.Remove(c.cachePath(relative))
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("delete file analysis cache: %w", err)
-	}
-	return nil
-}
-
 func (c *FileAnalysisCache) validateInput(input FileAnalysisInput) error {
 	policy, err := NewContextPolicy(c.root)
 	if err != nil {
