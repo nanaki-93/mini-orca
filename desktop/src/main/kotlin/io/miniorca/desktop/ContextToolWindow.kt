@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,7 +12,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -28,11 +38,27 @@ internal fun RightToolWindowContainer(
     badges: Map<RightToolWindow, RightToolWindowBadge> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
+  var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
+  var tabGroupHasFocus by remember { mutableStateOf(false) }
   Column(
-      modifier.fillMaxSize().semantics {
-        contentDescription =
-            "Right tool windows. ${rightToolWindowLabel(activeToolWindow)} selected."
-      }) {
+      modifier
+          .fillMaxSize()
+          .onFocusChanged { tabGroupHasFocus = it.hasFocus }
+          .focusable()
+          .onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val interaction =
+                tabGroupInteraction(
+                    RightToolWindow.entries.toList(), focusedToolWindow, tabGroupKey(event.key))
+                    ?: return@onPreviewKeyEvent false
+            focusedToolWindow = interaction.focused
+            interaction.activate?.let(onSelect)
+            true
+          }
+          .semantics {
+            contentDescription =
+                "Right tool windows. ${rightToolWindowLabel(activeToolWindow)} selected."
+          }) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
           RightToolWindow.entries.forEach { toolWindow ->
             val selected = toolWindow == activeToolWindow
@@ -42,10 +68,15 @@ internal fun RightToolWindowContainer(
                 tone = ActionTone.Navigation,
                 density = ButtonDensity.Toolbar,
                 selected = selected,
+                focusHighlight = tabGroupHasFocus && toolWindow == focusedToolWindow,
                 modifier =
                     Modifier.weight(1f).semantics {
                       contentDescription =
-                          rightToolWindowTabDescription(toolWindow, selected, badge)
+                          rightToolWindowTabDescription(
+                              toolWindow,
+                              selected,
+                              badge,
+                              tabGroupHasFocus && toolWindow == focusedToolWindow)
                       this.selected = selected
                     },
             ) {
@@ -63,8 +94,9 @@ internal fun rightToolWindowTabDescription(
     toolWindow: RightToolWindow,
     selected: Boolean,
     badge: RightToolWindowBadge? = null,
+    focused: Boolean = false,
 ): String =
-    "${rightToolWindowLabel(toolWindow)} tool window tab${badge?.let { ", ${it.label}" }.orEmpty()}, ${if (selected) "selected" else "not selected"}"
+    "${rightToolWindowLabel(toolWindow)} tool window tab${badge?.let { ", ${it.label}" }.orEmpty()}, ${if (selected) "selected" else "not selected"}${if (focused) ", focused" else ""}"
 
 @Composable
 internal fun ContextToolWindow(

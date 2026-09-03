@@ -311,6 +311,7 @@ internal fun FocusFlowButton(
     tone: ActionTone = ActionTone.Neutral,
     density: ButtonDensity = ButtonDensity.Standard,
     selected: Boolean = false,
+    focusHighlight: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
@@ -326,7 +327,7 @@ internal fun FocusFlowButton(
               defaultElevation = 0.dp, pressedElevation = 1.dp, disabledElevation = 0.dp),
       shape = MiniOrcaButtonDefaults.shape,
       border = MiniOrcaButtonDefaults.border(tone),
-      colors = MiniOrcaButtonDefaults.colors(tone, selected, pressed),
+      colors = MiniOrcaButtonDefaults.colors(tone, selected || focusHighlight, pressed),
       contentPadding = densityStyle.contentPadding,
       content = content,
   )
