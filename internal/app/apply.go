@@ -154,30 +154,21 @@ func (s *Service) loadCurrentApplyProject(identity applyIdentity) (currentApplyP
 }
 
 func (s *Service) loadStoredDraftForApply(identity applyIdentity) (applyDraftState, error) {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	stored := s.drafts[identity.draft.id]
-	if stored == nil {
-		return applyDraftState{}, fmt.Errorf("draft not found")
+	if _, err := s.requireCurrentDraft(identity.draft.id); err != nil {
+		return applyDraftState{}, err
 	}
-	s.expireDraftLocked(stored)
-	if stored.draft.State == DraftStale || !identity.matchesDraft(stored.draft) {
-		return applyDraftState{}, project.ErrRevisionConflict
+	draft, checks, err := s.drafts.applyState(identity)
+	if err != nil {
+		return applyDraftState{}, err
 	}
-	target, err := taskTargetForDraft(stored.draft)
+	target, err := taskTargetForDraft(draft)
 	if err != nil {
 		return applyDraftState{}, err
 	}
 	if !target.project.matches(identity.project.id, identity.project.revision) || target.file.baseHash != identity.baseFileHash {
 		return applyDraftState{}, project.ErrRevisionConflict
 	}
-	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable || stored.draft.CompositionHash == "" {
-		return applyDraftState{}, fmt.Errorf("draft is not valid; validate the latest revision")
-	}
-	if stored.checks == nil || stored.checks.Revision != stored.draft.Revision || stored.checks.CompositionHash != stored.draft.CompositionHash || !stored.checks.Report.Applicable {
-		return applyDraftState{}, fmt.Errorf("focused draft checks have not passed for the latest draft revision")
-	}
-	return applyDraftState{draft: cloneDraft(stored.draft), target: target, checks: cloneCheckReport(stored.checks.Report), identity: identity}, nil
+	return applyDraftState{draft: draft, target: target, checks: checks, identity: identity}, nil
 }
 
 func (s *Service) loadCurrentApplyFile(current currentApplyProject, target taskTarget) (currentApplyProject, error) {

@@ -39,9 +39,9 @@ func TestApplyDraftCancellationAndFailedChecksLeaveSourceUntouched(t *testing.T)
 	if _, err := service.ApplyDraft(canceled, applyDraftRequest(draft)); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled ApplyDraft() error = %v", err)
 	}
-	service.draftMu.Lock()
-	service.drafts[draft.ID].checks.Report.Applicable = false
-	service.draftMu.Unlock()
+	service.drafts.mu.Lock()
+	service.drafts.records[draft.ID].checks.Report.Applicable = false
+	service.drafts.mu.Unlock()
 	if _, err := service.ApplyDraft(context.Background(), applyDraftRequest(draft)); err == nil {
 		t.Fatal("expected ApplyDraft() to reject failed required checks")
 	}

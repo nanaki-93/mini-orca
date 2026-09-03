@@ -18,13 +18,18 @@ func TestDraftLifecycleInvalidatesApprovalEvidenceAndRejectsLateValidation(t *te
 	if valid.State != DraftValid || valid.Validation == nil {
 		t.Fatalf("validated draft = %+v", valid)
 	}
-	service.drafts[draft.ID].checks = &draftCheckEvidence{Revision: valid.Revision, CompositionHash: "composition", Report: DraftCheckReport{Applicable: true}}
+	service.drafts.mu.Lock()
+	service.drafts.records[draft.ID].checks = &draftCheckEvidence{Revision: valid.Revision, CompositionHash: "composition", Report: DraftCheckReport{Applicable: true}}
+	service.drafts.mu.Unlock()
 
 	dirty, err := service.UpdateDraft(DraftUpdateRequest{ID: draft.ID, ExpectedRevision: valid.Revision, Declaration: "func Run( {", Imports: []string{"fmt"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dirty.State != DraftDirty || dirty.Validation != nil || service.drafts[draft.ID].checks != nil || dirty.PreviousHash == "" || dirty.Hash == valid.Hash {
+	service.drafts.mu.Lock()
+	checksCleared := service.drafts.records[draft.ID].checks == nil
+	service.drafts.mu.Unlock()
+	if dirty.State != DraftDirty || dirty.Validation != nil || !checksCleared || dirty.PreviousHash == "" || dirty.Hash == valid.Hash {
 		t.Fatalf("edited draft did not clear approval evidence: %+v", dirty)
 	}
 	invalid := validateFixtureDraft(t, service, dirty.ID, dirty.Revision, false)

@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
@@ -64,9 +63,7 @@ type modelOutput struct {
 // Service owns configured model access and the active project's generation path.
 type Service struct {
 	manager             *project.Manager
-	analyzeRuntime      modelRuntime
-	bugRuntime          modelRuntime
-	functionRuntime     modelRuntime
+	runtimes            scopedRuntimes
 	importTimeout       time.Duration
 	analysisTimeout     time.Duration
 	focusedCheckTimeout time.Duration
@@ -74,10 +71,8 @@ type Service struct {
 	retryMax            time.Duration
 	analysisAll         *analysisAllController
 	goScan              *goScanController
-	drafts              map[string]*storedDraft
-	draftMu             sync.Mutex
-	chatSessions        map[string]*chatSession
-	chatSessionMu       sync.Mutex
+	drafts              *draftStore
+	chatSessions        *chatSessionStore
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
@@ -109,10 +104,12 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	}
 
 	return &Service{
-		manager:             manager,
-		analyzeRuntime:      newModelRuntime(profiles.Analyze, importTimeout, maxRetries),
-		bugRuntime:          newModelRuntime(profiles.Bug, analysisTimeout, maxRetries),
-		functionRuntime:     newModelRuntime(profiles.Function, functionTimeout, maxRetries),
+		manager: manager,
+		runtimes: scopedRuntimes{
+			analyze:  newModelRuntime(profiles.Analyze, importTimeout, maxRetries),
+			bug:      newModelRuntime(profiles.Bug, analysisTimeout, maxRetries),
+			function: newModelRuntime(profiles.Function, functionTimeout, maxRetries),
+		},
 		importTimeout:       importTimeout,
 		analysisTimeout:     analysisTimeout,
 		focusedCheckTimeout: configuredDuration(cfg.Timeouts.FocusedCheckSeconds, time.Minute),
@@ -120,8 +117,8 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		retryMax:            time.Duration(backoffMax) * time.Millisecond,
 		analysisAll:         newAnalysisAllController(),
 		goScan:              newGoScanController(),
-		drafts:              make(map[string]*storedDraft),
-		chatSessions:        make(map[string]*chatSession),
+		drafts:              newDraftStore(),
+		chatSessions:        newChatSessionStore(),
 	}, nil
 }
 
@@ -156,7 +153,8 @@ func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash 
 func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
 	timed, cancel := context.WithTimeout(ctx, s.importTimeout)
 	defer cancel()
-	analysis, err := project.NewAnalyzerWithProvenance(s.analyzeRuntime.client, s.analyzeRuntime.profile.Model, string(config.AnalyzeModelScope), s.analyzeRuntime.effective.ProviderOrigin, s.analyzeRuntime.effective.ReasoningEffort).Analyze(timed, root)
+	runtime := s.runtimes.analyze
+	analysis, err := project.NewAnalyzerWithProvenance(runtime.client, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).Analyze(timed, root)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
@@ -166,16 +164,17 @@ func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Ana
 // RestoreProject reopens a previously imported project from local persisted
 // analysis without making a model request.
 func (s *Service) RestoreProject(root string) (*project.Analysis, error) {
-	return project.NewAnalyzerWithProvenance(nil, s.analyzeRuntime.profile.Model, string(config.AnalyzeModelScope), s.analyzeRuntime.effective.ProviderOrigin, s.analyzeRuntime.effective.ReasoningEffort).Restore(root)
+	runtime := s.runtimes.analyze
+	return project.NewAnalyzerWithProvenance(nil, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).Restore(root)
 }
 
 func (s *Service) EffectiveModel() EffectiveModel {
-	return s.functionRuntime.effective
+	return s.runtimes.function.effective
 }
 
 // EffectiveModels returns safe metadata for every configured prompt scope.
 func (s *Service) EffectiveModels() []EffectiveModel {
-	return []EffectiveModel{s.analyzeRuntime.effective, s.bugRuntime.effective, s.functionRuntime.effective}
+	return []EffectiveModel{s.runtimes.analyze.effective, s.runtimes.bug.effective, s.runtimes.function.effective}
 }
 
 // CurrentModelCatalog returns only the safe effective metadata needed for
@@ -199,7 +198,7 @@ func scopedModel(profile EffectiveModel) ScopedModel {
 // RequireRemoteConfirmation prevents accidental prompt delivery to the actual
 // selected scope's non-local provider.
 func (s *Service) RequireRemoteConfirmation(scope config.ModelScope, confirmed bool) error {
-	runtime, ok := s.modelRuntimeForScope(scope)
+	runtime, ok := s.runtimes.forScope(string(scope))
 	if !ok {
 		return fmt.Errorf("unknown model scope %q", scope)
 	}
@@ -209,23 +208,10 @@ func (s *Service) RequireRemoteConfirmation(scope config.ModelScope, confirmed b
 	return nil
 }
 
-func (s *Service) modelRuntimeForScope(scope config.ModelScope) (modelRuntime, bool) {
-	switch scope {
-	case config.AnalyzeModelScope:
-		return s.analyzeRuntime, true
-	case config.BugModelScope:
-		return s.bugRuntime, true
-	case config.FunctionModelScope:
-		return s.functionRuntime, true
-	default:
-		return modelRuntime{}, false
-	}
-}
-
 // ContextManifest previews the safe prompt context for one selected file.
 func (s *Service) ContextManifest(targetFile string) (project.ContextManifest, error) {
 	_, manifest, err := project.NewContextBuilder().BuildWithManifest(s.manager.Root(), targetFile)
-	return s.contextManifestForRuntime(manifest, s.functionRuntime), err
+	return s.contextManifestForRuntime(manifest, s.runtimes.function), err
 }
 
 // AnalysisContextManifest previews the one-file context used for semantic analysis.
@@ -234,7 +220,7 @@ func (s *Service) AnalysisContextManifest(targetFile string) (project.ContextMan
 	if err != nil {
 		return project.ContextManifest{}, err
 	}
-	return s.contextManifestForRuntime(semanticManifest(*indexedFile), s.bugRuntime), nil
+	return s.contextManifestForRuntime(semanticManifest(*indexedFile), s.runtimes.bug), nil
 }
 
 func (s *Service) contextManifestForRuntime(manifest project.ContextManifest, runtime modelRuntime) project.ContextManifest {

@@ -114,83 +114,35 @@ func (s *Service) CreateDraft(request DraftCreateRequest) (*Draft, error) {
 		Revision: 1, ParentDraftID: request.ParentDraftID, EffectiveModel: request.EffectiveModel, TaskSpec: project.SanitizeBugTaskSpec(request.TaskSpec), State: DraftGenerated,
 	}
 	draft.Hash = draftHash(draft.Declaration, draft.Imports)
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	if _, exists := s.drafts[draft.ID]; exists {
-		return nil, fmt.Errorf("draft already exists")
-	}
-	if draft.ParentDraftID != "" {
-		if _, exists := s.drafts[draft.ParentDraftID]; !exists {
-			return nil, fmt.Errorf("parent draft not found")
-		}
-	}
-	s.drafts[draft.ID] = &storedDraft{draft: cloneDraft(draft)}
-	copy := cloneDraft(draft)
-	return &copy, nil
+	return s.drafts.create(draft)
 }
 
 // Draft returns a copy and marks it stale if its pinned project/file identity
 // no longer matches the active project.
 func (s *Service) Draft(id string) (*Draft, error) {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	stored := s.drafts[id]
-	if stored == nil {
-		return nil, fmt.Errorf("draft not found")
+	draft, err := s.refreshDraft(id)
+	if err != nil {
+		return nil, err
 	}
-	s.expireDraftLocked(stored)
-	copy := cloneDraft(stored.draft)
-	return &copy, nil
+	return &draft, nil
 }
 
 // UpdateDraft creates the next revision only if the caller saw the current
 // revision. Any content/import change removes all previous approval evidence.
 func (s *Service) UpdateDraft(request DraftUpdateRequest) (*Draft, error) {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	stored := s.drafts[request.ID]
-	if stored == nil {
-		return nil, fmt.Errorf("draft not found")
+	if _, err := s.requireCurrentDraft(request.ID); err != nil {
+		return nil, err
 	}
-	s.expireDraftLocked(stored)
-	if stored.draft.State == DraftStale {
-		return nil, project.ErrRevisionConflict
-	}
-	if request.ExpectedRevision != stored.draft.Revision {
-		return nil, project.ErrRevisionConflict
-	}
-	stored.draft.PreviousHash = stored.draft.Hash
-	stored.draft.Declaration = request.Declaration
-	stored.draft.Imports = append([]string(nil), request.Imports...)
-	stored.draft.Revision++
-	stored.draft.Hash = draftHash(stored.draft.Declaration, stored.draft.Imports)
-	stored.draft.Validation = nil
-	stored.draft.CompositionHash = ""
-	stored.draft.State = DraftDirty
-	stored.checks = nil
-	copy := cloneDraft(stored.draft)
-	return &copy, nil
+	return s.drafts.update(request)
 }
 
 // BeginDraftValidation reserves the displayed revision for validation. A
 // completion for an older revision is rejected and cannot authorize an edit.
 func (s *Service) BeginDraftValidation(id string, expectedRevision int64) (*Draft, error) {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	stored := s.drafts[id]
-	if stored == nil {
-		return nil, fmt.Errorf("draft not found")
+	if _, err := s.requireCurrentDraft(id); err != nil {
+		return nil, err
 	}
-	s.expireDraftLocked(stored)
-	if stored.draft.State == DraftStale || stored.draft.Revision != expectedRevision {
-		return nil, project.ErrRevisionConflict
-	}
-	stored.draft.State = DraftValidating
-	stored.draft.Validation = nil
-	stored.draft.CompositionHash = ""
-	stored.checks = nil
-	copy := cloneDraft(stored.draft)
-	return &copy, nil
+	return s.drafts.beginValidation(id, expectedRevision)
 }
 
 // CompleteDraftValidation stores validation only for the revision that began
@@ -200,27 +152,10 @@ func (s *Service) CompleteDraftValidation(id string, expectedRevision int64, val
 }
 
 func (s *Service) completeDraftValidation(id string, expectedRevision int64, validation project.DeclarationValidation, compositionHash string) (*Draft, error) {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	stored := s.drafts[id]
-	if stored == nil {
-		return nil, fmt.Errorf("draft not found")
+	if _, err := s.requireCurrentDraft(id); err != nil {
+		return nil, err
 	}
-	s.expireDraftLocked(stored)
-	if stored.draft.State == DraftStale || stored.draft.Revision != expectedRevision || stored.draft.State != DraftValidating {
-		return nil, project.ErrRevisionConflict
-	}
-	copyValidation := cloneValidation(validation)
-	stored.draft.Validation = &copyValidation
-	if validation.Applicable {
-		stored.draft.State = DraftValid
-		stored.draft.CompositionHash = compositionHash
-	} else {
-		stored.draft.State = DraftInvalid
-		stored.draft.CompositionHash = ""
-	}
-	copy := cloneDraft(stored.draft)
-	return &copy, nil
+	return s.drafts.completeValidation(id, expectedRevision, validation, compositionHash)
 }
 
 // ValidateDraft composes the current declaration in memory and records only
@@ -285,20 +220,10 @@ func (s *Service) CheckDraft(ctx context.Context, request DraftCheckRequest) (*D
 }
 
 func (s *Service) loadValidatedDraftForChecks(identity draftRevisionIdentity) (Draft, error) {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	stored := s.drafts[identity.id]
-	if stored == nil {
-		return Draft{}, fmt.Errorf("draft not found")
+	if _, err := s.requireCurrentDraft(identity.id); err != nil {
+		return Draft{}, err
 	}
-	s.expireDraftLocked(stored)
-	if stored.draft.State == DraftStale || !identity.matches(stored.draft) {
-		return Draft{}, project.ErrRevisionConflict
-	}
-	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable || stored.draft.CompositionHash == "" {
-		return Draft{}, fmt.Errorf("draft is not valid; validate the latest revision")
-	}
-	return cloneDraft(stored.draft), nil
+	return s.drafts.validated(identity)
 }
 
 func (s *Service) composeDraftCheckInput(draft Draft) (draftCheckInput, string, error) {
@@ -335,41 +260,46 @@ func draftCheckReport(draft Draft, compositionHash string, report DraftCheckRepo
 }
 
 func (s *Service) storeDraftCheckReport(identity draftRevisionIdentity, draft Draft, compositionHash string, report DraftCheckReport) (*DraftCheckReport, error) {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	stored := s.drafts[identity.id]
-	if stored == nil {
-		return nil, project.ErrRevisionConflict
+	if _, err := s.requireCurrentDraft(identity.id); err != nil {
+		return nil, err
 	}
-	s.expireDraftLocked(stored)
-	if stored.draft.State != DraftValid || !identity.matches(stored.draft) || stored.draft.CompositionHash != compositionHash {
-		return nil, project.ErrRevisionConflict
-	}
-	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CompositionHash: compositionHash, Report: cloneCheckReport(report)}
-	copy := cloneCheckReport(report)
-	return &copy, nil
+	return s.drafts.storeCheckReport(identity, draft, compositionHash, report)
 }
 
 // ExpireDraftsForOpenFile marks drafts stale when a UI changes the open file or
 // its base hash. Passing the active project identity makes the boundary clear
 // to the file-scoped chat session added in the next phase.
 func (s *Service) ExpireDraftsForOpenFile(projectID, revision, openPath, baseFileHash string) {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	for _, stored := range s.drafts {
-		if stored.draft.ProjectID != projectID || stored.draft.ProjectRevision != revision || (openPath != "" && stored.draft.TargetPath != openPath) || (baseFileHash != "" && stored.draft.BaseFileHash != baseFileHash) {
-			staleDraft(stored)
-		}
-	}
+	s.drafts.expireForOpenFile(projectID, revision, openPath, baseFileHash)
 }
 
-func (s *Service) expireDraftLocked(stored *storedDraft) {
-	if stored.draft.State == DraftStale {
-		return
+func (s *Service) refreshDraft(id string) (Draft, error) {
+	draft, ok := s.drafts.snapshot(id)
+	if !ok {
+		return Draft{}, fmt.Errorf("draft not found")
 	}
-	if err := s.ValidateMutableRequest(stored.draft.ProjectID, stored.draft.ProjectRevision, stored.draft.TargetPath, stored.draft.BaseFileHash); err != nil {
-		staleDraft(stored)
+	if draft.State == DraftStale {
+		return draft, nil
 	}
+	if err := s.ValidateMutableRequest(draft.ProjectID, draft.ProjectRevision, draft.TargetPath, draft.BaseFileHash); err != nil {
+		stale, exists := s.drafts.markStale(id)
+		if !exists {
+			return Draft{}, fmt.Errorf("draft not found")
+		}
+		return stale, nil
+	}
+	return draft, nil
+}
+
+func (s *Service) requireCurrentDraft(id string) (Draft, error) {
+	draft, err := s.refreshDraft(id)
+	if err != nil {
+		return Draft{}, err
+	}
+	if draft.State == DraftStale {
+		return Draft{}, project.ErrRevisionConflict
+	}
+	return draft, nil
 }
 
 func staleDraft(stored *storedDraft) {
@@ -380,9 +310,7 @@ func staleDraft(stored *storedDraft) {
 }
 
 func (s *Service) clearDraftsForProjectChange() {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	s.drafts = make(map[string]*storedDraft)
+	s.drafts.clear()
 }
 
 func draftHash(declaration string, imports []string) string {

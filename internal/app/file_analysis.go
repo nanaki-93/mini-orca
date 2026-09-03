@@ -74,13 +74,14 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 	if err != nil {
 		return nil, err
 	}
-	prompt, err := semanticPrompt(fileInfo.Content, *analysis, index, *indexedFile, s.contextManifestForRuntime(semanticManifest(*indexedFile), s.bugRuntime))
+	runtime := s.runtimes.bug
+	prompt, err := semanticPrompt(fileInfo.Content, *analysis, index, *indexedFile, s.contextManifestForRuntime(semanticManifest(*indexedFile), runtime))
 	if err != nil {
 		return nil, err
 	}
 	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
 	defer cancel()
-	result, err := s.retry(timed, s.bugRuntime, []llm.ChatMessage{{Role: "user", Content: prompt}})
+	result, err := s.retry(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}})
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
@@ -150,7 +151,7 @@ func (s *Service) fileAnalysisCacheInput(analysis *project.Analysis, file *proje
 	if err != nil {
 		return nil, project.FileAnalysisInput{}, err
 	}
-	runtime := s.bugRuntime
+	runtime := s.runtimes.bug
 	return cache, project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: contentHash, Language: file.Language, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, ReasoningEffort: runtime.effective.ReasoningEffort, PromptVersion: semanticAnalysisPromptVersion, ContextPolicyVersion: policy.Version()}, nil
 }
 
