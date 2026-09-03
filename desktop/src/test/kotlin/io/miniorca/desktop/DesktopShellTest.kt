@@ -144,11 +144,16 @@ class DesktopShellTest {
   }
 
   @Test
-  fun workspaceRailUsesConciseWorkspaceNames() {
-    assertEquals("Summary", workspaceRailLabel(Workspace.Summary))
-    assertEquals("Analysis", workspaceRailLabel(Workspace.Analysis))
-    assertEquals("Bugs", workspaceRailLabel(Workspace.Bugs))
-    assertEquals("Editor", workspaceRailLabel(Workspace.Editor))
+  fun toolWindowBarMapsStableNavigationDestinations() {
+    assertEquals("Project", leftToolWindowLabel(LeftToolWindow.Project))
+    assertEquals("Summary", leftToolWindowLabel(LeftToolWindow.Summary))
+    assertEquals("Analysis", leftToolWindowLabel(LeftToolWindow.Analysis))
+    assertEquals("Problems", leftToolWindowLabel(LeftToolWindow.Problems))
+    assertEquals("Editor", leftToolWindowLabel(LeftToolWindow.Editor))
+    assertEquals(Workspace.Editor, workspaceForLeftToolWindow(LeftToolWindow.Project))
+    assertEquals(Workspace.Bugs, workspaceForLeftToolWindow(LeftToolWindow.Problems))
+    assertEquals(LeftToolWindow.Editor, leftToolWindowForWorkspace(Workspace.Editor))
+    assertEquals("!", toolWindowGlyph(LeftToolWindow.Problems))
   }
 
   @Test

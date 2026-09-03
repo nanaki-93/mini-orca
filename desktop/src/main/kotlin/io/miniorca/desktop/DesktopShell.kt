@@ -1,9 +1,6 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -17,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
@@ -37,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
@@ -44,8 +41,6 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -269,73 +264,35 @@ internal fun DesktopShell(
   }
   fun selectWorkspace(nextWorkspace: Workspace) {
     if (!editorChromeVisible(nextWorkspace)) scope.launch { drawerState.close() }
+    layoutActions.updateLayout(
+        layout
+            .openLeft(leftToolWindowForWorkspace(nextWorkspace))
+            .withFocus(DesktopFocusRegion.Editor))
+    editorActions.selectWorkspace(nextWorkspace)
+  }
+  fun selectToolWindow(toolWindow: LeftToolWindow) {
+    layoutActions.updateLayout(
+        layout.openLeft(toolWindow).withFocus(DesktopFocusRegion.LeftToolWindow))
+    val nextWorkspace = workspaceForLeftToolWindow(toolWindow)
+    if (!editorChromeVisible(nextWorkspace)) scope.launch { drawerState.close() }
     editorActions.selectWorkspace(nextWorkspace)
   }
   LaunchedEffect(showsEditorChrome) { if (!showsEditorChrome) drawerState.close() }
   Surface(
       modifier =
           Modifier.fillMaxSize().onPreviewKeyEvent { event ->
-            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-            val key =
-                when (event.key) {
-                  Key.P -> "P"
-                  Key.O -> "O"
-                  Key.K -> "K"
-                  Key.One -> "1"
-                  Key.Two -> "2"
-                  Key.Three -> "3"
-                  Key.Four -> "4"
-                  Key.F -> "F"
-                  Key.D -> "D"
-                  Key.V -> "V"
-                  Key.C -> "C"
-                  Key.Enter -> "Enter"
-                  Key.Escape -> "Escape"
-                  Key.Tab -> "Tab"
-                  else -> ""
-                }
-            val shortcut =
-                desktopShortcut(
-                    key, event.isMetaPressed || event.isCtrlPressed, event.isShiftPressed)
-            if (!shortcutAvailable(shellMode, shortcut)) return@onPreviewKeyEvent false
-            when (shortcut) {
-              DesktopShortcut.OpenProject -> if (!appState.loading) projectActions.importProject()
-              DesktopShortcut.OpenFile -> paletteActions.open(PaletteMode.Files)
-              DesktopShortcut.OpenSymbol -> paletteActions.open(PaletteMode.Symbols)
-              DesktopShortcut.OpenAction -> paletteActions.open(PaletteMode.Actions)
-              DesktopShortcut.FocusChat ->
-                  if (editor.contextualActions.canFocusChat) editorActions.focusChat()
-                  else return@onPreviewKeyEvent false
-              DesktopShortcut.FocusDraft ->
-                  if (editor.contextualActions.canFocusDraft) editorActions.focusDraft()
-                  else return@onPreviewKeyEvent false
-              DesktopShortcut.FocusBugsFilters -> selectWorkspace(Workspace.Bugs)
-              DesktopShortcut.ValidateDraft ->
-                  if (editor.contextualActions.canValidateDraft) editorActions.validateDraft()
-                  else return@onPreviewKeyEvent false
-              DesktopShortcut.RunDraftChecks ->
-                  if (editor.contextualActions.canRunFocusedChecks) editorActions.runDraftChecks()
-                  else return@onPreviewKeyEvent false
-              DesktopShortcut.SummaryWorkspace -> selectWorkspace(Workspace.Summary)
-              DesktopShortcut.AnalysisWorkspace -> selectWorkspace(Workspace.Analysis)
-              DesktopShortcut.BugsWorkspace -> selectWorkspace(Workspace.Bugs)
-              DesktopShortcut.EditorWorkspace -> selectWorkspace(Workspace.Editor)
-              DesktopShortcut.Generate ->
-                  if (editor.generating) editorActions.cancelGeneration()
-                  else if (editor.contextualActions.canGenerate) editorActions.generate()
-                  else return@onPreviewKeyEvent false
-              DesktopShortcut.Cancel ->
-                  when {
-                    palette.visible -> paletteActions.dismiss()
-                    context.visible -> editorActions.dismissContext()
-                    editor.generating -> editorActions.cancelGeneration()
-                    editor.analysisInProgress -> editorActions.cancelAnalysis()
-                    else -> return@onPreviewKeyEvent false
-                  }
-              DesktopShortcut.NextTab -> selectWorkspace(nextWorkspace(workspace))
-              null -> return@onPreviewKeyEvent false
-            }
-            true
+            handleDesktopShortcut(
+                event = event,
+                shellMode = shellMode,
+                appState = appState,
+                editor = editor,
+                context = context,
+                palette = palette,
+                projectActions = projectActions,
+                editorActions = editorActions,
+                paletteActions = paletteActions,
+                onWorkspaceSelected = ::selectWorkspace,
+            )
           },
       color = AppBackground,
   ) {
@@ -351,17 +308,23 @@ internal fun DesktopShell(
             drawerContent = {
               if (showsEditorChrome) {
                 if (narrowDrawer == NarrowDrawer.Files) {
-                  panes.explorer(Modifier.fillMaxHeight().width(320.dp)) {
-                    scope.launch { drawerState.close() }
-                  }
+                  DockedToolWindow(
+                      "Project",
+                      content = { modifier ->
+                        panes.explorer(modifier) { scope.launch { drawerState.close() } }
+                      },
+                      modifier = Modifier.fillMaxHeight().width(320.dp))
                 } else {
-                  panes.context(Modifier.fillMaxHeight().width(360.dp))
+                  DockedToolWindow(
+                      "Context",
+                      content = panes.context,
+                      modifier = Modifier.fillMaxHeight().width(360.dp))
                 }
               }
             },
         ) {
           Column {
-            AppTopBar(
+            MainToolbar(
                 appState.project,
                 appState.loading,
                 appState.connection,
@@ -373,9 +336,12 @@ internal fun DesktopShell(
                 { openDrawer(NarrowDrawer.Files) },
                 { openDrawer(NarrowDrawer.Context) })
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-              WorkspaceRail(workspace, ::selectWorkspace, Modifier.width(176.dp).fillMaxHeight())
-              if (!narrow && showsEditorChrome) {
-                panes.explorer(Modifier.width(layout.explorerWidth.dp).fillMaxHeight()) {}
+              ToolWindowBar(layout.activeLeftToolWindow, ::selectToolWindow)
+              if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
+                DockedToolWindow(
+                    "Project",
+                    content = { modifier -> panes.explorer(modifier) {} },
+                    modifier = Modifier.width(layout.explorerWidth.dp).fillMaxHeight())
                 ResizableDivider(
                     onDelta = {
                       layoutActions.updateLayout(
@@ -383,58 +349,33 @@ internal fun DesktopShell(
                     },
                     onCommit = layoutActions.saveLayout)
               }
-              ContentPane(
-                  state =
-                      ContentPaneState(
-                          project = appState.project,
-                          overview = appState.overview,
-                          selected = appState.selectedFile,
-                          symbols = appState.symbols,
-                          selectedSymbol = appState.selectedSymbol,
-                          workspace = workspace,
-                          editorProgress = editor.progress,
-                          draft = appState.review.draft,
-                          focusedLine = appState.selection.focusedLine,
-                          analysis =
-                              AnalysisWorkspacePaneState(
-                                  job = appState.findings.analyzeAll,
-                                  coverage = appState.overview?.analysisCoverage,
-                                  model = context.bugModel,
-                                  remoteProviderConfirmed = context.bugProviderConfirmed,
-                              ),
-                          bugs =
-                              BugsWorkspacePaneState(
-                                  appState.findings.findings, appState.findings.scan),
-                      ),
-                  navigation =
-                      ContentPaneNavigationActions(
-                          selectWorkspace = ::selectWorkspace,
-                          sourceLineSelected = { selection ->
-                            editorActions.sourceLineSelected(selection)
-                            contextDrawerForSourceSelection(workspace, widthDp)?.let(::openDrawer)
-                          },
-                      ),
-                  analysisActions = analysisActions.toWorkspaceActions(),
-                  bugsActions =
-                      BugsWorkspaceActions(
-                          openFinding = findingActions.openFinding,
-                          prepareFinding = findingActions.prepareFinding,
-                          triageFinding = findingActions.triageFinding,
-                          startScan = analysisActions.startScan,
-                          cancelScan = analysisActions.cancelScan,
-                      ),
+              DesktopCanvas(
+                  appState = appState,
+                  workspace = workspace,
+                  editor = editor,
+                  context = context,
+                  widthDp = widthDp,
+                  editorActions = editorActions,
+                  analysisActions = analysisActions,
+                  findingActions = findingActions,
+                  onWorkspaceSelected = ::selectWorkspace,
+                  onOpenNarrowDrawer = ::openDrawer,
                   modifier = Modifier.weight(1f).fillMaxHeight(),
               )
-              if (!narrow && showsEditorChrome) {
+              if (!narrow && showsEditorChrome && layout.rightToolWindowVisible) {
                 ResizableDivider(
                     onDelta = {
                       layoutActions.updateLayout(layout.withActionWidth(layout.actionWidth - it))
                     },
                     onCommit = layoutActions.saveLayout)
-                panes.context(Modifier.width(layout.actionWidth.dp).fillMaxHeight())
+                DockedToolWindow(
+                    "Context",
+                    content = panes.context,
+                    modifier = Modifier.width(layout.actionWidth.dp).fillMaxHeight())
               }
             }
-            DesktopStatusBar(appState.status, appState.error, appState.loading)
+            BottomToolWindowRegion(layout)
+            ShellStatusRegion(appState.status, appState.error, appState.loading)
           }
         }
         if (palette.visible) {
@@ -459,6 +400,125 @@ internal fun DesktopShell(
           ContextInspectorDialog(
               context.manifest ?: ContextManifest(), editorActions.dismissContext)
     }
+  }
+}
+
+private fun handleDesktopShortcut(
+    event: KeyEvent,
+    shellMode: DesktopShellMode,
+    appState: DesktopState,
+    editor: DesktopShellEditorState,
+    context: DesktopShellContextState,
+    palette: DesktopShellPaletteState,
+    projectActions: DesktopShellProjectActions,
+    editorActions: DesktopShellEditorActions,
+    paletteActions: DesktopShellPaletteActions,
+    onWorkspaceSelected: (Workspace) -> Unit,
+): Boolean {
+  if (event.type != KeyEventType.KeyDown) return false
+  val key =
+      when (event.key) {
+        Key.P -> "P"
+        Key.O -> "O"
+        Key.K -> "K"
+        Key.One -> "1"
+        Key.Two -> "2"
+        Key.Three -> "3"
+        Key.Four -> "4"
+        Key.F -> "F"
+        Key.D -> "D"
+        Key.V -> "V"
+        Key.C -> "C"
+        Key.Enter -> "Enter"
+        Key.Escape -> "Escape"
+        Key.Tab -> "Tab"
+        else -> ""
+      }
+  val shortcut =
+      desktopShortcut(key, event.isMetaPressed || event.isCtrlPressed, event.isShiftPressed)
+  if (!shortcutAvailable(shellMode, shortcut)) return false
+  return when (shortcut) {
+    DesktopShortcut.OpenProject -> {
+      if (!appState.loading) projectActions.importProject()
+      true
+    }
+    DesktopShortcut.OpenFile -> {
+      paletteActions.open(PaletteMode.Files)
+      true
+    }
+    DesktopShortcut.OpenSymbol -> {
+      paletteActions.open(PaletteMode.Symbols)
+      true
+    }
+    DesktopShortcut.OpenAction -> {
+      paletteActions.open(PaletteMode.Actions)
+      true
+    }
+    DesktopShortcut.FocusChat ->
+        editor.contextualActions.canFocusChat.also { if (it) editorActions.focusChat() }
+    DesktopShortcut.FocusDraft ->
+        editor.contextualActions.canFocusDraft.also { if (it) editorActions.focusDraft() }
+    DesktopShortcut.FocusBugsFilters -> {
+      onWorkspaceSelected(Workspace.Bugs)
+      true
+    }
+    DesktopShortcut.ValidateDraft ->
+        editor.contextualActions.canValidateDraft.also { if (it) editorActions.validateDraft() }
+    DesktopShortcut.RunDraftChecks ->
+        editor.contextualActions.canRunFocusedChecks.also { if (it) editorActions.runDraftChecks() }
+    DesktopShortcut.SummaryWorkspace -> {
+      onWorkspaceSelected(Workspace.Summary)
+      true
+    }
+    DesktopShortcut.AnalysisWorkspace -> {
+      onWorkspaceSelected(Workspace.Analysis)
+      true
+    }
+    DesktopShortcut.BugsWorkspace -> {
+      onWorkspaceSelected(Workspace.Bugs)
+      true
+    }
+    DesktopShortcut.EditorWorkspace -> {
+      onWorkspaceSelected(Workspace.Editor)
+      true
+    }
+    DesktopShortcut.Generate ->
+        when {
+          editor.generating -> {
+            editorActions.cancelGeneration()
+            true
+          }
+          editor.contextualActions.canGenerate -> {
+            editorActions.generate()
+            true
+          }
+          else -> false
+        }
+    DesktopShortcut.Cancel ->
+        when {
+          palette.visible -> {
+            paletteActions.dismiss()
+            true
+          }
+          context.visible -> {
+            editorActions.dismissContext()
+            true
+          }
+          editor.generating -> {
+            editorActions.cancelGeneration()
+            true
+          }
+          editor.analysisInProgress -> {
+            editorActions.cancelAnalysis()
+            true
+          }
+          else -> false
+        }
+    DesktopShortcut.NextTab -> {
+      onWorkspaceSelected(nextWorkspace(appState.workspace))
+      true
+    }
+    null -> false
   }
 }
 
@@ -494,6 +554,68 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
       }
     }
   }
+}
+
+@Composable
+private fun DesktopCanvas(
+    appState: DesktopState,
+    workspace: Workspace,
+    editor: DesktopShellEditorState,
+    context: DesktopShellContextState,
+    widthDp: Float,
+    editorActions: DesktopShellEditorActions,
+    analysisActions: DesktopShellAnalysisActions,
+    findingActions: DesktopShellFindingActions,
+    onWorkspaceSelected: (Workspace) -> Unit,
+    onOpenNarrowDrawer: (NarrowDrawer) -> Unit,
+    modifier: Modifier,
+) {
+  EditorArea(
+      content = {
+        ContentPane(
+            state =
+                ContentPaneState(
+                    project = appState.project,
+                    overview = appState.overview,
+                    selected = appState.selectedFile,
+                    symbols = appState.symbols,
+                    selectedSymbol = appState.selectedSymbol,
+                    workspace = workspace,
+                    editorProgress = editor.progress,
+                    draft = appState.review.draft,
+                    focusedLine = appState.selection.focusedLine,
+                    analysis =
+                        AnalysisWorkspacePaneState(
+                            job = appState.findings.analyzeAll,
+                            coverage = appState.overview?.analysisCoverage,
+                            model = context.bugModel,
+                            remoteProviderConfirmed = context.bugProviderConfirmed,
+                        ),
+                    bugs =
+                        BugsWorkspacePaneState(appState.findings.findings, appState.findings.scan),
+                ),
+            navigation =
+                ContentPaneNavigationActions(
+                    selectWorkspace = onWorkspaceSelected,
+                    sourceLineSelected = { selection ->
+                      editorActions.sourceLineSelected(selection)
+                      contextDrawerForSourceSelection(workspace, widthDp)?.let(onOpenNarrowDrawer)
+                    },
+                ),
+            analysisActions = analysisActions.toWorkspaceActions(),
+            bugsActions =
+                BugsWorkspaceActions(
+                    openFinding = findingActions.openFinding,
+                    prepareFinding = findingActions.prepareFinding,
+                    triageFinding = findingActions.triageFinding,
+                    startScan = analysisActions.startScan,
+                    cancelScan = analysisActions.cancelScan,
+                ),
+            modifier = Modifier.fillMaxSize(),
+        )
+      },
+      modifier = modifier,
+  )
 }
 
 @Composable
@@ -557,47 +679,6 @@ private fun DesktopShellAnalysisActions.toWorkspaceActions() =
         resume = resumeAnalyzeAll,
         cancel = cancelAnalyzeAll,
     )
-
-@Composable
-private fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
-  val density = LocalDensity.current
-  Box(
-      Modifier.fillMaxHeight().width(6.dp).background(Border).pointerInput(Unit) {
-        detectDragGestures(
-            onDrag = { change, amount ->
-              change.consume()
-              onDelta(with(density) { amount.x.toDp().value })
-            },
-            onDragEnd = onCommit,
-        )
-      },
-  )
-}
-
-internal fun desktopStatusBarVisible(loading: Boolean, error: String?): Boolean =
-    loading || error != null
-
-@Composable
-private fun DesktopStatusBar(status: String, error: String?, loading: Boolean) {
-  if (!desktopStatusBarVisible(loading, error)) return
-  Row(
-      Modifier.fillMaxWidth()
-          .height(30.dp)
-          .background(Panel)
-          .border(BorderStroke(1.dp, Border))
-          .padding(horizontal = 12.dp),
-      verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(7.dp)
-                .background(if (error == null) Warning else Error, RoundedCornerShape(50)))
-        Spacer(Modifier.width(7.dp))
-        Text(
-            error ?: status,
-            color = if (error == null) SecondaryText else Error,
-            fontSize = 11.sp,
-            maxLines = 1)
-      }
-}
 
 internal fun modelDestinationLabel(scope: ModelScope, model: ScopedModel): String {
   val reasoningEffort =
