@@ -119,11 +119,11 @@ func TestCleanupRouteInventoryMatchesDaemonRegistration(t *testing.T) {
 		t.Fatalf("cleanup inventory routes = %d, registered routes = %d", len(inventory), len(registered))
 	}
 	for _, route := range registered {
-		if route.Disposition != routeRetained && route.Disposition != routeRetired {
+		if route.Disposition != routeRetained {
 			t.Fatalf("%s %s has invalid disposition %q", route.Method, route.Path, route.Disposition)
 		}
-		if route.Disposition == routeRetained && route.Consumer == "" {
-			t.Fatalf("retained route %s %s has no maintained consumer", route.Method, route.Path)
+		if route.Consumer == "" {
+			t.Fatalf("registered route %s %s has no maintained consumer", route.Method, route.Path)
 		}
 		if !containsRouteSpec(inventory, route) {
 			t.Fatalf("registered route missing from cleanup inventory: %+v", route)

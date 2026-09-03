@@ -77,15 +77,12 @@ analysis, file analysis, Analyze-all, a chat message, or an explicit repair—af
 the user reviews that scope’s destination. Keep `config.yaml` local; it is
 ignored by Git.
 
-## Migrating from the preview workflow
+## Loopback API contract
 
-The former whole-file generation and activity-oriented UI is retired. Do not
-send a request to `POST /api/chat/message`: it deliberately returns `410 Gone`.
-New integrations open a file-scoped session, send its messages, then read or
-edit the resulting declaration draft before validation, checks, review, and an
-explicit Apply. `GET /api/chat/history` remains only as a deprecated alias for
-source-free activity; it is not a conversation transcript. See the [API guide](API.md)
-for the exact route contract.
+Integrations open a file-scoped session, send its messages, then edit the
+returned declaration draft before validation, checks, review, and an explicit
+Apply. The supported routes are listed once in the [API guide](API.md) and
+[route contract](docs/api-contract.md).
 
 ## Documentation
 

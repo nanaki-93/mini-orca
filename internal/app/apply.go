@@ -299,8 +299,6 @@ func (s *Service) UndoDraft(ctx context.Context, request UndoRequest) (*ApplyRes
 	return &ApplyResult{Audit: audit, ProjectRevision: index.ProjectRevision, PostApplyHash: state.BeforeHash, UndoAvailable: false, Index: index}, nil
 }
 
-func (s *Service) AuditHistory() ([]AuditEntry, error) { return readAudit(s.manager.Root()) }
-
 func writeBackup(root, target string, content []byte) (string, error) {
 	directory := filepath.Join(root, ".mini-orca", "backups")
 	if err := os.MkdirAll(directory, 0700); err != nil {

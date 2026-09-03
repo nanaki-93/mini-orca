@@ -59,31 +59,6 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 	}
 }
 
-func TestClearFileAnalysisResetsIndexStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
-	}))
-	defer server.Close()
-	service, _ := newSemanticAnalysisService(t, server.URL, 0)
-	if _, err := service.AnalyzeFile(context.Background(), "main.go", false, false); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.ClearFileAnalysis("main.go"); err != nil {
-		t.Fatal(err)
-	}
-	index, err := service.manager.Index()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if file := findAppIndexFile(index, "main.go"); file == nil || file.AnalysisStatus != project.AnalysisStatusMissing {
-		t.Fatalf("cleared index analysis status = %+v, want missing", file)
-	}
-	cached, err := service.CachedFileAnalysis("main.go")
-	if err != nil || cached.Status != project.AnalysisStatusMissing {
-		t.Fatalf("cleared cache = %+v, %v", cached, err)
-	}
-}
-
 func TestAnalyzeFileAcceptsUnqualifiedMethodExplanations(t *testing.T) {
 	output := `{"purpose":"Explains the service.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{"FileSystemService":"The service implementation.","PrintFiles":"Prints files.","ListFiles":"Lists files."}}`
 	parsed, err := parseSemanticAnalysis(output, project.IndexFile{Path: "service.go", Language: "Go", Symbols: []project.SymbolInfo{

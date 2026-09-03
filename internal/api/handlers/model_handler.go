@@ -11,11 +11,6 @@ type ModelHandler struct{ service *app.Service }
 
 func NewModelHandler(service *app.Service) *ModelHandler { return &ModelHandler{service: service} }
 
-// Current handles GET /api/models/current.
-func (h *ModelHandler) Current(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
+func (h *ModelHandler) Current(w http.ResponseWriter, _ *http.Request) {
 	api.WriteJSON(w, http.StatusOK, h.service.CurrentModelCatalog())
 }

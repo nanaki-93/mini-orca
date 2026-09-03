@@ -67,13 +67,6 @@ func TestDraftEndpointsAreRevisionAndHashGuarded(t *testing.T) {
 		t.Fatalf("check report = %+v", report)
 	}
 
-	review := draftHandlerRequest(http.MethodGet, "/api/projects/current/drafts/draft-api/review?project_revision="+index.ProjectRevision, "", draft.ID)
-	reviewResponse := httptest.NewRecorder()
-	handler.ReviewDraft(reviewResponse, review)
-	if reviewResponse.Code != http.StatusOK || !bytes.Contains(reviewResponse.Body.Bytes(), []byte(`"apply_eligible":true`)) {
-		t.Fatalf("review = %d: %s", reviewResponse.Code, reviewResponse.Body.String())
-	}
-
 	staleUpdate := draftHandlerRequest(http.MethodPatch, "/api/projects/current/drafts/draft-api", `{"project_revision":"`+index.ProjectRevision+`","expected_revision":0,"declaration":"func Run() {}"}`, draft.ID)
 	staleResponse := httptest.NewRecorder()
 	handler.UpdateDraft(staleResponse, staleUpdate)

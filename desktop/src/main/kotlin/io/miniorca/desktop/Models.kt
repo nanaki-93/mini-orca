@@ -78,24 +78,11 @@ data class ScopedModel(
     @SerialName("reasoning_effort") val reasoningEffort: String = "",
 )
 
-/**
- * The daemon keeps the former top-level profile for older Desktop clients and
- * supplies fixed scope entries for newer ones. Defaulted fields let this client
- * safely consume either shape.
- */
 @Serializable
 data class ModelCatalog(
-    val scope: String = "",
-    val profile: String = "",
-    val model: String = "",
-    @SerialName("provider_origin") val providerOrigin: String = "",
-    @SerialName("remote_provider") val remoteProvider: Boolean = false,
-    val timeout: String = "",
-    @SerialName("reasoning_effort") val reasoningEffort: String = "",
     val scopes: Map<String, ScopedModel> = emptyMap(),
 ) {
-    fun forScope(scope: ModelScope): ScopedModel = scopes[scope.wireValue]
-        ?: ScopedModel(scope.wireValue, profile, model, providerOrigin, remoteProvider, timeout, reasoningEffort)
+    fun forScope(scope: ModelScope): ScopedModel = scopes[scope.wireValue] ?: ScopedModel(scope = scope.wireValue)
 }
 
 fun ModelCatalog.identity(): List<ScopedModel> = ModelScope.entries.map(::forScope)

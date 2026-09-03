@@ -29,17 +29,13 @@ class ModelScopeStateTest {
         assertNotEquals(mixed.identity(), allRemote.identity())
     }
 
-    @Test fun changedCatalogRequiresFreshScopeConfirmationsAndLegacyUsesOneProfile() {
+    @Test fun changedCatalogRequiresFreshScopeConfirmations() {
         val before = catalog(analyzeRemote = true, bugRemote = false, functionRemote = true)
         val changed = before.copy(scopes = before.scopes + ("function" to before.forScope(ModelScope.Function).copy(model = "new-model")))
         val confirmations = ScopedConfirmationState(analyze = true, bug = true, function = true)
-        val legacy = ModelCatalog(profile = "legacy", model = "legacy-model", remoteProvider = true)
 
         assertNotEquals(before.identity(), changed.identity())
         assertEquals(ScopedConfirmationState(), if (before.identity() != changed.identity()) ScopedConfirmationState() else confirmations)
-        assertEquals("legacy-model", legacy.forScope(ModelScope.Analyze).model)
-        assertEquals("legacy-model", legacy.forScope(ModelScope.Bug).model)
-        assertEquals("legacy-model", legacy.forScope(ModelScope.Function).model)
     }
 
     @Test fun staleServerConfirmationExplainsWhichScopeMustBeReconfirmed() {

@@ -34,8 +34,7 @@ type ChatSession struct {
 	UpdatedAt       time.Time                   `json:"updated_at"`
 }
 
-// ChatSessionMessage is visible only in its file-scoped session. Durable
-// project activity records intentionally retain only source-free summaries.
+// ChatSessionMessage is visible only in its file-scoped session.
 type ChatSessionMessage struct {
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`

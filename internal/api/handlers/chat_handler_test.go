@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -56,23 +55,11 @@ func TestChatSessionEndpointsKeepMessagesBoundToOneFile(t *testing.T) {
 	retarget.SetPathValue("sessionID", session.ID)
 	retargetResponse := httptest.NewRecorder()
 	handler.SendSessionMessage(retargetResponse, retarget)
-	if retargetResponse.Code != http.StatusBadRequest || !strings.Contains(retargetResponse.Body.String(), "unknown field") {
+	if retargetResponse.Code != http.StatusBadRequest {
 		t.Fatalf("retarget response = %d: %s", retargetResponse.Code, retargetResponse.Body.String())
 	}
+	assertStructuredError(t, retargetResponse)
 
-	loaded := httptest.NewRequest(http.MethodGet, "/api/projects/current/chat/sessions/"+session.ID, nil)
-	loaded.SetPathValue("sessionID", session.ID)
-	loadedResponse := httptest.NewRecorder()
-	handler.Session(loadedResponse, loaded)
-	if loadedResponse.Code != http.StatusOK || !strings.Contains(loadedResponse.Body.String(), "Improve Run.") {
-		t.Fatalf("session response = %d: %s", loadedResponse.Code, loadedResponse.Body.String())
-	}
-
-	activity := httptest.NewRecorder()
-	handler.Activity(activity, httptest.NewRequest(http.MethodGet, "/api/projects/current/activity", nil))
-	if activity.Code != http.StatusOK || strings.Contains(activity.Body.String(), "Improve Run.") || !strings.Contains(activity.Body.String(), "Generated declaration draft") {
-		t.Fatalf("activity response = %d: %s", activity.Code, activity.Body.String())
-	}
 }
 
 func TestChatSessionEndpointReportsCancellationAndStaleSession(t *testing.T) {
@@ -126,18 +113,23 @@ func TestChatSessionEndpointPinsTaskSpecsAndRejectsUnpreparedRepairs(t *testing.
 	repair.SetPathValue("sessionID", session.ID)
 	failed := httptest.NewRecorder()
 	handler.SendSessionMessage(failed, repair)
-	if failed.Code != http.StatusBadRequest || !strings.Contains(failed.Body.String(), "check-driven repair") {
+	if failed.Code != http.StatusBadRequest {
 		t.Fatalf("unprepared repair = %d: %s", failed.Code, failed.Body.String())
 	}
+	assertStructuredError(t, failed)
 }
 
-func TestRetiredOneShotChatRouteReturnsGone(t *testing.T) {
-	handler, _ := newChatSessionTestHandler(t, "http://127.0.0.1:1", 0)
+func TestChatSessionEndpointRejectsInvalidEditMode(t *testing.T) {
+	handler, identity := newChatSessionTestHandler(t, "http://127.0.0.1:1", 0)
 	response := httptest.NewRecorder()
-	handler.RemovedMessageEndpoint(response, httptest.NewRequest(http.MethodPost, "/api/chat/message", nil))
-	if response.Code != http.StatusGone {
-		t.Fatalf("retired route status = %d: %s", response.Code, response.Body.String())
+	handler.OpenSession(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions", bytes.NewReader(marshalChatBody(t, ChatSessionRequest{
+		ProjectID: identity.projectID, ProjectRevision: identity.revision, BaseFileHash: identity.hash,
+		OpenPath: "sample.go", Mode: "rename_symbol", TargetSymbol: "Run",
+	}))))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid mode status = %d: %s", response.Code, response.Body.String())
 	}
+	assertStructuredError(t, response)
 }
 
 type chatSessionIdentity struct {

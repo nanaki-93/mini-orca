@@ -4,15 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-
-	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
 )
-
-// ErrorResponse represents an error response body.
-// Deprecated: use apperrors.Error instead
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
 
 // WriteJSON writes a JSON response to the HTTP writer.
 func WriteJSON(w http.ResponseWriter, status int, data any) {
@@ -23,30 +15,29 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 // WriteError writes an error JSON response to the HTTP writer.
 func WriteError(w http.ResponseWriter, status int, message string) {
-	// For backward compatibility, we create an AppError
-	errType := apperrors.TypeInternal
+	errType := ErrorInternal
 	switch status {
 	case http.StatusNotFound:
-		errType = apperrors.TypeNotFound
+		errType = ErrorNotFound
 	case http.StatusBadRequest:
-		errType = apperrors.TypeBadRequest
+		errType = ErrorBadRequest
 	case http.StatusUnauthorized:
-		errType = apperrors.TypeUnauthorized
+		errType = ErrorUnauthorized
 	case http.StatusForbidden:
-		errType = apperrors.TypeForbidden
+		errType = ErrorForbidden
 	case http.StatusConflict:
-		errType = apperrors.TypeConflict
+		errType = ErrorConflict
 	}
 
-	appErr := apperrors.New(errType, message, message, status, nil)
+	appErr := NewAppError(errType, message, message, status, nil)
 	WriteAppError(w, appErr)
 }
 
 // WriteAppError writes a centralized error to the HTTP writer.
 func WriteAppError(w http.ResponseWriter, err error) {
-	appErr, ok := apperrors.AsError(err)
+	appErr, ok := AsAppError(err)
 	if !ok {
-		appErr = apperrors.Internal("unhandled error", "", err)
+		appErr = Internal("unhandled error", "", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

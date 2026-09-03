@@ -112,7 +112,6 @@ func daemonAddress() string {
 
 const (
 	routeRetained = "retained"
-	routeRetired  = "retired"
 )
 
 // routeSpec records the pre-cleanup HTTP surface and its current owner. It is
@@ -129,18 +128,12 @@ func registeredRoutes() []routeSpec {
 	return []routeSpec{
 		{http.MethodGet, "/health", routeRetained, "container health check"},
 		{http.MethodGet, "/status", routeRetained, "Desktop ApiClient.status"},
-		{http.MethodGet, "/api/system/info", routeRetired, ""},
 		{http.MethodPost, "/api/projects/current/chat/sessions", routeRetained, "Desktop ApiClient.openChatSession"},
-		{http.MethodGet, "/api/projects/current/chat/sessions/{sessionID}", routeRetired, ""},
 		{http.MethodPost, "/api/projects/current/chat/sessions/{sessionID}/messages", routeRetained, "Desktop ApiClient.sendChatMessage"},
-		{http.MethodGet, "/api/projects/current/activity", routeRetired, ""},
-		{http.MethodPost, "/api/chat/message", routeRetired, ""},
-		{http.MethodGet, "/api/chat/history", routeRetired, ""},
 		{http.MethodGet, "/api/models/current", routeRetained, "Desktop ApiClient.modelCatalog"},
 		{http.MethodGet, "/api/projects/current/context", routeRetained, "Desktop ApiClient.context"},
 		{http.MethodPost, "/api/projects/import", routeRetained, "Desktop ApiClient.importProject"},
 		{http.MethodPost, "/api/projects/restore", routeRetained, "Desktop ApiClient.restoreProject"},
-		{http.MethodGet, "/api/projects/current", routeRetired, ""},
 		{http.MethodGet, "/api/projects/current/overview", routeRetained, "Desktop ApiClient.overview"},
 		{http.MethodGet, "/api/projects/current/findings", routeRetained, "Desktop ApiClient.findings"},
 		{http.MethodPatch, "/api/projects/current/findings/{findingID}", routeRetained, "Desktop ApiClient.updateFindingStatus"},
@@ -154,21 +147,17 @@ func registeredRoutes() []routeSpec {
 		{http.MethodGet, "/api/projects/current/git", routeRetained, "Desktop ApiClient.gitStatus"},
 		{http.MethodGet, "/api/projects/current/files/analysis", routeRetained, "Desktop ApiClient.analysis"},
 		{http.MethodPost, "/api/projects/current/files/analysis", routeRetained, "Desktop ApiClient.analyze"},
-		{http.MethodDelete, "/api/projects/current/files/analysis", routeRetired, ""},
 		{http.MethodGet, "/api/projects/current/analysis-job", routeRetained, "Desktop ApiClient.analyzeAllJob"},
 		{http.MethodPost, "/api/projects/current/analysis-job", routeRetained, "Desktop ApiClient.startAnalyzeAll"},
 		{http.MethodPost, "/api/projects/current/analysis-job/pause", routeRetained, "Desktop ApiClient.pauseAnalyzeAll"},
 		{http.MethodPost, "/api/projects/current/analysis-job/resume", routeRetained, "Desktop ApiClient.resumeAnalyzeAll"},
 		{http.MethodPost, "/api/projects/current/analysis-job/cancel", routeRetained, "Desktop ApiClient.cancelAnalyzeAll"},
 		{http.MethodPost, "/api/projects/current/reindex", routeRetained, "Desktop ApiClient.reindex"},
-		{http.MethodGet, "/api/projects/current/drafts/{draftID}", routeRetired, ""},
 		{http.MethodPatch, "/api/projects/current/drafts/{draftID}", routeRetained, "Desktop ApiClient.updateDraft"},
 		{http.MethodPost, "/api/projects/current/drafts/{draftID}/validate", routeRetained, "Desktop ApiClient.validateDraft"},
 		{http.MethodPost, "/api/projects/current/drafts/{draftID}/checks", routeRetained, "Desktop ApiClient.checkDraft"},
-		{http.MethodGet, "/api/projects/current/drafts/{draftID}/review", routeRetired, ""},
 		{http.MethodPost, "/api/projects/current/apply", routeRetained, "Desktop ApiClient.applyDraft"},
 		{http.MethodPost, "/api/projects/current/undo", routeRetained, "Desktop ApiClient.undo"},
-		{http.MethodGet, "/api/projects/current/audit", routeRetired, ""},
 	}
 }
 
@@ -193,23 +182,12 @@ func newHTTPMux(
 		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","workflow":"single_coder_preview"}`))
 	})
 
-	// System info endpoint
-	systemHandler := handlers.NewSystemHandler()
-	mux.HandleFunc("GET /api/system/info", systemHandler.GetSystemInfo)
-
-	// Initialize chat handler
 	chatHandler := handlers.NewChatHandler(application)
 
 	// File-scoped chat session endpoints. A message has no target fields; its
 	// immutable project/file/symbol identity is established at session creation.
 	mux.HandleFunc("POST /api/projects/current/chat/sessions", chatHandler.OpenSession)
-	mux.HandleFunc("GET /api/projects/current/chat/sessions/{sessionID}", chatHandler.Session)
 	mux.HandleFunc("POST /api/projects/current/chat/sessions/{sessionID}/messages", chatHandler.SendSessionMessage)
-	mux.HandleFunc("GET /api/projects/current/activity", chatHandler.Activity)
-	// Keep the retired discovery route from silently accepting an unsafe one-shot
-	// request until the desktop client moves to the typed session contract.
-	mux.HandleFunc("POST /api/chat/message", chatHandler.RemovedMessageEndpoint)
-	mux.HandleFunc("GET /api/chat/history", chatHandler.Activity)
 
 	modelHandler := handlers.NewModelHandler(application)
 	mux.HandleFunc("GET /api/models/current", modelHandler.Current)
@@ -220,7 +198,6 @@ func newHTTPMux(
 	draftHandler := handlers.NewDraftHandler(application, projectManager)
 	mux.HandleFunc("POST /api/projects/import", projectHandler.Import)
 	mux.HandleFunc("POST /api/projects/restore", projectHandler.Restore)
-	mux.HandleFunc("GET /api/projects/current", projectHandler.Current)
 	mux.HandleFunc("GET /api/projects/current/overview", projectHandler.Overview)
 	mux.HandleFunc("GET /api/projects/current/findings", projectHandler.Findings)
 	mux.HandleFunc("PATCH /api/projects/current/findings/{findingID}", projectHandler.UpdateFindingStatus)
@@ -234,21 +211,17 @@ func newHTTPMux(
 	mux.HandleFunc("GET /api/projects/current/git", projectHandler.GitStatus)
 	mux.HandleFunc("GET /api/projects/current/files/analysis", projectHandler.FileAnalysis)
 	mux.HandleFunc("POST /api/projects/current/files/analysis", projectHandler.AnalyzeFile)
-	mux.HandleFunc("DELETE /api/projects/current/files/analysis", projectHandler.DeleteFileAnalysis)
 	mux.HandleFunc("GET /api/projects/current/analysis-job", projectHandler.AnalyzeAllJob)
 	mux.HandleFunc("POST /api/projects/current/analysis-job", projectHandler.StartAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/analysis-job/pause", projectHandler.PauseAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/analysis-job/resume", projectHandler.ResumeAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/analysis-job/cancel", projectHandler.CancelAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/reindex", projectHandler.Reindex)
-	mux.HandleFunc("GET /api/projects/current/drafts/{draftID}", draftHandler.Draft)
 	mux.HandleFunc("PATCH /api/projects/current/drafts/{draftID}", draftHandler.UpdateDraft)
 	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/validate", draftHandler.ValidateDraft)
 	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/checks", draftHandler.CheckDraft)
-	mux.HandleFunc("GET /api/projects/current/drafts/{draftID}/review", draftHandler.ReviewDraft)
 	mux.HandleFunc("POST /api/projects/current/apply", draftHandler.Apply)
 	mux.HandleFunc("POST /api/projects/current/undo", draftHandler.Undo)
-	mux.HandleFunc("GET /api/projects/current/audit", draftHandler.Audit)
 
 	return mux
 }

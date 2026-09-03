@@ -7,9 +7,8 @@ It is a characterization baseline, not a second API specification.
 
 `cleanup-baseline-routes.json` is the machine-readable inventory. The daemon
 test compares it with the registered route catalog. Entries marked `retained`
-have a current Desktop `ApiClient` method or an operational consumer; entries
-marked `retired` have no current consumer and are deletion candidates for Tasks
-109–110. The current route count is 45: 32 retained and 13 retired.
+have a current Desktop `ApiClient` method or an operational consumer. After
+Task 110, the current route count is 32 and every route is retained.
 
 The maintained public contract remains [the API guide](api-contract.md) and
 [the OpenAPI document](openapi.yaml). Their route tables are also tested against

@@ -160,7 +160,7 @@ func TestApplyUndoAndAuditAreConflictSafeAndSourceFree(t *testing.T) {
 	if err != nil || string(current) != "package main\n\nimport \"fmt\"\n\nfunc Run() { println(\"draft\") }\n" {
 		t.Fatalf("applied content = %q, %v", current, err)
 	}
-	audits, err := service.AuditHistory()
+	audits, err := readAudit(root)
 	if err != nil || len(audits) != 1 || stringMustContain(jsonAudit(t, audits), "changed") {
 		t.Fatalf("audit = %+v, %v", audits, err)
 	}
