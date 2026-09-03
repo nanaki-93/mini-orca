@@ -46,21 +46,30 @@ class DesktopAccessibilityTest {
   }
 
   @Test
-  fun editorFileHeaderExposesTheSelectedFileIdentityWithoutProgressState() {
-    val header =
-        editorFileHeaderUiState(
-            ProjectFileInfo(
-                path = "cmd/miniorca/main.go",
-                contentHash = "hash",
-                name = "main.go",
-                language = "Go",
-                sizeBytes = 0,
-                lineCount = 0,
-                modifiedAt = "",
-                binary = false,
-            ))
+  fun editorChromeExposesTheFullSelectedFileIdentityAndReadOnlySurface() {
+    val chrome =
+        editorChromeUiState(
+            file =
+                ProjectFileInfo(
+                    path = "cmd/miniorca/main.go",
+                    contentHash = "hash",
+                    name = "main.go",
+                    language = "Go",
+                    sizeBytes = 0,
+                    lineCount = 0,
+                    modifiedAt = "",
+                    binary = false,
+                ),
+            selectedSymbol =
+                SymbolInfo("Main", "function", confidence = "exact", atomicTarget = true),
+            requestedSurface = EditorSurface.Source,
+            progress = EditorProgressUiState(EditorProgress.Inspect, ""),
+            draft = null,
+        )
 
-    assertEquals("main.go. cmd/miniorca/main.go", editorFileHeaderDescription(header))
+    assertTrue(chrome.accessibleDescription.contains("cmd/miniorca/main.go"))
+    assertTrue(chrome.accessibleDescription.contains("Selected declaration Main"))
+    assertTrue(chrome.accessibleDescription.contains("Read-only source surface"))
   }
 
   @Test

@@ -102,7 +102,12 @@ internal fun MiniOrcaApp(
     filter = ""
     collapsedDirectories = revealExplorerPath(index.files, collapsedDirectories, activePath)
   }
-  LaunchedEffect(appState.review.draft?.id) { if (appState.review.draft != null) chatMessage = "" }
+  LaunchedEffect(appState.review.draft?.id, appState.review.draft?.revision) {
+    if (appState.review.draft != null) {
+      chatMessage = ""
+      layout = layout.withEditorSurface(EditorSurface.Source)
+    }
+  }
   LaunchedEffect(workflow.contextManifest) {
     if (workflow.contextManifest != null) showContext = true
   }
@@ -370,6 +375,9 @@ internal fun MiniOrcaApp(
       editorActions =
           DesktopShellEditorActions(
               selectWorkspace = { presenter.dispatch(DesktopEvent.WorkspaceSelected(it)) },
+              selectEditorSurface = { surface ->
+                layout = layout.withEditorSurface(surface).withFocus(DesktopFocusRegion.Editor)
+              },
               focusChat = { focusComposerControl(ComposerFocusTarget.Chat) },
               focusDraft = { focusComposerControl(ComposerFocusTarget.Draft) },
               cancelAnalysis = presenter::cancelAnalysis,
