@@ -47,7 +47,7 @@ func TestFindingStoreReconcilesTriageSanitizationAndFreshness(t *testing.T) {
 	}
 	input := FindingInput{ProjectID: "project", ProjectRevision: "revision-one", FileHashes: map[string]string{"main.go": "hash-one"}}
 	reported := []UnifiedFinding{{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: "medium", Title: "Risk", Message: "password: should-not-persist", Evidence: "api_key: should-not-persist", FileHash: "hash-one", Location: FindingLocation{Path: "main.go", Symbol: "Run"}, OriginatingAnalysis: "file", TaskSpec: &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", TargetSymbol: "Run", TargetSignature: "func()", AcceptanceCriteria: []string{"password: should-not-persist"}, NonGoals: []string{}}}}
-	stored, err := store.Reconcile(input, reported)
+	stored, err := store.ReconcileSource(input, FindingSourceAI, reported)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestFindingStoreReconcilesTriageSanitizationAndFreshness(t *testing.T) {
 	if err := store.SetStatus(stored[0].ID, FindingStatusDismissed); err != nil {
 		t.Fatal(err)
 	}
-	rerun, err := store.Reconcile(input, reported)
+	rerun, err := store.ReconcileSource(input, FindingSourceAI, reported)
 	if err != nil || rerun[0].Status != FindingStatusDismissed {
 		t.Fatalf("triage after unchanged rerun = %+v, %v", rerun, err)
 	}
@@ -65,7 +65,7 @@ func TestFindingStoreReconcilesTriageSanitizationAndFreshness(t *testing.T) {
 	if err != nil || stale[0].Freshness != FindingFreshnessStale {
 		t.Fatalf("changed input findings = %+v, %v", stale, err)
 	}
-	retired, err := store.Reconcile(input, nil)
+	retired, err := store.ReconcileSource(input, FindingSourceAI, nil)
 	if err != nil || retired[0].Status != FindingStatusRetired || retired[0].Freshness != FindingFreshnessStale {
 		t.Fatalf("retired findings = %+v, %v", retired, err)
 	}

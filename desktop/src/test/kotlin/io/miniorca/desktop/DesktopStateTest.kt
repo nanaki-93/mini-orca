@@ -9,7 +9,7 @@ import kotlinx.serialization.json.Json
 
 class DesktopStateTest {
     @Test fun projectLoadClearsPriorSelectionAndDraft() {
-        val project = ProjectAnalysis("id", "revision", "fixture", "/tmp/fixture", "go", fileCount = 1, sourceFileCount = 1, totalLines = 2, analysisFile = ".mini-orca/analysis.md", summary = "", aiStatus = "fresh", analyzedAt = "")
+        val project = ProjectAnalysis("id", "revision", "fixture", "/tmp/fixture", "go", fileCount = 1, sourceFileCount = 1, totalLines = 2, summary = "", aiStatus = "fresh", analyzedAt = "")
         val index = ProjectIndex("id", "revision")
         val state = DesktopState(
             selection = FileSelectionState(selectedFile = ProjectFileInfo("main.go", "hash", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)),
@@ -251,7 +251,7 @@ class DesktopStateTest {
         assertTrue(!Json.encodeToString(manifest).contains("private source"))
     }
 
-    private fun project() = ProjectAnalysis("project", "revision", "fixture", "/tmp/fixture", "go", fileCount = 1, sourceFileCount = 1, totalLines = 2, analysisFile = ".mini-orca/analysis.md", summary = "", aiStatus = "fresh", analyzedAt = "")
+    private fun project() = ProjectAnalysis("project", "revision", "fixture", "/tmp/fixture", "go", fileCount = 1, sourceFileCount = 1, totalLines = 2, summary = "", aiStatus = "fresh", analyzedAt = "")
     private fun projectState() = DesktopState(projectState = ProjectWorkspaceState(project(), ProjectIndex("project", "revision")))
     private fun file(path: String, hash: String) = ProjectFileInfo(path, hash, path, language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
     private fun session(path: String, hash: String) = ChatSession(id = "session", projectId = "project", projectRevision = "revision", baseFileHash = hash, openPath = path)

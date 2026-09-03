@@ -121,7 +121,6 @@ class EditorInspectionStateTest {
         fileCount = 1,
         sourceFileCount = 1,
         totalLines = 42,
-        analysisFile = ".mini-orca/analysis.md",
         summary = "",
         aiStatus = "fresh",
         analyzedAt = "",

@@ -86,7 +86,7 @@ class DesktopWorkflowControllerTest {
         assertTrue(controller.projectLoaded(request, project("project", "revision"), index("project", "revision")))
     }
 
-    private fun project(id: String, revision: String) = ProjectAnalysis(id, revision, id, "/tmp/$id", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "missing", analyzedAt = "")
+    private fun project(id: String, revision: String) = ProjectAnalysis(id, revision, id, "/tmp/$id", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, summary = "", aiStatus = "missing", analyzedAt = "")
     private fun index(id: String, revision: String) = ProjectIndex(id, revision)
     private fun file(path: String, hash: String) = ProjectFileInfo(path, hash, path, language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false, content = "package main")
     private fun draft() = DeclarationDraft(id = "draft", projectId = "project", projectRevision = "revision", baseFileHash = "main-hash", targetPath = "main.go", revision = 2, hash = "draft-hash", validation = DeclarationValidation(true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")))

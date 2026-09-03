@@ -16,7 +16,6 @@ data class ProjectAnalysis(
     @SerialName("total_lines") val totalLines: Int,
     val languages: Map<String, Int> = emptyMap(),
     val files: List<String> = emptyList(),
-    @SerialName("analysis_file") val analysisFile: String,
     val summary: String,
     @SerialName("ai_status") val aiStatus: String,
     @SerialName("analyzed_at") val analyzedAt: String,

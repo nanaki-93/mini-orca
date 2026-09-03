@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const (
@@ -108,50 +110,6 @@ func (s *FindingStore) Load(input FindingInput) ([]UnifiedFinding, error) {
 	return cloneFindings(findings), nil
 }
 
-// Reconcile stores the current run, retaining user triage for unchanged IDs,
-// retiring no-longer-reported findings, and sanitizing all persisted text.
-func (s *FindingStore) Reconcile(input FindingInput, reported []UnifiedFinding) ([]UnifiedFinding, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if input.ProjectID == "" || input.ProjectRevision == "" {
-		return nil, fmt.Errorf("finding project identity is required")
-	}
-	previous, err := s.loadLocked()
-	if err != nil {
-		return nil, err
-	}
-	byID := make(map[string]UnifiedFinding, len(previous))
-	for _, finding := range previous {
-		byID[finding.ID] = finding
-	}
-	current := make([]UnifiedFinding, 0, len(previous)+len(reported))
-	seen := make(map[string]bool, len(reported))
-	for _, finding := range reported {
-		finding = normalizeFinding(finding, input)
-		if err := validateFinding(finding); err != nil {
-			return nil, err
-		}
-		if prior, ok := byID[finding.ID]; ok {
-			finding.Status = prior.Status
-		}
-		seen[finding.ID] = true
-		current = append(current, finding)
-	}
-	for _, finding := range previous {
-		if seen[finding.ID] {
-			continue
-		}
-		finding.Status = FindingStatusRetired
-		finding.Freshness = FindingFreshnessStale
-		current = append(current, finding)
-	}
-	sort.Slice(current, func(i, j int) bool { return current[i].ID < current[j].ID })
-	if err := s.storeLocked(current); err != nil {
-		return nil, err
-	}
-	return cloneFindings(current), nil
-}
-
 // ReconcileSource updates findings from one producer without retiring findings
 // from the other producers. This keeps explicit scan results and cached AI
 // suggestions independently refreshable.
@@ -238,7 +196,7 @@ func (s *FindingStore) loadLocked() ([]UnifiedFinding, error) {
 	}
 	var document findingDocument
 	if err := json.Unmarshal(data, &document); err != nil || document.SchemaVersion != findingStoreSchema {
-		if recoverErr := recoverCorruptFindingStore(path); recoverErr != nil {
+		if recoverErr := storage.RecoverCorrupt(path); recoverErr != nil {
 			return nil, recoverErr
 		}
 		return []UnifiedFinding{}, nil
@@ -251,11 +209,10 @@ func (s *FindingStore) storeLocked(findings []UnifiedFinding) error {
 	if err != nil {
 		return fmt.Errorf("encode findings: %w", err)
 	}
-	return writeProjectAnalysisFile(s.root, findingStorePath, data)
-}
-
-func recoverCorruptFindingStore(path string) error {
-	return os.Rename(path, path+".corrupt-"+time.Now().UTC().Format("20060102T150405.000000000"))
+	if err := storage.WriteFile(filepath.Join(s.root, findingStorePath), data, 0600); err != nil {
+		return fmt.Errorf("store findings: %w", err)
+	}
+	return nil
 }
 
 func normalizeFinding(finding UnifiedFinding, input FindingInput) UnifiedFinding {

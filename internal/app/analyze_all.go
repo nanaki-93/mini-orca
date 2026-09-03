@@ -12,6 +12,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const (
@@ -392,36 +393,12 @@ func (s *Service) verifyAnalyzeAllRevisionLocked(job *AnalyzeAllJob) error {
 
 func (s *Service) storeAnalyzeAllJobLocked(job *AnalyzeAllJob) error {
 	path := filepath.Join(s.manager.Root(), ".mini-orca", "sessions", "analyze-all.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return fmt.Errorf("create analyze-all session directory: %w", err)
-	}
 	data, err := json.MarshalIndent(job, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode analyze-all job: %w", err)
 	}
-	temp, err := os.CreateTemp(filepath.Dir(path), ".analyze-all-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create analyze-all job temp file: %w", err)
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath)
-	if _, err := temp.Write(data); err != nil {
-		temp.Close()
-		return fmt.Errorf("write analyze-all job: %w", err)
-	}
-	if err := temp.Chmod(0600); err != nil {
-		temp.Close()
-		return fmt.Errorf("set analyze-all job permissions: %w", err)
-	}
-	if err := temp.Sync(); err != nil {
-		temp.Close()
-		return fmt.Errorf("sync analyze-all job: %w", err)
-	}
-	if err := temp.Close(); err != nil {
-		return fmt.Errorf("close analyze-all job: %w", err)
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("replace analyze-all job: %w", err)
+	if err := storage.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("store analyze-all job: %w", err)
 	}
 	return nil
 }

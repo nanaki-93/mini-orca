@@ -84,5 +84,5 @@ class DraftEditorStateTest {
 
     private fun draft(validation: DeclarationValidation? = null, imports: List<String> = emptyList()) = DeclarationDraft("draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}", imports = imports, revision = 2, hash = "hash", validation = validation)
     private fun file(hash: String = "base") = ProjectFileInfo("main.go", hash, "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
-    private fun project(revision: String = "revision") = ProjectAnalysis("project", revision, "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+    private fun project(revision: String = "revision") = ProjectAnalysis("project", revision, "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, summary = "", aiStatus = "fresh", analyzedAt = "")
 }

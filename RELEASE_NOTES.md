@@ -21,6 +21,11 @@
   draft/session read, system, analysis-delete, and compatibility endpoints. The
   model catalog now contains scoped profiles only; every JSON request uses the
   same size-limited, strict one-object decoder and revision guard.
+- Consolidated retained metadata writes behind one private, synced atomic
+  replacement path. The canonical project report is now only
+  `.mini-orca/project-analysis.json`; legacy `.mini-orca/analysis.md` and
+  activity files are no longer generated. Existing legacy files are never
+  deleted automatically and can be removed manually.
 
 Manual provider and GUI acceptance remains required before a release operator
 claims compatibility with a personal OpenAI, Claude-compatible,

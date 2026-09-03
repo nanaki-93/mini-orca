@@ -49,6 +49,6 @@ class ReviewContextPaneTest {
         validation = DeclarationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")),
     )
 
-    private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+    private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, summary = "", aiStatus = "fresh", analyzedAt = "")
     private fun file() = ProjectFileInfo("main.go", "base", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
 }

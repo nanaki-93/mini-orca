@@ -109,7 +109,7 @@ class FileChatStateTest {
         assertTrue(controller.projectLoaded(request, project(), ProjectIndex("project", "revision")))
     }
 
-    private fun project(revision: String = "revision") = ProjectAnalysis("project", revision, "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+    private fun project(revision: String = "revision") = ProjectAnalysis("project", revision, "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, summary = "", aiStatus = "fresh", analyzedAt = "")
     private fun file(path: String = "main.go", hash: String = "base") = ProjectFileInfo(path, hash, path, language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
     private fun symbol(name: String) = SymbolInfo(name, "function", "func $name()", 1, 3, "exact", true)
     private fun session(messages: List<ChatSessionMessage> = emptyList(), latestDraftId: String = "") = ChatSession("session", "project", "revision", "base", "main.go", "replace_symbol", "Run", "active", latestDraftId, messages)

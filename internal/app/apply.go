@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const (
@@ -389,10 +390,7 @@ func writeJSONAtomic(path string, value any) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	return atomicWrite(path, data)
+	return storage.WriteFile(path, data, 0600)
 }
 func readJSON(path string, value any) error {
 	data, err := os.ReadFile(path)

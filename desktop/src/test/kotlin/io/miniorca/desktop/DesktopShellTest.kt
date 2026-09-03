@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 class DesktopShellTest {
     @Test fun shellUsesADedicatedLandingBranchUntilAProjectExists() {
         assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(DesktopState()))
-        val project = ProjectAnalysis("project", "revision", "Mini", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+        val project = ProjectAnalysis("project", "revision", "Mini", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, summary = "", aiStatus = "fresh", analyzedAt = "")
 
         assertEquals(DesktopShellMode.ProjectWorkspace, desktopShellMode(DesktopState(projectState = ProjectWorkspaceState(project))))
     }
@@ -113,7 +113,7 @@ class DesktopShellTest {
     }
 
     @Test fun topBarTextNamesTheProjectWithoutItsRevision() {
-        val project = ProjectAnalysis("project", "revision-hash", "Long project name", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+        val project = ProjectAnalysis("project", "revision-hash", "Long project name", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, summary = "", aiStatus = "fresh", analyzedAt = "")
 
         assertEquals("Long project name", projectBreadcrumbLabel(project))
         assertEquals("Connected", connectionPresentation(ConnectionState(connected = true, locality = "Local endpoint", model = "local model", latency = "12ms")).label)

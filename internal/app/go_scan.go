@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const goScanPath = ".mini-orca/scans/go.json"
@@ -312,28 +313,8 @@ func marshalGoScanReport(report *GoScanReport) ([]byte, error) {
 
 func writeGoScanReport(root string, data []byte) error {
 	path := filepath.Join(root, goScanPath)
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return fmt.Errorf("create scan directory: %w", err)
-	}
-	temp, err := os.CreateTemp(filepath.Dir(path), ".go-scan-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create scan temp file: %w", err)
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath)
-	if _, err := temp.Write(data); err != nil {
-		temp.Close()
-		return fmt.Errorf("write scan: %w", err)
-	}
-	if err := temp.Chmod(0600); err != nil {
-		temp.Close()
-		return fmt.Errorf("set scan permissions: %w", err)
-	}
-	if err := temp.Close(); err != nil {
-		return fmt.Errorf("close scan: %w", err)
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("replace scan: %w", err)
+	if err := storage.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("store scan report: %w", err)
 	}
 	return nil
 }

@@ -166,7 +166,7 @@ func min(left, right int) int {
 func prioritize(files []string, target string) []string {
 	ordered := make([]string, 0, len(files)+1)
 	seen := make(map[string]bool, len(files))
-	for _, file := range []string{target, analysisRelativePath, "README.md", "go.mod", "build.gradle.kts", "build.gradle", "package.json", "Cargo.toml", "pyproject.toml"} {
+	for _, file := range []string{target, "README.md", "go.mod", "build.gradle.kts", "build.gradle", "package.json", "Cargo.toml", "pyproject.toml"} {
 		if file != "" && !seen[file] {
 			ordered = append(ordered, file)
 			seen[file] = true
