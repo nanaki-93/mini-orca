@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -232,6 +235,39 @@ internal data class DesktopShellPanes(
     val bottomToolWindowSummaries: Map<BottomToolWindow, BottomToolWindowSummary>,
 )
 
+private data class ShellFocusRequesters(
+    val fallback: FocusRequester,
+    val toolbar: FocusRequester,
+    val leftToolWindow: FocusRequester,
+    val editor: FocusRequester,
+    val rightToolWindow: FocusRequester,
+    val bottomToolWindow: FocusRequester,
+)
+
+internal fun paletteFocusRestorationRegion(
+    previous: DesktopFocusRegion,
+    rightToolWindowVisible: Boolean,
+    bottomToolWindowVisible: Boolean,
+): DesktopFocusRegion =
+    when (previous) {
+      DesktopFocusRegion.RightToolWindow ->
+          if (rightToolWindowVisible) previous else DesktopFocusRegion.Editor
+      DesktopFocusRegion.BottomToolWindow ->
+          if (bottomToolWindowVisible) previous else DesktopFocusRegion.Editor
+      DesktopFocusRegion.StatusBar -> DesktopFocusRegion.Toolbar
+      else -> previous
+    }
+
+private fun ShellFocusRequesters.forRegion(region: DesktopFocusRegion): FocusRequester =
+    when (region) {
+      DesktopFocusRegion.Toolbar -> toolbar
+      DesktopFocusRegion.LeftToolWindow -> leftToolWindow
+      DesktopFocusRegion.Editor -> editor
+      DesktopFocusRegion.RightToolWindow -> rightToolWindow
+      DesktopFocusRegion.BottomToolWindow -> bottomToolWindow
+      DesktopFocusRegion.StatusBar -> fallback
+    }
+
 @Composable
 internal fun DesktopShell(
     state: DesktopShellState,
@@ -251,8 +287,19 @@ internal fun DesktopShell(
   val workspace = appState.workspace
   val shellMode = desktopShellMode(appState)
   val scope = rememberCoroutineScope()
+  val focusRequesters = remember {
+    ShellFocusRequesters(
+        fallback = FocusRequester(),
+        toolbar = FocusRequester(),
+        leftToolWindow = FocusRequester(),
+        editor = FocusRequester(),
+        rightToolWindow = FocusRequester(),
+        bottomToolWindow = FocusRequester(),
+    )
+  }
   val drawerState = rememberDrawerState(DrawerValue.Closed)
   var narrowDrawer by remember { mutableStateOf(NarrowDrawer.Files) }
+  var paletteFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   val showsEditorChrome =
       shellMode == DesktopShellMode.ProjectWorkspace && editorChromeVisible(workspace)
   fun openDrawer(drawer: NarrowDrawer) {
@@ -289,23 +336,31 @@ internal fun DesktopShell(
     layoutActions.updateLayout(updated)
     layoutActions.saveLayout(updated)
   }
+  fun dismissPaletteAndRestoreFocus() {
+    paletteFocusRestoreTarget = layout.lastFocusedRegion
+    paletteActions.dismiss()
+  }
   LaunchedEffect(showsEditorChrome) { if (!showsEditorChrome) drawerState.close() }
   Surface(
       modifier =
-          Modifier.fillMaxSize().onPreviewKeyEvent { event ->
-            handleDesktopShortcut(
-                event = event,
-                shellMode = shellMode,
-                appState = appState,
-                editor = editor,
-                context = context,
-                palette = palette,
-                projectActions = projectActions,
-                editorActions = editorActions,
-                paletteActions = paletteActions,
-                onWorkspaceSelected = ::selectWorkspace,
-            )
-          },
+          Modifier.fillMaxSize()
+              .focusRequester(focusRequesters.fallback)
+              .focusable()
+              .onPreviewKeyEvent { event ->
+                handleDesktopShortcut(
+                    event = event,
+                    shellMode = shellMode,
+                    appState = appState,
+                    editor = editor,
+                    context = context,
+                    palette = palette,
+                    projectActions = projectActions,
+                    editorActions = editorActions,
+                    paletteActions = paletteActions,
+                    onDismissPalette = ::dismissPaletteAndRestoreFocus,
+                    onWorkspaceSelected = ::selectWorkspace,
+                )
+              },
       color = AppBackground,
   ) {
     if (shellMode == DesktopShellMode.ProjectLanding) {
@@ -315,6 +370,19 @@ internal fun DesktopShell(
         val widthDp = maxWidth.value
         val narrow = useNarrowLayout(widthDp)
         val showEditorDrawers = editorDrawerActionsVisible(workspace, widthDp)
+        val restoredFocusRegion =
+            paletteFocusRestorationRegion(
+                previous = paletteFocusRestoreTarget ?: layout.lastFocusedRegion,
+                rightToolWindowVisible =
+                    !narrow && showsEditorChrome && layout.rightToolWindowVisible,
+                bottomToolWindowVisible = panes.bottomToolWindowSummaries.isNotEmpty(),
+            )
+        LaunchedEffect(palette.visible, paletteFocusRestoreTarget, restoredFocusRegion) {
+          if (!palette.visible && paletteFocusRestoreTarget != null) {
+            focusRequesters.forRegion(restoredFocusRegion).requestFocus()
+            paletteFocusRestoreTarget = null
+          }
+        }
         ModalDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -344,18 +412,35 @@ internal fun DesktopShell(
         ) {
           Column {
             MainToolbar(
-                appState.project,
-                appState.loading,
-                appState.connection,
-                projectActions.importProject,
-                projectActions.reanalyzeProject,
-                projectActions.reconnect,
-                { paletteActions.open(PaletteMode.Actions) },
-                showEditorDrawers,
-                { openDrawer(NarrowDrawer.Files) },
-                { openDrawer(NarrowDrawer.Context) })
+                state =
+                    ToolbarState(
+                        widthDp = widthDp,
+                        project = appState.project,
+                        busy = appState.loading,
+                        operationStatus = appState.status,
+                        connection = appState.connection,
+                        showEditorDrawerActions = showEditorDrawers,
+                    ),
+                actions =
+                    ToolbarActions(
+                        onImport = projectActions.importProject,
+                        onReanalyze = projectActions.reanalyzeProject,
+                        onReconnect = projectActions.reconnect,
+                        onPalette = {
+                          layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
+                          paletteActions.open(PaletteMode.Actions)
+                        },
+                        onOpenExplorer = { openDrawer(NarrowDrawer.Files) },
+                        onOpenContext = { openDrawer(NarrowDrawer.Context) },
+                    ),
+                modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
+            )
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-              ToolWindowBar(layout.activeLeftToolWindow, ::selectToolWindow)
+              ToolWindowBar(
+                  layout.activeLeftToolWindow,
+                  ::selectToolWindow,
+                  Modifier.focusRequester(focusRequesters.leftToolWindow).focusable(),
+              )
               if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
                 DockedToolWindow(
                     "Project",
@@ -379,7 +464,11 @@ internal fun DesktopShell(
                   findingActions = findingActions,
                   onWorkspaceSelected = ::selectWorkspace,
                   onOpenNarrowDrawer = ::openDrawer,
-                  modifier = Modifier.weight(1f).fillMaxHeight(),
+                  modifier =
+                      Modifier.weight(1f)
+                          .fillMaxHeight()
+                          .focusRequester(focusRequesters.editor)
+                          .focusable(),
               )
               if (!narrow && showsEditorChrome && layout.rightToolWindowVisible) {
                 ResizableDivider(
@@ -397,7 +486,11 @@ internal fun DesktopShell(
                           panes.rightToolWindowBadges,
                           modifier)
                     },
-                    modifier = Modifier.width(layout.actionWidth.dp).fillMaxHeight())
+                    modifier =
+                        Modifier.width(layout.actionWidth.dp)
+                            .fillMaxHeight()
+                            .focusRequester(focusRequesters.rightToolWindow)
+                            .focusable())
               }
             }
             BottomToolWindowRegion(
@@ -412,6 +505,7 @@ internal fun DesktopShell(
                 },
                 onHeightCommit = { layoutActions.saveLayout(layout) },
                 content = panes.bottomToolWindows,
+                modifier = Modifier.focusRequester(focusRequesters.bottomToolWindow).focusable(),
             )
             ShellStatusRegion(appState.status, appState.error, appState.loading)
           }
@@ -424,13 +518,21 @@ internal fun DesktopShell(
               appState.index?.files.orEmpty(),
               appState.symbols,
               appState.analysis,
-              paletteActions.selectFile,
+              appState.selectedFile != null,
+              { path ->
+                paletteActions.selectFile(path)
+                paletteFocusRestoreTarget = DesktopFocusRegion.Editor
+              },
               { symbol ->
                 paletteActions.selectSymbol(symbol)
                 contextDrawerForSourceSelection(Workspace.Editor, widthDp)?.let(::openDrawer)
+                paletteFocusRestoreTarget = DesktopFocusRegion.Editor
               },
-              paletteActions.selectAction,
-              paletteActions.dismiss,
+              { action ->
+                paletteActions.selectAction(action)
+                paletteFocusRestoreTarget = layout.lastFocusedRegion
+              },
+              ::dismissPaletteAndRestoreFocus,
           )
         }
       }
@@ -451,6 +553,7 @@ private fun handleDesktopShortcut(
     projectActions: DesktopShellProjectActions,
     editorActions: DesktopShellEditorActions,
     paletteActions: DesktopShellPaletteActions,
+    onDismissPalette: () -> Unit,
     onWorkspaceSelected: (Workspace) -> Unit,
 ): Boolean {
   if (event.type != KeyEventType.KeyDown) return false
@@ -535,7 +638,7 @@ private fun handleDesktopShortcut(
     DesktopShortcut.Cancel ->
         when {
           palette.visible -> {
-            paletteActions.dismiss()
+            onDismissPalette()
             true
           }
           context.visible -> {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,8 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -27,21 +34,16 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun MainToolbar(
-    project: ProjectAnalysis?,
-    busy: Boolean,
-    connection: ConnectionState,
-    onImport: () -> Unit,
-    onReanalyze: () -> Unit,
-    onReconnect: () -> Unit,
-    onPalette: () -> Unit,
-    showEditorDrawerActions: Boolean,
-    onOpenExplorer: () -> Unit,
-    onOpenContext: () -> Unit,
+    state: ToolbarState,
+    actions: ToolbarActions,
+    modifier: Modifier = Modifier,
 ) {
-  val connectionPresentation = connectionPresentation(connection)
+  val connectionPresentation = connectionPresentation(state.connection)
+  val presentation = toolbarPresentation(state.widthDp)
   Row(
       modifier =
-          Modifier.fillMaxWidth()
+          modifier
+              .fillMaxWidth()
               .height(58.dp)
               .background(Panel)
               .border(BorderStroke(1.dp, Border))
@@ -49,43 +51,131 @@ internal fun MainToolbar(
       verticalAlignment = Alignment.CenterVertically,
   ) {
     MiniOrcaMark()
+    if (presentation.showProductName) {
+      Spacer(Modifier.width(10.dp))
+      Text("Mini-Orca", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+    }
     Spacer(Modifier.width(10.dp))
-    Text("Mini-Orca", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.width(12.dp))
     Text(
-        projectBreadcrumbLabel(project),
+        projectBreadcrumbLabel(state.project),
         color = SecondaryText,
         fontSize = 12.sp,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.weight(1f))
-    Spacer(Modifier.width(12.dp))
+    if (state.busy) {
+      Spacer(Modifier.width(8.dp))
+      CircularProgressIndicator(Modifier.size(16.dp), color = CyanAccent, strokeWidth = 2.dp)
+      Text(
+          state.operationStatus,
+          color = SecondaryText,
+          fontSize = 11.sp,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.padding(start = 6.dp))
+    }
+    Spacer(Modifier.width(8.dp))
     Text(
         connectionPresentation.label,
         color = connectionPresentation.color,
         fontSize = 11.sp,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis)
-    if (busy) {
-      Spacer(Modifier.width(8.dp))
-      CircularProgressIndicator(Modifier.size(16.dp), color = CyanAccent, strokeWidth = 2.dp)
-    }
-    Spacer(Modifier.width(12.dp))
-    if (showEditorDrawerActions) {
-      TopBarButton("Files", onOpenExplorer, tone = ActionTone.Navigation)
+    Spacer(Modifier.width(8.dp))
+    if (state.showEditorDrawerActions) {
+      TopBarButton("Files", actions.onOpenExplorer, tone = ActionTone.Navigation)
       Spacer(Modifier.width(6.dp))
-      TopBarButton("Context", onOpenContext, tone = ActionTone.Navigation)
+      TopBarButton("Context", actions.onOpenContext, tone = ActionTone.Navigation)
       Spacer(Modifier.width(6.dp))
     }
-    TopBarButton("Command", onPalette, tone = ActionTone.Navigation)
+    TopBarButton("Command", actions.onPalette, tone = ActionTone.Navigation)
     Spacer(Modifier.width(6.dp))
-    TopBarButton("Re-index", onReanalyze, project != null, tone = ActionTone.Primary)
-    Spacer(Modifier.width(6.dp))
-    if (connectionPresentation.canReconnect) {
-      TopBarButton("Reconnect", onReconnect, tone = ActionTone.Attention)
+    if (presentation.showProjectActionsInline) {
+      TopBarButton(
+          "Re-index", actions.onReanalyze, state.project != null, tone = ActionTone.Primary)
       Spacer(Modifier.width(6.dp))
+      if (connectionPresentation.canReconnect) {
+        TopBarButton("Reconnect", actions.onReconnect, tone = ActionTone.Attention)
+        Spacer(Modifier.width(6.dp))
+      }
+      TopBarButton("Open project", actions.onImport, tone = ActionTone.Primary)
+    } else {
+      ProjectActionsMenu(
+          projectAvailable = state.project != null,
+          reconnectAvailable = connectionPresentation.canReconnect,
+          onImport = actions.onImport,
+          onReanalyze = actions.onReanalyze,
+          onReconnect = actions.onReconnect,
+      )
     }
-    TopBarButton("Open project", onImport, tone = ActionTone.Primary)
+  }
+}
+
+internal data class ToolbarState(
+    val widthDp: Float,
+    val project: ProjectAnalysis?,
+    val busy: Boolean,
+    val operationStatus: String,
+    val connection: ConnectionState,
+    val showEditorDrawerActions: Boolean,
+)
+
+internal data class ToolbarActions(
+    val onImport: () -> Unit,
+    val onReanalyze: () -> Unit,
+    val onReconnect: () -> Unit,
+    val onPalette: () -> Unit,
+    val onOpenExplorer: () -> Unit,
+    val onOpenContext: () -> Unit,
+)
+
+internal data class ToolbarPresentation(
+    val showProductName: Boolean,
+    val showProjectActionsInline: Boolean,
+)
+
+internal fun toolbarPresentation(widthDp: Float): ToolbarPresentation =
+    ToolbarPresentation(
+        showProductName = widthDp >= COMPACT_TOOLBAR_WIDTH,
+        showProjectActionsInline = widthDp >= EXPANDED_TOOLBAR_WIDTH,
+    )
+
+@Composable
+private fun ProjectActionsMenu(
+    projectAvailable: Boolean,
+    reconnectAvailable: Boolean,
+    onImport: () -> Unit,
+    onReanalyze: () -> Unit,
+    onReconnect: () -> Unit,
+) {
+  var expanded by remember { mutableStateOf(false) }
+  Box {
+    TopBarButton("Project", { expanded = true }, tone = ActionTone.Primary)
+    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+      DropdownMenuItem(
+          onClick = {
+            expanded = false
+            onImport()
+          }) {
+            Text("Open project")
+          }
+      DropdownMenuItem(
+          onClick = {
+            expanded = false
+            onReanalyze()
+          },
+          enabled = projectAvailable) {
+            Text("Re-index project")
+          }
+      if (reconnectAvailable)
+          DropdownMenuItem(
+              onClick = {
+                expanded = false
+                onReconnect()
+              }) {
+                Text("Reconnect")
+              }
+    }
   }
 }
 
@@ -138,3 +228,6 @@ internal fun connectionPresentation(connection: ConnectionState): ConnectionPres
           ConnectionPresentation("Connecting", Warning, false)
       else -> ConnectionPresentation("Disconnected", Error, true)
     }
+
+private const val COMPACT_TOOLBAR_WIDTH = 1_000f
+private const val EXPANDED_TOOLBAR_WIDTH = 1_220f

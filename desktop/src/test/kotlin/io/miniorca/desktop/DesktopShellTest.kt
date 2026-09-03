@@ -206,6 +206,49 @@ class DesktopShellTest {
   }
 
   @Test
+  fun toolbarMovesProjectOperationsIntoALabeledMenuBeforeTheCompactWidth() {
+    assertEquals(ToolbarPresentation(true, true), toolbarPresentation(1_220f))
+    assertEquals(ToolbarPresentation(true, false), toolbarPresentation(1_000f))
+    assertEquals(ToolbarPresentation(false, false), toolbarPresentation(999f))
+  }
+
+  @Test
+  fun paletteDismissalRestoresThePriorMeaningfulVisibleRegion() {
+    assertEquals(
+        DesktopFocusRegion.RightToolWindow,
+        paletteFocusRestorationRegion(
+            DesktopFocusRegion.RightToolWindow,
+            rightToolWindowVisible = true,
+            bottomToolWindowVisible = true,
+        ),
+    )
+    assertEquals(
+        DesktopFocusRegion.BottomToolWindow,
+        paletteFocusRestorationRegion(
+            DesktopFocusRegion.BottomToolWindow,
+            rightToolWindowVisible = true,
+            bottomToolWindowVisible = true,
+        ),
+    )
+    assertEquals(
+        DesktopFocusRegion.Editor,
+        paletteFocusRestorationRegion(
+            DesktopFocusRegion.RightToolWindow,
+            rightToolWindowVisible = false,
+            bottomToolWindowVisible = true,
+        ),
+    )
+    assertEquals(
+        DesktopFocusRegion.Toolbar,
+        paletteFocusRestorationRegion(
+            DesktopFocusRegion.StatusBar,
+            rightToolWindowVisible = true,
+            bottomToolWindowVisible = true,
+        ),
+    )
+  }
+
+  @Test
   fun keyboardWorkspaceOrderCoversAllFourWorkspaces() {
     assertEquals(Workspace.Analysis, nextWorkspace(Workspace.Summary))
     assertEquals(Workspace.Bugs, nextWorkspace(Workspace.Analysis))
