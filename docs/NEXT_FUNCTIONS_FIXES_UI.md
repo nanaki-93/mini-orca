@@ -3,6 +3,9 @@
 Date: 2026-08-17  
 Analyzed version: 4.1.0 (`f4371c5`)
 
+> Historical roadmap. Its observations are retained for Git-era context only;
+> the current implementation and cleanup decisions live in [`../PLAN.md`](../PLAN.md).
+
 ## 1. Product direction
 
 Mini-Orca should be a small, local-first coding IDE that helps a developer understand or change one bounded unit at a time:
@@ -48,7 +51,7 @@ The current code already provides a useful foundation:
 | File explorer | Flat/filterable desktop file list | No symbol outline, status badges, ignore explanation, or summary state |
 | File information | Language, size, line count, modification time, binary flag, and content | No semantic per-file summary or symbol list |
 | Code generation | Requires `file_path` and `target_symbol`; returns a preview | Atomic scope is enforced only by the prompt, not by parsing the result or comparing a diff |
-| Agents | Coder, tester, and reviewer code exists | The chat endpoint calls only the coder; the documented multi-phase/human-gate workflow is not wired into this UI flow |
+| Agents | The former coder/tester/reviewer orchestration stack was retired | The current workflow uses one scoped declaration-draft request with explicit review |
 | Web UI | Three-pane HTMX interface with file tree, file viewer, and chat | Legacy UI to remove after desktop reaches feature parity |
 | Desktop UI | Import, project metrics, file view, and atomic generation | Generated output replaces the editor view as raw text; there is no diff, validation, Apply, or undo |
 | Persistence | Project analysis is written to the imported project | Active state and chat history are memory-only and not scoped by project |
@@ -58,7 +61,7 @@ Relevant implementation locations:
 - Project scan and analysis: `internal/project/analysis.go`
 - Context construction: `internal/project/context.go`
 - Atomic request handler: `internal/api/handlers/chat_handler.go`
-- Atomic prompt: `internal/agent/orchestrator.go`
+- Atomic prompt: retained application workflow (the historical agent/orchestrator path was removed)
 - Desktop UI: `desktop/src/main/kotlin/io/miniorca/desktop/Main.kt`
 - Legacy web UI scheduled for removal: `internal/api/templates/`, `internal/api/static/`, and `internal/api/handlers/htmx_*.go`
 
@@ -122,19 +125,22 @@ Acceptance criteria:
 
 ### P0 — Pass cancellation and deadlines through the full call chain
 
-Current behavior: the HTTP handler has a request context, but `RunCoderForSymbol` calls the agent with `context.Background()`.
+Historical behavior: the retired agent path did not propagate request cancellation.
 
 Change the orchestration APIs to accept `context.Context` and propagate `r.Context()` to the LLM call. Do the same for tester/reviewer paths. A canceled UI request should stop the local-model request and release its resources.
 
 ### P1 — Make configuration real, not decorative
 
-The daemon creates configured coder/tester/reviewer instances for logging, but the chat handler constructs a new coder with no configured skills. Per-agent model fields are parsed but not applied to the active generation path. There are also two orchestration layers (`internal/agent` and `internal/orchestrator`) with overlapping responsibilities.
+This historical analysis described duplicated agent/orchestrator layers. The
+standalone `internal/orchestrator` package was removed by cleanup Task 104;
+remaining configuration and application-layer cleanup is tracked by the current
+plan.
 
 Recommended fix:
 
 - create one application service at startup and inject it into handlers;
 - apply task/model profile, temperature, skills, retry policy, and timeout there;
-- remove or clearly mark the unused orchestration path;
+- remove the remaining retired orchestration path;
 - add a `/api/models/current` response showing the effective—not merely configured—settings.
 
 ### P1 — Fix HTTP/UI contract drift
