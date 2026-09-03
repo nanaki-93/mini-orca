@@ -243,6 +243,9 @@ func sanitizeCheckOutput(output, workspace, root string) string {
 	return strings.TrimSpace(output)
 }
 
+// copyCheckWorkspace intentionally keeps its own traversal: an isolated Go
+// check needs every regular project file (except Mini-Orca metadata), whereas
+// project.WalkProjectFiles returns only source-policy candidates.
 func copyCheckWorkspace(source, destination string) error {
 	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {

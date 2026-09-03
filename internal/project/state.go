@@ -1,13 +1,13 @@
 package project
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"sort"
 )
 
 var (
@@ -27,11 +27,12 @@ func projectRevision(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	files, err := listFiles(root)
+	files, err := WalkProjectFiles(context.Background(), ProjectWalkOptions{
+		Root: root, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles,
+	})
 	if err != nil {
 		return "", err
 	}
-	sort.Strings(files)
 	hash := sha256.New()
 	_, _ = io.WriteString(hash, root+"\n")
 	for _, relative := range files {
