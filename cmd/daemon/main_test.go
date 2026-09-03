@@ -71,53 +71,7 @@ type documentedRoute struct {
 }
 
 func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
-	routes := []documentedRoute{
-		{http.MethodGet, "/health"},
-		{http.MethodGet, "/status"},
-		{http.MethodGet, "/api/system/info"},
-		{http.MethodPost, "/api/projects/current/chat/sessions"},
-		{http.MethodGet, "/api/projects/current/chat/sessions/{sessionID}"},
-		{http.MethodPost, "/api/projects/current/chat/sessions/{sessionID}/messages"},
-		{http.MethodGet, "/api/projects/current/activity"},
-		{http.MethodPost, "/api/chat/message"},
-		{http.MethodGet, "/api/chat/history"},
-		{http.MethodGet, "/api/models/current"},
-		{http.MethodGet, "/api/projects/current/context"},
-		{http.MethodPost, "/api/projects/import"},
-		{http.MethodPost, "/api/projects/restore"},
-		{http.MethodGet, "/api/projects/current"},
-		{http.MethodGet, "/api/projects/current/overview"},
-		{http.MethodGet, "/api/projects/current/findings"},
-		{http.MethodPatch, "/api/projects/current/findings/{findingID}"},
-		{http.MethodGet, "/api/projects/current/scan"},
-		{http.MethodPost, "/api/projects/current/scan"},
-		{http.MethodDelete, "/api/projects/current/scan"},
-		{http.MethodGet, "/api/projects/current/index"},
-		{http.MethodGet, "/api/projects/current/files/info"},
-		{http.MethodGet, "/api/projects/current/files/symbols"},
-		{http.MethodGet, "/api/projects/current/impact"},
-		{http.MethodGet, "/api/projects/current/git"},
-		{http.MethodGet, "/api/projects/current/files/analysis"},
-		{http.MethodPost, "/api/projects/current/files/analysis"},
-		{http.MethodDelete, "/api/projects/current/files/analysis"},
-		{http.MethodGet, "/api/projects/current/analysis-job"},
-		{http.MethodPost, "/api/projects/current/analysis-job"},
-		{http.MethodPost, "/api/projects/current/analysis-job/pause"},
-		{http.MethodPost, "/api/projects/current/analysis-job/resume"},
-		{http.MethodPost, "/api/projects/current/analysis-job/cancel"},
-		{http.MethodPost, "/api/projects/current/reindex"},
-		{http.MethodGet, "/api/projects/current/drafts/{draftID}"},
-		{http.MethodPatch, "/api/projects/current/drafts/{draftID}"},
-		{http.MethodPost, "/api/projects/current/drafts/{draftID}/validate"},
-		{http.MethodPost, "/api/projects/current/drafts/{draftID}/checks"},
-		{http.MethodGet, "/api/projects/current/drafts/{draftID}/review"},
-		{http.MethodPost, "/api/projects/current/candidates/checks"},
-		{http.MethodPost, "/api/projects/current/candidates/compare"},
-		{http.MethodPost, "/api/projects/current/candidates/export"},
-		{http.MethodPost, "/api/projects/current/apply"},
-		{http.MethodPost, "/api/projects/current/undo"},
-		{http.MethodGet, "/api/projects/current/audit"},
-	}
+	routes := documentedRegisteredRoutes()
 
 	if got := openAPIRoutes(t); !sameRoutes(got, routes) {
 		t.Fatalf("OpenAPI routes = %v, want %v", got, routes)
@@ -156,6 +110,89 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCleanupRouteInventoryMatchesDaemonRegistration(t *testing.T) {
+	inventory := cleanupRouteInventory(t)
+	registered := registeredRoutes()
+	if len(inventory) != len(registered) {
+		t.Fatalf("cleanup inventory routes = %d, registered routes = %d", len(inventory), len(registered))
+	}
+	for _, route := range registered {
+		if route.Disposition != routeRetained && route.Disposition != routeRetired {
+			t.Fatalf("%s %s has invalid disposition %q", route.Method, route.Path, route.Disposition)
+		}
+		if route.Disposition == routeRetained && route.Consumer == "" {
+			t.Fatalf("retained route %s %s has no maintained consumer", route.Method, route.Path)
+		}
+		if !containsRouteSpec(inventory, route) {
+			t.Fatalf("registered route missing from cleanup inventory: %+v", route)
+		}
+	}
+	for _, route := range inventory {
+		if !containsRouteSpec(registered, route) {
+			t.Fatalf("cleanup inventory route is not registered: %+v", route)
+		}
+	}
+}
+
+func TestMaintainedDesktopClientPathsHaveRegisteredRoutes(t *testing.T) {
+	wantConsumers := []string{
+		"Desktop ApiClient.status", "Desktop ApiClient.openChatSession", "Desktop ApiClient.sendChatMessage",
+		"Desktop ApiClient.modelCatalog", "Desktop ApiClient.context", "Desktop ApiClient.importProject",
+		"Desktop ApiClient.restoreProject", "Desktop ApiClient.overview", "Desktop ApiClient.findings",
+		"Desktop ApiClient.updateFindingStatus", "Desktop ApiClient.goScan", "Desktop ApiClient.startGoScan",
+		"Desktop ApiClient.cancelGoScan", "Desktop ApiClient.index", "Desktop ApiClient.fileInfo",
+		"Desktop ApiClient.symbols", "Desktop ApiClient.impact", "Desktop ApiClient.gitStatus",
+		"Desktop ApiClient.analysis", "Desktop ApiClient.analyze", "Desktop ApiClient.analyzeAllJob",
+		"Desktop ApiClient.startAnalyzeAll", "Desktop ApiClient.pauseAnalyzeAll", "Desktop ApiClient.resumeAnalyzeAll",
+		"Desktop ApiClient.cancelAnalyzeAll", "Desktop ApiClient.reindex", "Desktop ApiClient.updateDraft",
+		"Desktop ApiClient.validateDraft", "Desktop ApiClient.checkDraft", "Desktop ApiClient.applyDraft",
+		"Desktop ApiClient.undo",
+	}
+	for _, consumer := range wantConsumers {
+		var found bool
+		for _, route := range registeredRoutes() {
+			if route.Consumer == consumer && route.Disposition == routeRetained {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("maintained desktop client consumer %q has no registered route", consumer)
+		}
+	}
+}
+
+func documentedRegisteredRoutes() []documentedRoute {
+	routes := registeredRoutes()
+	result := make([]documentedRoute, 0, len(routes))
+	for _, route := range routes {
+		result = append(result, documentedRoute{method: route.Method, path: route.Path})
+	}
+	return result
+}
+
+func cleanupRouteInventory(t *testing.T) []routeSpec {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "cleanup-baseline-routes.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inventory []routeSpec
+	if err := json.Unmarshal(data, &inventory); err != nil {
+		t.Fatalf("parse cleanup route inventory: %v", err)
+	}
+	return inventory
+}
+
+func containsRouteSpec(routes []routeSpec, want routeSpec) bool {
+	for _, route := range routes {
+		if route == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestDaemonDoesNotRegisterBrowserUIRoutes(t *testing.T) {

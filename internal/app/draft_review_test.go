@@ -12,6 +12,10 @@ import (
 
 func TestDraftValidateCheckApplyAndUndoRequireCurrentEvidence(t *testing.T) {
 	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	original, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	draft := createFixtureDraft(t, service, "draft-review", "")
 	updated, err := service.UpdateDraft(DraftUpdateRequest{ID: draft.ID, ExpectedRevision: draft.Revision, Declaration: "func Run() { println(\"ready\") }"})
 	if err != nil {
@@ -42,6 +46,10 @@ func TestDraftValidateCheckApplyAndUndoRequireCurrentEvidence(t *testing.T) {
 	}
 	if _, err := service.ApplyCandidate(context.Background(), applyDraftRequest(validated)); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("stale apply error = %v", err)
+	}
+	current, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil || string(current) != string(original) {
+		t.Fatalf("stale Apply changed source: %q, %v", current, err)
 	}
 	if review, err := service.ReviewDraft(dirty.ID); err != nil || review.ApplyEligible {
 		t.Fatalf("manual edit retained Apply eligibility: %+v, %v", review, err)

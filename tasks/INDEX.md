@@ -111,6 +111,21 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 100 | [Bug task specification](completed/100_bug_task_specification.md) | 97–99 | Complete |
 | 101 | [Function context and explicit repair](completed/101_function_context_and_repair.md) | 100 | Complete |
 | 102 | [Scoped-model acceptance](completed/102_model_scopes_acceptance.md) | 95–101 | Complete |
+| 103 | [Cleanup contract and characterization baseline](completed/103_cleanup_contract_baseline.md) | 102 | Complete |
+| 104 | [Retire autonomous orchestration](104_retire_autonomous_orchestration.md) | 103 | Pending |
+| 105 | [Simplify scoped model execution](105_simplify_scoped_model_execution.md) | 104 | Pending |
+| 106 | [Consolidate project detection and remove tools](106_consolidate_project_detection.md) | 105 | Pending |
+| 107 | [Enforce one scoped configuration and LLM boundary](107_strict_scoped_configuration.md) | 106 | Pending |
+| 108 | [Introduce draft-native identities and Apply stages](108_draft_identities_apply.md) | 107 | Pending |
+| 109 | [Remove candidate and workflow compatibility](109_remove_candidate_compatibility.md) | 108 | Pending |
+| 110 | [Reduce the loopback API contract](110_reduce_loopback_api.md) | 109 | Pending |
+| 111 | [Unify project source traversal](111_unify_project_traversal.md) | 110 | Pending |
+| 112 | [Unify metadata persistence](112_unify_metadata_persistence.md) | 111 | Pending |
+| 113 | [Isolate Go workflow state](113_isolate_go_workflow_state.md) | 112 | Pending |
+| 114 | [Extract the Desktop workflow presenter](114_extract_desktop_presenter.md) | 113 | Pending |
+| 115 | [Simplify Compose and API client contracts](115_simplify_desktop_ui_contracts.md) | 114 | Pending |
+| 116 | [Clean documentation and build residue](116_clean_docs_and_build.md) | 115 | Pending |
+| 117 | [Complete cleanup quality and acceptance](117_cleanup_acceptance.md) | 103–116 | Pending |
 
 ## Delivery boundaries
 
@@ -170,13 +185,27 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
   action with at most three local attempts.
 - Task 102 completes integration coverage, documentation, manual acceptance, and the
   full validation gate for scoped models.
+- Task 103 freezes the retained runtime/API contract and adds characterization evidence
+  before deletion begins.
+- Task 104 removes the unreachable autonomous orchestrator and its dedicated tests.
+- Task 105 replaces the generic agent layer with direct scoped LLM execution.
+- Task 106 moves the one live project detector and removes general-purpose tools.
+- Task 107 establishes one strict scoped configuration schema and one LLM boundary.
+- Task 108 introduces draft-native identity values and decomposes Apply/check safety.
+- Task 109 removes whole-file generation, candidate, comparison, and workflow shims.
+- Task 110 removes unconsumed routes, activity history, compatibility DTOs, and client calls.
+- Task 111 establishes one deterministic eligible-source traversal policy.
+- Task 112 establishes one atomic metadata persistence primitive and retires stale files.
+- Task 113 gives every Go job, draft, and chat state collection one cohesive owner.
+- Task 114 moves asynchronous workflow ownership out of the Compose application root.
+- Task 115 simplifies Compose contracts and replaces weakly typed request construction.
+- Task 116 consolidates stale task/design/API documentation and removes build residue.
+- Task 117 installs final quality gates, runs acceptance, and closes the cleanup plan.
 
-One implementation agent owns one ready task at a time. Read-only research or review
-agents may work in parallel, but shared-worktree writers must not overlap. The
-completed Tasks 85–89 and 90–94 retain their historical execution prompts and commit
-policies. The current Tasks 95–102 execute strictly in numeric order using
-[`PROMPT_EXECUTE_MODEL_SCOPES.md`](PROMPT_EXECUTE_MODEL_SCOPES.md). The execution
-prompt must post a user-facing start and completion commentary update for every task.
-No task may introduce direct source editing, autonomous multi-file edits, silent
-writes, background fixes, or background agents that mutate a project. Tasks 95–102 do
-not authorize staging, commits, or pushes.
+One implementation agent owns one ready task at a time. The current Tasks 103–117
+execute strictly in numeric order using
+[`PROMPT_EXECUTE_LEGACY_CLEANUP.md`](PROMPT_EXECUTE_LEGACY_CLEANUP.md). The execution
+prompt requires a user-facing start and completion update and exactly one isolated,
+verified commit for every task. No task may introduce direct source editing,
+autonomous multi-file edits, silent writes, background fixes, or a second writer.
+Commits must not be amended, squashed, combined, tagged, or pushed by the executor.
