@@ -422,10 +422,13 @@ private fun DesktopStatusBar(status: String, error: String?, loading: Boolean) {
     }
 }
 
-internal fun modelDestinationLabel(scope: ModelScope, model: ScopedModel): String = if (model.remoteProvider) {
-    "${scope.label}: ${model.profile} · ${model.model} · remote provider · confirmation required before sending project context"
-} else {
-    "${scope.label}: ${model.profile} · ${model.model} · local provider · project context stays on this machine"
+internal fun modelDestinationLabel(scope: ModelScope, model: ScopedModel): String {
+    val reasoningEffort = model.reasoningEffort.takeIf(String::isNotBlank)?.let { " · reasoning: $it" }.orEmpty()
+    return if (model.remoteProvider) {
+        "${scope.label}: ${model.profile} · ${model.model}$reasoningEffort · remote provider · confirmation required before sending project context"
+    } else {
+        "${scope.label}: ${model.profile} · ${model.model}$reasoningEffort · local provider · project context stays on this machine"
+    }
 }
 
 internal fun contextManifestSummary(manifest: ContextManifest): String =

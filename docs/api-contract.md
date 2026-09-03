@@ -137,8 +137,10 @@ and `code`. Project paths are canonical project-relative paths and revision/hash
 guards return `409 Conflict` when their captured base is no longer current.
 
 `model_scopes` is loaded only when the daemon starts. Missing scopes use the
-legacy profile fallback, while a changed explicit model or provider makes old
-AI cache entries stale. Providers must support OpenAI Chat Completions JSON;
-native Anthropic/Gemini endpoints, vendor SDKs, streaming, tool calls, and
-credential-vault features are outside this API. Keys belong only in ignored
-local config and are neither logged nor returned.
+legacy profile fallback, while a changed explicit model, provider, or reasoning
+effort makes old AI cache entries stale. Providers must support OpenAI Chat
+Completions JSON; native Anthropic/Gemini endpoints, vendor SDKs, streaming,
+tool calls, and credential-vault features are outside this API. An optional
+scope `reasoning_effort` is safe metadata and is included in a Chat Completions
+request only when configured. Keys belong only in ignored local config and are
+neither logged nor returned.

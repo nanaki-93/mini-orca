@@ -92,11 +92,18 @@ func TestAPIBaseClientPreservesCompatibilityPrefixAndRequestContract(t *testing.
 				if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
 					t.Fatalf("Authorization = %q", got)
 				}
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Fatalf("read request: %v", err)
+				}
+				if strings.Contains(string(body), `"reasoning_effort"`) {
+					t.Fatalf("default request unexpectedly included reasoning effort: %s", body)
+				}
 				var request ChatRequest
-				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				if err := json.Unmarshal(body, &request); err != nil {
 					t.Fatalf("decode request: %v", err)
 				}
-				if request.Model != "compatible-model" || request.Temperature != 0.2 || request.MaxTokens != 1234 || len(request.Messages) != 1 {
+				if request.Model != "compatible-model" || request.Temperature != 0.2 || request.MaxTokens != 1234 || request.ReasoningEffort != "" || len(request.Messages) != 1 {
 					t.Fatalf("request = %+v", request)
 				}
 				_ = json.NewEncoder(w).Encode(ChatResponse{Model: "compatible-model", Choices: []ChatChoice{{Message: ChatMessage{Role: "assistant", Content: "ok"}}}})
@@ -108,6 +115,25 @@ func TestAPIBaseClientPreservesCompatibilityPrefixAndRequestContract(t *testing.
 				t.Fatalf("Chat() error = %v", err)
 			}
 		})
+	}
+}
+
+func TestAPIBaseClientForwardsConfiguredReasoningEffort(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.ReasoningEffort != "high" {
+			t.Fatalf("reasoning effort = %q, want high", request.ReasoningEffort)
+		}
+		_ = json.NewEncoder(w).Encode(ChatResponse{Model: "reasoning-model", Choices: []ChatChoice{{Message: ChatMessage{Role: "assistant", Content: "ok"}}}})
+	}))
+	defer server.Close()
+
+	client := NewClientWithAPIBaseAndReasoningEffort(server.URL+"/v1", "", "reasoning-model", 0.2, 1234, "high")
+	if _, err := client.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}); err != nil {
+		t.Fatalf("Chat() error = %v", err)
 	}
 }
 

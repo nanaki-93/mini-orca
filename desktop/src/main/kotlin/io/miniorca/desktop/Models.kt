@@ -75,6 +75,7 @@ data class ScopedModel(
     @SerialName("provider_origin") val providerOrigin: String = "",
     @SerialName("remote_provider") val remoteProvider: Boolean = false,
     val timeout: String = "",
+    @SerialName("reasoning_effort") val reasoningEffort: String = "",
 )
 
 /**
@@ -90,10 +91,11 @@ data class ModelCatalog(
     @SerialName("provider_origin") val providerOrigin: String = "",
     @SerialName("remote_provider") val remoteProvider: Boolean = false,
     val timeout: String = "",
+    @SerialName("reasoning_effort") val reasoningEffort: String = "",
     val scopes: Map<String, ScopedModel> = emptyMap(),
 ) {
     fun forScope(scope: ModelScope): ScopedModel = scopes[scope.wireValue]
-        ?: ScopedModel(scope.wireValue, profile, model, providerOrigin, remoteProvider, timeout)
+        ?: ScopedModel(scope.wireValue, profile, model, providerOrigin, remoteProvider, timeout, reasoningEffort)
 }
 
 fun ModelCatalog.identity(): List<ScopedModel> = ModelScope.entries.map(::forScope)

@@ -62,15 +62,29 @@ func TestProjectAnalysisReportPersistsAndInvalidatesChangedInputs(t *testing.T) 
 
 func TestProjectAnalysisReportInvalidatesChangedScopeProvider(t *testing.T) {
 	root := t.TempDir()
-	report := newProjectAnalysisReportWithProvenance("project", "revision", "model", "analyze", "analyze", "https://provider-one.example")
+	report := newProjectAnalysisReportWithProvenance("project", "revision", "model", "analyze", "analyze", "https://provider-one.example", "high")
 	report.Purpose = "Purpose"
 	report.Architecture = "Architecture"
 	if err := StoreProjectAnalysisReport(root, report); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: "project", ProjectRevision: "revision", Model: "model", Profile: "analyze", Scope: "analyze", ProviderOrigin: "https://provider-two.example", PromptVersion: projectAnalysisPromptVersion})
+	loaded, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: "project", ProjectRevision: "revision", Model: "model", Profile: "analyze", Scope: "analyze", ProviderOrigin: "https://provider-two.example", ReasoningEffort: "high", PromptVersion: projectAnalysisPromptVersion})
 	if err != nil || loaded == nil || loaded.Status != ProjectAnalysisStatusStale {
 		t.Fatalf("provider-changed report = %+v, %v", loaded, err)
+	}
+}
+
+func TestProjectAnalysisReportInvalidatesChangedReasoningEffort(t *testing.T) {
+	root := t.TempDir()
+	report := newProjectAnalysisReportWithProvenance("project", "revision", "model", "analyze", "analyze", "https://provider.example", "high")
+	report.Purpose = "Purpose"
+	report.Architecture = "Architecture"
+	if err := StoreProjectAnalysisReport(root, report); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: "project", ProjectRevision: "revision", Model: "model", Profile: "analyze", Scope: "analyze", ProviderOrigin: "https://provider.example", ReasoningEffort: "low", PromptVersion: projectAnalysisPromptVersion})
+	if err != nil || loaded == nil || loaded.Status != ProjectAnalysisStatusStale {
+		t.Fatalf("reasoning-effort-changed report = %+v, %v", loaded, err)
 	}
 }
 

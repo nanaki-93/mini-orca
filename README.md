@@ -36,16 +36,18 @@ use `bug`; file-scoped declaration proposals and explicit repairs use
 `agents.coder.model` retaining its legacy function-model override.
 
 Each explicit scope uses the OpenAI Chat Completions-compatible API base and a
-model ID. This represents OpenAI, Claude-compatible, Gemini-compatible,
-Ollama, LM Studio, and compatible gateways without native vendor SDKs,
-streaming, tool calls, or provider account management. See [CONFIG.md](CONFIG.md)
-for safe placeholder examples and migration rules.
+model ID. An optional per-scope `reasoning_effort` is passed unchanged through
+the Chat Completions request when the selected provider/model supports it. This
+represents OpenAI, Claude-compatible, Gemini-compatible, Ollama, LM Studio, and
+compatible gateways without native vendor SDKs, streaming, tool calls, or
+provider account management. See [CONFIG.md](CONFIG.md) for safe placeholder
+examples and migration rules.
 
 The daemon loads configuration at startup; restart it after changing
 `config.yaml`. A non-loopback scope requires an explicit confirmation for its
 own prompt request. That confirmation never authorizes another scope. Model
 metadata, caches, and the Desktop display expose no API keys; changing a scope
-model or provider makes old AI interpretations stale.
+model, provider, or reasoning effort makes old AI interpretations stale.
 
 ## Project intelligence
 

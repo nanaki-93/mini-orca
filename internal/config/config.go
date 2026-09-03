@@ -51,6 +51,7 @@ type ModelProfileConfig struct {
 	APIBaseURL       string   `json:"api_base_url,omitempty" yaml:"api_base_url,omitempty"`
 	APIKey           string   `json:"api_key,omitempty" yaml:"api_key,omitempty"`
 	Model            string   `json:"model,omitempty" yaml:"model,omitempty"`
+	ReasoningEffort  string   `json:"reasoning_effort,omitempty" yaml:"reasoning_effort,omitempty"`
 	Temperature      *float32 `json:"temperature,omitempty" yaml:"temperature,omitempty"`
 	MaxTokens        *int     `json:"max_tokens,omitempty" yaml:"max_tokens,omitempty"`
 	ContextMaxTokens *int     `json:"context_max_tokens,omitempty" yaml:"context_max_tokens,omitempty"`

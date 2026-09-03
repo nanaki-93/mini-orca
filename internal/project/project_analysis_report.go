@@ -53,6 +53,7 @@ type ProjectAnalysisReport struct {
 	Profile         string                `json:"profile"`
 	Scope           string                `json:"scope,omitempty"`
 	ProviderOrigin  string                `json:"provider_origin,omitempty"`
+	ReasoningEffort string                `json:"reasoning_effort,omitempty"`
 	PromptVersion   string                `json:"prompt_version"`
 	GeneratedAt     time.Time             `json:"generated_at"`
 }
@@ -66,6 +67,7 @@ type ProjectAnalysisInput struct {
 	Profile         string
 	Scope           string
 	ProviderOrigin  string
+	ReasoningEffort string
 	PromptVersion   string
 }
 
@@ -80,15 +82,15 @@ type projectAnalysisResponse struct {
 }
 
 func newProjectAnalysisReport(projectID, revision, model, profile string) ProjectAnalysisReport {
-	return newProjectAnalysisReportWithProvenance(projectID, revision, model, profile, profile, "")
+	return newProjectAnalysisReportWithProvenance(projectID, revision, model, profile, profile, "", "")
 }
 
-func newProjectAnalysisReportWithProvenance(projectID, revision, model, profile, scope, providerOrigin string) ProjectAnalysisReport {
+func newProjectAnalysisReportWithProvenance(projectID, revision, model, profile, scope, providerOrigin, reasoningEffort string) ProjectAnalysisReport {
 	return ProjectAnalysisReport{
 		SchemaVersion: projectAnalysisSchemaVersion,
 		ProjectID:     projectID, ProjectRevision: revision,
 		Components: []string{}, EntryPoints: []string{}, Flows: []string{}, Risks: []ProjectAnalysisRisk{}, NextSteps: []string{},
-		Status: ProjectAnalysisStatusFresh, Model: model, ConfiguredModel: model, Profile: profile, Scope: scope, ProviderOrigin: providerOrigin, PromptVersion: projectAnalysisPromptVersion,
+		Status: ProjectAnalysisStatusFresh, Model: model, ConfiguredModel: model, Profile: profile, Scope: scope, ProviderOrigin: providerOrigin, ReasoningEffort: reasoningEffort, PromptVersion: projectAnalysisPromptVersion,
 		GeneratedAt: time.Now().UTC(),
 	}
 }
@@ -219,7 +221,7 @@ func projectAnalysisReportMatches(report ProjectAnalysisReport, input ProjectAna
 	if configuredModel == "" {
 		configuredModel = report.Model
 	}
-	return report.ProjectID == input.ProjectID && report.ProjectRevision == input.ProjectRevision && configuredModel == input.Model && report.Profile == input.Profile && report.Scope == scope && report.ProviderOrigin == input.ProviderOrigin && report.PromptVersion == input.PromptVersion
+	return report.ProjectID == input.ProjectID && report.ProjectRevision == input.ProjectRevision && configuredModel == input.Model && report.Profile == input.Profile && report.Scope == scope && report.ProviderOrigin == input.ProviderOrigin && report.ReasoningEffort == input.ReasoningEffort && report.PromptVersion == input.PromptVersion
 }
 
 func cloneProjectAnalysisReport(source *ProjectAnalysisReport) *ProjectAnalysisReport {

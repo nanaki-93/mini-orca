@@ -63,6 +63,7 @@ type FileAnalysis struct {
 	Profile              string            `json:"profile,omitempty"`
 	Scope                string            `json:"scope,omitempty"`
 	ProviderOrigin       string            `json:"provider_origin,omitempty"`
+	ReasoningEffort      string            `json:"reasoning_effort,omitempty"`
 	PromptVersion        string            `json:"prompt_version"`
 	ContextPolicyVersion string            `json:"context_policy_version"`
 	GeneratedAt          time.Time         `json:"generated_at"`
@@ -79,6 +80,7 @@ type FileAnalysisInput struct {
 	Profile              string
 	Scope                string
 	ProviderOrigin       string
+	ReasoningEffort      string
 	PromptVersion        string
 	ContextPolicyVersion string
 }
@@ -238,7 +240,7 @@ func (c *FileAnalysisCache) recoverCorrupt(path string) error {
 }
 
 func newMissingAnalysis(input FileAnalysisInput) *FileAnalysis {
-	return &FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: normalizedAnalysisPath(input.Path), ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusMissing, Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
+	return &FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: normalizedAnalysisPath(input.Path), ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusMissing, Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
 }
 
 func inputFromAnalysis(analysis FileAnalysis) FileAnalysisInput {
@@ -246,14 +248,14 @@ func inputFromAnalysis(analysis FileAnalysis) FileAnalysisInput {
 	if model == "" {
 		model = analysis.Model
 	}
-	return FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: analysis.Path, ContentHash: analysis.ContentHash, Language: analysis.Language, Model: model, Profile: analysis.Profile, Scope: analysis.Scope, ProviderOrigin: analysis.ProviderOrigin, PromptVersion: analysis.PromptVersion, ContextPolicyVersion: analysis.ContextPolicyVersion}
+	return FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: analysis.Path, ContentHash: analysis.ContentHash, Language: analysis.Language, Model: model, Profile: analysis.Profile, Scope: analysis.Scope, ProviderOrigin: analysis.ProviderOrigin, ReasoningEffort: analysis.ReasoningEffort, PromptVersion: analysis.PromptVersion, ContextPolicyVersion: analysis.ContextPolicyVersion}
 }
 
 func analysisMatches(analysis FileAnalysis, input FileAnalysisInput) bool {
 	// A project revision changes for every eligible source edit. Content hashes
 	// keep invalidation local to the edited file while the stored revision still
 	// records the project state that informed the original summary.
-	return analysis.SchemaVersion == fileAnalysisSchemaVersion && analysis.ProjectID == input.ProjectID && analysis.Path == normalizedAnalysisPath(input.Path) && analysis.ContentHash == input.ContentHash && analysis.Language == input.Language && modelsMatch(analysis.ConfiguredModel, input.Model) && analysis.Profile == input.Profile && analysis.Scope == input.Scope && analysis.ProviderOrigin == input.ProviderOrigin && analysis.PromptVersion == input.PromptVersion && analysis.ContextPolicyVersion == input.ContextPolicyVersion
+	return analysis.SchemaVersion == fileAnalysisSchemaVersion && analysis.ProjectID == input.ProjectID && analysis.Path == normalizedAnalysisPath(input.Path) && analysis.ContentHash == input.ContentHash && analysis.Language == input.Language && modelsMatch(analysis.ConfiguredModel, input.Model) && analysis.Profile == input.Profile && analysis.Scope == input.Scope && analysis.ProviderOrigin == input.ProviderOrigin && analysis.ReasoningEffort == input.ReasoningEffort && analysis.PromptVersion == input.PromptVersion && analysis.ContextPolicyVersion == input.ContextPolicyVersion
 }
 
 func modelsMatch(stored, requested string) bool {

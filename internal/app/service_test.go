@@ -114,9 +114,9 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 	service, err := New(&config.Config{
 		LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy", Temperature: 0.2, MaxTokens: 1024},
 		ModelScopes: config.ModelScopesConfig{
-			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "do-not-return", Model: "analyze-model"},
-			Bug:      config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug-model"},
-			Function: config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", APIKey: "do-not-return", Model: "function-model"},
+			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "do-not-return", Model: "analyze-model", ReasoningEffort: "high"},
+			Bug:      config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug-model", ReasoningEffort: "low"},
+			Function: config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", APIKey: "do-not-return", Model: "function-model", ReasoningEffort: "max"},
 		},
 	}, manager)
 	if err != nil {
@@ -126,7 +126,7 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 	if catalog.Model != "function-model" || catalog.Profile != "function" || len(catalog.Scopes) != 3 {
 		t.Fatalf("catalog top-level compatibility = %+v", catalog)
 	}
-	if catalog.Scopes["analyze"].ProviderOrigin != "https://analyze.example" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
+	if catalog.Scopes["analyze"].ProviderOrigin != "https://analyze.example" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.ReasoningEffort != "max" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
 		t.Fatalf("scope catalog = %+v", catalog.Scopes)
 	}
 	encoded, err := json.Marshal(catalog)
@@ -244,18 +244,21 @@ func TestAnalyzeProjectStoresStructuredReport(t *testing.T) {
 
 func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 	var analyzeCalls, bugCalls, functionCalls int
+	var analyzeRequest, bugRequest, functionRequest llm.ChatRequest
 	analyzeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		analyzeCalls++
+		if err := json.NewDecoder(r.Body).Decode(&analyzeRequest); err != nil {
+			t.Fatal(err)
+		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "analyze-returned", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Understands the fixture.","architecture":"One package.","components":[],"entry_points":[],"flows":[],"risks":[],"next_steps":[]}`}}}})
 	}))
 	defer analyzeServer.Close()
 	bugServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bugCalls++
-		var request llm.ChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&bugRequest); err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(request.Messages[0].Content, "Use the function_skill skill.") {
+		if strings.Contains(bugRequest.Messages[0].Content, "Use the function_skill skill.") {
 			t.Fatal("semantic analysis received function coder skills")
 		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "bug-returned", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
@@ -263,11 +266,10 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 	defer bugServer.Close()
 	functionServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		functionCalls++
-		var request llm.ChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&functionRequest); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(request.Messages[0].Content, "Use the function_skill skill.") {
+		if !strings.Contains(functionRequest.Messages[0].Content, "Use the function_skill skill.") {
 			t.Fatal("function proposal did not receive coder skills")
 		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "function-returned", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"version":"v1","declaration":"func Run() {}","explanation":"Keeps the declaration focused."}`}}}})
@@ -285,9 +287,9 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 	service, err := New(&config.Config{
 		LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy", Temperature: 0.2, MaxTokens: 1024},
 		ModelScopes: config.ModelScopesConfig{
-			Analyze:  config.ModelProfileConfig{APIBaseURL: analyzeServer.URL + "/v1", Model: "analyze-model"},
-			Bug:      config.ModelProfileConfig{APIBaseURL: bugServer.URL + "/v1", Model: "bug-model"},
-			Function: config.ModelProfileConfig{APIBaseURL: functionServer.URL + "/v1", Model: "function-model"},
+			Analyze:  config.ModelProfileConfig{APIBaseURL: analyzeServer.URL + "/v1", Model: "analyze-model", ReasoningEffort: "high"},
+			Bug:      config.ModelProfileConfig{APIBaseURL: bugServer.URL + "/v1", Model: "bug-model", ReasoningEffort: "medium"},
+			Function: config.ModelProfileConfig{APIBaseURL: functionServer.URL + "/v1", Model: "function-model", ReasoningEffort: "low"},
 		},
 		Agents: config.AgentsConfig{Coder: config.AgentConfig{Skills: []string{"function_skill"}}},
 		Retry:  config.RetryConfig{MaxRetries: 0, BackoffBase: 1, BackoffMax: 1},
@@ -300,7 +302,7 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if analysis.Report.Scope != "analyze" || analysis.Report.Model != "analyze-returned" || analysis.Report.ConfiguredModel != "analyze-model" || analysis.Report.ProviderOrigin != analyzeServer.URL {
+	if analysis.Report.Scope != "analyze" || analysis.Report.Model != "analyze-returned" || analysis.Report.ConfiguredModel != "analyze-model" || analysis.Report.ProviderOrigin != analyzeServer.URL || analysis.Report.ReasoningEffort != "high" {
 		t.Fatalf("analysis provenance = %+v", analysis.Report)
 	}
 	if err := manager.Set(root, analysis); err != nil {
@@ -310,7 +312,7 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fileAnalysis.Scope != "bug" || fileAnalysis.ConfiguredModel != "bug-model" || fileAnalysis.Model != "bug-returned" || fileAnalysis.ProviderOrigin != bugServer.URL {
+	if fileAnalysis.Scope != "bug" || fileAnalysis.ConfiguredModel != "bug-model" || fileAnalysis.Model != "bug-returned" || fileAnalysis.ProviderOrigin != bugServer.URL || fileAnalysis.ReasoningEffort != "medium" {
 		t.Fatalf("file analysis provenance = %+v", fileAnalysis)
 	}
 	session := openFixtureChatSession(t, service, project.DeclarationEditReplaceSymbol, "Run")
@@ -318,11 +320,14 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if proposal.Draft.EffectiveModel.Scope != "function" || proposal.Draft.EffectiveModel.Model != "function-model" || proposal.Draft.EffectiveModel.ProviderOrigin != functionServer.URL {
+	if proposal.Draft.EffectiveModel.Scope != "function" || proposal.Draft.EffectiveModel.Model != "function-model" || proposal.Draft.EffectiveModel.ProviderOrigin != functionServer.URL || proposal.Draft.EffectiveModel.ReasoningEffort != "low" {
 		t.Fatalf("draft provenance = %+v", proposal.Draft.EffectiveModel)
 	}
 	if analyzeCalls != 1 || bugCalls != 1 || functionCalls != 1 {
 		t.Fatalf("scope calls = analyze:%d bug:%d function:%d", analyzeCalls, bugCalls, functionCalls)
+	}
+	if analyzeRequest.ReasoningEffort != "high" || bugRequest.ReasoningEffort != "medium" || functionRequest.ReasoningEffort != "low" {
+		t.Fatalf("scope reasoning efforts = analyze:%q bug:%q function:%q", analyzeRequest.ReasoningEffort, bugRequest.ReasoningEffort, functionRequest.ReasoningEffort)
 	}
 }
 

@@ -21,6 +21,7 @@ type EffectiveModel struct {
 	Scope            string   `json:"scope"`
 	Profile          string   `json:"profile"`
 	Model            string   `json:"model"`
+	ReasoningEffort  string   `json:"reasoning_effort,omitempty"`
 	ProviderOrigin   string   `json:"provider_origin"`
 	RemoteProvider   bool     `json:"remote_provider"`
 	Temperature      float32  `json:"temperature"`
@@ -36,6 +37,7 @@ type ScopedModel struct {
 	Scope            string  `json:"scope"`
 	Profile          string  `json:"profile"`
 	Model            string  `json:"model"`
+	ReasoningEffort  string  `json:"reasoning_effort,omitempty"`
 	ProviderOrigin   string  `json:"provider_origin"`
 	RemoteProvider   bool    `json:"remote_provider"`
 	Temperature      float32 `json:"temperature"`
@@ -127,10 +129,11 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetries int, skills []string) modelRuntime {
 	runtime := modelRuntime{
 		profile: profile,
-		client:  llm.NewClientWithAPIBase(profile.APIBaseURL, profile.APIKey, profile.Model, profile.Temperature, profile.MaxTokens),
+		client:  llm.NewClientWithAPIBaseAndReasoningEffort(profile.APIBaseURL, profile.APIKey, profile.Model, profile.Temperature, profile.MaxTokens, profile.ReasoningEffort),
 		effective: EffectiveModel{
 			Scope: string(profile.Scope), Profile: string(profile.Scope), Model: profile.Model,
-			ProviderOrigin: providerOrigin(profile.APIBaseURL), RemoteProvider: !isLoopbackURL(profile.APIBaseURL),
+			ReasoningEffort: profile.ReasoningEffort,
+			ProviderOrigin:  providerOrigin(profile.APIBaseURL), RemoteProvider: !isLoopbackURL(profile.APIBaseURL),
 			Temperature: profile.Temperature, MaxTokens: profile.MaxTokens, ContextMaxTokens: profile.ContextMaxTokens,
 			Timeout: timeout.String(), MaxRetries: maxRetries,
 		},
@@ -173,7 +176,7 @@ func (s *Service) Activity() ([]project.Activity, error) {
 func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
 	timed, cancel := context.WithTimeout(ctx, s.importTimeout)
 	defer cancel()
-	analysis, err := project.NewAnalyzerWithProvenance(s.analyzeRuntime.client, s.analyzeRuntime.profile.Model, string(config.AnalyzeModelScope), s.analyzeRuntime.effective.ProviderOrigin).Analyze(timed, root)
+	analysis, err := project.NewAnalyzerWithProvenance(s.analyzeRuntime.client, s.analyzeRuntime.profile.Model, string(config.AnalyzeModelScope), s.analyzeRuntime.effective.ProviderOrigin, s.analyzeRuntime.effective.ReasoningEffort).Analyze(timed, root)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
@@ -183,7 +186,7 @@ func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Ana
 // RestoreProject reopens a previously imported project from local persisted
 // analysis without making a model request.
 func (s *Service) RestoreProject(root string) (*project.Analysis, error) {
-	return project.NewAnalyzerWithProvenance(nil, s.analyzeRuntime.profile.Model, string(config.AnalyzeModelScope), s.analyzeRuntime.effective.ProviderOrigin).Restore(root)
+	return project.NewAnalyzerWithProvenance(nil, s.analyzeRuntime.profile.Model, string(config.AnalyzeModelScope), s.analyzeRuntime.effective.ProviderOrigin, s.analyzeRuntime.effective.ReasoningEffort).Restore(root)
 }
 
 func (s *Service) EffectiveModel() EffectiveModel {
@@ -213,7 +216,7 @@ func (s *Service) CurrentModelCatalog() ModelCatalog {
 
 func scopedModel(profile EffectiveModel) ScopedModel {
 	return ScopedModel{
-		Scope: profile.Scope, Profile: profile.Profile, Model: profile.Model, ProviderOrigin: profile.ProviderOrigin,
+		Scope: profile.Scope, Profile: profile.Profile, Model: profile.Model, ReasoningEffort: profile.ReasoningEffort, ProviderOrigin: profile.ProviderOrigin,
 		RemoteProvider: profile.RemoteProvider, Temperature: profile.Temperature, MaxTokens: profile.MaxTokens,
 		ContextMaxTokens: profile.ContextMaxTokens, Timeout: profile.Timeout, MaxRetries: profile.MaxRetries,
 	}
