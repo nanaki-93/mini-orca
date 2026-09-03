@@ -1,38 +1,23 @@
 package config
 
-// DefaultProviderURL is the default LM Studio URL.
-const DefaultProviderURL = "http://localhost:1234"
+// DefaultProviderAPIBaseURL is the local LM Studio OpenAI-compatible endpoint.
+const DefaultProviderAPIBaseURL = "http://localhost:1234/v1"
 
-// DefaultAgentConfigs returns default agent configurations with predefined skill lists.
-func DefaultAgentConfigs() AgentsConfig {
-	return AgentsConfig{
-		Coder: AgentConfig{
-			Skills: []string{"code_generation", "refactoring", "debugging"},
-		},
-		Tester: AgentConfig{
-			Skills: []string{"test_generation", "edge_case_detection", "validation"},
-		},
-		Reviewer: AgentConfig{
-			Skills: []string{"code_review", "security_check", "best_practices"},
-		},
-	}
-}
-
-// Default returns a Config with sensible defaults.
+// Default returns explicit local scoped profiles. Users should replace the
+// placeholder model IDs in their ignored config.yaml before making requests.
 func Default() *Config {
-	return &Config{
-		LLM: LLMConfig{
-			BaseURL:     DefaultProviderURL,
-			Model:       "",
-			Temperature: 0.7,
-			MaxTokens:   8192,
+	cfg := &Config{
+		ModelScopes: ModelScopesConfig{
+			Analyze:  ModelProfileConfig{APIBaseURL: DefaultProviderAPIBaseURL, Model: "local-analysis-model"},
+			Bug:      ModelProfileConfig{APIBaseURL: DefaultProviderAPIBaseURL, Model: "local-bug-model"},
+			Function: ModelProfileConfig{APIBaseURL: DefaultProviderAPIBaseURL, Model: "local-function-model"},
 		},
-		Agents: DefaultAgentConfigs(),
+		Retry: RetryConfig{MaxRetries: 3, BackoffBase: 1000, BackoffMax: 30000},
 		Timeouts: TimeoutConfig{
-			ImportSeconds:       300,
-			AnalysisSeconds:     300,
-			GenerationSeconds:   300,
-			FocusedCheckSeconds: 60,
+			ImportSeconds: 300, AnalysisSeconds: 300, GenerationSeconds: 300, FocusedCheckSeconds: 60,
 		},
+		Logging: LoggingConfig{Level: "info", Format: "json"},
 	}
+	cfg.applyDefaults()
+	return cfg
 }

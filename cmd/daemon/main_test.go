@@ -26,7 +26,7 @@ func TestDaemonStatusReportsCanonicalVersion(t *testing.T) {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	service, err := app.New(config.Default(), manager)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	service, err := app.New(config.Default(), manager)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestDaemonDoesNotRegisterBrowserUIRoutes(t *testing.T) {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	service, err := app.New(config.Default(), manager)
 	if err != nil {
 		t.Fatal(err)
 	}

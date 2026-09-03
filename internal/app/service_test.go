@@ -42,11 +42,14 @@ func TestGenerateUsesConfiguredFunctionProfile(t *testing.T) {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := New(&config.Config{
-		LLM:    config.LLMConfig{BaseURL: server.URL, Model: "default-model", Temperature: 0.25, MaxTokens: 321},
-		Agents: config.AgentsConfig{Coder: config.AgentConfig{Model: "coder-override", TimeoutSeconds: 30}},
-		Retry:  config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1},
-	}, manager)
+	cfg := scopedTestConfig(server.URL)
+	temperature, maxTokens := float32(0.25), 321
+	cfg.ModelScopes.Function.Model = "function-model"
+	cfg.ModelScopes.Function.Temperature = &temperature
+	cfg.ModelScopes.Function.MaxTokens = &maxTokens
+	cfg.Timeouts.GenerationSeconds = 30
+	cfg.Retry = config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}
+	service, err := New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,11 +58,11 @@ func TestGenerateUsesConfiguredFunctionProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.GenerationID == "" || preview.BaseFileHash == "" || preview.CandidateHash == "" || preview.CandidateContent != "package sample\n\nfunc Run() {}" || preview.ScopeMode != workflow.ScopeStrictSymbol || preview.EffectiveModel.Model != "coder-override" || len(preview.ContextManifest.Included) != 1 {
+	if preview.GenerationID == "" || preview.BaseFileHash == "" || preview.CandidateHash == "" || preview.CandidateContent != "package sample\n\nfunc Run() {}" || preview.ScopeMode != workflow.ScopeStrictSymbol || preview.EffectiveModel.Model != "function-model" || len(preview.ContextManifest.Included) != 1 {
 		t.Fatalf("generation preview = %+v", preview)
 	}
-	if received.Model != "coder-override" || received.Temperature != 0.25 || received.MaxTokens != 321 {
-		t.Fatalf("generation used %+v, want configured coder model and LLM settings", received)
+	if received.Model != "function-model" || received.Temperature != 0.25 || received.MaxTokens != 321 {
+		t.Fatalf("generation used %+v, want configured function scope", received)
 	}
 	if len(received.Messages) != 1 || !strings.Contains(received.Messages[0].Content, "## Atomic code request") || strings.Contains(received.Messages[0].Content, "Use the custom_skill skill.") {
 		t.Fatalf("function request = %+v", received.Messages)
@@ -68,7 +71,7 @@ func TestGenerateUsesConfiguredFunctionProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Included) != 1 || manifest.Included[0].Path != "sample.go" || manifest.Scope != "function" || manifest.Model != "coder-override" || !strings.Contains(received.Messages[0].Content, "func Run()") {
+	if len(manifest.Included) != 1 || manifest.Included[0].Path != "sample.go" || manifest.Scope != "function" || manifest.Model != "function-model" || !strings.Contains(received.Messages[0].Content, "func Run()") {
 		t.Fatalf("manifest does not describe generated prompt context: %+v", manifest)
 	}
 	manifestJSON, err := json.Marshal(manifest)
@@ -79,7 +82,7 @@ func TestGenerateUsesConfiguredFunctionProfile(t *testing.T) {
 		t.Fatalf("manifest leaked source text: %s", manifestJSON)
 	}
 	profile := service.EffectiveModel()
-	if profile.Model != "coder-override" || profile.Scope != "function" || profile.Profile != "function" || profile.Timeout != "30s" {
+	if profile.Model != "function-model" || profile.Scope != "function" || profile.Profile != "function" || profile.Timeout != "30s" {
 		t.Fatalf("unexpected effective profile: %+v", profile)
 	}
 }
@@ -89,7 +92,7 @@ func TestRemoteProviderRequiresConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: "https://example.com"}}, manager)
+	service, err := New(scopedTestConfig("https://example.com/v1"), manager)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +115,6 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 		t.Fatal(err)
 	}
 	service, err := New(&config.Config{
-		LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy", Temperature: 0.2, MaxTokens: 1024},
 		ModelScopes: config.ModelScopesConfig{
 			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "do-not-return", Model: "analyze-model", ReasoningEffort: "high"},
 			Bug:      config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug-model", ReasoningEffort: "low"},
@@ -187,7 +189,7 @@ func TestScopedModelLocalMixedAndRemoteConfirmationMatrixUsesNoProvider(t *testi
 			if err != nil {
 				t.Fatal(err)
 			}
-			service, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy"}, ModelScopes: test.scopes}, manager)
+			service, err := New(&config.Config{ModelScopes: test.scopes}, manager)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -225,7 +227,9 @@ func TestAnalyzeProjectStoresStructuredReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: server.URL, Model: "analysis-model"}}, manager)
+	cfg := scopedTestConfig(server.URL)
+	cfg.ModelScopes.Analyze.Model = "analysis-model"
+	service, err := New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +289,6 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 	service, err := New(&config.Config{
-		LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy", Temperature: 0.2, MaxTokens: 1024},
 		ModelScopes: config.ModelScopesConfig{
 			Analyze:  config.ModelProfileConfig{APIBaseURL: analyzeServer.URL + "/v1", Model: "analyze-model", ReasoningEffort: "high"},
 			Bug:      config.ModelProfileConfig{APIBaseURL: bugServer.URL + "/v1", Model: "bug-model", ReasoningEffort: "medium"},
@@ -360,7 +363,6 @@ func TestScopedModelEndToEndTaskFlowKeepsNonPromptOperationsModelFree(t *testing
 		t.Fatal(err)
 	}
 	service, err := New(&config.Config{
-		LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy"},
 		ModelScopes: config.ModelScopesConfig{
 			Analyze:  config.ModelProfileConfig{APIBaseURL: analyzeServer.URL + "/v1", Model: "analyze-model"},
 			Bug:      config.ModelProfileConfig{APIBaseURL: bugServer.URL + "/v1", Model: "bug-model"},
@@ -435,6 +437,14 @@ func TestScopedModelEndToEndTaskFlowKeepsNonPromptOperationsModelFree(t *testing
 
 func intPointer(value int) *int { return &value }
 
+func scopedTestConfig(apiBaseURL string) *config.Config {
+	cfg := config.Default()
+	cfg.ModelScopes.Analyze.APIBaseURL = apiBaseURL
+	cfg.ModelScopes.Bug.APIBaseURL = apiBaseURL
+	cfg.ModelScopes.Function.APIBaseURL = apiBaseURL
+	return cfg
+}
+
 func TestGenerateCancellationStopsLLMRequest(t *testing.T) {
 	started := make(chan struct{}, 1)
 	providerCanceled := make(chan struct{}, 1)
@@ -456,7 +466,9 @@ func TestGenerateCancellationStopsLLMRequest(t *testing.T) {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: server.URL}, Retry: config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}}, manager)
+	cfg := scopedTestConfig(server.URL)
+	cfg.Retry = config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}
+	service, err := New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -494,11 +506,10 @@ func TestGenerateReturnsDeadlineExceeded(t *testing.T) {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := New(&config.Config{
-		LLM:      config.LLMConfig{BaseURL: server.URL},
-		Timeouts: config.TimeoutConfig{GenerationSeconds: 1},
-		Retry:    config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1},
-	}, manager)
+	cfg := scopedTestConfig(server.URL)
+	cfg.Timeouts = config.TimeoutConfig{GenerationSeconds: 1}
+	cfg.Retry = config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}
+	service, err := New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
 	}

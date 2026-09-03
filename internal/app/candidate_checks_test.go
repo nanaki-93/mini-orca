@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -196,7 +195,7 @@ func TestApplyUndoAndAuditAreConflictSafeAndSourceFree(t *testing.T) {
 	if err := restartedManager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: server.URL}}, restartedManager)
+	restarted, err := New(scopedTestConfig(server.URL), restartedManager)
 	if err != nil {
 		t.Fatal(err)
 	}

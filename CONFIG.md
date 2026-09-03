@@ -1,175 +1,66 @@
 # Configuration Guide
 
-Mini-Orca is configured using a YAML file, typically named `config.yaml`. This document provides a detailed reference for all available configuration options.
+Mini-Orca reads one YAML file, normally ignored `config.yaml`. Start with
+`config.example.yaml`; do not commit provider credentials. Configuration is
+validated once at daemon startup, and unknown or retired keys stop startup with
+the full field path in the error. JSON configuration files are not supported.
 
-Keep `config.yaml` on the local machine; it is intentionally ignored by Git.
-Start from `config.example.yaml` and do not add provider credentials to tracked
-files. The daemon binds to loopback by default. Every configured non-loopback
-model scope requires explicit confirmation for its own prompt request. That
-confirmation is part of the request, not a configuration switch that silently
-enables remote delivery.
+Every prompt-bearing operation has one fixed model scope:
 
-Prompt-bearing requests are project import/analysis, one-file semantic
-analysis, Analyze-all, and file-scoped chat messages. Deterministic reindexing,
-verified Go scans, validation, focused checks, Apply, and Undo do not send a
-prompt. Confirming a remote provider does not authorize automatic scans,
-automatic writes, multi-file edits, commits, or pushes.
+| Scope | Used for |
+| --- | --- |
+| `analyze` | Project import and architectural summaries |
+| `bug` | Selected-file analysis and Analyze-all suggestions |
+| `function` | Declaration proposals and explicit repairs |
 
-## LLM Configuration (`llm`)
-
-Defines the LLM provider settings. This is a flat configuration (no nested providers).
-
-- `base_url` (string, required): The base URL of the provider's API (e.g., `http://localhost:1234` for LM Studio).
-- `api_key` (string, optional): The API key for the provider.
-- `model` (string, optional): The default model to use.
-- `temperature` (float, optional): Sampling temperature (0.0 to 1.0). Default: `0.7`.
-- `max_tokens` (int, optional): Maximum number of tokens to generate. Default: `8192`.
-
-## Scoped model profiles (`model_scopes`)
-
-`model_scopes` optionally resolves three fixed profiles at daemon startup:
-`analyze` for import, `bug` for one-file analysis and Analyze-all, and
-`function` for declaration proposals and explicit check-driven repairs. Each
-explicit profile needs `api_base_url` and `model`; an empty `api_key` is valid
-for local servers. `temperature`, `max_tokens`, `context_max_tokens`, and
-`reasoning_effort` are optional. The default context budgets are 120000, 32000,
-and 4000 tokens in scope order.
-
-An omitted `analyze` or `bug` scope inherits the complete legacy `llm` profile.
-An omitted `function` scope inherits `llm`, except that `agents.coder.model`
-continues to override its model. A partial scope is invalid rather than silently
-mixing endpoints. Restart the daemon after changing configuration.
-
-All profiles use one small OpenAI Chat Completions-compatible contract. Use
-placeholder IDs and a local personal config, for example:
+All three scopes are required. Each has an OpenAI Chat Completions-compatible
+`api_base_url` and a `model`; an empty `api_key` is valid for a loopback local
+server. `api_base_url` must be an absolute HTTP or HTTPS URL without user
+information, a query string, or a fragment. A non-loopback scope still requires
+an explicit confirmation on each request that sends prompt content. Configuration
+does not authorize automatic scans, writes, multi-file edits, commits, or pushes.
 
 ```yaml
 model_scopes:
-  analyze: # OpenAI-compatible example
+  analyze:
     api_base_url: "https://api.openai.com/v1"
-    api_key: "replace-in-local-config"
-    model: "replace-with-analysis-model-id"
-    reasoning_effort: "high" # Optional; leave absent to use the provider default.
-  bug: # Claude-compatible or Gemini-compatible OpenAI endpoint
-    api_base_url: "https://api.anthropic.com/v1" # or https://generativelanguage.googleapis.com/v1beta/openai
-    api_key: "replace-in-local-config"
-    model: "replace-with-bug-model-id"
-  function: # Ollama, LM Studio, or a custom compatible gateway
-    api_base_url: "http://localhost:11434/v1" # LM Studio: http://localhost:1234/v1
+    api_key: "set-in-ignored-config.yaml"
+    model: "analysis-model-id"
+    reasoning_effort: "high" # Optional: none, minimal, low, medium, high, xhigh, max.
+    temperature: 0.1 # Optional; defaults to 0.7.
+    max_tokens: 16000 # Optional; defaults to 8192.
+    context_max_tokens: 120000 # Optional; defaults by scope.
+  bug:
+    api_base_url: "http://localhost:11434/v1"
     api_key: ""
-    model: "replace-with-local-function-model-id"
+    model: "bug-model-id"
+  function:
+    api_base_url: "http://localhost:1234/v1"
+    api_key: ""
+    model: "function-model-id"
 ```
 
-Native Anthropic Messages, Gemini `generateContent`, OpenAI Responses,
-streaming, tool calls, and vendor SDKs are not supported by this compatibility
-layer. For providers that support it, `reasoning_effort` is the standard OpenAI
-Chat Completions request field and is forwarded unchanged when set. Valid values
-are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; support
-varies by model, so leave it absent for a provider's default or for local
-servers that do not accept the field. A provider that lacks compatible Chat
-Completions or `/models` support can still be used for generation; model listing
-is informational only.
+The default context budgets are 120000 tokens for `analyze`, 32000 for `bug`,
+and 4000 for `function`. `temperature` must be from 0 through 2;
+`max_tokens` must be 1–65536; `context_max_tokens` must be 1–120000. API keys
+are never returned, logged, or embedded in metadata. Mini-Orca does not perform
+environment interpolation, use a vault or Keychain, call native provider SDKs,
+or provide a settings UI.
 
-API keys are read only from ignored local configuration. Mini-Orca never logs
-or returns them, but it does not provide a vault, encryption, Keychain,
-rotation, account management, or credential UI.
+The provider boundary is one non-streaming OpenAI-compatible Chat Completions
+request. Native Anthropic Messages, Gemini `generateContent`, OpenAI Responses,
+tool calls, model enumeration, and vendor SDKs are not supported. Provider
+errors are reduced to a status code so provider bodies cannot leak a key.
 
-## Agents Configuration (`agents`)
-
-Configure the active `coder` profile. Tester and reviewer settings are retained
-for optional focused checks but are not an automatic generation pipeline. The
-workflow remains one file-scoped chat session and one editable declaration draft
-at a time; profiles cannot authorize automatic writes or multi-file changes.
-
-### Agent Configuration
-
-Each agent supports the following fields:
-
-- `skills` (list of strings, optional): A list of skill names assigned to the agent. Skills must be defined in the `skills` section.
-- `model` (string, optional): Override the default model for this specific agent.
-- `timeout_seconds` (int, optional): Maximum duration for requests made with this profile. Default: `300`.
-
-Example:
-```yaml
-agents:
-  coder:
-    skills: ["go", "file-system"]
-    model: "qwen3-coder-30b"
-    timeout_seconds: 300
-```
-
-## Skills Configuration (`skills`)
-
-Define the knowledge base and tools available to agents.
-
-- `knowledge` (map): Prompt templates that provide agents with specialized knowledge or instructions.
-- `tools` (map): Prompt templates that describe how to use specific tools (e.g., shell, formatter).
-
-Example:
-```yaml
-skills:
-  knowledge:
-    go-best-practices: "Follow effective Go programming practices..."
-    testing-strategies: "Use table-driven tests and property-based testing..."
-  tools:
-    shell: "Execute shell commands safely..."
-    formatter: "Format code using gofmt or equivalent..."
-```
-
-## Retry Configuration (`retry`)
-
-Control how the system handles failed LLM requests or tool executions.
-
-- `max_retries` (int): Maximum number of attempts for a failed operation. Default: `3`.
-- `backoff_base` (int): The base delay for exponential backoff in milliseconds. Default: `1000`.
-- `backoff_max` (int): The maximum delay between retries in milliseconds. Default: `30000`.
-
-## Operation Timeouts (`timeouts`)
-
-Each desktop request carries its cancellation context through daemon work. These
-values cap the daemon operation even when the client remains connected.
-
-- `import_seconds` (int): Project import and architectural analysis deadline. Default: `300`.
-- `analysis_seconds` (int): One-file semantic analysis deadline. Default: `300`.
-- `generation_seconds` (int): File-scoped declaration proposal deadline. Default: `300`.
-- `focused_check_seconds` (int): Isolated formatter/parser/check deadline. Default: `60`.
-
-## Logging Configuration (`logging`)
-
-Mini-Orca uses structured logging via Go's `slog` package.
-
-- `level` (string): Log level (`debug`, `info`, `warn`, `error`). Default: `info`.
-- `format` (string): Output format (`json` or `text`). Default: `json`.
-- `filename` (string, optional): Path to a file where logs should be written. If empty, logs go to stdout.
-- `sensitive_keys` (list of strings, optional): A list of keys whose values should be redacted from the logs (e.g., `password`, `api_key`).
-
-## Full Example
+## Other settings
 
 ```yaml
-llm:
-  base_url: "http://localhost:1234"
-  api_key: ""
-  model: "qwen3-coder-30b"
-  temperature: 0.7
-  max_tokens: 8192
-
-agents:
-  coder:
-    skills: ["go", "file-system"]
-    model: "qwen3-coder-30b"
-    timeout_seconds: 300
-
-skills:
-  knowledge:
-    go-best-practices: "Follow effective Go programming practices..."
-  tools:
-    shell: "Execute shell commands safely..."
-    formatter: "Format code using gofmt or equivalent..."
+project_path: "."
 
 retry:
   max_retries: 3
-  backoff_base: 1000
-  backoff_max: 30000
+  backoff_base: 1000 # milliseconds
+  backoff_max: 30000 # milliseconds
 
 timeouts:
   import_seconds: 300
@@ -184,6 +75,27 @@ logging:
   sensitive_keys: ["api_key", "password"]
 ```
 
-## Environment Variables
+The operation timeouts bound the request contexts; retries only cover explicit
+prompt requests. Restore, navigation, validation, checks, Apply, and Undo do
+not make a model call.
 
-- `MINI_ORCA_CONFIG`: Path to the configuration file (defaults to `config.yaml`).
+## Migration from legacy configuration
+
+Retired keys are errors, not fallbacks. Migrate each legacy key before restart:
+
+| Removed key | Replacement |
+| --- | --- |
+| `llm.base_url` | Copy to each `model_scopes.<scope>.api_base_url` (include the compatible API prefix such as `/v1`) |
+| `llm.api_key` | Copy to each `model_scopes.<scope>.api_key` that uses the key |
+| `llm.model` | Set each `model_scopes.<scope>.model` explicitly |
+| `llm.temperature` | Set each `model_scopes.<scope>.temperature`, or omit for the default |
+| `llm.max_tokens` | Set each `model_scopes.<scope>.max_tokens`, or omit for the default |
+| `agents.coder.model` | `model_scopes.function.model` |
+| `agents.coder.timeout_seconds` | `timeouts.generation_seconds` |
+| `agents.coder.skills`, `agents.tester.*`, `agents.reviewer.*` | Removed; there are no role profiles or role skills |
+| `skills.knowledge`, `skills.tools` | Removed |
+| JSON loading/saving | Removed; use YAML only |
+
+`MINI_ORCA_CONFIG` may select the YAML file path (default `config.yaml`); it
+does not interpolate values inside that file. Restart the daemon after editing
+configuration.

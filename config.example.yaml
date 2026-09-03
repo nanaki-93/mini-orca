@@ -1,131 +1,54 @@
-# Mini-Orca Configuration Example
-# This file demonstrates all available configuration options.
+# Copy this file to ignored config.yaml and replace each placeholder model ID.
+# Mini-Orca accepts only this strict YAML schema; it does not read environment
+# variables into profile values or support legacy llm/agents/skills sections.
 
-# ─── LLM ──────────────────────────────────────────────────────────────────────
-# Configure the legacy LLM endpoint. Existing configurations continue to use it for
-# all three model scopes unless a scope is explicitly configured below.
-# Keep real credentials in an ignored local config.yaml. A non-loopback endpoint
-# still requires per-request desktop confirmation before prompt content is sent.
+model_scopes:
+  # Project import and architectural summaries.
+  analyze:
+    api_base_url: "http://localhost:1234/v1"
+    api_key: "" # Empty keys are valid for local OpenAI-compatible servers.
+    model: "replace-with-analysis-model-id"
+    temperature: 0.1
+    max_tokens: 16000
+    context_max_tokens: 120000
 
-llm:
-  base_url: "http://localhost:1234"
-  api_key: ""            # Only required for remote providers (OpenAI, etc.)
-  model: ""              # Optional: specify a model name
-  temperature: 0.7       # Default sampling temperature
-  max_tokens: 8192       # Default response limit
+  # Selected-file analysis and Analyze-all suggestions.
+  bug:
+    api_base_url: "http://localhost:1234/v1"
+    api_key: ""
+    model: "replace-with-bug-model-id"
+    temperature: 0.1
+    max_tokens: 12000
+    context_max_tokens: 32000
 
-# ─── Scoped model profiles ────────────────────────────────────────────────────
-# Optional fixed scopes. An explicit scope needs both api_base_url and model. API
-# bases use Chat Completions compatibility: OpenAI https://api.openai.com/v1;
-# Claude compatibility https://api.anthropic.com/v1; Gemini compatibility
-# https://generativelanguage.googleapis.com/v1beta/openai; Ollama
-# http://localhost:11434/v1; LM Studio http://localhost:1234/v1; or a custom
-# compatible gateway such as https://gateway.example/v1. Keep actual keys only
-# in ignored config.yaml. reasoning_effort is optional and is forwarded only to
-# providers that accept the OpenAI Chat Completions field. Restart the daemon
-# after changing scopes.
-#
-# model_scopes:
-#   analyze:
-#     api_base_url: "https://api.openai.com/v1"
-#     api_key: "replace-with-personal-key"
-#     model: "replace-with-analysis-model-id"
-#     reasoning_effort: "high" # Optional: none, minimal, low, medium, high, xhigh, or max.
-#     temperature: 0.1
-#     max_tokens: 16000
-#     context_max_tokens: 120000
-#   bug:
-#     api_base_url: "https://api.anthropic.com/v1"
-#     api_key: "replace-with-personal-key"
-#     model: "replace-with-bug-model-id"
-#     temperature: 0.1
-#     max_tokens: 12000
-#     context_max_tokens: 32000
-#   function:
-#     api_base_url: "http://localhost:11434/v1"
-#     api_key: "" # Empty keys are valid for local servers.
-#     model: "replace-with-local-function-model-id"
-#     temperature: 0.2
-#     max_tokens: 4096
-#     context_max_tokens: 4000
+  # Declaration proposals and explicit repairs.
+  function:
+    api_base_url: "http://localhost:1234/v1"
+    api_key: ""
+    model: "replace-with-function-model-id"
+    temperature: 0.2
+    max_tokens: 4096
+    context_max_tokens: 4000
+    # reasoning_effort: "high" # Optional: none, minimal, low, medium, high, xhigh, max.
 
-# ─── Agents ───────────────────────────────────────────────────────────────────
-# Configure the active profile and optional focused-check profiles. These do not
-# form an autonomous pipeline and cannot create multi-file or automatic writes.
-
-agents:
-  coder:
-    skills:
-      - code_generation
-      - refactoring
-      - debugging
-    model: ""  # Optional: override the default model for this agent
-    timeout_seconds: 300 # Optional request timeout for this profile
-
-  tester:
-    skills:
-      - test_generation
-      - edge_case_detection
-      - validation
-    model: ""  # Optional: override the default model for this agent
-
-  reviewer:
-    skills:
-      - code_review
-      - security_check
-      - best_practices
-    model: ""  # Optional: override the default model for this agent
-
-# ─── Skills ───────────────────────────────────────────────────────────────────
-# Define available skills (knowledge base) and tools.
-
-skills:
-  knowledge:
-    code_generation: "Generate clean, well-documented code"
-    refactoring: "Refactor code for clarity and maintainability"
-    debugging: "Debug and fix issues in code"
-    test_generation: "Generate comprehensive unit and integration tests"
-    edge_case_detection: "Identify and handle edge cases"
-    validation: "Validate code against requirements and standards"
-    code_review: "Review code for quality and correctness"
-    security_check: "Identify potential security vulnerabilities"
-    best_practices: "Enforce coding best practices and patterns"
-
-  tools:
-    formatter: "Format code according to project standards"
-    linter: "Lint code for style and correctness"
-    test_runner: "Execute test suites"
-
-# ─── Project ──────────────────────────────────────────────────────────────────
-# Path of the project to work with.
-
-project_path: "."         # Default to current directory if empty
-
-# ─── Retry ────────────────────────────────────────────────────────────────────
-# Configure retry behavior for failed operations.
+project_path: "."
 
 retry:
   max_retries: 3
-  backoff_base: 1000   # ms - base delay for exponential backoff
-  backoff_max: 30000   # ms - maximum delay between retries
+  backoff_base: 1000 # milliseconds
+  backoff_max: 30000 # milliseconds
 
-# ─── Operation timeouts ──────────────────────────────────────────────────────
-# These deadlines bound work started by one desktop request. They are separate
-# from the daemon's HTTP server timeouts.
 timeouts:
   import_seconds: 300
   analysis_seconds: 300
   generation_seconds: 300
   focused_check_seconds: 60
 
-# ─── Logging ──────────────────────────────────────────────────────────────────
-# Configure structured logging.
-
 logging:
-  level: "info"         # debug, info, warn, error
-  format: "json"        # json or text
-  filename: ""          # Optional: path to log file (default: stdout)
-  sensitive_keys:       # Optional: list of keys to redact from logs
+  level: "info"
+  format: "json"
+  filename: ""
+  sensitive_keys:
     - "password"
     - "secret"
     - "api_key"

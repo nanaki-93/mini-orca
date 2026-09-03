@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -22,7 +21,7 @@ func TestDraftEndpointsAreRevisionAndHashGuarded(t *testing.T) {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	service, err := app.New(scopedHandlerConfig("http://127.0.0.1:1"), manager)
 	if err != nil {
 		t.Fatal(err)
 	}

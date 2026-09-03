@@ -18,7 +18,6 @@ func TestCurrentModelCatalogPreservesFunctionProjectionWithoutSecrets(t *testing
 		t.Fatal(err)
 	}
 	service, err := app.New(&config.Config{
-		LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy", Temperature: 0.3, MaxTokens: 1024},
 		ModelScopes: config.ModelScopesConfig{
 			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "secret-value", Model: "analyze", ReasoningEffort: "high"},
 			Bug:      config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug", ReasoningEffort: "low"},
