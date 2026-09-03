@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -79,14 +80,14 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 	}
 	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
 	defer cancel()
-	result, err := s.retry(timed, s.bugRuntime, prompt)
+	result, err := s.retry(timed, s.bugRuntime, []llm.ChatMessage{{Role: "user", Content: prompt}})
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
 	if err != nil {
 		return s.storeAnalysisFailure(cache, input, err)
 	}
-	parsed, err := parseSemanticAnalysis(result.Output, *indexedFile, fileInfo.Content)
+	parsed, err := parseSemanticAnalysis(result.Content, *indexedFile, fileInfo.Content)
 	if err != nil {
 		return s.storeAnalysisFailure(cache, input, err)
 	}
@@ -100,7 +101,7 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 		Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
 		GeneratedAt: time.Now().UTC(),
 	}
-	if model := result.Metadata["model"]; model != "" {
+	if model := result.Model; model != "" {
 		fresh.Model = model
 	}
 	if err := cache.Store(fresh); err != nil {

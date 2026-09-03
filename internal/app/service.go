@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -58,7 +57,11 @@ type modelRuntime struct {
 	profile   config.ModelProfile
 	effective EffectiveModel
 	client    *llm.Client
-	coder     *agent.CoderAgent
+}
+
+type modelOutput struct {
+	Content string
+	Model   string
 }
 
 // Service owns configured model access and the active project's generation path.
@@ -111,9 +114,9 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 
 	return &Service{
 		manager:             manager,
-		analyzeRuntime:      newModelRuntime(profiles.Analyze, importTimeout, maxRetries, nil),
-		bugRuntime:          newModelRuntime(profiles.Bug, analysisTimeout, maxRetries, nil),
-		functionRuntime:     newModelRuntime(profiles.Function, functionTimeout, maxRetries, cfg.Agents.Coder.Skills),
+		analyzeRuntime:      newModelRuntime(profiles.Analyze, importTimeout, maxRetries),
+		bugRuntime:          newModelRuntime(profiles.Bug, analysisTimeout, maxRetries),
+		functionRuntime:     newModelRuntime(profiles.Function, functionTimeout, maxRetries),
 		importTimeout:       importTimeout,
 		analysisTimeout:     analysisTimeout,
 		focusedCheckTimeout: configuredDuration(cfg.Timeouts.FocusedCheckSeconds, 0, time.Minute),
@@ -126,7 +129,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	}, nil
 }
 
-func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetries int, skills []string) modelRuntime {
+func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetries int) modelRuntime {
 	runtime := modelRuntime{
 		profile: profile,
 		client:  llm.NewClientWithAPIBaseAndReasoningEffort(profile.APIBaseURL, profile.APIKey, profile.Model, profile.Temperature, profile.MaxTokens, profile.ReasoningEffort),
@@ -137,11 +140,6 @@ func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetr
 			Temperature: profile.Temperature, MaxTokens: profile.MaxTokens, ContextMaxTokens: profile.ContextMaxTokens,
 			Timeout: timeout.String(), MaxRetries: maxRetries,
 		},
-	}
-	if profile.Scope == config.FunctionModelScope {
-		runtime.effective.Skills = append([]string(nil), skills...)
-		runtime.coder = agent.NewCoderAgent(runtime.client)
-		runtime.coder.SetSkills(runtime.effective.Skills)
 	}
 	return runtime
 }
@@ -284,10 +282,10 @@ func isLoopbackURL(rawURL string) bool {
 	return address != nil && address.IsLoopback()
 }
 
-func (s *Service) retry(ctx context.Context, runtime modelRuntime, input string) (*agent.Result, error) {
+func (s *Service) retry(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage) (modelOutput, error) {
 	var lastErr error
 	for attempt := 0; attempt <= runtime.effective.MaxRetries; attempt++ {
-		result, err := runtime.execute(ctx, input)
+		result, err := runtime.execute(ctx, messages)
 		if err == nil {
 			return result, nil
 		}
@@ -303,21 +301,31 @@ func (s *Service) retry(ctx context.Context, runtime modelRuntime, input string)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, ctx.Err()
+			return modelOutput{}, ctx.Err()
 		case <-timer.C:
 		}
 	}
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return modelOutput{}, ctx.Err()
 	}
-	return nil, lastErr
+	return modelOutput{}, lastErr
 }
 
-func (r modelRuntime) execute(ctx context.Context, input string) (*agent.Result, error) {
-	if r.coder != nil {
-		return r.coder.Execute(ctx, input)
+func (r modelRuntime) execute(ctx context.Context, messages []llm.ChatMessage) (modelOutput, error) {
+	if r.client == nil {
+		return modelOutput{}, fmt.Errorf("model client is not configured")
 	}
-	return agent.NewClient(r.client).Execute(ctx, input)
+	if len(messages) == 0 || strings.TrimSpace(messages[0].Content) == "" {
+		return modelOutput{}, fmt.Errorf("model request is required")
+	}
+	response, err := r.client.Chat(ctx, messages)
+	if err != nil {
+		return modelOutput{}, fmt.Errorf("model request failed: %w", err)
+	}
+	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
+		return modelOutput{}, fmt.Errorf("model response content is required")
+	}
+	return modelOutput{Content: response.Choices[0].Message.Content, Model: response.Model}, nil
 }
 
 func providerOrigin(rawURL string) string {

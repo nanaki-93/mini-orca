@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -180,20 +179,20 @@ func (s *Service) SendChatSessionMessage(ctx context.Context, request ChatSessio
 		return nil, fmt.Errorf("build session context: %w", err)
 	}
 	manifest = s.contextManifestForRuntime(manifest, s.functionRuntime)
-	input, err := agent.DeclarationDraftInput(request.Message, "", projectContext, session.OpenPath, session.TargetSymbol, string(session.Mode))
+	messages, err := declarationDraftMessages(request.Message, "", projectContext, session.OpenPath, session.TargetSymbol, session.Mode)
 	if err != nil {
 		return nil, err
 	}
 	timed, cancel := context.WithTimeout(ctx, duration(s.functionRuntime.effective.Timeout))
 	defer cancel()
-	result, err := s.retry(timed, s.functionRuntime, input)
+	result, err := s.retry(timed, s.functionRuntime, messages)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
 	if err != nil {
 		return nil, err
 	}
-	response, err := ParseDeclarationDraftResponse(result.Output)
+	response, err := ParseDeclarationDraftResponse(result.Content)
 	if err != nil {
 		return nil, err
 	}

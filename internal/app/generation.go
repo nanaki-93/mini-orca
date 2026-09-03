@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/agent"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
@@ -95,21 +94,21 @@ func (s *Service) Generate(ctx context.Context, userPrompt, targetFile, targetSy
 		return nil, fmt.Errorf("build project context: %w", err)
 	}
 	manifest = s.contextManifestForRuntime(manifest, s.functionRuntime)
-	input, err := agent.AtomicCoderInputWithScope(userPrompt, projectContext, indexedFile.Path, targetSymbol, string(scope))
+	messages, err := generationMessages(userPrompt, projectContext, indexedFile.Path, targetSymbol, scope)
 	if err != nil {
 		return nil, err
 	}
 
 	timed, cancel := context.WithTimeout(ctx, duration(s.functionRuntime.effective.Timeout))
 	defer cancel()
-	result, err := s.retry(timed, s.functionRuntime, input)
+	result, err := s.retry(timed, s.functionRuntime, messages)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
 	if err != nil {
 		return nil, err
 	}
-	response, err := ParseGenerationResponse(result.Output, indexedFile.Path, targetSymbol, scope)
+	response, err := ParseGenerationResponse(result.Content, indexedFile.Path, targetSymbol, scope)
 	if err != nil {
 		return nil, err
 	}
