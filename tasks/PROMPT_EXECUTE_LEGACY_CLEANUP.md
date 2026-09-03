@@ -71,9 +71,9 @@ Starting-worktree and planning-artifact gate:
 2. Require Task 102 to be Complete and HEAD to contain its behavior.
 3. Require no staged changes. Record all unstaged and untracked paths before editing.
 4. The user-approved PLAN.md cleanup rewrite, tasks/README.md, tasks/INDEX.md, this
-   prompt, PROMPT_EXECUTE_TASK.md, and pending Task 103–117 files may initially be
-   uncommitted planning artifacts. Task 103 owns validating and including that exact
-   backlog metadata in its commit together with its characterization work.
+   prompt, and pending Task 103–117 files may initially be uncommitted planning
+   artifacts. Task 103 owns validating and including that exact backlog metadata in
+   its commit together with its characterization work.
 5. Treat every other pre-existing modification as user-owned. Do not stage it, rewrite
    it, or include it in a task commit.
 6. Stop if required work overlaps a user-owned hunk and cannot be separated safely.

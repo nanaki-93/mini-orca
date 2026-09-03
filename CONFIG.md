@@ -99,3 +99,13 @@ Retired keys are errors, not fallbacks. Migrate each legacy key before restart:
 `MINI_ORCA_CONFIG` may select the YAML file path (default `config.yaml`); it
 does not interpolate values inside that file. Restart the daemon after editing
 configuration.
+
+## Local metadata and manual cleanup
+
+Configuration stays separate from project metadata. Mini-Orca stores its local
+index, analysis, findings, Analyze-all state, Apply audit, and Undo backup data
+under the imported project's `.mini-orca/` directory; see
+[README.md](README.md#project-intelligence) for the current paths. These files
+do not contain source edits and are not a configuration fallback. Retired
+`.mini-orca/analysis.md` and activity files are never read or written; remove
+them manually only when they are no longer needed.

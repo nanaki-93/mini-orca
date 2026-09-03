@@ -1,5 +1,9 @@
 # Cleanup contract baseline
 
+> Historical Task 103 characterization evidence. It records the repository
+> before the cleanup sequence; use the maintained README, CONFIG, API, Docker,
+> and release documents for the current product contract.
+
 This record freezes the Mini-Orca contract before the Tasks 104–117 cleanup.
 It is a characterization baseline, not a second API specification.
 

@@ -26,6 +26,10 @@
   `.mini-orca/project-analysis.json`; legacy `.mini-orca/analysis.md` and
   activity files are no longer generated. Existing legacy files are never
   deleted automatically and can be removed manually.
+- Consolidated maintained documentation around one human API guide and its
+  OpenAPI schema, replaced the detailed pre-cleanup task archive with a concise
+  historical ledger, and removed retired UI mock material. The runtime Docker
+  image now contains only the daemon binary and required runtime packages.
 
 Manual provider and GUI acceptance remains required before a release operator
 claims compatibility with a personal OpenAI, Claude-compatible,

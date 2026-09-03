@@ -87,8 +87,6 @@ desktop-run: ## Run the Compose Desktop client (daemon required at localhost:909
 docker-build: ## Build Docker image
 	@echo "$(COLOR_GREEN)Building Docker image $(DOCKER_IMAGE)...$(COLOR_RESET)"
 	@$(DOCKER) build \
-		--build-arg BUILD_DATE=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-		--build-arg VCS_REF=$$(git rev-parse --short HEAD) \
 		--tag $(DOCKER_IMAGE) \
 		.
 	@echo "$(COLOR_GREEN)Docker image built: $(DOCKER_IMAGE)$(COLOR_RESET)"
@@ -98,8 +96,6 @@ docker-build-cache: ## Build Docker image with cache optimization
 	@$(DOCKER) build \
 		--cache-from $(IMAGE_NAME):cache \
 		--cache-to $(IMAGE_NAME):cache \
-		--build-arg BUILD_DATE=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-		--build-arg VCS_REF=$$(git rev-parse --short HEAD) \
 		--tag $(DOCKER_IMAGE) \
 		.
 	@echo "$(COLOR_GREEN)Docker image built with cache: $(DOCKER_IMAGE)$(COLOR_RESET)"

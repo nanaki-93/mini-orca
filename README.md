@@ -56,11 +56,15 @@ one-file semantic analysis, and Analyze-all are explicit user actions. Bugs
 keeps verified tool findings distinct from AI suggestions, including provenance,
 confidence, lifecycle state, and freshness.
 
-The canonical persisted project interpretation is
-`.mini-orca/project-analysis.json`. Mini-Orca no longer reads or writes the
-retired `.mini-orca/analysis.md` projection or activity files. Existing legacy
-files are left untouched and may be removed manually from a project’s
-`.mini-orca` directory when no longer needed.
+Project-local metadata is persisted under `.mini-orca/`: `index.json`,
+`project-analysis.json`, `file-analysis/`, `findings.json`, the persisted
+Analyze-all job at `sessions/analyze-all.json`, guarded Apply state and audit
+at `sessions/apply-state.json` and `sessions/audit.json`, and one-file Undo
+backups under `backups/`. These files are application metadata, not source
+edits. Mini-Orca no longer reads or writes the retired `.mini-orca/analysis.md`
+projection or activity files. Existing legacy files are left untouched and may
+be removed manually from a project's `.mini-orca` directory when no longer
+needed.
 
 Exact declaration editing, composition, and required parsing/formatting are
 currently Go-first. Other languages can have conservative analysis and symbol
@@ -87,15 +91,16 @@ ignored by Git.
 
 Integrations open a file-scoped session, send its messages, then edit the
 returned declaration draft before validation, checks, review, and an explicit
-Apply. The supported routes are listed once in the [API guide](API.md) and
-[route contract](docs/api-contract.md).
+Apply. The supported routes are documented once in the
+[canonical API guide](docs/api-contract.md), with schemas in
+[OpenAPI](docs/openapi.yaml).
 
 ## Documentation
 
 - [Desktop usage](desktop/README.md), including keyboard and responsive smoke checks
-- [API guide](API.md) and the authoritative [route contract](docs/api-contract.md)
-- [OpenAPI contract](docs/openapi.yaml)
+- [Canonical API guide](docs/api-contract.md) and [OpenAPI contract](docs/openapi.yaml)
 - [Configuration reference](CONFIG.md)
+- [Docker deployment](DOCKER.md)
 - [Release notes](RELEASE_NOTES.md)
 
 ## Development checks

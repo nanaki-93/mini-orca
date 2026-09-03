@@ -10,10 +10,10 @@ This directory contains the implementation backlog for [`../PLAN.md`](../PLAN.md
 - [`PROMPT_EXECUTE_LEGACY_CLEANUP.md`](PROMPT_EXECUTE_LEGACY_CLEANUP.md) runs the
   current Tasks 103–117 strictly sequentially with one implementation writer, one
   verified commit per task, and required user-facing start/completion commentary.
-- The older execution prompts are retained as history until Task 116 consolidates the
-  pre-cleanup task archive.
-- Tasks 01–102 are completed history. The active legacy-cleanup backlog is Tasks
-  103–117.
+- [`INDEX.md`](INDEX.md) contains the concise historical ledger for completed
+  Tasks 01–102. Git history is the full archive.
+- The active legacy-cleanup backlog is Tasks 103–117; its detailed records and
+  the one execution prompt remain auditable until final acceptance.
 
 ## Status lifecycle
 

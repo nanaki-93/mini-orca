@@ -1,8 +1,8 @@
-# v4.3 focused AI IDE release acceptance
+# v4.4 focused declaration-draft release acceptance
 
 Run this checklist from a clean release worktree after applying the intended
 implementation and documentation changes. The automated commands are recorded
-in the v4.3 release notes; the manual checks below are reproducible evidence
+in the v4.4 release notes; the manual checks below are reproducible evidence
 for a release operator, not claims that a source file was edited directly.
 
 ## Fixture and variants
@@ -35,7 +35,7 @@ context and findings.
 | Replace/create composition changes only the target declaration and requested imports | `go test ./internal/project -run 'ComposeGoDeclaration|ReleaseFixture'` |
 | File-bound chat, offline/remote confirmation, cancellation, stale sessions, and draft lineage | `go test ./internal/app ./internal/api/handlers -run 'ChatSession|Draft'` |
 | Manual draft edit invalidates old validation/checks; invalid or stale drafts cannot Apply | `go test ./internal/app -run 'DraftLifecycle|DraftValidateCheckApply'` |
-| One-file guarded Apply/Undo, comparison, export, and source-free audit | `go test ./internal/app -run 'Apply|Undo|Compare|Export'` |
+| One-file guarded Apply/Undo and source-free audit | `go test ./internal/app -run 'Apply|Undo'` |
 | Empty landing/open-project transition, shortcut gate, compact semantic controls, concise workspace labels, Bugs filters and priority grouping with per-card provenance, Analyze-all limits, responsive groups, direct source-symbol selection, active-file header in source/review, removed Editor/source helper copy, conditional imports, Editor-only explorer/context panes, read-only source/diff, and revision/file guards | `./desktop/gradlew -p desktop test` |
 | Live routes, OpenAPI, API reference, version, and retired browser routes | `go test ./cmd/daemon ./internal/api/handlers` |
 | Independent Analyze → Bug task → Function routing, temporary task-test checks, and no-model validation/check/Apply/Undo/scan/reindex path | `go test ./internal/app -run ScopedModelEndToEndTaskFlowKeepsNonPromptOperationsModelFree` |
@@ -140,6 +140,18 @@ running local model and a Compose Desktop window. A release operator records
 which profile type, date, and result were used, but not credentials, prompts, or
 source content.
 
+## Documentation and container acceptance
+
+Confirm maintained documentation links resolve, `docs/openapi.yaml` remains the
+machine-readable companion to the sole human API guide at
+`docs/api-contract.md`, and the task ledger exposes only the active cleanup
+record. Build the supported image without cleanup commands, start it with an
+ignored local `config.yaml`, and confirm `GET /health` plus the image health
+check succeed. The runtime image must contain the daemon binary and required
+runtime packages only—never Go source, a local configuration file, generated
+Desktop output, or credentials. If Docker is unavailable, record that as a
+release blocker instead of claiming container acceptance.
+
 ## Current execution record
 
 On 2026-09-02, the automated Desktop suite and `make check` passed for the focused
@@ -164,7 +176,7 @@ compatibility claim.
 Mini-Orca is Go-first for safe declaration editing. Kotlin, Java, TypeScript,
 Python, Rust, and other languages can retain conservative analysis and symbol
 information but do not have parser-backed exact declaration composition or
-equivalent Apply validators in v4.3. This is intentionally deferred, not a
+equivalent Apply validators in v4.4. This is intentionally deferred, not a
 fallback to direct source editing.
 
 The release is acceptable only when the automated table passes, the manual flow
