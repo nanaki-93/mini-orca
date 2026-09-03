@@ -155,9 +155,9 @@ func (h *CandidateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	if !decodeCandidateRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
 		return
 	}
-	result, err := h.service.ApplyCandidate(r.Context(), request)
+	result, err := h.service.ApplyDraft(r.Context(), request)
 	if err != nil {
-		writeCandidateError(w, "apply candidate failed", err)
+		writeCandidateError(w, "apply draft failed", err)
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, result)
@@ -168,9 +168,9 @@ func (h *CandidateHandler) Undo(w http.ResponseWriter, r *http.Request) {
 	if !decodeCandidateRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
 		return
 	}
-	result, err := h.service.UndoCandidate(r.Context(), request)
+	result, err := h.service.UndoDraft(r.Context(), request)
 	if err != nil {
-		writeCandidateError(w, "undo candidate failed", err)
+		writeCandidateError(w, "undo draft failed", err)
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, result)

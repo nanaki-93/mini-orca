@@ -61,57 +61,49 @@ type CandidateCheckOptions struct {
 	RunTests bool `json:"run_tests,omitempty"`
 }
 
-// RunCandidateChecks validates a candidate in an isolated copy of the active
-// project. Neither the candidate nor a formatter/check process can write the
-// imported project.
-func (s *Service) RunCandidateChecks(ctx context.Context, targetPath, candidate string, options CandidateCheckOptions) (CandidateCheckReport, error) {
-	return s.runCandidateChecks(ctx, targetPath, candidate, options, nil)
+type draftCheckInput struct {
+	file     project.IndexFile
+	source   string
+	taskTest *project.GoTestCandidateSpec
 }
 
-// RunCandidateChecksForTask adds one reviewed task test to the same isolated
-// workspace used by the ordinary parser, formatter, lint, and test checks.
-func (s *Service) RunCandidateChecksForTask(ctx context.Context, targetPath, candidate string, options CandidateCheckOptions, test *project.GoTestCandidateSpec) (CandidateCheckReport, error) {
-	return s.runCandidateChecks(ctx, targetPath, candidate, options, test)
-}
-
-func (s *Service) runCandidateChecks(ctx context.Context, targetPath, candidate string, options CandidateCheckOptions, taskTest *project.GoTestCandidateSpec) (CandidateCheckReport, error) {
-	file, err := s.manager.IndexedFile(targetPath)
-	if err != nil {
-		return CandidateCheckReport{}, err
-	}
+// runDraftChecks executes only the exact, already-validated draft in an
+// isolated project copy. It is intentionally not a general source-check API.
+func (s *Service) runDraftChecks(ctx context.Context, input draftCheckInput, options CandidateCheckOptions) (CandidateCheckReport, error) {
+	file := input.file
 	workspace, err := os.MkdirTemp("", "mini-orca-check-")
 	if err != nil {
-		return CandidateCheckReport{}, fmt.Errorf("create candidate workspace: %w", err)
+		return CandidateCheckReport{}, fmt.Errorf("create draft check workspace: %w", err)
 	}
 	defer os.RemoveAll(workspace)
-	if err := copyCandidateWorkspace(s.manager.Root(), workspace); err != nil {
+	if err := copyCheckWorkspace(s.manager.Root(), workspace); err != nil {
 		return CandidateCheckReport{}, err
 	}
 	var taskChecks []CandidateCheck
 	var taskCommand []string
-	if taskTest != nil {
+	if input.taskTest != nil {
 		testPath, err := taskTestPath(workspace, file.Path)
 		if err != nil {
 			return CandidateCheckReport{}, err
 		}
-		if err := os.WriteFile(testPath, []byte(taskTest.Content), 0600); err != nil {
+		if err := os.WriteFile(testPath, []byte(input.taskTest.Content), 0600); err != nil {
 			return CandidateCheckReport{}, fmt.Errorf("write task test workspace file: %w", err)
 		}
-		taskCommand = []string{"go", "test", "./...", "-run", "^" + taskTest.Name + "$"}
+		taskCommand = []string{"go", "test", "./...", "-run", "^" + input.taskTest.Name + "$"}
 		taskChecks = append(taskChecks, s.runTaskTestCheck(ctx, workspace, "task test baseline", taskCommand, false))
 	}
-	candidatePath := filepath.Join(workspace, filepath.FromSlash(file.Path))
-	if err := os.MkdirAll(filepath.Dir(candidatePath), 0700); err != nil {
-		return CandidateCheckReport{}, fmt.Errorf("create candidate directory: %w", err)
+	draftPath := filepath.Join(workspace, filepath.FromSlash(file.Path))
+	if err := os.MkdirAll(filepath.Dir(draftPath), 0700); err != nil {
+		return CandidateCheckReport{}, fmt.Errorf("create draft directory: %w", err)
 	}
-	if err := os.WriteFile(candidatePath, []byte(candidate), 0600); err != nil {
-		return CandidateCheckReport{}, fmt.Errorf("write candidate workspace file: %w", err)
+	if err := os.WriteFile(draftPath, []byte(input.source), 0600); err != nil {
+		return CandidateCheckReport{}, fmt.Errorf("write draft workspace file: %w", err)
 	}
 
 	report := CandidateCheckReport{TargetPath: file.Path, Checks: make([]CandidateCheck, 0, 4)}
 	switch file.Language {
 	case "Go":
-		report.Checks = append(report.Checks, parseGoCandidate(candidatePath, candidate))
+		report.Checks = append(report.Checks, parseGoDraft(draftPath, input.source))
 		report.Checks = append(report.Checks, s.runCheck(ctx, workspace, "format", true, []string{"gofmt", "-d", file.Path}, true))
 		if options.RunLint {
 			report.Checks = append(report.Checks, s.runCheck(ctx, workspace, "lint", false, []string{"go", "vet", "./..."}, false))
@@ -182,9 +174,9 @@ func (s *Service) runTaskTestCheck(ctx context.Context, workspace, name string, 
 	return check
 }
 
-func parseGoCandidate(path, candidate string) CandidateCheck {
+func parseGoDraft(path, source string) CandidateCheck {
 	check := CandidateCheck{Name: "parse", Required: true}
-	if _, err := parser.ParseFile(token.NewFileSet(), path, candidate, parser.AllErrors); err != nil {
+	if _, err := parser.ParseFile(token.NewFileSet(), path, source, parser.AllErrors); err != nil {
 		check.State = CheckFailed
 		check.Output = err.Error()
 		return check
@@ -251,7 +243,7 @@ func sanitizeCheckOutput(output, workspace, root string) string {
 	return strings.TrimSpace(output)
 }
 
-func copyCandidateWorkspace(source, destination string) error {
+func copyCheckWorkspace(source, destination string) error {
 	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr

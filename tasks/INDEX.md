@@ -116,7 +116,7 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 105 | [Simplify scoped model execution](completed/105_simplify_scoped_model_execution.md) | 104 | Complete |
 | 106 | [Consolidate project detection and remove tools](completed/106_consolidate_project_detection.md) | 105 | Complete |
 | 107 | [Enforce one scoped configuration and LLM boundary](completed/107_strict_scoped_configuration.md) | 106 | Complete |
-| 108 | [Introduce draft-native identities and Apply stages](108_draft_identities_apply.md) | 107 | Pending |
+| 108 | [Introduce draft-native identities and Apply stages](completed/108_draft_identities_apply.md) | 107 | Complete |
 | 109 | [Remove candidate and workflow compatibility](109_remove_candidate_compatibility.md) | 108 | Pending |
 | 110 | [Reduce the loopback API contract](110_reduce_loopback_api.md) | 109 | Pending |
 | 111 | [Unify project source traversal](111_unify_project_traversal.md) | 110 | Pending |

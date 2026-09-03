@@ -68,7 +68,7 @@ func (s *Service) ScanGoProject(ctx context.Context, revision string) (*GoScanRe
 		return nil, fmt.Errorf("create scan workspace: %w", err)
 	}
 	defer os.RemoveAll(workspace)
-	if err := copyCandidateWorkspace(root, workspace); err != nil {
+	if err := copyCheckWorkspace(root, workspace); err != nil {
 		return nil, err
 	}
 	fileHashes := make(map[string]string, len(index.Files))

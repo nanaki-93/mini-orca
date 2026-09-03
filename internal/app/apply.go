@@ -82,74 +82,183 @@ type ApplyResult struct {
 	Index           *project.ProjectIndex `json:"index"`
 }
 
-// ApplyCandidate writes one previously validated and checked candidate after
-// re-reading the real file. It never accepts source text from the caller.
-func (s *Service) ApplyCandidate(ctx context.Context, request ApplyRequest) (*ApplyResult, error) {
-	if !request.Confirm {
-		return nil, fmt.Errorf("explicit apply confirmation is required")
+// ApplyDraft is the only retained source-write path. It accepts identity and
+// confirmation, never source text, and rechecks the source immediately before
+// the atomic replacement.
+func (s *Service) ApplyDraft(ctx context.Context, request ApplyRequest) (*ApplyResult, error) {
+	identity, err := validateApplyRequest(ctx, request)
+	if err != nil {
+		return nil, err
 	}
+	current, err := s.loadCurrentApplyProject(identity)
+	if err != nil {
+		return nil, err
+	}
+	state, err := s.loadStoredDraftForApply(identity)
+	if err != nil {
+		return nil, err
+	}
+	current, err = s.loadCurrentApplyFile(current, state.target)
+	if err != nil {
+		return nil, err
+	}
+	composition, err := validateDraftForApply(state, current.source)
+	if err != nil {
+		return nil, err
+	}
+	original, err := s.verifyApplyBeforeWrite(ctx, current, state)
+	if err != nil {
+		return nil, err
+	}
+	backupPath, err := writeBackup(current.root, state.target.file.path, original)
+	if err != nil {
+		return nil, err
+	}
+	if err := atomicWrite(current.path, []byte(composition.CandidateContent)); err != nil {
+		return nil, err
+	}
+	return s.persistDraftApply(current, state, composition, backupPath)
+}
+
+type currentApplyProject struct {
+	root         string
+	path         string
+	source       []byte
+	baseFileHash string
+}
+
+type applyDraftState struct {
+	draft    Draft
+	meta     draftMetadata
+	target   taskTarget
+	checks   CandidateCheckReport
+	identity applyIdentity
+}
+
+func validateApplyRequest(ctx context.Context, request ApplyRequest) (applyIdentity, error) {
+	if !request.Confirm {
+		return applyIdentity{}, fmt.Errorf("explicit apply confirmation is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return applyIdentity{}, err
+	}
+	return newApplyIdentity(request)
+}
+
+func (s *Service) loadCurrentApplyProject(identity applyIdentity) (currentApplyProject, error) {
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		return currentApplyProject{}, err
+	}
+	if !identity.project.matches(analysis.ProjectID, analysis.ProjectRevision) {
+		return currentApplyProject{}, project.ErrRevisionConflict
+	}
+	return currentApplyProject{root: s.manager.Root()}, nil
+}
+
+func (s *Service) loadStoredDraftForApply(identity applyIdentity) (applyDraftState, error) {
+	s.draftMu.Lock()
+	defer s.draftMu.Unlock()
+	stored := s.drafts[identity.draft.id]
+	if stored == nil {
+		return applyDraftState{}, fmt.Errorf("draft not found")
+	}
+	s.expireDraftLocked(stored)
+	if stored.draft.State == DraftStale || !identity.matchesDraft(stored.draft) {
+		return applyDraftState{}, project.ErrRevisionConflict
+	}
+	target, err := taskTargetForDraft(stored.draft)
+	if err != nil {
+		return applyDraftState{}, err
+	}
+	if !target.project.matches(identity.project.id, identity.project.revision) || target.file.baseHash != identity.baseFileHash {
+		return applyDraftState{}, project.ErrRevisionConflict
+	}
+	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable || stored.draft.CandidateHash == "" {
+		return applyDraftState{}, fmt.Errorf("draft is not valid; validate the latest revision")
+	}
+	if stored.checks == nil || stored.checks.Revision != stored.draft.Revision || stored.checks.CandidateHash != stored.draft.CandidateHash || !stored.checks.Report.Applicable {
+		return applyDraftState{}, fmt.Errorf("focused draft checks have not passed for the latest draft revision")
+	}
+	return applyDraftState{draft: cloneDraft(stored.draft), meta: cloneDraftMetadata(stored.meta), target: target, checks: cloneCheckReport(stored.checks.Report), identity: identity}, nil
+}
+
+func (s *Service) loadCurrentApplyFile(current currentApplyProject, target taskTarget) (currentApplyProject, error) {
+	if err := s.ValidateMutableRequest(target.project.id, target.project.revision, target.file.path, target.file.baseHash); err != nil {
+		return currentApplyProject{}, err
+	}
+	path, err := project.ResolveFile(current.root, target.file.path)
+	if err != nil {
+		return currentApplyProject{}, err
+	}
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return currentApplyProject{}, fmt.Errorf("read apply target: %w", err)
+	}
+	if contentHash(source) != target.file.baseHash {
+		return currentApplyProject{}, project.ErrRevisionConflict
+	}
+	current.path = path
+	current.source = source
+	current.baseFileHash = target.file.baseHash
+	return current, nil
+}
+
+func validateDraftForApply(state applyDraftState, source []byte) (project.GoDeclarationComposition, error) {
+	composition := project.ComposeGoDeclaration(state.target.file.path, string(source), project.GoDeclarationEdit{
+		Mode: state.target.mode, TargetSymbol: state.target.symbol, Declaration: state.draft.Declaration, Imports: state.draft.Imports,
+	})
+	if !composition.Validation.Applicable || composition.CandidateHash != state.draft.CandidateHash || composition.CandidateHash != state.checks.CandidateHash {
+		return project.GoDeclarationComposition{}, project.ErrRevisionConflict
+	}
+	return composition, nil
+}
+
+func (s *Service) verifyApplyBeforeWrite(ctx context.Context, current currentApplyProject, state applyDraftState) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if request.DraftID == "" || request.DraftRevision < 1 || request.DraftHash == "" {
-		return nil, fmt.Errorf("draft_id, draft_revision, and draft_hash are required")
+	if _, err := s.loadCurrentApplyProject(state.identity); err != nil {
+		return nil, err
 	}
-	currentDraft, err := s.Draft(request.DraftID)
+	latest, err := s.loadStoredDraftForApply(state.identity)
 	if err != nil {
 		return nil, err
 	}
-	if currentDraft.Revision != request.DraftRevision || currentDraft.Hash != request.DraftHash {
+	if !state.target.matchesDraft(latest.draft) || latest.draft.CandidateHash != state.draft.CandidateHash || latest.checks.CandidateHash != state.checks.CandidateHash {
 		return nil, project.ErrRevisionConflict
 	}
-	preview, checks, err := s.checkedCandidate(request.DraftID)
-	if err != nil {
+	if err := s.ValidateMutableRequest(state.target.project.id, state.target.project.revision, state.target.file.path, state.target.file.baseHash); err != nil {
 		return nil, err
 	}
-	if !preview.Validation.Applicable || !checks.Applicable {
-		return nil, fmt.Errorf("candidate scope validation or required checks did not pass")
+	source, err := os.ReadFile(current.path)
+	if err != nil {
+		return nil, fmt.Errorf("re-read apply target: %w", err)
 	}
-	if preview.ProjectID != request.ProjectID || preview.ProjectRevision != request.ProjectRevision || preview.BaseFileHash != request.BaseFileHash {
+	if contentHash(source) != current.baseFileHash {
 		return nil, project.ErrRevisionConflict
 	}
-	if err := s.ValidateMutableRequest(request.ProjectID, request.ProjectRevision, preview.TargetPath, request.BaseFileHash); err != nil {
-		return nil, err
-	}
-	root := s.manager.Root()
-	path, err := project.ResolveFile(root, preview.TargetPath)
-	if err != nil {
-		return nil, err
-	}
-	original, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read apply target: %w", err)
-	}
-	if contentHash(original) != preview.BaseFileHash {
-		return nil, project.ErrRevisionConflict
-	}
-	backupPath, err := writeBackup(root, preview.TargetPath, original)
-	if err != nil {
-		return nil, err
-	}
-	if err := atomicWrite(path, []byte(preview.CandidateContent)); err != nil {
-		return nil, err
-	}
-	postHash := contentHash([]byte(preview.CandidateContent))
+	return source, nil
+}
+
+func (s *Service) persistDraftApply(current currentApplyProject, state applyDraftState, composition project.GoDeclarationComposition, backupPath string) (*ApplyResult, error) {
+	postHash := composition.CandidateHash
 	index, err := s.Reindex()
 	if err != nil {
 		return nil, err
 	}
-	audit := AuditEntry{ID: "apply-" + shortHash(postHash), Action: "apply", TargetPath: preview.TargetPath, GenerationID: preview.GenerationID, BeforeHash: preview.BaseFileHash, AfterHash: postHash, ProjectID: preview.ProjectID, ProjectRevision: index.ProjectRevision, Model: preview.EffectiveModel.Model, Profile: preview.EffectiveModel.Profile, Validation: true, Checks: auditChecks(checks.Checks), Outcome: "applied", Timestamp: time.Now().UTC(), TemplateID: preview.TemplateID, ActionTemplate: preview.Action, TemplateInputHash: preview.TemplateInputHash}
-	if err := appendAudit(root, audit); err != nil {
+	audit := AuditEntry{ID: "apply-" + shortHash(postHash), Action: "apply", TargetPath: state.target.file.path, GenerationID: state.draft.ID, BeforeHash: state.target.file.baseHash, AfterHash: postHash, ProjectID: state.draft.ProjectID, ProjectRevision: index.ProjectRevision, Model: state.draft.EffectiveModel.Model, Profile: state.draft.EffectiveModel.Profile, Validation: true, Checks: auditChecks(state.checks.Checks), Outcome: "applied", Timestamp: time.Now().UTC(), TemplateID: state.meta.TemplateID, ActionTemplate: state.meta.Action, TemplateInputHash: state.meta.TemplateInputHash}
+	if err := appendAudit(current.root, audit); err != nil {
 		return nil, err
 	}
-	if err := writeApplyState(root, applyState{ProjectID: preview.ProjectID, TargetPath: preview.TargetPath, BeforeHash: preview.BaseFileHash, AfterHash: postHash, BackupPath: backupPath, AuditID: audit.ID, AppliedAt: audit.Timestamp}); err != nil {
+	if err := writeApplyState(current.root, applyState{ProjectID: state.draft.ProjectID, TargetPath: state.target.file.path, BeforeHash: state.target.file.baseHash, AfterHash: postHash, BackupPath: backupPath, AuditID: audit.ID, AppliedAt: audit.Timestamp}); err != nil {
 		return nil, err
 	}
 	return &ApplyResult{Audit: audit, ProjectRevision: index.ProjectRevision, PostApplyHash: postHash, UndoAvailable: true, Index: index}, nil
 }
 
-// UndoCandidate restores only the last unchanged applied file.
-func (s *Service) UndoCandidate(ctx context.Context, request UndoRequest) (*ApplyResult, error) {
+// UndoDraft restores only the last unchanged applied file.
+func (s *Service) UndoDraft(ctx context.Context, request UndoRequest) (*ApplyResult, error) {
 	if !request.Confirm {
 		return nil, fmt.Errorf("explicit undo confirmation is required")
 	}

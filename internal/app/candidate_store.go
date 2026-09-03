@@ -142,16 +142,17 @@ func (s *Service) CreateDraft(request DraftCreateRequest) (*Draft, error) {
 	if request.ID == "" {
 		request.ID = newGenerationID()
 	}
-	if request.ProjectID == "" || request.ProjectRevision == "" || request.BaseFileHash == "" || request.TargetPath == "" || request.TargetSymbol == "" {
-		return nil, fmt.Errorf("draft base project, file, and target identity is required")
+	target, err := newTaskTarget(request.ProjectID, request.ProjectRevision, request.TargetPath, request.BaseFileHash, request.Mode, request.TargetSymbol)
+	if err != nil {
+		return nil, err
 	}
-	if err := s.ValidateMutableRequest(request.ProjectID, request.ProjectRevision, request.TargetPath, request.BaseFileHash); err != nil {
+	if err := s.ValidateMutableRequest(target.project.id, target.project.revision, target.file.path, target.file.baseHash); err != nil {
 		return nil, err
 	}
 	draft := Draft{
-		ID: request.ID, ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision,
-		BaseFileHash: request.BaseFileHash, TargetPath: request.TargetPath, Mode: request.Mode,
-		TargetSymbol: request.TargetSymbol, Declaration: request.Declaration, Imports: append([]string(nil), request.Imports...),
+		ID: request.ID, ProjectID: target.project.id, ProjectRevision: target.project.revision,
+		BaseFileHash: target.file.baseHash, TargetPath: target.file.path, Mode: target.mode,
+		TargetSymbol: target.symbol, Declaration: request.Declaration, Imports: append([]string(nil), request.Imports...),
 		Revision: 1, ParentDraftID: request.ParentDraftID, EffectiveModel: request.EffectiveModel, TaskSpec: project.SanitizeBugTaskSpec(request.TaskSpec), State: DraftGenerated,
 	}
 	draft.Hash = draftHash(draft.Declaration, draft.Imports)
@@ -305,58 +306,88 @@ func (s *Service) composeDraft(draft Draft) (project.GoDeclarationComposition, e
 // CheckDraft runs isolated checks for exactly one current, validated draft.
 // A concurrent manual edit cannot retain its predecessor's check evidence.
 func (s *Service) CheckDraft(ctx context.Context, request DraftCheckRequest) (*CandidateCheckReport, error) {
+	identity, err := newDraftRevisionIdentity(request.ID, request.ExpectedRevision, request.ExpectedHash)
+	if err != nil {
+		return nil, err
+	}
+	draft, err := s.loadValidatedDraftForChecks(identity)
+	if err != nil {
+		return nil, err
+	}
+	input, candidateHash, err := s.composeDraftCheckInput(draft)
+	if err != nil {
+		return nil, err
+	}
+	report, err := s.runDraftChecks(ctx, input, request.Options)
+	if err != nil {
+		return nil, err
+	}
+	report = draftCheckReport(draft, candidateHash, report)
+	return s.storeDraftCheckReport(identity, draft, candidateHash, report)
+}
+
+func (s *Service) loadValidatedDraftForChecks(identity draftRevisionIdentity) (Draft, error) {
 	s.draftMu.Lock()
-	stored := s.drafts[request.ID]
+	defer s.draftMu.Unlock()
+	stored := s.drafts[identity.id]
 	if stored == nil {
-		s.draftMu.Unlock()
-		return nil, fmt.Errorf("draft not found")
+		return Draft{}, fmt.Errorf("draft not found")
 	}
 	s.expireDraftLocked(stored)
-	if stored.draft.State == DraftStale || stored.draft.Revision != request.ExpectedRevision || stored.draft.Hash != request.ExpectedHash {
-		s.draftMu.Unlock()
-		return nil, project.ErrRevisionConflict
+	if stored.draft.State == DraftStale || !identity.matches(stored.draft) {
+		return Draft{}, project.ErrRevisionConflict
 	}
 	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable || stored.draft.CandidateHash == "" {
-		s.draftMu.Unlock()
-		return nil, fmt.Errorf("draft is not valid; validate the latest revision")
+		return Draft{}, fmt.Errorf("draft is not valid; validate the latest revision")
 	}
-	draft := cloneDraft(stored.draft)
-	s.draftMu.Unlock()
+	return cloneDraft(stored.draft), nil
+}
 
+func (s *Service) composeDraftCheckInput(draft Draft) (draftCheckInput, string, error) {
 	composition, err := s.composeDraft(draft)
 	if err != nil {
-		return nil, err
+		return draftCheckInput{}, "", err
 	}
 	if !composition.Validation.Applicable || composition.CandidateHash != draft.CandidateHash {
-		return nil, project.ErrRevisionConflict
+		return draftCheckInput{}, "", project.ErrRevisionConflict
 	}
-	var taskTest *project.GoTestCandidateSpec
-	if draft.TaskSpec != nil {
-		taskTest = draft.TaskSpec.GoTestCandidate
-	}
-	report, err := s.RunCandidateChecksForTask(ctx, draft.TargetPath, composition.CandidateContent, request.Options, taskTest)
+	file, err := s.manager.IndexedFile(draft.TargetPath)
 	if err != nil {
-		return nil, err
+		return draftCheckInput{}, "", err
 	}
+	if file.ContentHash != draft.BaseFileHash {
+		return draftCheckInput{}, "", project.ErrRevisionConflict
+	}
+	input := draftCheckInput{file: *file, source: composition.CandidateContent}
+	if draft.TaskSpec != nil {
+		input.taskTest = draft.TaskSpec.GoTestCandidate
+	}
+	return input, composition.CandidateHash, nil
+}
+
+func draftCheckReport(draft Draft, candidateHash string, report CandidateCheckReport) CandidateCheckReport {
 	report.DraftID = draft.ID
 	report.DraftRevision = draft.Revision
 	report.DraftHash = draft.Hash
-	report.CandidateHash = composition.CandidateHash
+	report.CandidateHash = candidateHash
 	report.ProjectID = draft.ProjectID
 	report.ProjectRevision = draft.ProjectRevision
 	report.BaseFileHash = draft.BaseFileHash
+	return report
+}
 
+func (s *Service) storeDraftCheckReport(identity draftRevisionIdentity, draft Draft, candidateHash string, report CandidateCheckReport) (*CandidateCheckReport, error) {
 	s.draftMu.Lock()
 	defer s.draftMu.Unlock()
-	stored = s.drafts[request.ID]
+	stored := s.drafts[identity.id]
 	if stored == nil {
 		return nil, project.ErrRevisionConflict
 	}
 	s.expireDraftLocked(stored)
-	if stored.draft.State != DraftValid || stored.draft.Revision != draft.Revision || stored.draft.Hash != draft.Hash || stored.draft.CandidateHash != composition.CandidateHash {
+	if stored.draft.State != DraftValid || !identity.matches(stored.draft) || stored.draft.CandidateHash != candidateHash {
 		return nil, project.ErrRevisionConflict
 	}
-	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CandidateHash: composition.CandidateHash, Report: cloneCheckReport(report)}
+	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CandidateHash: candidateHash, Report: cloneCheckReport(report)}
 	copy := cloneCheckReport(report)
 	return &copy, nil
 }
@@ -684,6 +715,12 @@ func cloneManifest(source project.ContextManifest) project.ContextManifest {
 	copy := source
 	copy.Included = append([]project.ContextFile(nil), source.Included...)
 	copy.Excluded = append([]project.ContextDecision(nil), source.Excluded...)
+	return copy
+}
+
+func cloneDraftMetadata(source draftMetadata) draftMetadata {
+	copy := source
+	copy.ContextManifest = cloneManifest(source.ContextManifest)
 	return copy
 }
 

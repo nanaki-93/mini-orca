@@ -413,11 +413,11 @@ func TestScopedModelEndToEndTaskFlowKeepsNonPromptOperationsModelFree(t *testing
 	if err != nil || !checks.Applicable || len(taskChecks(checks.Checks)) != 2 {
 		t.Fatalf("task checks = %+v, err = %v", checks, err)
 	}
-	applied, err := service.ApplyCandidate(context.Background(), ApplyRequest{DraftID: validated.ID, DraftRevision: validated.Revision, DraftHash: validated.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: indexedFile.ContentHash, Confirm: true})
+	applied, err := service.ApplyDraft(context.Background(), ApplyRequest{DraftID: validated.ID, DraftRevision: validated.Revision, DraftHash: validated.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: indexedFile.ContentHash, Confirm: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.UndoCandidate(context.Background(), UndoRequest{ProjectID: analysis.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true}); err != nil {
+	if _, err := service.UndoDraft(context.Background(), UndoRequest{ProjectID: analysis.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true}); err != nil {
 		t.Fatal(err)
 	}
 	current, err := manager.Analysis()
