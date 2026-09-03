@@ -233,6 +233,7 @@ internal data class DesktopShellPaletteActions(
 internal data class DesktopShellPanes(
     val explorer: @Composable (Modifier, () -> Unit) -> Unit,
     val rightToolWindows: @Composable (RightToolWindow, Modifier) -> Unit,
+    val rightToolWindowBadges: Map<RightToolWindow, RightToolWindowBadge>,
 )
 
 @Composable
@@ -327,6 +328,7 @@ internal fun DesktopShell(
                             layout.activeRightToolWindow,
                             ::selectRightToolWindow,
                             panes.rightToolWindows,
+                            panes.rightToolWindowBadges,
                             modifier)
                       },
                       modifier = Modifier.fillMaxHeight().width(360.dp))
@@ -386,6 +388,7 @@ internal fun DesktopShell(
                           layout.activeRightToolWindow,
                           ::selectRightToolWindow,
                           panes.rightToolWindows,
+                          panes.rightToolWindowBadges,
                           modifier)
                     },
                     modifier = Modifier.width(layout.actionWidth.dp).fillMaxHeight())

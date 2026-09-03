@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class ReviewContextPaneTest {
+class ReviewToolWindowTest {
   @Test
   fun eligibleDecisionNamesExactlyOneSymbolAndFile() {
     val current = draft()

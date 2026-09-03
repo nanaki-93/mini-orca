@@ -25,6 +25,7 @@ internal fun RightToolWindowContainer(
     activeToolWindow: RightToolWindow,
     onSelect: (RightToolWindow) -> Unit,
     content: @Composable (RightToolWindow, Modifier) -> Unit,
+    badges: Map<RightToolWindow, RightToolWindowBadge> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
   Column(
@@ -35,6 +36,7 @@ internal fun RightToolWindowContainer(
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
           RightToolWindow.entries.forEach { toolWindow ->
             val selected = toolWindow == activeToolWindow
+            val badge = badges[toolWindow]
             FocusFlowButton(
                 onClick = { onSelect(toolWindow) },
                 tone = ActionTone.Navigation,
@@ -42,11 +44,14 @@ internal fun RightToolWindowContainer(
                 selected = selected,
                 modifier =
                     Modifier.weight(1f).semantics {
-                      contentDescription = rightToolWindowTabDescription(toolWindow, selected)
+                      contentDescription =
+                          rightToolWindowTabDescription(toolWindow, selected, badge)
                       this.selected = selected
                     },
             ) {
-              Text(rightToolWindowLabel(toolWindow), fontSize = 10.sp)
+              Text(
+                  rightToolWindowLabel(toolWindow) + badge?.let { " · ${it.label}" }.orEmpty(),
+                  fontSize = 10.sp)
             }
           }
         }
@@ -54,8 +59,12 @@ internal fun RightToolWindowContainer(
       }
 }
 
-internal fun rightToolWindowTabDescription(toolWindow: RightToolWindow, selected: Boolean): String =
-    "${rightToolWindowLabel(toolWindow)} tool window tab, ${if (selected) "selected" else "not selected"}"
+internal fun rightToolWindowTabDescription(
+    toolWindow: RightToolWindow,
+    selected: Boolean,
+    badge: RightToolWindowBadge? = null,
+): String =
+    "${rightToolWindowLabel(toolWindow)} tool window tab${badge?.let { ", ${it.label}" }.orEmpty()}, ${if (selected) "selected" else "not selected"}"
 
 @Composable
 internal fun ContextToolWindow(

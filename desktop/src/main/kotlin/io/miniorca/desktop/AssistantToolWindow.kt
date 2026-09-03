@@ -17,95 +17,106 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-internal fun DraftContextPane(
-    state: DraftContextPaneState,
-    conversationActions: DraftConversationActions,
+internal fun AssistantToolWindow(
+    state: AssistantToolWindowState,
+    conversationActions: AssistantConversationActions,
     editorActions: DraftEditorActions,
     modifier: Modifier,
 ) {
   val bound =
       state.target != null &&
           chatSessionMatches(state.session, state.selected, state.project, state.target)
-  Column(modifier.verticalScroll(rememberScrollState())) {
-    FocusFlowPanel(Modifier.fillMaxWidth()) {
-      SectionLabel("BOUND CONVERSATION")
-      Text(
-          state.selected?.path ?: "Open one Go file before drafting.",
-          color = PrimaryText,
-          fontFamily = FontFamily.Monospace,
-          fontSize = 12.sp)
-      Text(
-          state.target?.let { "${it.mode.label} · ${it.symbol}" }
-              ?: "Select an eligible declaration or enter a new declaration name.",
-          color = if (state.target == null) Warning else SecondaryText,
-          fontSize = 11.sp)
-      if (bound && state.session != null) {
-        state.session.messages.forEach { turn ->
-          Text(
-              turn.role.uppercase(),
-              color = SecondaryText,
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold,
-              modifier = Modifier.padding(top = 7.dp))
-          Text(turn.content, color = PrimaryText, fontSize = 12.sp)
-        }
-      }
-      if (state.mode == ChatEditMode.CreateSymbol) {
-        CompactSingleLineField(
-            state.newSymbol,
-            conversationActions.updateNewSymbol,
-            label = { Text("New Go function or type name") },
-            modifier = Modifier.fillMaxWidth().padding(top = 9.dp))
-      }
-      OutlinedTextField(
-          state.message,
-          conversationActions.updateMessage,
-          enabled = !state.sending && state.target != null,
-          label = { Text("Message") },
-          placeholder = { Text("Describe one declaration change") },
-          minLines = 3,
-          modifier = Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(state.chatFocus))
-      RemoteProviderConfirmation(
-          ModelScope.Function,
-          state.functionModel,
-          state.remoteConfirmed,
-          conversationActions.confirmRemoteProvider)
-      FocusFlowButton(
-          onClick = conversationActions.inspectContext,
-          enabled = state.selected != null && !state.sending,
-          tone = ActionTone.Neutral,
-          modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            Text("Inspect context")
+  Column(modifier) {
+    ToolWindowScopeHeader(
+        "ASSISTANT",
+        assistantToolWindowScope(state.selected, state.target, state.draft, state.newSymbol),
+        Modifier.padding(12.dp))
+    Column(
+        Modifier.weight(1f)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 12.dp)) {
+          FocusFlowPanel(Modifier.fillMaxWidth()) {
+            SectionLabel("BOUND CONVERSATION")
+            Text(
+                state.selected?.path ?: "Open one Go file before drafting.",
+                color = PrimaryText,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp)
+            Text(
+                state.target?.let { "${it.mode.label} · ${it.symbol}" }
+                    ?: "Select an eligible declaration or enter a new declaration name.",
+                color = if (state.target == null) Warning else SecondaryText,
+                fontSize = 11.sp)
+            if (bound && state.session != null) {
+              state.session.messages.forEach { turn ->
+                Text(
+                    turn.role.uppercase(),
+                    color = SecondaryText,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 7.dp))
+                Text(turn.content, color = PrimaryText, fontSize = 12.sp)
+              }
+            }
+            if (state.mode == ChatEditMode.CreateSymbol) {
+              CompactSingleLineField(
+                  state.newSymbol,
+                  conversationActions.updateNewSymbol,
+                  label = { Text("New Go function or type name") },
+                  modifier = Modifier.fillMaxWidth().padding(top = 9.dp))
+            }
+            OutlinedTextField(
+                state.message,
+                conversationActions.updateMessage,
+                enabled = !state.sending && state.target != null,
+                label = { Text("Message") },
+                placeholder = { Text("Describe one declaration change") },
+                minLines = 3,
+                modifier =
+                    Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(state.chatFocus))
+            RemoteProviderConfirmation(
+                ModelScope.Function,
+                state.functionModel,
+                state.remoteConfirmed,
+                conversationActions.confirmRemoteProvider)
+            FocusFlowButton(
+                onClick = conversationActions.inspectContext,
+                enabled = state.selected != null && !state.sending,
+                tone = ActionTone.Neutral,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                  Text("Inspect context")
+                }
+            if (state.sending)
+                FocusFlowButton(
+                    onClick = conversationActions.cancel,
+                    tone = ActionTone.Destructive,
+                    modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
+                      Text("Cancel request")
+                    }
+            else
+                FocusFlowButton(
+                    onClick = conversationActions.send,
+                    enabled =
+                        state.target != null &&
+                            state.message.isNotBlank() &&
+                            (!state.functionModel.remoteProvider || state.remoteConfirmed),
+                    tone = ActionTone.Primary,
+                    modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
+                      Text("Send message")
+                    }
           }
-      if (state.sending)
-          FocusFlowButton(
-              onClick = conversationActions.cancel,
-              tone = ActionTone.Destructive,
-              modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
-                Text("Cancel request")
-              }
-      else
-          FocusFlowButton(
-              onClick = conversationActions.send,
-              enabled =
-                  state.target != null &&
-                      state.message.isNotBlank() &&
-                      (!state.functionModel.remoteProvider || state.remoteConfirmed),
-              tone = ActionTone.Primary,
-              modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
-                Text("Send message")
-              }
-    }
-    if (state.draft != null &&
-        state.editor != null &&
-        chatDraftMatchesSession(state.draft, state.session)) {
-      DraftEditorCard(state.editor, state.draftFocus, editorActions)
-    }
+          if (state.draft != null &&
+              state.editor != null &&
+              chatDraftMatchesSession(state.draft, state.session)) {
+            AssistantDraftEditorCard(state.editor, state.draftFocus, editorActions)
+          }
+        }
   }
 }
 
 @Composable
-private fun DraftEditorCard(
+private fun AssistantDraftEditorCard(
     editor: EditableDraftState,
     draftFocus: FocusRequester,
     actions: DraftEditorActions
@@ -158,8 +169,8 @@ private fun DraftEditorCard(
   }
 }
 
-/** File-scoped drafting data rendered by the context pane. */
-internal data class DraftContextPaneState(
+/** File-scoped drafting data rendered by the Assistant tool window. */
+internal data class AssistantToolWindowState(
     val project: ProjectAnalysis?,
     val selected: ProjectFileInfo?,
     val session: ChatSession?,
@@ -177,7 +188,7 @@ internal data class DraftContextPaneState(
 )
 
 /** Conversation intents that do not mutate the editable declaration. */
-internal data class DraftConversationActions(
+internal data class AssistantConversationActions(
     val updateMessage: (String) -> Unit,
     val updateNewSymbol: (String) -> Unit,
     val confirmRemoteProvider: (Boolean) -> Unit,
