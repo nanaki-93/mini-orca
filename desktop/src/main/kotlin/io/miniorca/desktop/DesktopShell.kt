@@ -147,62 +147,106 @@ class PaneWidthStore(private val preferences: Preferences = Preferences.userNode
     }
 }
 
+/** Immutable shell state assembled from feature-specific desktop workflow state. */
+internal data class DesktopShellState(
+    val app: DesktopState,
+    val paneWidths: PaneWidths,
+    val editor: DesktopShellEditorState,
+    val context: DesktopShellContextState,
+    val palette: DesktopShellPaletteState,
+)
+
+internal data class DesktopShellEditorState(
+    val progress: EditorProgressUiState,
+    val contextualActions: EditorContextualActions,
+    val analysisInProgress: Boolean,
+    val generating: Boolean,
+)
+
+internal data class DesktopShellContextState(
+    val visible: Boolean,
+    val manifest: ContextManifest?,
+    val bugModel: ScopedModel,
+    val bugProviderConfirmed: Boolean,
+)
+
+internal data class DesktopShellPaletteState(
+    val mode: PaletteMode,
+    val query: String,
+    val visible: Boolean,
+)
+
+internal data class DesktopShellLayoutActions(
+    val updatePaneWidths: (PaneWidths) -> Unit,
+    val savePaneWidths: () -> Unit,
+)
+
+internal data class DesktopShellProjectActions(
+    val importProject: () -> Unit,
+    val reanalyzeProject: () -> Unit,
+    val reconnect: () -> Unit,
+)
+
+internal data class DesktopShellEditorActions(
+    val selectWorkspace: (Workspace) -> Unit,
+    val focusChat: () -> Unit,
+    val focusDraft: () -> Unit,
+    val cancelAnalysis: () -> Unit,
+    val sourceLineSelected: (SourceLineSelection) -> Unit,
+    val validateDraft: () -> Unit,
+    val runDraftChecks: () -> Unit,
+    val generate: () -> Unit,
+    val cancelGeneration: () -> Unit,
+    val dismissContext: () -> Unit,
+)
+
+internal data class DesktopShellAnalysisActions(
+    val confirmBugProvider: (Boolean) -> Unit,
+    val startAnalyzeAll: (AnalyzeAllRunOptions) -> Unit,
+    val pauseAnalyzeAll: () -> Unit,
+    val resumeAnalyzeAll: (Boolean) -> Unit,
+    val cancelAnalyzeAll: () -> Unit,
+    val startScan: () -> Unit,
+    val cancelScan: () -> Unit,
+)
+
+internal data class DesktopShellFindingActions(
+    val openFinding: (UnifiedFinding) -> Unit,
+    val prepareFinding: (UnifiedFinding) -> Unit,
+    val triageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
+)
+
+internal data class DesktopShellPaletteActions(
+    val updateQuery: (String) -> Unit,
+    val dismiss: () -> Unit,
+    val open: (PaletteMode) -> Unit,
+    val selectFile: (String) -> Unit,
+    val selectSymbol: (SymbolInfo) -> Unit,
+    val selectAction: (String) -> Unit,
+)
+
+internal data class DesktopShellPanes(
+    val explorer: @Composable (Modifier, () -> Unit) -> Unit,
+    val context: @Composable (Modifier) -> Unit,
+)
+
 @Composable
 internal fun DesktopShell(
-    appState: DesktopState,
-    paneWidths: PaneWidths,
-    onPaneWidths: (PaneWidths) -> Unit,
-    onSavePaneWidths: () -> Unit,
-    connection: ConnectionState,
-    workspace: Workspace,
-    onWorkspace: (Workspace) -> Unit,
-    editorProgress: EditorProgressUiState,
-    onFocusChat: () -> Unit,
-    onFocusDraft: () -> Unit,
-    canFocusChat: Boolean,
-    canFocusDraft: Boolean,
-    canGenerate: Boolean,
-    canValidateDraft: Boolean,
-    canRunDraftChecks: Boolean,
-    analysisInProgress: Boolean,
-    generating: Boolean,
-    showContext: Boolean,
-    contextManifest: ContextManifest?,
-    bugModel: ScopedModel,
-    bugProviderConfirmed: Boolean,
-    onBugProviderConfirmed: (Boolean) -> Unit,
-    onDismissContext: () -> Unit,
-    paletteMode: PaletteMode,
-    paletteQuery: String,
-    showPalette: Boolean,
-    onPaletteQuery: (String) -> Unit,
-    onDismissPalette: () -> Unit,
-    onOpenPalette: (PaletteMode) -> Unit,
-    onSelectPaletteFile: (String) -> Unit,
-    onSelectPaletteSymbol: (SymbolInfo) -> Unit,
-    onSelectPaletteAction: (String) -> Unit,
-    onOpenFinding: (UnifiedFinding) -> Unit,
-    onPrepareFinding: (UnifiedFinding) -> Unit,
-    onTriageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
-    onStartAnalyzeAll: (AnalyzeAllRunOptions) -> Unit,
-    onPauseAnalyzeAll: () -> Unit,
-    onResumeAnalyzeAll: (Boolean) -> Unit,
-    onCancelAnalyzeAll: () -> Unit,
-    onStartScan: () -> Unit,
-    onCancelScan: () -> Unit,
-    explorer: @Composable (Modifier, () -> Unit) -> Unit,
-    contextPane: @Composable (Modifier) -> Unit,
-    onImport: () -> Unit,
-    onReanalyze: () -> Unit,
-    onReconnect: () -> Unit,
-    onCancelAnalysis: () -> Unit,
-    onSourceLineSelected: (SourceLineSelection) -> Unit,
-    onValidateDraft: () -> Unit,
-    onRunDraftChecks: () -> Unit,
-    onGenerate: () -> Unit,
-    onCancelGeneration: () -> Unit,
-    onCancelAll: () -> Unit,
+    state: DesktopShellState,
+    layoutActions: DesktopShellLayoutActions,
+    projectActions: DesktopShellProjectActions,
+    editorActions: DesktopShellEditorActions,
+    analysisActions: DesktopShellAnalysisActions,
+    findingActions: DesktopShellFindingActions,
+    paletteActions: DesktopShellPaletteActions,
+    panes: DesktopShellPanes,
 ) {
+    val appState = state.app
+    val paneWidths = state.paneWidths
+    val editor = state.editor
+    val context = state.context
+    val palette = state.palette
+    val workspace = appState.workspace
     val shellMode = desktopShellMode(appState)
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -215,7 +259,7 @@ internal fun DesktopShell(
     }
     fun selectWorkspace(nextWorkspace: Workspace) {
         if (!editorChromeVisible(nextWorkspace)) scope.launch { drawerState.close() }
-        onWorkspace(nextWorkspace)
+        editorActions.selectWorkspace(nextWorkspace)
     }
     LaunchedEffect(showsEditorChrome) {
         if (!showsEditorChrome) drawerState.close()
@@ -243,25 +287,25 @@ internal fun DesktopShell(
             val shortcut = desktopShortcut(key, event.isMetaPressed || event.isCtrlPressed, event.isShiftPressed)
             if (!shortcutAvailable(shellMode, shortcut)) return@onPreviewKeyEvent false
             when (shortcut) {
-                DesktopShortcut.OpenProject -> if (!appState.loading) onImport()
-                DesktopShortcut.OpenFile -> onOpenPalette(PaletteMode.Files)
-                DesktopShortcut.OpenSymbol -> onOpenPalette(PaletteMode.Symbols)
-                DesktopShortcut.OpenAction -> onOpenPalette(PaletteMode.Actions)
-                DesktopShortcut.FocusChat -> if (canFocusChat) onFocusChat() else return@onPreviewKeyEvent false
-                DesktopShortcut.FocusDraft -> if (canFocusDraft) onFocusDraft() else return@onPreviewKeyEvent false
+                DesktopShortcut.OpenProject -> if (!appState.loading) projectActions.importProject()
+                DesktopShortcut.OpenFile -> paletteActions.open(PaletteMode.Files)
+                DesktopShortcut.OpenSymbol -> paletteActions.open(PaletteMode.Symbols)
+                DesktopShortcut.OpenAction -> paletteActions.open(PaletteMode.Actions)
+                DesktopShortcut.FocusChat -> if (editor.contextualActions.canFocusChat) editorActions.focusChat() else return@onPreviewKeyEvent false
+                DesktopShortcut.FocusDraft -> if (editor.contextualActions.canFocusDraft) editorActions.focusDraft() else return@onPreviewKeyEvent false
                 DesktopShortcut.FocusBugsFilters -> selectWorkspace(Workspace.Bugs)
-                DesktopShortcut.ValidateDraft -> if (canValidateDraft) onValidateDraft() else return@onPreviewKeyEvent false
-                DesktopShortcut.RunDraftChecks -> if (canRunDraftChecks) onRunDraftChecks() else return@onPreviewKeyEvent false
+                DesktopShortcut.ValidateDraft -> if (editor.contextualActions.canValidateDraft) editorActions.validateDraft() else return@onPreviewKeyEvent false
+                DesktopShortcut.RunDraftChecks -> if (editor.contextualActions.canRunFocusedChecks) editorActions.runDraftChecks() else return@onPreviewKeyEvent false
                 DesktopShortcut.SummaryWorkspace -> selectWorkspace(Workspace.Summary)
                 DesktopShortcut.AnalysisWorkspace -> selectWorkspace(Workspace.Analysis)
                 DesktopShortcut.BugsWorkspace -> selectWorkspace(Workspace.Bugs)
                 DesktopShortcut.EditorWorkspace -> selectWorkspace(Workspace.Editor)
-                DesktopShortcut.Generate -> if (generating) onCancelGeneration() else if (canGenerate) onGenerate() else return@onPreviewKeyEvent false
+                DesktopShortcut.Generate -> if (editor.generating) editorActions.cancelGeneration() else if (editor.contextualActions.canGenerate) editorActions.generate() else return@onPreviewKeyEvent false
                 DesktopShortcut.Cancel -> when {
-                    showPalette -> onDismissPalette()
-                    showContext -> onDismissContext()
-                    generating -> onCancelGeneration()
-                    analysisInProgress -> onCancelAnalysis()
+                    palette.visible -> paletteActions.dismiss()
+                    context.visible -> editorActions.dismissContext()
+                    editor.generating -> editorActions.cancelGeneration()
+                    editor.analysisInProgress -> editorActions.cancelAnalysis()
                     else -> return@onPreviewKeyEvent false
                 }
                 DesktopShortcut.NextTab -> selectWorkspace(nextWorkspace(workspace))
@@ -272,7 +316,7 @@ internal fun DesktopShell(
         color = AppBackground,
     ) {
         if (shellMode == DesktopShellMode.ProjectLanding) {
-            ProjectLanding(appState, onImport)
+            ProjectLanding(appState, projectActions.importProject)
         } else {
             BoxWithConstraints {
                 val widthDp = maxWidth.value
@@ -283,61 +327,84 @@ internal fun DesktopShell(
                 drawerContent = {
                     if (showsEditorChrome) {
                         if (narrowDrawer == NarrowDrawer.Files) {
-                            explorer(Modifier.fillMaxHeight().width(320.dp)) { scope.launch { drawerState.close() } }
+                            panes.explorer(Modifier.fillMaxHeight().width(320.dp)) { scope.launch { drawerState.close() } }
                         } else {
-                            contextPane(Modifier.fillMaxHeight().width(360.dp))
+                            panes.context(Modifier.fillMaxHeight().width(360.dp))
                         }
                     }
                 },
                 ) {
                     Column {
-                    AppTopBar(appState.project, appState.loading, connection, onImport, onReanalyze, onReconnect, { onOpenPalette(PaletteMode.Actions) }, showEditorDrawers, { openDrawer(NarrowDrawer.Files) }, { openDrawer(NarrowDrawer.Context) })
+                    AppTopBar(appState.project, appState.loading, appState.connection, projectActions.importProject, projectActions.reanalyzeProject, projectActions.reconnect, { paletteActions.open(PaletteMode.Actions) }, showEditorDrawers, { openDrawer(NarrowDrawer.Files) }, { openDrawer(NarrowDrawer.Context) })
                     Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         WorkspaceRail(workspace, ::selectWorkspace, Modifier.width(176.dp).fillMaxHeight())
                         if (!narrow && showsEditorChrome) {
-                            explorer(Modifier.width(paneWidths.explorer.dp).fillMaxHeight()) {}
-                            ResizableDivider(onDelta = { onPaneWidths(paneWidths.withExplorer(paneWidths.explorer + it)) }, onCommit = onSavePaneWidths)
+                            panes.explorer(Modifier.width(paneWidths.explorer.dp).fillMaxHeight()) {}
+                            ResizableDivider(onDelta = { layoutActions.updatePaneWidths(paneWidths.withExplorer(paneWidths.explorer + it)) }, onCommit = layoutActions.savePaneWidths)
                         }
                         ContentPane(
-                            project = appState.project, overview = appState.overview, selected = appState.selectedFile, symbols = appState.symbols, selectedSymbol = appState.selectedSymbol,
-                            workspace = workspace, bugModel = bugModel, bugProviderConfirmed = bugProviderConfirmed, onBugProviderConfirmed = onBugProviderConfirmed,
-                            editorProgress = editorProgress, draft = appState.review.draft,
-                            findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding, onTriageFinding = onTriageFinding,
-                            onStartAnalyzeAll = onStartAnalyzeAll, onPauseAnalyzeAll = onPauseAnalyzeAll, onResumeAnalyzeAll = onResumeAnalyzeAll, onCancelAnalyzeAll = onCancelAnalyzeAll, onStartScan = onStartScan, onCancelScan = onCancelScan,
-                            focusedLine = appState.selection.focusedLine,
-                            onSourceLineSelected = { selection ->
-                                onSourceLineSelected(selection)
-                                contextDrawerForSourceSelection(workspace, widthDp)?.let(::openDrawer)
-                            },
-                            onWorkspace = ::selectWorkspace, modifier = Modifier.weight(1f).fillMaxHeight(),
+                            state = ContentPaneState(
+                                project = appState.project,
+                                overview = appState.overview,
+                                selected = appState.selectedFile,
+                                symbols = appState.symbols,
+                                selectedSymbol = appState.selectedSymbol,
+                                workspace = workspace,
+                                editorProgress = editor.progress,
+                                draft = appState.review.draft,
+                                focusedLine = appState.selection.focusedLine,
+                                analysis = AnalysisWorkspacePaneState(
+                                    job = appState.findings.analyzeAll,
+                                    coverage = appState.overview?.analysisCoverage,
+                                    model = context.bugModel,
+                                    remoteProviderConfirmed = context.bugProviderConfirmed,
+                                ),
+                                bugs = BugsWorkspacePaneState(appState.findings.findings, appState.findings.scan),
+                            ),
+                            navigation = ContentPaneNavigationActions(
+                                selectWorkspace = ::selectWorkspace,
+                                sourceLineSelected = { selection ->
+                                    editorActions.sourceLineSelected(selection)
+                                    contextDrawerForSourceSelection(workspace, widthDp)?.let(::openDrawer)
+                                },
+                            ),
+                            analysisActions = analysisActions.toWorkspaceActions(),
+                            bugsActions = BugsWorkspaceActions(
+                                openFinding = findingActions.openFinding,
+                                prepareFinding = findingActions.prepareFinding,
+                                triageFinding = findingActions.triageFinding,
+                                startScan = analysisActions.startScan,
+                                cancelScan = analysisActions.cancelScan,
+                            ),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
                         if (!narrow && showsEditorChrome) {
-                            ResizableDivider(onDelta = { onPaneWidths(paneWidths.withAction(paneWidths.action - it)) }, onCommit = onSavePaneWidths)
-                            contextPane(Modifier.width(paneWidths.action.dp).fillMaxHeight())
+                            ResizableDivider(onDelta = { layoutActions.updatePaneWidths(paneWidths.withAction(paneWidths.action - it)) }, onCommit = layoutActions.savePaneWidths)
+                            panes.context(Modifier.width(paneWidths.action.dp).fillMaxHeight())
                         }
                     }
                         DesktopStatusBar(appState.status, appState.error, appState.loading)
                     }
                 }
-                if (showPalette) {
+                if (palette.visible) {
                     CommandPaletteDialog(
-                        paletteMode,
-                        paletteQuery,
-                        onPaletteQuery,
+                        palette.mode,
+                        palette.query,
+                        paletteActions.updateQuery,
                         appState.index?.files.orEmpty(),
                         appState.symbols,
                         appState.analysis,
-                        onSelectPaletteFile,
+                        paletteActions.selectFile,
                         { symbol ->
-                            onSelectPaletteSymbol(symbol)
+                            paletteActions.selectSymbol(symbol)
                             contextDrawerForSourceSelection(Workspace.Editor, widthDp)?.let(::openDrawer)
                         },
-                        onSelectPaletteAction,
-                        onDismissPalette,
+                        paletteActions.selectAction,
+                        paletteActions.dismiss,
                     )
                 }
             }
-            if (showContext) ContextInspectorDialog(contextManifest ?: ContextManifest(), onDismissContext)
+            if (context.visible) ContextInspectorDialog(context.manifest ?: ContextManifest(), editorActions.dismissContext)
         }
     }
 }
@@ -371,28 +438,54 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
 
 @Composable
 private fun ContentPane(
-    project: ProjectAnalysis?, overview: ProjectOverview?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, selectedSymbol: SymbolInfo?, workspace: Workspace,
-    bugModel: ScopedModel, bugProviderConfirmed: Boolean, onBugProviderConfirmed: (Boolean) -> Unit,
-    editorProgress: EditorProgressUiState, draft: DeclarationDraft?,
-    findings: List<UnifiedFinding>, scan: GoScanReport?, analyzeAll: AnalyzeAllJob?, coverage: AnalysisCoverage?, onOpenFinding: (UnifiedFinding) -> Unit, onPrepareFinding: (UnifiedFinding) -> Unit, onTriageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
-    onStartAnalyzeAll: (AnalyzeAllRunOptions) -> Unit, onPauseAnalyzeAll: () -> Unit, onResumeAnalyzeAll: (Boolean) -> Unit, onCancelAnalyzeAll: () -> Unit, onStartScan: () -> Unit, onCancelScan: () -> Unit,
-    focusedLine: Int, onSourceLineSelected: (SourceLineSelection) -> Unit, onWorkspace: (Workspace) -> Unit, modifier: Modifier,
+    state: ContentPaneState,
+    navigation: ContentPaneNavigationActions,
+    analysisActions: AnalysisWorkspaceActions,
+    bugsActions: BugsWorkspaceActions,
+    modifier: Modifier,
 ) {
     Column(modifier.background(AppBackground)) {
-        when (workspace) {
-            Workspace.Summary -> ProjectSummaryPane(overview, project, onWorkspace)
-            Workspace.Editor -> EditorWorkspace(selected, canvas = {
-                if (editorProgress.progress == EditorProgress.Review) {
-                    ReviewDiffCanvas(draft)
+        when (state.workspace) {
+            Workspace.Summary -> ProjectSummaryPane(state.overview, state.project, navigation.selectWorkspace)
+            Workspace.Editor -> EditorWorkspace(state.selected, canvas = {
+                if (state.editorProgress.progress == EditorProgress.Review) {
+                    ReviewDiffCanvas(state.draft)
                 } else {
-                    EditorPane(project, selected, symbols, selectedSymbol, focusedLine, onSourceLineSelected)
+                    EditorPane(state.project, state.selected, state.symbols, state.selectedSymbol, state.focusedLine, navigation.sourceLineSelected)
                 }
             })
-            Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, bugModel, bugProviderConfirmed, onBugProviderConfirmed, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll)
-            Workspace.Bugs -> BugsWorkspacePane(findings, scan, onOpenFinding, onPrepareFinding, onTriageFinding, onStartScan, onCancelScan)
+            Workspace.Analysis -> AnalysisWorkspacePane(state.analysis, analysisActions)
+            Workspace.Bugs -> BugsWorkspacePane(state.bugs, bugsActions)
         }
     }
 }
+
+private data class ContentPaneState(
+    val project: ProjectAnalysis?,
+    val overview: ProjectOverview?,
+    val selected: ProjectFileInfo?,
+    val symbols: List<SymbolInfo>,
+    val selectedSymbol: SymbolInfo?,
+    val workspace: Workspace,
+    val editorProgress: EditorProgressUiState,
+    val draft: DeclarationDraft?,
+    val focusedLine: Int,
+    val analysis: AnalysisWorkspacePaneState,
+    val bugs: BugsWorkspacePaneState,
+)
+
+private data class ContentPaneNavigationActions(
+    val selectWorkspace: (Workspace) -> Unit,
+    val sourceLineSelected: (SourceLineSelection) -> Unit,
+)
+
+private fun DesktopShellAnalysisActions.toWorkspaceActions() = AnalysisWorkspaceActions(
+    confirmRemoteProvider = confirmBugProvider,
+    start = startAnalyzeAll,
+    pause = pauseAnalyzeAll,
+    resume = resumeAnalyzeAll,
+    cancel = cancelAnalyzeAll,
+)
 
 @Composable
 private fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {

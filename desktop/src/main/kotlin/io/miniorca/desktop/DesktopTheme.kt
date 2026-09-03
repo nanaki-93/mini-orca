@@ -306,8 +306,6 @@ internal fun statusBadgeStyle(status: String): StatusBadgeStyle = when (status.l
     else -> StatusBadgeStyle("Not analyzed", SecondaryText)
 }
 
-internal fun badgeColor(status: String): Color = statusBadgeStyle(status).color
-
 @Composable
 internal fun FocusFlowPanel(
     modifier: Modifier = Modifier,

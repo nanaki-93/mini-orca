@@ -38,33 +38,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-internal fun ExplorerPane(
-    index: ProjectIndex?, selectedPath: String?, filter: String, collapsedDirectories: Set<String>, onFilter: (String) -> Unit,
-    onToggleDirectory: (String) -> Unit, onSelect: (String) -> Unit, loading: Boolean, modifier: Modifier,
-) {
-    val rows = visibleExplorerRows(index?.files.orEmpty(), filter, collapsedDirectories)
+internal fun ExplorerPane(state: ExplorerPaneState, actions: ExplorerPaneActions, modifier: Modifier) {
+    val rows = visibleExplorerRows(state.index?.files.orEmpty(), state.filter, state.collapsedDirectories)
     FocusFlowPanel(modifier = modifier, contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
         SectionLabel("PROJECT EXPLORER")
         Spacer(Modifier.height(8.dp))
         CompactSingleLineField(
-            value = filter,
-            onValueChange = onFilter,
+            value = state.filter,
+            onValueChange = actions.updateFilter,
             label = { Text("Filter indexed files") },
             placeholder = { Text("Type a relative path", color = SecondaryText, fontSize = 12.sp) },
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Filter indexed relative file paths" },
         )
         Spacer(Modifier.height(8.dp))
         when {
-            index == null && loading -> LoadingRows("Loading indexed files")
-            index == null -> SystemStateMessage("No project open", "Open a project to browse safe, indexed relative paths.")
+            state.index == null && state.loading -> LoadingRows("Loading indexed files")
+            state.index == null -> SystemStateMessage("No project open", "Open a project to browse safe, indexed relative paths.")
             rows.isEmpty() -> SystemStateMessage("No matching files", "Change the filter to view indexed relative paths.")
             else -> LazyColumn {
                 items(rows, key = { it.path }) { row ->
                     ExplorerItem(
                         row = row,
-                        selected = !row.directory && row.path == selectedPath,
-                        expanded = row.path !in collapsedDirectories,
-                        onActivate = { if (row.directory) onToggleDirectory(row.path) else onSelect(row.path) },
+                        selected = !row.directory && row.path == state.selectedPath,
+                        expanded = row.path !in state.collapsedDirectories,
+                        onActivate = { if (row.directory) actions.toggleDirectory(row.path) else actions.selectFile(row.path) },
                     )
                 }
             }
@@ -72,6 +69,22 @@ internal fun ExplorerPane(
         Spacer(Modifier.height(8.dp))
     }
 }
+
+/** Immutable explorer inputs; only indexed project-relative paths are rendered. */
+internal data class ExplorerPaneState(
+    val index: ProjectIndex?,
+    val selectedPath: String?,
+    val filter: String,
+    val collapsedDirectories: Set<String>,
+    val loading: Boolean,
+)
+
+/** Explorer-only intents, kept separate from project and editor workflow actions. */
+internal data class ExplorerPaneActions(
+    val updateFilter: (String) -> Unit,
+    val toggleDirectory: (String) -> Unit,
+    val selectFile: (String) -> Unit,
+)
 
 @Composable
 private fun ExplorerItem(row: ExplorerRow, selected: Boolean, expanded: Boolean, onActivate: () -> Unit) {

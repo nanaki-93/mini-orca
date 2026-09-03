@@ -114,7 +114,7 @@ class DesktopWorkflowPresenter(
                 dispatch(DesktopEvent.ConnectionUpdated(ConnectionState("Daemon connected", "${function.profile} · ${function.model}", status.version, true, api.endpointLocality(), "${(System.nanoTime() - startedAt) / 1_000_000}ms")))
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
                 dispatch(DesktopEvent.ConnectionUpdated(ConnectionState(label = "Daemon unavailable", locality = api.endpointLocality())))
             }
         }
@@ -134,13 +134,17 @@ class DesktopWorkflowPresenter(
                 }
                 if (!controller.projectLoaded(request, project, index)) return@launch
                 publish()
-                runCatching { lastProjectStore.save(project.path) }
+                try {
+                    lastProjectStore.save(project.path)
+                } catch (_: Exception) {
+                    // Project restore is optional; a persistence failure must not discard the loaded project.
+                }
                 if (restore) dispatch(DesktopEvent.Status("Reopened ${project.name}"))
                 analyzeAllPolling.activate(project.projectRevision)
                 refreshProjectWorkspace(project.identity())
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (!controller.isCurrentProjectRequest(request)) return@launch
                 if (restore) dispatch(DesktopEvent.Failed(error.message ?: "Could not reopen the last project"))
                 else modelRequestFailed(error, ModelScope.Analyze, "Import failed")
@@ -162,7 +166,7 @@ class DesktopWorkflowPresenter(
                 refreshProjectWorkspace(project.identity())
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (matchesProject(project.identity())) dispatch(DesktopEvent.Failed(error.message ?: "Re-analysis failed"))
             }
         }
@@ -198,7 +202,7 @@ class DesktopWorkflowPresenter(
             } catch (_: CancellationException) {
                 controller.cancelFileLoad(request)
                 publish()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (controller.fileFailed(request, error.message ?: "File load failed")) publish()
             }
         }
@@ -252,7 +256,7 @@ class DesktopWorkflowPresenter(
                 refreshFindings(project.identity())
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (matchesProject(project.identity())) dispatch(DesktopEvent.Failed(error.message ?: "Unable to update finding triage"))
             }
         }
@@ -282,7 +286,7 @@ class DesktopWorkflowPresenter(
             } catch (_: CancellationException) {
                 dispatch(DesktopEvent.Status("Analysis canceled"))
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (generation == analysisGeneration && isCurrentFile(file.identity(project))) modelRequestFailed(error, ModelScope.Bug, "Analysis failed")
             } finally {
                 if (analysisJob === coroutineContext[Job]) setOperation(analysis = false)
@@ -318,7 +322,7 @@ class DesktopWorkflowPresenter(
                 if (isCurrentFile(identity)) mutableSnapshot.value = mutableSnapshot.value.copy(contextManifest = manifest)
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (isCurrentFile(identity)) dispatch(DesktopEvent.Failed(error.message ?: "Context preview failed"))
             }
         }
@@ -368,7 +372,7 @@ class DesktopWorkflowPresenter(
             } catch (_: CancellationException) {
                 if (controller.cancelChatLoad(request, fileRequest)) publish()
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (activeTask == identity && controller.cancelChatLoad(request, fileRequest)) publish()
                 if (activeTask == identity) modelRequestFailed(error, ModelScope.Function, "Chat request failed")
             } finally {
@@ -412,7 +416,7 @@ class DesktopWorkflowPresenter(
             } catch (_: CancellationException) {
                 dispatch(DesktopEvent.Status("Draft validation canceled"))
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (activeDraft != identity) return@launch
                 if (error is ApiException && error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
                 dispatch(DesktopEvent.Failed(error.message ?: "Draft validation failed"))
@@ -448,7 +452,7 @@ class DesktopWorkflowPresenter(
                 }
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (activeDraft != identity) return@launch
                 if (error is ApiException && error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
                 dispatch(DesktopEvent.Failed(error.message ?: "Focused checks failed"))
@@ -478,7 +482,7 @@ class DesktopWorkflowPresenter(
                 reloadAfterMutation(identity.file, result.projectRevision)
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (currentDraftIdentity() == identity) dispatch(DesktopEvent.Failed(error.message ?: "Apply failed"))
             }
         }
@@ -500,7 +504,7 @@ class DesktopWorkflowPresenter(
                 reloadAfterMutation(identity, undo.projectRevision)
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (isCurrentFile(identity)) dispatch(DesktopEvent.Failed(error.message ?: "Undo failed"))
             }
         }
@@ -531,7 +535,7 @@ class DesktopWorkflowPresenter(
                 pollVerifiedScan(identity)
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (matchesProject(identity)) dispatch(DesktopEvent.Failed(error.message ?: "Unable to start verified scan"))
             }
         }
@@ -549,7 +553,7 @@ class DesktopWorkflowPresenter(
                 refreshFindings(identity)
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (matchesProject(identity)) dispatch(DesktopEvent.Failed(error.message ?: "Unable to cancel verified scan"))
             }
         }
@@ -564,7 +568,7 @@ class DesktopWorkflowPresenter(
         dispatch(DesktopEvent.DraftDiscarded)
     }
 
-    fun cancelAll() {
+    private fun cancelAll() {
         cancelAnalysis()
         cancelGeneration()
         cancelDraftValidation()
@@ -596,7 +600,7 @@ class DesktopWorkflowPresenter(
             if (accept(value)) publish()
         } catch (_: CancellationException) {
             throw CancellationException()
-        } catch (_: Throwable) {
+        } catch (_: Exception) {
             controller.optionalLoadFailed(request)
         }
     }
@@ -613,7 +617,7 @@ class DesktopWorkflowPresenter(
                 if (shouldPollVerifiedScan(details.scan)) pollVerifiedScan(identity)
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
                 if (matchesProject(identity)) dispatch(DesktopEvent.Status("Project facts are available; workspace details could not be refreshed."))
             }
         }
@@ -626,7 +630,7 @@ class DesktopWorkflowPresenter(
                 if (matchesProject(identity)) dispatch(DesktopEvent.FindingsLoaded(response.findings))
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
                 // Findings refresh is enrichment; preserve visible deterministic state.
             }
         }
@@ -639,7 +643,7 @@ class DesktopWorkflowPresenter(
                 if (matchesProject(identity) && index.projectRevision == identity.revision) dispatch(DesktopEvent.IndexRefreshed(index))
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
                 // Cache freshness is optional enrichment.
             }
         }
@@ -654,7 +658,7 @@ class DesktopWorkflowPresenter(
                 if (matchesProject(identity)) publishAnalyzeAll(identity, job)
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (matchesProject(identity)) modelRequestFailed(error, ModelScope.Bug, fallback)
             }
         }
@@ -680,7 +684,7 @@ class DesktopWorkflowPresenter(
                     publishAnalyzeAll(identity, io { api.analyzeAllJob(identity.revision) })
                 } catch (_: CancellationException) {
                     throw CancellationException()
-                } catch (error: Throwable) {
+                } catch (error: Exception) {
                     if (matchesProject(identity)) dispatch(DesktopEvent.Failed(error.message ?: "Analyze-all status failed"))
                     return@launch
                 }
@@ -703,7 +707,7 @@ class DesktopWorkflowPresenter(
                     }
                 } catch (_: CancellationException) {
                     throw CancellationException()
-                } catch (error: Throwable) {
+                } catch (error: Exception) {
                     if (matchesProject(identity)) dispatch(DesktopEvent.Failed(error.message ?: "Verified scan status failed"))
                     return@launch
                 }
@@ -723,7 +727,7 @@ class DesktopWorkflowPresenter(
                 refreshProjectWorkspace(WorkflowProjectIdentity(file.project.id, revision))
             } catch (_: CancellationException) {
                 throw CancellationException()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (matchesProject(file.project)) dispatch(DesktopEvent.Failed(error.message ?: "Project refresh failed"))
             }
         }
@@ -738,7 +742,7 @@ class DesktopWorkflowPresenter(
         cancelAll()
     }
 
-    private fun modelRequestFailed(error: Throwable, scope: ModelScope, fallback: String) {
+    private fun modelRequestFailed(error: Exception, scope: ModelScope, fallback: String) {
         val staleConfirmation = staleRemoteConfirmationMessage(error, scope)
         if (staleConfirmation != null) setProviderConfirmation(scope, false)
         dispatch(DesktopEvent.Failed(staleConfirmation ?: error.message ?: fallback))
