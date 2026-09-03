@@ -51,13 +51,6 @@ class DesktopShellTest {
   }
 
   @Test
-  fun paneWidthsRemainWithinUsableBounds() {
-    val widths = PaneWidths().withExplorer(1f).withAction(10_000f)
-    assertEquals(180f, widths.explorer)
-    assertEquals(560f, widths.action)
-  }
-
-  @Test
   fun narrowWindowsUseDrawersInsteadOfSqueezingThreePanes() {
     assertTrue(useNarrowLayout(999f))
     assertTrue(!useNarrowLayout(1_000f))

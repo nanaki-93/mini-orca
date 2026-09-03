@@ -58,8 +58,8 @@ internal fun MiniOrcaApp(
       }
   val workflow by presenter.snapshot.collectAsState()
   val appState = workflow.state
-  val widthStore = remember { PaneWidthStore() }
-  var paneWidths by remember { mutableStateOf(widthStore.load()) }
+  val layoutStore = remember { DesktopLayoutStore() }
+  var layout by remember { mutableStateOf(layoutStore.load()) }
   var filter by remember { mutableStateOf("") }
   var collapsedDirectories by remember { mutableStateOf(emptySet<String>()) }
   var contextAction by remember { mutableStateOf("fix") }
@@ -322,7 +322,7 @@ internal fun MiniOrcaApp(
       state =
           DesktopShellState(
               app = appState,
-              paneWidths = paneWidths,
+              layout = layout,
               editor =
                   DesktopShellEditorState(
                       progress = editorProgress,
@@ -341,8 +341,8 @@ internal fun MiniOrcaApp(
           ),
       layoutActions =
           DesktopShellLayoutActions(
-              updatePaneWidths = { paneWidths = it },
-              savePaneWidths = { widthStore.save(paneWidths) },
+              updateLayout = { layout = it },
+              saveLayout = { layoutStore.save(layout) },
           ),
       projectActions =
           DesktopShellProjectActions(

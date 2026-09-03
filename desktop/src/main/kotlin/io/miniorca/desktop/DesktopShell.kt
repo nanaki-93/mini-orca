@@ -49,7 +49,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.util.prefs.Preferences
 import kotlinx.coroutines.launch
 
 data class ExplorerRow(
@@ -157,32 +156,10 @@ fun visibleExplorerRows(
   return rows.filter { row -> collapsedDirectories.none { row.path.startsWith("$it/") } }
 }
 
-data class PaneWidths(val explorer: Float = 270f, val action: Float = 390f) {
-  fun withExplorer(value: Float) = copy(explorer = value.coerceIn(180f, 520f))
-
-  fun withAction(value: Float) = copy(action = value.coerceIn(280f, 560f))
-}
-
-class PaneWidthStore(
-    private val preferences: Preferences =
-        Preferences.userNodeForPackage(PaneWidthStore::class.java)
-) {
-  fun load(): PaneWidths =
-      PaneWidths(
-          explorer = preferences.getFloat("explorer-width", 270f).coerceIn(180f, 520f),
-          action = preferences.getFloat("action-width", 390f).coerceIn(280f, 560f),
-      )
-
-  fun save(widths: PaneWidths) {
-    preferences.putFloat("explorer-width", widths.explorer)
-    preferences.putFloat("action-width", widths.action)
-  }
-}
-
 /** Immutable shell state assembled from feature-specific desktop workflow state. */
 internal data class DesktopShellState(
     val app: DesktopState,
-    val paneWidths: PaneWidths,
+    val layout: DesktopLayoutState,
     val editor: DesktopShellEditorState,
     val context: DesktopShellContextState,
     val palette: DesktopShellPaletteState,
@@ -209,8 +186,8 @@ internal data class DesktopShellPaletteState(
 )
 
 internal data class DesktopShellLayoutActions(
-    val updatePaneWidths: (PaneWidths) -> Unit,
-    val savePaneWidths: () -> Unit,
+    val updateLayout: (DesktopLayoutState) -> Unit,
+    val saveLayout: () -> Unit,
 )
 
 internal data class DesktopShellProjectActions(
@@ -274,7 +251,7 @@ internal fun DesktopShell(
     panes: DesktopShellPanes,
 ) {
   val appState = state.app
-  val paneWidths = state.paneWidths
+  val layout = state.layout
   val editor = state.editor
   val context = state.context
   val palette = state.palette
@@ -398,13 +375,13 @@ internal fun DesktopShell(
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
               WorkspaceRail(workspace, ::selectWorkspace, Modifier.width(176.dp).fillMaxHeight())
               if (!narrow && showsEditorChrome) {
-                panes.explorer(Modifier.width(paneWidths.explorer.dp).fillMaxHeight()) {}
+                panes.explorer(Modifier.width(layout.explorerWidth.dp).fillMaxHeight()) {}
                 ResizableDivider(
                     onDelta = {
-                      layoutActions.updatePaneWidths(
-                          paneWidths.withExplorer(paneWidths.explorer + it))
+                      layoutActions.updateLayout(
+                          layout.withExplorerWidth(layout.explorerWidth + it))
                     },
-                    onCommit = layoutActions.savePaneWidths)
+                    onCommit = layoutActions.saveLayout)
               }
               ContentPane(
                   state =
@@ -451,10 +428,10 @@ internal fun DesktopShell(
               if (!narrow && showsEditorChrome) {
                 ResizableDivider(
                     onDelta = {
-                      layoutActions.updatePaneWidths(paneWidths.withAction(paneWidths.action - it))
+                      layoutActions.updateLayout(layout.withActionWidth(layout.actionWidth - it))
                     },
-                    onCommit = layoutActions.savePaneWidths)
-                panes.context(Modifier.width(paneWidths.action.dp).fillMaxHeight())
+                    onCommit = layoutActions.saveLayout)
+                panes.context(Modifier.width(layout.actionWidth.dp).fillMaxHeight())
               }
             }
             DesktopStatusBar(appState.status, appState.error, appState.loading)
