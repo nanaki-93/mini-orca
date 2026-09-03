@@ -110,6 +110,71 @@ func daemonAddress() string {
 	return "127.0.0.1:9090"
 }
 
+const (
+	routeRetained = "retained"
+	routeRetired  = "retired"
+)
+
+// routeSpec records the pre-cleanup HTTP surface and its current owner. It is
+// intentionally local to the daemon: tests use it to keep registration and the
+// cleanup inventory aligned without introducing a routing abstraction.
+type routeSpec struct {
+	Method      string `json:"method"`
+	Path        string `json:"path"`
+	Disposition string `json:"disposition"`
+	Consumer    string `json:"consumer,omitempty"`
+}
+
+func registeredRoutes() []routeSpec {
+	return []routeSpec{
+		{http.MethodGet, "/health", routeRetained, "container health check"},
+		{http.MethodGet, "/status", routeRetained, "Desktop ApiClient.status"},
+		{http.MethodGet, "/api/system/info", routeRetired, ""},
+		{http.MethodPost, "/api/projects/current/chat/sessions", routeRetained, "Desktop ApiClient.openChatSession"},
+		{http.MethodGet, "/api/projects/current/chat/sessions/{sessionID}", routeRetired, ""},
+		{http.MethodPost, "/api/projects/current/chat/sessions/{sessionID}/messages", routeRetained, "Desktop ApiClient.sendChatMessage"},
+		{http.MethodGet, "/api/projects/current/activity", routeRetired, ""},
+		{http.MethodPost, "/api/chat/message", routeRetired, ""},
+		{http.MethodGet, "/api/chat/history", routeRetired, ""},
+		{http.MethodGet, "/api/models/current", routeRetained, "Desktop ApiClient.modelCatalog"},
+		{http.MethodGet, "/api/projects/current/context", routeRetained, "Desktop ApiClient.context"},
+		{http.MethodPost, "/api/projects/import", routeRetained, "Desktop ApiClient.importProject"},
+		{http.MethodPost, "/api/projects/restore", routeRetained, "Desktop ApiClient.restoreProject"},
+		{http.MethodGet, "/api/projects/current", routeRetired, ""},
+		{http.MethodGet, "/api/projects/current/overview", routeRetained, "Desktop ApiClient.overview"},
+		{http.MethodGet, "/api/projects/current/findings", routeRetained, "Desktop ApiClient.findings"},
+		{http.MethodPatch, "/api/projects/current/findings/{findingID}", routeRetained, "Desktop ApiClient.updateFindingStatus"},
+		{http.MethodGet, "/api/projects/current/scan", routeRetained, "Desktop ApiClient.goScan"},
+		{http.MethodPost, "/api/projects/current/scan", routeRetained, "Desktop ApiClient.startGoScan"},
+		{http.MethodDelete, "/api/projects/current/scan", routeRetained, "Desktop ApiClient.cancelGoScan"},
+		{http.MethodGet, "/api/projects/current/index", routeRetained, "Desktop ApiClient.index"},
+		{http.MethodGet, "/api/projects/current/files/info", routeRetained, "Desktop ApiClient.fileInfo"},
+		{http.MethodGet, "/api/projects/current/files/symbols", routeRetained, "Desktop ApiClient.symbols"},
+		{http.MethodGet, "/api/projects/current/impact", routeRetained, "Desktop ApiClient.impact"},
+		{http.MethodGet, "/api/projects/current/git", routeRetained, "Desktop ApiClient.gitStatus"},
+		{http.MethodGet, "/api/projects/current/files/analysis", routeRetained, "Desktop ApiClient.analysis"},
+		{http.MethodPost, "/api/projects/current/files/analysis", routeRetained, "Desktop ApiClient.analyze"},
+		{http.MethodDelete, "/api/projects/current/files/analysis", routeRetired, ""},
+		{http.MethodGet, "/api/projects/current/analysis-job", routeRetained, "Desktop ApiClient.analyzeAllJob"},
+		{http.MethodPost, "/api/projects/current/analysis-job", routeRetained, "Desktop ApiClient.startAnalyzeAll"},
+		{http.MethodPost, "/api/projects/current/analysis-job/pause", routeRetained, "Desktop ApiClient.pauseAnalyzeAll"},
+		{http.MethodPost, "/api/projects/current/analysis-job/resume", routeRetained, "Desktop ApiClient.resumeAnalyzeAll"},
+		{http.MethodPost, "/api/projects/current/analysis-job/cancel", routeRetained, "Desktop ApiClient.cancelAnalyzeAll"},
+		{http.MethodPost, "/api/projects/current/reindex", routeRetained, "Desktop ApiClient.reindex"},
+		{http.MethodGet, "/api/projects/current/drafts/{draftID}", routeRetired, ""},
+		{http.MethodPatch, "/api/projects/current/drafts/{draftID}", routeRetained, "Desktop ApiClient.updateDraft"},
+		{http.MethodPost, "/api/projects/current/drafts/{draftID}/validate", routeRetained, "Desktop ApiClient.validateDraft"},
+		{http.MethodPost, "/api/projects/current/drafts/{draftID}/checks", routeRetained, "Desktop ApiClient.checkDraft"},
+		{http.MethodGet, "/api/projects/current/drafts/{draftID}/review", routeRetired, ""},
+		{http.MethodPost, "/api/projects/current/candidates/checks", routeRetired, ""},
+		{http.MethodPost, "/api/projects/current/candidates/compare", routeRetired, ""},
+		{http.MethodPost, "/api/projects/current/candidates/export", routeRetired, ""},
+		{http.MethodPost, "/api/projects/current/apply", routeRetained, "Desktop ApiClient.applyDraft"},
+		{http.MethodPost, "/api/projects/current/undo", routeRetained, "Desktop ApiClient.undo"},
+		{http.MethodGet, "/api/projects/current/audit", routeRetired, ""},
+	}
+}
+
 // newHTTPMux registers only the local desktop API routes.
 func newHTTPMux(
 	application *app.Service,

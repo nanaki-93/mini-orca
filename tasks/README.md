@@ -7,12 +7,13 @@ This directory contains the implementation backlog for [`../PLAN.md`](../PLAN.md
 - Pending tasks live in this directory as `NN_snake_case.md`.
 - Completed tasks move to `completed/` without changing their identifier.
 - [`INDEX.md`](INDEX.md) is the authoritative dependency order and status list.
-- [`PROMPT_EXECUTE_MODEL_SCOPES.md`](PROMPT_EXECUTE_MODEL_SCOPES.md) runs the current
-  Tasks 95–102 sequentially with one implementation writer and a required user-facing
-  start/completion commentary update for every task.
-- [`PROMPT_EXECUTE_DESKTOP_UX_REFINEMENTS.md`](PROMPT_EXECUTE_DESKTOP_UX_REFINEMENTS.md)
-  is retained as execution history for completed Tasks 90–94.
-- Tasks 01–94 are completed history. The scoped-model backlog is Tasks 95–102.
+- [`PROMPT_EXECUTE_LEGACY_CLEANUP.md`](PROMPT_EXECUTE_LEGACY_CLEANUP.md) runs the
+  current Tasks 103–117 strictly sequentially with one implementation writer, one
+  verified commit per task, and required user-facing start/completion commentary.
+- The older execution prompts are retained as history until Task 116 consolidates the
+  pre-cleanup task archive.
+- Tasks 01–102 are completed history. The active legacy-cleanup backlog is Tasks
+  103–117.
 
 ## Status lifecycle
 
@@ -25,8 +26,9 @@ Each task has exactly one status: `Pending`, `In Progress`, or `Complete`.
 4. The implementation agent runs the task's focused checks and `git diff --check`.
 5. Only after every acceptance criterion passes does the agent set the task to
    Complete, move it under `completed/`, and update `INDEX.md`.
-6. Follow the selected backlog's documented commit policy. Tasks 95–102 do not
-   authorize staging or commits; completed backlogs retain their historical policy.
+6. For Tasks 103–117, stage only the completed task's owned changes and create exactly
+   one commit using the task's required subject. Do not start the next task until the
+   commit succeeds and the worktree contains no uncommitted changes owned by the task.
 7. The agent posts the task's required completion commentary and continues to the next
    ready task without waiting for a separate “continue” message.
 
@@ -36,7 +38,7 @@ task Complete based only on partial implementation.
 ## Shared implementation rules
 
 - Read `AGENTS.md`, `PLAN.md`, this file, `INDEX.md`, and the selected task first.
-- For Tasks 95–102, follow the current `PLAN.md`. Earlier tasks and UI mocks are
+- For Tasks 103–117, follow the current `PLAN.md`. Earlier tasks and UI mocks are
   historical context, not acceptance requirements except where the current plan
   explicitly preserves their behavior.
 - Preserve the one-project, one-open-file, one-symbol, preview-first workflow.
@@ -46,18 +48,19 @@ task Complete based only on partial implementation.
   background fixes.
 - Reuse the current Go daemon, Compose Desktop client, API client, persistence,
   context policy, revision guards, checks, and audit boundaries.
-- Keep model selection configuration-driven across the fixed `analyze`, `bug`, and
-  `function` scopes. Use the existing OpenAI-compatible boundary for local and online
-  providers; do not add native vendor SDKs or a credential-management subsystem.
+- Keep model selection configuration-driven across the retained fixed scopes and use
+  the OpenAI-compatible boundary for local and online providers. Do not add native
+  vendor SDKs or a credential-management subsystem.
 - Add focused regression tests for every behavior change.
 - Preserve unrelated user changes and never edit generated build output.
 - Post the required user-facing commentary before and after every task, with concise
   progress updates during work lasting more than 60 seconds.
 - The task comments are conversation commentary, not a reason to add source-code comments.
-- Tasks 95–102 do not authorize staging, commits, pushes, rebases, tags, amendments,
-  squashes, or combined commits.
-- Do not start Task 95 until Task 94 is Complete. Never absorb unrelated or
-  preceding-backlog changes into a Task 95–102 change.
+- Tasks 103–117 authorize exactly one commit per completed task. They do not authorize
+  pushes, rebases, tags, amendments, squashes, combined commits, or commits containing
+  unrelated user work.
+- Do not start Task 103 until Task 102 is Complete. Never absorb unrelated or
+  preceding-backlog changes into a Task 103–117 commit.
 
 ## Verification baseline
 
@@ -71,4 +74,4 @@ task Complete based only on partial implementation.
 
 The final task report must state each task ID/status, behavior changed, files changed,
 acceptance criteria verified, commands run, any blocker or intentionally deferred work,
-and a commit hash only when the selected task authorized a commit.
+and the commit hash for every completed Task 103–117.

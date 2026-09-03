@@ -1,11 +1,11 @@
-# Prompt template — execute one task
+# Prompt template — execute one cleanup task
 
-Use the scoped-model execution prompt for the normal Tasks 95–102 sequence. This
-template is for resuming exactly one incomplete task. Replace `{TASK_FILE}` and
-`{TASK_ID}` with the selected Pending/In Progress task from [`INDEX.md`](INDEX.md).
+Use the full sequential prompt for the normal Tasks 103–117 run. This template is for
+resuming exactly one Pending or In Progress cleanup task. Replace `{TASK_ID}` and
+`{TASK_FILE}` using [`INDEX.md`](INDEX.md).
 
 ```text
-You are the sole implementation agent for one Mini-Orca task.
+You are the sole implementation agent for one Mini-Orca cleanup task.
 
 Task ID: {TASK_ID}
 Task file: tasks/{TASK_FILE}
@@ -17,58 +17,69 @@ Read completely, in this order:
 4. tasks/INDEX.md
 5. tasks/{TASK_FILE}
 6. Every completed dependency task named by the selected task
-7. The current production files, tests, and documentation implicated by the task
+7. Current production files, tests, build files, docs, and recent commits implicated by
+   the selected task
 
 Before editing:
-- Run `git status --short`, `git diff --name-only`, and
-  `git diff --cached --name-only`.
-- Preserve all pre-existing changes as user-owned. Relevant files may already be dirty;
-  do not assume the entire file belongs to this task.
-- Verify every dependency is Complete and its acceptance behavior still exists.
-- State the task boundary, likely files, focused checks, and pre-existing changes that
-  must remain outside the task changes.
-- Stop if the task is not the first ready incomplete task in dependency order.
+- Run git status --short, git diff --name-only, and git diff --cached --name-only.
+- Require no staged changes and verify this is the first ready incomplete task.
+- Verify every dependency is Complete, its required commit exists, and its acceptance
+  behavior still exists.
+- Record all pre-existing modifications. Treat unrelated changes as user-owned and do
+  not stage, rewrite, or commit them.
+- Task 103 may own the initial user-approved PLAN/task execution artifacts documented
+  by PROMPT_EXECUTE_LEGACY_CLEANUP.md. No later task inherits that exception.
+- Stop if a required edit overlaps a user-owned hunk and cannot be separated safely.
+- Never use reset, checkout, restore, stash, clean, rebase, or destructive history
+  operations.
 
 Implementation rules:
-- Implement only the selected task; do not absorb later work.
-- Follow AGENTS.md, Clean Code, KISS, and existing package/state boundaries.
-- Preserve the one-project, one-file, one-symbol, preview-first workflow.
-- Keep source/diff read-only and the declaration/import draft isolated until explicit Apply.
-- Preserve Open project, Analyze-all, explicit prompt-bearing actions, remote-provider confirmation,
-  revision/hash/request identity, and explicit mutation actions.
-- Add focused regression tests for changed behavior.
-- Use apply_patch for manual edits and do not edit generated output or local configuration.
-- Do not start another implementation writer or create another Codex task.
-- Post a user-facing commentary update beginning with `Starting Task {TASK_ID}` before
-  implementation, brief progress updates during work longer than 60 seconds, and a
-  separate `Task {TASK_ID} complete` commentary update after verification.
-- These required task comments are conversation commentary, not source-code comments.
-
-Pre-existing-change rules:
-- Never use reset, checkout, restore, stash, clean, rebase, or destructive history commands.
-- Do not stage or commit any file. Tasks 95–102 do not authorize commits.
-- If required work cannot be separated safely from an overlapping user-owned hunk, stop
-  and report the exact overlap.
+- Post commentary beginning `Starting Task {TASK_ID}` before implementation.
+- Set only the selected task and index row In Progress; do not commit that marker alone.
+- Implement only the selected task and every one of its acceptance criteria.
+- Follow AGENTS.md, PLAN.md, Clean Code, KISS, and preview-first safety.
+- Replace obsolete code instead of retaining old/new paths.
+- Add focused tests for changed behavior.
+- Do not create another Codex task, delegate writes, or use another implementation writer.
+- Do not edit generated output, credentials, local config, or user projects.
+- Post concise progress updates at least every 60 seconds during long work.
 
 Verification:
-- Run every command listed by the task.
-- For Desktop changes, run `./desktop/gradlew -p desktop test`.
-- Always run `git diff --check` and inspect the complete task diff.
-- Verify every acceptance criterion one by one.
+- Run every command in the task's Verification section.
+- Run git diff --check and inspect the complete task-owned diff.
+- Verify each acceptance criterion explicitly; do not suppress or weaken a real safety
+  finding to get a pass.
 
-Completion:
-- Only after all criteria pass, mark the task Complete, move it to tasks/completed/, and
-  update its tasks/INDEX.md link/status.
-- Do not commit, push, tag, rebase, or stage the implementation or task metadata.
-- Confirm pre-existing unrelated changes remain present and unaltered.
+Completion and commit:
+- Only after all criteria pass, set the task Complete, move it to tasks/completed/
+  without renaming it, and update tasks/INDEX.md.
+- Stage only implementation, tests, docs, task move, index update, and explicitly owned
+  PLAN/build changes for this task. Use hunk staging around separable user changes.
+- Inspect git diff --cached --name-status and the complete git diff --cached.
+- Run git diff --cached --check and confirm no unrelated/generated/secret content.
+- Create exactly one commit using the exact subject in the task's Commit section.
+- Do not create partial commits, amend, squash, combine, reword, tag, or push.
+- Record the hash and verify no selected-task change remains staged or uncommitted.
+- Post separate commentary beginning `Task {TASK_ID} complete` with behavior, files,
+  checks, exact hash, limitations, and the next ready task.
 
-Finish with the task status, behavior changed, files changed, acceptance evidence,
-commands/results, and any blocker or deliberately deferred follow-up.
+If blocked:
+- Exhaust safe task-scoped investigation first.
+- Do not skip ahead or create a partial commit.
+- Leave a started task In Progress and report the exact blocker, working-tree state,
+  commands run, and next required user/external action.
+
+Final response:
+- State task status and one-line outcome.
+- Report behavior/removals, acceptance evidence, commands/results, exact commit hash,
+  manual limitations, migration impact, and preserved unrelated changes.
+- Confirm the commit was not pushed.
+- Link the task, PLAN.md, INDEX.md, and key changed files with absolute paths.
 ```
 
-Example current task value:
+Example:
 
 ```text
-Task ID: 95
-Task file: 95_scoped_model_configuration.md
+Task ID: 103
+Task file: 103_cleanup_contract_baseline.md
 ```

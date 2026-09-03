@@ -27,8 +27,15 @@ func TestFindingIDAndValidationKeepSourcesDistinct(t *testing.T) {
 			}
 		})
 	}
-	if FindingID(base) != FindingID(base) {
-		t.Fatal("finding ID is not deterministic")
+	equivalent := UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: "medium", Title: "Suggestion", Message: "Check input", Location: FindingLocation{Path: "main.go", StartLine: 4, EndLine: 4}}
+	id := FindingID(base)
+	if id == "" || id != FindingID(equivalent) {
+		t.Fatalf("finding ID must be stable for equivalent findings: %q, %q", id, FindingID(equivalent))
+	}
+	changed := equivalent
+	changed.Message = "Check a different input"
+	if id == FindingID(changed) {
+		t.Fatal("finding ID did not include finding content")
 	}
 }
 
