@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -409,6 +410,56 @@ internal fun SectionLabel(label: String, modifier: Modifier = Modifier) {
       fontSize = 10.sp,
       fontWeight = FontWeight.Bold,
       modifier = modifier)
+}
+
+@Composable
+internal fun WorkspacePaneHeader(title: String, modifier: Modifier = Modifier) {
+  Text(
+      title,
+      color = PrimaryText,
+      fontSize = 16.sp,
+      fontWeight = FontWeight.SemiBold,
+      modifier = modifier)
+}
+
+@Composable
+internal fun CompactKeyValueRow(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+  Row(
+      modifier.fillMaxWidth().semantics { contentDescription = "$label: $value" },
+      verticalAlignment = androidx.compose.ui.Alignment.Top,
+  ) {
+    Text(
+        label,
+        color = FaintText,
+        fontSize = 11.sp,
+        modifier = Modifier.width(96.dp),
+    )
+    Text(
+        value,
+        color = PrimaryText,
+        fontSize = 11.sp,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
+    )
+  }
+}
+
+@Composable
+internal fun CompactKeyValueRows(
+    values: List<Pair<String, String>>,
+    modifier: Modifier = Modifier,
+) {
+  Column(modifier) {
+    values.forEachIndexed { index, (label, value) ->
+      if (index > 0) Spacer(Modifier.height(MiniOrcaSpacing.compact))
+      CompactKeyValueRow(label, value)
+    }
+  }
 }
 
 @Composable

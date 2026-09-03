@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,7 +12,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -81,75 +81,72 @@ internal fun ProjectSummaryPane(
     onWorkspace: (Workspace) -> Unit
 ) {
   val presentation = projectSummaryPresentation(overview, project)
-  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
-    Text("PROJECT SUMMARY", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(12.dp))
+  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+    WorkspacePaneHeader("Summary")
+    Spacer(Modifier.height(8.dp))
+    if (!presentation.hasProject) {
+      SystemStateMessage(
+          "No project selected",
+          "Import a project to view its indexed facts.",
+          modifier = Modifier.fillMaxWidth(),
+      )
+    } else {
+      FocusFlowPanel(
+          Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+            SectionLabel("Project facts")
+            CompactKeyValueRows(
+                listOf(
+                    "Type" to presentation.projectType,
+                    "Build" to presentation.buildMetadata,
+                    "Languages" to presentation.languages.ifBlank { "Not detected" },
+                ),
+                modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
+            )
+          }
 
-    FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-      SectionLabel("DETERMINISTIC PROJECT FACTS")
-      if (!presentation.hasProject) {
+      Spacer(Modifier.height(8.dp))
+      FocusFlowPanel(
+          Modifier.fillMaxWidth(),
+          raised = presentation.analysisStatus in setOf("fresh", "stale", "failed"),
+          contentPadding = PaddingValues(MiniOrcaSpacing.standard),
+      ) {
+        SectionLabel("Interpretation · advisory")
+        StatusBadge(presentation.analysisStatus, Modifier.padding(top = MiniOrcaSpacing.standard))
         Text(
-            "Import a project to view its indexed facts.",
-            color = SecondaryText,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(top = 6.dp))
-      } else {
-        Column(Modifier.padding(top = 6.dp)) {
-          Text(
-              "${presentation.projectType} · ${presentation.buildMetadata}",
-              color = PrimaryText,
-              fontSize = 13.sp)
-          if (presentation.languages.isNotBlank())
-              Text(
-                  presentation.languages,
-                  color = SecondaryText,
-                  fontSize = 12.sp,
-                  modifier = Modifier.padding(top = 4.dp))
+            presentation.analysisMessage,
+            color =
+                if (presentation.analysisStatus == "failed") Error
+                else if (presentation.analysisStatus == "stale") Warning else SecondaryText,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+        if (presentation.analysisStatus == "fresh" || presentation.analysisStatus == "stale") {
+          ProjectInterpretation(overview?.analysis)
         }
       }
-    }
 
-    Spacer(Modifier.height(10.dp))
-    FocusFlowPanel(Modifier.fillMaxWidth()) {
-      SectionLabel("MODEL INTERPRETATION · ADVISORY")
-      StatusBadge(presentation.analysisStatus, Modifier.padding(top = 7.dp))
-      Text(
-          presentation.analysisMessage,
-          color =
-              if (presentation.analysisStatus == "failed") Error
-              else if (presentation.analysisStatus == "stale") Warning else SecondaryText,
-          fontSize = 12.sp,
-          modifier = Modifier.padding(top = 7.dp))
-      if (presentation.analysisStatus == "fresh" || presentation.analysisStatus == "stale") {
-        val analysis = overview?.analysis
-        ProjectInterpretation(analysis)
-      }
-    }
-
-    Spacer(Modifier.height(10.dp))
-    FocusFlowPanel(Modifier.fillMaxWidth()) {
-      SectionLabel("WORKSPACE COVERAGE")
-      Text(
-          "File analysis: ${presentation.coverage}",
-          color = PrimaryText,
-          fontSize = 12.sp,
-          modifier = Modifier.padding(top = 7.dp))
-      Text(
-          "Findings: ${presentation.findings}",
-          color = SecondaryText,
-          fontSize = 12.sp,
-          modifier = Modifier.padding(top = 4.dp))
-      FocusFlowButton(
-          onClick = { onWorkspace(Workspace.Analysis) },
-          tone = ActionTone.Navigation,
-          modifier = Modifier.padding(top = 9.dp)) {
-            Text("Open Analysis")
-          }
-      FocusFlowButton(
-          onClick = { onWorkspace(Workspace.Bugs) },
-          tone = ActionTone.Navigation,
-          modifier = Modifier.padding(top = 6.dp)) {
-            Text("Open Bugs")
+      Spacer(Modifier.height(8.dp))
+      FocusFlowPanel(
+          Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+            SectionLabel("Workspace coverage")
+            CompactKeyValueRows(
+                listOf(
+                    "File analysis" to presentation.coverage, "Findings" to presentation.findings),
+                modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
+            )
+            ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
+              FocusFlowButton(
+                  onClick = { onWorkspace(Workspace.Analysis) },
+                  tone = ActionTone.Navigation,
+                  density = ButtonDensity.Toolbar) {
+                    Text("Open Analysis", fontSize = 11.sp)
+                  }
+              FocusFlowButton(
+                  onClick = { onWorkspace(Workspace.Bugs) },
+                  tone = ActionTone.Navigation,
+                  density = ButtonDensity.Toolbar) {
+                    Text("Open Bugs", fontSize = 11.sp)
+                  }
+            }
           }
     }
   }
@@ -161,14 +158,14 @@ private fun ProjectInterpretation(analysis: StructuredProjectAnalysis?) {
   Text(
       analysis.purpose.ifBlank { "No purpose returned." },
       color = PrimaryText,
-      fontSize = 13.sp,
-      modifier = Modifier.padding(top = 8.dp))
+      fontSize = 12.sp,
+      modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
   if (analysis.architecture.isNotBlank())
       Text(
           "Architecture: ${analysis.architecture}",
           color = SecondaryText,
-          fontSize = 12.sp,
-          modifier = Modifier.padding(top = 6.dp))
+          fontSize = 11.sp,
+          modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
   projectList("Components", analysis.components)
   projectList("Entry points", analysis.entryPoints)
   projectList("Flows", analysis.flows)
@@ -180,8 +177,16 @@ private fun ProjectInterpretation(analysis: StructuredProjectAnalysis?) {
 @Composable
 private fun projectList(label: String, values: List<String>) {
   if (values.isEmpty()) return
-  Text(label, color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+  Text(
+      label,
+      color = SecondaryText,
+      fontSize = 11.sp,
+      modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
   values.forEach {
-    Text("• $it", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+    Text(
+        "• $it",
+        color = PrimaryText,
+        fontSize = 11.sp,
+        modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
   }
 }

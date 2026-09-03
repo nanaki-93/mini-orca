@@ -137,6 +137,27 @@ internal fun groupFindingsByPriority(findings: List<UnifiedFinding>): List<Findi
       groupedFindings.takeIf { it.isNotEmpty() }?.let { FindingPriorityGroup(priority, it) }
     }
 
+internal fun findingDisplayKey(finding: UnifiedFinding): String =
+    listOf(
+            finding.id,
+            finding.location.path,
+            finding.location.startLine.toString(),
+            finding.location.symbol,
+            finding.title,
+        )
+        .joinToString(separator = ":")
+
+internal fun visibleFindingByDisplayKey(
+    presentation: FindingsPresentation,
+    displayKey: String?,
+): UnifiedFinding? =
+    displayKey?.let { key ->
+      presentation.priorityGroups
+          .asSequence()
+          .flatMap { it.findings.asSequence() }
+          .firstOrNull { findingDisplayKey(it) == key }
+    }
+
 internal fun activeBugsFilters(filters: BugsFilters): List<String> = buildList {
   filters.query.trim().takeIf { it.isNotBlank() }?.let { add("Search") }
   filters.source.trim().takeIf { it.isNotBlank() }?.let { add("Source: $it") }

@@ -50,3 +50,16 @@ contracts listed here passed with `./desktop/gradlew -p desktop spotlessCheck de
 | Keyboard and focus | `DesktopKeyboardNavigationTest` verifies wrapping arrow navigation moves tab-group focus without activation, Escape selects one topmost transient surface, and leaving Editor closes only its incompatible drawer. Explorer tree arrow behavior remains covered by its existing tests. | Tab through toolbar, tool-window bar, Project tree, editor tabs, source, right tabs, bottom tabs, and status. Verify the cyan focus indication, Enter/Space activation, and return focus after each drawer or dialog closes. |
 | Text scaling | The toolbar policy switches project operations to its labeled menu below the expanded width, and editor/project labels use bounded ellipsis; the long-breadcrumb policy is covered by `DesktopKeyboardNavigationTest`. | Repeat the viewport matrix at the supported platform text scale. Verify paths, findings, bottom summaries, and status labels remain readable through wrapping, scrolling, or ellipsis without horizontal clipping. |
 | Semantics and non-color states | The new test verifies focused left/right/bottom tab descriptions retain text labels and selected state. Explorer freshness now always renders a textual badge, and source/review labels remain explicitly read-only. | Use the supported screen reader to confirm names for tool windows, active tabs, selected files and symbols, status details, source, and review surfaces. |
+
+## Task 131 workspace presentation comparison
+
+The interactive Desktop application is still unavailable in this execution environment, so no
+live screenshots or focus observations are claimed. The Summary, Analysis, Bugs, and shared
+Problems presentation contracts were validated with the focused desktop state tests and the
+unchanged Focus Flow palette-token test.
+
+Before release, compare the supported viewport matrix against the Task 118 baseline. Confirm that
+Summary facts, Analysis progress/errors, Bugs filters/scan state, compact finding rows, and the
+selected finding details region retain readable labels and scroll rather than clipping; confirm
+the shared palette, focus treatment, disabled controls, and verified/advisory labels remain
+recognizable.
