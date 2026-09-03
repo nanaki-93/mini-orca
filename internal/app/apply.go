@@ -253,35 +253,54 @@ func (s *Service) UndoDraft(ctx context.Context, request UndoRequest) (*ApplyRes
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	state, err := readApplyState(s.manager.Root())
+	state, path, err := s.undoStateForRequest(request)
 	if err != nil {
 		return nil, err
 	}
+	if err := restoreUndoBackup(path, state); err != nil {
+		return nil, err
+	}
+	return s.persistDraftUndo(state)
+}
+
+func (s *Service) undoStateForRequest(request UndoRequest) (*applyState, string, error) {
+	state, err := readApplyState(s.manager.Root())
+	if err != nil {
+		return nil, "", err
+	}
 	if state == nil || state.ProjectID != request.ProjectID || state.AfterHash != request.PostApplyHash {
-		return nil, project.ErrRevisionConflict
+		return nil, "", project.ErrRevisionConflict
 	}
 	if err := s.ValidateMutableRequest(request.ProjectID, request.ProjectRevision, state.TargetPath, request.PostApplyHash); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	path, err := project.ResolveFile(s.manager.Root(), state.TargetPath)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	return state, path, nil
+}
+
+func restoreUndoBackup(path string, state *applyState) error {
 	backup, err := os.ReadFile(state.BackupPath)
 	if err != nil {
-		return nil, fmt.Errorf("read apply backup: %w", err)
+		return fmt.Errorf("read apply backup: %w", err)
 	}
 	if contentHash(backup) != state.BeforeHash {
-		return nil, fmt.Errorf("apply backup integrity check failed")
+		return fmt.Errorf("apply backup integrity check failed")
 	}
 	if err := atomicWrite(path, backup); err != nil {
-		return nil, err
+		return err
 	}
+	return nil
+}
+
+func (s *Service) persistDraftUndo(state *applyState) (*ApplyResult, error) {
 	index, err := s.Reindex()
 	if err != nil {
 		return nil, err
 	}
-	audit := AuditEntry{ID: "undo-" + shortHash(state.BeforeHash), Action: "undo", TargetPath: state.TargetPath, BeforeHash: state.AfterHash, AfterHash: state.BeforeHash, ProjectID: request.ProjectID, ProjectRevision: index.ProjectRevision, Validation: true, Outcome: "undone", Timestamp: time.Now().UTC()}
+	audit := AuditEntry{ID: "undo-" + shortHash(state.BeforeHash), Action: "undo", TargetPath: state.TargetPath, BeforeHash: state.AfterHash, AfterHash: state.BeforeHash, ProjectID: state.ProjectID, ProjectRevision: index.ProjectRevision, Validation: true, Outcome: "undone", Timestamp: time.Now().UTC()}
 	if err := appendAudit(s.manager.Root(), audit); err != nil {
 		return nil, err
 	}

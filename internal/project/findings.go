@@ -256,10 +256,10 @@ func findingMatchesInput(finding UnifiedFinding, input FindingInput) bool {
 }
 
 func validateFinding(finding UnifiedFinding) error {
-	if finding.ID == "" || !validFindingSource(finding.Source) || !validFindingConfidence(finding.Source, finding.Confidence) || !validProjectAnalysisSeverity(finding.Severity) || finding.Title == "" || finding.Message == "" || finding.ProjectID == "" || finding.ProjectRevision == "" || !validFindingStatus(finding.Status) || finding.Freshness != FindingFreshnessFresh || finding.DetectedAt.IsZero() {
+	if !validFindingIdentity(finding) {
 		return fmt.Errorf("finding is invalid")
 	}
-	if len(finding.Title) > maxProjectAnalysisItemBytes || len(finding.Message) > maxProjectAnalysisItemBytes || len(finding.Evidence) > maxProjectAnalysisBytes || finding.Location.StartLine < 0 || finding.Location.EndLine < finding.Location.StartLine {
+	if !validFindingContent(finding) {
 		return fmt.Errorf("finding exceeds limits")
 	}
 	if !validPersistedBugTaskSpec(finding.TaskSpec) {
@@ -268,22 +268,47 @@ func validateFinding(finding UnifiedFinding) error {
 	return nil
 }
 
+func validFindingIdentity(finding UnifiedFinding) bool {
+	return finding.ID != "" && validFindingSource(finding.Source) && validFindingConfidence(finding.Source, finding.Confidence) &&
+		validProjectAnalysisSeverity(finding.Severity) && finding.Title != "" && finding.Message != "" &&
+		finding.ProjectID != "" && finding.ProjectRevision != "" && validFindingStatus(finding.Status) &&
+		finding.Freshness == FindingFreshnessFresh && !finding.DetectedAt.IsZero()
+}
+
+func validFindingContent(finding UnifiedFinding) bool {
+	return len(finding.Title) <= maxProjectAnalysisItemBytes && len(finding.Message) <= maxProjectAnalysisItemBytes &&
+		len(finding.Evidence) <= maxProjectAnalysisBytes && finding.Location.StartLine >= 0 &&
+		finding.Location.EndLine >= finding.Location.StartLine
+}
+
 func validPersistedBugTaskSpec(spec *BugTaskSpec) bool {
 	if spec == nil {
 		return true
 	}
-	if spec.SchemaVersion != BugTaskSpecSchemaVersion || spec.TargetPath == "" || spec.TargetSymbol == "" || spec.TargetSignature == "" || len(spec.AcceptanceCriteria) == 0 || len(spec.AcceptanceCriteria) > MaxBugTaskItems || len(spec.NonGoals) > MaxBugTaskItems {
+	if !validPersistedBugTaskTarget(spec) || !validPersistedBugTaskItems(spec) {
 		return false
 	}
+	return validPersistedGoTestCandidate(spec.GoTestCandidate)
+}
+
+func validPersistedBugTaskTarget(spec *BugTaskSpec) bool {
+	return spec.SchemaVersion == BugTaskSpecSchemaVersion && spec.TargetPath != "" && spec.TargetSymbol != "" &&
+		spec.TargetSignature != "" && len(spec.AcceptanceCriteria) > 0 &&
+		len(spec.AcceptanceCriteria) <= MaxBugTaskItems && len(spec.NonGoals) <= MaxBugTaskItems
+}
+
+func validPersistedBugTaskItems(spec *BugTaskSpec) bool {
 	for _, item := range append(append([]string(nil), spec.AcceptanceCriteria...), spec.NonGoals...) {
 		if item == "" || len(item) > MaxBugTaskItemBytes {
 			return false
 		}
 	}
-	if candidate := spec.GoTestCandidate; candidate != nil && (candidate.Name == "" || candidate.Content == "" || len(candidate.Name) > MaxBugTaskItemBytes || len(candidate.Content) > MaxBugTaskCandidateBytes) {
-		return false
-	}
 	return true
+}
+
+func validPersistedGoTestCandidate(candidate *GoTestCandidateSpec) bool {
+	return candidate == nil || (candidate.Name != "" && candidate.Content != "" &&
+		len(candidate.Name) <= MaxBugTaskItemBytes && len(candidate.Content) <= MaxBugTaskCandidateBytes)
 }
 
 func validFindingSource(value string) bool {

@@ -188,11 +188,7 @@ func (s *Service) CurrentModelCatalog() ModelCatalog {
 }
 
 func scopedModel(profile EffectiveModel) ScopedModel {
-	return ScopedModel{
-		Scope: profile.Scope, Profile: profile.Profile, Model: profile.Model, ReasoningEffort: profile.ReasoningEffort, ProviderOrigin: profile.ProviderOrigin,
-		RemoteProvider: profile.RemoteProvider, Temperature: profile.Temperature, MaxTokens: profile.MaxTokens,
-		ContextMaxTokens: profile.ContextMaxTokens, Timeout: profile.Timeout, MaxRetries: profile.MaxRetries,
-	}
+	return ScopedModel(profile)
 }
 
 // RequireRemoteConfirmation prevents accidental prompt delivery to the actual

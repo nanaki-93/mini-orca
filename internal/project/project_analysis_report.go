@@ -99,10 +99,24 @@ func projectAnalysisMessages(contextText string) []llm.ChatMessage {
 }
 
 func parseProjectAnalysisResponse(output string) (projectAnalysisResponse, error) {
-	var response projectAnalysisResponse
 	if len(output) == 0 || len(output) > maxProjectAnalysisBytes {
-		return response, fmt.Errorf("project analysis response is empty or too large")
+		return projectAnalysisResponse{}, fmt.Errorf("project analysis response is empty or too large")
 	}
+	response, err := decodeProjectAnalysisResponse(output)
+	if err != nil {
+		return response, err
+	}
+	if err := validateProjectAnalysisSummary(&response); err != nil {
+		return response, err
+	}
+	if err := validateProjectAnalysisRisks(response.Risks); err != nil {
+		return response, err
+	}
+	return response, nil
+}
+
+func decodeProjectAnalysisResponse(output string) (projectAnalysisResponse, error) {
+	var response projectAnalysisResponse
 	decoder := json.NewDecoder(strings.NewReader(output))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&response); err != nil {
@@ -111,35 +125,40 @@ func parseProjectAnalysisResponse(output string) (projectAnalysisResponse, error
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return response, fmt.Errorf("project analysis JSON must contain one object")
 	}
+	return response, nil
+}
+
+func validateProjectAnalysisSummary(response *projectAnalysisResponse) error {
 	response.Purpose = strings.TrimSpace(response.Purpose)
 	response.Architecture = strings.TrimSpace(response.Architecture)
 	if response.Purpose == "" || response.Architecture == "" || len(response.Purpose) > maxProjectAnalysisItemBytes || len(response.Architecture) > maxProjectAnalysisItemBytes {
-		return response, fmt.Errorf("project analysis JSON requires purpose and architecture")
+		return fmt.Errorf("project analysis JSON requires purpose and architecture")
 	}
 	if err := validateProjectAnalysisStrings("components", response.Components); err != nil {
-		return response, err
+		return err
 	}
 	if err := validateProjectAnalysisStrings("entry points", response.EntryPoints); err != nil {
-		return response, err
+		return err
 	}
 	if err := validateProjectAnalysisStrings("flows", response.Flows); err != nil {
-		return response, err
+		return err
 	}
-	if err := validateProjectAnalysisStrings("next steps", response.NextSteps); err != nil {
-		return response, err
+	return validateProjectAnalysisStrings("next steps", response.NextSteps)
+}
+
+func validateProjectAnalysisRisks(risks []ProjectAnalysisRisk) error {
+	if len(risks) > maxProjectAnalysisItems {
+		return fmt.Errorf("project analysis risks exceed limit")
 	}
-	if len(response.Risks) > maxProjectAnalysisItems {
-		return response, fmt.Errorf("project analysis risks exceed limit")
-	}
-	for index := range response.Risks {
-		risk := &response.Risks[index]
+	for index := range risks {
+		risk := &risks[index]
 		risk.Severity = strings.ToLower(strings.TrimSpace(risk.Severity))
 		risk.Summary = strings.TrimSpace(risk.Summary)
 		if !validProjectAnalysisSeverity(risk.Severity) || risk.Summary == "" || len(risk.Summary) > maxProjectAnalysisItemBytes {
-			return response, fmt.Errorf("project analysis contains an invalid risk")
+			return fmt.Errorf("project analysis contains an invalid risk")
 		}
 	}
-	return response, nil
+	return nil
 }
 
 func validateProjectAnalysisStrings(name string, values []string) error {

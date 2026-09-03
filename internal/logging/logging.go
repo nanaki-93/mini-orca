@@ -92,11 +92,6 @@ func Info(msg string, args ...any) {
 	logger.Info(msg, args...)
 }
 
-// Warn logs a message at warn level
-func Warn(msg string, args ...any) {
-	logger.Warn(msg, args...)
-}
-
 // Error logs a message at error level
 func Error(msg string, args ...any) {
 	logger.Error(msg, args...)

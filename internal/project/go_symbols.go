@@ -19,6 +19,15 @@ func extractGoFacts(filename string, source []byte) ([]string, []SymbolInfo, []D
 	if file == nil {
 		return []string{}, []SymbolInfo{}, diagnostics
 	}
+	imports := goImports(file)
+	symbols := make([]SymbolInfo, 0)
+	for _, declaration := range file.Decls {
+		symbols = append(symbols, goDeclarationSymbols(fset, declaration)...)
+	}
+	return imports, symbols, diagnostics
+}
+
+func goImports(file *ast.File) []string {
 	imports := make([]string, 0, len(file.Imports))
 	for _, spec := range file.Imports {
 		path, err := strconv.Unquote(spec.Path.Value)
@@ -26,42 +35,69 @@ func extractGoFacts(filename string, source []byte) ([]string, []SymbolInfo, []D
 			imports = append(imports, path)
 		}
 	}
-	symbols := make([]SymbolInfo, 0)
-	for _, declaration := range file.Decls {
-		switch declaration := declaration.(type) {
-		case *ast.FuncDecl:
-			name := declaration.Name.Name
-			kind := "function"
-			if declaration.Recv != nil && len(declaration.Recv.List) > 0 {
-				kind = "method"
-				name = receiverName(declaration.Recv.List[0].Type) + "." + name
-			}
-			symbols = append(symbols, newGoSymbol(fset, declaration.Pos(), declaration.End(), name, kind, formatNode(fset, declaration.Type), declaration.Name.Name, true))
-		case *ast.GenDecl:
-			for _, spec := range declaration.Specs {
-				switch spec := spec.(type) {
-				case *ast.TypeSpec:
-					kind := "type"
-					if _, ok := spec.Type.(*ast.StructType); ok {
-						kind = "struct"
-					}
-					if _, ok := spec.Type.(*ast.InterfaceType); ok {
-						kind = "interface"
-					}
-					symbols = append(symbols, newGoSymbol(fset, spec.Pos(), spec.End(), spec.Name.Name, kind, formatTypeSpec(fset, spec), spec.Name.Name, true))
-				case *ast.ValueSpec:
-					kind := "var"
-					if declaration.Tok == token.CONST {
-						kind = "const"
-					}
-					for _, name := range spec.Names {
-						symbols = append(symbols, newGoSymbol(fset, name.Pos(), spec.End(), name.Name, kind, "", name.Name, isAtomicVariableDeclaration(declaration, spec)))
-					}
-				}
-			}
-		}
+	return imports
+}
+
+func goDeclarationSymbols(fset *token.FileSet, declaration ast.Decl) []SymbolInfo {
+	switch declaration := declaration.(type) {
+	case *ast.FuncDecl:
+		return []SymbolInfo{goFunctionSymbol(fset, declaration)}
+	case *ast.GenDecl:
+		return goGeneralDeclarationSymbols(fset, declaration)
+	default:
+		return nil
 	}
-	return imports, symbols, diagnostics
+}
+
+func goFunctionSymbol(fset *token.FileSet, declaration *ast.FuncDecl) SymbolInfo {
+	name, kind := declaration.Name.Name, "function"
+	if declaration.Recv != nil && len(declaration.Recv.List) > 0 {
+		kind = "method"
+		name = receiverName(declaration.Recv.List[0].Type) + "." + name
+	}
+	return newGoSymbol(fset, declaration.Pos(), declaration.End(), name, kind, formatNode(fset, declaration.Type), declaration.Name.Name, true)
+}
+
+func goGeneralDeclarationSymbols(fset *token.FileSet, declaration *ast.GenDecl) []SymbolInfo {
+	symbols := make([]SymbolInfo, 0)
+	for _, spec := range declaration.Specs {
+		symbols = append(symbols, goSpecSymbols(fset, declaration, spec)...)
+	}
+	return symbols
+}
+
+func goSpecSymbols(fset *token.FileSet, declaration *ast.GenDecl, spec ast.Spec) []SymbolInfo {
+	switch spec := spec.(type) {
+	case *ast.TypeSpec:
+		return []SymbolInfo{newGoSymbol(fset, spec.Pos(), spec.End(), spec.Name.Name, goTypeKind(spec), formatTypeSpec(fset, spec), spec.Name.Name, true)}
+	case *ast.ValueSpec:
+		return goValueSymbols(fset, declaration, spec)
+	default:
+		return nil
+	}
+}
+
+func goTypeKind(spec *ast.TypeSpec) string {
+	switch spec.Type.(type) {
+	case *ast.StructType:
+		return "struct"
+	case *ast.InterfaceType:
+		return "interface"
+	default:
+		return "type"
+	}
+}
+
+func goValueSymbols(fset *token.FileSet, declaration *ast.GenDecl, spec *ast.ValueSpec) []SymbolInfo {
+	kind := "var"
+	if declaration.Tok == token.CONST {
+		kind = "const"
+	}
+	symbols := make([]SymbolInfo, 0, len(spec.Names))
+	for _, name := range spec.Names {
+		symbols = append(symbols, newGoSymbol(fset, name.Pos(), spec.End(), name.Name, kind, "", name.Name, isAtomicVariableDeclaration(declaration, spec)))
+	}
+	return symbols
 }
 
 // isAtomicVariableDeclaration accepts only a single-name, ungrouped top-level var.

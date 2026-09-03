@@ -37,20 +37,6 @@ type ModelProfiles struct {
 	Function ModelProfile
 }
 
-// ForScope returns one fixed resolved profile.
-func (p ModelProfiles) ForScope(scope ModelScope) (ModelProfile, bool) {
-	switch scope {
-	case AnalyzeModelScope:
-		return p.Analyze, true
-	case BugModelScope:
-		return p.Bug, true
-	case FunctionModelScope:
-		return p.Function, true
-	default:
-		return ModelProfile{}, false
-	}
-}
-
 // ResolveModelProfiles validates each declared scope independently. There is no
 // flat profile, agent setting, or cross-scope fallback.
 func ResolveModelProfiles(cfg *Config) (ModelProfiles, error) {

@@ -41,8 +41,6 @@ func invalidDeclarationValidation(validation DeclarationValidation, code, messag
 
 type declarationSet map[string][]string
 
-func (set declarationSet) count(name string) int { return len(set[name]) }
-
 func goDeclarations(fset *token.FileSet, file *ast.File) (declarationSet, error) {
 	set := declarationSet{}
 	for _, declaration := range file.Decls {
@@ -138,18 +136,6 @@ func sameNonTargetDeclarations(before, after declarationSet, target string) bool
 		}
 	}
 	return true
-}
-
-func sameImports(fset *token.FileSet, before, after *ast.File) bool {
-	render := func(file *ast.File) []string {
-		imports := make([]string, 0, len(file.Imports))
-		for _, spec := range file.Imports {
-			imports = append(imports, renderGoNode(fset, spec))
-		}
-		return imports
-	}
-	left, right := render(before), render(after)
-	return strings.Join(left, "\x00") == strings.Join(right, "\x00")
 }
 
 func buildUnifiedDiff(path, original, composed string) UnifiedDiff {

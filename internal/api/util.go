@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 )
 
 // WriteJSON writes a JSON response to the HTTP writer.
@@ -43,39 +42,4 @@ func WriteAppError(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(appErr.Code)
 	json.NewEncoder(w).Encode(appErr)
-}
-
-// SplitPath splits a URL path into its components.
-func SplitPath(path string) []string {
-	if path == "/" {
-		return []string{""}
-	}
-	path = CleanPath(path)
-	if path[0] == '/' {
-		path = path[1:]
-	}
-	if path == "" {
-		return []string{""}
-	}
-	return strings.Split(path, "/")
-}
-
-// CleanPath removes redundant slashes from the path.
-func CleanPath(path string) string {
-	if path == "" {
-		return "/"
-	}
-	if path[0] != '/' {
-		path = "/" + path
-	}
-	n := len(path)
-	for i := 1; i < n-1; {
-		if path[i] == '/' && path[i+1] == '/' {
-			path = path[:i+1] + path[i+2:]
-			n--
-		} else {
-			i++
-		}
-	}
-	return path
 }

@@ -1,0 +1,36 @@
+build:
+  maxIssues: 0
+
+complexity:
+  CyclomaticComplexMethod:
+    active: true
+    # Compose screen routers intentionally aggregate many independently tested
+    # branches. Their child composables carry behavior; this gate catches a
+    # screen that grows beyond the current bounded routing shape.
+    threshold: 65
+  LongParameterList:
+    active: true
+    functionThreshold: 12
+    constructorThreshold: 12
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: true
+    exceptionNames:
+      - Throwable
+  SwallowedException:
+    active: true
+  InstanceOfCheckForException:
+    active: true
+
+potential-bugs:
+  UnsafeCast:
+    active: true
+  CastNullableToNonNullableType:
+    active: true
+
+style:
+  UnusedPrivateMember:
+    active: true
