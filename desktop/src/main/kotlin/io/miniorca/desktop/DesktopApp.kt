@@ -370,6 +370,33 @@ internal fun MiniOrcaApp(
       RightToolWindow.Review -> reviewPane(modifier)
     }
   }
+  val findingActions =
+      FindingActions(
+          openFinding = presenter::openFinding,
+          prepareFinding = presenter::prepareFinding,
+          triageFinding = presenter::triageFinding,
+      )
+  val bottomToolWindows: @Composable (BottomToolWindow, Modifier) -> Unit =
+      { toolWindow, modifier ->
+        when (toolWindow) {
+          BottomToolWindow.Problems ->
+              ProblemsToolWindow(
+                  state = ProblemsToolWindowState(appState.findings.findings, appState.loading),
+                  actions = findingActions,
+                  modifier = modifier,
+              )
+          BottomToolWindow.Checks,
+          BottomToolWindow.Output ->
+              SystemStateMessage(
+                  title = "Bottom tool window",
+                  message = "This tool will be connected in the next delivery.",
+                  modifier = modifier)
+        }
+      }
+  val bottomToolWindowSummaries =
+      mapOf(
+          BottomToolWindow.Problems to
+              problemsCollapsedSummary(appState.findings.findings, appState.loading).text)
   val contextualActions =
       editorContextualActions(
           appState,
@@ -444,12 +471,7 @@ internal fun MiniOrcaApp(
               startScan = presenter::runVerifiedScan,
               cancelScan = presenter::cancelVerifiedScan,
           ),
-      findingActions =
-          DesktopShellFindingActions(
-              openFinding = presenter::openFinding,
-              prepareFinding = presenter::prepareFinding,
-              triageFinding = presenter::triageFinding,
-          ),
+      findingActions = findingActions,
       paletteActions =
           DesktopShellPaletteActions(
               updateQuery = { paletteQuery = it },
@@ -475,7 +497,13 @@ internal fun MiniOrcaApp(
                 }
               },
           ),
-      panes = DesktopShellPanes(explorer, rightToolWindows, rightToolWindowBadges),
+      panes =
+          DesktopShellPanes(
+              explorer,
+              rightToolWindows,
+              rightToolWindowBadges,
+              bottomToolWindows,
+              bottomToolWindowSummaries),
   )
   pendingDraftDiscard?.let { pending ->
     DraftDiscardDialog(pending, ::discardDraftAndContinue) { pendingDraftDiscard = null }

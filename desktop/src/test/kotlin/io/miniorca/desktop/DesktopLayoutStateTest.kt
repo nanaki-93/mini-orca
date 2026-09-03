@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class DesktopLayoutStateTest {
   @Test
-  fun defaultsKeepTheExistingDockedPaneDimensionsAndNoBottomTool() {
+  fun defaultsKeepDockedPaneDimensionsAndACollapsedBottomSummary() {
     val layout = DesktopLayoutState()
 
     assertEquals(LeftToolWindow.Project, layout.activeLeftToolWindow)
@@ -19,7 +19,7 @@ class DesktopLayoutStateTest {
     assertEquals(270f, layout.explorerWidth)
     assertEquals(390f, layout.actionWidth)
     assertEquals(240f, layout.bottomHeight)
-    assertFalse(layout.bottomToolWindowVisible)
+    assertTrue(layout.bottomToolWindowVisible)
     assertTrue(layout.bottomCollapsed)
   }
 

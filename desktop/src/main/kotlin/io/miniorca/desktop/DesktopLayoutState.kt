@@ -77,7 +77,7 @@ internal data class DesktopLayoutState(
     val editorSurface: EditorSurface = EditorSurface.Source,
     val leftToolWindowVisible: Boolean = true,
     val rightToolWindowVisible: Boolean = true,
-    val bottomToolWindowVisible: Boolean = false,
+    val bottomToolWindowVisible: Boolean = true,
     val bottomCollapsed: Boolean = true,
     val explorerWidth: Float = DEFAULT_EXPLORER_WIDTH,
     val actionWidth: Float = DEFAULT_ACTION_WIDTH,
@@ -100,10 +100,10 @@ internal data class DesktopLayoutState(
           bottomToolWindowVisible = true,
           bottomCollapsed = false)
 
-  fun closeBottom() = copy(bottomToolWindowVisible = false, bottomCollapsed = true)
+  fun closeBottom() = copy(bottomToolWindowVisible = true, bottomCollapsed = true)
 
   fun withBottomCollapsed(collapsed: Boolean) =
-      copy(bottomToolWindowVisible = !collapsed, bottomCollapsed = collapsed)
+      copy(bottomToolWindowVisible = true, bottomCollapsed = collapsed)
 
   fun withEditorSurface(surface: EditorSurface) = copy(editorSurface = surface)
 
@@ -117,7 +117,8 @@ internal data class DesktopLayoutState(
 
   fun normalized() =
       copy(
-          bottomToolWindowVisible = !bottomCollapsed,
+          // A collapsed pane remains visible as its text-only summary and explicit reopen control.
+          bottomToolWindowVisible = true,
           explorerWidth = clampExplorerWidth(explorerWidth),
           actionWidth = clampActionWidth(actionWidth),
           bottomHeight = clampBottomHeight(bottomHeight),

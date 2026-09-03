@@ -27,6 +27,33 @@ data class FindingPriorityGroup(
     val findings: List<UnifiedFinding>,
 )
 
+/**
+ * The shared, read-only finding view used by the detailed Bugs workspace and the Problems tool
+ * window. Filtering, grouping, and lifecycle labels are deliberately resolved once here.
+ */
+internal data class FindingsPresentation(
+    val filters: BugsFilters,
+    val activeFilters: List<String>,
+    val priorityGroups: List<FindingPriorityGroup>,
+    val emptyMessage: String,
+)
+
+internal data class ProblemsCollapsedSummary(
+    val total: Int,
+    val highestActionablePriority: FindingPriority?,
+    val loading: Boolean = false,
+) {
+  val text: String
+    get() =
+        when {
+          loading && total == 0 -> "Loading problems…"
+          total == 0 -> "No problems"
+          highestActionablePriority == null -> "$total problems · no actionable problems"
+          else ->
+              "$total problems · highest actionable severity: ${highestActionablePriority.summaryLabel}"
+        }
+}
+
 data class FindingLifecycleAction(val label: String, val status: String)
 
 data class VerifiedScanProgress(
@@ -51,6 +78,42 @@ fun filterFindings(findings: List<UnifiedFinding>, filters: BugsFilters): List<U
           matchesFindingField(finding.status, filters.lifecycle)
     }
 
+internal fun findingsPresentation(
+    findings: List<UnifiedFinding>,
+    filters: BugsFilters,
+    loading: Boolean = false,
+): FindingsPresentation {
+  val activeFilters = activeBugsFilters(filters)
+  val filteredFindings = filterFindings(findings, filters)
+  return FindingsPresentation(
+      filters = filters,
+      activeFilters = activeFilters,
+      priorityGroups = groupFindingsByPriority(filteredFindings),
+      emptyMessage =
+          when {
+            loading && findings.isEmpty() -> "Loading findings…"
+            activeFilters.isNotEmpty() -> "No findings match the active filters."
+            else -> "No findings are available for this project."
+          },
+  )
+}
+
+internal fun problemsCollapsedSummary(
+    findings: List<UnifiedFinding>,
+    loading: Boolean = false,
+): ProblemsCollapsedSummary =
+    ProblemsCollapsedSummary(
+        total = findings.size,
+        highestActionablePriority =
+            FindingPriority.entries.firstOrNull { priority ->
+              findings.any { finding ->
+                finding.status.equals("open", ignoreCase = true) &&
+                    findingPriority(finding) == priority
+              }
+            },
+        loading = loading,
+    )
+
 internal fun findingPriority(finding: UnifiedFinding): FindingPriority =
     when (finding.severity.trim().lowercase()) {
       "high" -> FindingPriority.High
@@ -58,6 +121,15 @@ internal fun findingPriority(finding: UnifiedFinding): FindingPriority =
       "low" -> FindingPriority.Low
       else -> FindingPriority.Other
     }
+
+private val FindingPriority.summaryLabel: String
+  get() =
+      when (this) {
+        FindingPriority.High -> "High"
+        FindingPriority.Medium -> "Medium"
+        FindingPriority.Low -> "Low"
+        FindingPriority.Other -> "Other"
+      }
 
 internal fun groupFindingsByPriority(findings: List<UnifiedFinding>): List<FindingPriorityGroup> =
     FindingPriority.entries.mapNotNull { priority ->

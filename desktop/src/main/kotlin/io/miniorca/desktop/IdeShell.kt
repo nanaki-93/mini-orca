@@ -113,24 +113,79 @@ internal fun EditorArea(content: @Composable () -> Unit, modifier: Modifier = Mo
 }
 
 @Composable
-internal fun BottomToolWindowRegion(layout: DesktopLayoutState, modifier: Modifier = Modifier) {
-  if (!layout.bottomToolWindowVisible || layout.bottomCollapsed) return
-  Row(
+internal fun BottomToolWindowRegion(
+    layout: DesktopLayoutState,
+    availableToolWindows: List<BottomToolWindow>,
+    summaries: Map<BottomToolWindow, String>,
+    onSelect: (BottomToolWindow) -> Unit,
+    onCollapse: () -> Unit,
+    onHeightDelta: (Float) -> Unit,
+    onHeightCommit: () -> Unit,
+    content: @Composable (BottomToolWindow, Modifier) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+  if (availableToolWindows.isEmpty()) return
+  val activeToolWindow =
+      layout.activeBottomToolWindow.takeIf { it in availableToolWindows }
+          ?: availableToolWindows.first()
+  val collapsed = layout.bottomCollapsed
+  Column(
       modifier
           .fillMaxWidth()
-          .height(layout.bottomHeight.dp)
+          .height(if (collapsed) 38.dp else layout.bottomHeight.dp)
           .background(Panel)
-          .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
-          .padding(horizontal = 12.dp),
-      verticalAlignment = Alignment.CenterVertically,
+          .border(androidx.compose.foundation.BorderStroke(1.dp, Border)),
   ) {
-    Text(
-        "${layout.activeBottomToolWindow.name} tool window",
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.semantics { contentDescription = "Bottom tool window" })
+    if (!collapsed) HorizontalResizableDivider(onHeightDelta, onHeightCommit)
+    Row(
+        Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+          availableToolWindows.forEach { toolWindow ->
+            val selected = toolWindow == activeToolWindow
+            FocusFlowButton(
+                onClick = { onSelect(toolWindow) },
+                tone = ActionTone.Navigation,
+                density = ButtonDensity.Toolbar,
+                selected = selected,
+                modifier =
+                    Modifier.semantics {
+                      contentDescription =
+                          bottomToolWindowTabDescription(
+                              toolWindow, selected, summaries[toolWindow])
+                    }) {
+                  Text(bottomToolWindowLabel(toolWindow), fontSize = 11.sp)
+                }
+          }
+          Text(
+              summaries[activeToolWindow].orEmpty(),
+              color = SecondaryText,
+              fontSize = 11.sp,
+              maxLines = 1,
+              modifier = Modifier.weight(1f).padding(start = 8.dp))
+          FocusFlowButton(
+              onClick = if (collapsed) ({ onSelect(activeToolWindow) }) else onCollapse,
+              tone = ActionTone.Neutral,
+              density = ButtonDensity.Toolbar) {
+                Text(if (collapsed) "Open" else "Collapse", fontSize = 11.sp)
+              }
+        }
+    if (!collapsed) content(activeToolWindow, Modifier.fillMaxWidth().weight(1f))
   }
 }
+
+internal fun bottomToolWindowLabel(toolWindow: BottomToolWindow): String =
+    when (toolWindow) {
+      BottomToolWindow.Problems -> "Problems"
+      BottomToolWindow.Checks -> "Checks"
+      BottomToolWindow.Output -> "Output"
+    }
+
+internal fun bottomToolWindowTabDescription(
+    toolWindow: BottomToolWindow,
+    selected: Boolean,
+    summary: String?,
+): String =
+    "${bottomToolWindowLabel(toolWindow)} tool window tab${summary?.let { ", $it" }.orEmpty()}, ${if (selected) "selected" else "not selected"}"
 
 internal fun toolWindowGlyph(toolWindow: LeftToolWindow): String =
     when (toolWindow) {
@@ -160,6 +215,25 @@ internal fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
       contentAlignment = Alignment.Center,
   ) {
     Box(Modifier.fillMaxHeight().width(1.dp).background(Border))
+  }
+}
+
+@Composable
+internal fun HorizontalResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
+  val density = LocalDensity.current
+  Box(
+      Modifier.fillMaxWidth().height(6.dp).pointerInput(Unit) {
+        detectDragGestures(
+            onDrag = { change, amount ->
+              change.consume()
+              onDelta(-with(density) { amount.y.toDp().value })
+            },
+            onDragEnd = onCommit,
+        )
+      },
+      contentAlignment = Alignment.Center,
+  ) {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Border))
   }
 }
 

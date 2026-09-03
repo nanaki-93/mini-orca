@@ -215,12 +215,6 @@ internal data class DesktopShellAnalysisActions(
     val cancelScan: () -> Unit,
 )
 
-internal data class DesktopShellFindingActions(
-    val openFinding: (UnifiedFinding) -> Unit,
-    val prepareFinding: (UnifiedFinding) -> Unit,
-    val triageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
-)
-
 internal data class DesktopShellPaletteActions(
     val updateQuery: (String) -> Unit,
     val dismiss: () -> Unit,
@@ -234,6 +228,8 @@ internal data class DesktopShellPanes(
     val explorer: @Composable (Modifier, () -> Unit) -> Unit,
     val rightToolWindows: @Composable (RightToolWindow, Modifier) -> Unit,
     val rightToolWindowBadges: Map<RightToolWindow, RightToolWindowBadge>,
+    val bottomToolWindows: @Composable (BottomToolWindow, Modifier) -> Unit,
+    val bottomToolWindowSummaries: Map<BottomToolWindow, String>,
 )
 
 @Composable
@@ -243,7 +239,7 @@ internal fun DesktopShell(
     projectActions: DesktopShellProjectActions,
     editorActions: DesktopShellEditorActions,
     analysisActions: DesktopShellAnalysisActions,
-    findingActions: DesktopShellFindingActions,
+    findingActions: FindingActions,
     paletteActions: DesktopShellPaletteActions,
     panes: DesktopShellPanes,
 ) {
@@ -282,6 +278,14 @@ internal fun DesktopShell(
   fun selectRightToolWindow(toolWindow: RightToolWindow) {
     layoutActions.updateLayout(
         layout.openRight(toolWindow).withFocus(DesktopFocusRegion.RightToolWindow))
+  }
+  fun selectBottomToolWindow(toolWindow: BottomToolWindow) {
+    layoutActions.updateLayout(
+        layout.openBottom(toolWindow).withFocus(DesktopFocusRegion.BottomToolWindow))
+  }
+  fun collapseBottomToolWindow() {
+    layoutActions.updateLayout(
+        layout.withBottomCollapsed(true).withFocus(DesktopFocusRegion.BottomToolWindow))
   }
   LaunchedEffect(showsEditorChrome) { if (!showsEditorChrome) drawerState.close() }
   Surface(
@@ -394,7 +398,19 @@ internal fun DesktopShell(
                     modifier = Modifier.width(layout.actionWidth.dp).fillMaxHeight())
               }
             }
-            BottomToolWindowRegion(layout)
+            BottomToolWindowRegion(
+                layout = layout,
+                availableToolWindows =
+                    BottomToolWindow.entries.filter { it in panes.bottomToolWindowSummaries },
+                summaries = panes.bottomToolWindowSummaries,
+                onSelect = ::selectBottomToolWindow,
+                onCollapse = ::collapseBottomToolWindow,
+                onHeightDelta = {
+                  layoutActions.updateLayout(layout.withBottomHeight(layout.bottomHeight + it))
+                },
+                onHeightCommit = layoutActions.saveLayout,
+                content = panes.bottomToolWindows,
+            )
             ShellStatusRegion(appState.status, appState.error, appState.loading)
           }
         }
@@ -585,7 +601,7 @@ private fun DesktopCanvas(
     widthDp: Float,
     editorActions: DesktopShellEditorActions,
     analysisActions: DesktopShellAnalysisActions,
-    findingActions: DesktopShellFindingActions,
+    findingActions: FindingActions,
     onWorkspaceSelected: (Workspace) -> Unit,
     onOpenNarrowDrawer: (NarrowDrawer) -> Unit,
     modifier: Modifier,
@@ -621,7 +637,8 @@ private fun DesktopCanvas(
                             remoteProviderConfirmed = context.bugProviderConfirmed,
                         ),
                     bugs =
-                        BugsWorkspacePaneState(appState.findings.findings, appState.findings.scan),
+                        BugsWorkspacePaneState(
+                            appState.findings.findings, appState.findings.scan, appState.loading),
                 ),
             navigation =
                 ContentPaneNavigationActions(
@@ -635,9 +652,7 @@ private fun DesktopCanvas(
             analysisActions = analysisActions.toWorkspaceActions(),
             bugsActions =
                 BugsWorkspaceActions(
-                    openFinding = findingActions.openFinding,
-                    prepareFinding = findingActions.prepareFinding,
-                    triageFinding = findingActions.triageFinding,
+                    findingActions = findingActions,
                     startScan = analysisActions.startScan,
                     cancelScan = analysisActions.cancelScan,
                 ),
