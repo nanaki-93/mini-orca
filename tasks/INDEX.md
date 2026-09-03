@@ -45,7 +45,7 @@ The previous sequence remains reproducible through
 | ---: | --- | --- | --- |
 | 118 | [Establish the IDE UI contract baseline](completed/118_ide_ui_contract_baseline.md) | 117 | Complete |
 | 119 | [Add Desktop IDE layout state](completed/119_desktop_layout_state.md) | 118 | Complete |
-| 120 | [Build the IDE shell foundation](120_ide_shell_foundation.md) | 119 | Pending |
+| 120 | [Build the IDE shell foundation](completed/120_ide_shell_foundation.md) | 119 | Complete |
 | 121 | [Rebuild Project as a navigation tool window](121_project_tool_window.md) | 120 | Pending |
 | 122 | [Add active-file editor chrome](122_editor_chrome.md) | 121 | Pending |
 | 123 | [Improve the source gutter and viewport](123_source_gutter_and_viewport.md) | 122 | Pending |

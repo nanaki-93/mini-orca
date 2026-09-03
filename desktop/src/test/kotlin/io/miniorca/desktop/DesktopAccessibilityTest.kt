@@ -37,9 +37,12 @@ class DesktopAccessibilityTest {
   }
 
   @Test
-  fun workspaceSemanticsKeepTextualSelectedStateWithoutCounters() {
-    assertEquals("Editor, selected", workspaceSemanticsLabel(Workspace.Editor, true))
-    assertEquals("Bugs, not selected", workspaceSemanticsLabel(Workspace.Bugs, false))
+  fun toolWindowSemanticsKeepTextualSelectedStateWithoutCounters() {
+    assertEquals(
+        "Editor tool window, selected", toolWindowSemanticsLabel(LeftToolWindow.Editor, true))
+    assertEquals(
+        "Problems tool window, not selected",
+        toolWindowSemanticsLabel(LeftToolWindow.Problems, false))
   }
 
   @Test

@@ -7,6 +7,7 @@ internal enum class LeftToolWindow {
   Summary,
   Analysis,
   Problems,
+  Editor,
 }
 
 internal enum class RightToolWindow {
@@ -34,6 +35,32 @@ internal enum class DesktopFocusRegion {
   BottomToolWindow,
   StatusBar,
 }
+
+internal fun leftToolWindowLabel(toolWindow: LeftToolWindow): String =
+    when (toolWindow) {
+      LeftToolWindow.Project -> "Project"
+      LeftToolWindow.Summary -> "Summary"
+      LeftToolWindow.Analysis -> "Analysis"
+      LeftToolWindow.Problems -> "Problems"
+      LeftToolWindow.Editor -> "Editor"
+    }
+
+internal fun leftToolWindowForWorkspace(workspace: Workspace): LeftToolWindow =
+    when (workspace) {
+      Workspace.Summary -> LeftToolWindow.Summary
+      Workspace.Analysis -> LeftToolWindow.Analysis
+      Workspace.Bugs -> LeftToolWindow.Problems
+      Workspace.Editor -> LeftToolWindow.Editor
+    }
+
+internal fun workspaceForLeftToolWindow(toolWindow: LeftToolWindow): Workspace =
+    when (toolWindow) {
+      LeftToolWindow.Project -> Workspace.Editor
+      LeftToolWindow.Summary -> Workspace.Summary
+      LeftToolWindow.Analysis -> Workspace.Analysis
+      LeftToolWindow.Problems -> Workspace.Bugs
+      LeftToolWindow.Editor -> Workspace.Editor
+    }
 
 /** Presentation-only preferences for the known IDE shell regions. */
 internal data class DesktopLayoutState(
