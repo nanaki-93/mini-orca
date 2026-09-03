@@ -51,7 +51,7 @@ internal fun reviewEvidenceUiState(
     selected: ProjectFileInfo?,
     editor: EditableDraftState?,
     draft: DeclarationDraft?,
-    checks: CandidateCheckReport?,
+    checks: DraftCheckReport?,
     checksRunning: Boolean = false,
 ): ReviewEvidenceUiState {
     val validationCurrent = editor?.status == DraftEditorStatus.Valid && draft?.validation?.applicable == true
@@ -100,11 +100,11 @@ internal fun reviewValidationSummary(editor: EditableDraftState?, validationCurr
     else -> "Validate the latest declaration draft before continuing."
 }
 
-internal fun checksMatchDraft(checks: CandidateCheckReport?, draft: DeclarationDraft?): Boolean =
+internal fun checksMatchDraft(checks: DraftCheckReport?, draft: DeclarationDraft?): Boolean =
     checks != null && draft != null && checks.draftId == draft.id &&
         checks.draftRevision == draft.revision && checks.draftHash == draft.hash
 
-internal fun repairMessageForChecks(session: ChatSession?, draft: DeclarationDraft?, checks: CandidateCheckReport?): String? {
+internal fun repairMessageForChecks(session: ChatSession?, draft: DeclarationDraft?, checks: DraftCheckReport?): String? {
     if (session?.taskSpec == null || draft?.taskSpec == null || !sameTaskSpec(session.taskSpec, draft.taskSpec) || session.repairCount >= 3 || !checksMatchDraft(checks, draft)) return null
     val failures = checks!!.checks.filter { it.state.lowercase() in setOf("failed", "error", "canceled", "cancelled") }
     if (failures.isEmpty() && checks.applicable) return null
@@ -114,12 +114,12 @@ internal fun repairMessageForChecks(session: ChatSession?, draft: DeclarationDra
     return "Revise the current declaration to address this sanitized focused check evidence. Keep the pinned task scope and do not change unrelated code.\n\n$evidence".trim()
 }
 
-private fun repairLimitReached(session: ChatSession?, draft: DeclarationDraft?, checks: CandidateCheckReport?): Boolean =
+private fun repairLimitReached(session: ChatSession?, draft: DeclarationDraft?, checks: DraftCheckReport?): Boolean =
     session?.taskSpec != null && draft?.taskSpec != null && sameTaskSpec(session.taskSpec, draft.taskSpec) &&
         session.repairCount >= 3 && checksMatchDraft(checks, draft) && !checks!!.applicable
 
 private fun focusedChecksEvidence(
-    checks: CandidateCheckReport?,
+    checks: DraftCheckReport?,
     draft: DeclarationDraft?,
     checksRunning: Boolean,
 ): ReviewEvidenceRow {
@@ -180,7 +180,7 @@ internal fun applyDecisionUiState(
     selected: ProjectFileInfo?,
     editor: EditableDraftState?,
     draft: DeclarationDraft?,
-    checks: CandidateCheckReport?,
+    checks: DraftCheckReport?,
     applied: ApplyResult?,
 ): ApplyDecisionUiState {
     if (applied != null) {
@@ -218,7 +218,7 @@ internal fun ReviewContextPane(
     session: ChatSession?,
     editor: EditableDraftState?,
     draft: DeclarationDraft?,
-    checks: CandidateCheckReport?,
+    checks: DraftCheckReport?,
     impact: ImpactPreview?,
     gitStatus: GitStatus?,
     applied: ApplyResult?,

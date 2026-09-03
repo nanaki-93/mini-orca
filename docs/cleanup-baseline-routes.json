@@ -38,9 +38,6 @@
   {"method":"POST","path":"/api/projects/current/drafts/{draftID}/validate","disposition":"retained","consumer":"Desktop ApiClient.validateDraft"},
   {"method":"POST","path":"/api/projects/current/drafts/{draftID}/checks","disposition":"retained","consumer":"Desktop ApiClient.checkDraft"},
   {"method":"GET","path":"/api/projects/current/drafts/{draftID}/review","disposition":"retired"},
-  {"method":"POST","path":"/api/projects/current/candidates/checks","disposition":"retired"},
-  {"method":"POST","path":"/api/projects/current/candidates/compare","disposition":"retired"},
-  {"method":"POST","path":"/api/projects/current/candidates/export","disposition":"retired"},
   {"method":"POST","path":"/api/projects/current/apply","disposition":"retained","consumer":"Desktop ApiClient.applyDraft"},
   {"method":"POST","path":"/api/projects/current/undo","disposition":"retained","consumer":"Desktop ApiClient.undo"},
   {"method":"GET","path":"/api/projects/current/audit","disposition":"retired"}

@@ -1,11 +1,9 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -20,7 +18,7 @@ func TestDraftLifecycleInvalidatesApprovalEvidenceAndRejectsLateValidation(t *te
 	if valid.State != DraftValid || valid.Validation == nil {
 		t.Fatalf("validated draft = %+v", valid)
 	}
-	service.drafts[draft.ID].checks = &draftCheckEvidence{Revision: valid.Revision, CandidateHash: "candidate", Report: CandidateCheckReport{Applicable: true}}
+	service.drafts[draft.ID].checks = &draftCheckEvidence{Revision: valid.Revision, CompositionHash: "composition", Report: DraftCheckReport{Applicable: true}}
 
 	dirty, err := service.UpdateDraft(DraftUpdateRequest{ID: draft.ID, ExpectedRevision: valid.Revision, Declaration: "func Run( {", Imports: []string{"fmt"}})
 	if err != nil {
@@ -38,7 +36,7 @@ func TestDraftLifecycleInvalidatesApprovalEvidenceAndRejectsLateValidation(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.CompleteDraftValidation(draft.ID, invalid.Revision, project.GenerationValidation{Applicable: true}); !errors.Is(err, project.ErrRevisionConflict) {
+	if _, err := service.CompleteDraftValidation(draft.ID, invalid.Revision, project.DeclarationValidation{Applicable: true}); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("late validation error = %v, want revision conflict", err)
 	}
 	if got := validateFixtureDraft(t, service, recovered.ID, recovered.Revision, true); got.State != DraftValid {
@@ -125,17 +123,6 @@ func TestDraftStalesOnFileChangeAndProjectSwitchClearsSource(t *testing.T) {
 	if _, err := service.Draft(draft.ID); err == nil {
 		t.Fatal("project switch retained editable draft source")
 	}
-	audit := service.DraftAuditMetadata()
-	if len(audit) != 1 || audit[0].ID != draft.ID || audit[0].Hash == "" {
-		t.Fatalf("source-free audit metadata = %+v", audit)
-	}
-	serialized, err := json.Marshal(audit)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(serialized), draft.Declaration) {
-		t.Fatalf("draft audit leaked declaration: %s", serialized)
-	}
 }
 
 func createFixtureDraft(t *testing.T, service *Service, id, parentID string) *Draft {
@@ -160,7 +147,7 @@ func validateFixtureDraft(t *testing.T, service *Service, id string, revision in
 	if _, err := service.BeginDraftValidation(id, revision); err != nil {
 		t.Fatal(err)
 	}
-	draft, err := service.CompleteDraftValidation(id, revision, project.GenerationValidation{Applicable: applicable})
+	draft, err := service.CompleteDraftValidation(id, revision, project.DeclarationValidation{Applicable: applicable})
 	if err != nil {
 		t.Fatal(err)
 	}

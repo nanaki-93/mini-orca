@@ -16,7 +16,7 @@ import (
 const chatSessionResponseVersion = "v1"
 
 // ChatSession is an in-memory conversation pinned to one Go declaration in
-// one open file. It never carries a complete candidate file.
+// one open file. It never carries a complete source file.
 type ChatSession struct {
 	ID              string                      `json:"id"`
 	ProjectID       string                      `json:"project_id"`
@@ -62,7 +62,7 @@ type ChatSessionMessageRequest struct {
 }
 
 // DeclarationDraftResponse is the only model contract accepted by a session.
-// The absence of a target path and candidate file prevents model-directed
+// The absence of a target path and complete file prevents model-directed
 // retargeting or writing.
 type DeclarationDraftResponse struct {
 	Version     string   `json:"version"`
@@ -103,7 +103,7 @@ func (s *Service) OpenChatSession(request ChatSessionCreateRequest) (*ChatSessio
 	if err != nil {
 		return nil, err
 	}
-	session := ChatSession{ID: newGenerationID(), ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, BaseFileHash: request.BaseFileHash, OpenPath: request.OpenPath, Mode: request.Mode, TargetSymbol: request.TargetSymbol, TaskSpec: taskSpec, State: "active", Messages: []ChatSessionMessage{}, CreatedAt: now, UpdatedAt: now}
+	session := ChatSession{ID: newChatSessionID(), ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, BaseFileHash: request.BaseFileHash, OpenPath: request.OpenPath, Mode: request.Mode, TargetSymbol: request.TargetSymbol, TaskSpec: taskSpec, State: "active", Messages: []ChatSessionMessage{}, CreatedAt: now, UpdatedAt: now}
 	s.chatSessionMu.Lock()
 	s.chatSessions[session.ID] = &chatSession{session: cloneChatSession(session)}
 	s.chatSessionMu.Unlock()
@@ -275,13 +275,13 @@ func (s *Service) taskDraftHasFailedChecks(id string, session ChatSession) error
 	s.draftMu.Lock()
 	defer s.draftMu.Unlock()
 	stored := s.drafts[id]
-	if stored == nil || !sameTaskSpec(stored.draft.TaskSpec, session.TaskSpec) || stored.checks == nil || stored.checks.Revision != stored.draft.Revision || stored.checks.CandidateHash != stored.draft.CandidateHash || !checksFailed(stored.checks.Report) {
+	if stored == nil || !sameTaskSpec(stored.draft.TaskSpec, session.TaskSpec) || stored.checks == nil || stored.checks.Revision != stored.draft.Revision || stored.checks.CompositionHash != stored.draft.CompositionHash || !checksFailed(stored.checks.Report) {
 		return fmt.Errorf("check-driven repair requires failed checks for the current task draft")
 	}
 	return nil
 }
 
-func checksFailed(report CandidateCheckReport) bool {
+func checksFailed(report DraftCheckReport) bool {
 	for _, check := range report.Checks {
 		if check.State == CheckFailed || check.State == CheckCanceled {
 			return true

@@ -37,23 +37,20 @@ type UndoRequest struct {
 
 // AuditEntry is durable source-free evidence of one requested mutation.
 type AuditEntry struct {
-	ID                string       `json:"id"`
-	Action            string       `json:"action"`
-	TargetPath        string       `json:"target_path"`
-	GenerationID      string       `json:"generation_id,omitempty"`
-	BeforeHash        string       `json:"before_hash"`
-	AfterHash         string       `json:"after_hash"`
-	ProjectID         string       `json:"project_id"`
-	ProjectRevision   string       `json:"project_revision"`
-	Model             string       `json:"model,omitempty"`
-	Profile           string       `json:"profile,omitempty"`
-	Validation        bool         `json:"validation_passed"`
-	Checks            []CheckAudit `json:"checks"`
-	Outcome           string       `json:"outcome"`
-	Timestamp         time.Time    `json:"timestamp"`
-	TemplateID        string       `json:"template_id,omitempty"`
-	ActionTemplate    string       `json:"action_template,omitempty"`
-	TemplateInputHash string       `json:"template_input_hash,omitempty"`
+	ID              string       `json:"id"`
+	Action          string       `json:"action"`
+	TargetPath      string       `json:"target_path"`
+	GenerationID    string       `json:"generation_id,omitempty"`
+	BeforeHash      string       `json:"before_hash"`
+	AfterHash       string       `json:"after_hash"`
+	ProjectID       string       `json:"project_id"`
+	ProjectRevision string       `json:"project_revision"`
+	Model           string       `json:"model,omitempty"`
+	Profile         string       `json:"profile,omitempty"`
+	Validation      bool         `json:"validation_passed"`
+	Checks          []CheckAudit `json:"checks"`
+	Outcome         string       `json:"outcome"`
+	Timestamp       time.Time    `json:"timestamp"`
 }
 
 // CheckAudit omits command output because it can contain source.
@@ -114,7 +111,7 @@ func (s *Service) ApplyDraft(ctx context.Context, request ApplyRequest) (*ApplyR
 	if err != nil {
 		return nil, err
 	}
-	if err := atomicWrite(current.path, []byte(composition.CandidateContent)); err != nil {
+	if err := atomicWrite(current.path, []byte(composition.Source)); err != nil {
 		return nil, err
 	}
 	return s.persistDraftApply(current, state, composition, backupPath)
@@ -129,9 +126,8 @@ type currentApplyProject struct {
 
 type applyDraftState struct {
 	draft    Draft
-	meta     draftMetadata
 	target   taskTarget
-	checks   CandidateCheckReport
+	checks   DraftCheckReport
 	identity applyIdentity
 }
 
@@ -174,13 +170,13 @@ func (s *Service) loadStoredDraftForApply(identity applyIdentity) (applyDraftSta
 	if !target.project.matches(identity.project.id, identity.project.revision) || target.file.baseHash != identity.baseFileHash {
 		return applyDraftState{}, project.ErrRevisionConflict
 	}
-	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable || stored.draft.CandidateHash == "" {
+	if stored.draft.State != DraftValid || stored.draft.Validation == nil || !stored.draft.Validation.Applicable || stored.draft.CompositionHash == "" {
 		return applyDraftState{}, fmt.Errorf("draft is not valid; validate the latest revision")
 	}
-	if stored.checks == nil || stored.checks.Revision != stored.draft.Revision || stored.checks.CandidateHash != stored.draft.CandidateHash || !stored.checks.Report.Applicable {
+	if stored.checks == nil || stored.checks.Revision != stored.draft.Revision || stored.checks.CompositionHash != stored.draft.CompositionHash || !stored.checks.Report.Applicable {
 		return applyDraftState{}, fmt.Errorf("focused draft checks have not passed for the latest draft revision")
 	}
-	return applyDraftState{draft: cloneDraft(stored.draft), meta: cloneDraftMetadata(stored.meta), target: target, checks: cloneCheckReport(stored.checks.Report), identity: identity}, nil
+	return applyDraftState{draft: cloneDraft(stored.draft), target: target, checks: cloneCheckReport(stored.checks.Report), identity: identity}, nil
 }
 
 func (s *Service) loadCurrentApplyFile(current currentApplyProject, target taskTarget) (currentApplyProject, error) {
@@ -208,7 +204,7 @@ func validateDraftForApply(state applyDraftState, source []byte) (project.GoDecl
 	composition := project.ComposeGoDeclaration(state.target.file.path, string(source), project.GoDeclarationEdit{
 		Mode: state.target.mode, TargetSymbol: state.target.symbol, Declaration: state.draft.Declaration, Imports: state.draft.Imports,
 	})
-	if !composition.Validation.Applicable || composition.CandidateHash != state.draft.CandidateHash || composition.CandidateHash != state.checks.CandidateHash {
+	if !composition.Validation.Applicable || composition.CompositionHash != state.draft.CompositionHash || composition.CompositionHash != state.checks.CompositionHash {
 		return project.GoDeclarationComposition{}, project.ErrRevisionConflict
 	}
 	return composition, nil
@@ -225,7 +221,7 @@ func (s *Service) verifyApplyBeforeWrite(ctx context.Context, current currentApp
 	if err != nil {
 		return nil, err
 	}
-	if !state.target.matchesDraft(latest.draft) || latest.draft.CandidateHash != state.draft.CandidateHash || latest.checks.CandidateHash != state.checks.CandidateHash {
+	if !state.target.matchesDraft(latest.draft) || latest.draft.CompositionHash != state.draft.CompositionHash || latest.checks.CompositionHash != state.checks.CompositionHash {
 		return nil, project.ErrRevisionConflict
 	}
 	if err := s.ValidateMutableRequest(state.target.project.id, state.target.project.revision, state.target.file.path, state.target.file.baseHash); err != nil {
@@ -242,12 +238,12 @@ func (s *Service) verifyApplyBeforeWrite(ctx context.Context, current currentApp
 }
 
 func (s *Service) persistDraftApply(current currentApplyProject, state applyDraftState, composition project.GoDeclarationComposition, backupPath string) (*ApplyResult, error) {
-	postHash := composition.CandidateHash
+	postHash := composition.CompositionHash
 	index, err := s.Reindex()
 	if err != nil {
 		return nil, err
 	}
-	audit := AuditEntry{ID: "apply-" + shortHash(postHash), Action: "apply", TargetPath: state.target.file.path, GenerationID: state.draft.ID, BeforeHash: state.target.file.baseHash, AfterHash: postHash, ProjectID: state.draft.ProjectID, ProjectRevision: index.ProjectRevision, Model: state.draft.EffectiveModel.Model, Profile: state.draft.EffectiveModel.Profile, Validation: true, Checks: auditChecks(state.checks.Checks), Outcome: "applied", Timestamp: time.Now().UTC(), TemplateID: state.meta.TemplateID, ActionTemplate: state.meta.Action, TemplateInputHash: state.meta.TemplateInputHash}
+	audit := AuditEntry{ID: "apply-" + shortHash(postHash), Action: "apply", TargetPath: state.target.file.path, GenerationID: state.draft.ID, BeforeHash: state.target.file.baseHash, AfterHash: postHash, ProjectID: state.draft.ProjectID, ProjectRevision: index.ProjectRevision, Model: state.draft.EffectiveModel.Model, Profile: state.draft.EffectiveModel.Profile, Validation: true, Checks: auditChecks(state.checks.Checks), Outcome: "applied", Timestamp: time.Now().UTC()}
 	if err := appendAudit(current.root, audit); err != nil {
 		return nil, err
 	}
@@ -407,7 +403,7 @@ func readJSON(path string, value any) error {
 	}
 	return json.Unmarshal(data, value)
 }
-func auditChecks(checks []CandidateCheck) []CheckAudit {
+func auditChecks(checks []DraftCheck) []CheckAudit {
 	result := make([]CheckAudit, len(checks))
 	for i, check := range checks {
 		result[i] = CheckAudit{Name: check.Name, Required: check.Required, State: check.State, ExitCode: check.ExitCode}

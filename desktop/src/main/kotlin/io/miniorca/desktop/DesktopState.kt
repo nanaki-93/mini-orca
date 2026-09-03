@@ -93,7 +93,7 @@ data class ChatState(
 )
 
 data class DraftReviewState(
-    val checks: CandidateCheckReport? = null,
+    val checks: DraftCheckReport? = null,
     val draft: DeclarationDraft? = null,
     val editor: EditableDraftState? = null,
     val applied: ApplyResult? = null,
@@ -159,7 +159,7 @@ sealed interface DesktopEvent {
     data class AnalysisLoaded(val analysis: FileAnalysis) : DesktopEvent
     data class ImpactLoaded(val impact: ImpactPreview) : DesktopEvent
     data class GitStatusLoaded(val gitStatus: GitStatus) : DesktopEvent
-    data class ChecksLoaded(val checks: CandidateCheckReport) : DesktopEvent
+    data class ChecksLoaded(val checks: DraftCheckReport) : DesktopEvent
     data class ChatLoaded(val session: ChatSession) : DesktopEvent
     data class ChatProposalLoaded(val session: ChatSession, val userMessage: String, val proposal: ChatDraftProposal) : DesktopEvent
     data class DraftEdited(val declaration: String? = null, val imports: List<String>? = null) : DesktopEvent
@@ -358,7 +358,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
     fun draftLoaded(requestId: Long, file: RequestIdentity, draft: DeclarationDraft): Boolean =
         if (requestId == draftRequest && matchesFile(file) && sessionMatches(file, draft.projectId, draft.projectRevision, draft.targetPath, draft.baseFileHash)) accept(DesktopEvent.DraftLoaded(draft)) else false
 
-    fun draftChecksLoaded(requestId: Long, file: RequestIdentity, draft: DeclarationDraft, checks: CandidateCheckReport): Boolean =
+    fun draftChecksLoaded(requestId: Long, file: RequestIdentity, draft: DeclarationDraft, checks: DraftCheckReport): Boolean =
         if (
             requestId == draftRequest && matchesFile(file) &&
             sessionMatches(file, draft.projectId, draft.projectRevision, draft.targetPath, draft.baseFileHash) &&
@@ -387,7 +387,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
 
 data class ApplyEligibility(val eligible: Boolean, val reason: String)
 
-fun draftApplyEligibility(draft: DeclarationDraft?, checks: CandidateCheckReport?, selectedFile: ProjectFileInfo?): ApplyEligibility {
+fun draftApplyEligibility(draft: DeclarationDraft?, checks: DraftCheckReport?, selectedFile: ProjectFileInfo?): ApplyEligibility {
     if (draft == null || selectedFile == null) return ApplyEligibility(false, "Select a file and draft first.")
     if (draft.targetPath != selectedFile.path || draft.baseFileHash != selectedFile.contentHash) return ApplyEligibility(false, "The draft no longer matches the selected file.")
     if (draft.validation?.applicable != true) return ApplyEligibility(false, "Validate the latest draft before applying it.")
@@ -395,11 +395,11 @@ fun draftApplyEligibility(draft: DeclarationDraft?, checks: CandidateCheckReport
     return ApplyEligibility(true, "Ready to apply.")
 }
 
-private fun checksPassForDraft(checks: CandidateCheckReport?, draft: DeclarationDraft): Boolean =
+private fun checksPassForDraft(checks: DraftCheckReport?, draft: DeclarationDraft): Boolean =
     checks?.applicable == true && checks.draftId == draft.id && checks.draftRevision == draft.revision && checks.draftHash == draft.hash &&
         checks.checks.all { it.state.lowercase() in setOf("passed", "skipped") }
 
-fun draftReviewEligibility(editor: EditableDraftState?, draft: DeclarationDraft?, checks: CandidateCheckReport?, selectedFile: ProjectFileInfo?, project: ProjectAnalysis?): ApplyEligibility {
+fun draftReviewEligibility(editor: EditableDraftState?, draft: DeclarationDraft?, checks: DraftCheckReport?, selectedFile: ProjectFileInfo?, project: ProjectAnalysis?): ApplyEligibility {
     if (editor == null || draft == null) return ApplyEligibility(false, "Select a draft first.")
     if (editor.status == DraftEditorStatus.Stale) return ApplyEligibility(false, "The draft is stale; start a new file-scoped conversation.")
     if (editor.status == DraftEditorStatus.Dirty) return ApplyEligibility(false, "Manual edits require validation and fresh checks.")

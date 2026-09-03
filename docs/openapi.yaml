@@ -452,7 +452,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/DraftCheckRequest'}}}
       responses:
-        '200': {description: Isolated check report for the displayed revision and hash, content: {application/json: {schema: {$ref: '#/components/schemas/CandidateCheckReport'}}}}
+        '200': {description: Isolated check report for the displayed revision and hash, content: {application/json: {schema: {$ref: '#/components/schemas/DraftCheckReport'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/drafts/{draftID}/review:
@@ -464,43 +464,6 @@ paths:
         - {$ref: '#/components/parameters/ProjectRevision'}
       responses:
         '200': {description: Read-only declaration review, content: {application/json: {schema: {$ref: '#/components/schemas/DraftReview'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/candidates/checks:
-    post:
-      tags: [Compatibility]
-      deprecated: true
-      summary: Compatibility check route for a pre-draft candidate
-      responses:
-        '200': {description: Source-free candidate check report}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/candidates/compare:
-    post:
-      tags: [Compatibility]
-      deprecated: true
-      summary: Compatibility comparison for pre-draft candidate metadata
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/CandidateComparisonRequest'}}}
-      responses:
-        '200':
-          description: Source-free candidate comparison; neither candidate is applied.
-          content: {application/json: {schema: {$ref: '#/components/schemas/CandidateComparison'}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/candidates/export:
-    post:
-      tags: [Compatibility]
-      deprecated: true
-      summary: Compatibility export for pre-draft review metadata
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/CandidateExportRequest'}}}
-      responses:
-        '200':
-          description: Suggested filename and Markdown metadata; the daemon does not write a file.
-          content: {application/json: {schema: {$ref: '#/components/schemas/ReviewExport'}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/apply:
@@ -1071,7 +1034,7 @@ components:
         parent_draft_id: {type: string}
         previous_hash: {type: string}
         state: {type: string, enum: [generated, dirty, validating, valid, invalid, stale]}
-        validation: {$ref: '#/components/schemas/GenerationValidation'}
+        validation: {$ref: '#/components/schemas/DeclarationValidation'}
         task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
     DraftUpdateRequest:
       type: object
@@ -1101,9 +1064,9 @@ components:
       required: [draft, apply_eligible]
       properties:
         draft: {$ref: '#/components/schemas/Draft'}
-        checks: {$ref: '#/components/schemas/CandidateCheckReport'}
+        checks: {$ref: '#/components/schemas/DraftCheckReport'}
         apply_eligible: {type: boolean}
-    CandidateCheckReport:
+    DraftCheckReport:
       type: object
       required: [target_path, applicable, checks]
       properties:
@@ -1136,56 +1099,15 @@ components:
         project_revision: {type: string}
         post_apply_hash: {type: string}
         confirm: {type: boolean, description: Must be true after the user confirms restoration of the immediately preceding unchanged apply.}
-    CandidateComparisonRequest:
-      type: object
-      required: [left_generation_id, right_generation_id, project_revision]
-      properties:
-        left_generation_id: {type: string}
-        right_generation_id: {type: string}
-        project_revision: {type: string}
-        left_note: {type: string, description: Optional user-authored comparison note.}
-        right_note: {type: string, description: Optional user-authored comparison note.}
-    CandidateComparison:
-      type: object
-      required: [left, right]
-      properties:
-        left: {$ref: '#/components/schemas/CandidateComparisonItem'}
-        right: {$ref: '#/components/schemas/CandidateComparisonItem'}
-    CandidateComparisonItem:
-      type: object
-      properties:
-        generation_id: {type: string}
-        candidate_hash: {type: string}
-        target_path: {type: string}
-        target_symbol: {type: string}
-        action: {type: string}
-        scope_mode: {type: string, enum: [strict_symbol, symbol_plus_imports]}
-        diff_lines: {type: integer}
-        applicable: {type: boolean}
-        checks: {type: string, enum: [not run, passed, failed]}
-        model: {type: string}
-        user_note: {type: string}
-    CandidateExportRequest:
-      type: object
-      required: [generation_id, project_revision]
-      properties:
-        generation_id: {type: string}
-        project_revision: {type: string}
-    ReviewExport:
-      type: object
-      required: [filename, markdown]
-      properties:
-        filename: {type: string}
-        markdown: {type: string, description: Source-free focused-review Markdown.}
-    GenerationValidation:
+    DeclarationValidation:
       type: object
       required: [applicable, scope_mode, diagnostics, diff]
       properties:
         applicable: {type: boolean}
         scope_mode: {type: string, enum: [strict_symbol, symbol_plus_imports]}
-        diagnostics: {type: array, items: {$ref: '#/components/schemas/GenerationFinding'}}
+        diagnostics: {type: array, items: {$ref: '#/components/schemas/DeclarationFinding'}}
         diff: {$ref: '#/components/schemas/UnifiedDiff'}
-    GenerationFinding:
+    DeclarationFinding:
       type: object
       properties:
         code: {type: string}

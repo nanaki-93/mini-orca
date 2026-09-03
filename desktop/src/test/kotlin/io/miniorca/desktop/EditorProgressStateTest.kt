@@ -74,7 +74,7 @@ class EditorProgressStateTest {
             review = DraftReviewState(
                 draft = draft,
                 editor = editableDraft(draft),
-                checks = CandidateCheckReport("main.go", true, draftId = draft.id, draftRevision = draft.revision, draftHash = draft.hash),
+                checks = DraftCheckReport("main.go", true, draftId = draft.id, draftRevision = draft.revision, draftHash = draft.hash),
             ),
         )
     }
@@ -83,5 +83,5 @@ class EditorProgressStateTest {
     private fun file() = ProjectFileInfo("main.go", "base", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
     private fun symbol() = SymbolInfo("Run", "function", "func Run()", 1, 3, "exact", true)
     private fun session() = ChatSession("session", "project", "revision", "base", "main.go", "replace_symbol", "Run", "active", "draft")
-    private fun draft() = DeclarationDraft("draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}", revision = 2, hash = "draft-hash", validation = GenerationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
+    private fun draft() = DeclarationDraft("draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}", revision = 2, hash = "draft-hash", validation = DeclarationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
 }

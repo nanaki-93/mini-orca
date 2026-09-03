@@ -37,7 +37,7 @@ func TestDraftEndpointsAreRevisionAndHashGuarded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewCandidateHandler(service, manager)
+	handler := NewDraftHandler(service, manager)
 
 	validate := draftHandlerRequest(http.MethodPost, "/api/projects/current/drafts/draft-api/validate", `{"project_revision":"`+index.ProjectRevision+`","expected_revision":1}`, draft.ID)
 	validatedResponse := httptest.NewRecorder()
@@ -49,7 +49,7 @@ func TestDraftEndpointsAreRevisionAndHashGuarded(t *testing.T) {
 	if err := json.NewDecoder(validatedResponse.Body).Decode(&validated); err != nil {
 		t.Fatal(err)
 	}
-	if validated.CandidateHash == "" || validated.State != app.DraftValid {
+	if validated.CompositionHash == "" || validated.State != app.DraftValid {
 		t.Fatalf("validated draft = %+v", validated)
 	}
 
@@ -59,11 +59,11 @@ func TestDraftEndpointsAreRevisionAndHashGuarded(t *testing.T) {
 	if checksResponse.Code != http.StatusOK {
 		t.Fatalf("checks = %d: %s", checksResponse.Code, checksResponse.Body.String())
 	}
-	var report app.CandidateCheckReport
+	var report app.DraftCheckReport
 	if err := json.NewDecoder(checksResponse.Body).Decode(&report); err != nil {
 		t.Fatal(err)
 	}
-	if report.DraftID != draft.ID || report.DraftHash != validated.Hash || report.CandidateHash != validated.CandidateHash {
+	if report.DraftID != draft.ID || report.DraftHash != validated.Hash || report.CompositionHash != validated.CompositionHash {
 		t.Fatalf("check report = %+v", report)
 	}
 

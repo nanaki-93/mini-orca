@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,15 +13,15 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-func TestCandidateChecksUseIsolatedWorkspace(t *testing.T) {
+func TestDraftChecksUseIsolatedWorkspace(t *testing.T) {
 	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	originalPath := filepath.Join(root, "main.go")
 	original, err := os.ReadFile(originalPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	candidate := "package main\n\nimport \"fmt\"\n\nfunc Run() { fmt.Println(\"changed\") }\n"
-	report, err := runFixtureDraftChecks(service, context.Background(), candidate, CandidateCheckOptions{}, nil)
+	source := "package main\n\nimport \"fmt\"\n\nfunc Run() { fmt.Println(\"changed\") }\n"
+	report, err := runFixtureDraftChecks(service, context.Background(), source, DraftCheckOptions{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,14 +33,14 @@ func TestCandidateChecksUseIsolatedWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(after) != string(original) {
-		t.Fatal("candidate checks modified the imported project")
+		t.Fatal("draft checks modified the imported project")
 	}
 }
 
-func TestCandidateChecksReportFormatterFailure(t *testing.T) {
+func TestDraftChecksReportFormatterFailure(t *testing.T) {
 	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
-	candidate := "package main\nimport \"fmt\"\nfunc Run(){fmt.Println(\"changed\")}\n"
-	report, err := runFixtureDraftChecks(service, context.Background(), candidate, CandidateCheckOptions{}, nil)
+	source := "package main\nimport \"fmt\"\nfunc Run(){fmt.Println(\"changed\")}\n"
+	report, err := runFixtureDraftChecks(service, context.Background(), source, DraftCheckOptions{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +70,7 @@ func TestTaskTestChecksRequireBaseFailureAndCandidatePassWithoutWritingProject(t
 		t.Fatal(err)
 	}
 	test := project.GoTestCandidateSpec{Name: "TestRun", Content: "package main\n\nimport \"testing\"\n\nfunc TestRun(t *testing.T) { if !Run() { t.Fatal(\"expected true\") } }\n"}
-	report, err := runFixtureDraftChecks(service, context.Background(), "package main\n\nfunc Run() bool { return true }\n", CandidateCheckOptions{}, &test)
+	report, err := runFixtureDraftChecks(service, context.Background(), "package main\n\nfunc Run() bool { return true }\n", DraftCheckOptions{}, &test)
 	checks := taskChecks(report.Checks)
 	if err != nil || len(checks) != 2 || checks[0].State != CheckPassed || checks[1].State != CheckPassed {
 		t.Fatalf("task checks = %+v, err = %v", checks, err)
@@ -87,7 +85,7 @@ func TestTaskTestChecksRequireBaseFailureAndCandidatePassWithoutWritingProject(t
 	if _, err := service.Reindex(); err != nil {
 		t.Fatal(err)
 	}
-	report, err = runFixtureDraftChecks(service, context.Background(), "package main\n\nfunc Run() bool { return true }\n", CandidateCheckOptions{}, &test)
+	report, err = runFixtureDraftChecks(service, context.Background(), "package main\n\nfunc Run() bool { return true }\n", DraftCheckOptions{}, &test)
 	checks = taskChecks(report.Checks)
 	if err != nil || len(checks) != 1 || checks[0].State != CheckFailed {
 		t.Fatalf("unexpectedly passing baseline = %+v, err = %v", checks, err)
@@ -109,10 +107,10 @@ func TestTaskTestChecksReportCandidateFailureAndUseNonConflictingFilename(t *tes
 		t.Fatal(err)
 	}
 	test := project.GoTestCandidateSpec{Name: "TestRun", Content: "package main\n\nimport \"testing\"\n\nfunc TestRun(t *testing.T) { if !Run() { t.Fatal(\"expected true\") } }\n"}
-	report, err := runFixtureDraftChecks(service, context.Background(), "package main\n\nfunc Run() bool { return false }\n", CandidateCheckOptions{}, &test)
+	report, err := runFixtureDraftChecks(service, context.Background(), "package main\n\nfunc Run() bool { return false }\n", DraftCheckOptions{}, &test)
 	checks := taskChecks(report.Checks)
 	if err != nil || len(checks) != 2 || checks[0].State != CheckPassed || checks[1].State != CheckFailed {
-		t.Fatalf("candidate failure checks = %+v, err = %v", checks, err)
+		t.Fatalf("draft failure checks = %+v, err = %v", checks, err)
 	}
 	workspace := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(workspace, "nested"), 0700); err != nil {
@@ -127,8 +125,8 @@ func TestTaskTestChecksReportCandidateFailureAndUseNonConflictingFilename(t *tes
 	}
 }
 
-func taskChecks(checks []CandidateCheck) []CandidateCheck {
-	result := make([]CandidateCheck, 0, 2)
+func taskChecks(checks []DraftCheck) []DraftCheck {
+	result := make([]DraftCheck, 0, 2)
 	for _, check := range checks {
 		if strings.HasPrefix(check.Name, "task test ") {
 			result = append(result, check)
@@ -152,36 +150,14 @@ func TestTaskTestCheckCancellationAndEvidenceSanitization(t *testing.T) {
 }
 
 func TestApplyUndoAndAuditAreConflictSafeAndSourceFree(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]string{"content": `{"version":"v1","target_path":"main.go","target_symbol":"Run","scope_mode":"strict_symbol","candidate_content":"package main\n\nimport \"fmt\"\n\nfunc Run() { fmt.Println(\"changed\") }\n"}`}}}})
-	}))
-	defer server.Close()
-	service, root := newSemanticAnalysisService(t, server.URL, 0)
-	analysis, err := service.manager.Analysis()
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := service.manager.IndexedFile("main.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	preview, err := service.Generate(context.Background(), "change Run", "main.go", "Run", "strict_symbol", false)
-	if err != nil || !preview.Validation.Applicable {
-		t.Fatalf("preview = %+v, %v", preview, err)
-	}
-	if _, err := service.CheckCandidate(context.Background(), preview.GenerationID, CandidateCheckOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	draft, err := service.Draft(preview.GenerationID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	applied, err := service.ApplyDraft(context.Background(), ApplyRequest{DraftID: preview.GenerationID, DraftRevision: draft.Revision, DraftHash: draft.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true})
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	draft := createDraftReadyForApply(t, service)
+	applied, err := service.ApplyDraft(context.Background(), applyDraftRequest(draft))
 	if err != nil {
 		t.Fatal(err)
 	}
 	current, err := os.ReadFile(filepath.Join(root, "main.go"))
-	if err != nil || string(current) != preview.CandidateContent {
+	if err != nil || string(current) != "package main\n\nimport \"fmt\"\n\nfunc Run() { println(\"draft\") }\n" {
 		t.Fatalf("applied content = %q, %v", current, err)
 	}
 	audits, err := service.AuditHistory()
@@ -195,45 +171,17 @@ func TestApplyUndoAndAuditAreConflictSafeAndSourceFree(t *testing.T) {
 	if err := restartedManager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := New(scopedTestConfig(server.URL), restartedManager)
+	restarted, err := New(scopedTestConfig("http://127.0.0.1:1"), restartedManager)
 	if err != nil {
 		t.Fatal(err)
 	}
-	undone, err := restarted.UndoDraft(context.Background(), UndoRequest{ProjectID: analysis.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true})
+	undone, err := restarted.UndoDraft(context.Background(), UndoRequest{ProjectID: draft.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true})
 	if err != nil || undone.UndoAvailable {
 		t.Fatalf("undo = %+v, %v", undone, err)
 	}
 	restored, err := os.ReadFile(filepath.Join(root, "main.go"))
-	if err != nil || string(restored) == preview.CandidateContent {
+	if err != nil || string(restored) == string(current) {
 		t.Fatalf("restored content = %q, %v", restored, err)
-	}
-}
-
-func TestApplyRejectsFileConflict(t *testing.T) {
-	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
-	analysis, err := service.manager.Analysis()
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := service.manager.IndexedFile("main.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	service.rememberCandidate(&GenerationPreview{GenerationID: "candidate", ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run", CandidateContent: "package main\nfunc Run() {}\n", Validation: project.GenerationValidation{Applicable: true}})
-	preview, err := service.Candidate("candidate")
-	if err != nil {
-		t.Fatal(err)
-	}
-	service.drafts["candidate"].checks = &draftCheckEvidence{Revision: 1, CandidateHash: preview.CandidateHash, Report: CandidateCheckReport{Applicable: true}}
-	draft, err := service.Draft("candidate")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() { println(\"external\") }\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.ApplyDraft(context.Background(), ApplyRequest{DraftID: "candidate", DraftRevision: draft.Revision, DraftHash: draft.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true}); !errors.Is(err, project.ErrRevisionConflict) {
-		t.Fatalf("apply conflict = %v", err)
 	}
 }
 
@@ -248,10 +196,10 @@ func jsonAudit(t *testing.T, audits []AuditEntry) string {
 
 func stringMustContain(value, unwanted string) bool { return strings.Contains(value, unwanted) }
 
-func runFixtureDraftChecks(service *Service, ctx context.Context, source string, options CandidateCheckOptions, taskTest *project.GoTestCandidateSpec) (CandidateCheckReport, error) {
+func runFixtureDraftChecks(service *Service, ctx context.Context, source string, options DraftCheckOptions, taskTest *project.GoTestCandidateSpec) (DraftCheckReport, error) {
 	file, err := service.manager.IndexedFile("main.go")
 	if err != nil {
-		return CandidateCheckReport{}, err
+		return DraftCheckReport{}, err
 	}
 	return service.runDraftChecks(ctx, draftCheckInput{file: *file, source: source, taskTest: taskTest}, options)
 }

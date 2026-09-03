@@ -36,14 +36,14 @@ func TestReleaseFixtureRepresentsPolicyAndParserAcceptanceCases(t *testing.T) {
 		Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run",
 		Declaration: "func Run(name string) string { return \"updated \" + name }",
 	})
-	if !replaced.Validation.Applicable || !strings.Contains(replaced.CandidateContent, "updated") || !strings.Contains(replaced.CandidateContent, "func Keep") {
+	if !replaced.Validation.Applicable || !strings.Contains(replaced.Source, "updated") || !strings.Contains(replaced.Source, "func Keep") {
 		t.Fatalf("fixture replace composition = %+v", replaced)
 	}
 	created := ComposeGoDeclaration("main.go", string(mainSource), GoDeclarationEdit{
 		Mode: DeclarationEditCreateSymbol, TargetSymbol: "ReleaseNote",
 		Declaration: "type ReleaseNote struct { Text string }",
 	})
-	if !created.Validation.Applicable || !strings.Contains(created.CandidateContent, "type ReleaseNote struct") || !strings.Contains(created.CandidateContent, "type Worker") {
+	if !created.Validation.Applicable || !strings.Contains(created.Source, "type ReleaseNote struct") || !strings.Contains(created.Source, "type Worker") {
 		t.Fatalf("fixture create composition = %+v", created)
 	}
 	brokenSource, err := os.ReadFile(filepath.Join(root, "malformed.go.fixture"))

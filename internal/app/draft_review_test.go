@@ -25,14 +25,14 @@ func TestDraftValidateCheckApplyAndUndoRequireCurrentEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if validated.State != DraftValid || validated.CandidateHash == "" {
+	if validated.State != DraftValid || validated.CompositionHash == "" {
 		t.Fatalf("validated draft = %+v", validated)
 	}
 	checks, err := service.CheckDraft(context.Background(), DraftCheckRequest{ID: validated.ID, ExpectedRevision: validated.Revision, ExpectedHash: validated.Hash})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !checks.Applicable || checks.DraftID != validated.ID || checks.DraftRevision != validated.Revision || checks.DraftHash != validated.Hash || checks.CandidateHash != validated.CandidateHash {
+	if !checks.Applicable || checks.DraftID != validated.ID || checks.DraftRevision != validated.Revision || checks.DraftHash != validated.Hash || checks.CompositionHash != validated.CompositionHash {
 		t.Fatalf("checks are not bound to the draft: %+v", checks)
 	}
 	review, err := service.ReviewDraft(validated.ID)

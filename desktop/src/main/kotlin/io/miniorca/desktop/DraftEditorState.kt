@@ -8,7 +8,7 @@ data class EditableDraftState(
     val imports: List<String> = serverDraft.imports,
     val status: DraftEditorStatus = draftEditorStatus(serverDraft),
 ) {
-    val diagnostics: List<GenerationFinding> get() = serverDraft.validation?.diagnostics.orEmpty()
+    val diagnostics: List<DeclarationFinding> get() = serverDraft.validation?.diagnostics.orEmpty()
 }
 
 fun draftEditorStatus(draft: DeclarationDraft): DraftEditorStatus = when {

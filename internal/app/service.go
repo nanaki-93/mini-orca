@@ -77,7 +77,6 @@ type Service struct {
 	analysisAll         *analysisAllController
 	goScan              *goScanController
 	drafts              map[string]*storedDraft
-	draftAudit          []DraftAuditMetadata
 	draftMu             sync.Mutex
 	chatSessions        map[string]*chatSession
 	chatSessionMu       sync.Mutex
@@ -150,7 +149,7 @@ func configuredDuration(seconds int, defaultValue time.Duration) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-// ValidateMutableRequest rejects candidates based on a different project or file state.
+// ValidateMutableRequest rejects draft operations based on a different project or file state.
 func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash string) error {
 	return s.manager.ValidateMutableRequest(id, revision, targetFile, baseFileHash)
 }

@@ -16,8 +16,8 @@ class ReviewEvidencePaneTest {
 
     @Test fun staleOrFailedCheckEvidenceCannotEnableApply() {
         val current = draft()
-        val stale = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = "old-hash")
-        val failed = CandidateCheckReport("main.go", true, checks = listOf(CandidateCheck("go test", required = true, state = "failed")), draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
+        val stale = DraftCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = "old-hash")
+        val failed = DraftCheckReport("main.go", true, checks = listOf(DraftCheck("go test", required = true, state = "failed")), draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
 
         val staleEvidence = reviewEvidenceUiState(project(), file(), editableDraft(current), current, stale)
         val failedEvidence = reviewEvidenceUiState(project(), file(), editableDraft(current), current, failed)
@@ -28,7 +28,7 @@ class ReviewEvidencePaneTest {
 
     @Test fun verificationAndReceiptsKeepIdentityGuardsInternal() {
         val current = draft()
-        val checks = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
+        val checks = DraftCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
         val evidence = reviewEvidenceUiState(project(), file(), editableDraft(current), current, checks)
         val receipt = applyDecisionUiState(project(), file(), editableDraft(current), current, checks, ApplyResult("revision", "post-hash", true, AuditEntry("apply", "main.go", "applied", "")))
 
@@ -41,7 +41,7 @@ class ReviewEvidencePaneTest {
 
     @Test fun aManualEditInvalidatesCurrentCheckEvidenceAndReturnsTheUserToDraftRecovery() {
         val current = draft()
-        val matchingChecks = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
+        val matchingChecks = DraftCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
         val edited = editDraft(editableDraft(current), declaration = "func Run() error { return nil }")
         val evidence = reviewEvidenceUiState(project(), file(), edited, current.copy(validation = null), matchingChecks)
 
@@ -51,7 +51,7 @@ class ReviewEvidencePaneTest {
     }
 
     @Test fun diagnosticsAndReadOnlyImpactAndGitContextRemainExplicit() {
-        val invalid = draft().copy(validation = GenerationValidation(false, "replace_symbol", diagnostics = listOf(GenerationFinding("scope", "Only one declaration may change.")), diff = UnifiedDiff("main.go", "main.go")))
+        val invalid = draft().copy(validation = DeclarationValidation(false, "replace_symbol", diagnostics = listOf(DeclarationFinding("scope", "Only one declaration may change.")), diff = UnifiedDiff("main.go", "main.go")))
         val evidence = reviewEvidenceUiState(project(), file(), editableDraft(invalid), invalid, checks = null)
         val impact = ImpactPreview("main.go", "Run", listOf(ImpactReference("main_test.go", "Run", "high", "calls Run")))
 
@@ -66,7 +66,7 @@ class ReviewEvidencePaneTest {
         val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return an error."))
         val current = draft().copy(taskSpec = task)
         val session = ChatSession(id = "session", taskSpec = task, repairCount = 2)
-        val checks = CandidateCheckReport("main.go", false, listOf(CandidateCheck("task test candidate", required = true, state = "failed", output = "<workspace>/main_test.go: assertion failed")), current.id, current.revision, current.hash)
+        val checks = DraftCheckReport("main.go", false, listOf(DraftCheck("task test candidate", required = true, state = "failed", output = "<workspace>/main_test.go: assertion failed")), current.id, current.revision, current.hash)
 
         val repair = repairMessageForChecks(session, current, checks)
 
@@ -74,14 +74,14 @@ class ReviewEvidencePaneTest {
         assertTrue(repair?.contains("assertion failed") == true)
         assertTrue(repair!!.length < 4096)
         assertEquals(null, repairMessageForChecks(session.copy(repairCount = 3), current, checks))
-        assertFalse(checksMatchDraft(CandidateCheckReport("main.go", false, draftId = current.id, draftRevision = current.revision, draftHash = "stale"), current))
+        assertFalse(checksMatchDraft(DraftCheckReport("main.go", false, draftId = current.id, draftRevision = current.revision, draftHash = "stale"), current))
     }
 
     private fun draft() = DeclarationDraft(
         "draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}",
         revision = 2,
         hash = "draft-hash",
-        validation = GenerationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")),
+        validation = DeclarationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")),
     )
 
     private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")

@@ -12,8 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
 )
 
 // DeclarationEditMode identifies whether a draft replaces an exact symbol or
@@ -25,7 +23,7 @@ const (
 	DeclarationEditCreateSymbol  DeclarationEditMode = "create_symbol"
 )
 
-// GoDeclarationEdit contains the isolated, editable part of a Go candidate.
+// GoDeclarationEdit contains the isolated, editable part of a Go declaration composition.
 // Imports are Go import specs: a bare path such as "fmt", a quoted path, or an
 // aliased spec such as `alias "example.com/package"`.
 type GoDeclarationEdit struct {
@@ -35,13 +33,13 @@ type GoDeclarationEdit struct {
 	Imports      []string            `json:"imports,omitempty"`
 }
 
-// GoDeclarationComposition is an in-memory, preview-only candidate. Invalid
-// edits return diagnostics and never produce a candidate or candidate hash.
+// GoDeclarationComposition is an in-memory, preview-only source composition.
+// Invalid edits return diagnostics and never produce source or a composition hash.
 type GoDeclarationComposition struct {
-	NormalizedDeclaration string               `json:"normalized_declaration,omitempty"`
-	CandidateContent      string               `json:"candidate_content,omitempty"`
-	CandidateHash         string               `json:"candidate_hash,omitempty"`
-	Validation            GenerationValidation `json:"validation"`
+	NormalizedDeclaration string                `json:"normalized_declaration,omitempty"`
+	Source                string                `json:"candidate_content,omitempty"`
+	CompositionHash       string                `json:"candidate_hash,omitempty"`
+	Validation            DeclarationValidation `json:"validation"`
 }
 
 // ComposeGoDeclaration composes one isolated Go declaration into a complete
@@ -49,7 +47,7 @@ type GoDeclarationComposition struct {
 // variables, and proves that every unrelated declaration and every pre-existing
 // import remains unchanged.
 func ComposeGoDeclaration(path, original string, edit GoDeclarationEdit) GoDeclarationComposition {
-	result := GoDeclarationComposition{Validation: GenerationValidation{ScopeMode: workflow.ScopeSymbolPlusImports}}
+	result := GoDeclarationComposition{Validation: DeclarationValidation{ScopeMode: "symbol_plus_imports"}}
 	if !validDeclarationEditMode(edit.Mode) {
 		return invalidDeclarationComposition(result, "invalid_mode", "The requested declaration edit mode is not supported.")
 	}
@@ -80,21 +78,21 @@ func ComposeGoDeclaration(path, original string, edit GoDeclarationEdit) GoDecla
 		return invalidDeclarationComposition(result, "target_kind", err.Error())
 	}
 
-	candidateSource, err := composeDeclarationSource(original, fset, before, declaration, normalized, edit.Mode, requestedImports)
+	composedSource, err := composeDeclarationSource(original, fset, before, declaration, normalized, edit.Mode, requestedImports)
 	if err != nil {
 		return invalidDeclarationComposition(result, "compose_failed", err.Error())
 	}
-	candidate, err := format.Source(candidateSource)
+	formattedSource, err := format.Source(composedSource)
 	if err != nil {
-		return invalidDeclarationComposition(result, "candidate_syntax", "The composed Go candidate cannot be formatted.")
+		return invalidDeclarationComposition(result, "composition_syntax", "The composed Go source cannot be formatted.")
 	}
 	result.NormalizedDeclaration = normalized
-	result.CandidateContent = string(candidate)
-	result.CandidateHash = declarationCandidateHash(result.CandidateContent)
-	result.Validation = validateGoDeclarationComposition(path, original, result.CandidateContent, edit, requestedImports)
+	result.Source = string(formattedSource)
+	result.CompositionHash = declarationCompositionHash(result.Source)
+	result.Validation = validateGoDeclarationComposition(path, original, result.Source, edit, requestedImports)
 	if !result.Validation.Applicable {
-		result.CandidateContent = ""
-		result.CandidateHash = ""
+		result.Source = ""
+		result.CompositionHash = ""
 	}
 	return result
 }
@@ -422,39 +420,39 @@ func normalizeRequestedImports(imports []string) ([]string, error) {
 	return normalized, nil
 }
 
-func validateGoDeclarationComposition(path, original, candidate string, edit GoDeclarationEdit, requestedImports []string) GenerationValidation {
-	validation := GenerationValidation{ScopeMode: workflow.ScopeSymbolPlusImports, Diff: buildUnifiedDiff(path, original, candidate)}
+func validateGoDeclarationComposition(path, original, composed string, edit GoDeclarationEdit, requestedImports []string) DeclarationValidation {
+	validation := DeclarationValidation{ScopeMode: "symbol_plus_imports", Diff: buildUnifiedDiff(path, original, composed)}
 	fset := token.NewFileSet()
 	before, err := parser.ParseFile(fset, path, original, parser.ParseComments)
 	if err != nil {
-		return invalidGeneration(validation, "original_syntax", "The original Go file cannot be parsed for declaration composition.")
+		return invalidDeclarationValidation(validation, "original_syntax", "The original Go file cannot be parsed for declaration composition.")
 	}
-	after, err := parser.ParseFile(fset, path, candidate, parser.ParseComments)
+	after, err := parser.ParseFile(fset, path, composed, parser.ParseComments)
 	if err != nil {
-		return invalidGeneration(validation, "candidate_syntax", "The composed Go candidate has invalid syntax.")
+		return invalidDeclarationValidation(validation, "composition_syntax", "The composed Go source has invalid syntax.")
 	}
 	if before.Name.Name != after.Name.Name {
-		return invalidGeneration(validation, "package_changed", "The candidate changes the Go package.")
+		return invalidDeclarationValidation(validation, "package_changed", "The composition changes the Go package.")
 	}
 	beforeCount := countNamedDeclarations(before, edit.TargetSymbol)
 	afterCount := countNamedDeclarations(after, edit.TargetSymbol)
 	if (edit.Mode == DeclarationEditReplaceSymbol && (beforeCount != 1 || afterCount != 1)) ||
 		(edit.Mode == DeclarationEditCreateSymbol && (beforeCount != 0 || afterCount != 1)) {
-		return invalidGeneration(validation, "target_identity", "The candidate does not preserve the requested declaration identity.")
+		return invalidDeclarationValidation(validation, "target_identity", "The composition does not preserve the requested declaration identity.")
 	}
 	beforeDeclarations, err := goDeclarations(fset, before)
 	if err != nil {
-		return invalidGeneration(validation, "original_declarations", err.Error())
+		return invalidDeclarationValidation(validation, "original_declarations", err.Error())
 	}
 	afterDeclarations, err := goDeclarations(fset, after)
 	if err != nil {
-		return invalidGeneration(validation, "candidate_declarations", err.Error())
+		return invalidDeclarationValidation(validation, "composed_declarations", err.Error())
 	}
 	if !sameNonTargetDeclarations(beforeDeclarations, afterDeclarations, edit.TargetSymbol) || !sameNonTargetDeclarationOrder(before, after, edit.TargetSymbol) {
-		return invalidGeneration(validation, "out_of_scope_declaration", "The candidate changes, reorders, removes, or duplicates an unrelated declaration.")
+		return invalidDeclarationValidation(validation, "out_of_scope_declaration", "The composition changes, reorders, removes, or duplicates an unrelated declaration.")
 	}
 	if !importsPreservedWithRequests(fset, before, after, requestedImports) {
-		return invalidGeneration(validation, "out_of_scope_import", "The candidate changes an existing import or adds an import that was not requested.")
+		return invalidDeclarationValidation(validation, "out_of_scope_import", "The composition changes an existing import or adds an import that was not requested.")
 	}
 	validation.Applicable = true
 	return validation
@@ -558,12 +556,12 @@ func containsImportSpec(imports []string, want string) bool {
 	return false
 }
 
-func declarationCandidateHash(content string) string {
+func declarationCompositionHash(content string) string {
 	sum := sha256.Sum256([]byte(content))
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func invalidDeclarationComposition(result GoDeclarationComposition, code, message string) GoDeclarationComposition {
-	result.Validation = invalidGeneration(result.Validation, code, message)
+	result.Validation = invalidDeclarationValidation(result.Validation, code, message)
 	return result
 }
