@@ -15,7 +15,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -273,15 +272,8 @@ internal fun RemoteProviderConfirmation(
 
 @Composable
 internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorkspaceActions) {
-  var query by remember { mutableStateOf("") }
-  var source by remember { mutableStateOf("") }
-  var severity by remember { mutableStateOf("") }
-  var freshness by remember { mutableStateOf("") }
-  var lifecycle by remember { mutableStateOf("") }
-  var showFilters by remember { mutableStateOf(false) }
-  val filters = BugsFilters(query, source, severity, freshness, lifecycle)
-  val activeFilters = activeBugsFilters(filters)
-  val priorityGroups = groupFindingsByPriority(filterFindings(state.findings, filters))
+  val filters = rememberFindingsFilterState()
+  val presentation = findingsPresentation(state.findings, filters.filters, state.loading)
   val progress = verifiedScanProgress(state.scan)
   LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
     item {
@@ -289,54 +281,8 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
       Spacer(Modifier.height(12.dp))
       FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
         SectionLabel("SEARCH AND FILTER")
-        CompactSingleLineField(
-            query,
-            { query = it },
-            label = { Text("Search findings") },
-            modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
-        FocusFlowButton(
-            onClick = { showFilters = !showFilters },
-            tone = ActionTone.Neutral,
-            selected = showFilters,
-            modifier = Modifier.padding(top = 6.dp)) {
-              Text(if (showFilters) "Hide filters" else "Filters")
-            }
-        if (activeFilters.isNotEmpty())
-            Text(
-                "Filters active: ${activeFilters.joinToString(" · ")}",
-                color = SecondaryText,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 5.dp))
-        if (showFilters) {
-          ResponsiveFieldPair(
-              modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-              first = { modifier ->
-                CompactSingleLineField(
-                    source, { source = it }, label = { Text("Source") }, modifier = modifier)
-              },
-              second = { modifier ->
-                CompactSingleLineField(
-                    severity, { severity = it }, label = { Text("Severity") }, modifier = modifier)
-              },
-          )
-          ResponsiveFieldPair(
-              modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-              first = { modifier ->
-                CompactSingleLineField(
-                    freshness,
-                    { freshness = it },
-                    label = { Text("Freshness") },
-                    modifier = modifier)
-              },
-              second = { modifier ->
-                CompactSingleLineField(
-                    lifecycle,
-                    { lifecycle = it },
-                    label = { Text("Lifecycle") },
-                    modifier = modifier)
-              },
-          )
-        }
+        FindingsFilterControls(
+            filters, presentation, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
       }
       Spacer(Modifier.height(10.dp))
       FocusFlowPanel(Modifier.fillMaxWidth()) {
@@ -375,23 +321,23 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
       Spacer(Modifier.height(10.dp))
       SectionLabel("FINDINGS")
     }
-    if (priorityGroups.isEmpty()) {
+    if (presentation.priorityGroups.isEmpty()) {
       item {
         Text(
-            "No matching findings.",
+            presentation.emptyMessage,
             color = SecondaryText,
             fontSize = 12.sp,
             modifier = Modifier.padding(top = 9.dp))
       }
     } else {
-      priorityGroups.forEach { group ->
+      presentation.priorityGroups.forEach { group ->
         item { SectionLabel(group.priority.sectionLabel, Modifier.padding(top = 9.dp)) }
         items(
             group.findings,
             key = { finding ->
               "${group.priority.name}:${finding.id}:${finding.location.path}:${finding.location.startLine}"
             }) { finding ->
-              FindingCard(finding, actions)
+              DetailedFindingCard(finding, actions.findingActions)
             }
       }
     }
@@ -402,102 +348,12 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
 internal data class BugsWorkspacePaneState(
     val findings: List<UnifiedFinding>,
     val scan: GoScanReport?,
+    val loading: Boolean,
 )
 
 /** Finding navigation, task preparation, triage, and scan intents. */
 internal data class BugsWorkspaceActions(
-    val openFinding: (UnifiedFinding) -> Unit,
-    val prepareFinding: (UnifiedFinding) -> Unit,
-    val triageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
+    val findingActions: FindingActions,
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
 )
-
-@Composable
-private fun FindingCard(finding: UnifiedFinding, actions: BugsWorkspaceActions) {
-  FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 7.dp)) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      Text(
-          "${finding.severity.ifBlank { "unknown" }.uppercase()} · ${finding.title.ifBlank { "Untitled finding" }}",
-          color = PrimaryText,
-          fontSize = 13.sp,
-          fontWeight = FontWeight.SemiBold,
-          modifier = Modifier.weight(1f))
-      StatusBadge(finding.freshness.ifBlank { "missing" })
-    }
-    Text(
-        findingProvenanceLabel(finding),
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 5.dp))
-    Text(
-        "Location: ${findingLocationLabel(finding)}",
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 3.dp))
-    Text(
-        "Status: ${findingStatusLabel(finding)}",
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 3.dp))
-    Text(
-        finding.message.ifBlank { "No message supplied." },
-        color = PrimaryText,
-        fontSize = 12.sp,
-        modifier = Modifier.padding(top = 6.dp))
-    if (finding.evidence.isNotBlank())
-        Text(
-            "Evidence: ${finding.evidence}",
-            color = SecondaryText,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 4.dp))
-    finding.taskSpec?.let { task ->
-      Text(
-          "Fix task: ${task.targetSymbol} · ${task.targetSignature}",
-          color = SecondaryText,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 4.dp))
-      Text(
-          "Acceptance: ${task.acceptanceCriteria.joinToString(" · ")}",
-          color = SecondaryText,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 3.dp))
-      if (task.nonGoals.isNotEmpty())
-          Text(
-              "Non-goals: ${task.nonGoals.joinToString(" · ")}",
-              color = SecondaryText,
-              fontSize = 11.sp,
-              modifier = Modifier.padding(top = 3.dp))
-    }
-    ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 7.dp)) {
-      FocusFlowButton(
-          onClick = { actions.openFinding(finding) },
-          enabled = finding.location.path.isNotBlank(),
-          tone = ActionTone.Navigation) {
-            Text("Open in Editor")
-          }
-      FocusFlowButton(
-          onClick = { actions.prepareFinding(finding) },
-          enabled = findingCanPrepareFix(finding),
-          tone = ActionTone.Navigation) {
-            Text("Prepare fix")
-          }
-      findingLifecycleActions(finding).forEach { action ->
-        FocusFlowButton(
-            onClick = { actions.triageFinding(finding, action) },
-            tone =
-                if (action.status == "dismissed") ActionTone.Destructive else ActionTone.Neutral) {
-              Text(action.label)
-            }
-      }
-    }
-  }
-}
-
-internal fun findingLocationLabel(finding: UnifiedFinding): String {
-  val location = finding.location
-  if (location.path.isBlank()) return "project-wide"
-  val line = if (location.startLine > 0) ":${location.startLine}" else ""
-  val symbol = location.symbol.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
-  return "${location.path}$line$symbol"
-}
