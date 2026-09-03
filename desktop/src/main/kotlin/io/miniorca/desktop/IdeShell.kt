@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -116,7 +118,7 @@ internal fun EditorArea(content: @Composable () -> Unit, modifier: Modifier = Mo
 internal fun BottomToolWindowRegion(
     layout: DesktopLayoutState,
     availableToolWindows: List<BottomToolWindow>,
-    summaries: Map<BottomToolWindow, String>,
+    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
     onSelect: (BottomToolWindow) -> Unit,
     onCollapse: () -> Unit,
     onHeightDelta: (Float) -> Unit,
@@ -128,6 +130,7 @@ internal fun BottomToolWindowRegion(
   val activeToolWindow =
       layout.activeBottomToolWindow.takeIf { it in availableToolWindows }
           ?: availableToolWindows.first()
+  val visibleSummary = bottomToolWindowSummary(activeToolWindow, summaries)
   val collapsed = layout.bottomCollapsed
   Column(
       modifier
@@ -151,14 +154,14 @@ internal fun BottomToolWindowRegion(
                     Modifier.semantics {
                       contentDescription =
                           bottomToolWindowTabDescription(
-                              toolWindow, selected, summaries[toolWindow])
+                              toolWindow, selected, summaries[toolWindow]?.text)
                     }) {
                   Text(bottomToolWindowLabel(toolWindow), fontSize = 11.sp)
                 }
           }
           Text(
-              summaries[activeToolWindow].orEmpty(),
-              color = SecondaryText,
+              visibleSummary?.text.orEmpty(),
+              color = if (visibleSummary?.attention == true) Warning else SecondaryText,
               fontSize = 11.sp,
               maxLines = 1,
               modifier = Modifier.weight(1f).padding(start = 8.dp))
@@ -187,6 +190,15 @@ internal fun bottomToolWindowTabDescription(
 ): String =
     "${bottomToolWindowLabel(toolWindow)} tool window tab${summary?.let { ", $it" }.orEmpty()}, ${if (selected) "selected" else "not selected"}"
 
+/**
+ * A failed background tab is visible in the collapsed summary without changing the selected tab.
+ */
+internal fun bottomToolWindowSummary(
+    activeToolWindow: BottomToolWindow,
+    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
+): BottomToolWindowSummary? =
+    summaries.values.firstOrNull { it.attention } ?: summaries[activeToolWindow]
+
 internal fun toolWindowGlyph(toolWindow: LeftToolWindow): String =
     when (toolWindow) {
       LeftToolWindow.Project -> "P"
@@ -202,14 +214,16 @@ internal fun toolWindowSemanticsLabel(toolWindow: LeftToolWindow, selected: Bool
 @Composable
 internal fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
   val density = LocalDensity.current
+  val currentOnDelta by rememberUpdatedState(onDelta)
+  val currentOnCommit by rememberUpdatedState(onCommit)
   Box(
       Modifier.fillMaxHeight().width(8.dp).pointerInput(Unit) {
         detectDragGestures(
             onDrag = { change, amount ->
               change.consume()
-              onDelta(with(density) { amount.x.toDp().value })
+              currentOnDelta(with(density) { amount.x.toDp().value })
             },
-            onDragEnd = onCommit,
+            onDragEnd = currentOnCommit,
         )
       },
       contentAlignment = Alignment.Center,
@@ -221,14 +235,16 @@ internal fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
 @Composable
 internal fun HorizontalResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
   val density = LocalDensity.current
+  val currentOnDelta by rememberUpdatedState(onDelta)
+  val currentOnCommit by rememberUpdatedState(onCommit)
   Box(
       Modifier.fillMaxWidth().height(6.dp).pointerInput(Unit) {
         detectDragGestures(
             onDrag = { change, amount ->
               change.consume()
-              onDelta(-with(density) { amount.y.toDp().value })
+              currentOnDelta(-with(density) { amount.y.toDp().value })
             },
-            onDragEnd = onCommit,
+            onDragEnd = currentOnCommit,
         )
       },
       contentAlignment = Alignment.Center,

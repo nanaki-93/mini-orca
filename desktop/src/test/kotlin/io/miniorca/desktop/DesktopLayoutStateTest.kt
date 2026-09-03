@@ -104,6 +104,22 @@ class DesktopLayoutStateTest {
   }
 
   @Test
+  fun storePersistsTheCollapsedSelectedBottomTabWithoutWorkflowState() {
+    withPreferences { preferences ->
+      val layout =
+          DesktopLayoutState()
+              .openBottom(BottomToolWindow.Checks)
+              .withBottomHeight(360f)
+              .withBottomCollapsed(true)
+              .withFocus(DesktopFocusRegion.BottomToolWindow)
+
+      DesktopLayoutStore(preferences).save(layout)
+
+      assertEquals(layout, DesktopLayoutStore(preferences).load())
+    }
+  }
+
+  @Test
   fun wideLayoutBoundaryStaysAtExactlyOneThousandDp() {
     assertFalse(useNarrowLayout(1_000f))
     assertTrue(useNarrowLayout(999f))

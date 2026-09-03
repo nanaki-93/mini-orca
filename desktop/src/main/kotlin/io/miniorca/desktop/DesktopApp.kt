@@ -376,6 +376,30 @@ internal fun MiniOrcaApp(
           prepareFinding = presenter::prepareFinding,
           triageFinding = presenter::triageFinding,
       )
+  val checksPresentation =
+      checksToolWindowPresentation(
+          ChecksToolWindowState(
+              project = appState.project,
+              selected = appState.selectedFile,
+              editor = appState.review.editor,
+              draft = appState.review.draft,
+              checks = appState.checks,
+              checksRunning = appState.loading,
+          ))
+  val outputPresentation =
+      outputToolWindowPresentation(
+          OutputToolWindowState(
+              status = appState.status,
+              error = appState.error,
+              loading = appState.loading,
+              fileAnalysis = appState.analysis,
+              analyzeAll = appState.findings.analyzeAll,
+              coverage = appState.overview?.analysisCoverage,
+              scan = appState.findings.scan,
+              analysisInProgress = workflow.analysisInProgress,
+              generating = workflow.generating,
+              validating = workflow.draftValidationInProgress,
+          ))
   val bottomToolWindows: @Composable (BottomToolWindow, Modifier) -> Unit =
       { toolWindow, modifier ->
         when (toolWindow) {
@@ -385,18 +409,18 @@ internal fun MiniOrcaApp(
                   actions = findingActions,
                   modifier = modifier,
               )
-          BottomToolWindow.Checks,
-          BottomToolWindow.Output ->
-              SystemStateMessage(
-                  title = "Bottom tool window",
-                  message = "This tool will be connected in the next delivery.",
-                  modifier = modifier)
+          BottomToolWindow.Checks -> ChecksToolWindow(checksPresentation, modifier)
+          BottomToolWindow.Output -> OutputToolWindow(outputPresentation, modifier)
         }
       }
   val bottomToolWindowSummaries =
       mapOf(
           BottomToolWindow.Problems to
-              problemsCollapsedSummary(appState.findings.findings, appState.loading).text)
+              BottomToolWindowSummary(
+                  problemsCollapsedSummary(appState.findings.findings, appState.loading).text),
+          BottomToolWindow.Checks to checksPresentation.summary,
+          BottomToolWindow.Output to outputPresentation.summary,
+      )
   val contextualActions =
       editorContextualActions(
           appState,
@@ -431,7 +455,7 @@ internal fun MiniOrcaApp(
       layoutActions =
           DesktopShellLayoutActions(
               updateLayout = { layout = it },
-              saveLayout = { layoutStore.save(layout) },
+              saveLayout = layoutStore::save,
           ),
       projectActions =
           DesktopShellProjectActions(

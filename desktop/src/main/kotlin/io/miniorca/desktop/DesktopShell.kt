@@ -182,7 +182,7 @@ internal data class DesktopShellPaletteState(
 
 internal data class DesktopShellLayoutActions(
     val updateLayout: (DesktopLayoutState) -> Unit,
-    val saveLayout: () -> Unit,
+    val saveLayout: (DesktopLayoutState) -> Unit,
 )
 
 internal data class DesktopShellProjectActions(
@@ -229,7 +229,7 @@ internal data class DesktopShellPanes(
     val rightToolWindows: @Composable (RightToolWindow, Modifier) -> Unit,
     val rightToolWindowBadges: Map<RightToolWindow, RightToolWindowBadge>,
     val bottomToolWindows: @Composable (BottomToolWindow, Modifier) -> Unit,
-    val bottomToolWindowSummaries: Map<BottomToolWindow, String>,
+    val bottomToolWindowSummaries: Map<BottomToolWindow, BottomToolWindowSummary>,
 )
 
 @Composable
@@ -280,12 +280,14 @@ internal fun DesktopShell(
         layout.openRight(toolWindow).withFocus(DesktopFocusRegion.RightToolWindow))
   }
   fun selectBottomToolWindow(toolWindow: BottomToolWindow) {
-    layoutActions.updateLayout(
-        layout.openBottom(toolWindow).withFocus(DesktopFocusRegion.BottomToolWindow))
+    val updated = layout.openBottom(toolWindow).withFocus(DesktopFocusRegion.BottomToolWindow)
+    layoutActions.updateLayout(updated)
+    layoutActions.saveLayout(updated)
   }
   fun collapseBottomToolWindow() {
-    layoutActions.updateLayout(
-        layout.withBottomCollapsed(true).withFocus(DesktopFocusRegion.BottomToolWindow))
+    val updated = layout.withBottomCollapsed(true).withFocus(DesktopFocusRegion.BottomToolWindow)
+    layoutActions.updateLayout(updated)
+    layoutActions.saveLayout(updated)
   }
   LaunchedEffect(showsEditorChrome) { if (!showsEditorChrome) drawerState.close() }
   Surface(
@@ -364,7 +366,7 @@ internal fun DesktopShell(
                       layoutActions.updateLayout(
                           layout.withExplorerWidth(layout.explorerWidth + it))
                     },
-                    onCommit = layoutActions.saveLayout)
+                    onCommit = { layoutActions.saveLayout(layout) })
               }
               DesktopCanvas(
                   appState = appState,
@@ -384,7 +386,7 @@ internal fun DesktopShell(
                     onDelta = {
                       layoutActions.updateLayout(layout.withActionWidth(layout.actionWidth - it))
                     },
-                    onCommit = layoutActions.saveLayout)
+                    onCommit = { layoutActions.saveLayout(layout) })
                 DockedToolWindow(
                     "Tool windows",
                     content = { modifier ->
@@ -408,7 +410,7 @@ internal fun DesktopShell(
                 onHeightDelta = {
                   layoutActions.updateLayout(layout.withBottomHeight(layout.bottomHeight + it))
                 },
-                onHeightCommit = layoutActions.saveLayout,
+                onHeightCommit = { layoutActions.saveLayout(layout) },
                 content = panes.bottomToolWindows,
             )
             ShellStatusRegion(appState.status, appState.error, appState.loading)
