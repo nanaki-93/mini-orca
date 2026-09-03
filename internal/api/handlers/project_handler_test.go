@@ -27,7 +27,7 @@ func TestProjectRestoreActivatesStoredAnalysisWithoutModelAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	service, err := app.New(scopedHandlerConfig("http://127.0.0.1:1"), manager)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,9 @@ func TestFileAnalysisAPIsRequireRevisionAndExposeStates(t *testing.T) {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: server.URL}, Retry: config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}}, manager)
+	cfg := scopedHandlerConfig(server.URL)
+	cfg.Retry = config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}
+	service, err := app.New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +186,6 @@ func TestPromptHandlersConfirmOnlyTheirOwnRemoteScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	service, err := app.New(&config.Config{
-		LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy", Temperature: 0.2, MaxTokens: 1024},
 		ModelScopes: config.ModelScopesConfig{
 			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "hidden", Model: "analyze"},
 			Bug:      config.ModelProfileConfig{APIBaseURL: bugProvider.URL + "/v1", Model: "bug"},
@@ -253,7 +254,7 @@ func TestProjectWorkspaceAPIsAreRevisionGuardedAndSourceFree(t *testing.T) {
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}}, manager)
+	service, err := app.New(scopedHandlerConfig("http://127.0.0.1:1"), manager)
 	if err != nil {
 		t.Fatal(err)
 	}

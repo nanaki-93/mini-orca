@@ -32,8 +32,8 @@ automatically, writes drafts or tests automatically, commits, or pushes.
 `analyze`, `bug`, and `function` are three fixed independently configured
 scopes. Project import uses `analyze`; selected-file analysis and Analyze-all
 use `bug`; file-scoped declaration proposals and explicit repairs use
-`function`. Existing `llm` settings remain the fallback, with
-`agents.coder.model` retaining its legacy function-model override.
+`function`. All three `model_scopes` profiles are required at startup; there is
+no flat `llm` fallback or agent-model override.
 
 Each explicit scope uses the OpenAI Chat Completions-compatible API base and a
 model ID. An optional per-scope `reasoning_effort` is passed unchanged through

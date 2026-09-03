@@ -134,7 +134,9 @@ func newGoScanService(t *testing.T, files map[string]string) (*Service, string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: "http://127.0.0.1:1"}, Timeouts: config.TimeoutConfig{FocusedCheckSeconds: 5}}, manager)
+	cfg := scopedTestConfig("http://127.0.0.1:1")
+	cfg.Timeouts = config.TimeoutConfig{FocusedCheckSeconds: 5}
+	service, err := New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
 	}

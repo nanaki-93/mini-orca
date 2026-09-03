@@ -1,115 +1,69 @@
 package config
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the top-level configuration struct.
+// Config is the daemon's single YAML configuration schema.
 type Config struct {
-	LLM         LLMConfig         `json:"llm" yaml:"llm"`
-	ModelScopes ModelScopesConfig `json:"model_scopes,omitempty" yaml:"model_scopes,omitempty"`
-	Agents      AgentsConfig      `json:"agents" yaml:"agents"`
-	Retry       RetryConfig       `json:"retry" yaml:"retry"`
-	Timeouts    TimeoutConfig     `json:"timeouts" yaml:"timeouts"`
-	Logging     LoggingConfig     `json:"logging" yaml:"logging"`
-	ProjectPath string            `json:"project_path" yaml:"project_path"`
+	ModelScopes ModelScopesConfig `yaml:"model_scopes"`
+	Retry       RetryConfig       `yaml:"retry"`
+	Timeouts    TimeoutConfig     `yaml:"timeouts"`
+	Logging     LoggingConfig     `yaml:"logging"`
+	ProjectPath string            `yaml:"project_path"`
 }
 
 // LoggingConfig holds configuration for the logger.
 type LoggingConfig struct {
-	Level         string   `json:"level" yaml:"level"`
-	Format        string   `json:"format" yaml:"format"`
-	Filename      string   `json:"filename" yaml:"filename"`
-	SensitiveKeys []string `json:"sensitive_keys" yaml:"sensitive_keys"`
-}
-
-// LLMConfig holds the flat LLM configuration.
-type LLMConfig struct {
-	BaseURL     string  `json:"base_url" yaml:"base_url"`
-	APIKey      string  `json:"api_key,omitempty" yaml:"api_key,omitempty"`
-	Model       string  `json:"model" yaml:"model"`
-	Temperature float32 `json:"temperature,omitempty" yaml:"temperature,omitempty"`
-	MaxTokens   int     `json:"max_tokens,omitempty" yaml:"max_tokens,omitempty"`
+	Level         string   `yaml:"level"`
+	Format        string   `yaml:"format"`
+	Filename      string   `yaml:"filename"`
+	SensitiveKeys []string `yaml:"sensitive_keys"`
 }
 
 // ModelScopesConfig contains the three fixed model profiles used by the daemon.
-// A profile becomes explicit when its api_base_url is configured.
 type ModelScopesConfig struct {
-	Analyze  ModelProfileConfig `json:"analyze,omitempty" yaml:"analyze,omitempty"`
-	Bug      ModelProfileConfig `json:"bug,omitempty" yaml:"bug,omitempty"`
-	Function ModelProfileConfig `json:"function,omitempty" yaml:"function,omitempty"`
+	Analyze  ModelProfileConfig `yaml:"analyze"`
+	Bug      ModelProfileConfig `yaml:"bug"`
+	Function ModelProfileConfig `yaml:"function"`
 }
 
-// ModelProfileConfig is the configured portion of a scope profile. Pointer
+// ModelProfileConfig is the configured portion of a fixed scope. Pointer
 // numeric fields preserve the difference between an omitted value and zero.
 type ModelProfileConfig struct {
-	APIBaseURL       string   `json:"api_base_url,omitempty" yaml:"api_base_url,omitempty"`
-	APIKey           string   `json:"api_key,omitempty" yaml:"api_key,omitempty"`
-	Model            string   `json:"model,omitempty" yaml:"model,omitempty"`
-	ReasoningEffort  string   `json:"reasoning_effort,omitempty" yaml:"reasoning_effort,omitempty"`
-	Temperature      *float32 `json:"temperature,omitempty" yaml:"temperature,omitempty"`
-	MaxTokens        *int     `json:"max_tokens,omitempty" yaml:"max_tokens,omitempty"`
-	ContextMaxTokens *int     `json:"context_max_tokens,omitempty" yaml:"context_max_tokens,omitempty"`
-}
-
-// AgentsConfig holds agent-related configuration.
-type AgentsConfig struct {
-	Coder    AgentConfig `json:"coder" yaml:"coder"`
-	Tester   AgentConfig `json:"tester" yaml:"tester"`
-	Reviewer AgentConfig `json:"reviewer" yaml:"reviewer"`
-}
-
-// AgentConfig holds configuration for a single agent.
-type AgentConfig struct {
-	Skills         []string `json:"skills" yaml:"skills"`
-	Model          string   `json:"model,omitempty" yaml:"model,omitempty"` // optional override
-	TimeoutSeconds int      `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
+	APIBaseURL       string   `yaml:"api_base_url"`
+	APIKey           string   `yaml:"api_key"`
+	Model            string   `yaml:"model"`
+	ReasoningEffort  string   `yaml:"reasoning_effort"`
+	Temperature      *float32 `yaml:"temperature"`
+	MaxTokens        *int     `yaml:"max_tokens"`
+	ContextMaxTokens *int     `yaml:"context_max_tokens"`
 }
 
 // RetryConfig holds retry-related configuration.
 type RetryConfig struct {
-	MaxRetries  int `json:"max_retries" yaml:"max_retries"`
-	BackoffBase int `json:"backoff_base" yaml:"backoff_base"`
-	BackoffMax  int `json:"backoff_max" yaml:"backoff_max"`
+	MaxRetries  int `yaml:"max_retries"`
+	BackoffBase int `yaml:"backoff_base"`
+	BackoffMax  int `yaml:"backoff_max"`
 }
 
 // TimeoutConfig sets operation deadlines independently of HTTP server timeouts.
 // Zero values use conservative local-daemon defaults.
 type TimeoutConfig struct {
-	ImportSeconds       int `json:"import_seconds" yaml:"import_seconds"`
-	AnalysisSeconds     int `json:"analysis_seconds" yaml:"analysis_seconds"`
-	GenerationSeconds   int `json:"generation_seconds" yaml:"generation_seconds"`
-	FocusedCheckSeconds int `json:"focused_check_seconds" yaml:"focused_check_seconds"`
+	ImportSeconds       int `yaml:"import_seconds"`
+	AnalysisSeconds     int `yaml:"analysis_seconds"`
+	GenerationSeconds   int `yaml:"generation_seconds"`
+	FocusedCheckSeconds int `yaml:"focused_check_seconds"`
 }
 
-// applyDefaults ensures all nested maps and slices are initialized.
 func (c *Config) applyDefaults() {
-	if c.LLM.BaseURL == "" {
-		c.LLM.BaseURL = DefaultProviderURL
-	}
-	if c.LLM.Model == "" {
-		c.LLM.Model = ""
-	}
-	if c.LLM.Temperature == 0 {
-		c.LLM.Temperature = 0.7
-	}
-	if c.LLM.MaxTokens == 0 {
-		c.LLM.MaxTokens = 8192
-	}
-	if c.Agents.Coder.Skills == nil {
-		c.Agents.Coder.Skills = []string{}
-	}
-	if c.Agents.Tester.Skills == nil {
-		c.Agents.Tester.Skills = []string{}
-	}
-	if c.Agents.Reviewer.Skills == nil {
-		c.Agents.Reviewer.Skills = []string{}
-	}
 	if c.Retry.MaxRetries == 0 {
 		c.Retry.MaxRetries = 3
 	}
@@ -126,10 +80,7 @@ func (c *Config) applyDefaults() {
 		c.Timeouts.AnalysisSeconds = 300
 	}
 	if c.Timeouts.GenerationSeconds == 0 {
-		c.Timeouts.GenerationSeconds = c.Agents.Coder.TimeoutSeconds
-		if c.Timeouts.GenerationSeconds == 0 {
-			c.Timeouts.GenerationSeconds = 300
-		}
+		c.Timeouts.GenerationSeconds = 300
 	}
 	if c.Timeouts.FocusedCheckSeconds == 0 {
 		c.Timeouts.FocusedCheckSeconds = 60
@@ -141,25 +92,26 @@ func (c *Config) applyDefaults() {
 		c.Logging.Format = "json"
 	}
 	if c.ProjectPath == "" {
-		if wd, err := os.Getwd(); err == nil {
-			c.ProjectPath = wd
+		if workingDirectory, err := os.Getwd(); err == nil {
+			c.ProjectPath = workingDirectory
 		} else {
 			c.ProjectPath = "."
 		}
 	}
 }
 
-// LoadConfig reads configuration from the specified path or uses defaults.
+// LoadConfig reads the configured YAML file or returns explicit local defaults
+// when no configuration file exists.
 func LoadConfig() (*Config, error) {
 	configPath := "config.yaml"
-	if p := os.Getenv("MINI_ORCA_CONFIG"); p != "" {
-		configPath = p
+	if path := os.Getenv("MINI_ORCA_CONFIG"); path != "" {
+		configPath = path
 	}
 
 	cfg, err := LoadFromYAML(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			logging.Info("Config file not found, using defaults", "path", configPath)
+			logging.Info("Config file not found, using local defaults", "path", configPath)
 			return Default(), nil
 		}
 		return nil, err
@@ -169,7 +121,8 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
-// LoadFromYAML reads configuration from a YAML file and applies defaults for missing fields.
+// LoadFromYAML reads the only supported configuration format. Unknown keys are
+// rejected before a startup can silently accept retired configuration.
 func LoadFromYAML(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -178,54 +131,104 @@ func LoadFromYAML(path string) (*Config, error) {
 		}
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
+	if err := rejectUnknownFields(data); err != nil {
+		return nil, fmt.Errorf("parse config file: %w", err)
+	}
 
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := decoder.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("parse config file: %w", err)
+	}
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("parse config file: configuration must contain one YAML document")
+		}
 		return nil, fmt.Errorf("parse config file: %w", err)
 	}
 
 	cfg.applyDefaults()
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
 }
 
-// LoadFromJSON reads configuration from a JSON file.
-func LoadFromJSON(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read config file: %w", err)
-	}
-
-	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parse config file: %w", err)
-	}
-
-	cfg.applyDefaults()
-	return &cfg, nil
-}
-
-// Validate checks that the configuration is valid.
+// Validate checks that the configured scopes are complete and safe before any
+// provider request can be constructed.
 func (c *Config) Validate() error {
-	if c.LLM.BaseURL == "" {
-		return fmt.Errorf("llm.base_url is required")
+	if c == nil {
+		return fmt.Errorf("configuration is required")
 	}
-	if _, err := ResolveModelProfiles(c); err != nil {
+	_, err := ResolveModelProfiles(c)
+	return err
+}
+
+var configurationFields = fieldSet{
+	"model_scopes": {
+		"analyze":  modelProfileFields,
+		"bug":      modelProfileFields,
+		"function": modelProfileFields,
+	},
+	"retry": {
+		"max_retries": {}, "backoff_base": {}, "backoff_max": {},
+	},
+	"timeouts": {
+		"import_seconds": {}, "analysis_seconds": {}, "generation_seconds": {}, "focused_check_seconds": {},
+	},
+	"logging": {
+		"level": {}, "format": {}, "filename": {}, "sensitive_keys": {},
+	},
+	"project_path": {},
+}
+
+var modelProfileFields = fieldSet{
+	"api_base_url": {}, "api_key": {}, "model": {}, "reasoning_effort": {},
+	"temperature": {}, "max_tokens": {}, "context_max_tokens": {},
+}
+
+type fieldSet map[string]fieldSet
+
+func rejectUnknownFields(data []byte) error {
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil {
 		return err
 	}
+	if len(document.Content) == 0 {
+		return nil
+	}
+	return rejectUnknownMapping(document.Content[0], "", configurationFields)
+}
 
+func rejectUnknownMapping(node *yaml.Node, prefix string, fields fieldSet) error {
+	if node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for index := 0; index+1 < len(node.Content); index += 2 {
+		key := node.Content[index].Value
+		path := key
+		if prefix != "" {
+			path = prefix + "." + key
+		}
+		children, known := fields[key]
+		if !known {
+			return fmt.Errorf("unsupported configuration field %q", path)
+		}
+		if len(children) > 0 {
+			if err := rejectUnknownMapping(node.Content[index+1], path, children); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
-// Save writes configuration to a JSON file.
-func (c *Config) Save(path string) error {
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
+func missingScopeError(scope ModelScope) error {
+	return fmt.Errorf("model_scopes.%s is required", scope)
+}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("write config file: %w", err)
-	}
-
-	return nil
+func missingFieldError(scope ModelScope, field string) error {
+	return fmt.Errorf("model_scopes.%s.%s is required", scope, strings.TrimSpace(field))
 }

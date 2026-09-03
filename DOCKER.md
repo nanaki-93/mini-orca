@@ -119,21 +119,19 @@ The Docker image uses a multi-stage build:
 
 ```yaml
 # config.yaml
-llm:
-  base_url: "http://lm-studio:1234"  # Use container name
-  api_key: ""
-  model: ""
-  temperature: 0.7
-  max_tokens: 8192
-
-agents:
-  coder:
-    skills:
-      - code_generation
-      - refactoring
-      - debugging
-    model: ""
-    timeout_seconds: 300
+model_scopes:
+  analyze:
+    api_base_url: "http://lm-studio:1234/v1" # Use the container name.
+    api_key: ""
+    model: "replace-with-analysis-model-id"
+  bug:
+    api_base_url: "http://lm-studio:1234/v1"
+    api_key: ""
+    model: "replace-with-bug-model-id"
+  function:
+    api_base_url: "http://lm-studio:1234/v1"
+    api_key: ""
+    model: "replace-with-function-model-id"
 
 retry:
   max_retries: 3

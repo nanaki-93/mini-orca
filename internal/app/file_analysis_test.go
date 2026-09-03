@@ -402,7 +402,9 @@ func TestAnalyzeAllPersistsPausedJobAndResumesAfterServiceRestart(t *testing.T) 
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: server.URL}, Retry: config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}}, manager)
+	cfg := scopedTestConfig(server.URL)
+	cfg.Retry = config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}
+	restarted, err := New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -549,7 +551,11 @@ func newSemanticAnalysisServiceFixture(t *testing.T, baseURL string, analysisSec
 	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root, Summary: "A compact fixture project."}); err != nil {
 		t.Fatal(err)
 	}
-	service, err := New(&config.Config{LLM: config.LLMConfig{BaseURL: baseURL, Model: "analysis-model"}, Timeouts: config.TimeoutConfig{AnalysisSeconds: analysisSeconds}, Retry: config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}}, manager)
+	cfg := scopedTestConfig(baseURL)
+	cfg.ModelScopes.Bug.Model = "analysis-model"
+	cfg.Timeouts = config.TimeoutConfig{AnalysisSeconds: analysisSeconds}
+	cfg.Retry = config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}
+	service, err := New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
 	}

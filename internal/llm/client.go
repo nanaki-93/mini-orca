@@ -7,21 +7,26 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
-const maxProviderResponseBytes = 4 * 1024 * 1024
+const (
+	maxProviderResponseBytes = 4 * 1024 * 1024
+	providerRequestTimeout   = 5 * time.Minute
+)
 
-// ChatMessage represents a single message in a chat conversation
+// ChatMessage represents a single message in a chat conversation.
 type ChatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-// ChatRequest is the request payload for a chat completion call
+// ChatRequest is the OpenAI-compatible chat-completions request payload.
 type ChatRequest struct {
 	Model           string        `json:"model"`
 	Messages        []ChatMessage `json:"messages"`
@@ -31,21 +36,21 @@ type ChatRequest struct {
 	Stream          bool          `json:"stream,omitempty"`
 }
 
-// ChatChoice represents a single choice in the response
+// ChatChoice represents a single choice in a response.
 type ChatChoice struct {
 	Index        int         `json:"index"`
 	Message      ChatMessage `json:"message"`
 	FinishReason string      `json:"finish_reason,omitempty"`
 }
 
-// ChatUsage tracks token usage for billing/monitoring
+// ChatUsage tracks token usage for billing and monitoring.
 type ChatUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// ChatResponse is the response from a chat completion call
+// ChatResponse is the response from a chat completion call.
 type ChatResponse struct {
 	ID      string       `json:"id"`
 	Object  string       `json:"object"`
@@ -55,171 +60,105 @@ type ChatResponse struct {
 	Usage   ChatUsage    `json:"usage"`
 }
 
-// Model represents an available model from a provider
-type Model struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	OwnedBy string `json:"owned_by"`
-}
-
-// Client handles all LLM API interactions with a single configuration
+// Client owns the one provider-neutral Chat Completions request flow.
 type Client struct {
-	apiBaseURL      string
-	apiKey          string
-	model           string
-	temperature     float32
-	maxTokens       int
-	reasoningEffort string
-	httpClient      *http.Client
+	profile    config.ModelProfile
+	httpClient *http.Client
 }
 
-// NewClient creates a client for the legacy host-style base URL. Existing callers
-// continue to send requests to the host's /v1 API prefix.
-func NewClient(baseURL, apiKey, model string, temperature float32, maxTokens int) *Client {
-	apiBaseURL := strings.TrimRight(baseURL, "/")
-	if apiBaseURL != "" {
-		apiBaseURL += "/v1"
-	}
-	return NewClientWithAPIBase(apiBaseURL, apiKey, model, temperature, maxTokens)
-}
-
-// NewClientWithAPIBase creates a client for an OpenAI-compatible API prefix, such
-// as /v1 or /v1beta/openai. It always uses the Chat Completions wire contract.
-func NewClientWithAPIBase(apiBaseURL, apiKey, model string, temperature float32, maxTokens int) *Client {
-	return NewClientWithAPIBaseAndReasoningEffort(apiBaseURL, apiKey, model, temperature, maxTokens, "")
-}
-
-// NewClientWithAPIBaseAndReasoningEffort creates an OpenAI-compatible client
-// with an optional Chat Completions reasoning effort.
-func NewClientWithAPIBaseAndReasoningEffort(apiBaseURL, apiKey, model string, temperature float32, maxTokens int, reasoningEffort string) *Client {
+// NewClient constructs the one LLM client from a validated fixed scope.
+func NewClient(profile config.ModelProfile) *Client {
 	return &Client{
-		apiBaseURL:      strings.TrimRight(apiBaseURL, "/"),
-		apiKey:          apiKey,
-		model:           model,
-		temperature:     temperature,
-		maxTokens:       maxTokens,
-		reasoningEffort: reasoningEffort,
-		httpClient:      &http.Client{Timeout: 5 * time.Minute},
+		profile:    profile,
+		httpClient: &http.Client{Timeout: providerRequestTimeout},
 	}
 }
 
-// Chat sends a chat completion request and returns the response
+// Chat sends one OpenAI-compatible Chat Completions request and validates the
+// provider result before application code receives it.
 func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatResponse, error) {
-	if c.apiBaseURL == "" {
-		return nil, fmt.Errorf("llm client: base URL not configured")
-	}
-
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("llm client: messages are required")
 	}
-
-	req := ChatRequest{
-		Model:           c.model,
+	requestBody, err := json.Marshal(ChatRequest{
+		Model:           c.profile.Model,
 		Messages:        messages,
-		Temperature:     c.temperature,
-		MaxTokens:       c.maxTokens,
-		ReasoningEffort: c.reasoningEffort,
+		Temperature:     c.profile.Temperature,
+		MaxTokens:       c.profile.MaxTokens,
+		ReasoningEffort: c.profile.ReasoningEffort,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("llm client: marshal chat request: %w", err)
 	}
 
-	body, err := json.Marshal(req)
+	request, err := c.newRequest(ctx, http.MethodPost, "chat/completions", bytes.NewReader(requestBody))
 	if err != nil {
-		logging.Error("Failed to marshal request", "error", err)
-		return nil, fmt.Errorf("llm client: failed to marshal request: %w", err)
-	}
-
-	url := c.apiURL("chat/completions")
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		logging.Error("Failed to create request", "error", err)
-		return nil, fmt.Errorf("llm client: failed to create request: %w", err)
+		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		request.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-
-	resp, err := c.httpClient.Do(request)
-	if err != nil {
-		logging.Error("Request failed", "error", err)
-		return nil, fmt.Errorf("llm client: request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		logging.Error("Unexpected status code", "status", resp.StatusCode)
-		return nil, fmt.Errorf("llm client: unexpected status code: %d", resp.StatusCode)
-	}
-
-	var chatResp ChatResponse
-	data, err := readProviderBody(resp.Body)
+	responseBody, err := c.do(request)
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(data, &chatResp); err != nil {
-		logging.Error("Failed to decode response", "error", err)
-		return nil, fmt.Errorf("llm client: failed to decode response: %w", err)
-	}
 
-	logging.Info("Chat completed", "model", chatResp.Model, "tokens", chatResp.Usage.TotalTokens)
-	return &chatResp, nil
+	var response ChatResponse
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("llm client: decode chat response: %w", err)
+	}
+	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
+		return nil, fmt.Errorf("llm client: chat response has no content")
+	}
+	logging.Info("Chat completed", "model", response.Model, "tokens", response.Usage.TotalTokens)
+	return &response, nil
 }
 
-// ListModels returns the list of available models from the LLM provider
-func (c *Client) ListModels(ctx context.Context) ([]Model, error) {
-	if c.apiBaseURL == "" {
-		return nil, fmt.Errorf("llm client: base URL not configured")
-	}
-
-	url := c.apiURL("models")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	endpoint, err := joinAPIURL(c.profile.APIBaseURL, path)
 	if err != nil {
-		logging.Error("Failed to create request", "error", err)
-		return nil, fmt.Errorf("llm client: failed to create request: %w", err)
+		return nil, fmt.Errorf("llm client: build request URL: %w", err)
 	}
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-
-	resp, err := c.httpClient.Do(req)
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, body)
 	if err != nil {
-		logging.Error("Request failed", "error", err)
+		return nil, fmt.Errorf("llm client: create request: %w", err)
+	}
+	if c.profile.APIKey != "" {
+		request.Header.Set("Authorization", "Bearer "+c.profile.APIKey)
+	}
+	return request, nil
+}
+
+func (c *Client) do(request *http.Request) ([]byte, error) {
+	response, err := c.httpClient.Do(request)
+	if err != nil {
 		return nil, fmt.Errorf("llm client: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer response.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		logging.Error("Unexpected status code", "status", resp.StatusCode)
-		return nil, fmt.Errorf("llm client: unexpected status code: %d", resp.StatusCode)
-	}
-
-	var listResp struct {
-		Object string       `json:"object"`
-		Data   []modelEntry `json:"data"`
-	}
-	data, err := readProviderBody(resp.Body)
+	data, err := readProviderBody(response.Body)
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(data, &listResp); err != nil {
-		logging.Error("Failed to decode response", "error", err)
-		return nil, fmt.Errorf("llm client: failed to decode response: %w", err)
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, providerStatusError(response.StatusCode, data)
 	}
-
-	models := make([]Model, 0, len(listResp.Data))
-	for _, entry := range listResp.Data {
-		models = append(models, Model{
-			ID:      entry.ID,
-			Object:  entry.Object,
-			OwnedBy: entry.OwnedBy,
-		})
-	}
-
-	logging.Info("Listed models", "count", len(models))
-	return models, nil
+	return data, nil
 }
 
-func (c *Client) apiURL(path string) string {
-	return c.apiBaseURL + "/" + strings.TrimLeft(path, "/")
+func joinAPIURL(apiBaseURL, path string) (string, error) {
+	base, err := url.Parse(apiBaseURL)
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return "", fmt.Errorf("API base URL is not configured")
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + "/" + strings.TrimLeft(path, "/")
+	return base.String(), nil
+}
+
+func providerStatusError(status int, body []byte) error {
+	var payload struct {
+		Error json.RawMessage `json:"error"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	return fmt.Errorf("llm client: provider returned status %d", status)
 }
 
 func readProviderBody(body io.Reader) ([]byte, error) {
@@ -231,11 +170,4 @@ func readProviderBody(body io.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("llm client: response exceeds %d byte limit", maxProviderResponseBytes)
 	}
 	return data, nil
-}
-
-// modelEntry represents a single model entry in the /v1/models response
-type modelEntry struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	OwnedBy string `json:"owned_by"`
 }

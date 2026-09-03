@@ -17,18 +17,17 @@ import (
 
 // EffectiveModel is the actual generation profile used by the daemon.
 type EffectiveModel struct {
-	Scope            string   `json:"scope"`
-	Profile          string   `json:"profile"`
-	Model            string   `json:"model"`
-	ReasoningEffort  string   `json:"reasoning_effort,omitempty"`
-	ProviderOrigin   string   `json:"provider_origin"`
-	RemoteProvider   bool     `json:"remote_provider"`
-	Temperature      float32  `json:"temperature"`
-	MaxTokens        int      `json:"max_tokens"`
-	ContextMaxTokens int      `json:"context_max_tokens"`
-	Skills           []string `json:"skills"`
-	Timeout          string   `json:"timeout"`
-	MaxRetries       int      `json:"max_retries"`
+	Scope            string  `json:"scope"`
+	Profile          string  `json:"profile"`
+	Model            string  `json:"model"`
+	ReasoningEffort  string  `json:"reasoning_effort,omitempty"`
+	ProviderOrigin   string  `json:"provider_origin"`
+	RemoteProvider   bool    `json:"remote_provider"`
+	Temperature      float32 `json:"temperature"`
+	MaxTokens        int     `json:"max_tokens"`
+	ContextMaxTokens int     `json:"context_max_tokens"`
+	Timeout          string  `json:"timeout"`
+	MaxRetries       int     `json:"max_retries"`
 }
 
 // ScopedModel is the non-secret API representation of one effective runtime.
@@ -46,8 +45,8 @@ type ScopedModel struct {
 	MaxRetries       int     `json:"max_retries"`
 }
 
-// ModelCatalog preserves the legacy top-level function profile and adds the
-// complete fixed-scope catalog for new clients.
+// ModelCatalog exposes the function profile alongside all fixed scopes for the
+// Desktop's existing model-destination display.
 type ModelCatalog struct {
 	EffectiveModel
 	Scopes map[string]ScopedModel `json:"scopes"`
@@ -96,9 +95,9 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	functionTimeout := configuredDuration(cfg.Timeouts.GenerationSeconds, cfg.Agents.Coder.TimeoutSeconds, 5*time.Minute)
-	importTimeout := configuredDuration(cfg.Timeouts.ImportSeconds, 0, 5*time.Minute)
-	analysisTimeout := configuredDuration(cfg.Timeouts.AnalysisSeconds, 0, 5*time.Minute)
+	functionTimeout := configuredDuration(cfg.Timeouts.GenerationSeconds, 5*time.Minute)
+	importTimeout := configuredDuration(cfg.Timeouts.ImportSeconds, 5*time.Minute)
+	analysisTimeout := configuredDuration(cfg.Timeouts.AnalysisSeconds, 5*time.Minute)
 	maxRetries := cfg.Retry.MaxRetries
 	if maxRetries == 0 {
 		maxRetries = 3
@@ -119,7 +118,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		functionRuntime:     newModelRuntime(profiles.Function, functionTimeout, maxRetries),
 		importTimeout:       importTimeout,
 		analysisTimeout:     analysisTimeout,
-		focusedCheckTimeout: configuredDuration(cfg.Timeouts.FocusedCheckSeconds, 0, time.Minute),
+		focusedCheckTimeout: configuredDuration(cfg.Timeouts.FocusedCheckSeconds, time.Minute),
 		retryBase:           time.Duration(backoffBase) * time.Millisecond,
 		retryMax:            time.Duration(backoffMax) * time.Millisecond,
 		analysisAll:         newAnalysisAllController(),
@@ -132,7 +131,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetries int) modelRuntime {
 	runtime := modelRuntime{
 		profile: profile,
-		client:  llm.NewClientWithAPIBaseAndReasoningEffort(profile.APIBaseURL, profile.APIKey, profile.Model, profile.Temperature, profile.MaxTokens, profile.ReasoningEffort),
+		client:  llm.NewClient(profile),
 		effective: EffectiveModel{
 			Scope: string(profile.Scope), Profile: string(profile.Scope), Model: profile.Model,
 			ReasoningEffort: profile.ReasoningEffort,
@@ -144,11 +143,7 @@ func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetr
 	return runtime
 }
 
-func configuredDuration(primarySeconds, fallbackSeconds int, defaultValue time.Duration) time.Duration {
-	seconds := primarySeconds
-	if seconds == 0 {
-		seconds = fallbackSeconds
-	}
+func configuredDuration(seconds int, defaultValue time.Duration) time.Duration {
 	if seconds <= 0 {
 		return defaultValue
 	}
@@ -188,18 +183,12 @@ func (s *Service) RestoreProject(root string) (*project.Analysis, error) {
 }
 
 func (s *Service) EffectiveModel() EffectiveModel {
-	profile := s.functionRuntime.effective
-	profile.Skills = append([]string(nil), s.functionRuntime.effective.Skills...)
-	return profile
+	return s.functionRuntime.effective
 }
 
 // EffectiveModels returns safe metadata for every configured prompt scope.
 func (s *Service) EffectiveModels() []EffectiveModel {
-	profiles := []EffectiveModel{s.analyzeRuntime.effective, s.bugRuntime.effective, s.functionRuntime.effective}
-	for index := range profiles {
-		profiles[index].Skills = append([]string(nil), profiles[index].Skills...)
-	}
-	return profiles
+	return []EffectiveModel{s.analyzeRuntime.effective, s.bugRuntime.effective, s.functionRuntime.effective}
 }
 
 // CurrentModelCatalog returns only the safe effective metadata needed for
@@ -321,9 +310,6 @@ func (r modelRuntime) execute(ctx context.Context, messages []llm.ChatMessage) (
 	response, err := r.client.Chat(ctx, messages)
 	if err != nil {
 		return modelOutput{}, fmt.Errorf("model request failed: %w", err)
-	}
-	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
-		return modelOutput{}, fmt.Errorf("model response content is required")
 	}
 	return modelOutput{Content: response.Choices[0].Message.Content, Model: response.Model}, nil
 }

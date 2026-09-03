@@ -2,9 +2,9 @@
 
 ## Unreleased — Scoped model profiles and explicit task repair
 
-- Added fixed `analyze`, `bug`, and `function` model profiles with legacy
-  `llm` and `agents.coder.model` fallback. Each profile accepts an
-  OpenAI Chat Completions-compatible API base, model, and optional local key.
+- Added strict fixed `analyze`, `bug`, and `function` model profiles. Each
+  profile is required, accepts an OpenAI Chat Completions-compatible API base,
+  model, and optional local key; legacy `llm` and agent fallbacks are retired.
 - Added safe scope metadata and per-scope remote confirmation across the daemon,
   API, cache provenance, and Desktop. Provider keys are never returned or logged.
 - Added optional per-scope `reasoning_effort` forwarding for Chat Completions

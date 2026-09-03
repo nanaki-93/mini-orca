@@ -620,7 +620,7 @@ components:
         version: {type: string}
     EffectiveModel:
       type: object
-      required: [profile, model, remote_provider, temperature, max_tokens, skills, timeout, max_retries]
+      required: [profile, model, remote_provider, temperature, max_tokens, timeout, max_retries]
       properties:
         scope: {type: string, example: function}
         profile: {type: string, example: function}
@@ -631,7 +631,6 @@ components:
         temperature: {type: number}
         max_tokens: {type: integer}
         context_max_tokens: {type: integer}
-        skills: {type: array, items: {type: string}}
         timeout: {type: string}
         max_retries: {type: integer}
     ScopedModel:

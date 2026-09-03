@@ -14,8 +14,6 @@ const (
 	BugModelScope      ModelScope = "bug"
 	FunctionModelScope ModelScope = "function"
 
-	// MaxModelOutputTokens and MaxModelContextTokens bound configuration before
-	// prompt assembly or a provider request begins.
 	MaxModelOutputTokens  = 65536
 	MaxModelContextTokens = 120000
 )
@@ -53,83 +51,50 @@ func (p ModelProfiles) ForScope(scope ModelScope) (ModelProfile, bool) {
 	}
 }
 
-// ResolveModelProfiles applies the scoped-model fallback contract once at the
-// configuration boundary. It never modifies the source Config.
+// ResolveModelProfiles validates each declared scope independently. There is no
+// flat profile, agent setting, or cross-scope fallback.
 func ResolveModelProfiles(cfg *Config) (ModelProfiles, error) {
 	if cfg == nil {
 		return ModelProfiles{}, fmt.Errorf("model profile configuration is required")
 	}
-
-	legacyBase, err := legacyAPIBaseURL(cfg.LLM.BaseURL)
-	if err != nil {
-		return ModelProfiles{}, err
-	}
-
-	legacy := ModelProfile{
-		APIBaseURL:  legacyBase,
-		APIKey:      cfg.LLM.APIKey,
-		Model:       cfg.LLM.Model,
-		Temperature: legacyTemperature(cfg.LLM.Temperature),
-		MaxTokens:   legacyMaxTokens(cfg.LLM.MaxTokens),
-	}
 	profiles := ModelProfiles{}
-	if profiles.Analyze, err = resolveProfile(AnalyzeModelScope, cfg.ModelScopes.Analyze, legacy, defaultContextBudget(AnalyzeModelScope)); err != nil {
+	var err error
+	if profiles.Analyze, err = resolveProfile(AnalyzeModelScope, cfg.ModelScopes.Analyze); err != nil {
 		return ModelProfiles{}, err
 	}
-	if profiles.Bug, err = resolveProfile(BugModelScope, cfg.ModelScopes.Bug, legacy, defaultContextBudget(BugModelScope)); err != nil {
+	if profiles.Bug, err = resolveProfile(BugModelScope, cfg.ModelScopes.Bug); err != nil {
 		return ModelProfiles{}, err
 	}
-	functionLegacy := legacy
-	if cfg.Agents.Coder.Model != "" {
-		functionLegacy.Model = cfg.Agents.Coder.Model
-	}
-	if profiles.Function, err = resolveProfile(FunctionModelScope, cfg.ModelScopes.Function, functionLegacy, defaultContextBudget(FunctionModelScope)); err != nil {
+	if profiles.Function, err = resolveProfile(FunctionModelScope, cfg.ModelScopes.Function); err != nil {
 		return ModelProfiles{}, err
 	}
 	return profiles, nil
 }
 
-func legacyTemperature(value float32) float32 {
-	if value == 0 {
-		return 0.7
-	}
-	return value
-}
-
-func legacyMaxTokens(value int) int {
-	if value == 0 {
-		return 8192
-	}
-	return value
-}
-
-func resolveProfile(scope ModelScope, configured ModelProfileConfig, fallback ModelProfile, defaultContext int) (ModelProfile, error) {
-	if configured.APIBaseURL == "" {
-		if configured.Model != "" || configured.APIKey != "" || configured.ReasoningEffort != "" || configured.Temperature != nil || configured.MaxTokens != nil || configured.ContextMaxTokens != nil {
-			return ModelProfile{}, fmt.Errorf("model_scopes.%s.api_base_url is required when configuring a scope", scope)
+func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
+	if strings.TrimSpace(configured.APIBaseURL) == "" {
+		if configured.APIKey != "" || strings.TrimSpace(configured.Model) != "" || strings.TrimSpace(configured.ReasoningEffort) != "" || configured.Temperature != nil || configured.MaxTokens != nil || configured.ContextMaxTokens != nil {
+			return ModelProfile{}, missingFieldError(scope, "api_base_url")
 		}
-		fallback.Scope = scope
-		fallback.ContextMaxTokens = defaultContext
-		return fallback, nil
+		return ModelProfile{}, missingScopeError(scope)
 	}
-
 	apiBase, err := validateAPIBaseURL(scope, configured.APIBaseURL)
 	if err != nil {
 		return ModelProfile{}, err
 	}
 	if strings.TrimSpace(configured.Model) == "" {
-		return ModelProfile{}, fmt.Errorf("model_scopes.%s.model is required when api_base_url is configured", scope)
+		return ModelProfile{}, missingFieldError(scope, "model")
 	}
 
 	profile := ModelProfile{
 		Scope:            scope,
 		APIBaseURL:       apiBase,
 		APIKey:           configured.APIKey,
-		Model:            configured.Model,
+		Model:            strings.TrimSpace(configured.Model),
 		ReasoningEffort:  strings.TrimSpace(configured.ReasoningEffort),
-		Temperature:      fallback.Temperature,
-		MaxTokens:        fallback.MaxTokens,
-		ContextMaxTokens: defaultContext,
+		Temperature:      0.7,
+		MaxTokens:        8192,
+		ContextMaxTokens: defaultContextBudget(scope),
 	}
 	if configured.Temperature != nil {
 		profile.Temperature = *configured.Temperature
@@ -159,16 +124,8 @@ func defaultContextBudget(scope ModelScope) int {
 	}
 }
 
-func legacyAPIBaseURL(rawURL string) (string, error) {
-	trimmed := strings.TrimRight(strings.TrimSpace(rawURL), "/")
-	if trimmed == "" {
-		return "", fmt.Errorf("llm.base_url is required")
-	}
-	return trimmed + "/v1", nil
-}
-
 func validateAPIBaseURL(scope ModelScope, rawURL string) (string, error) {
-	parsed, err := url.Parse(rawURL)
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return "", fmt.Errorf("model_scopes.%s.api_base_url must be an absolute HTTP(S) URL", scope)
 	}

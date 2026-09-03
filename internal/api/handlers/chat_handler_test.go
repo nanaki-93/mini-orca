@@ -167,7 +167,10 @@ func newChatSessionTestHandler(t *testing.T, baseURL string, generationSeconds i
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := app.New(&config.Config{LLM: config.LLMConfig{BaseURL: baseURL}, Timeouts: config.TimeoutConfig{GenerationSeconds: generationSeconds}, Retry: config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}}, manager)
+	cfg := scopedHandlerConfig(baseURL)
+	cfg.Timeouts = config.TimeoutConfig{GenerationSeconds: generationSeconds}
+	cfg.Retry = config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}
+	service, err := app.New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
 	}
