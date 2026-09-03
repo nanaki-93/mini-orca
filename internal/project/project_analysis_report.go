@@ -49,7 +49,10 @@ type ProjectAnalysisReport struct {
 	Status          string                `json:"status"`
 	Failure         string                `json:"failure,omitempty"`
 	Model           string                `json:"model"`
+	ConfiguredModel string                `json:"configured_model,omitempty"`
 	Profile         string                `json:"profile"`
+	Scope           string                `json:"scope,omitempty"`
+	ProviderOrigin  string                `json:"provider_origin,omitempty"`
 	PromptVersion   string                `json:"prompt_version"`
 	GeneratedAt     time.Time             `json:"generated_at"`
 }
@@ -61,6 +64,8 @@ type ProjectAnalysisInput struct {
 	ProjectRevision string
 	Model           string
 	Profile         string
+	Scope           string
+	ProviderOrigin  string
 	PromptVersion   string
 }
 
@@ -75,11 +80,15 @@ type projectAnalysisResponse struct {
 }
 
 func newProjectAnalysisReport(projectID, revision, model, profile string) ProjectAnalysisReport {
+	return newProjectAnalysisReportWithProvenance(projectID, revision, model, profile, profile, "")
+}
+
+func newProjectAnalysisReportWithProvenance(projectID, revision, model, profile, scope, providerOrigin string) ProjectAnalysisReport {
 	return ProjectAnalysisReport{
 		SchemaVersion: projectAnalysisSchemaVersion,
 		ProjectID:     projectID, ProjectRevision: revision,
 		Components: []string{}, EntryPoints: []string{}, Flows: []string{}, Risks: []ProjectAnalysisRisk{}, NextSteps: []string{},
-		Status: ProjectAnalysisStatusFresh, Model: model, Profile: profile, PromptVersion: projectAnalysisPromptVersion,
+		Status: ProjectAnalysisStatusFresh, Model: model, ConfiguredModel: model, Profile: profile, Scope: scope, ProviderOrigin: providerOrigin, PromptVersion: projectAnalysisPromptVersion,
 		GeneratedAt: time.Now().UTC(),
 	}
 }
@@ -202,7 +211,15 @@ func validStoredProjectAnalysisReport(report ProjectAnalysisReport) bool {
 }
 
 func projectAnalysisReportMatches(report ProjectAnalysisReport, input ProjectAnalysisInput) bool {
-	return report.ProjectID == input.ProjectID && report.ProjectRevision == input.ProjectRevision && report.Model == input.Model && report.Profile == input.Profile && report.PromptVersion == input.PromptVersion
+	scope := input.Scope
+	if scope == "" {
+		scope = input.Profile
+	}
+	configuredModel := report.ConfiguredModel
+	if configuredModel == "" {
+		configuredModel = report.Model
+	}
+	return report.ProjectID == input.ProjectID && report.ProjectRevision == input.ProjectRevision && configuredModel == input.Model && report.Profile == input.Profile && report.Scope == scope && report.ProviderOrigin == input.ProviderOrigin && report.PromptVersion == input.PromptVersion
 }
 
 func cloneProjectAnalysisReport(source *ProjectAnalysisReport) *ProjectAnalysisReport {

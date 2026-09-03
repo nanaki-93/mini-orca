@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -25,6 +26,8 @@ type ChatSession struct {
 	OpenPath        string                      `json:"open_path"`
 	Mode            project.DeclarationEditMode `json:"mode"`
 	TargetSymbol    string                      `json:"target_symbol"`
+	TaskSpec        *project.BugTaskSpec        `json:"task_spec,omitempty"`
+	RepairCount     int                         `json:"repair_count,omitempty"`
 	State           string                      `json:"state"`
 	LatestDraftID   string                      `json:"latest_draft_id,omitempty"`
 	Messages        []ChatSessionMessage        `json:"messages"`
@@ -48,6 +51,7 @@ type ChatSessionCreateRequest struct {
 	OpenPath        string
 	Mode            project.DeclarationEditMode
 	TargetSymbol    string
+	TaskSpec        *project.BugTaskSpec
 }
 
 type ChatSessionMessageRequest struct {
@@ -55,6 +59,7 @@ type ChatSessionMessageRequest struct {
 	Message               string
 	ParentDraftID         string
 	ConfirmRemoteProvider bool
+	Repair                bool
 }
 
 // DeclarationDraftResponse is the only model contract accepted by a session.
@@ -95,7 +100,11 @@ func (s *Service) OpenChatSession(request ChatSessionCreateRequest) (*ChatSessio
 		return nil, err
 	}
 	now := time.Now().UTC()
-	session := ChatSession{ID: newGenerationID(), ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, BaseFileHash: request.BaseFileHash, OpenPath: request.OpenPath, Mode: request.Mode, TargetSymbol: request.TargetSymbol, State: "active", Messages: []ChatSessionMessage{}, CreatedAt: now, UpdatedAt: now}
+	taskSpec, err := s.validateSessionTaskSpec(request.TaskSpec, *file, request)
+	if err != nil {
+		return nil, err
+	}
+	session := ChatSession{ID: newGenerationID(), ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, BaseFileHash: request.BaseFileHash, OpenPath: request.OpenPath, Mode: request.Mode, TargetSymbol: request.TargetSymbol, TaskSpec: taskSpec, State: "active", Messages: []ChatSessionMessage{}, CreatedAt: now, UpdatedAt: now}
 	s.chatSessionMu.Lock()
 	s.chatSessions[session.ID] = &chatSession{session: cloneChatSession(session)}
 	s.chatSessionMu.Unlock()
@@ -146,28 +155,38 @@ func (s *Service) SendChatSessionMessage(ctx context.Context, request ChatSessio
 	if strings.TrimSpace(request.Message) == "" {
 		return nil, fmt.Errorf("chat message is required")
 	}
-	if err := s.RequireRemoteConfirmation(request.ConfirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	session, err := s.chatSessionForMessage(request.SessionID, request.ParentDraftID)
 	if err != nil {
 		return nil, err
 	}
-	projectContext, manifest, err := project.NewContextBuilder().BuildWithManifest(s.manager.Root(), session.OpenPath)
+	if request.Repair {
+		if err := s.reserveTaskRepair(session, request.ParentDraftID); err != nil {
+			return nil, err
+		}
+	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return nil, err
+	}
+	priorDeclaration, err := s.chatConversation(session, request.ParentDraftID)
+	if err != nil {
+		return nil, err
+	}
+	projectContext, manifest, err := project.NewContextBuilder().BuildFunctionWithManifest(s.manager.Root(), project.FunctionContextOptions{TargetPath: session.OpenPath, TargetSymbol: session.TargetSymbol, Mode: session.Mode, Index: index, TaskSpec: session.TaskSpec, PriorDeclaration: priorDeclaration, MaxTokens: sessionFunctionContextLimit(s.functionRuntime.effective.ContextMaxTokens)})
 	if err != nil {
 		return nil, fmt.Errorf("build session context: %w", err)
 	}
-	conversation, err := s.chatConversation(session, request.ParentDraftID)
+	manifest = s.contextManifestForRuntime(manifest, s.functionRuntime)
+	input, err := agent.DeclarationDraftInput(request.Message, "", projectContext, session.OpenPath, session.TargetSymbol, string(session.Mode))
 	if err != nil {
 		return nil, err
 	}
-	input, err := agent.DeclarationDraftInput(request.Message, conversation, projectContext, session.OpenPath, session.TargetSymbol, string(session.Mode))
-	if err != nil {
-		return nil, err
-	}
-	timed, cancel := context.WithTimeout(ctx, duration(s.profile.Timeout))
+	timed, cancel := context.WithTimeout(ctx, duration(s.functionRuntime.effective.Timeout))
 	defer cancel()
-	result, err := s.retry(timed, input)
+	result, err := s.retry(timed, s.functionRuntime, input)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
@@ -182,7 +201,7 @@ func (s *Service) SendChatSessionMessage(ctx context.Context, request ChatSessio
 		s.markChatSessionStale(session.ID)
 		return nil, err
 	}
-	draft, err := s.CreateDraft(DraftCreateRequest{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, BaseFileHash: session.BaseFileHash, TargetPath: session.OpenPath, Mode: session.Mode, TargetSymbol: session.TargetSymbol, Declaration: response.Declaration, Imports: response.Imports, ParentDraftID: request.ParentDraftID})
+	draft, err := s.CreateDraft(DraftCreateRequest{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, BaseFileHash: session.BaseFileHash, TargetPath: session.OpenPath, Mode: session.Mode, TargetSymbol: session.TargetSymbol, Declaration: response.Declaration, Imports: response.Imports, ParentDraftID: request.ParentDraftID, EffectiveModel: s.EffectiveModel(), TaskSpec: session.TaskSpec})
 	if err != nil {
 		return nil, err
 	}
@@ -204,17 +223,79 @@ func (s *Service) chatConversation(session ChatSession, parentDraftID string) (s
 	if draft.ProjectID != session.ProjectID || draft.ProjectRevision != session.ProjectRevision || draft.BaseFileHash != session.BaseFileHash || draft.TargetPath != session.OpenPath || draft.Mode != session.Mode || draft.TargetSymbol != session.TargetSymbol {
 		return "", project.ErrRevisionConflict
 	}
-	var conversation strings.Builder
-	conversation.WriteString("The user asked to revise the current proposal. Keep the same immutable target.\n")
-	conversation.WriteString("Current declaration proposal:\n```go\n")
-	conversation.WriteString(draft.Declaration)
-	conversation.WriteString("\n```\n")
-	if len(draft.Imports) > 0 {
-		conversation.WriteString("Current requested imports: ")
-		conversation.WriteString(strings.Join(draft.Imports, ", "))
-		conversation.WriteString("\n")
+	return draft.Declaration, nil
+}
+
+func sessionFunctionContextLimit(limit int) int {
+	if limit <= 0 {
+		return 4000
 	}
-	return conversation.String(), nil
+	return limit
+}
+
+func (s *Service) validateSessionTaskSpec(spec *project.BugTaskSpec, file project.IndexFile, request ChatSessionCreateRequest) (*project.BugTaskSpec, error) {
+	if spec == nil {
+		return nil, nil
+	}
+	if request.Mode != project.DeclarationEditReplaceSymbol || spec.TargetPath != request.OpenPath || spec.TargetSymbol != request.TargetSymbol {
+		return nil, project.ErrRevisionConflict
+	}
+	info, err := project.GetFileInfo(s.manager.Root(), file.Path)
+	if err != nil {
+		return nil, err
+	}
+	validated, err := validateBugTaskSpec(spec, file, info.Content)
+	if err != nil {
+		return nil, err
+	}
+	return validated, nil
+}
+
+func (s *Service) reserveTaskRepair(session ChatSession, parentDraftID string) error {
+	if session.TaskSpec == nil || parentDraftID == "" {
+		return fmt.Errorf("check-driven repair requires a task-bound draft")
+	}
+	if err := s.taskDraftHasFailedChecks(parentDraftID, session); err != nil {
+		return err
+	}
+	s.chatSessionMu.Lock()
+	defer s.chatSessionMu.Unlock()
+	stored := s.chatSessions[session.ID]
+	if stored == nil || stored.session.State != "active" || stored.session.LatestDraftID != parentDraftID {
+		return project.ErrRevisionConflict
+	}
+	if stored.session.RepairCount >= 3 {
+		return fmt.Errorf("check-driven repair limit reached")
+	}
+	stored.session.RepairCount++
+	stored.session.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+func (s *Service) taskDraftHasFailedChecks(id string, session ChatSession) error {
+	s.draftMu.Lock()
+	defer s.draftMu.Unlock()
+	stored := s.drafts[id]
+	if stored == nil || !sameTaskSpec(stored.draft.TaskSpec, session.TaskSpec) || stored.checks == nil || stored.checks.Revision != stored.draft.Revision || stored.checks.CandidateHash != stored.draft.CandidateHash || !checksFailed(stored.checks.Report) {
+		return fmt.Errorf("check-driven repair requires failed checks for the current task draft")
+	}
+	return nil
+}
+
+func checksFailed(report CandidateCheckReport) bool {
+	for _, check := range report.Checks {
+		if check.State == CheckFailed || check.State == CheckCanceled {
+			return true
+		}
+	}
+	return !report.Applicable
+}
+
+func sameTaskSpec(left, right *project.BugTaskSpec) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return left.SchemaVersion == right.SchemaVersion && left.TargetPath == right.TargetPath && left.TargetSymbol == right.TargetSymbol && left.TargetSignature == right.TargetSignature
 }
 
 func (s *Service) chatSessionForMessage(id, parentDraftID string) (ChatSession, error) {
@@ -300,6 +381,7 @@ func ParseDeclarationDraftResponse(output string) (DeclarationDraftResponse, err
 func cloneChatSession(source ChatSession) ChatSession {
 	copy := source
 	copy.Messages = append([]ChatSessionMessage(nil), source.Messages...)
+	copy.TaskSpec = project.SanitizeBugTaskSpec(source.TaskSpec)
 	return copy
 }
 

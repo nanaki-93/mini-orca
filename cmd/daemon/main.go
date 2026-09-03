@@ -52,26 +52,10 @@ func main() {
 
 	// Log successful startup
 	logging.Info("Mini-Orca daemon started successfully")
-	logging.Info("Startup config",
-		"base_url", cfg.LLM.BaseURL,
-		"model", cfg.LLM.Model,
-		"temperature", cfg.LLM.Temperature)
-
-	logging.Info("Generation profile initialized", "profile", application.EffectiveModel().Profile, "model", application.EffectiveModel().Model)
-	logging.Info("Workflow: single-coder preview with explicit review")
-
-	// List available models
-	modelsCtx, cancelModels := context.WithTimeout(context.Background(), 10*time.Second)
-	models, err := application.AnalysisClient().ListModels(modelsCtx)
-	cancelModels()
-	if err != nil {
-		logging.Warn("Failed to list models", "error", err)
-	} else {
-		logging.Info("Available models", "count", len(models))
-		for _, m := range models {
-			logging.Debug("Model detail", "id", m.ID, "owned_by", m.OwnedBy)
-		}
+	for _, model := range application.EffectiveModels() {
+		logging.Info("Model scope initialized", "scope", model.Scope, "model", model.Model, "provider_origin", model.ProviderOrigin, "remote_provider", model.RemoteProvider)
 	}
+	logging.Info("Workflow: single-coder preview with explicit review")
 
 	// Start HTTP server with all API endpoints
 	server := startHTTPServer(application, projectManager)
@@ -173,6 +157,7 @@ func newHTTPMux(
 	projectHandler := handlers.NewProjectHandler(projectManager, application)
 	candidateHandler := handlers.NewCandidateHandler(application, projectManager)
 	mux.HandleFunc("POST /api/projects/import", projectHandler.Import)
+	mux.HandleFunc("POST /api/projects/restore", projectHandler.Restore)
 	mux.HandleFunc("GET /api/projects/current", projectHandler.Current)
 	mux.HandleFunc("GET /api/projects/current/overview", projectHandler.Overview)
 	mux.HandleFunc("GET /api/projects/current/findings", projectHandler.Findings)

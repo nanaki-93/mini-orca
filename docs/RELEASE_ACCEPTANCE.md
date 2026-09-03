@@ -38,22 +38,26 @@ context and findings.
 | One-file guarded Apply/Undo, comparison, export, and source-free audit | `go test ./internal/app -run 'Apply|Undo|Compare|Export'` |
 | Empty landing/open-project transition, shortcut gate, compact semantic controls, concise workspace labels, Bugs filters and priority grouping with per-card provenance, Analyze-all limits, responsive groups, direct source-symbol selection, active-file header in source/review, removed Editor/source helper copy, conditional imports, Editor-only explorer/context panes, read-only source/diff, and revision/file guards | `./desktop/gradlew -p desktop test` |
 | Live routes, OpenAPI, API reference, version, and retired browser routes | `go test ./cmd/daemon ./internal/api/handlers` |
+| Independent Analyze → Bug task → Function routing, temporary task-test checks, and no-model validation/check/Apply/Undo/scan/reindex path | `go test ./internal/app -run ScopedModelEndToEndTaskFlowKeepsNonPromptOperationsModelFree` |
+| Legacy fallback, independent local/remote profile resolution, API-base validation, and scope-specific confirmation | `go test ./internal/config ./internal/app ./internal/api/handlers -run 'ModelProfile|ModelCatalog|RemoteProvider'` |
 | All supported formatting, unit, race, vet, and desktop checks | `make check` |
 
 ## Manual desktop acceptance
 
-Start the daemon and desktop client with the normal fixture. First start with no project
-open, then complete this exact keyboard flow on a wide layout, exactly 1000dp, and a
-window narrower than 1000dp:
+Start the daemon and desktop client with the normal fixture. Use a clean desktop preference
+profile to first start with no remembered project, then complete this exact keyboard flow
+on a wide layout, exactly 1000dp, and a window narrower than 1000dp:
 
 1. With no project open, confirm only product identity, **Open project**, and concise
    opening/retry feedback are visible. Press `Cmd/Ctrl+O` to open the chooser, cancel
    it, and confirm no workspace action becomes available. Exercise a failed open when
    possible and confirm retry stays available. Then open the normal fixture and confirm
-   the landing state is fully replaced by the workspace.
+   the landing state is fully replaced by the workspace. Restart the desktop client and
+   confirm the fixture reopens automatically without model access or a project chooser.
 2. Use `Cmd/Ctrl+1` through `Cmd/Ctrl+4` to visit Summary, Analysis, Bugs, and
-   Editor. Confirm labels, selected state, and freshness/confidence/severity
-   text are understandable without color. Confirm the top bar has one text-labeled
+   Editor. Confirm labels, selected state, confidence/severity text, and non-fresh
+   analysis labels are understandable without color; confirm the fresh-file dot has
+   an accessibility description. Confirm the top bar has one text-labeled
    connection state and workspace labels have no numeric inventory counters or raw
    revision/hash identifiers. On wide windows, Summary, Analysis,
    and Bugs must have no Explorer or Context pane; only Editor has them.
@@ -116,6 +120,26 @@ Use `desktop/KEYBOARD_SMOKE_CHECKLIST.md` for the key-by-key version of the
 same flow. Record the release operator, date, fixture variant, and any failure
 next to the release candidate; do not record prompts, source, or credentials.
 
+## Scoped-model manual acceptance
+
+Use an ignored personal `config.yaml`; never put a real key in a screenshot,
+fixture, log, or this repository. Restart the daemon after every scope-profile
+change. Verify the following without relying on model listing success:
+
+1. An all-local Ollama or LM Studio configuration for all three scopes.
+2. One compatible online OpenAI, Claude, or Gemini profile, confirming only the
+   scope that sends prompt content.
+3. A mixed configuration with remote `analyze` and `bug` plus local `function`.
+4. A fresh bug task with a deliberately failed temporary test, one explicit
+   **Revise with check output**, review, and explicit Apply. Confirm the fourth
+   repair is unavailable and that the generated test never appears in the
+   imported project.
+
+These checks are manual because they require a personal provider account or a
+running local model and a Compose Desktop window. A release operator records
+which profile type, date, and result were used, but not credentials, prompts, or
+source content.
+
 ## Current execution record
 
 On 2026-09-02, the automated Desktop suite and `make check` passed for the focused
@@ -125,6 +149,15 @@ recorded as passed**: this non-interactive execution environment cannot inspect 
 running Compose Desktop window at wide, exactly 1000dp, or below 1000dp, and no
 release-fixture GUI session was available. A release operator must complete the manual
 flow above before treating this release checklist as fully accepted.
+
+On 2026-09-03, scoped-model automated coverage ran only against local `httptest`
+providers and temporary repositories. It covers independent Analyze → Bug task →
+Function routing, task pinning, temporary test failure/pass behavior, three explicit
+repairs, and model-free validation/check/Apply/Undo/scan/reindex operations. The
+all-local, online-compatible, mixed-provider, and GUI manual checks are **not run**
+in this environment because no personal credentials, local model server, or interactive
+Compose session is available. This is a recorded manual limitation, not a provider
+compatibility claim.
 
 ## Supported scope and release decision
 

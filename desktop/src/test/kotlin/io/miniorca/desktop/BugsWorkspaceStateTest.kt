@@ -18,6 +18,15 @@ class BugsWorkspaceStateTest {
         evidence = "err is ignored",
         status = "open",
         freshness = "fresh",
+        taskSpec = BugTaskSpec(
+            schemaVersion = "1",
+            targetPath = "main.go",
+            targetSymbol = "Run",
+            targetSignature = "func Run() error",
+            acceptanceCriteria = listOf("Return the error."),
+            nonGoals = listOf("Do not edit other files."),
+            goTestCandidate = GoTestCandidateSpec("TestRun", "package main\nfunc TestRun() {}"),
+        ),
     )
     private val suggested = UnifiedFinding(
         id = "ai-1",
@@ -82,10 +91,17 @@ class BugsWorkspaceStateTest {
         assertTrue(findingCanPrepareFix(verified))
         assertFalse(findingCanPrepareFix(suggested))
         assertFalse(findingCanPrepareFix(verified.copy(location = FindingLocation())))
+        assertFalse(findingCanPrepareFix(verified.copy(freshness = "stale")))
+        assertFalse(findingCanPrepareFix(verified.copy(taskSpec = verified.taskSpec?.copy(targetSignature = ""))))
 
         val index = ProjectIndex("project", "revision", files = listOf(IndexedFile("main.go", "hash", "Go", false)))
         assertEquals(EditorNavigationTarget("main.go", "Run", 7), findingNavigationTarget(verified, index))
         assertEquals(null, findingNavigationTarget(verified.copy(location = FindingLocation("other.go")), index))
+        assertEquals(EditorNavigationTarget("main.go", "Run"), findingTaskNavigationTarget(verified))
+        val requirement = requireNotNull(findingTaskRequirement(verified))
+        assertTrue(requirement.contains("Acceptance criteria:"))
+        assertTrue(requirement.contains("Non-goals:"))
+        assertTrue(requirement.contains("review only"))
     }
 
     @Test fun findingPresentationLabelsExposeProvenanceLocationLifecycleAndFreshness() {

@@ -129,3 +129,65 @@ func TestSaveLoadJSON(t *testing.T) {
 		t.Errorf("expected gpt-4, got %s", loaded.LLM.Model)
 	}
 }
+
+func TestLoadScopedModelConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := `
+llm:
+  base_url: "http://localhost:1234"
+  model: "legacy"
+model_scopes:
+  function:
+    api_base_url: "http://localhost:11434/v1"
+    api_key: ""
+    model: "local-function"
+    temperature: 0
+    max_tokens: 4096
+    context_max_tokens: 4000
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromYAML(path)
+	if err != nil {
+		t.Fatalf("LoadFromYAML() error = %v", err)
+	}
+	profiles, err := ResolveModelProfiles(cfg)
+	if err != nil {
+		t.Fatalf("ResolveModelProfiles() error = %v", err)
+	}
+	if profiles.Function.Temperature != 0 || profiles.Function.APIKey != "" {
+		t.Fatalf("function profile did not preserve explicit local zero values: %+v", profiles.Function)
+	}
+}
+
+func TestSaveLoadJSONScopedModelConfiguration(t *testing.T) {
+	temperature := float32(0)
+	maxTokens := 4096
+	contextMaxTokens := 4000
+	original := &Config{
+		LLM: LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy"},
+		ModelScopes: ModelScopesConfig{Function: ModelProfileConfig{
+			APIBaseURL:       "http://localhost:11434/v1",
+			Model:            "local-function",
+			Temperature:      &temperature,
+			MaxTokens:        &maxTokens,
+			ContextMaxTokens: &contextMaxTokens,
+		}},
+	}
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := original.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	loaded, err := LoadFromJSON(path)
+	if err != nil {
+		t.Fatalf("LoadFromJSON() error = %v", err)
+	}
+	profiles, err := ResolveModelProfiles(loaded)
+	if err != nil {
+		t.Fatalf("ResolveModelProfiles() error = %v", err)
+	}
+	if profiles.Function.Model != "local-function" || profiles.Function.Temperature != 0 {
+		t.Fatalf("JSON scope profile = %+v", profiles.Function)
+	}
+}

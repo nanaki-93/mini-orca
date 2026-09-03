@@ -107,6 +107,30 @@ func TestChatSessionEndpointReportsCancellationAndStaleSession(t *testing.T) {
 	}
 }
 
+func TestChatSessionEndpointPinsTaskSpecsAndRejectsUnpreparedRepairs(t *testing.T) {
+	handler, identity := newChatSessionTestHandler(t, "http://127.0.0.1:1", 0)
+	task := &project.BugTaskSpec{SchemaVersion: project.BugTaskSpecSchemaVersion, TargetPath: "sample.go", TargetSymbol: "Run", TargetSignature: "ignored", AcceptanceCriteria: []string{"Change only Run."}}
+	response := httptest.NewRecorder()
+	handler.OpenSession(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions", bytes.NewReader(marshalChatBody(t, ChatSessionRequest{ProjectID: identity.projectID, ProjectRevision: identity.revision, BaseFileHash: identity.hash, OpenPath: "sample.go", Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: "Run", TaskSpec: task}))))
+	if response.Code != http.StatusCreated {
+		t.Fatalf("task session = %d: %s", response.Code, response.Body.String())
+	}
+	var session app.ChatSession
+	if err := json.NewDecoder(response.Body).Decode(&session); err != nil {
+		t.Fatal(err)
+	}
+	if session.TaskSpec == nil || session.TaskSpec.TargetPath != "sample.go" || session.TaskSpec.TargetSymbol != "Run" {
+		t.Fatalf("pinned task spec = %+v", session.TaskSpec)
+	}
+	repair := httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions/"+session.ID+"/messages", bytes.NewBufferString(`{"message":"Use checks.","repair":true}`))
+	repair.SetPathValue("sessionID", session.ID)
+	failed := httptest.NewRecorder()
+	handler.SendSessionMessage(failed, repair)
+	if failed.Code != http.StatusBadRequest || !strings.Contains(failed.Body.String(), "check-driven repair") {
+		t.Fatalf("unprepared repair = %d: %s", failed.Code, failed.Body.String())
+	}
+}
+
 func TestRetiredOneShotChatRouteReturnsGone(t *testing.T) {
 	handler, _ := newChatSessionTestHandler(t, "http://127.0.0.1:1", 0)
 	response := httptest.NewRecorder()

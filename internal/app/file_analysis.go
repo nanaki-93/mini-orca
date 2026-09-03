@@ -4,15 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"strings"
 	"time"
+	"unicode"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v1"
+	semanticAnalysisPromptVersion = "file-analysis-v2"
 	maxSemanticAnalysisBytes      = 64 * 1024
 )
 
@@ -29,7 +34,7 @@ type semanticAnalysisResponse struct {
 // AnalyzeFile creates or refreshes a semantic summary for exactly one selected
 // file. It sends that file's source plus bounded, source-free project facts.
 func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, confirmRemoteProvider bool) (*project.FileAnalysis, error) {
-	if err := s.RequireRemoteConfirmation(confirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.BugModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	indexedFile, err := s.manager.IndexedFile(targetFile)
@@ -68,20 +73,20 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 	if err != nil {
 		return nil, err
 	}
-	prompt, err := semanticPrompt(fileInfo.Content, *analysis, index, *indexedFile, semanticManifest(*indexedFile))
+	prompt, err := semanticPrompt(fileInfo.Content, *analysis, index, *indexedFile, s.contextManifestForRuntime(semanticManifest(*indexedFile), s.bugRuntime))
 	if err != nil {
 		return nil, err
 	}
 	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
 	defer cancel()
-	result, err := s.retry(timed, prompt)
+	result, err := s.retry(timed, s.bugRuntime, prompt)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
 	if err != nil {
 		return s.storeAnalysisFailure(cache, input, err)
 	}
-	parsed, err := parseSemanticAnalysis(result.Output, indexedFile.Symbols)
+	parsed, err := parseSemanticAnalysis(result.Output, *indexedFile, fileInfo.Content)
 	if err != nil {
 		return s.storeAnalysisFailure(cache, input, err)
 	}
@@ -92,7 +97,7 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 		Imports: append([]string(nil), indexedFile.Imports...), Dependencies: parsed.Dependencies,
 		SideEffects: parsed.SideEffects, Risks: parsed.Risks, Suggestions: parsed.Suggestions,
 		SymbolExplanations: parsed.SymbolExplanations, Status: project.AnalysisStatusFresh,
-		Model: input.Model, Profile: input.Profile, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
+		Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
 		GeneratedAt: time.Now().UTC(),
 	}
 	if model := result.Metadata["model"]; model != "" {
@@ -164,7 +169,8 @@ func (s *Service) fileAnalysisCacheInput(analysis *project.Analysis, file *proje
 	if err != nil {
 		return nil, project.FileAnalysisInput{}, err
 	}
-	return cache, project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: contentHash, Language: file.Language, Model: s.profile.Model, Profile: s.profile.Profile, PromptVersion: semanticAnalysisPromptVersion, ContextPolicyVersion: policy.Version()}, nil
+	runtime := s.bugRuntime
+	return cache, project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: contentHash, Language: file.Language, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, PromptVersion: semanticAnalysisPromptVersion, ContextPolicyVersion: policy.Version()}, nil
 }
 
 func (s *Service) syncFileAnalysisStatus(input project.FileAnalysisInput, status string) error {
@@ -175,7 +181,7 @@ func (s *Service) storeAnalysisFailure(cache *project.FileAnalysisCache, input p
 	if strings.Contains(cause.Error(), "context canceled") || strings.Contains(cause.Error(), "deadline exceeded") {
 		return nil, cause
 	}
-	failed := project.FileAnalysis{SchemaVersion: "1", ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: project.AnalysisStatusFailed, Failure: "The model returned an unusable file summary. Retry the analysis.", Model: input.Model, Profile: input.Profile, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion, GeneratedAt: time.Now().UTC()}
+	failed := project.FileAnalysis{SchemaVersion: "1", ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: project.AnalysisStatusFailed, Failure: "The model returned an unusable file summary. Retry the analysis.", Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion, GeneratedAt: time.Now().UTC()}
 	if err := cache.Store(failed); err != nil {
 		return nil, err
 	}
@@ -213,7 +219,8 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 		return "", err
 	}
 	return "You summarize exactly one selected source file. Return one JSON object only; do not use Markdown or code fences. " +
-		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary} array), suggestions ({title,summary,target_symbol?,action?} array), symbol_explanations (object keyed only by supplied symbol names). " +
+		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary,task_spec?} array), suggestions ({title,summary,target_symbol?,action?} array), symbol_explanations (object keyed only by supplied symbol names). " +
+		"A task_spec is optional and must use schema_version \"1\", one supplied exact atomic symbol, acceptance_criteria and non_goals arrays, and may include go_test_candidate {name,content}. Never target another file. " +
 		"Treat all interpretations as suggestions. Do not quote source wholesale, invent files, or include source from another file.\n\n" +
 		"PROJECT_FACTS:\n" + string(facts) + "\n\nCONTEXT_MANIFEST:\n" + string(manifestJSON) + "\n\nTARGET_FACTS:\n" + string(targetJSON) + "\n\nTARGET_SOURCE (the only source content supplied):\n```\n" + source + "\n```\n", nil
 }
@@ -239,7 +246,7 @@ func boundedSignatures(index *project.ProjectIndex, targetPath string) []string 
 	return result
 }
 
-func parseSemanticAnalysis(output string, symbols []project.SymbolInfo) (semanticAnalysisResponse, error) {
+func parseSemanticAnalysis(output string, target project.IndexFile, source string) (semanticAnalysisResponse, error) {
 	var parsed semanticAnalysisResponse
 	if len(output) == 0 || len(output) > maxSemanticAnalysisBytes {
 		return parsed, fmt.Errorf("semantic analysis response is empty or too large")
@@ -255,9 +262,9 @@ func parseSemanticAnalysis(output string, symbols []project.SymbolInfo) (semanti
 	if decoder.More() || strings.TrimSpace(parsed.Purpose) == "" || len(parsed.Responsibilities) > 32 || len(parsed.Dependencies) > 64 || len(parsed.SideEffects) > 32 || len(parsed.Risks) > 32 || len(parsed.Suggestions) > 32 {
 		return parsed, fmt.Errorf("semantic analysis JSON is incomplete or exceeds limits")
 	}
-	allowed := make(map[string]bool, len(symbols))
+	allowed := make(map[string]bool, len(target.Symbols))
 	shortNames := make(map[string][]string)
-	for _, symbol := range symbols {
+	for _, symbol := range target.Symbols {
 		allowed[symbol.Name] = true
 		if separator := strings.LastIndexByte(symbol.Name, '.'); separator >= 0 {
 			shortName := symbol.Name[separator+1:]
@@ -291,6 +298,87 @@ func parseSemanticAnalysis(output string, symbols []project.SymbolInfo) (semanti
 		if risk.Severity != "low" && risk.Severity != "medium" && risk.Severity != "high" || risk.Summary == "" {
 			return parsed, fmt.Errorf("semantic analysis contains an invalid risk")
 		}
+		taskSpec, err := validateBugTaskSpec(risk.TaskSpec, target, source)
+		if err != nil {
+			return parsed, err
+		}
+		risk.TaskSpec = taskSpec
 	}
 	return parsed, nil
+}
+
+func validateBugTaskSpec(spec *project.BugTaskSpec, target project.IndexFile, source string) (*project.BugTaskSpec, error) {
+	if spec == nil {
+		return nil, nil
+	}
+	if spec.SchemaVersion != project.BugTaskSpecSchemaVersion || len(spec.TargetPath) > 1024 || len(spec.TargetSymbol) > project.MaxBugTaskItemBytes || len(spec.TargetSignature) > 1024 || spec.TargetPath != target.Path || strings.TrimSpace(spec.TargetSymbol) == "" {
+		return nil, fmt.Errorf("semantic analysis contains an invalid bug task target")
+	}
+	if err := validateBugTaskItems(spec.AcceptanceCriteria, true); err != nil {
+		return nil, err
+	}
+	if err := validateBugTaskItems(spec.NonGoals, false); err != nil {
+		return nil, err
+	}
+	matching := make([]project.SymbolInfo, 0, 1)
+	for _, symbol := range target.Symbols {
+		if symbol.Name == spec.TargetSymbol {
+			matching = append(matching, symbol)
+		}
+	}
+	if len(matching) != 1 || matching[0].Confidence != "exact" || !matching[0].AtomicTarget || matching[0].Signature == "" {
+		return nil, fmt.Errorf("semantic analysis bug task target is not one exact atomic symbol")
+	}
+	validated := project.SanitizeBugTaskSpec(spec)
+	validated.TargetPath = target.Path
+	validated.TargetSymbol = matching[0].Name
+	validated.TargetSignature = matching[0].Signature
+	if validated.GoTestCandidate != nil {
+		validated.GoTestCandidate = validateGoTestCandidate(validated.GoTestCandidate, target, source)
+	}
+	return validated, nil
+}
+
+func validateBugTaskItems(items []string, required bool) error {
+	if len(items) > project.MaxBugTaskItems || required && len(items) == 0 {
+		return fmt.Errorf("semantic analysis bug task items exceed limits")
+	}
+	for _, item := range items {
+		if strings.TrimSpace(item) == "" || len(item) > project.MaxBugTaskItemBytes {
+			return fmt.Errorf("semantic analysis bug task item is invalid")
+		}
+	}
+	return nil
+}
+
+func validateGoTestCandidate(candidate *project.GoTestCandidateSpec, target project.IndexFile, source string) *project.GoTestCandidateSpec {
+	if candidate == nil || target.Language != "Go" || len(candidate.Name) > project.MaxBugTaskItemBytes || len(candidate.Content) > project.MaxBugTaskCandidateBytes || !validGoTestName(candidate.Name) {
+		return nil
+	}
+	fset := token.NewFileSet()
+	targetFile, err := parser.ParseFile(fset, target.Path, source, parser.PackageClauseOnly)
+	if err != nil {
+		return nil
+	}
+	testFile, err := parser.ParseFile(fset, candidate.Name+"_test.go", candidate.Content, parser.AllErrors)
+	if err != nil || testFile.Name == nil || testFile.Name.Name != targetFile.Name.Name {
+		return nil
+	}
+	count := 0
+	for _, declaration := range testFile.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if ok && function.Recv == nil && function.Name.Name == candidate.Name {
+			count++
+		}
+	}
+	if count != 1 {
+		return nil
+	}
+	copy := *candidate
+	return &copy
+}
+
+func validGoTestName(name string) bool {
+	runes := []rune(name)
+	return len(runes) > len("Test") && strings.HasPrefix(name, "Test") && unicode.IsUpper(runes[len("Test")])
 }

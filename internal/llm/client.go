@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
@@ -62,7 +63,7 @@ type Model struct {
 
 // Client handles all LLM API interactions with a single configuration
 type Client struct {
-	baseURL     string
+	apiBaseURL  string
 	apiKey      string
 	model       string
 	temperature float32
@@ -70,10 +71,21 @@ type Client struct {
 	httpClient  *http.Client
 }
 
-// NewClient creates a new LLM client with the given configuration
+// NewClient creates a client for the legacy host-style base URL. Existing callers
+// continue to send requests to the host's /v1 API prefix.
 func NewClient(baseURL, apiKey, model string, temperature float32, maxTokens int) *Client {
+	apiBaseURL := strings.TrimRight(baseURL, "/")
+	if apiBaseURL != "" {
+		apiBaseURL += "/v1"
+	}
+	return NewClientWithAPIBase(apiBaseURL, apiKey, model, temperature, maxTokens)
+}
+
+// NewClientWithAPIBase creates a client for an OpenAI-compatible API prefix, such
+// as /v1 or /v1beta/openai. It always uses the Chat Completions wire contract.
+func NewClientWithAPIBase(apiBaseURL, apiKey, model string, temperature float32, maxTokens int) *Client {
 	return &Client{
-		baseURL:     baseURL,
+		apiBaseURL:  strings.TrimRight(apiBaseURL, "/"),
 		apiKey:      apiKey,
 		model:       model,
 		temperature: temperature,
@@ -84,7 +96,7 @@ func NewClient(baseURL, apiKey, model string, temperature float32, maxTokens int
 
 // Chat sends a chat completion request and returns the response
 func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatResponse, error) {
-	if c.baseURL == "" {
+	if c.apiBaseURL == "" {
 		return nil, fmt.Errorf("llm client: base URL not configured")
 	}
 
@@ -105,7 +117,7 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatRespons
 		return nil, fmt.Errorf("llm client: failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/chat/completions", c.baseURL)
+	url := c.apiURL("chat/completions")
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		logging.Error("Failed to create request", "error", err)
@@ -144,11 +156,11 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatRespons
 
 // ListModels returns the list of available models from the LLM provider
 func (c *Client) ListModels(ctx context.Context) ([]Model, error) {
-	if c.baseURL == "" {
+	if c.apiBaseURL == "" {
 		return nil, fmt.Errorf("llm client: base URL not configured")
 	}
 
-	url := fmt.Sprintf("%s/v1/models", c.baseURL)
+	url := c.apiURL("models")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		logging.Error("Failed to create request", "error", err)
@@ -194,6 +206,10 @@ func (c *Client) ListModels(ctx context.Context) ([]Model, error) {
 
 	logging.Info("Listed models", "count", len(models))
 	return models, nil
+}
+
+func (c *Client) apiURL(path string) string {
+	return c.apiBaseURL + "/" + strings.TrimLeft(path, "/")
 }
 
 func readProviderBody(body io.Reader) ([]byte, error) {

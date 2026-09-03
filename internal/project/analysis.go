@@ -76,9 +76,11 @@ type FileInfo struct {
 
 // Analyzer scans projects and asks the configured model for an architectural summary.
 type Analyzer struct {
-	llm     chatClient
-	model   string
-	profile string
+	llm            chatClient
+	model          string
+	profile        string
+	scope          string
+	providerOrigin string
 }
 
 func NewAnalyzer(client chatClient) *Analyzer {
@@ -88,36 +90,33 @@ func NewAnalyzer(client chatClient) *Analyzer {
 // NewAnalyzerWithProfile records the configured analysis model identity with
 // every structured report so cached interpretations can be invalidated safely.
 func NewAnalyzerWithProfile(client chatClient, model, profile string) *Analyzer {
+	return NewAnalyzerWithProvenance(client, model, profile, "")
+}
+
+// NewAnalyzerWithProvenance records the effective scope and sanitized provider
+// origin alongside the configured model for cache freshness.
+func NewAnalyzerWithProvenance(client chatClient, model, scope, providerOrigin string) *Analyzer {
+	profile := scope
 	if profile == "" {
 		profile = "analysis"
 	}
-	return &Analyzer{llm: client, model: model, profile: profile}
+	if scope == "" {
+		scope = profile
+	}
+	return &Analyzer{llm: client, model: model, profile: profile, scope: scope, providerOrigin: providerOrigin}
 }
 
 func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) {
-	canonical, err := CanonicalRoot(root)
-	if err != nil {
-		return nil, err
-	}
-	policy, err := NewContextPolicy(canonical)
-	if err != nil {
-		return nil, err
-	}
-	analysis, err := scanWithPolicy(canonical, policy)
-	if err != nil {
-		return nil, err
-	}
-	analysis.ProjectID = projectID(canonical)
-	analysis.ProjectRevision, err = projectRevision(canonical)
+	analysis, err := a.scan(root)
 	if err != nil {
 		return nil, err
 	}
 
-	contextText, err := NewContextBuilder().Build(canonical, "")
+	contextText, err := NewContextBuilder().Build(analysis.Path, "")
 	if err != nil {
 		return nil, fmt.Errorf("build analysis context: %w", err)
 	}
-	report := newProjectAnalysisReport(analysis.ProjectID, analysis.ProjectRevision, a.model, a.profile)
+	report := newProjectAnalysisReportWithProvenance(analysis.ProjectID, analysis.ProjectRevision, a.model, a.profile, a.scope, a.providerOrigin)
 	if a.llm == nil {
 		report.Status = ProjectAnalysisStatusUnavailable
 		report.Failure = "AI analysis is unavailable because no LLM client is configured."
@@ -139,6 +138,9 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 				report.Flows = parsed.Flows
 				report.Risks = parsed.Risks
 				report.NextSteps = parsed.NextSteps
+				if response.Model != "" {
+					report.Model = response.Model
+				}
 			}
 		}
 	}
@@ -146,10 +148,60 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 	analysis.AIStatus = report.Status
 	analysis.Summary = projectAnalysisSummary(report)
 
-	if err := StoreProjectAnalysisReport(canonical, report); err != nil {
+	if err := StoreProjectAnalysisReport(analysis.Path, report); err != nil {
 		return nil, err
 	}
-	if err := writeAnalysisProjection(canonical, analysis); err != nil {
+	if err := writeAnalysisProjection(analysis.Path, analysis); err != nil {
+		return nil, err
+	}
+	return analysis, nil
+}
+
+// Restore reloads deterministic facts and the persisted project interpretation
+// without contacting a model or rewriting project artifacts.
+func (a *Analyzer) Restore(root string) (*Analysis, error) {
+	analysis, err := a.scan(root)
+	if err != nil {
+		return nil, err
+	}
+	report, err := LoadProjectAnalysisReport(analysis.Path, ProjectAnalysisInput{
+		ProjectID:       analysis.ProjectID,
+		ProjectRevision: analysis.ProjectRevision,
+		Model:           a.model,
+		Profile:         a.profile,
+		Scope:           a.scope,
+		ProviderOrigin:  a.providerOrigin,
+		PromptVersion:   projectAnalysisPromptVersion,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load stored project analysis: %w", err)
+	}
+	if report == nil {
+		return nil, fmt.Errorf("stored project analysis not found")
+	}
+	analysis.Report = *report
+	analysis.AIStatus = report.Status
+	analysis.Summary = projectAnalysisSummary(*report)
+	analysis.AnalyzedAt = report.GeneratedAt
+	return analysis, nil
+}
+
+func (a *Analyzer) scan(root string) (*Analysis, error) {
+	canonical, err := CanonicalRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	policy, err := NewContextPolicy(canonical)
+	if err != nil {
+		return nil, err
+	}
+	analysis, err := scanWithPolicy(canonical, policy)
+	if err != nil {
+		return nil, err
+	}
+	analysis.ProjectID = projectID(canonical)
+	analysis.ProjectRevision, err = projectRevision(canonical)
+	if err != nil {
 		return nil, err
 	}
 	return analysis, nil

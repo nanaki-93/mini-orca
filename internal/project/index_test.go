@@ -157,6 +157,44 @@ func TestBuildIndexRebuildsCorruptCacheAtomically(t *testing.T) {
 	}
 }
 
+func TestManagerRestoreRefreshesIndexWithoutRewritingPersistedCache(t *testing.T) {
+	root := t.TempDir()
+	writeIndexFixture(t, root, "main.go", "package main\n")
+	manager, err := NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	persistedPath := filepath.Join(root, indexRelativePath)
+	before, err := os.ReadFile(persistedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.Restore(root, &Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(persistedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("restore rewrote the persisted index")
+	}
+	index, err := manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index.Files) != 1 || len(index.Files[0].Symbols) != 1 || index.Files[0].Symbols[0].Name != "Run" {
+		t.Fatalf("restored in-memory index = %+v", index.Files)
+	}
+}
+
 func writeIndexFixture(t *testing.T, root, relative, content string) {
 	t.Helper()
 	path := filepath.Join(root, relative)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	apperrors "github.com/nanaki-93/mini-orca/v2/internal/errors"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -21,6 +22,10 @@ type ProjectHandler struct {
 type projectImportRequest struct {
 	ProjectPath           string `json:"project_path"`
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
+}
+
+type projectRestoreRequest struct {
+	ProjectPath string `json:"project_path"`
 }
 
 type reindexRequest struct {
@@ -70,7 +75,7 @@ func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
 		api.WriteAppError(w, apperrors.BadRequest("invalid request", "A JSON project_path is required.", err))
 		return
 	}
-	if err := h.service.RequireRemoteConfirmation(request.ConfirmRemoteProvider); err != nil {
+	if err := h.service.RequireRemoteConfirmation(config.AnalyzeModelScope, request.ConfirmRemoteProvider); err != nil {
 		api.WriteAppError(w, apperrors.BadRequest("remote provider confirmation required", err.Error(), err))
 		return
 	}
@@ -85,6 +90,27 @@ func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
 	h.service.ProjectChanged()
 	if err := h.manager.Set(analysis.Path, analysis); err != nil {
 		api.WriteAppError(w, apperrors.Internal("project activation failed", "The analysis was created but the project could not be activated.", err))
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, analysis)
+}
+
+func (h *ProjectHandler) Restore(w http.ResponseWriter, r *http.Request) {
+	var request projectRestoreRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		api.WriteAppError(w, apperrors.BadRequest("invalid request", "A JSON project_path is required.", err))
+		return
+	}
+	analysis, err := h.service.RestoreProject(request.ProjectPath)
+	if err != nil {
+		api.WriteAppError(w, apperrors.BadRequest("project restore failed", err.Error(), err))
+		return
+	}
+	h.service.ProjectChanged()
+	if err := h.manager.Restore(analysis.Path, analysis); err != nil {
+		api.WriteAppError(w, apperrors.Internal("project restoration failed", "The stored analysis was loaded but the project could not be activated.", err))
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, analysis)

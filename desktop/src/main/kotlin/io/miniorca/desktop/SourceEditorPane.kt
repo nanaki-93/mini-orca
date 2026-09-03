@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,10 +11,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -50,7 +55,25 @@ internal fun sourceLineContentDescription(
 ): String = sourceLineDescription(line, emphasis) +
     declarationSymbol?.let { ", selectable declaration ${it.name}" }.orEmpty()
 
+/** Widens only a source line's leading whitespace for easier visual nesting in the read-only editor. */
+internal fun expandedEditorIndentation(sourceLine: String): String {
+    val indentationEnd = sourceLine.indexOfFirst { !it.isWhitespace() }
+    if (indentationEnd <= 0) return sourceLine
+    val indentation = sourceLine.take(indentationEnd)
+    val visualIndentationWidth = indentation.count { it != '\t' } + indentation.count { it == '\t' } * 4
+    val additionalSpaces = maxOf(1, visualIndentationWidth / 4)
+    return buildString(sourceLine.length + indentationEnd) {
+        indentation.forEach { character ->
+            append(character)
+            append(character)
+        }
+        repeat(additionalSpaces) { append(' ') }
+        append(sourceLine.drop(indentationEnd))
+    }
+}
+
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 internal fun SourceEditorPane(
     project: ProjectAnalysis?,
     selected: ProjectFileInfo?,
@@ -65,6 +88,12 @@ internal fun SourceEditorPane(
         else -> "Select Import to analyze a project. Mini-Orca indexes only policy-eligible project files."
     }
     val canSelectSource = selected != null && !selected.binary
+    val sourceLines = source.lines()
+    val focusLine = focusedLine.takeIf { it in 1..sourceLines.size }
+    val focusLineRequester = remember { BringIntoViewRequester() }
+    LaunchedEffect(selected?.path, selected?.contentHash, focusLine) {
+        if (focusLine != null) focusLineRequester.bringIntoView()
+    }
     SelectionContainer {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(18.dp)) {
             if (focusedLine > 0) {
@@ -75,7 +104,7 @@ internal fun SourceEditorPane(
                     modifier = Modifier.padding(bottom = 10.dp),
                 )
             }
-            source.lines().forEachIndexed { index, sourceLine ->
+            sourceLines.forEachIndexed { index, sourceLine ->
                 val lineNumber = index + 1
                 val emphasis = sourceLineEmphasis(lineNumber, selectedSymbol, focusedLine)
                 val sourceSelection = if (canSelectSource) sourceLineSelection(symbols, lineNumber) else null
@@ -88,7 +117,8 @@ internal fun SourceEditorPane(
                         }
                         .sourceLineSelectionTap(sourceSelection) {
                             onSourceLineSelected(requireNotNull(sourceSelection))
-                        },
+                        }
+                        .then(if (lineNumber == focusLine) Modifier.bringIntoViewRequester(focusLineRequester) else Modifier),
                 ) {
                     Text(
                         lineNumber.toString().padStart(4),
@@ -99,7 +129,7 @@ internal fun SourceEditorPane(
                         modifier = Modifier.width(46.dp),
                     )
                     Text(
-                        text = highlightedCode(sourceLine),
+                        text = highlightedCode(if (selected != null) expandedEditorIndentation(sourceLine) else sourceLine),
                         color = PrimaryText,
                         fontFamily = if (selected != null) FontFamily.Monospace else FontFamily.Default,
                         fontSize = 13.sp,

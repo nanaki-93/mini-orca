@@ -61,6 +61,97 @@ func TestRunCheckCommandHonorsCancellation(t *testing.T) {
 	}
 }
 
+func TestTaskTestChecksRequireBaseFailureAndCandidatePassWithoutWritingProject(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module fixture\n\ngo 1.22\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc Run() bool { return false }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	test := project.GoTestCandidateSpec{Name: "TestRun", Content: "package main\n\nimport \"testing\"\n\nfunc TestRun(t *testing.T) { if !Run() { t.Fatal(\"expected true\") } }\n"}
+	report, err := service.RunCandidateChecksForTask(context.Background(), "main.go", "package main\n\nfunc Run() bool { return true }\n", CandidateCheckOptions{}, &test)
+	checks := taskChecks(report.Checks)
+	if err != nil || len(checks) != 2 || checks[0].State != CheckPassed || checks[1].State != CheckPassed {
+		t.Fatalf("task checks = %+v, err = %v", checks, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "mini_orca_task_test.go")); !os.IsNotExist(err) {
+		t.Fatalf("task test escaped temporary workspace: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc Run() bool { return true }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	report, err = service.RunCandidateChecksForTask(context.Background(), "main.go", "package main\n\nfunc Run() bool { return true }\n", CandidateCheckOptions{}, &test)
+	checks = taskChecks(report.Checks)
+	if err != nil || len(checks) != 1 || checks[0].State != CheckFailed {
+		t.Fatalf("unexpectedly passing baseline = %+v, err = %v", checks, err)
+	}
+}
+
+func TestTaskTestChecksReportCandidateFailureAndUseNonConflictingFilename(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module fixture\n\ngo 1.22\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "mini_orca_task_test.go"), []byte("package main\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc Run() bool { return false }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	test := project.GoTestCandidateSpec{Name: "TestRun", Content: "package main\n\nimport \"testing\"\n\nfunc TestRun(t *testing.T) { if !Run() { t.Fatal(\"expected true\") } }\n"}
+	report, err := service.RunCandidateChecksForTask(context.Background(), "main.go", "package main\n\nfunc Run() bool { return false }\n", CandidateCheckOptions{}, &test)
+	checks := taskChecks(report.Checks)
+	if err != nil || len(checks) != 2 || checks[0].State != CheckPassed || checks[1].State != CheckFailed {
+		t.Fatalf("candidate failure checks = %+v, err = %v", checks, err)
+	}
+	workspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspace, "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "nested", "mini_orca_task_test.go"), []byte("package nested\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	path, err := taskTestPath(workspace, "nested/main.go")
+	if err != nil || filepath.Base(path) != "mini_orca_task_1_test.go" {
+		t.Fatalf("task filename = %q, err = %v", path, err)
+	}
+}
+
+func taskChecks(checks []CandidateCheck) []CandidateCheck {
+	result := make([]CandidateCheck, 0, 2)
+	for _, check := range checks {
+		if strings.HasPrefix(check.Name, "task test ") {
+			result = append(result, check)
+		}
+	}
+	return result
+}
+
+func TestTaskTestCheckCancellationAndEvidenceSanitization(t *testing.T) {
+	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	check := service.runTaskTestCheck(ctx, t.TempDir(), "task", []string{"go", "test", "./..."}, true)
+	if check.State != CheckCanceled {
+		t.Fatalf("canceled task check = %+v", check)
+	}
+	evidence := sanitizeCheckOutput("/tmp/work/api_key=private\npassword: hidden\n"+strings.Repeat("x", maxCheckOutputBytes+1), "/tmp/work", "/project")
+	if strings.Contains(evidence, "private") || strings.Contains(evidence, "hidden") || !strings.Contains(evidence, "[output truncated]") || !strings.Contains(evidence, "<workspace>") {
+		t.Fatalf("sanitized evidence = %q", evidence)
+	}
+}
+
 func TestApplyUndoAndAuditAreConflictSafeAndSourceFree(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]string{"content": `{"version":"v1","target_path":"main.go","target_symbol":"Run","scope_mode":"strict_symbol","candidate_content":"package main\n\nimport \"fmt\"\n\nfunc Run() { fmt.Println(\"changed\") }\n"}`}}}})

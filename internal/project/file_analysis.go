@@ -24,8 +24,9 @@ const (
 
 // Finding is model-derived advice, not a deterministic project fact.
 type Finding struct {
-	Severity string `json:"severity"`
-	Summary  string `json:"summary"`
+	Severity string       `json:"severity"`
+	Summary  string       `json:"summary"`
+	TaskSpec *BugTaskSpec `json:"task_spec,omitempty"`
 }
 
 // Suggestion is an optional, user-reviewed atomic improvement proposal.
@@ -58,7 +59,10 @@ type FileAnalysis struct {
 	Status               string            `json:"status"`
 	Failure              string            `json:"failure,omitempty"`
 	Model                string            `json:"model,omitempty"`
+	ConfiguredModel      string            `json:"configured_model,omitempty"`
 	Profile              string            `json:"profile,omitempty"`
+	Scope                string            `json:"scope,omitempty"`
+	ProviderOrigin       string            `json:"provider_origin,omitempty"`
 	PromptVersion        string            `json:"prompt_version"`
 	ContextPolicyVersion string            `json:"context_policy_version"`
 	GeneratedAt          time.Time         `json:"generated_at"`
@@ -73,6 +77,8 @@ type FileAnalysisInput struct {
 	Language             string
 	Model                string
 	Profile              string
+	Scope                string
+	ProviderOrigin       string
 	PromptVersion        string
 	ContextPolicyVersion string
 }
@@ -125,6 +131,13 @@ func (c *FileAnalysisCache) Load(input FileAnalysisInput) (*FileAnalysis, error)
 func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	analysis = *cloneFileAnalysis(&analysis)
+	for index := range analysis.Risks {
+		analysis.Risks[index].TaskSpec = SanitizeBugTaskSpec(analysis.Risks[index].TaskSpec)
+		if !validPersistedBugTaskSpec(analysis.Risks[index].TaskSpec) {
+			return fmt.Errorf("file analysis task specification is invalid")
+		}
+	}
 	input := inputFromAnalysis(analysis)
 	if err := c.validateInput(input); err != nil {
 		return err
@@ -225,18 +238,22 @@ func (c *FileAnalysisCache) recoverCorrupt(path string) error {
 }
 
 func newMissingAnalysis(input FileAnalysisInput) *FileAnalysis {
-	return &FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: normalizedAnalysisPath(input.Path), ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusMissing, Model: input.Model, Profile: input.Profile, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
+	return &FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: normalizedAnalysisPath(input.Path), ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusMissing, Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
 }
 
 func inputFromAnalysis(analysis FileAnalysis) FileAnalysisInput {
-	return FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: analysis.Path, ContentHash: analysis.ContentHash, Language: analysis.Language, Model: analysis.Model, Profile: analysis.Profile, PromptVersion: analysis.PromptVersion, ContextPolicyVersion: analysis.ContextPolicyVersion}
+	model := analysis.ConfiguredModel
+	if model == "" {
+		model = analysis.Model
+	}
+	return FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: analysis.Path, ContentHash: analysis.ContentHash, Language: analysis.Language, Model: model, Profile: analysis.Profile, Scope: analysis.Scope, ProviderOrigin: analysis.ProviderOrigin, PromptVersion: analysis.PromptVersion, ContextPolicyVersion: analysis.ContextPolicyVersion}
 }
 
 func analysisMatches(analysis FileAnalysis, input FileAnalysisInput) bool {
 	// A project revision changes for every eligible source edit. Content hashes
 	// keep invalidation local to the edited file while the stored revision still
 	// records the project state that informed the original summary.
-	return analysis.SchemaVersion == fileAnalysisSchemaVersion && analysis.ProjectID == input.ProjectID && analysis.Path == normalizedAnalysisPath(input.Path) && analysis.ContentHash == input.ContentHash && analysis.Language == input.Language && modelsMatch(analysis.Model, input.Model) && analysis.Profile == input.Profile && analysis.PromptVersion == input.PromptVersion && analysis.ContextPolicyVersion == input.ContextPolicyVersion
+	return analysis.SchemaVersion == fileAnalysisSchemaVersion && analysis.ProjectID == input.ProjectID && analysis.Path == normalizedAnalysisPath(input.Path) && analysis.ContentHash == input.ContentHash && analysis.Language == input.Language && modelsMatch(analysis.ConfiguredModel, input.Model) && analysis.Profile == input.Profile && analysis.Scope == input.Scope && analysis.ProviderOrigin == input.ProviderOrigin && analysis.PromptVersion == input.PromptVersion && analysis.ContextPolicyVersion == input.ContextPolicyVersion
 }
 
 func modelsMatch(stored, requested string) bool {
@@ -271,6 +288,9 @@ func cloneFileAnalysis(source *FileAnalysis) *FileAnalysis {
 	copy.Dependencies = append([]string(nil), source.Dependencies...)
 	copy.SideEffects = append([]string(nil), source.SideEffects...)
 	copy.Risks = append([]Finding(nil), source.Risks...)
+	for index := range copy.Risks {
+		copy.Risks[index].TaskSpec = cloneBugTaskSpec(source.Risks[index].TaskSpec)
+	}
 	copy.Suggestions = append([]Suggestion(nil), source.Suggestions...)
 	if source.SymbolExplanations != nil {
 		copy.SymbolExplanations = make(map[string]string, len(source.SymbolExplanations))

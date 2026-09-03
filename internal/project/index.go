@@ -60,6 +60,12 @@ type Diagnostic struct {
 // BuildIndex scans only context-policy-eligible project files and writes the
 // complete index atomically. Existing unchanged entries are reused by hash.
 func BuildIndex(root, id, revision string) (*ProjectIndex, error) {
+	return buildIndex(root, id, revision, true)
+}
+
+// buildIndex can refresh an in-memory index for startup restoration without
+// rewriting the persisted cache.
+func buildIndex(root, id, revision string, persist bool) (*ProjectIndex, error) {
 	canonical, err := CanonicalRoot(root)
 	if err != nil {
 		return nil, err
@@ -94,8 +100,10 @@ func BuildIndex(root, id, revision string) (*ProjectIndex, error) {
 		}
 		index.Files = append(index.Files, entry)
 	}
-	if err := writeIndex(canonical, index); err != nil {
-		return nil, err
+	if persist {
+		if err := writeIndex(canonical, index); err != nil {
+			return nil, err
+		}
 	}
 	return index, nil
 }

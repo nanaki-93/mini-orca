@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agent"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
 )
@@ -55,7 +56,7 @@ type GenerationPreview struct {
 // Generate produces an in-memory candidate preview only. It captures the base
 // project and file state before calling the model and rejects malformed output.
 func (s *Service) Generate(ctx context.Context, userPrompt, targetFile, targetSymbol string, scope workflow.ScopeMode, confirmRemoteProvider bool) (*GenerationPreview, error) {
-	if err := s.RequireRemoteConfirmation(confirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	if scope == "" {
@@ -82,18 +83,26 @@ func (s *Service) Generate(ctx context.Context, userPrompt, targetFile, targetSy
 	if fileInfo.ContentHash != indexedFile.ContentHash {
 		return nil, project.ErrRevisionConflict
 	}
-	projectContext, manifest, err := project.NewContextBuilder().BuildWithManifest(s.manager.Root(), indexedFile.Path)
+	index, err := s.manager.Index()
+	if err != nil {
+		return nil, err
+	}
+	projectContext, manifest, err := project.NewContextBuilder().BuildFunctionWithManifest(s.manager.Root(), project.FunctionContextOptions{
+		TargetPath: indexedFile.Path, TargetSymbol: targetSymbol, Mode: project.DeclarationEditReplaceSymbol,
+		Index: index, MaxTokens: sessionFunctionContextLimit(s.functionRuntime.effective.ContextMaxTokens),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("build project context: %w", err)
 	}
+	manifest = s.contextManifestForRuntime(manifest, s.functionRuntime)
 	input, err := agent.AtomicCoderInputWithScope(userPrompt, projectContext, indexedFile.Path, targetSymbol, string(scope))
 	if err != nil {
 		return nil, err
 	}
 
-	timed, cancel := context.WithTimeout(ctx, duration(s.profile.Timeout))
+	timed, cancel := context.WithTimeout(ctx, duration(s.functionRuntime.effective.Timeout))
 	defer cancel()
-	result, err := s.retry(timed, input)
+	result, err := s.retry(timed, s.functionRuntime, input)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}

@@ -1,5 +1,25 @@
 # Mini-Orca Release Notes
 
+## Unreleased — Scoped model profiles and explicit task repair
+
+- Added fixed `analyze`, `bug`, and `function` model profiles with legacy
+  `llm` and `agents.coder.model` fallback. Each profile accepts an
+  OpenAI Chat Completions-compatible API base, model, and optional local key.
+- Added safe scope metadata and per-scope remote confirmation across the daemon,
+  API, cache provenance, and Desktop. Provider keys are never returned or logged.
+- AI file findings can now supply one bounded, exact task specification. A
+  reviewed optional Go test runs only in the temporary check workspace and must
+  fail on the base then pass on the candidate.
+- Function proposals now receive declaration-focused, token-capped context. A
+  failed task check can start at most three explicit **Revise with check output**
+  messages in the existing session; there is no automatic repair loop.
+- Native provider SDKs, credential vaults, provider account UI, automatic source
+  or test writes, commits, and pushes remain intentionally out of scope.
+
+Manual provider and GUI acceptance remains required before a release operator
+claims compatibility with a personal OpenAI, Claude-compatible,
+Gemini-compatible, Ollama, LM Studio, or custom gateway configuration.
+
 ## v4.3.0 — Focused file-scoped declaration drafts (2026-08-26)
 
 Mini-Orca now presents a single local Desktop workflow across Summary, Analysis,

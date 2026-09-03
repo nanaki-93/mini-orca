@@ -4,10 +4,10 @@ Mini-Orca is configured using a YAML file, typically named `config.yaml`. This d
 
 Keep `config.yaml` on the local machine; it is intentionally ignored by Git.
 Start from `config.example.yaml` and do not add provider credentials to tracked
-files. The daemon binds to loopback by default. If `llm.base_url` is a
-non-loopback provider, the desktop user must explicitly confirm the destination
-for every request that sends prompt content. That confirmation is part of the
-request, not a configuration switch that silently enables remote delivery.
+files. The daemon binds to loopback by default. Every configured non-loopback
+model scope requires explicit confirmation for its own prompt request. That
+confirmation is part of the request, not a configuration switch that silently
+enables remote delivery.
 
 Prompt-bearing requests are project import/analysis, one-file semantic
 analysis, Analyze-all, and file-scoped chat messages. Deterministic reindexing,
@@ -24,6 +24,50 @@ Defines the LLM provider settings. This is a flat configuration (no nested provi
 - `model` (string, optional): The default model to use.
 - `temperature` (float, optional): Sampling temperature (0.0 to 1.0). Default: `0.7`.
 - `max_tokens` (int, optional): Maximum number of tokens to generate. Default: `8192`.
+
+## Scoped model profiles (`model_scopes`)
+
+`model_scopes` optionally resolves three fixed profiles at daemon startup:
+`analyze` for import, `bug` for one-file analysis and Analyze-all, and
+`function` for declaration proposals and explicit check-driven repairs. Each
+explicit profile needs `api_base_url` and `model`; an empty `api_key` is valid
+for local servers. `temperature`, `max_tokens`, and `context_max_tokens` are
+optional. The default context budgets are 120000, 32000, and 4000 tokens in
+scope order.
+
+An omitted `analyze` or `bug` scope inherits the complete legacy `llm` profile.
+An omitted `function` scope inherits `llm`, except that `agents.coder.model`
+continues to override its model. A partial scope is invalid rather than silently
+mixing endpoints. Restart the daemon after changing configuration.
+
+All profiles use one small OpenAI Chat Completions-compatible contract. Use
+placeholder IDs and a local personal config, for example:
+
+```yaml
+model_scopes:
+  analyze: # OpenAI-compatible example
+    api_base_url: "https://api.openai.com/v1"
+    api_key: "replace-in-local-config"
+    model: "replace-with-analysis-model-id"
+  bug: # Claude-compatible or Gemini-compatible OpenAI endpoint
+    api_base_url: "https://api.anthropic.com/v1" # or https://generativelanguage.googleapis.com/v1beta/openai
+    api_key: "replace-in-local-config"
+    model: "replace-with-bug-model-id"
+  function: # Ollama, LM Studio, or a custom compatible gateway
+    api_base_url: "http://localhost:11434/v1" # LM Studio: http://localhost:1234/v1
+    api_key: ""
+    model: "replace-with-local-function-model-id"
+```
+
+Native Anthropic Messages, Gemini `generateContent`, OpenAI Responses,
+streaming, tool calls, vendor SDKs, and provider-specific reasoning controls
+are not supported by this compatibility layer. A provider that lacks compatible
+Chat Completions or `/models` support can still be used for generation; model
+listing is informational only.
+
+API keys are read only from ignored local configuration. Mini-Orca never logs
+or returns them, but it does not provide a vault, encryption, Keychain,
+rotation, account management, or credential UI.
 
 ## Agents Configuration (`agents`)
 

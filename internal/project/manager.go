@@ -31,6 +31,16 @@ func (m *Manager) Root() string {
 }
 
 func (m *Manager) Set(root string, analysis *Analysis) error {
+	return m.activate(root, analysis, true)
+}
+
+// Restore activates a previously imported project while keeping startup
+// restoration free from persisted index rewrites.
+func (m *Manager) Restore(root string, analysis *Analysis) error {
+	return m.activate(root, analysis, false)
+}
+
+func (m *Manager) activate(root string, analysis *Analysis, persistIndex bool) error {
 	if analysis == nil {
 		return fmt.Errorf("project analysis is required")
 	}
@@ -47,7 +57,7 @@ func (m *Manager) Set(root string, analysis *Analysis) error {
 	if err != nil {
 		return err
 	}
-	index, err := BuildIndex(canonical, id, revision)
+	index, err := buildIndex(canonical, id, revision, persistIndex)
 	if err != nil {
 		return err
 	}

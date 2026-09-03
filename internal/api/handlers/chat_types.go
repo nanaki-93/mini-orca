@@ -11,6 +11,7 @@ type ChatSessionRequest struct {
 	OpenPath        string                      `json:"open_path"`
 	Mode            project.DeclarationEditMode `json:"mode"`
 	TargetSymbol    string                      `json:"target_symbol"`
+	TaskSpec        *project.BugTaskSpec        `json:"task_spec,omitempty"`
 }
 
 // ChatMessageRequest cannot contain a file, symbol, mode, or project identity.
@@ -19,4 +20,5 @@ type ChatMessageRequest struct {
 	Message               string `json:"message"`
 	ParentDraftID         string `json:"parent_draft_id,omitempty"`
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
+	Repair                bool   `json:"repair,omitempty"`
 }

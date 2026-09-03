@@ -62,6 +62,21 @@ class ReviewEvidencePaneTest {
         assertTrue(gitContextLabel(null).contains("read-only"))
     }
 
+    @Test fun taskBoundFailureCreatesABoundedExplicitRepairMessageUntilTheLimit() {
+        val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return an error."))
+        val current = draft().copy(taskSpec = task)
+        val session = ChatSession(id = "session", taskSpec = task, repairCount = 2)
+        val checks = CandidateCheckReport("main.go", false, listOf(CandidateCheck("task test candidate", required = true, state = "failed", output = "<workspace>/main_test.go: assertion failed")), current.id, current.revision, current.hash)
+
+        val repair = repairMessageForChecks(session, current, checks)
+
+        assertTrue(repair?.contains("sanitized focused check evidence") == true)
+        assertTrue(repair?.contains("assertion failed") == true)
+        assertTrue(repair!!.length < 4096)
+        assertEquals(null, repairMessageForChecks(session.copy(repairCount = 3), current, checks))
+        assertFalse(checksMatchDraft(CandidateCheckReport("main.go", false, draftId = current.id, draftRevision = current.revision, draftHash = "stale"), current))
+    }
+
     private fun draft() = DeclarationDraft(
         "draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}",
         revision = 2,

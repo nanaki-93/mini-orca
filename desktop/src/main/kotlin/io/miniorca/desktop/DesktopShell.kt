@@ -168,9 +168,9 @@ internal fun DesktopShell(
     generating: Boolean,
     showContext: Boolean,
     contextManifest: ContextManifest?,
-    remoteProvider: Boolean,
-    remoteProviderConfirmed: Boolean,
-    onRemoteProviderConfirmed: (Boolean) -> Unit,
+    bugModel: ScopedModel,
+    bugProviderConfirmed: Boolean,
+    onBugProviderConfirmed: (Boolean) -> Unit,
     onDismissContext: () -> Unit,
     paletteMode: PaletteMode,
     paletteQuery: String,
@@ -300,7 +300,7 @@ internal fun DesktopShell(
                         }
                         ContentPane(
                             project = appState.project, overview = appState.overview, selected = appState.selectedFile, symbols = appState.symbols, selectedSymbol = appState.selectedSymbol,
-                            workspace = workspace, remoteProvider = remoteProvider, remoteProviderConfirmed = remoteProviderConfirmed, onRemoteProviderConfirmed = onRemoteProviderConfirmed,
+                            workspace = workspace, bugModel = bugModel, bugProviderConfirmed = bugProviderConfirmed, onBugProviderConfirmed = onBugProviderConfirmed,
                             editorProgress = editorProgress, draft = appState.review.draft,
                             findings = appState.findings.findings, scan = appState.findings.scan, analyzeAll = appState.findings.analyzeAll, coverage = appState.overview?.analysisCoverage, onOpenFinding = onOpenFinding, onPrepareFinding = onPrepareFinding, onTriageFinding = onTriageFinding,
                             onStartAnalyzeAll = onStartAnalyzeAll, onPauseAnalyzeAll = onPauseAnalyzeAll, onResumeAnalyzeAll = onResumeAnalyzeAll, onCancelAnalyzeAll = onCancelAnalyzeAll, onStartScan = onStartScan, onCancelScan = onCancelScan,
@@ -337,7 +337,7 @@ internal fun DesktopShell(
                     )
                 }
             }
-            if (showContext) ContextInspectorDialog(contextManifest ?: ContextManifest(), remoteProvider, onDismissContext)
+            if (showContext) ContextInspectorDialog(contextManifest ?: ContextManifest(), onDismissContext)
         }
     }
 }
@@ -372,7 +372,7 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
 @Composable
 private fun ContentPane(
     project: ProjectAnalysis?, overview: ProjectOverview?, selected: ProjectFileInfo?, symbols: List<SymbolInfo>, selectedSymbol: SymbolInfo?, workspace: Workspace,
-    remoteProvider: Boolean, remoteProviderConfirmed: Boolean, onRemoteProviderConfirmed: (Boolean) -> Unit,
+    bugModel: ScopedModel, bugProviderConfirmed: Boolean, onBugProviderConfirmed: (Boolean) -> Unit,
     editorProgress: EditorProgressUiState, draft: DeclarationDraft?,
     findings: List<UnifiedFinding>, scan: GoScanReport?, analyzeAll: AnalyzeAllJob?, coverage: AnalysisCoverage?, onOpenFinding: (UnifiedFinding) -> Unit, onPrepareFinding: (UnifiedFinding) -> Unit, onTriageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
     onStartAnalyzeAll: (AnalyzeAllRunOptions) -> Unit, onPauseAnalyzeAll: () -> Unit, onResumeAnalyzeAll: (Boolean) -> Unit, onCancelAnalyzeAll: () -> Unit, onStartScan: () -> Unit, onCancelScan: () -> Unit,
@@ -388,7 +388,7 @@ private fun ContentPane(
                     EditorPane(project, selected, symbols, selectedSymbol, focusedLine, onSourceLineSelected)
                 }
             })
-            Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, remoteProvider, remoteProviderConfirmed, onRemoteProviderConfirmed, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll)
+            Workspace.Analysis -> AnalysisWorkspacePane(analyzeAll, coverage, bugModel, bugProviderConfirmed, onBugProviderConfirmed, onStartAnalyzeAll, onPauseAnalyzeAll, onResumeAnalyzeAll, onCancelAnalyzeAll)
             Workspace.Bugs -> BugsWorkspacePane(findings, scan, onOpenFinding, onPrepareFinding, onTriageFinding, onStartScan, onCancelScan)
         }
     }
@@ -422,22 +422,24 @@ private fun DesktopStatusBar(status: String, error: String?, loading: Boolean) {
     }
 }
 
-internal fun contextDestinationLabel(remoteProvider: Boolean): String = if (remoteProvider) {
-    "Destination: remote provider · confirmation required before sending project context"
+internal fun modelDestinationLabel(scope: ModelScope, model: ScopedModel): String = if (model.remoteProvider) {
+    "${scope.label}: ${model.profile} · ${model.model} · remote provider · confirmation required before sending project context"
 } else {
-    "Destination: local provider · project context stays on this machine"
+    "${scope.label}: ${model.profile} · ${model.model} · local provider · project context stays on this machine"
 }
 
 internal fun contextManifestSummary(manifest: ContextManifest): String =
     "${manifest.included.size} included · ${manifest.excluded.size} excluded · ${manifest.estimatedTokens} estimated tokens${if (manifest.truncated) " · truncated" else ""}"
 
 @Composable
-private fun ContextInspectorDialog(manifest: ContextManifest, remoteProvider: Boolean, onDismiss: () -> Unit) {
+private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Context inspector · read-only") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
                 SectionLabel("DESTINATION")
-                Text(contextDestinationLabel(remoteProvider), color = if (remoteProvider) Warning else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                val scope = ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label ?: manifest.scope.ifBlank { "Function edits" }
+                val provider = if (manifest.remoteProvider) "remote provider · confirmation required before sending project context" else "local provider · project context stays on this machine"
+                Text("$scope: ${manifest.model.ifBlank { "configured model" }} · ${manifest.providerOrigin.ifBlank { "configured destination" }} · $provider", color = if (manifest.remoteProvider) Warning else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
             }
             Text(contextManifestSummary(manifest), color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
             if (manifest.tokenLimit > 0) Text("Token budget: ${manifest.estimatedTokens} / ${manifest.tokenLimit}", color = SecondaryText, fontSize = 11.sp)

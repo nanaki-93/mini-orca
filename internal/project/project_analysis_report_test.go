@@ -13,9 +13,11 @@ import (
 
 type projectAnalysisFixtureClient struct {
 	output string
+	calls  int
 }
 
-func (c projectAnalysisFixtureClient) Chat(context.Context, []llm.ChatMessage) (*llm.ChatResponse, error) {
+func (c *projectAnalysisFixtureClient) Chat(context.Context, []llm.ChatMessage) (*llm.ChatResponse, error) {
+	c.calls++
 	return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: c.output}}}}, nil
 }
 
@@ -45,11 +47,11 @@ func TestProjectAnalysisReportPersistsAndInvalidatesChangedInputs(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	loaded, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: "project", ProjectRevision: "revision-one", Model: "model-a", Profile: "analysis", PromptVersion: projectAnalysisPromptVersion})
+	loaded, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: "project", ProjectRevision: "revision-one", Model: "model-a", Profile: "analysis", Scope: "analysis", PromptVersion: projectAnalysisPromptVersion})
 	if err != nil || loaded == nil || loaded.Status != ProjectAnalysisStatusFresh {
 		t.Fatalf("fresh stored report = %+v, %v", loaded, err)
 	}
-	stale, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: "project", ProjectRevision: "revision-two", Model: "model-a", Profile: "analysis", PromptVersion: projectAnalysisPromptVersion})
+	stale, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: "project", ProjectRevision: "revision-two", Model: "model-a", Profile: "analysis", Scope: "analysis", PromptVersion: projectAnalysisPromptVersion})
 	if err != nil || stale == nil || stale.Status != ProjectAnalysisStatusStale {
 		t.Fatalf("changed revision report = %+v, %v", stale, err)
 	}
@@ -58,12 +60,26 @@ func TestProjectAnalysisReportPersistsAndInvalidatesChangedInputs(t *testing.T) 
 	}
 }
 
+func TestProjectAnalysisReportInvalidatesChangedScopeProvider(t *testing.T) {
+	root := t.TempDir()
+	report := newProjectAnalysisReportWithProvenance("project", "revision", "model", "analyze", "analyze", "https://provider-one.example")
+	report.Purpose = "Purpose"
+	report.Architecture = "Architecture"
+	if err := StoreProjectAnalysisReport(root, report); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: "project", ProjectRevision: "revision", Model: "model", Profile: "analyze", Scope: "analyze", ProviderOrigin: "https://provider-two.example", PromptVersion: projectAnalysisPromptVersion})
+	if err != nil || loaded == nil || loaded.Status != ProjectAnalysisStatusStale {
+		t.Fatalf("provider-changed report = %+v, %v", loaded, err)
+	}
+}
+
 func TestAnalyzerFailureKeepsInventoryAndWritesTruthfulProjection(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc main() {}\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	analysis, err := NewAnalyzerWithProfile(projectAnalysisFixtureClient{output: "not JSON"}, "fixture-model", "analysis").Analyze(context.Background(), root)
+	analysis, err := NewAnalyzerWithProfile(&projectAnalysisFixtureClient{output: "not JSON"}, "fixture-model", "analysis").Analyze(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,6 +96,31 @@ func TestAnalyzerFailureKeepsInventoryAndWritesTruthfulProjection(t *testing.T) 
 	stored, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Model: "fixture-model", Profile: "analysis", PromptVersion: projectAnalysisPromptVersion})
 	if err != nil || stored == nil || stored.Status != ProjectAnalysisStatusFailed {
 		t.Fatalf("stored failed report = %+v, %v", stored, err)
+	}
+}
+
+func TestAnalyzerRestoreLoadsStoredReportWithoutContactingModel(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	client := &projectAnalysisFixtureClient{output: `{"purpose":"Restored project.","architecture":"One package.","components":[],"entry_points":[],"flows":[],"risks":[],"next_steps":[]}`}
+	analyzer := NewAnalyzerWithProfile(client, "fixture-model", "analysis")
+	imported, err := analyzer.Analyze(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.calls = 0
+
+	restored, err := analyzer.Restore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.calls != 0 {
+		t.Fatalf("restore contacted model %d times", client.calls)
+	}
+	if restored.ProjectID != imported.ProjectID || restored.Summary != imported.Summary || restored.AIStatus != ProjectAnalysisStatusFresh {
+		t.Fatalf("restored analysis = %+v", restored)
 	}
 }
 

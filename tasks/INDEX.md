@@ -103,6 +103,14 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 92 | [Hide empty Required imports](completed/92_hide_empty_required_imports.md) | 91 | Complete |
 | 93 | [Group Bugs by priority](completed/93_group_bugs_by_priority.md) | 92 | Complete |
 | 94 | [Desktop UX refinement acceptance](completed/94_desktop_ux_refinement_acceptance.md) | 90–93 | Complete |
+| 95 | [Scoped model configuration](completed/95_scoped_model_configuration.md) | 94 | Complete |
+| 96 | [OpenAI-compatible API base](completed/96_openai_compatible_api_base.md) | 95 | Complete |
+| 97 | [Route model scopes](completed/97_route_model_scopes.md) | 95, 96 | Complete |
+| 98 | [Scoped model API and confirmation](completed/98_scope_model_api_confirmation.md) | 97 | Complete |
+| 99 | [Desktop model scope awareness](completed/99_desktop_model_scope_awareness.md) | 98 | Complete |
+| 100 | [Bug task specification](completed/100_bug_task_specification.md) | 97–99 | Complete |
+| 101 | [Function context and explicit repair](completed/101_function_context_and_repair.md) | 100 | Complete |
+| 102 | [Scoped-model acceptance](completed/102_model_scopes_acceptance.md) | 95–101 | Complete |
 
 ## Delivery boundaries
 
@@ -146,16 +154,29 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
   card-level provenance.
 - Task 94 completes integration, responsive, accessibility, documentation, and full
   regression acceptance for the focused Desktop UX refinement.
+- Task 95 adds backward-compatible configuration and resolution for the fixed
+  `analyze`, `bug`, and `function` model scopes.
+- Task 96 makes the existing LLM client accept local or online OpenAI-compatible API
+  bases without adding provider-specific SDKs.
+- Task 97 routes operations to their configured scopes and records scope-aware
+  provenance, retries, and cache identity.
+- Task 98 exposes effective scoped models through the API and applies remote-provider
+  confirmation to the scope used by each request.
+- Task 99 makes the Desktop client display and confirm the effective scope without
+  changing the workflow.
+- Task 100 adds a strict bug-to-function task specification and optional isolated test
+  candidate.
+- Task 101 bounds function context and adds an explicit, check-output-assisted repair
+  action with at most three local attempts.
+- Task 102 completes integration coverage, documentation, manual acceptance, and the
+  full validation gate for scoped models.
 
 One implementation agent owns one ready task at a time. Read-only research or review
-agents may work in parallel, but shared-worktree writers must not overlap. The current
-Tasks 85–89 execute strictly in numeric order using
-[`PROMPT_EXECUTE_ALL_TASKS.md`](PROMPT_EXECUTE_ALL_TASKS.md). The execution prompt must
-post a user-facing start and completion commentary update for every task.
-After Task 89 is Complete and its overlapping work has a stable commit boundary, Tasks
-90–94 execute strictly in numeric order using
-[`PROMPT_EXECUTE_DESKTOP_UX_REFINEMENTS.md`](PROMPT_EXECUTE_DESKTOP_UX_REFINEMENTS.md),
-with exactly one reviewed local commit after each completed task.
+agents may work in parallel, but shared-worktree writers must not overlap. The
+completed Tasks 85–89 and 90–94 retain their historical execution prompts and commit
+policies. The current Tasks 95–102 execute strictly in numeric order using
+[`PROMPT_EXECUTE_MODEL_SCOPES.md`](PROMPT_EXECUTE_MODEL_SCOPES.md). The execution
+prompt must post a user-facing start and completion commentary update for every task.
 No task may introduce direct source editing, autonomous multi-file edits, silent
-writes, background fixes, or background agents that mutate a project. Tasks 90–94
-authorize only their specified local commits and never authorize a push.
+writes, background fixes, or background agents that mutate a project. Tasks 95–102 do
+not authorize staging, commits, or pushes.

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -105,9 +106,19 @@ private fun ExplorerItem(row: ExplorerRow, selected: Boolean, expanded: Boolean,
         if (!row.directory) {
             Text(row.language.ifBlank { "Text" }.uppercase(), color = FaintText, fontSize = 9.sp, maxLines = 1)
             Spacer(Modifier.width(6.dp))
-            StatusBadge(row.analysisStatus)
+            if (row.analysisStatus.equals("fresh", ignoreCase = true)) FreshnessDot() else StatusBadge(row.analysisStatus)
         }
     }
+}
+
+@Composable
+private fun FreshnessDot() {
+    Box(
+        Modifier
+            .size(7.dp)
+            .background(Success, CircleShape)
+            .semantics { contentDescription = "Fresh analysis" },
+    )
 }
 
 private fun explorerNodeColor(row: ExplorerRow, selected: Boolean): Color = when {

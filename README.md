@@ -12,17 +12,40 @@ isolated declaration draft is editable.
 
 1. Import one local project to build deterministic facts and a structured
    project analysis.
-2. In Editor, open one Go file and select an exact declaration to replace, or
-   name a new top-level declaration to create.
+2. In Bugs, review a fresh suggested task and use **Prepare fix**, or in Editor
+   select an exact declaration to replace, or name a new top-level declaration
+   to create.
 3. Open a file-scoped chat session and request a proposal. Its project, file,
    base hash, mode, and target cannot change in later messages.
 4. Edit only the returned declaration/import draft. Validate the displayed
-   revision, run scoped checks, and review the read-only diff.
+   revision, run focused checks, and review the read-only diff. A reviewed Go
+   task test runs only in a temporary copy; a failed task check can offer up to
+   three explicit **Revise with check output** requests in the same session.
 5. Confirm Apply for that named file and declaration. Undo can restore only the
    immediately preceding unchanged apply.
 
 Mini-Orca never creates multi-file changes, edits source directly, runs scans
-automatically, writes drafts automatically, commits, or pushes.
+automatically, writes drafts or tests automatically, commits, or pushes.
+
+## Model scopes and provider compatibility
+
+`analyze`, `bug`, and `function` are three fixed independently configured
+scopes. Project import uses `analyze`; selected-file analysis and Analyze-all
+use `bug`; file-scoped declaration proposals and explicit repairs use
+`function`. Existing `llm` settings remain the fallback, with
+`agents.coder.model` retaining its legacy function-model override.
+
+Each explicit scope uses the OpenAI Chat Completions-compatible API base and a
+model ID. This represents OpenAI, Claude-compatible, Gemini-compatible,
+Ollama, LM Studio, and compatible gateways without native vendor SDKs,
+streaming, tool calls, or provider account management. See [CONFIG.md](CONFIG.md)
+for safe placeholder examples and migration rules.
+
+The daemon loads configuration at startup; restart it after changing
+`config.yaml`. A non-loopback scope requires an explicit confirmation for its
+own prompt request. That confirmation never authorizes another scope. Model
+metadata, caches, and the Desktop display expose no API keys; changing a scope
+model or provider makes old AI interpretations stale.
 
 ## Project intelligence
 
@@ -48,8 +71,9 @@ go run ./cmd/daemon
 The daemon binds to `http://localhost:9090` on loopback by default. The desktop
 uses that URL unless `MINI_ORCA_URL` is set. A non-loopback provider must be
 explicitly confirmed in each request that can send prompt content—project
-analysis, file analysis, Analyze-all, or a chat message—after the user reviews
-the destination. Keep `config.yaml` local; it is ignored by Git.
+analysis, file analysis, Analyze-all, a chat message, or an explicit repair—after
+the user reviews that scope’s destination. Keep `config.yaml` local; it is
+ignored by Git.
 
 ## Migrating from the preview workflow
 

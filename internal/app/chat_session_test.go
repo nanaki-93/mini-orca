@@ -58,7 +58,7 @@ func TestChatSessionCreatesDeclarationDraftsWithRevisionLineage(t *testing.T) {
 	if stored.LatestDraftID != second.Draft.ID || len(stored.Messages) != 4 || stored.Messages[1].Content != "First proposal." {
 		t.Fatalf("stored session = %+v", stored)
 	}
-	if len(prompts) != 2 || !strings.Contains(prompts[0], "Return exactly one complete Go function") || strings.Contains(prompts[0], "candidate_content") || !strings.Contains(prompts[1], "Current declaration proposal") || !strings.Contains(prompts[1], first.Draft.Declaration) {
+	if len(prompts) != 2 || !strings.Contains(prompts[0], "Return exactly one complete Go function") || strings.Contains(prompts[0], "candidate_content") || !strings.Contains(prompts[1], "Prior declaration revision (explicit request only)") || !strings.Contains(prompts[1], first.Draft.Declaration) {
 		t.Fatalf("declaration prompts = %q", prompts)
 	}
 	content, err := os.ReadFile(filepath.Join(root, "main.go"))
@@ -154,6 +154,68 @@ func TestChatSessionRejectsInvalidTargetsAndStaleState(t *testing.T) {
 	if stale.State != "stale" {
 		t.Fatalf("session state = %q, want stale", stale.State)
 	}
+}
+
+func TestTaskBoundChatRepairsAreExplicitAndLimitedToThreeProviderRequests(t *testing.T) {
+	providerCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		providerCalls++
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]string{"content": `{"version":"v1","declaration":"func Run() { println(\"revised\") }","explanation":"Proposal ready."}`}}}})
+	}))
+	defer server.Close()
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := service.manager.IndexedFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := &project.BugTaskSpec{SchemaVersion: project.BugTaskSpecSchemaVersion, TargetPath: file.Path, TargetSymbol: "Run", TargetSignature: file.Symbols[0].Signature, AcceptanceCriteria: []string{"Change only Run."}}
+	session, err := service.OpenChatSession(ChatSessionCreateRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, OpenPath: file.Path, Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: "Run", TaskSpec: task})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposal, err := service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, Message: "Fix the reviewed task."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proposal.Draft.TaskSpec == nil || providerCalls != 1 {
+		t.Fatalf("initial task proposal = %+v, provider calls = %d", proposal.Draft, providerCalls)
+	}
+	parent := proposal.Draft
+	for repair := 0; repair < 3; repair++ {
+		markTaskDraftChecksFailed(t, service, parent.ID)
+		proposal, err = service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, ParentDraftID: parent.ID, Message: "Use the focused check evidence.", Repair: true})
+		if err != nil {
+			t.Fatalf("repair %d: %v", repair+1, err)
+		}
+		parent = proposal.Draft
+	}
+	markTaskDraftChecksFailed(t, service, parent.ID)
+	if _, err := service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, ParentDraftID: parent.ID, Message: "Fourth repair.", Repair: true}); err == nil || !strings.Contains(err.Error(), "repair limit") {
+		t.Fatalf("fourth repair error = %v", err)
+	}
+	if providerCalls != 4 {
+		t.Fatalf("provider calls = %d; expected initial request plus three explicit repairs", providerCalls)
+	}
+	stored, err := service.ChatSession(session.ID)
+	if err != nil || stored.RepairCount != 3 {
+		t.Fatalf("repair count = %+v, err = %v", stored, err)
+	}
+}
+
+func markTaskDraftChecksFailed(t *testing.T, service *Service, draftID string) {
+	t.Helper()
+	draft, err := service.ValidateDraft(draftID, 1)
+	if err != nil || draft.CandidateHash == "" {
+		t.Fatalf("validate task draft = %+v, %v", draft, err)
+	}
+	service.draftMu.Lock()
+	defer service.draftMu.Unlock()
+	stored := service.drafts[draftID]
+	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CandidateHash: draft.CandidateHash, Report: CandidateCheckReport{DraftID: draft.ID, DraftRevision: draft.Revision, DraftHash: draft.Hash, CandidateHash: draft.CandidateHash, Applicable: false, Checks: []CandidateCheck{{Name: "task test candidate", Required: true, State: CheckFailed, Output: "sanitized failure"}}}}
 }
 
 func TestParseDeclarationDraftResponseContract(t *testing.T) {

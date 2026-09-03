@@ -18,29 +18,58 @@ import (
 
 // EffectiveModel is the actual generation profile used by the daemon.
 type EffectiveModel struct {
-	Profile        string   `json:"profile"`
-	Model          string   `json:"model"`
-	RemoteProvider bool     `json:"remote_provider"`
-	Temperature    float32  `json:"temperature"`
-	MaxTokens      int      `json:"max_tokens"`
-	Skills         []string `json:"skills"`
-	Timeout        string   `json:"timeout"`
-	MaxRetries     int      `json:"max_retries"`
+	Scope            string   `json:"scope"`
+	Profile          string   `json:"profile"`
+	Model            string   `json:"model"`
+	ProviderOrigin   string   `json:"provider_origin"`
+	RemoteProvider   bool     `json:"remote_provider"`
+	Temperature      float32  `json:"temperature"`
+	MaxTokens        int      `json:"max_tokens"`
+	ContextMaxTokens int      `json:"context_max_tokens"`
+	Skills           []string `json:"skills"`
+	Timeout          string   `json:"timeout"`
+	MaxRetries       int      `json:"max_retries"`
+}
+
+// ScopedModel is the non-secret API representation of one effective runtime.
+type ScopedModel struct {
+	Scope            string  `json:"scope"`
+	Profile          string  `json:"profile"`
+	Model            string  `json:"model"`
+	ProviderOrigin   string  `json:"provider_origin"`
+	RemoteProvider   bool    `json:"remote_provider"`
+	Temperature      float32 `json:"temperature"`
+	MaxTokens        int     `json:"max_tokens"`
+	ContextMaxTokens int     `json:"context_max_tokens"`
+	Timeout          string  `json:"timeout"`
+	MaxRetries       int     `json:"max_retries"`
+}
+
+// ModelCatalog preserves the legacy top-level function profile and adds the
+// complete fixed-scope catalog for new clients.
+type ModelCatalog struct {
+	EffectiveModel
+	Scopes map[string]ScopedModel `json:"scopes"`
+}
+
+type modelRuntime struct {
+	profile   config.ModelProfile
+	effective EffectiveModel
+	client    *llm.Client
+	coder     *agent.CoderAgent
 }
 
 // Service owns configured model access and the active project's generation path.
 type Service struct {
 	manager             *project.Manager
-	analysisClient      *llm.Client
-	analysisModel       string
-	coder               *agent.CoderAgent
-	profile             EffectiveModel
+	analyzeRuntime      modelRuntime
+	bugRuntime          modelRuntime
+	functionRuntime     modelRuntime
 	importTimeout       time.Duration
 	analysisTimeout     time.Duration
 	focusedCheckTimeout time.Duration
 	retryBase           time.Duration
 	retryMax            time.Duration
-	remoteProvider      bool
 	analysisAll         *analysisAllController
 	goScan              *goScanController
 	drafts              map[string]*storedDraft
@@ -58,16 +87,13 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		return nil, fmt.Errorf("project manager is required")
 	}
 
-	model := cfg.Agents.Coder.Model
-	if model == "" {
-		model = cfg.LLM.Model
+	profiles, err := config.ResolveModelProfiles(cfg)
+	if err != nil {
+		return nil, err
 	}
-	analysisClient := llm.NewClient(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.Temperature, cfg.LLM.MaxTokens)
-	coderClient := llm.NewClient(cfg.LLM.BaseURL, cfg.LLM.APIKey, model, cfg.LLM.Temperature, cfg.LLM.MaxTokens)
-	coder := agent.NewCoderAgent(coderClient)
-	coder.SetSkills(append([]string(nil), cfg.Agents.Coder.Skills...))
-
-	timeout := configuredDuration(cfg.Timeouts.GenerationSeconds, cfg.Agents.Coder.TimeoutSeconds, 5*time.Minute)
+	functionTimeout := configuredDuration(cfg.Timeouts.GenerationSeconds, cfg.Agents.Coder.TimeoutSeconds, 5*time.Minute)
+	importTimeout := configuredDuration(cfg.Timeouts.ImportSeconds, 0, 5*time.Minute)
+	analysisTimeout := configuredDuration(cfg.Timeouts.AnalysisSeconds, 0, 5*time.Minute)
 	maxRetries := cfg.Retry.MaxRetries
 	if maxRetries == 0 {
 		maxRetries = 3
@@ -81,27 +107,40 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		backoffMax = 30000
 	}
 
-	remoteProvider := !isLoopbackURL(cfg.LLM.BaseURL)
 	return &Service{
-		manager:        manager,
-		analysisClient: analysisClient,
-		analysisModel:  cfg.LLM.Model,
-		coder:          coder,
-		profile: EffectiveModel{
-			Profile: "coder", Model: model, RemoteProvider: remoteProvider, Temperature: cfg.LLM.Temperature, MaxTokens: cfg.LLM.MaxTokens,
-			Skills: append([]string(nil), cfg.Agents.Coder.Skills...), Timeout: timeout.String(), MaxRetries: maxRetries,
-		},
-		importTimeout:       configuredDuration(cfg.Timeouts.ImportSeconds, 0, 5*time.Minute),
-		analysisTimeout:     configuredDuration(cfg.Timeouts.AnalysisSeconds, 0, 5*time.Minute),
+		manager:             manager,
+		analyzeRuntime:      newModelRuntime(profiles.Analyze, importTimeout, maxRetries, nil),
+		bugRuntime:          newModelRuntime(profiles.Bug, analysisTimeout, maxRetries, nil),
+		functionRuntime:     newModelRuntime(profiles.Function, functionTimeout, maxRetries, cfg.Agents.Coder.Skills),
+		importTimeout:       importTimeout,
+		analysisTimeout:     analysisTimeout,
 		focusedCheckTimeout: configuredDuration(cfg.Timeouts.FocusedCheckSeconds, 0, time.Minute),
 		retryBase:           time.Duration(backoffBase) * time.Millisecond,
 		retryMax:            time.Duration(backoffMax) * time.Millisecond,
-		remoteProvider:      remoteProvider,
 		analysisAll:         newAnalysisAllController(),
 		goScan:              newGoScanController(),
 		drafts:              make(map[string]*storedDraft),
 		chatSessions:        make(map[string]*chatSession),
 	}, nil
+}
+
+func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetries int, skills []string) modelRuntime {
+	runtime := modelRuntime{
+		profile: profile,
+		client:  llm.NewClientWithAPIBase(profile.APIBaseURL, profile.APIKey, profile.Model, profile.Temperature, profile.MaxTokens),
+		effective: EffectiveModel{
+			Scope: string(profile.Scope), Profile: string(profile.Scope), Model: profile.Model,
+			ProviderOrigin: providerOrigin(profile.APIBaseURL), RemoteProvider: !isLoopbackURL(profile.APIBaseURL),
+			Temperature: profile.Temperature, MaxTokens: profile.MaxTokens, ContextMaxTokens: profile.ContextMaxTokens,
+			Timeout: timeout.String(), MaxRetries: maxRetries,
+		},
+	}
+	if profile.Scope == config.FunctionModelScope {
+		runtime.effective.Skills = append([]string(nil), skills...)
+		runtime.coder = agent.NewCoderAgent(runtime.client)
+		runtime.coder.SetSkills(runtime.effective.Skills)
+	}
+	return runtime
 }
 
 func configuredDuration(primarySeconds, fallbackSeconds int, defaultValue time.Duration) time.Duration {
@@ -114,8 +153,6 @@ func configuredDuration(primarySeconds, fallbackSeconds int, defaultValue time.D
 	}
 	return time.Duration(seconds) * time.Second
 }
-
-func (s *Service) AnalysisClient() *llm.Client { return s.analysisClient }
 
 // ValidateMutableRequest rejects candidates based on a different project or file state.
 func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash string) error {
@@ -136,31 +173,82 @@ func (s *Service) Activity() ([]project.Activity, error) {
 func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
 	timed, cancel := context.WithTimeout(ctx, s.importTimeout)
 	defer cancel()
-	analysis, err := project.NewAnalyzerWithProfile(s.analysisClient, s.analysisModel, "analysis").Analyze(timed, root)
+	analysis, err := project.NewAnalyzerWithProvenance(s.analyzeRuntime.client, s.analyzeRuntime.profile.Model, string(config.AnalyzeModelScope), s.analyzeRuntime.effective.ProviderOrigin).Analyze(timed, root)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
 	return analysis, err
 }
 
+// RestoreProject reopens a previously imported project from local persisted
+// analysis without making a model request.
+func (s *Service) RestoreProject(root string) (*project.Analysis, error) {
+	return project.NewAnalyzerWithProvenance(nil, s.analyzeRuntime.profile.Model, string(config.AnalyzeModelScope), s.analyzeRuntime.effective.ProviderOrigin).Restore(root)
+}
+
 func (s *Service) EffectiveModel() EffectiveModel {
-	profile := s.profile
-	profile.Skills = append([]string(nil), s.profile.Skills...)
+	profile := s.functionRuntime.effective
+	profile.Skills = append([]string(nil), s.functionRuntime.effective.Skills...)
 	return profile
 }
 
-// RequireRemoteConfirmation prevents accidental prompt delivery to a non-local provider.
-func (s *Service) RequireRemoteConfirmation(confirmed bool) error {
-	if s.remoteProvider && !confirmed {
-		return fmt.Errorf("remote LLM provider requires explicit confirmation")
+// EffectiveModels returns safe metadata for every configured prompt scope.
+func (s *Service) EffectiveModels() []EffectiveModel {
+	profiles := []EffectiveModel{s.analyzeRuntime.effective, s.bugRuntime.effective, s.functionRuntime.effective}
+	for index := range profiles {
+		profiles[index].Skills = append([]string(nil), profiles[index].Skills...)
+	}
+	return profiles
+}
+
+// CurrentModelCatalog returns only the safe effective metadata needed for
+// model destination display and remote-confirmation decisions.
+func (s *Service) CurrentModelCatalog() ModelCatalog {
+	catalog := ModelCatalog{EffectiveModel: s.EffectiveModel(), Scopes: make(map[string]ScopedModel, 3)}
+	for _, profile := range s.EffectiveModels() {
+		catalog.Scopes[profile.Scope] = scopedModel(profile)
+	}
+	return catalog
+}
+
+func scopedModel(profile EffectiveModel) ScopedModel {
+	return ScopedModel{
+		Scope: profile.Scope, Profile: profile.Profile, Model: profile.Model, ProviderOrigin: profile.ProviderOrigin,
+		RemoteProvider: profile.RemoteProvider, Temperature: profile.Temperature, MaxTokens: profile.MaxTokens,
+		ContextMaxTokens: profile.ContextMaxTokens, Timeout: profile.Timeout, MaxRetries: profile.MaxRetries,
+	}
+}
+
+// RequireRemoteConfirmation prevents accidental prompt delivery to the actual
+// selected scope's non-local provider.
+func (s *Service) RequireRemoteConfirmation(scope config.ModelScope, confirmed bool) error {
+	runtime, ok := s.modelRuntimeForScope(scope)
+	if !ok {
+		return fmt.Errorf("unknown model scope %q", scope)
+	}
+	if runtime.effective.RemoteProvider && !confirmed {
+		return fmt.Errorf("remote %s provider requires explicit confirmation", scope)
 	}
 	return nil
+}
+
+func (s *Service) modelRuntimeForScope(scope config.ModelScope) (modelRuntime, bool) {
+	switch scope {
+	case config.AnalyzeModelScope:
+		return s.analyzeRuntime, true
+	case config.BugModelScope:
+		return s.bugRuntime, true
+	case config.FunctionModelScope:
+		return s.functionRuntime, true
+	default:
+		return modelRuntime{}, false
+	}
 }
 
 // ContextManifest previews the safe prompt context for one selected file.
 func (s *Service) ContextManifest(targetFile string) (project.ContextManifest, error) {
 	_, manifest, err := project.NewContextBuilder().BuildWithManifest(s.manager.Root(), targetFile)
-	return manifest, err
+	return s.contextManifestForRuntime(manifest, s.functionRuntime), err
 }
 
 // AnalysisContextManifest previews the one-file context used for semantic analysis.
@@ -169,7 +257,15 @@ func (s *Service) AnalysisContextManifest(targetFile string) (project.ContextMan
 	if err != nil {
 		return project.ContextManifest{}, err
 	}
-	return semanticManifest(*indexedFile), nil
+	return s.contextManifestForRuntime(semanticManifest(*indexedFile), s.bugRuntime), nil
+}
+
+func (s *Service) contextManifestForRuntime(manifest project.ContextManifest, runtime modelRuntime) project.ContextManifest {
+	manifest.Scope = runtime.effective.Scope
+	manifest.Model = runtime.effective.Model
+	manifest.ProviderOrigin = runtime.effective.ProviderOrigin
+	manifest.RemoteProvider = runtime.effective.RemoteProvider
+	return manifest
 }
 
 func isLoopbackURL(rawURL string) bool {
@@ -185,15 +281,15 @@ func isLoopbackURL(rawURL string) bool {
 	return address != nil && address.IsLoopback()
 }
 
-func (s *Service) retry(ctx context.Context, input string) (*agent.Result, error) {
+func (s *Service) retry(ctx context.Context, runtime modelRuntime, input string) (*agent.Result, error) {
 	var lastErr error
-	for attempt := 0; attempt <= s.profile.MaxRetries; attempt++ {
-		result, err := s.coder.Execute(ctx, input)
+	for attempt := 0; attempt <= runtime.effective.MaxRetries; attempt++ {
+		result, err := runtime.execute(ctx, input)
 		if err == nil {
 			return result, nil
 		}
 		lastErr = err
-		if ctx.Err() != nil || attempt == s.profile.MaxRetries {
+		if ctx.Err() != nil || attempt == runtime.effective.MaxRetries {
 			break
 		}
 		wait := s.retryBase << attempt
@@ -212,6 +308,21 @@ func (s *Service) retry(ctx context.Context, input string) (*agent.Result, error
 		return nil, ctx.Err()
 	}
 	return nil, lastErr
+}
+
+func (r modelRuntime) execute(ctx context.Context, input string) (*agent.Result, error) {
+	if r.coder != nil {
+		return r.coder.Execute(ctx, input)
+	}
+	return agent.NewClient(r.client).Execute(ctx, input)
+}
+
+func providerOrigin(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	return parsed.Scheme + "://" + parsed.Host
 }
 
 func duration(value string) time.Duration {

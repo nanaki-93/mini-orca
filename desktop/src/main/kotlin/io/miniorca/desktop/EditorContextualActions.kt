@@ -15,7 +15,7 @@ internal fun editorContextualActions(
     requestedSymbol: String,
     message: String,
     sending: Boolean,
-    remoteProvider: Boolean,
+    functionModel: ScopedModel,
     remoteProviderConfirmed: Boolean,
 ): EditorContextualActions {
     if (state.workspace != Workspace.Editor) {
@@ -47,7 +47,7 @@ internal fun editorContextualActions(
     return EditorContextualActions(
         canFocusChat = target.valid,
         canFocusDraft = draftCurrent,
-        canGenerate = target.valid && message.isNotBlank() && !sending && (!remoteProvider || remoteProviderConfirmed),
+        canGenerate = target.valid && message.isNotBlank() && !sending && (!functionModel.remoteProvider || remoteProviderConfirmed),
         canValidateDraft = canValidate,
         canRunFocusedChecks = canChecks,
     )

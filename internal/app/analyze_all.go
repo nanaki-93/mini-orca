@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -68,7 +69,7 @@ func newAnalysisAllController() *analysisAllController { return &analysisAllCont
 // StartAnalyzeAll explicitly starts a bounded, sequential cache-warming job.
 // Importing a project never calls this method.
 func (s *Service) StartAnalyzeAll(ctx context.Context, options AnalyzeAllOptions, confirmRemoteProvider bool) (*AnalyzeAllJob, error) {
-	if err := s.RequireRemoteConfirmation(confirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.BugModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	analysis, err := s.manager.Analysis()
@@ -158,7 +159,7 @@ func (s *Service) CancelAnalyzeAll() (*AnalyzeAllJob, error) {
 
 // ResumeAnalyzeAll resumes a paused persisted job for the active revision.
 func (s *Service) ResumeAnalyzeAll(ctx context.Context, confirmRemoteProvider bool) (*AnalyzeAllJob, error) {
-	if err := s.RequireRemoteConfirmation(confirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.BugModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	if _, err := s.manager.Analysis(); err != nil {
