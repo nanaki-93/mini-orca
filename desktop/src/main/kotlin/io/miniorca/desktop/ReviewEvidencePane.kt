@@ -569,7 +569,7 @@ private fun ReadOnlyImpactPane(impact: ImpactPreview?, gitStatus: GitStatus?) {
   }
 }
 
-private fun checkStatus(state: String): ReviewEvidenceStatus =
+internal fun checkStatus(state: String): ReviewEvidenceStatus =
     when (state.lowercase()) {
       "passed" -> ReviewEvidenceStatus.Passed
       "skipped" -> ReviewEvidenceStatus.Skipped
@@ -581,7 +581,7 @@ private fun checkStatus(state: String): ReviewEvidenceStatus =
       else -> ReviewEvidenceStatus.Missing
     }
 
-private fun evidenceColor(status: ReviewEvidenceStatus): Color =
+internal fun evidenceColor(status: ReviewEvidenceStatus): Color =
     when (status) {
       ReviewEvidenceStatus.Passed -> Success
       ReviewEvidenceStatus.Running,
