@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
-	"github.com/nanaki-93/mini-orca/v2/internal/tools"
 )
 
 const (
@@ -219,13 +218,12 @@ func scan(root string) (*Analysis, error) {
 
 func scanWithPolicy(root string, policy *ContextPolicy) (*Analysis, error) {
 	result := &Analysis{
-		Name: filepath.Base(root), Path: root, Type: string(tools.ProjectTypeUnknown),
+		Name: filepath.Base(root), Path: root, Type: "unknown",
 		Languages: make(map[string]int), AnalysisFile: analysisRelativePath, AnalyzedAt: time.Now().UTC(),
 	}
-	if info, err := tools.NewProjectDetectorExecutor().DetectProjectType(root); err == nil {
-		result.Type = string(info.Type)
-		result.BuildFile = info.BuildFile
-	}
+	detection := detectProject(root)
+	result.Type = detection.Type
+	result.BuildFile = detection.BuildFile
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
