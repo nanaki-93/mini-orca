@@ -47,6 +47,114 @@ class EditorInspectionStateTest {
   }
 
   @Test
+  fun sourceViewportKeepsGutterAndTextRowsAlignedForEmptyAndIndentedLines() {
+    val rows =
+        sourceViewportRows(
+            source = "first\n\n    nested",
+            expandIndentation = true,
+            selectable = true,
+            symbols = emptyList(),
+        )
+
+    assertEquals(listOf(1, 2, 3), rows.map { it.line })
+    assertEquals("first", rows[0].highlightedText.text)
+    assertEquals("", rows[1].highlightedText.text)
+    assertEquals("         nested", rows[2].highlightedText.text)
+    assertEquals(SourceLineSelection(2, null), rows[1].selection)
+  }
+
+  @Test
+  fun gutterMarkersDescribeFocusedDeclarationsAndOnlyActiveFileFindings() {
+    val selected =
+        SymbolInfo(
+            "Run",
+            "function",
+            startLine = 3,
+            endLine = 8,
+            confidence = "exact",
+            atomicTarget = true)
+    val markers =
+        sourceGutterMarkers(
+            activeFilePath = "internal/main.go",
+            selectedSymbol = selected,
+            focusedLine = 5,
+            findings =
+                listOf(
+                    UnifiedFinding(
+                        id = "active",
+                        severity = "high",
+                        title = "Unchecked error",
+                        location = FindingLocation("internal/main.go", startLine = 6)),
+                    UnifiedFinding(
+                        id = "other",
+                        title = "Outside active file",
+                        location = FindingLocation("other.go", startLine = 6))),
+            lineCount = 12,
+        )
+
+    assertEquals(SourceGutterMarkerKind.SelectedDeclaration, markers.getValue(3).single().kind)
+    assertEquals(SourceGutterMarkerKind.FocusedLine, markers.getValue(5).single().kind)
+    assertEquals(SourceGutterMarkerKind.Finding, markers.getValue(6).single().kind)
+    assertEquals(
+        "Selected declaration Run marker at line 3", markers.getValue(3).single().description)
+    assertEquals("Focused line marker at line 5", markers.getValue(5).single().description)
+    assertEquals(
+        "Finding marker at line 6: Unchecked error", markers.getValue(6).single().description)
+    assertFalse(markers.containsKey(7))
+  }
+
+  @Test
+  fun largeSourceCachesSyntaxAndDeclarationMappingBeforeFocusChanges() {
+    val nested =
+        SymbolInfo(
+            "Inner",
+            "function",
+            startLine = 2_500,
+            endLine = 2_600,
+            confidence = "exact",
+            atomicTarget = true)
+    val source = (1..5_000).joinToString("\n") { "func item$it() = $it" }
+
+    val rows =
+        sourceViewportRows(
+            source = source,
+            expandIndentation = true,
+            selectable = true,
+            symbols = listOf(nested),
+        )
+
+    assertEquals(5_000, rows.size)
+    assertEquals("func item2500() = 2500", rows[2_499].highlightedText.text)
+    assertEquals(SourceLineSelection(2_500, nested), rows[2_499].selection)
+    assertEquals(SourceLineEmphasis.FocusedSelectedSymbol, sourceLineEmphasis(2_500, nested, 2_500))
+    assertEquals(SourceLineEmphasis.FocusedLocation, sourceLineEmphasis(4_000, nested, 4_000))
+  }
+
+  @Test
+  fun sourceSelectionKeepsTheMostSpecificNestedDeclarationForGutterNavigation() {
+    val outer =
+        SymbolInfo(
+            "Outer",
+            "function",
+            startLine = 2,
+            endLine = 12,
+            confidence = "exact",
+            atomicTarget = true)
+    val inner =
+        SymbolInfo(
+            "Inner",
+            "function",
+            startLine = 5,
+            endLine = 8,
+            confidence = "exact",
+            atomicTarget = true)
+
+    assertEquals(SourceLineSelection(6, inner), sourceLineSelection(listOf(outer, inner), 6))
+    assertEquals(SourceLineSelection(11, outer), sourceLineSelection(listOf(outer, inner), 11))
+    assertEquals(SourceLineSelection(20, null), sourceLineSelection(listOf(outer, inner), 20))
+  }
+
+  @Test
   fun inspectorShowsOneSelectedSymbolAndOneAnalysisActionAtATime() {
     val selected = SymbolInfo("Run", "function", "func Run() error", 5, 12, "exact", true)
     val remoteUnconfirmed =
