@@ -37,3 +37,16 @@ replace these layout details while retaining the safety and keyboard behavior be
 12. After Apply and Undo, confirm the selected source refreshes, the receipt names the guarded result, and old draft/check evidence is gone.
 
 13. At supported text scaling, verify long relative paths, symbol names, diagnostics, command output, compact buttons, and fields remain readable through scrolling or ellipsis without horizontal clipping. Confirm primary, navigation, positive, attention, destructive, and neutral actions retain text labels and readable state in addition to their color.
+
+## Task 130 responsive and accessibility verification
+
+The interactive Desktop application remains unavailable in this execution environment, so the
+operator-only checks below are intentionally not marked as visually verified. The automated
+contracts listed here passed with `./desktop/gradlew -p desktop spotlessCheck detekt test`.
+
+| Area | Automated evidence | Interactive follow-up |
+| --- | --- | --- |
+| Responsive layout | `DesktopKeyboardNavigationTest` verifies that exactly `1000dp` keeps left/right/bottom regions docked, while `999dp` uses Project and right drawers plus a bounded bottom-tools overlay. | At `1440dp`, `1100dp`, `1000dp`, and `999dp`, confirm the editor remains the primary surface and no essential label clips. |
+| Keyboard and focus | `DesktopKeyboardNavigationTest` verifies wrapping arrow navigation moves tab-group focus without activation, Escape selects one topmost transient surface, and leaving Editor closes only its incompatible drawer. Explorer tree arrow behavior remains covered by its existing tests. | Tab through toolbar, tool-window bar, Project tree, editor tabs, source, right tabs, bottom tabs, and status. Verify the cyan focus indication, Enter/Space activation, and return focus after each drawer or dialog closes. |
+| Text scaling | The toolbar policy switches project operations to its labeled menu below the expanded width, and editor/project labels use bounded ellipsis; the long-breadcrumb policy is covered by `DesktopKeyboardNavigationTest`. | Repeat the viewport matrix at the supported platform text scale. Verify paths, findings, bottom summaries, and status labels remain readable through wrapping, scrolling, or ellipsis without horizontal clipping. |
+| Semantics and non-color states | The new test verifies focused left/right/bottom tab descriptions retain text labels and selected state. Explorer freshness now always renders a textual badge, and source/review labels remain explicitly read-only. | Use the supported screen reader to confirm names for tool windows, active tabs, selected files and symbols, status details, source, and review surfaces. |

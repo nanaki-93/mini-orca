@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,8 +12,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -93,10 +103,28 @@ private fun ActiveFileEditorChrome(
     state: EditorChromeUiState,
     onSelectSurface: (EditorSurface) -> Unit,
 ) {
+  val surfaces = buildList {
+    add(EditorSurface.Source)
+    if (state.reviewAvailable) add(EditorSurface.Review)
+  }
+  var focusedSurface by
+      remember(state.activeSurface, state.reviewAvailable) { mutableStateOf(state.activeSurface) }
+  var tabGroupHasFocus by remember { mutableStateOf(false) }
   Column(
       Modifier.fillMaxWidth()
           .background(Panel)
           .padding(horizontal = 12.dp, vertical = 7.dp)
+          .onFocusChanged { tabGroupHasFocus = it.hasFocus }
+          .focusable()
+          .onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val interaction =
+                tabGroupInteraction(surfaces, focusedSurface, tabGroupKey(event.key))
+                    ?: return@onPreviewKeyEvent false
+            focusedSurface = interaction.focused
+            interaction.activate?.let(onSelectSurface)
+            true
+          }
           .semantics { contentDescription = state.accessibleDescription },
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -114,7 +142,8 @@ private fun ActiveFileEditorChrome(
           onClick = { onSelectSurface(EditorSurface.Source) },
           tone = ActionTone.Navigation,
           density = ButtonDensity.Toolbar,
-          selected = state.activeSurface == EditorSurface.Source) {
+          selected = state.activeSurface == EditorSurface.Source,
+          focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source) {
             Text("Source", fontSize = 10.sp)
           }
       if (state.reviewAvailable) {
@@ -123,7 +152,8 @@ private fun ActiveFileEditorChrome(
             onClick = { onSelectSurface(EditorSurface.Review) },
             tone = ActionTone.Navigation,
             density = ButtonDensity.Toolbar,
-            selected = state.activeSurface == EditorSurface.Review) {
+            selected = state.activeSurface == EditorSurface.Review,
+            focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
               Text("Review candidate", fontSize = 10.sp)
             }
       }

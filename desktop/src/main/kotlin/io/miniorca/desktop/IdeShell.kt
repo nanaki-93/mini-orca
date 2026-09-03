@@ -4,21 +4,33 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -35,13 +47,27 @@ internal fun ToolWindowBar(
     onSelect: (LeftToolWindow) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+  var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
+  var tabGroupHasFocus by remember { mutableStateOf(false) }
   Column(
       modifier
           .width(52.dp)
           .fillMaxHeight()
           .background(Panel)
           .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
-          .padding(vertical = 6.dp),
+          .padding(vertical = 6.dp)
+          .onFocusChanged { tabGroupHasFocus = it.hasFocus }
+          .focusable()
+          .onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val interaction =
+                tabGroupInteraction(
+                    LeftToolWindow.entries.toList(), focusedToolWindow, tabGroupKey(event.key))
+                    ?: return@onPreviewKeyEvent false
+            focusedToolWindow = interaction.focused
+            interaction.activate?.let(onSelect)
+            true
+          },
       horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     LeftToolWindow.entries.forEach { toolWindow ->
@@ -52,12 +78,17 @@ internal fun ToolWindowBar(
             onClick = { onSelect(toolWindow) },
             modifier =
                 Modifier.padding(horizontal = 5.dp, vertical = 2.dp).semantics {
-                  contentDescription = toolWindowSemanticsLabel(toolWindow, selected)
+                  contentDescription =
+                      toolWindowSemanticsLabel(
+                          toolWindow,
+                          selected,
+                          focused = tabGroupHasFocus && toolWindow == focusedToolWindow)
                   this.selected = selected
                 },
             tone = ActionTone.Navigation,
             density = ButtonDensity.Toolbar,
             selected = selected,
+            focusHighlight = tabGroupHasFocus && toolWindow == focusedToolWindow,
         ) {
           Text(toolWindowGlyph(toolWindow), fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
@@ -122,6 +153,7 @@ internal fun BottomToolWindowRegion(
     onHeightDelta: (Float) -> Unit,
     onHeightCommit: () -> Unit,
     content: @Composable (BottomToolWindow, Modifier) -> Unit,
+    tabModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
   if (availableToolWindows.isEmpty()) return
@@ -141,22 +173,8 @@ internal fun BottomToolWindowRegion(
     Row(
         Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-          availableToolWindows.forEach { toolWindow ->
-            val selected = toolWindow == activeToolWindow
-            FocusFlowButton(
-                onClick = { onSelect(toolWindow) },
-                tone = ActionTone.Navigation,
-                density = ButtonDensity.Toolbar,
-                selected = selected,
-                modifier =
-                    Modifier.semantics {
-                      contentDescription =
-                          bottomToolWindowTabDescription(
-                              toolWindow, selected, summaries[toolWindow]?.text)
-                    }) {
-                  Text(bottomToolWindowLabel(toolWindow), fontSize = 11.sp)
-                }
-          }
+          BottomToolWindowTabs(
+              availableToolWindows, activeToolWindow, summaries, onSelect, tabModifier)
           Text(
               visibleSummary?.text.orEmpty(),
               color = if (visibleSummary?.attention == true) Warning else SecondaryText,
@@ -174,6 +192,126 @@ internal fun BottomToolWindowRegion(
   }
 }
 
+@Composable
+internal fun NarrowBottomToolWindowSummary(
+    layout: DesktopLayoutState,
+    availableToolWindows: List<BottomToolWindow>,
+    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+  if (availableToolWindows.isEmpty()) return
+  val activeToolWindow =
+      layout.activeBottomToolWindow.takeIf { it in availableToolWindows }
+          ?: availableToolWindows.first()
+  val summary = bottomToolWindowSummary(activeToolWindow, summaries)
+  Row(
+      modifier
+          .fillMaxWidth()
+          .height(38.dp)
+          .background(Panel)
+          .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
+          .padding(horizontal = 8.dp)
+          .semantics {
+            contentDescription =
+                "Bottom tools summary. ${bottomToolWindowLabel(activeToolWindow)} selected. ${summary?.text.orEmpty()}"
+          },
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text(bottomToolWindowLabel(activeToolWindow), color = PrimaryText, fontSize = 11.sp)
+    Text(
+        summary?.text.orEmpty(),
+        color = if (summary?.attention == true) Warning else SecondaryText,
+        fontSize = 11.sp,
+        maxLines = 1,
+        modifier = Modifier.weight(1f).padding(start = 8.dp),
+    )
+    FocusFlowButton(
+        onClick = onOpen, tone = ActionTone.Navigation, density = ButtonDensity.Toolbar) {
+          Text("Open", fontSize = 11.sp)
+        }
+  }
+}
+
+@Composable
+internal fun BottomToolWindowOverlay(
+    layout: DesktopLayoutState,
+    availableToolWindows: List<BottomToolWindow>,
+    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
+    onSelect: (BottomToolWindow) -> Unit,
+    onDismiss: () -> Unit,
+    content: @Composable (BottomToolWindow, Modifier) -> Unit,
+    tabModifier: Modifier = Modifier,
+) {
+  if (availableToolWindows.isEmpty()) return
+  val activeToolWindow =
+      layout.activeBottomToolWindow.takeIf { it in availableToolWindows }
+          ?: availableToolWindows.first()
+  AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text("Bottom tools · ${bottomToolWindowLabel(activeToolWindow)}") },
+      text = {
+        Column(Modifier.fillMaxWidth().semantics { contentDescription = "Bottom tools overlay" }) {
+          BottomToolWindowTabs(
+              availableToolWindows, activeToolWindow, summaries, onSelect, tabModifier)
+          Box(Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp)) {
+            content(activeToolWindow, Modifier.fillMaxSize())
+          }
+        }
+      },
+      confirmButton = {
+        FocusFlowButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Close") }
+      },
+  )
+}
+
+@Composable
+private fun BottomToolWindowTabs(
+    availableToolWindows: List<BottomToolWindow>,
+    activeToolWindow: BottomToolWindow,
+    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
+    onSelect: (BottomToolWindow) -> Unit,
+    modifier: Modifier,
+) {
+  var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
+  var tabGroupHasFocus by remember { mutableStateOf(false) }
+  Row(
+      modifier
+          .onFocusChanged { tabGroupHasFocus = it.hasFocus }
+          .focusable()
+          .onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val interaction =
+                tabGroupInteraction(availableToolWindows, focusedToolWindow, tabGroupKey(event.key))
+                    ?: return@onPreviewKeyEvent false
+            focusedToolWindow = interaction.focused
+            interaction.activate?.let(onSelect)
+            true
+          }) {
+        availableToolWindows.forEach { toolWindow ->
+          val selected = toolWindow == activeToolWindow
+          FocusFlowButton(
+              onClick = { onSelect(toolWindow) },
+              tone = ActionTone.Navigation,
+              density = ButtonDensity.Toolbar,
+              selected = selected,
+              focusHighlight = tabGroupHasFocus && toolWindow == focusedToolWindow,
+              modifier =
+                  Modifier.semantics {
+                    contentDescription =
+                        bottomToolWindowTabDescription(
+                            toolWindow,
+                            selected,
+                            summaries[toolWindow]?.text,
+                            focused = tabGroupHasFocus && toolWindow == focusedToolWindow)
+                  },
+          ) {
+            Text(bottomToolWindowLabel(toolWindow), fontSize = 11.sp)
+          }
+        }
+      }
+}
+
 internal fun bottomToolWindowLabel(toolWindow: BottomToolWindow): String =
     when (toolWindow) {
       BottomToolWindow.Problems -> "Problems"
@@ -185,8 +323,9 @@ internal fun bottomToolWindowTabDescription(
     toolWindow: BottomToolWindow,
     selected: Boolean,
     summary: String?,
+    focused: Boolean = false,
 ): String =
-    "${bottomToolWindowLabel(toolWindow)} tool window tab${summary?.let { ", $it" }.orEmpty()}, ${if (selected) "selected" else "not selected"}"
+    "${bottomToolWindowLabel(toolWindow)} tool window tab${summary?.let { ", $it" }.orEmpty()}, ${if (selected) "selected" else "not selected"}${if (focused) ", focused" else ""}"
 
 /**
  * A failed background tab is visible in the collapsed summary without changing the selected tab.
@@ -206,8 +345,12 @@ internal fun toolWindowGlyph(toolWindow: LeftToolWindow): String =
       LeftToolWindow.Editor -> "E"
     }
 
-internal fun toolWindowSemanticsLabel(toolWindow: LeftToolWindow, selected: Boolean): String =
-    "${leftToolWindowLabel(toolWindow)} tool window${if (selected) ", selected" else ", not selected"}"
+internal fun toolWindowSemanticsLabel(
+    toolWindow: LeftToolWindow,
+    selected: Boolean,
+    focused: Boolean = false,
+): String =
+    "${leftToolWindowLabel(toolWindow)} tool window${if (selected) ", selected" else ", not selected"}${if (focused) ", focused" else ""}"
 
 @Composable
 internal fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {

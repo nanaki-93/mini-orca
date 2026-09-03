@@ -257,6 +257,7 @@ private data class ShellFocusRequesters(
     val fallback: FocusRequester,
     val toolbar: FocusRequester,
     val leftToolWindow: FocusRequester,
+    val drawer: FocusRequester,
     val editor: FocusRequester,
     val rightToolWindow: FocusRequester,
     val bottomToolWindow: FocusRequester,
@@ -314,6 +315,7 @@ internal fun DesktopShell(
         fallback = FocusRequester(),
         toolbar = FocusRequester(),
         leftToolWindow = FocusRequester(),
+        drawer = FocusRequester(),
         editor = FocusRequester(),
         rightToolWindow = FocusRequester(),
         bottomToolWindow = FocusRequester(),
@@ -322,17 +324,28 @@ internal fun DesktopShell(
   }
   val drawerState = rememberDrawerState(DrawerValue.Closed)
   var narrowDrawer by remember { mutableStateOf(NarrowDrawer.Files) }
+  var drawerFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var paletteFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var statusDetailsVisible by remember { mutableStateOf(false) }
+  var statusDetailsFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
+  var contextFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
+  var bottomToolWindowOverlayVisible by remember { mutableStateOf(false) }
+  var bottomOverlayFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   val showsEditorChrome =
       shellMode == DesktopShellMode.ProjectWorkspace && editorChromeVisible(workspace)
+  fun closeDrawerAndRestoreFocus() {
+    if (!drawerState.isOpen) return
+    if (drawerFocusRestoreTarget == null) drawerFocusRestoreTarget = layout.lastFocusedRegion
+    scope.launch { drawerState.close() }
+  }
   fun openDrawer(drawer: NarrowDrawer) {
     if (!showsEditorChrome) return
+    if (drawerFocusRestoreTarget == null) drawerFocusRestoreTarget = layout.lastFocusedRegion
     narrowDrawer = drawer
     scope.launch { drawerState.open() }
   }
   fun selectWorkspace(nextWorkspace: Workspace) {
-    if (!editorChromeVisible(nextWorkspace)) scope.launch { drawerState.close() }
+    if (closesEditorDrawerOnWorkspaceChange(workspace, nextWorkspace)) closeDrawerAndRestoreFocus()
     layoutActions.updateLayout(
         layout
             .openLeft(leftToolWindowForWorkspace(nextWorkspace))
@@ -343,7 +356,7 @@ internal fun DesktopShell(
     layoutActions.updateLayout(
         layout.openLeft(toolWindow).withFocus(DesktopFocusRegion.LeftToolWindow))
     val nextWorkspace = workspaceForLeftToolWindow(toolWindow)
-    if (!editorChromeVisible(nextWorkspace)) scope.launch { drawerState.close() }
+    if (closesEditorDrawerOnWorkspaceChange(workspace, nextWorkspace)) closeDrawerAndRestoreFocus()
     editorActions.selectWorkspace(nextWorkspace)
   }
   fun selectRightToolWindow(toolWindow: RightToolWindow) {
@@ -369,9 +382,81 @@ internal fun DesktopShell(
   }
   fun showStatusDetails() {
     layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.StatusBar))
+    statusDetailsFocusRestoreTarget = DesktopFocusRegion.StatusBar
     statusDetailsVisible = true
   }
-  LaunchedEffect(showsEditorChrome) { if (!showsEditorChrome) drawerState.close() }
+  fun dismissStatusDetailsAndRestoreFocus() {
+    statusDetailsFocusRestoreTarget = DesktopFocusRegion.StatusBar
+    statusDetailsVisible = false
+  }
+  fun dismissContextAndRestoreFocus() {
+    contextFocusRestoreTarget = layout.lastFocusedRegion
+    editorActions.dismissContext()
+  }
+  fun dismissBottomToolWindowOverlayAndRestoreFocus() {
+    bottomOverlayFocusRestoreTarget = DesktopFocusRegion.BottomToolWindow
+    bottomToolWindowOverlayVisible = false
+  }
+  fun dismissTopmostTransient(): Boolean =
+      when (topmostTransientSurface(
+          contextVisible = context.visible,
+          paletteVisible = palette.visible,
+          statusDetailsVisible = statusDetailsVisible,
+          bottomToolsVisible = bottomToolWindowOverlayVisible,
+          drawerVisible = drawerState.isOpen,
+      )) {
+        TransientSurface.Context -> {
+          dismissContextAndRestoreFocus()
+          true
+        }
+        TransientSurface.Palette -> {
+          dismissPaletteAndRestoreFocus()
+          true
+        }
+        TransientSurface.StatusDetails -> {
+          dismissStatusDetailsAndRestoreFocus()
+          true
+        }
+        TransientSurface.BottomTools -> {
+          dismissBottomToolWindowOverlayAndRestoreFocus()
+          true
+        }
+        TransientSurface.Drawer -> {
+          closeDrawerAndRestoreFocus()
+          true
+        }
+        null -> false
+      }
+  LaunchedEffect(showsEditorChrome) {
+    if (!showsEditorChrome && drawerState.isOpen) closeDrawerAndRestoreFocus()
+  }
+  LaunchedEffect(drawerState.isOpen) {
+    if (drawerState.isOpen) focusRequesters.drawer.requestFocus()
+  }
+  LaunchedEffect(drawerState.isOpen, drawerFocusRestoreTarget) {
+    if (!drawerState.isOpen && drawerFocusRestoreTarget != null) {
+      focusRequesters.forRegion(drawerFocusRestoreTarget!!).requestFocus()
+      drawerFocusRestoreTarget = null
+    }
+  }
+  LaunchedEffect(statusDetailsVisible, statusDetailsFocusRestoreTarget) {
+    if (!statusDetailsVisible && statusDetailsFocusRestoreTarget != null) {
+      focusRequesters.forRegion(statusDetailsFocusRestoreTarget!!).requestFocus()
+      statusDetailsFocusRestoreTarget = null
+    }
+  }
+  LaunchedEffect(context.visible, contextFocusRestoreTarget) {
+    if (!context.visible && contextFocusRestoreTarget != null) {
+      focusRequesters.forRegion(contextFocusRestoreTarget!!).requestFocus()
+      contextFocusRestoreTarget = null
+    }
+  }
+  LaunchedEffect(bottomToolWindowOverlayVisible, bottomOverlayFocusRestoreTarget) {
+    if (!bottomToolWindowOverlayVisible && bottomOverlayFocusRestoreTarget != null) {
+      focusRequesters.forRegion(bottomOverlayFocusRestoreTarget!!).requestFocus()
+      bottomOverlayFocusRestoreTarget = null
+    }
+  }
   Surface(
       modifier =
           Modifier.fillMaxSize()
@@ -383,12 +468,10 @@ internal fun DesktopShell(
                     shellMode = shellMode,
                     appState = appState,
                     editor = editor,
-                    context = context,
-                    palette = palette,
                     projectActions = projectActions,
                     editorActions = editorActions,
                     paletteActions = paletteActions,
-                    onDismissPalette = ::dismissPaletteAndRestoreFocus,
+                    onDismissTransient = ::dismissTopmostTransient,
                     onWorkspaceSelected = ::selectWorkspace,
                 )
               },
@@ -399,8 +482,18 @@ internal fun DesktopShell(
     } else {
       BoxWithConstraints {
         val widthDp = maxWidth.value
-        val narrow = useNarrowLayout(widthDp)
+        val responsivePresentation = responsiveShellPresentation(widthDp)
+        val narrow = responsivePresentation.left == ResponsiveShellRegion.Drawer
         val showEditorDrawers = editorDrawerActionsVisible(workspace, widthDp)
+        val availableBottomToolWindows =
+            BottomToolWindow.entries.filter { it in panes.bottomToolWindowSummaries }
+        LaunchedEffect(narrow) { if (!narrow && drawerState.isOpen) closeDrawerAndRestoreFocus() }
+        LaunchedEffect(responsivePresentation.bottom) {
+          if (responsivePresentation.bottom == ResponsiveShellRegion.Docked &&
+              bottomToolWindowOverlayVisible) {
+            dismissBottomToolWindowOverlayAndRestoreFocus()
+          }
+        }
         val restoredFocusRegion =
             paletteFocusRestorationRegion(
                 previous = paletteFocusRestoreTarget ?: layout.lastFocusedRegion,
@@ -422,7 +515,9 @@ internal fun DesktopShell(
                   DockedToolWindow(
                       "Project",
                       content = { modifier ->
-                        panes.explorer(modifier) { scope.launch { drawerState.close() } }
+                        panes.explorer(
+                            modifier.focusRequester(focusRequesters.drawer),
+                            ::closeDrawerAndRestoreFocus)
                       },
                       modifier = Modifier.fillMaxHeight().width(320.dp))
                 } else {
@@ -434,7 +529,7 @@ internal fun DesktopShell(
                             ::selectRightToolWindow,
                             panes.rightToolWindows,
                             panes.rightToolWindowBadges,
-                            modifier)
+                            modifier.focusRequester(focusRequesters.drawer))
                       },
                       modifier = Modifier.fillMaxHeight().width(360.dp))
                 }
@@ -461,8 +556,16 @@ internal fun DesktopShell(
                           layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
                           paletteActions.open(PaletteMode.Actions)
                         },
-                        onOpenExplorer = { openDrawer(NarrowDrawer.Files) },
-                        onOpenContext = { openDrawer(NarrowDrawer.Context) },
+                        onOpenExplorer = {
+                          layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
+                          drawerFocusRestoreTarget = DesktopFocusRegion.Toolbar
+                          openDrawer(NarrowDrawer.Files)
+                        },
+                        onOpenContext = {
+                          layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
+                          drawerFocusRestoreTarget = DesktopFocusRegion.Toolbar
+                          openDrawer(NarrowDrawer.Context)
+                        },
                     ),
                 modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
             )
@@ -470,7 +573,7 @@ internal fun DesktopShell(
               ToolWindowBar(
                   layout.activeLeftToolWindow,
                   ::selectToolWindow,
-                  Modifier.focusRequester(focusRequesters.leftToolWindow).focusable(),
+                  Modifier.focusRequester(focusRequesters.leftToolWindow),
               )
               if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
                 DockedToolWindow(
@@ -515,29 +618,40 @@ internal fun DesktopShell(
                           ::selectRightToolWindow,
                           panes.rightToolWindows,
                           panes.rightToolWindowBadges,
-                          modifier)
+                          modifier.focusRequester(focusRequesters.rightToolWindow))
                     },
-                    modifier =
-                        Modifier.width(layout.actionWidth.dp)
-                            .fillMaxHeight()
-                            .focusRequester(focusRequesters.rightToolWindow)
-                            .focusable())
+                    modifier = Modifier.width(layout.actionWidth.dp).fillMaxHeight())
               }
             }
-            BottomToolWindowRegion(
-                layout = layout,
-                availableToolWindows =
-                    BottomToolWindow.entries.filter { it in panes.bottomToolWindowSummaries },
-                summaries = panes.bottomToolWindowSummaries,
-                onSelect = ::selectBottomToolWindow,
-                onCollapse = ::collapseBottomToolWindow,
-                onHeightDelta = {
-                  layoutActions.updateLayout(layout.withBottomHeight(layout.bottomHeight + it))
-                },
-                onHeightCommit = { layoutActions.saveLayout(layout) },
-                content = panes.bottomToolWindows,
-                modifier = Modifier.focusRequester(focusRequesters.bottomToolWindow).focusable(),
-            )
+            if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
+              BottomToolWindowRegion(
+                  layout = layout,
+                  availableToolWindows = availableBottomToolWindows,
+                  summaries = panes.bottomToolWindowSummaries,
+                  onSelect = ::selectBottomToolWindow,
+                  onCollapse = ::collapseBottomToolWindow,
+                  onHeightDelta = {
+                    layoutActions.updateLayout(layout.withBottomHeight(layout.bottomHeight + it))
+                  },
+                  onHeightCommit = { layoutActions.saveLayout(layout) },
+                  content = panes.bottomToolWindows,
+                  tabModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
+              )
+            } else {
+              NarrowBottomToolWindowSummary(
+                  layout = layout,
+                  availableToolWindows = availableBottomToolWindows,
+                  summaries = panes.bottomToolWindowSummaries,
+                  onOpen = {
+                    val activeToolWindow =
+                        layout.activeBottomToolWindow.takeIf { it in availableBottomToolWindows }
+                            ?: availableBottomToolWindows.firstOrNull()
+                    activeToolWindow?.let(::selectBottomToolWindow)
+                    bottomToolWindowOverlayVisible = activeToolWindow != null
+                  },
+                  modifier = Modifier.focusRequester(focusRequesters.bottomToolWindow).focusable(),
+              )
+            }
             if (desktopStatusBarVisible(appState.project)) {
               PersistentStatusBar(
                   presentation = statusPresentation,
@@ -546,6 +660,16 @@ internal fun DesktopShell(
                   modifier = Modifier.focusRequester(focusRequesters.statusBar).focusable(),
               )
             }
+          }
+          if (bottomToolWindowOverlayVisible) {
+            BottomToolWindowOverlay(
+                layout = layout,
+                availableToolWindows = availableBottomToolWindows,
+                summaries = panes.bottomToolWindowSummaries,
+                onSelect = ::selectBottomToolWindow,
+                onDismiss = ::dismissBottomToolWindowOverlayAndRestoreFocus,
+                content = panes.bottomToolWindows,
+            )
           }
         }
         if (palette.visible) {
@@ -574,12 +698,12 @@ internal fun DesktopShell(
           )
         }
         if (statusDetailsVisible) {
-          DesktopStatusDetailsDialog(statusPresentation) { statusDetailsVisible = false }
+          DesktopStatusDetailsDialog(statusPresentation, ::dismissStatusDetailsAndRestoreFocus)
         }
       }
       if (context.visible)
           ContextInspectorDialog(
-              context.manifest ?: ContextManifest(), editorActions.dismissContext)
+              context.manifest ?: ContextManifest(), ::dismissContextAndRestoreFocus)
     }
   }
 }
@@ -589,12 +713,10 @@ private fun handleDesktopShortcut(
     shellMode: DesktopShellMode,
     appState: DesktopState,
     editor: DesktopShellEditorState,
-    context: DesktopShellContextState,
-    palette: DesktopShellPaletteState,
     projectActions: DesktopShellProjectActions,
     editorActions: DesktopShellEditorActions,
     paletteActions: DesktopShellPaletteActions,
-    onDismissPalette: () -> Unit,
+    onDismissTransient: () -> Boolean,
     onWorkspaceSelected: (Workspace) -> Unit,
 ): Boolean {
   if (event.type != KeyEventType.KeyDown) return false
@@ -678,14 +800,7 @@ private fun handleDesktopShortcut(
         }
     DesktopShortcut.Cancel ->
         when {
-          palette.visible -> {
-            onDismissPalette()
-            true
-          }
-          context.visible -> {
-            editorActions.dismissContext()
-            true
-          }
+          onDismissTransient() -> true
           editor.generating -> {
             editorActions.cancelGeneration()
             true
