@@ -19,52 +19,89 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun DraftContextPane(
-    project: ProjectAnalysis?, selected: ProjectFileInfo?, session: ChatSession?, draft: DeclarationDraft?, editor: EditableDraftState?, target: ChatTarget?, mode: ChatEditMode, newSymbol: String,
-    message: String, sending: Boolean, functionModel: ScopedModel, remoteConfirmed: Boolean, chatFocus: FocusRequester, draftFocus: FocusRequester,
-    onMessage: (String) -> Unit, onNewSymbol: (String) -> Unit, onRemoteConfirmed: (Boolean) -> Unit, onInspectContext: () -> Unit, onDraftDeclaration: (String) -> Unit,
-    onDraftImports: (List<String>) -> Unit, onValidateDraft: () -> Unit, onSend: () -> Unit, onCancel: () -> Unit, modifier: Modifier,
+    state: DraftContextPaneState,
+    conversationActions: DraftConversationActions,
+    editorActions: DraftEditorActions,
+    modifier: Modifier,
 ) {
-    val bound = target != null && chatSessionMatches(session, selected, project, target)
+    val bound = state.target != null && chatSessionMatches(state.session, state.selected, state.project, state.target)
     Column(modifier.verticalScroll(rememberScrollState())) {
         FocusFlowPanel(Modifier.fillMaxWidth()) {
             SectionLabel("BOUND CONVERSATION")
-            Text(selected?.path ?: "Open one Go file before drafting.", color = PrimaryText, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-            Text(target?.let { "${it.mode.label} · ${it.symbol}" } ?: "Select an eligible declaration or enter a new declaration name.", color = if (target == null) Warning else SecondaryText, fontSize = 11.sp)
-            if (bound && session != null) {
-                session.messages.forEach { turn ->
+            Text(state.selected?.path ?: "Open one Go file before drafting.", color = PrimaryText, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            Text(state.target?.let { "${it.mode.label} · ${it.symbol}" } ?: "Select an eligible declaration or enter a new declaration name.", color = if (state.target == null) Warning else SecondaryText, fontSize = 11.sp)
+            if (bound && state.session != null) {
+                state.session.messages.forEach { turn ->
                     Text(turn.role.uppercase(), color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 7.dp))
                     Text(turn.content, color = PrimaryText, fontSize = 12.sp)
                 }
             }
-            if (mode == ChatEditMode.CreateSymbol) {
-                CompactSingleLineField(newSymbol, onNewSymbol, label = { Text("New Go function or type name") }, modifier = Modifier.fillMaxWidth().padding(top = 9.dp))
+            if (state.mode == ChatEditMode.CreateSymbol) {
+                CompactSingleLineField(state.newSymbol, conversationActions.updateNewSymbol, label = { Text("New Go function or type name") }, modifier = Modifier.fillMaxWidth().padding(top = 9.dp))
             }
-            OutlinedTextField(message, onMessage, enabled = !sending && target != null, label = { Text("Message") }, placeholder = { Text("Describe one declaration change") }, minLines = 3, modifier = Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(chatFocus))
-            RemoteProviderConfirmation(ModelScope.Function, functionModel, remoteConfirmed, onRemoteConfirmed)
-            FocusFlowButton(onClick = onInspectContext, enabled = selected != null && !sending, tone = ActionTone.Neutral, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Inspect context") }
-            if (sending) FocusFlowButton(onClick = onCancel, tone = ActionTone.Destructive, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Cancel request") }
-            else FocusFlowButton(onClick = onSend, enabled = target != null && message.isNotBlank() && (!functionModel.remoteProvider || remoteConfirmed), tone = ActionTone.Primary, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Send message") }
+            OutlinedTextField(state.message, conversationActions.updateMessage, enabled = !state.sending && state.target != null, label = { Text("Message") }, placeholder = { Text("Describe one declaration change") }, minLines = 3, modifier = Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(state.chatFocus))
+            RemoteProviderConfirmation(ModelScope.Function, state.functionModel, state.remoteConfirmed, conversationActions.confirmRemoteProvider)
+            FocusFlowButton(onClick = conversationActions.inspectContext, enabled = state.selected != null && !state.sending, tone = ActionTone.Neutral, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Inspect context") }
+            if (state.sending) FocusFlowButton(onClick = conversationActions.cancel, tone = ActionTone.Destructive, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Cancel request") }
+            else FocusFlowButton(onClick = conversationActions.send, enabled = state.target != null && state.message.isNotBlank() && (!state.functionModel.remoteProvider || state.remoteConfirmed), tone = ActionTone.Primary, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text("Send message") }
         }
-        if (draft != null && editor != null && chatDraftMatchesSession(draft, session)) DraftEditorCard(editor, draftFocus, onDraftDeclaration, onDraftImports, onValidateDraft)
+        if (state.draft != null && state.editor != null && chatDraftMatchesSession(state.draft, state.session)) {
+            DraftEditorCard(state.editor, state.draftFocus, editorActions)
+        }
     }
 }
 
 @Composable
-private fun DraftEditorCard(editor: EditableDraftState, draftFocus: FocusRequester, onDeclaration: (String) -> Unit, onImports: (List<String>) -> Unit, onValidate: () -> Unit) {
+private fun DraftEditorCard(editor: EditableDraftState, draftFocus: FocusRequester, actions: DraftEditorActions) {
     FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 10.dp), raised = true) {
         val draft = editor.serverDraft
         val canValidate = editor.status in setOf(DraftEditorStatus.Generated, DraftEditorStatus.Dirty, DraftEditorStatus.Invalid)
         SectionLabel("EDITABLE DECLARATION DRAFT · ${editor.status.name.lowercase()}")
         Text(draft.targetSymbol, color = SecondaryText, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
-        OutlinedTextField(editor.declaration, onDeclaration, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), label = { Text("Declaration only") }, minLines = 5, textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp), modifier = Modifier.fillMaxWidth().padding(top = 7.dp).focusRequester(draftFocus))
+        OutlinedTextField(editor.declaration, actions.updateDeclaration, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), label = { Text("Declaration only") }, minLines = 5, textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp), modifier = Modifier.fillMaxWidth().padding(top = 7.dp).focusRequester(draftFocus))
         if (requiredImportsVisible(editor)) {
-            CompactSingleLineField(editor.imports.joinToString(", "), { value -> onImports(parseRequiredImports(value)) }, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), label = { Text("Required imports") }, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
+            CompactSingleLineField(editor.imports.joinToString(", "), { value -> actions.updateImports(parseRequiredImports(value)) }, enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale), label = { Text("Required imports") }, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
         }
         editor.diagnostics.forEach { Text("${it.code}: ${it.message}", color = Error, fontSize = 10.sp) }
         Text(draftEditorStatusMessage(editor.status), color = draftEditorStatusColor(editor.status), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
-        FocusFlowButton(onClick = onValidate, enabled = canValidate, tone = ActionTone.Primary, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text(if (editor.status == DraftEditorStatus.Validating) "Validating declaration…" else "Validate draft") }
+        FocusFlowButton(onClick = actions.validate, enabled = canValidate, tone = ActionTone.Primary, modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) { Text(if (editor.status == DraftEditorStatus.Validating) "Validating declaration…" else "Validate draft") }
     }
 }
+
+/** File-scoped drafting data rendered by the context pane. */
+internal data class DraftContextPaneState(
+    val project: ProjectAnalysis?,
+    val selected: ProjectFileInfo?,
+    val session: ChatSession?,
+    val draft: DeclarationDraft?,
+    val editor: EditableDraftState?,
+    val target: ChatTarget?,
+    val mode: ChatEditMode,
+    val newSymbol: String,
+    val message: String,
+    val sending: Boolean,
+    val functionModel: ScopedModel,
+    val remoteConfirmed: Boolean,
+    val chatFocus: FocusRequester,
+    val draftFocus: FocusRequester,
+)
+
+/** Conversation intents that do not mutate the editable declaration. */
+internal data class DraftConversationActions(
+    val updateMessage: (String) -> Unit,
+    val updateNewSymbol: (String) -> Unit,
+    val confirmRemoteProvider: (Boolean) -> Unit,
+    val inspectContext: () -> Unit,
+    val send: () -> Unit,
+    val cancel: () -> Unit,
+)
+
+/** Editable declaration intents, separate from the chat conversation. */
+internal data class DraftEditorActions(
+    val updateDeclaration: (String) -> Unit,
+    val updateImports: (List<String>) -> Unit,
+    val validate: () -> Unit,
+)
 
 internal fun requiredImportsVisible(editor: EditableDraftState): Boolean = editor.imports.isNotEmpty()
 

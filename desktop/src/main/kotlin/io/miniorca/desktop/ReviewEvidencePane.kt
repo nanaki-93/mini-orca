@@ -213,36 +213,24 @@ internal fun ReviewDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Mod
 
 @Composable
 internal fun ReviewContextPane(
-    project: ProjectAnalysis?,
-    selected: ProjectFileInfo?,
-    session: ChatSession?,
-    editor: EditableDraftState?,
-    draft: DeclarationDraft?,
-    checks: DraftCheckReport?,
-    impact: ImpactPreview?,
-    gitStatus: GitStatus?,
-    applied: ApplyResult?,
-    checksRunning: Boolean,
-    onRunChecks: () -> Unit,
-    onReviseWithCheckOutput: () -> Unit,
-    onEditDraft: () -> Unit,
-    onApply: () -> Unit,
-    onUndo: () -> Unit,
+    state: ReviewContextPaneState,
+    evidenceActions: ReviewEvidenceActions,
+    applicationActions: DraftApplicationActions,
     modifier: Modifier = Modifier,
 ) {
-    val evidence = reviewEvidenceUiState(project, selected, editor, draft, checks, checksRunning)
-    val decision = applyDecisionUiState(project, selected, editor, draft, checks, applied)
-    var showCommandOutput by remember(checks?.draftId, checks?.draftRevision, checks?.draftHash) { mutableStateOf(false) }
-    var showDiagnostics by remember(draft?.id, draft?.revision, draft?.hash) { mutableStateOf(false) }
+    val evidence = reviewEvidenceUiState(state.project, state.selected, state.editor, state.draft, state.checks, state.checksRunning)
+    val decision = applyDecisionUiState(state.project, state.selected, state.editor, state.draft, state.checks, state.applied)
+    var showCommandOutput by remember(state.checks?.draftId, state.checks?.draftRevision, state.checks?.draftHash) { mutableStateOf(false) }
+    var showDiagnostics by remember(state.draft?.id, state.draft?.revision, state.draft?.hash) { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        if (decision.receiptTitle != null && applied != null) {
+        if (decision.receiptTitle != null && state.applied != null) {
             FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
                 SectionLabel("APPLIED RECEIPT")
                 Text(decision.receiptTitle, color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
                 Text(decision.receiptDetail, color = SecondaryText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
-                Text(if (applied.undoAvailable) "Undo is available for this applied change." else "Undo is no longer available for this applied change.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                FocusFlowButton(onClick = onUndo, enabled = applied.undoAvailable, tone = ActionTone.Attention, modifier = Modifier.padding(top = 10.dp)) { Text(decision.undoLabel) }
+                Text(if (state.applied.undoAvailable) "Undo is available for this applied change." else "Undo is no longer available for this applied change.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                FocusFlowButton(onClick = applicationActions.undo, enabled = state.applied.undoAvailable, tone = ActionTone.Attention, modifier = Modifier.padding(top = 10.dp)) { Text(decision.undoLabel) }
             }
             return@Column
         }
@@ -253,7 +241,7 @@ internal fun ReviewContextPane(
             EvidenceRow(evidence.identity)
             Spacer(Modifier.height(8.dp))
             EvidenceRow(evidence.validation)
-            val diagnostics = editor?.diagnostics.orEmpty().take(8)
+            val diagnostics = state.editor?.diagnostics.orEmpty().take(8)
             if (diagnostics.isNotEmpty()) {
                 FocusFlowButton(onClick = { showDiagnostics = !showDiagnostics }, tone = ActionTone.Neutral, modifier = Modifier.padding(top = 8.dp)) {
                     Text(if (showDiagnostics) "Hide validation diagnostics" else "Show validation diagnostics (${diagnostics.size})")
@@ -266,22 +254,22 @@ internal fun ReviewContextPane(
                     }
                 }
             }
-            if (editor != null && draft != null) FocusFlowButton(onClick = onEditDraft, tone = ActionTone.Neutral, modifier = Modifier.padding(top = 8.dp)) { Text("Edit draft") }
+            if (state.editor != null && state.draft != null) FocusFlowButton(onClick = evidenceActions.editDraft, tone = ActionTone.Neutral, modifier = Modifier.padding(top = 8.dp)) { Text("Edit draft") }
         }
         Spacer(Modifier.height(10.dp))
         FocusFlowPanel(Modifier.fillMaxWidth()) {
             EvidenceRow(evidence.checks)
-            if (evidence.canRunChecks) FocusFlowButton(onClick = onRunChecks, tone = ActionTone.Primary, modifier = Modifier.padding(top = 8.dp)) { Text(evidence.runChecksLabel) }
-            val repairMessage = repairMessageForChecks(session, draft, checks)
-            if (repairMessage != null || repairLimitReached(session, draft, checks)) {
-                FocusFlowButton(onClick = onReviseWithCheckOutput, enabled = repairMessage != null && !checksRunning, tone = ActionTone.Attention, modifier = Modifier.padding(top = 8.dp)) {
+            if (evidence.canRunChecks) FocusFlowButton(onClick = evidenceActions.runChecks, tone = ActionTone.Primary, modifier = Modifier.padding(top = 8.dp)) { Text(evidence.runChecksLabel) }
+            val repairMessage = repairMessageForChecks(state.session, state.draft, state.checks)
+            if (repairMessage != null || repairLimitReached(state.session, state.draft, state.checks)) {
+                FocusFlowButton(onClick = evidenceActions.reviseWithCheckOutput, enabled = repairMessage != null && !state.checksRunning, tone = ActionTone.Attention, modifier = Modifier.padding(top = 8.dp)) {
                     Text(if (repairMessage != null) "Revise with check output" else "Repair limit reached")
                 }
             }
-            checks?.checks.orEmpty().forEach { check ->
+            state.checks?.checks.orEmpty().forEach { check ->
                 Text("${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}", color = evidenceColor(checkStatus(check.state)), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
             }
-            val checksWithOutput = checks?.checks.orEmpty().filter { it.command.isNotEmpty() || it.output.isNotBlank() }
+            val checksWithOutput = state.checks?.checks.orEmpty().filter { it.command.isNotEmpty() || it.output.isNotBlank() }
             if (checksWithOutput.isNotEmpty()) {
                 FocusFlowButton(onClick = { showCommandOutput = !showCommandOutput }, tone = ActionTone.Neutral, modifier = Modifier.padding(top = 8.dp)) {
                     Text(if (showCommandOutput) "Hide command output" else "Show command output (${checksWithOutput.size})")
@@ -298,13 +286,13 @@ internal fun ReviewContextPane(
             }
         }
         Spacer(Modifier.height(10.dp))
-        ReadOnlyImpactPane(impact, gitStatus)
+        ReadOnlyImpactPane(state.impact, state.gitStatus)
         Spacer(Modifier.height(12.dp))
         FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
             if (decision.eligible) {
                 Text("Ready for the one guarded write", color = PrimaryText, fontWeight = FontWeight.SemiBold)
                 Text("Nothing has changed yet. This action applies only the named declaration in the named file.", color = SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                FocusFlowButton(onClick = onApply, tone = ActionTone.Positive, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(decision.actionLabel) }
+                FocusFlowButton(onClick = applicationActions.apply, tone = ActionTone.Positive, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(decision.actionLabel) }
             } else {
                 Text("Apply remains locked", color = PrimaryText, fontWeight = FontWeight.SemiBold)
                 Text(decision.reason, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
@@ -312,6 +300,33 @@ internal fun ReviewContextPane(
         }
     }
 }
+
+/** Immutable daemon-derived review evidence for one file-scoped candidate. */
+internal data class ReviewContextPaneState(
+    val project: ProjectAnalysis?,
+    val selected: ProjectFileInfo?,
+    val session: ChatSession?,
+    val editor: EditableDraftState?,
+    val draft: DeclarationDraft?,
+    val checks: DraftCheckReport?,
+    val impact: ImpactPreview?,
+    val gitStatus: GitStatus?,
+    val applied: ApplyResult?,
+    val checksRunning: Boolean,
+)
+
+/** Review and repair intents that leave guarded Apply and Undo separate. */
+internal data class ReviewEvidenceActions(
+    val runChecks: () -> Unit,
+    val reviseWithCheckOutput: () -> Unit,
+    val editDraft: () -> Unit,
+)
+
+/** The only source-mutating intents exposed by the review pane. */
+internal data class DraftApplicationActions(
+    val apply: () -> Unit,
+    val undo: () -> Unit,
+)
 
 @Composable
 private fun EvidenceRow(row: ReviewEvidenceRow) {

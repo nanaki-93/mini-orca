@@ -23,25 +23,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-internal fun AnalysisWorkspacePane(
-    job: AnalyzeAllJob?,
-    coverage: AnalysisCoverage?,
-    model: ScopedModel,
-    remoteProviderConfirmed: Boolean,
-    onRemoteProviderConfirmed: (Boolean) -> Unit,
-    onStart: (AnalyzeAllRunOptions) -> Unit,
-    onPause: () -> Unit,
-    onResume: (Boolean) -> Unit,
-    onCancel: () -> Unit,
-) {
+internal fun AnalysisWorkspacePane(state: AnalysisWorkspacePaneState, actions: AnalysisWorkspaceActions) {
     var maxFiles by remember { mutableStateOf(defaultAnalyzeAllFileLimit.toString()) }
     var maxRetries by remember { mutableStateOf(defaultAnalyzeAllRetryLimit.toString()) }
     val options = AnalyzeAllRunOptions(
         maxFiles = maxFiles.toIntOrNull() ?: defaultAnalyzeAllFileLimit,
         maxRetries = maxRetries.toIntOrNull() ?: defaultAnalyzeAllRetryLimit,
-        confirmRemoteProvider = remoteProviderConfirmed,
+        confirmRemoteProvider = state.remoteProviderConfirmed,
     ).bounded()
-    val presentation = analyzeAllPresentation(job, coverage)
+    val presentation = analyzeAllPresentation(state.job, state.coverage)
     LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
         item {
             Text("PROJECT ANALYSIS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
@@ -73,7 +63,7 @@ internal fun AnalysisWorkspacePane(
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 4.dp),
                 )
-                job?.let {
+                state.job?.let {
                     Text("Limits: ${presentation.run.maxFiles} files · ${presentation.run.maxRetries} retries per file", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                 }
             }
@@ -83,23 +73,31 @@ internal fun AnalysisWorkspacePane(
                 when (presentation.run.statusLabel) {
                     "Running" -> {
                         ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                            FocusFlowButton(onClick = onPause, tone = ActionTone.Attention) { Text("Pause") }
-                            FocusFlowButton(onClick = onCancel, tone = ActionTone.Destructive) { Text("Cancel") }
+                            FocusFlowButton(onClick = actions.pause, tone = ActionTone.Attention) { Text("Pause") }
+                            FocusFlowButton(onClick = actions.cancel, tone = ActionTone.Destructive) { Text("Cancel") }
                         }
                     }
                     "Pausing", "Canceling" -> {
                         Text(presentation.controls, color = Warning, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
-                        FocusFlowButton(onClick = onCancel, enabled = presentation.run.statusLabel == "Pausing", tone = ActionTone.Destructive, modifier = Modifier.padding(top = 8.dp)) { Text("Cancel") }
+                        FocusFlowButton(onClick = actions.cancel, enabled = presentation.run.statusLabel == "Pausing", tone = ActionTone.Destructive, modifier = Modifier.padding(top = 8.dp)) { Text("Cancel") }
                     }
                     "Paused" -> {
-                        RemoteProviderConfirmation(ModelScope.Bug, model, remoteProviderConfirmed, onRemoteProviderConfirmed)
+                        RemoteProviderConfirmation(ModelScope.Bug, state.model, state.remoteProviderConfirmed, actions.confirmRemoteProvider)
                         ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                            FocusFlowButton(onClick = { onResume(remoteProviderConfirmed) }, enabled = !model.remoteProvider || remoteProviderConfirmed, tone = ActionTone.Primary) { Text("Resume") }
-                            FocusFlowButton(onClick = onCancel, tone = ActionTone.Destructive) { Text("Cancel") }
+                            FocusFlowButton(onClick = { actions.resume(state.remoteProviderConfirmed) }, enabled = !state.model.remoteProvider || state.remoteProviderConfirmed, tone = ActionTone.Primary) { Text("Resume") }
+                            FocusFlowButton(onClick = actions.cancel, tone = ActionTone.Destructive) { Text("Cancel") }
                         }
                     }
                     else -> {
-                        AnalyzeAllStartControls(maxFiles, { maxFiles = it }, maxRetries, { maxRetries = it }, model, remoteProviderConfirmed, onRemoteProviderConfirmed, options, onStart)
+                        AnalyzeAllStartControls(
+                            state = AnalyzeAllStartControlsState(maxFiles, maxRetries, state.model, state.remoteProviderConfirmed, options),
+                            actions = AnalyzeAllStartActions(
+                                updateMaxFiles = { maxFiles = it },
+                                updateMaxRetries = { maxRetries = it },
+                                confirmRemoteProvider = actions.confirmRemoteProvider,
+                                start = actions.start,
+                            ),
+                        )
                     }
                 }
             }
@@ -121,25 +119,47 @@ internal fun AnalysisWorkspacePane(
 }
 
 @Composable
-private fun AnalyzeAllStartControls(
-    maxFiles: String,
-    onMaxFiles: (String) -> Unit,
-    maxRetries: String,
-    onMaxRetries: (String) -> Unit,
-    model: ScopedModel,
-    remoteConfirmed: Boolean,
-    onRemoteConfirmed: (Boolean) -> Unit,
-    options: AnalyzeAllRunOptions,
-    onStart: (AnalyzeAllRunOptions) -> Unit,
-) {
+private fun AnalyzeAllStartControls(state: AnalyzeAllStartControlsState, actions: AnalyzeAllStartActions) {
     ResponsiveFieldPair(
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-        first = { modifier -> CompactSingleLineField(maxFiles, onMaxFiles, label = { Text("File limit (1–500)") }, modifier = modifier) },
-        second = { modifier -> CompactSingleLineField(maxRetries, onMaxRetries, label = { Text("Retry limit (0–3)") }, modifier = modifier) },
+        first = { modifier -> CompactSingleLineField(state.maxFiles, actions.updateMaxFiles, label = { Text("File limit (1–500)") }, modifier = modifier) },
+        second = { modifier -> CompactSingleLineField(state.maxRetries, actions.updateMaxRetries, label = { Text("Retry limit (0–3)") }, modifier = modifier) },
     )
-    RemoteProviderConfirmation(ModelScope.Bug, model, remoteConfirmed, onRemoteConfirmed)
-    FocusFlowButton(onClick = { onStart(options) }, enabled = !model.remoteProvider || remoteConfirmed, tone = ActionTone.Primary, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
+    RemoteProviderConfirmation(ModelScope.Bug, state.model, state.remoteConfirmed, actions.confirmRemoteProvider)
+    FocusFlowButton(onClick = { actions.start(state.options) }, enabled = !state.model.remoteProvider || state.remoteConfirmed, tone = ActionTone.Primary, modifier = Modifier.padding(top = 6.dp)) { Text("Start Analyze-all") }
 }
+
+/** Project-wide analysis data displayed by the Analysis workspace. */
+internal data class AnalysisWorkspacePaneState(
+    val job: AnalyzeAllJob?,
+    val coverage: AnalysisCoverage?,
+    val model: ScopedModel,
+    val remoteProviderConfirmed: Boolean,
+)
+
+/** Analyze-all workflow intents, deliberately separate from file-scoped editing. */
+internal data class AnalysisWorkspaceActions(
+    val confirmRemoteProvider: (Boolean) -> Unit,
+    val start: (AnalyzeAllRunOptions) -> Unit,
+    val pause: () -> Unit,
+    val resume: (Boolean) -> Unit,
+    val cancel: () -> Unit,
+)
+
+private data class AnalyzeAllStartControlsState(
+    val maxFiles: String,
+    val maxRetries: String,
+    val model: ScopedModel,
+    val remoteConfirmed: Boolean,
+    val options: AnalyzeAllRunOptions,
+)
+
+private data class AnalyzeAllStartActions(
+    val updateMaxFiles: (String) -> Unit,
+    val updateMaxRetries: (String) -> Unit,
+    val confirmRemoteProvider: (Boolean) -> Unit,
+    val start: (AnalyzeAllRunOptions) -> Unit,
+)
 
 @Composable
 internal fun RemoteProviderConfirmation(scope: ModelScope, model: ScopedModel, confirmed: Boolean, onConfirmed: (Boolean) -> Unit) {
@@ -156,15 +176,7 @@ internal fun RemoteProviderConfirmation(scope: ModelScope, model: ScopedModel, c
 }
 
 @Composable
-internal fun BugsWorkspacePane(
-    findings: List<UnifiedFinding>,
-    scan: GoScanReport?,
-    onOpen: (UnifiedFinding) -> Unit,
-    onPrepare: (UnifiedFinding) -> Unit,
-    onTriage: (UnifiedFinding, FindingLifecycleAction) -> Unit,
-    onStartScan: () -> Unit,
-    onCancelScan: () -> Unit,
-) {
+internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorkspaceActions) {
     var query by remember { mutableStateOf("") }
     var source by remember { mutableStateOf("") }
     var severity by remember { mutableStateOf("") }
@@ -173,8 +185,8 @@ internal fun BugsWorkspacePane(
     var showFilters by remember { mutableStateOf(false) }
     val filters = BugsFilters(query, source, severity, freshness, lifecycle)
     val activeFilters = activeBugsFilters(filters)
-    val priorityGroups = groupFindingsByPriority(filterFindings(findings, filters))
-    val progress = verifiedScanProgress(scan)
+    val priorityGroups = groupFindingsByPriority(filterFindings(state.findings, filters))
+    val progress = verifiedScanProgress(state.scan)
     LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
         item {
             Text("PROJECT BUGS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
@@ -203,9 +215,9 @@ internal fun BugsWorkspacePane(
                 Text(progress.summary, color = if (progress.warnings.isNotEmpty()) Warning else SecondaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
                 progress.warnings.forEach { warning -> Text("Warning: $warning", color = Error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp)) }
                 if (progress.canCancel) {
-                    FocusFlowButton(onClick = onCancelScan, enabled = scan?.status?.lowercase() == "running", tone = ActionTone.Destructive, modifier = Modifier.padding(top = 8.dp)) { Text(if (scan?.status?.lowercase() == "canceling") "Canceling…" else "Cancel verified scan") }
+                    FocusFlowButton(onClick = actions.cancelScan, enabled = state.scan?.status?.lowercase() == "running", tone = ActionTone.Destructive, modifier = Modifier.padding(top = 8.dp)) { Text(if (state.scan?.status?.lowercase() == "canceling") "Canceling…" else "Cancel verified scan") }
                 } else {
-                    FocusFlowButton(onClick = onStartScan, tone = ActionTone.Primary, modifier = Modifier.padding(top = 8.dp)) { Text("Run verified scan") }
+                    FocusFlowButton(onClick = actions.startScan, tone = ActionTone.Primary, modifier = Modifier.padding(top = 8.dp)) { Text("Run verified scan") }
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -221,20 +233,30 @@ internal fun BugsWorkspacePane(
                     SectionLabel(group.priority.sectionLabel, Modifier.padding(top = 9.dp))
                 }
                 items(group.findings, key = { finding -> "${group.priority.name}:${finding.id}:${finding.location.path}:${finding.location.startLine}" }) { finding ->
-                    FindingCard(finding, onOpen, onPrepare, onTriage)
+                    FindingCard(finding, actions)
                 }
             }
         }
     }
 }
 
+/** Read-only Bugs workspace inputs from the current project snapshot. */
+internal data class BugsWorkspacePaneState(
+    val findings: List<UnifiedFinding>,
+    val scan: GoScanReport?,
+)
+
+/** Finding navigation, task preparation, triage, and scan intents. */
+internal data class BugsWorkspaceActions(
+    val openFinding: (UnifiedFinding) -> Unit,
+    val prepareFinding: (UnifiedFinding) -> Unit,
+    val triageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
+    val startScan: () -> Unit,
+    val cancelScan: () -> Unit,
+)
+
 @Composable
-private fun FindingCard(
-    finding: UnifiedFinding,
-    onOpen: (UnifiedFinding) -> Unit,
-    onPrepare: (UnifiedFinding) -> Unit,
-    onTriage: (UnifiedFinding, FindingLifecycleAction) -> Unit,
-) {
+private fun FindingCard(finding: UnifiedFinding, actions: BugsWorkspaceActions) {
     FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 7.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("${finding.severity.ifBlank { "unknown" }.uppercase()} · ${finding.title.ifBlank { "Untitled finding" }}", color = PrimaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -251,10 +273,10 @@ private fun FindingCard(
             if (task.nonGoals.isNotEmpty()) Text("Non-goals: ${task.nonGoals.joinToString(" · ")}", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
         }
         ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 7.dp)) {
-            FocusFlowButton(onClick = { onOpen(finding) }, enabled = finding.location.path.isNotBlank(), tone = ActionTone.Navigation) { Text("Open in Editor") }
-            FocusFlowButton(onClick = { onPrepare(finding) }, enabled = findingCanPrepareFix(finding), tone = ActionTone.Navigation) { Text("Prepare fix") }
+            FocusFlowButton(onClick = { actions.openFinding(finding) }, enabled = finding.location.path.isNotBlank(), tone = ActionTone.Navigation) { Text("Open in Editor") }
+            FocusFlowButton(onClick = { actions.prepareFinding(finding) }, enabled = findingCanPrepareFix(finding), tone = ActionTone.Navigation) { Text("Prepare fix") }
             findingLifecycleActions(finding).forEach { action ->
-                FocusFlowButton(onClick = { onTriage(finding, action) }, tone = if (action.status == "dismissed") ActionTone.Destructive else ActionTone.Neutral) { Text(action.label) }
+                FocusFlowButton(onClick = { actions.triageFinding(finding, action) }, tone = if (action.status == "dismissed") ActionTone.Destructive else ActionTone.Neutral) { Text(action.label) }
             }
         }
     }

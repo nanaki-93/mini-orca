@@ -157,17 +157,21 @@ internal fun MiniOrcaApp(
 
     val explorer: @Composable (Modifier, () -> Unit) -> Unit = { modifier, onSelected ->
         ExplorerPane(
-            index = appState.index,
-            selectedPath = appState.selectedFile?.path,
-            filter = filter,
-            collapsedDirectories = collapsedDirectories,
-            onFilter = { filter = it },
-            onToggleDirectory = { path -> collapsedDirectories = if (path in collapsedDirectories) collapsedDirectories - path else collapsedDirectories + path },
-            onSelect = { path ->
-                presenter.openFileInEditor(path)
-                onSelected()
-            },
-            loading = appState.loading,
+            state = ExplorerPaneState(
+                index = appState.index,
+                selectedPath = appState.selectedFile?.path,
+                filter = filter,
+                collapsedDirectories = collapsedDirectories,
+                loading = appState.loading,
+            ),
+            actions = ExplorerPaneActions(
+                updateFilter = { filter = it },
+                toggleDirectory = { path -> collapsedDirectories = if (path in collapsedDirectories) collapsedDirectories - path else collapsedDirectories + path },
+                selectFile = { path ->
+                    presenter.openFileInEditor(path)
+                    onSelected()
+                },
+            ),
             modifier = modifier,
         )
     }
@@ -175,11 +179,7 @@ internal fun MiniOrcaApp(
         if (appState.workspace != Workspace.Editor) {
             SystemStateMessage("Editor context", "Open the Editor workspace to inspect one declaration.", modifier = modifier)
         } else if (editorProgress.progress == EditorProgress.Receipt) {
-            ReviewContextPane(
-                appState.project, appState.selectedFile, appState.chat.session, appState.review.editor, appState.review.draft, appState.checks,
-                appState.impact, appState.gitStatus, appState.review.applied, appState.loading,
-                presenter::runDraftChecks, { presenter.reviseWithCheckOutput(chatMode, newChatSymbol) }, { composerRequested = true }, presenter::applyEditableDraft, presenter::undoAppliedDraft, modifier,
-            )
+            ReviewContextPane(reviewContextPaneState(appState), reviewEvidenceActions(presenter, chatMode, newChatSymbol) { composerRequested = true }, draftApplicationActions(presenter), modifier)
         } else if (composerRequested || editorProgress.progress == EditorProgress.Edit) {
             val target = validateChatTarget(appState.selectedFile, appState.symbols, appState.selectedSymbol, chatMode, newChatSymbol).target
             val draft = appState.review.draft
@@ -194,36 +194,61 @@ internal fun MiniOrcaApp(
                 if (pendingComposerFocus == focusTarget) pendingComposerFocus = null
             }
             DraftContextPane(
-                appState.project, appState.selectedFile, appState.chat.session, appState.review.draft, appState.review.editor, target, chatMode, newChatSymbol, chatMessage,
-                workflow.generating, functionModel, workflow.providerConfirmed(ModelScope.Function), chatFocusRequester, draftFocusRequester,
-                { chatMessage = it }, { newChatSymbol = it }, { presenter.setProviderConfirmation(ModelScope.Function, it) },
-                { presenter.inspectContext(contextAction) }, { presenter.dispatch(DesktopEvent.DraftEdited(declaration = it)) }, { presenter.dispatch(DesktopEvent.DraftEdited(imports = it)) },
-                presenter::validateEditableDraft, { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage) }, presenter::cancelGeneration, modifier,
+                state = DraftContextPaneState(
+                    project = appState.project,
+                    selected = appState.selectedFile,
+                    session = appState.chat.session,
+                    draft = appState.review.draft,
+                    editor = appState.review.editor,
+                    target = target,
+                    mode = chatMode,
+                    newSymbol = newChatSymbol,
+                    message = chatMessage,
+                    sending = workflow.generating,
+                    functionModel = functionModel,
+                    remoteConfirmed = workflow.providerConfirmed(ModelScope.Function),
+                    chatFocus = chatFocusRequester,
+                    draftFocus = draftFocusRequester,
+                ),
+                conversationActions = DraftConversationActions(
+                    updateMessage = { chatMessage = it },
+                    updateNewSymbol = { newChatSymbol = it },
+                    confirmRemoteProvider = { presenter.setProviderConfirmation(ModelScope.Function, it) },
+                    inspectContext = { presenter.inspectContext(contextAction) },
+                    send = { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage) },
+                    cancel = presenter::cancelGeneration,
+                ),
+                editorActions = DraftEditorActions(
+                    updateDeclaration = { presenter.dispatch(DesktopEvent.DraftEdited(declaration = it)) },
+                    updateImports = { presenter.dispatch(DesktopEvent.DraftEdited(imports = it)) },
+                    validate = presenter::validateEditableDraft,
+                ),
+                modifier = modifier,
             )
         } else if (editorProgress.progress == EditorProgress.Review) {
-            ReviewContextPane(
-                appState.project, appState.selectedFile, appState.chat.session, appState.review.editor, appState.review.draft, appState.checks,
-                appState.impact, appState.gitStatus, appState.review.applied, appState.loading,
-                presenter::runDraftChecks, { presenter.reviseWithCheckOutput(chatMode, newChatSymbol) }, { composerRequested = true }, presenter::applyEditableDraft, presenter::undoAppliedDraft, modifier,
-            )
+            ReviewContextPane(reviewContextPaneState(appState), reviewEvidenceActions(presenter, chatMode, newChatSymbol) { composerRequested = true }, draftApplicationActions(presenter), modifier)
         } else {
             SymbolInspectorPane(
-                inspector = symbolInspectorUiState(
-                    selectedFile = appState.selectedFile,
-                    symbols = appState.symbols,
-                    selectedSymbol = appState.selectedSymbol,
-                    analysis = appState.analysis,
-                    analysisInProgress = workflow.analysisInProgress,
-                    provider = InspectorProviderState(bugModel.remoteProvider, workflow.providerConfirmed(ModelScope.Bug)),
-                    currentEditIdentity = currentEditIdentity(appState),
+                state = SymbolInspectorPaneState(
+                    inspector = symbolInspectorUiState(
+                        selectedFile = appState.selectedFile,
+                        symbols = appState.symbols,
+                        selectedSymbol = appState.selectedSymbol,
+                        analysis = appState.analysis,
+                        analysisInProgress = workflow.analysisInProgress,
+                        provider = InspectorProviderState(bugModel.remoteProvider, workflow.providerConfirmed(ModelScope.Bug)),
+                        currentEditIdentity = currentEditIdentity(appState),
+                    ),
+                    bugModel = bugModel,
+                    remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
                 ),
-                bugModel = bugModel,
-                remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
-                onRemoteProviderConfirmed = { presenter.setProviderConfirmation(ModelScope.Bug, it) },
-                onAnalyze = { presenter.analyzeSelected(false) },
-                onRefresh = { presenter.analyzeSelected(true) },
-                onCancel = presenter::cancelAnalysis,
-                onEditSelected = ::requestDirectEdit,
+                actions = SymbolInspectorActions(
+                    confirmRemoteProvider = { presenter.setProviderConfirmation(ModelScope.Bug, it) },
+                    analyze = { presenter.analyzeSelected(false) },
+                    refresh = { presenter.analyzeSelected(true) },
+                    cancel = presenter::cancelAnalysis,
+                    editSelected = ::requestDirectEdit,
+                ),
                 modifier = modifier,
             )
         }
@@ -238,80 +263,83 @@ internal fun MiniOrcaApp(
         remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Function),
     )
     DesktopShell(
-        appState = appState,
-        paneWidths = paneWidths,
-        onPaneWidths = { paneWidths = it },
-        onSavePaneWidths = { widthStore.save(paneWidths) },
-        connection = appState.connection,
-        workspace = appState.workspace,
-        onWorkspace = { presenter.dispatch(DesktopEvent.WorkspaceSelected(it)) },
-        editorProgress = editorProgress,
-        onFocusChat = { focusComposerControl(ComposerFocusTarget.Chat) },
-        onFocusDraft = { focusComposerControl(ComposerFocusTarget.Draft) },
-        canFocusChat = contextualActions.canFocusChat,
-        canFocusDraft = contextualActions.canFocusDraft,
-        canGenerate = contextualActions.canGenerate,
-        canValidateDraft = contextualActions.canValidateDraft,
-        canRunDraftChecks = contextualActions.canRunFocusedChecks,
-        analysisInProgress = workflow.analysisInProgress,
-        generating = workflow.generating,
-        showContext = showContext,
-        contextManifest = workflow.contextManifest,
-        bugModel = bugModel,
-        bugProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
-        onBugProviderConfirmed = { presenter.setProviderConfirmation(ModelScope.Bug, it) },
-        onDismissContext = { showContext = false; presenter.clearContextManifest() },
-        paletteMode = paletteMode,
-        paletteQuery = paletteQuery,
-        showPalette = showPalette,
-        onPaletteQuery = { paletteQuery = it },
-        onDismissPalette = { showPalette = false },
-        onOpenPalette = ::openPalette,
-        onSelectPaletteFile = {
-            showPalette = false
-            presenter.openFileInEditor(it)
-        },
-        onSelectPaletteSymbol = {
-            showPalette = false
-            presenter.dispatch(DesktopEvent.SymbolSelected(it))
-            presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
-            composerRequested = false
-        },
-        onSelectPaletteAction = {
-            showPalette = false
-            presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
-            when (it) {
-                "refresh_file_analysis" -> presenter.analyzeSelected(true)
-                "create_declaration" -> requestCreateDeclaration()
-                else -> contextAction = it
-            }
-        },
-        onOpenFinding = presenter::openFinding,
-        onPrepareFinding = presenter::prepareFinding,
-        onTriageFinding = presenter::triageFinding,
-        onStartAnalyzeAll = presenter::startAnalyzeAll,
-        onPauseAnalyzeAll = presenter::pauseAnalyzeAll,
-        onResumeAnalyzeAll = presenter::resumeAnalyzeAll,
-        onCancelAnalyzeAll = presenter::cancelAnalyzeAll,
-        onStartScan = presenter::runVerifiedScan,
-        onCancelScan = presenter::cancelVerifiedScan,
-        explorer = explorer,
-        contextPane = contextPane,
-        onImport = ::importProject,
-        onReanalyze = presenter::reanalyze,
-        onReconnect = presenter::refreshConnection,
-        onCancelAnalysis = presenter::cancelAnalysis,
-        onSourceLineSelected = { selection -> presenter.dispatch(DesktopEvent.SourceLineSelected(selection)); composerRequested = false },
-        onValidateDraft = presenter::validateEditableDraft,
-        onRunDraftChecks = presenter::runDraftChecks,
-        onGenerate = { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage) },
-        onCancelGeneration = presenter::cancelGeneration,
-        onCancelAll = {
-            showPalette = false
-            showContext = false
-            presenter.clearContextManifest()
-            presenter.cancelAll()
-        },
+        state = DesktopShellState(
+            app = appState,
+            paneWidths = paneWidths,
+            editor = DesktopShellEditorState(
+                progress = editorProgress,
+                contextualActions = contextualActions,
+                analysisInProgress = workflow.analysisInProgress,
+                generating = workflow.generating,
+            ),
+            context = DesktopShellContextState(
+                visible = showContext,
+                manifest = workflow.contextManifest,
+                bugModel = bugModel,
+                bugProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
+            ),
+            palette = DesktopShellPaletteState(paletteMode, paletteQuery, showPalette),
+        ),
+        layoutActions = DesktopShellLayoutActions(
+            updatePaneWidths = { paneWidths = it },
+            savePaneWidths = { widthStore.save(paneWidths) },
+        ),
+        projectActions = DesktopShellProjectActions(
+            importProject = ::importProject,
+            reanalyzeProject = presenter::reanalyze,
+            reconnect = presenter::refreshConnection,
+        ),
+        editorActions = DesktopShellEditorActions(
+            selectWorkspace = { presenter.dispatch(DesktopEvent.WorkspaceSelected(it)) },
+            focusChat = { focusComposerControl(ComposerFocusTarget.Chat) },
+            focusDraft = { focusComposerControl(ComposerFocusTarget.Draft) },
+            cancelAnalysis = presenter::cancelAnalysis,
+            sourceLineSelected = { selection -> presenter.dispatch(DesktopEvent.SourceLineSelected(selection)); composerRequested = false },
+            validateDraft = presenter::validateEditableDraft,
+            runDraftChecks = presenter::runDraftChecks,
+            generate = { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage) },
+            cancelGeneration = presenter::cancelGeneration,
+            dismissContext = { showContext = false; presenter.clearContextManifest() },
+        ),
+        analysisActions = DesktopShellAnalysisActions(
+            confirmBugProvider = { presenter.setProviderConfirmation(ModelScope.Bug, it) },
+            startAnalyzeAll = presenter::startAnalyzeAll,
+            pauseAnalyzeAll = presenter::pauseAnalyzeAll,
+            resumeAnalyzeAll = presenter::resumeAnalyzeAll,
+            cancelAnalyzeAll = presenter::cancelAnalyzeAll,
+            startScan = presenter::runVerifiedScan,
+            cancelScan = presenter::cancelVerifiedScan,
+        ),
+        findingActions = DesktopShellFindingActions(
+            openFinding = presenter::openFinding,
+            prepareFinding = presenter::prepareFinding,
+            triageFinding = presenter::triageFinding,
+        ),
+        paletteActions = DesktopShellPaletteActions(
+            updateQuery = { paletteQuery = it },
+            dismiss = { showPalette = false },
+            open = ::openPalette,
+            selectFile = {
+                showPalette = false
+                presenter.openFileInEditor(it)
+            },
+            selectSymbol = {
+                showPalette = false
+                presenter.dispatch(DesktopEvent.SymbolSelected(it))
+                presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
+                composerRequested = false
+            },
+            selectAction = {
+                showPalette = false
+                presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
+                when (it) {
+                    "refresh_file_analysis" -> presenter.analyzeSelected(true)
+                    "create_declaration" -> requestCreateDeclaration()
+                    else -> contextAction = it
+                }
+            },
+        ),
+        panes = DesktopShellPanes(explorer, contextPane),
     )
     pendingDraftDiscard?.let { pending ->
         DraftDiscardDialog(pending, ::discardDraftAndContinue) { pendingDraftDiscard = null }
@@ -329,6 +357,35 @@ internal fun MiniOrcaApp(
         )
     }
 }
+
+private fun reviewContextPaneState(state: DesktopState) = ReviewContextPaneState(
+    project = state.project,
+    selected = state.selectedFile,
+    session = state.chat.session,
+    editor = state.review.editor,
+    draft = state.review.draft,
+    checks = state.checks,
+    impact = state.impact,
+    gitStatus = state.gitStatus,
+    applied = state.review.applied,
+    checksRunning = state.loading,
+)
+
+private fun reviewEvidenceActions(
+    presenter: DesktopWorkflowPresenter,
+    chatMode: ChatEditMode,
+    newChatSymbol: String,
+    editDraft: () -> Unit,
+) = ReviewEvidenceActions(
+    runChecks = presenter::runDraftChecks,
+    reviseWithCheckOutput = { presenter.reviseWithCheckOutput(chatMode, newChatSymbol) },
+    editDraft = editDraft,
+)
+
+private fun draftApplicationActions(presenter: DesktopWorkflowPresenter) = DraftApplicationActions(
+    apply = presenter::applyEditableDraft,
+    undo = presenter::undoAppliedDraft,
+)
 
 @Composable
 private fun ProjectImportConfirmationDialog(
