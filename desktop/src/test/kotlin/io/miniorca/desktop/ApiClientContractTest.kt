@@ -34,26 +34,17 @@ class ApiClientContractTest {
         assertEquals("fixture", client.importProject("/tmp/fixture", confirmRemoteProvider = true).name)
     }
 
-    @Test fun modelCatalogDecodesScopedAndLegacyResponses() {
+    @Test fun modelCatalogDecodesScopedResponses() {
         val scopedClient = ApiClient(transport = DaemonTransport { method, path, _ ->
             assertEquals("GET", method)
             assertEquals("/api/models/current", path)
-            TransportResponse(200, """{"profile":"function","model":"legacy-function","remote_provider":true,"scopes":{"analyze":{"scope":"analyze","profile":"analyze","model":"cloud-analyze","remote_provider":true},"bug":{"scope":"bug","profile":"bug","model":"cloud-bug","remote_provider":true},"function":{"scope":"function","profile":"function","model":"local-code","remote_provider":false}}}""")
-        })
-        val legacyClient = ApiClient(transport = DaemonTransport { _, _, _ ->
-            TransportResponse(200, """{"profile":"legacy","model":"legacy-model","remote_provider":true}""")
+            TransportResponse(200, """{"scopes":{"analyze":{"scope":"analyze","profile":"analyze","model":"cloud-analyze","remote_provider":true},"bug":{"scope":"bug","profile":"bug","model":"cloud-bug","remote_provider":true},"function":{"scope":"function","profile":"function","model":"local-code","remote_provider":false}}}""")
         })
 
         val scoped = scopedClient.modelCatalog()
         assertEquals("cloud-analyze", scoped.forScope(ModelScope.Analyze).model)
         assertTrue(scoped.forScope(ModelScope.Bug).remoteProvider)
         assertFalse(scoped.forScope(ModelScope.Function).remoteProvider)
-
-        val legacy = legacyClient.modelCatalog()
-        ModelScope.entries.forEach { scope ->
-            assertEquals("legacy-model", legacy.forScope(scope).model)
-            assertTrue(legacy.forScope(scope).remoteProvider)
-        }
     }
 
     @Test fun fileAnalysisSendsRemoteProviderConfirmation() {
@@ -158,8 +149,6 @@ class ApiClientContractTest {
                     assertContains(body.orEmpty(), "\"target_symbol\":\"Run\"")
                     TransportResponse(201, """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":null}""")
                 }
-                "GET" to "/api/projects/current/chat/sessions/session" ->
-                    TransportResponse(200, """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[{"role":"user","content":"Improve Run"}]}""")
                 "POST" to "/api/projects/current/chat/sessions/session/messages" -> {
                     assertContains(body.orEmpty(), "\"parent_draft_id\":\"older\"")
                     assertContains(body.orEmpty(), "\"confirm_remote_provider\":true")
@@ -185,7 +174,6 @@ class ApiClientContractTest {
         })
 
         val session = client.openChatSession("project", "revision", "base", "main.go", "replace_symbol", "Run")
-        val resumed = client.chatSession(session.id)
         val proposal = client.sendChatMessage(session.id, "Improve Run", "older", confirmRemoteProvider = true)
         val updated = client.updateDraft("draft", "revision", 1, "func Run() {}", listOf("fmt"))
         val validated = client.validateDraft("draft", "revision", updated.revision)
@@ -193,7 +181,6 @@ class ApiClientContractTest {
         val applied = client.applyDraft(validated)
 
         assertEquals(emptyList(), session.messages)
-        assertEquals("Improve Run", resumed.messages.single().content)
         assertEquals("draft", proposal.draft.id)
         assertEquals(emptyList(), proposal.contextManifest.included)
         assertEquals("draft", checks.draftId)

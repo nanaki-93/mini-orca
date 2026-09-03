@@ -118,7 +118,7 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 107 | [Enforce one scoped configuration and LLM boundary](completed/107_strict_scoped_configuration.md) | 106 | Complete |
 | 108 | [Introduce draft-native identities and Apply stages](completed/108_draft_identities_apply.md) | 107 | Complete |
 | 109 | [Remove candidate and workflow compatibility](completed/109_remove_candidate_compatibility.md) | 108 | Complete |
-| 110 | [Reduce the loopback API contract](110_reduce_loopback_api.md) | 109 | Pending |
+| 110 | [Reduce the loopback API contract](completed/110_reduce_loopback_api.md) | 109 | Complete |
 | 111 | [Unify project source traversal](111_unify_project_traversal.md) | 110 | Pending |
 | 112 | [Unify metadata persistence](112_unify_metadata_persistence.md) | 111 | Pending |
 | 113 | [Isolate Go workflow state](113_isolate_go_workflow_state.md) | 112 | Pending |

@@ -35,11 +35,6 @@ func TestDraftValidateCheckApplyAndUndoRequireCurrentEvidence(t *testing.T) {
 	if !checks.Applicable || checks.DraftID != validated.ID || checks.DraftRevision != validated.Revision || checks.DraftHash != validated.Hash || checks.CompositionHash != validated.CompositionHash {
 		t.Fatalf("checks are not bound to the draft: %+v", checks)
 	}
-	review, err := service.ReviewDraft(validated.ID)
-	if err != nil || !review.ApplyEligible {
-		t.Fatalf("review = %+v, %v", review, err)
-	}
-
 	dirty, err := service.UpdateDraft(DraftUpdateRequest{ID: validated.ID, ExpectedRevision: validated.Revision, Declaration: "func Run() { println(\"edited\") }"})
 	if err != nil {
 		t.Fatal(err)
@@ -51,10 +46,6 @@ func TestDraftValidateCheckApplyAndUndoRequireCurrentEvidence(t *testing.T) {
 	if err != nil || string(current) != string(original) {
 		t.Fatalf("stale Apply changed source: %q, %v", current, err)
 	}
-	if review, err := service.ReviewDraft(dirty.ID); err != nil || review.ApplyEligible {
-		t.Fatalf("manual edit retained Apply eligibility: %+v, %v", review, err)
-	}
-
 	validated, err = service.ValidateDraft(dirty.ID, dirty.Revision)
 	if err != nil {
 		t.Fatal(err)

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Mini-Orca local daemon API
-  version: 4.3.0
+  version: 4.4.0
   description: |
     Local REST API used by the Mini-Orca Compose Desktop client. The daemon is the
     LLM boundary. A user opens one Go file and declaration, starts a file-scoped
@@ -20,7 +20,6 @@ tags:
   - name: Projects
   - name: Chat
   - name: Drafts
-  - name: Compatibility
 paths:
   /health:
     get:
@@ -42,16 +41,6 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Status'}
-  /api/system/info:
-    get:
-      tags: [Daemon]
-      summary: Local daemon system information
-      responses:
-        '200':
-          description: System information
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/SystemInfo'}
   /api/projects/current/chat/sessions:
     post:
       tags: [Chat]
@@ -63,15 +52,6 @@ paths:
         '201': {description: Active file-scoped session, content: {application/json: {schema: {$ref: '#/components/schemas/ChatSession'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/chat/sessions/{sessionID}:
-    get:
-      tags: [Chat]
-      summary: Read one file-scoped conversation and its proposals
-      parameters:
-        - {$ref: '#/components/parameters/SessionID'}
-      responses:
-        '200': {description: Session messages and immutable file/declaration identity, content: {application/json: {schema: {$ref: '#/components/schemas/ChatSession'}}}}
-        '400': {$ref: '#/components/responses/Error'}
   /api/projects/current/chat/sessions/{sessionID}/messages:
     post:
       tags: [Chat]
@@ -86,20 +66,13 @@ paths:
         '200': {description: New editable declaration draft proposal, content: {application/json: {schema: {$ref: '#/components/schemas/ChatDraftProposal'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/activity:
-    get:
-      tags: [Chat]
-      summary: Read project-scoped, source-free activity
-      description: This is not a conversation transcript; messages belong to their file-scoped session.
-      responses:
-        '200': {description: Source-free project activity, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ChatEntry'}}}}}
   /api/models/current:
     get:
       tags: [Daemon]
       summary: Effective scoped model catalog
       responses:
         '200':
-          description: Function profile compatibility projection plus non-secret analyze, bug, and function scopes.
+          description: Non-secret analyze, bug, and function model scopes.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ModelCatalog'}
@@ -137,17 +110,6 @@ paths:
               schema: {$ref: '#/components/schemas/ProjectAnalysis'}
         '400': {$ref: '#/components/responses/Error'}
         '500': {$ref: '#/components/responses/Error'}
-  /api/projects/current:
-    get:
-      tags: [Projects]
-      summary: Active project analysis
-      responses:
-        '200':
-          description: Active project
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ProjectAnalysis'}
-        '404': {$ref: '#/components/responses/Error'}
   /api/projects/current/overview:
     get:
       tags: [Projects]
@@ -326,16 +288,6 @@ paths:
         '200': {description: Fresh or failed source-free analysis, content: {application/json: {schema: {$ref: '#/components/schemas/FileAnalysis'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
-    delete:
-      tags: [Projects]
-      summary: Clear one selected file analysis
-      parameters:
-        - {$ref: '#/components/parameters/ProjectPath'}
-        - {$ref: '#/components/parameters/ProjectRevision'}
-      responses:
-        '204': {description: Analysis cache entry removed.}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/analysis-job:
     get:
       tags: [Projects]
@@ -393,7 +345,7 @@ paths:
       tags: [Projects]
       summary: Refresh deterministic project facts
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema: {$ref: '#/components/schemas/ReindexRequest'}
@@ -407,16 +359,6 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/drafts/{draftID}:
-    get:
-      tags: [Drafts]
-      summary: Read one isolated editable declaration draft
-      parameters:
-        - {$ref: '#/components/parameters/DraftID'}
-        - {$ref: '#/components/parameters/ProjectRevision'}
-      responses:
-        '200': {description: Draft metadata and declaration only; never a complete source file, content: {application/json: {schema: {$ref: '#/components/schemas/Draft'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
     patch:
       tags: [Drafts]
       summary: Create the next draft revision from a declaration/import edit
@@ -455,17 +397,6 @@ paths:
         '200': {description: Isolated check report for the displayed revision and hash, content: {application/json: {schema: {$ref: '#/components/schemas/DraftCheckReport'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/drafts/{draftID}/review:
-    get:
-      tags: [Drafts]
-      summary: Read validation, check evidence, and Apply eligibility for a draft
-      parameters:
-        - {$ref: '#/components/parameters/DraftID'}
-        - {$ref: '#/components/parameters/ProjectRevision'}
-      responses:
-        '200': {description: Read-only declaration review, content: {application/json: {schema: {$ref: '#/components/schemas/DraftReview'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/apply:
     post:
       tags: [Drafts]
@@ -488,15 +419,6 @@ paths:
         '200': {description: Atomic one-file undo result}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/audit:
-    get:
-      tags: [Drafts]
-      summary: Return source-free project mutation audit history
-      parameters:
-        - {$ref: '#/components/parameters/ProjectRevision'}
-      responses:
-        '200': {description: Source-free apply and undo audit entries}
-        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/context:
     get:
       tags: [Projects]
@@ -510,28 +432,6 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ContextManifest'}
         '400': {$ref: '#/components/responses/Error'}
-  /api/chat/message:
-    post:
-      tags: [Compatibility]
-      deprecated: true
-      summary: Retired one-shot chat endpoint
-      description: Always returns 410 Gone. Open a file-scoped chat session and send a message to its immutable declaration target instead.
-      responses:
-        '410': {$ref: '#/components/responses/Error'}
-  /api/chat/history:
-    get:
-      tags: [Compatibility]
-      deprecated: true
-      summary: Compatibility alias for source-free project activity
-      description: Use /api/projects/current/activity in new clients. This route is not a file-scoped conversation transcript.
-      responses:
-        '200':
-          description: Current project-scoped source-free activity history.
-          content:
-            application/json:
-              schema:
-                type: array
-                items: {$ref: '#/components/schemas/ChatEntry'}
 components:
   parameters:
     SessionID:
@@ -575,27 +475,6 @@ components:
         status: {type: string, example: running}
         version: {type: string}
         workflow: {type: string, example: single_coder_preview}
-    SystemInfo:
-      type: object
-      properties:
-        cwd: {type: string}
-        home_dir: {type: string}
-        version: {type: string}
-    EffectiveModel:
-      type: object
-      required: [profile, model, remote_provider, temperature, max_tokens, timeout, max_retries]
-      properties:
-        scope: {type: string, example: function}
-        profile: {type: string, example: function}
-        model: {type: string}
-        reasoning_effort: {type: string, enum: [none, minimal, low, medium, high, xhigh, max], description: Optional configured Chat Completions reasoning effort.}
-        provider_origin: {type: string, description: Sanitized scheme, host, and optional port only.}
-        remote_provider: {type: boolean, description: Whether model requests require explicit user confirmation before source is sent.}
-        temperature: {type: number}
-        max_tokens: {type: integer}
-        context_max_tokens: {type: integer}
-        timeout: {type: string}
-        max_retries: {type: integer}
     ScopedModel:
       type: object
       required: [scope, profile, model, provider_origin, remote_provider, temperature, max_tokens, context_max_tokens, timeout, max_retries]
@@ -612,18 +491,16 @@ components:
         timeout: {type: string}
         max_retries: {type: integer}
     ModelCatalog:
-      allOf:
-        - {$ref: '#/components/schemas/EffectiveModel'}
-        - type: object
-          required: [scopes]
+      type: object
+      required: [scopes]
+      properties:
+        scopes:
+          type: object
+          required: [analyze, bug, function]
           properties:
-            scopes:
-              type: object
-              required: [analyze, bug, function]
-              properties:
-                analyze: {$ref: '#/components/schemas/ScopedModel'}
-                bug: {$ref: '#/components/schemas/ScopedModel'}
-                function: {$ref: '#/components/schemas/ScopedModel'}
+            analyze: {$ref: '#/components/schemas/ScopedModel'}
+            bug: {$ref: '#/components/schemas/ScopedModel'}
+            function: {$ref: '#/components/schemas/ScopedModel'}
     ProjectImportRequest:
       type: object
       required: [project_path]
@@ -843,8 +720,9 @@ components:
         symbols: {type: array, items: {$ref: '#/components/schemas/SymbolInfo'}}
     ReindexRequest:
       type: object
+      required: [project_revision]
       properties:
-        project_revision: {type: string, description: Optional revision expected by the client.}
+        project_revision: {type: string}
     FileAnalysisRequest:
       type: object
       required: [path, project_revision]
@@ -1059,13 +937,6 @@ components:
         expected_hash: {type: string}
         run_lint: {type: boolean}
         run_tests: {type: boolean}
-    DraftReview:
-      type: object
-      required: [draft, apply_eligible]
-      properties:
-        draft: {$ref: '#/components/schemas/Draft'}
-        checks: {$ref: '#/components/schemas/DraftCheckReport'}
-        apply_eligible: {type: boolean}
     DraftCheckReport:
       type: object
       required: [target_path, applicable, checks]
@@ -1125,18 +996,10 @@ components:
         old_line: {type: integer}
         new_line: {type: integer}
         text: {type: string}
-    ChatEntry:
-      type: object
-      properties:
-        role: {type: string}
-        content: {type: string}
-        phase: {type: string}
-        timestamp: {type: string, format: date-time}
     Error:
       type: object
-      required: [type, message, user_message, code]
+      required: [type, message, user_message]
       properties:
         type: {type: string}
         message: {type: string}
         user_message: {type: string}
-        code: {type: integer}

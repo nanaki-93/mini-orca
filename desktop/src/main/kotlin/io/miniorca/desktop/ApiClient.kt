@@ -38,7 +38,6 @@ class ApiClient(
     fun context(path: String, action: String = "fix"): ContextManifest = decode(send("GET", "/api/projects/current/context?path=${encode(path)}&action=${encode(action)}"))
     fun modelCatalog(): ModelCatalog = decode(send("GET", "/api/models/current"))
     fun status(): DaemonStatus = decode(send("GET", "/status"))
-    fun audit(revision: String): List<AuditEntry> = decode(send("GET", "/api/projects/current/audit?project_revision=${encode(revision)}"))
     fun impact(path: String, symbol: String = ""): ImpactPreview = decode(send("GET", "/api/projects/current/impact?path=${encode(path)}&symbol=${encode(symbol)}"))
     fun gitStatus(path: String): GitStatus = decode(send("GET", "/api/projects/current/git?path=${encode(path)}"))
 
@@ -71,10 +70,8 @@ class ApiClient(
     fun cancelAnalyzeAll(revision: String): AnalyzeAllJob = decode(send("POST", "/api/projects/current/analysis-job/cancel?project_revision=${encode(revision)}"))
 
     fun openChatSession(projectId: String, revision: String, baseFileHash: String, openPath: String, mode: String, targetSymbol: String, taskSpec: BugTaskSpec? = null): ChatSession = decode(send("POST", "/api/projects/current/chat/sessions", jsonBody("project_id" to projectId, "project_revision" to revision, "base_file_hash" to baseFileHash, "open_path" to openPath, "mode" to mode, "target_symbol" to targetSymbol, "task_spec" to taskSpec)))
-    fun chatSession(sessionId: String): ChatSession = decode(send("GET", "/api/projects/current/chat/sessions/${encodePath(sessionId)}"))
     fun sendChatMessage(sessionId: String, message: String, parentDraftId: String = "", confirmRemoteProvider: Boolean = false, repair: Boolean = false): ChatDraftProposal = decode(send("POST", "/api/projects/current/chat/sessions/${encodePath(sessionId)}/messages", jsonBody("message" to message, "parent_draft_id" to parentDraftId, "confirm_remote_provider" to confirmRemoteProvider, "repair" to repair)))
 
-    fun draft(draftId: String, revision: String): DeclarationDraft = decode(send("GET", "/api/projects/current/drafts/${encodePath(draftId)}?project_revision=${encode(revision)}"))
     fun updateDraft(draftId: String, projectRevision: String, expectedRevision: Long, declaration: String, imports: List<String>): DeclarationDraft = decode(send("PATCH", "/api/projects/current/drafts/${encodePath(draftId)}", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision, "declaration" to declaration, "imports" to imports)))
     fun validateDraft(draftId: String, projectRevision: String, expectedRevision: Long): DeclarationDraft = decode(send("POST", "/api/projects/current/drafts/${encodePath(draftId)}/validate", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision)))
     fun checkDraft(draftId: String, projectRevision: String, expectedRevision: Long, expectedHash: String, runLint: Boolean = false, runTests: Boolean = false): DraftCheckReport = decode(send("POST", "/api/projects/current/drafts/${encodePath(draftId)}/checks", jsonBody("project_revision" to projectRevision, "expected_revision" to expectedRevision, "expected_hash" to expectedHash, "run_lint" to runLint, "run_tests" to runTests)))

@@ -1,6 +1,6 @@
 # Mini-Orca Release Notes
 
-## Unreleased — Scoped model profiles and explicit task repair
+## v4.4.0 — Reduced loopback API contract (2026-09-03)
 
 - Added strict fixed `analyze`, `bug`, and `function` model profiles. Each
   profile is required, accepts an OpenAI Chat Completions-compatible API base,
@@ -17,6 +17,10 @@
   messages in the existing session; there is no automatic repair loop.
 - Native provider SDKs, credential vaults, provider account UI, automatic source
   or test writes, commits, and pushes remain intentionally out of scope.
+- Removed unconsumed activity, audit-history, current-project, transient
+  draft/session read, system, analysis-delete, and compatibility endpoints. The
+  model catalog now contains scoped profiles only; every JSON request uses the
+  same size-limited, strict one-object decoder and revision guard.
 
 Manual provider and GUI acceptance remains required before a release operator
 claims compatibility with a personal OpenAI, Claude-compatible,
@@ -44,16 +48,6 @@ immediate guarded Undo.
   findings from AI suggestions with provenance and freshness.
 - The API, OpenAPI contract, configuration guidance, and desktop smoke checklist
   now describe this workflow and its keyboard/responsive behavior.
-- The canonical daemon, API, and release-documentation version is now `4.3.0`.
-
-### Migration notes
-
-- Replace the retired one-shot POST /api/chat/message request with a file-scoped
-  chat session, a session message, draft read/edit/validate/check/review routes,
-  then explicit draft Apply or Undo.
-- POST /api/chat/message remains registered only to return 410 Gone. GET
-  /api/chat/history is a deprecated source-free activity alias; use GET
-  /api/projects/current/activity instead.
 
 ### Privacy and limits
 

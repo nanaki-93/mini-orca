@@ -12,7 +12,6 @@ type Manager struct {
 	mu       sync.RWMutex
 	root     string
 	analysis *Analysis
-	sessions *sessionStore
 	index    *ProjectIndex
 }
 
@@ -53,10 +52,6 @@ func (m *Manager) activate(root string, analysis *Analysis, persistIndex bool) e
 	if err != nil {
 		return err
 	}
-	sessions, err := newSessionStore(canonical, id, revision)
-	if err != nil {
-		return err
-	}
 	index, err := buildIndex(canonical, id, revision, persistIndex)
 	if err != nil {
 		return err
@@ -67,7 +62,6 @@ func (m *Manager) activate(root string, analysis *Analysis, persistIndex bool) e
 	defer m.mu.Unlock()
 	m.root = canonical
 	m.analysis = analysis
-	m.sessions = sessions
 	m.index = index
 	return nil
 }
@@ -267,44 +261,6 @@ func (m *Manager) ValidateMutableRequest(id, revision, relativePath, baseFileHas
 		return ErrRevisionConflict
 	}
 	return nil
-}
-
-// RecordActivity writes sanitized activity only for the active project.
-func (m *Manager) RecordActivity(activity Activity) error {
-	m.mu.RLock()
-	sessions := m.sessions
-	m.mu.RUnlock()
-	if sessions == nil {
-		return ErrNoActiveProject
-	}
-	return sessions.append(activity)
-}
-
-// RecordActivityFor keeps a request's activity attached to the project revision
-// that accepted it, even if another project is imported concurrently.
-func (m *Manager) RecordActivityFor(id, revision string, activity Activity) error {
-	m.mu.RLock()
-	if m.analysis == nil || m.analysis.ProjectID != id || m.analysis.ProjectRevision != revision {
-		m.mu.RUnlock()
-		return ErrRevisionConflict
-	}
-	sessions := m.sessions
-	m.mu.RUnlock()
-	if sessions == nil {
-		return ErrNoActiveProject
-	}
-	return sessions.append(activity)
-}
-
-// Activity returns only the active project's durable activity.
-func (m *Manager) Activity() ([]Activity, error) {
-	m.mu.RLock()
-	sessions := m.sessions
-	m.mu.RUnlock()
-	if sessions == nil {
-		return nil, ErrNoActiveProject
-	}
-	return sessions.history(), nil
 }
 
 func cloneMap(source map[string]int) map[string]int {

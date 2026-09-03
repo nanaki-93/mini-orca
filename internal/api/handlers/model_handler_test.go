@@ -12,7 +12,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-func TestCurrentModelCatalogPreservesFunctionProjectionWithoutSecrets(t *testing.T) {
+func TestCurrentModelCatalogExposesOnlyScopedProfilesWithoutSecrets(t *testing.T) {
 	manager, err := project.NewManager(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestCurrentModelCatalogPreservesFunctionProjectionWithoutSecrets(t *testing
 	if err := json.NewDecoder(response.Body).Decode(&catalog); err != nil {
 		t.Fatal(err)
 	}
-	if catalog.Model != "function" || catalog.ReasoningEffort != "max" || catalog.Scopes["analyze"].Model != "analyze" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
+	if len(catalog.Scopes) != 3 || catalog.Scopes["analyze"].Model != "analyze" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.Scopes["function"].ReasoningEffort != "max" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
 		t.Fatalf("catalog = %+v", catalog)
 	}
 	if strings.Contains(response.Body.String(), "secret-value") || strings.Contains(response.Body.String(), "/v1") {

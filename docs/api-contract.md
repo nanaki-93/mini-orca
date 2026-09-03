@@ -1,6 +1,6 @@
 # Mini-Orca desktop API contract
 
-**Version:** 4.3.0  
+**Version:** 4.4.0
 **Base URL:** `http://localhost:9090`  
 **Content type:** `application/json`
 
@@ -16,10 +16,9 @@ writes automatically, commits, or pushes.
 route test in `cmd/daemon/main_test.go` compares both this table and the OpenAPI
 paths with the daemon registrations.
 
-Use the routes in this table exactly once in a client integration. The three
-compatibility candidate routes do not create a draft or write a file, and the
-retired one-shot message route always returns `410 Gone`; neither is part of
-the current declaration-draft workflow.
+Each request body is one size-limited JSON object. Unknown fields, trailing
+values, invalid enum values, and missing required revision guards are rejected
+with the structured error response described below.
 
 ## Live routes
 
@@ -27,18 +26,12 @@ the current declaration-draft workflow.
 |---|---|---|
 | GET | `/health` | Liveness and daemon version. |
 | GET | `/status` | Daemon status and `single_coder_preview` workflow identifier. |
-| GET | `/api/system/info` | Local daemon system details. |
 | POST | `/api/projects/current/chat/sessions` | Open a Go declaration conversation pinned to project/file/revision/hash, mode, target, and optional reviewed task spec. |
-| GET | `/api/projects/current/chat/sessions/{sessionID}` | Read one file-scoped conversation, including its draft proposal references. |
 | POST | `/api/projects/current/chat/sessions/{sessionID}/messages` | Request one declaration proposal; the body cannot retarget the session and may explicitly request a bounded task repair. |
-| GET | `/api/projects/current/activity` | Read source-free project activity, distinct from file conversation messages. |
-| POST | `/api/chat/message` | Retired compatibility route; always returns `410 Gone`. |
-| GET | `/api/chat/history` | Deprecated source-free activity alias; new clients use `/api/projects/current/activity`. |
-| GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `function` model catalog; top-level fields remain the effective `function` compatibility projection. |
+| GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `function` model catalog. |
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
-| GET | `/api/projects/current` | Read the active project analysis. |
 | GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, coverage, and finding counts for `project_revision`. |
 | GET | `/api/projects/current/findings` | List source-free verified findings and AI suggestions with provenance, filters, and freshness. |
 | PATCH | `/api/projects/current/findings/{findingID}` | Record an explicit user triage status for one finding. |
@@ -52,21 +45,17 @@ the current declaration-draft workflow.
 | GET | `/api/projects/current/git` | Read target-file Git availability, branch, and status. |
 | GET | `/api/projects/current/files/analysis` | Read cached semantic analysis for one selected file and revision. |
 | POST | `/api/projects/current/files/analysis` | Explicitly analyze exactly one selected file. |
-| DELETE | `/api/projects/current/files/analysis` | Clear one selected-file semantic-analysis cache entry. |
 | GET | `/api/projects/current/analysis-job` | Read explicit bounded Analyze-all progress. |
 | POST | `/api/projects/current/analysis-job` | Start bounded sequential Analyze-all cache warming. |
 | POST | `/api/projects/current/analysis-job/pause` | Pause Analyze-all after its active file finishes. |
 | POST | `/api/projects/current/analysis-job/resume` | Resume a persisted paused Analyze-all job. |
 | POST | `/api/projects/current/analysis-job/cancel` | Cancel active/pending Analyze-all work. |
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM request. |
-| GET | `/api/projects/current/drafts/{draftID}` | Read one editable declaration draft for the required project revision. |
 | PATCH | `/api/projects/current/drafts/{draftID}` | Replace only the declaration/import list and create the next draft revision. |
 | POST | `/api/projects/current/drafts/{draftID}/validate` | Compose and validate one exact draft revision. |
 | POST | `/api/projects/current/drafts/{draftID}/checks` | Run scoped checks for one validated draft revision and hash. |
-| GET | `/api/projects/current/drafts/{draftID}/review` | Read draft validation/check evidence and Apply eligibility. |
 | POST | `/api/projects/current/apply` | Apply one validated, checked declaration draft only after `confirm: true`. |
 | POST | `/api/projects/current/undo` | Restore only the immediately preceding unchanged apply after `confirm: true`. |
-| GET | `/api/projects/current/audit` | Read source-free one-file Apply/Undo audit history for `project_revision`. |
 
 ## Focused draft lifecycle
 
@@ -93,8 +82,8 @@ and pass with the composed candidate before its required check succeeds.
 When current task-bound checks fail, a client can send the next pinned session
 message with `repair: true`. The daemon requires that exact latest failed draft,
 uses bounded sanitized check evidence supplied by the client, and permits at
-most three such repair requests. Checks, temporary tests, validation, review,
-Apply, and Undo never start a provider request on their own.
+most three such repair requests. Checks, temporary tests, validation, Apply,
+and Undo never start a provider request on their own.
 
 `POST /api/projects/current/apply` requires the displayed draft id, revision,
 hash, project identity, base file hash, and an explicit `confirm: true`. It
@@ -125,19 +114,19 @@ import uses `analyze`, selected-file analysis and Analyze-all use `bug`, and
 declaration proposals use `function`. A non-loopback scope requires
 `confirm_remote_provider: true` for that request only; confirmation for one
 scope never authorizes another. Restore, reindex, scans, validation, checks,
-review, Apply, and Undo never require provider confirmation.
+Apply, and Undo never require provider confirmation.
 
 Configuration is local-only in `config.yaml` (ignored by Git); begin with
 `config.example.yaml`. The API never returns configured credentials. All API
-failures use a structured error object with `type`, `message`, `user_message`,
-and `code`. Project paths are canonical project-relative paths and revision/hash
+failures use a structured error object with `type`, `message`, and
+`user_message`. Project paths are canonical project-relative paths and revision/hash
 guards return `409 Conflict` when their captured base is no longer current.
 
-`model_scopes` is loaded only when the daemon starts. Missing scopes use the
-legacy profile fallback, while a changed explicit model, provider, or reasoning
-effort makes old AI cache entries stale. Providers must support OpenAI Chat
-Completions JSON; native Anthropic/Gemini endpoints, vendor SDKs, streaming,
-tool calls, and credential-vault features are outside this API. An optional
-scope `reasoning_effort` is safe metadata and is included in a Chat Completions
+`model_scopes` is loaded only when the daemon starts, and all fixed scopes are
+required. A changed model, provider, or reasoning effort makes old AI cache
+entries stale. Providers must support OpenAI Chat Completions JSON; native
+Anthropic/Gemini endpoints, vendor SDKs, streaming, tool calls, and
+credential-vault features are outside this API. An optional scope
+`reasoning_effort` is safe metadata and is included in a Chat Completions
 request only when configured. Keys belong only in ignored local config and are
 neither logged nor returned.

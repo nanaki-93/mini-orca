@@ -141,26 +141,6 @@ func (s *Service) CachedFileAnalysis(targetFile string) (*project.FileAnalysis, 
 	return cached, nil
 }
 
-// ClearFileAnalysis removes one selected file's semantic cache entry.
-func (s *Service) ClearFileAnalysis(targetFile string) error {
-	file, err := s.manager.IndexedFile(targetFile)
-	if err != nil {
-		return err
-	}
-	analysis, err := s.manager.Analysis()
-	if err != nil {
-		return err
-	}
-	cache, err := project.NewFileAnalysisCache(s.manager.Root())
-	if err != nil {
-		return err
-	}
-	if err := cache.Delete(targetFile); err != nil {
-		return err
-	}
-	return s.syncFileAnalysisStatus(project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path}, project.AnalysisStatusMissing)
-}
-
 func (s *Service) fileAnalysisCacheInput(analysis *project.Analysis, file *project.IndexFile, contentHash string) (*project.FileAnalysisCache, project.FileAnalysisInput, error) {
 	policy, err := project.NewContextPolicy(s.manager.Root())
 	if err != nil {

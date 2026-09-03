@@ -45,10 +45,8 @@ type ScopedModel struct {
 	MaxRetries       int     `json:"max_retries"`
 }
 
-// ModelCatalog exposes the function profile alongside all fixed scopes for the
-// Desktop's existing model-destination display.
+// ModelCatalog exposes the configured model metadata for each fixed scope.
 type ModelCatalog struct {
-	EffectiveModel
 	Scopes map[string]ScopedModel `json:"scopes"`
 }
 
@@ -154,16 +152,6 @@ func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash 
 	return s.manager.ValidateMutableRequest(id, revision, targetFile, baseFileHash)
 }
 
-// RecordActivity persists source-free activity for the accepted project revision.
-func (s *Service) RecordActivity(id, revision string, activity project.Activity) error {
-	return s.manager.RecordActivityFor(id, revision, activity)
-}
-
-// Activity returns only the active project's durable activity history.
-func (s *Service) Activity() ([]project.Activity, error) {
-	return s.manager.Activity()
-}
-
 // AnalyzeProject runs import analysis under its own deadline.
 func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
 	timed, cancel := context.WithTimeout(ctx, s.importTimeout)
@@ -193,7 +181,7 @@ func (s *Service) EffectiveModels() []EffectiveModel {
 // CurrentModelCatalog returns only the safe effective metadata needed for
 // model destination display and remote-confirmation decisions.
 func (s *Service) CurrentModelCatalog() ModelCatalog {
-	catalog := ModelCatalog{EffectiveModel: s.EffectiveModel(), Scopes: make(map[string]ScopedModel, 3)}
+	catalog := ModelCatalog{Scopes: make(map[string]ScopedModel, 3)}
 	for _, profile := range s.EffectiveModels() {
 		catalog.Scopes[profile.Scope] = scopedModel(profile)
 	}

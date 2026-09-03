@@ -45,7 +45,7 @@ make compose-up
 
 ```bash
 # Build the image
-docker build -t mini-orca:4.3.0 .
+docker build -t mini-orca:4.4.0 .
 
 # Run the container
 docker run -d \
@@ -56,7 +56,7 @@ docker run -d \
   -v $(pwd)/projects:/app/projects:rw \
   -v $(pwd)/logs:/app/logs:rw \
   -e MINI_ORCA_CONFIG=/app/config.yaml \
-  mini-orca:4.3.0
+  mini-orca:4.4.0
 ```
 
 ### Option 3: Using Docker Compose
@@ -77,7 +77,7 @@ docker compose --profile with-llm up -d --build
 
 | Tag | Description |
 |-----|-------------|
-| `mini-orca:4.3.0` | Current desktop-API build |
+| `mini-orca:4.4.0` | Current desktop-API build |
 | `mini-orca:latest` | Latest build (may be unstable) |
 | `mini-orca:dev` | Development build |
 
@@ -219,7 +219,7 @@ spec:
     spec:
       containers:
         - name: mini-orca
-          image: mini-orca:4.3.0
+          image: mini-orca:4.4.0
           ports:
             - containerPort: 9090
           resources:
@@ -282,7 +282,7 @@ version: '3.8'
 
 services:
   mini-orca:
-    image: mini-orca:4.3.0
+    image: mini-orca:4.4.0
     restart: always
     ports:
       - "9090:9090"
@@ -368,7 +368,7 @@ lsof -i :9090
 make docker-stop
 
 # Run on different port
-docker run -p 8081:9090 mini-orca:4.3.0
+docker run -p 8081:9090 mini-orca:4.4.0
 ```
 
 #### 2. Permission Denied
@@ -378,7 +378,7 @@ docker run -p 8081:9090 mini-orca:4.3.0
 chmod 755 ./projects ./logs
 
 # Or run as root (not recommended)
-docker run --user root -v $(pwd)/projects:/app/projects mini-orca:4.3.0
+docker run --user root -v $(pwd)/projects:/app/projects mini-orca:4.4.0
 ```
 
 #### 3. Config File Not Found
@@ -388,10 +388,10 @@ docker run --user root -v $(pwd)/projects:/app/projects mini-orca:4.3.0
 ls -la config.yaml
 
 # Use default config
-docker run -d mini-orca:4.3.0
+docker run -d mini-orca:4.4.0
 
 # Or specify config path
-docker run -e MINI_ORCA_CONFIG=/app/config.yaml -v $(pwd)/config.yaml:/app/config.yaml mini-orca:4.3.0
+docker run -e MINI_ORCA_CONFIG=/app/config.yaml -v $(pwd)/config.yaml:/app/config.yaml mini-orca:4.4.0
 ```
 
 #### 4. Health Check Failing
@@ -411,7 +411,7 @@ docker restart mini-orca
 
 ```bash
 # Increase memory limits
-docker run -m 4g --memory-swap 4g mini-orca:4.3.0
+docker run -m 4g --memory-swap 4g mini-orca:4.4.0
 
 # Or in docker-compose
 # deploy:
@@ -424,10 +424,10 @@ docker run -m 4g --memory-swap 4g mini-orca:4.3.0
 
 ```bash
 # Run with debug logging
-docker run -e MINI_ORCA_LOG_LEVEL=debug mini-orca:4.3.0
+docker run -e MINI_ORCA_LOG_LEVEL=debug mini-orca:4.4.0
 
 # Run interactively
-docker run -it --entrypoint sh mini-orca:4.3.0
+docker run -it --entrypoint sh mini-orca:4.4.0
 
 # Execute commands in running container
 docker exec -it mini-orca sh

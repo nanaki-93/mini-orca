@@ -83,14 +83,6 @@ type DraftCheckRequest struct {
 	Options          DraftCheckOptions
 }
 
-// DraftReview exposes only the editable declaration and source-free review
-// evidence. Complete source is composed transiently by the daemon.
-type DraftReview struct {
-	Draft         Draft             `json:"draft"`
-	Checks        *DraftCheckReport `json:"checks,omitempty"`
-	ApplyEligible bool              `json:"apply_eligible"`
-}
-
 type draftCheckEvidence struct {
 	Revision        int64
 	CompositionHash string
@@ -356,25 +348,6 @@ func (s *Service) storeDraftCheckReport(identity draftRevisionIdentity, draft Dr
 	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CompositionHash: compositionHash, Report: cloneCheckReport(report)}
 	copy := cloneCheckReport(report)
 	return &copy, nil
-}
-
-// ReviewDraft returns the latest source-free state, including whether the
-// exact validated and checked revision can be explicitly applied.
-func (s *Service) ReviewDraft(id string) (*DraftReview, error) {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	stored := s.drafts[id]
-	if stored == nil {
-		return nil, fmt.Errorf("draft not found")
-	}
-	s.expireDraftLocked(stored)
-	review := &DraftReview{Draft: cloneDraft(stored.draft)}
-	if stored.checks != nil && stored.checks.Revision == stored.draft.Revision && stored.checks.CompositionHash == stored.draft.CompositionHash {
-		checks := cloneCheckReport(stored.checks.Report)
-		review.Checks = &checks
-		review.ApplyEligible = stored.draft.State == DraftValid && stored.draft.Validation != nil && stored.draft.Validation.Applicable && checks.Applicable
-	}
-	return review, nil
 }
 
 // ExpireDraftsForOpenFile marks drafts stale when a UI changes the open file or

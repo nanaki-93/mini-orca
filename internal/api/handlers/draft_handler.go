@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -10,8 +9,8 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-// DraftHandler exposes the explicit draft review, Apply, Undo, and audit
-// operations.
+// DraftHandler exposes the explicit draft mutation, validation, check, Apply,
+// and Undo operations.
 type DraftHandler struct {
 	service *app.Service
 	manager *project.Manager
@@ -41,27 +40,10 @@ type draftCheckRequest struct {
 	RunTests         bool   `json:"run_tests,omitempty"`
 }
 
-// Draft returns the isolated editable declaration, never a complete source file.
-func (h *DraftHandler) Draft(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	draft, err := h.service.Draft(r.PathValue("draftID"))
-	if err != nil {
-		writeDraftError(w, "draft unavailable", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, draft)
-}
-
 // UpdateDraft creates a new revision for a manual declaration/import edit.
 func (h *DraftHandler) UpdateDraft(w http.ResponseWriter, r *http.Request) {
 	var request draftUpdateRequest
-	if !decodeDraftRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+	if !decodeDraftRequest(w, r, &request) || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
 		return
 	}
 	draft, err := h.service.UpdateDraft(app.DraftUpdateRequest{ID: r.PathValue("draftID"), ExpectedRevision: request.ExpectedRevision, Declaration: request.Declaration, Imports: request.Imports})
@@ -75,7 +57,7 @@ func (h *DraftHandler) UpdateDraft(w http.ResponseWriter, r *http.Request) {
 // ValidateDraft performs focused declaration composition for one exact draft revision.
 func (h *DraftHandler) ValidateDraft(w http.ResponseWriter, r *http.Request) {
 	var request draftValidationRequest
-	if !decodeDraftRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+	if !decodeDraftRequest(w, r, &request) || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
 		return
 	}
 	draft, err := h.service.ValidateDraft(r.PathValue("draftID"), request.ExpectedRevision)
@@ -89,7 +71,7 @@ func (h *DraftHandler) ValidateDraft(w http.ResponseWriter, r *http.Request) {
 // CheckDraft runs isolated checks for the exact validated draft revision and hash.
 func (h *DraftHandler) CheckDraft(w http.ResponseWriter, r *http.Request) {
 	var request draftCheckRequest
-	if !decodeDraftRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+	if !decodeDraftRequest(w, r, &request) || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
 		return
 	}
 	report, err := h.service.CheckDraft(r.Context(), app.DraftCheckRequest{ID: r.PathValue("draftID"), ExpectedRevision: request.ExpectedRevision, ExpectedHash: request.ExpectedHash, Options: app.DraftCheckOptions{RunLint: request.RunLint, RunTests: request.RunTests}})
@@ -100,26 +82,9 @@ func (h *DraftHandler) CheckDraft(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, report)
 }
 
-// ReviewDraft returns validation, check evidence, and explicit Apply eligibility.
-func (h *DraftHandler) ReviewDraft(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	review, err := h.service.ReviewDraft(r.PathValue("draftID"))
-	if err != nil {
-		writeDraftError(w, "draft review unavailable", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, review)
-}
-
 func (h *DraftHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	var request app.ApplyRequest
-	if !decodeDraftRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+	if !decodeDraftRequest(w, r, &request) || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
 		return
 	}
 	result, err := h.service.ApplyDraft(r.Context(), request)
@@ -132,7 +97,7 @@ func (h *DraftHandler) Apply(w http.ResponseWriter, r *http.Request) {
 
 func (h *DraftHandler) Undo(w http.ResponseWriter, r *http.Request) {
 	var request app.UndoRequest
-	if !decodeDraftRequest(w, r, &request) || !h.requireRevision(w, request.ProjectRevision) {
+	if !decodeDraftRequest(w, r, &request) || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
 		return
 	}
 	result, err := h.service.UndoDraft(r.Context(), request)
@@ -143,40 +108,9 @@ func (h *DraftHandler) Undo(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, result)
 }
 
-func (h *DraftHandler) Audit(w http.ResponseWriter, r *http.Request) {
-	if !h.requireRevision(w, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	entries, err := h.service.AuditHistory()
-	if err != nil {
-		writeDraftError(w, "audit history unavailable", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, entries)
-}
-
-func (h *DraftHandler) requireRevision(w http.ResponseWriter, revision string) bool {
-	index, err := h.manager.Index()
-	if err != nil {
-		writeProjectError(w, "project revision check failed", err)
-		return false
-	}
-	if revision == "" || revision != index.ProjectRevision {
-		writeProjectError(w, "project revision check failed", project.ErrRevisionConflict)
-		return false
-	}
-	return true
-}
-
 func decodeDraftRequest(w http.ResponseWriter, r *http.Request, value any) bool {
-	if r.Method != http.MethodPost && r.Method != http.MethodPatch {
-		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return false
-	}
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(value); err != nil {
-		api.WriteError(w, http.StatusBadRequest, "invalid draft request")
+	if err := api.DecodeJSON(w, r, value); err != nil {
+		api.WriteRequestError(w, err, "invalid draft request", "Provide one complete draft request object.")
 		return false
 	}
 	return true
@@ -187,5 +121,5 @@ func writeDraftError(w http.ResponseWriter, action string, err error) {
 		writeProjectError(w, action, err)
 		return
 	}
-	api.WriteError(w, http.StatusBadRequest, err.Error())
+	api.WriteAppError(w, api.BadRequest(action, "Review the draft and try again.", err))
 }

@@ -16,20 +16,20 @@ func NewContextHandler(service *app.Service) *ContextHandler {
 
 // Preview handles GET /api/projects/current/context?path=... for the inspector.
 func (h *ContextHandler) Preview(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		api.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
 	path := r.URL.Query().Get("path")
 	var manifest project.ContextManifest
 	var err error
-	if r.URL.Query().Get("action") == "analyze_file" {
-		manifest, err = h.service.AnalysisContextManifest(path)
-	} else {
+	switch r.URL.Query().Get("action") {
+	case "", "fix":
 		manifest, err = h.service.ContextManifest(path)
+	case "analyze_file":
+		manifest, err = h.service.AnalysisContextManifest(path)
+	default:
+		api.WriteAppError(w, api.BadRequest("invalid context action", "Choose fix or analyze_file.", nil))
+		return
 	}
 	if err != nil {
-		api.WriteError(w, http.StatusBadRequest, err.Error())
+		api.WriteAppError(w, api.BadRequest("context preview failed", "Choose an eligible project file and try again.", err))
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, manifest)

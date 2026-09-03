@@ -111,11 +111,12 @@ func TestProjectIndexAndSymbolAPIs(t *testing.T) {
 	}
 	assertStructuredError(t, stale)
 
-	reindex := httptest.NewRecorder()
-	handler.Reindex(reindex, httptest.NewRequest(http.MethodPost, "/api/projects/current/reindex", bytes.NewBufferString(`{}`)))
-	if reindex.Code != http.StatusOK {
-		t.Fatalf("reindex status = %d: %s", reindex.Code, reindex.Body.String())
+	missingRevision := httptest.NewRecorder()
+	handler.Reindex(missingRevision, httptest.NewRequest(http.MethodPost, "/api/projects/current/reindex", bytes.NewBufferString(`{}`)))
+	if missingRevision.Code != http.StatusConflict {
+		t.Fatalf("missing revision status = %d: %s", missingRevision.Code, missingRevision.Body.String())
 	}
+	assertStructuredError(t, missingRevision)
 }
 
 func TestFileAnalysisAPIsRequireRevisionAndExposeStates(t *testing.T) {
@@ -160,11 +161,6 @@ func TestFileAnalysisAPIsRequireRevisionAndExposeStates(t *testing.T) {
 	handler.AnalyzeFile(analyzed, httptest.NewRequest(http.MethodPost, "/api/projects/current/files/analysis", body))
 	if analyzed.Code != http.StatusOK || !strings.Contains(analyzed.Body.String(), `"status":"fresh"`) || !strings.Contains(analyzed.Body.String(), `"task_spec"`) || !strings.Contains(analyzed.Body.String(), `"target_symbol":"Run"`) {
 		t.Fatalf("analyzed response = %d %s", analyzed.Code, analyzed.Body.String())
-	}
-	cleared := httptest.NewRecorder()
-	handler.DeleteFileAnalysis(cleared, httptest.NewRequest(http.MethodDelete, "/api/projects/current/files/analysis?path=main.go&project_revision="+index.ProjectRevision, nil))
-	if cleared.Code != http.StatusNoContent {
-		t.Fatalf("delete response = %d %s", cleared.Code, cleared.Body.String())
 	}
 }
 
@@ -232,9 +228,10 @@ func TestPromptHandlersConfirmOnlyTheirOwnRemoteScope(t *testing.T) {
 	message.SetPathValue("sessionID", session.ID)
 	functionResponse := httptest.NewRecorder()
 	chatHandler.SendSessionMessage(functionResponse, message)
-	if functionResponse.Code != http.StatusBadRequest || !strings.Contains(functionResponse.Body.String(), "remote function provider") || strings.Contains(functionResponse.Body.String(), "hidden") || bugCalls != 1 {
+	if functionResponse.Code != http.StatusBadRequest || strings.Contains(functionResponse.Body.String(), "hidden") || bugCalls != 1 {
 		t.Fatalf("unconfirmed remote function = %d %s, bug calls %d", functionResponse.Code, functionResponse.Body.String(), bugCalls)
 	}
+	assertStructuredError(t, functionResponse)
 
 	reindexResponse := httptest.NewRecorder()
 	projectHandler.Reindex(reindexResponse, httptest.NewRequest(http.MethodPost, "/api/projects/current/reindex", bytes.NewBufferString(`{"project_revision":"`+index.ProjectRevision+`"}`)))
@@ -334,7 +331,7 @@ func TestProjectIndexAPIsRequireAnActiveProject(t *testing.T) {
 			handler.Symbols(response, httptest.NewRequest(http.MethodGet, "/api/projects/current/files/symbols?path=main.go", nil))
 		}},
 		{name: "reindex", call: func(response *httptest.ResponseRecorder) {
-			handler.Reindex(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/reindex", nil))
+			handler.Reindex(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/reindex", bytes.NewBufferString(`{}`)))
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

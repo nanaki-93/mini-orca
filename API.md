@@ -7,14 +7,13 @@ machine-readable request and response schemas are in
 
 The current API is centered on file-scoped chat sessions and editable Go
 declaration drafts. New clients open a session pinned to one project/file/symbol,
-send messages that cannot retarget it, then read, revise, validate, check, and
-explicitly apply the resulting draft. The retired `POST /api/chat/message`
-route is documented only as a `410 Gone` migration response.
+send messages that cannot retarget it, then revise, validate, check, and
+explicitly apply the resulting draft.
 
 The four desktop workspaces consume distinct API data: Summary uses the project
 overview; Analysis uses explicit one-file analysis and bounded Analyze-all;
 Bugs reads provenance-labelled findings and explicit Go scan results; and
-Editor uses one file-scoped chat session plus draft review routes. See the
+Editor uses one file-scoped chat session plus draft validation and checks. See the
 [route contract](docs/api-contract.md) for the complete, once-only live route
 inventory and request guards.
 
@@ -25,8 +24,7 @@ automatic scans, automatic writes, multi-file changes, commits, or pushes.
 ## Scoped model and repair contract
 
 `GET /api/models/current` reports safe metadata for the fixed `analyze`, `bug`,
-and `function` profiles; legacy top-level fields remain the effective function
-profile. It never includes an API key. Import sends prompt content only to
+and `function` profiles. It never includes an API key. Import sends prompt content only to
 `analyze`, file analysis and Analyze-all only to `bug`, and declaration messages
 only to `function`. Confirmation is evaluated independently for each remote
 scope. An optional configured `reasoning_effort` is reported as non-secret
@@ -50,8 +48,7 @@ themselves. Passing checks return to the normal human diff review and explicit
 Apply flow.
 
 The API binds to loopback by default. `/api/models/current` exposes safe model
-metadata for `analyze`, `bug`, and `function`; its top-level fields remain the
-effective `function` profile for compatibility. A request that sends prompt
+metadata for `analyze`, `bug`, and `function`. A request that sends prompt
 content must include `confirm_remote_provider: true` only when its own scope is
 non-loopback: import uses `analyze`, file analysis uses `bug`, and declaration
 generation uses `function`. Local credentials belong only in ignored

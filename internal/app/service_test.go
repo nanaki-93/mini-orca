@@ -53,10 +53,10 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 		t.Fatal(err)
 	}
 	catalog := service.CurrentModelCatalog()
-	if catalog.Model != "function-model" || catalog.Profile != "function" || len(catalog.Scopes) != 3 {
+	if len(catalog.Scopes) != 3 {
 		t.Fatalf("catalog top-level compatibility = %+v", catalog)
 	}
-	if catalog.Scopes["analyze"].ProviderOrigin != "https://analyze.example" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.ReasoningEffort != "max" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
+	if catalog.Scopes["analyze"].ProviderOrigin != "https://analyze.example" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.Scopes["function"].ReasoningEffort != "max" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
 		t.Fatalf("scope catalog = %+v", catalog.Scopes)
 	}
 	encoded, err := json.Marshal(catalog)
