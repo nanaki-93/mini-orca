@@ -81,6 +81,28 @@ internal fun MiniOrcaApp(
   val functionModel = workflow.model(ModelScope.Function)
 
   val editorProgress = editorProgressUiState(appState)
+  val rightToolWindowBadges =
+      workflowToolWindowBadges(
+          editor = appState.review.editor,
+          evidence =
+              reviewEvidenceUiState(
+                  project = appState.project,
+                  selected = appState.selectedFile,
+                  editor = appState.review.editor,
+                  draft = appState.review.draft,
+                  checks = appState.review.checks,
+                  checksRunning = appState.loading,
+              ),
+          decision =
+              applyDecisionUiState(
+                  project = appState.project,
+                  selected = appState.selectedFile,
+                  editor = appState.review.editor,
+                  draft = appState.review.draft,
+                  checks = appState.review.checks,
+                  applied = appState.review.applied,
+              ),
+      )
   LaunchedEffect(editorProgress.progress) {
     if (editorProgress.progress in setOf(EditorProgress.Review, EditorProgress.Receipt))
         composerRequested = false
@@ -281,9 +303,9 @@ internal fun MiniOrcaApp(
         }
         if (pendingComposerFocus == focusTarget) pendingComposerFocus = null
       }
-      DraftContextPane(
+      AssistantToolWindow(
           state =
-              DraftContextPaneState(
+              AssistantToolWindowState(
                   project = appState.project,
                   selected = appState.selectedFile,
                   session = appState.chat.session,
@@ -300,7 +322,7 @@ internal fun MiniOrcaApp(
                   draftFocus = draftFocusRequester,
               ),
           conversationActions =
-              DraftConversationActions(
+              AssistantConversationActions(
                   updateMessage = { chatMessage = it },
                   updateNewSymbol = { newChatSymbol = it },
                   confirmRemoteProvider = {
@@ -329,9 +351,9 @@ internal fun MiniOrcaApp(
   }
   val reviewPane: @Composable (Modifier) -> Unit = { modifier ->
     if (editorProgress.progress in setOf(EditorProgress.Review, EditorProgress.Receipt)) {
-      ReviewContextPane(
-          reviewContextPaneState(appState),
-          reviewEvidenceActions(presenter, chatMode, newChatSymbol) { composerRequested = true },
+      ReviewToolWindow(
+          reviewToolWindowState(appState),
+          reviewToolWindowActions(presenter, chatMode, newChatSymbol) { composerRequested = true },
           draftApplicationActions(presenter),
           modifier)
     } else {
@@ -453,7 +475,7 @@ internal fun MiniOrcaApp(
                 }
               },
           ),
-      panes = DesktopShellPanes(explorer, rightToolWindows),
+      panes = DesktopShellPanes(explorer, rightToolWindows, rightToolWindowBadges),
   )
   pendingDraftDiscard?.let { pending ->
     DraftDiscardDialog(pending, ::discardDraftAndContinue) { pendingDraftDiscard = null }
@@ -472,10 +494,11 @@ internal fun MiniOrcaApp(
   }
 }
 
-private fun reviewContextPaneState(state: DesktopState) =
-    ReviewContextPaneState(
+private fun reviewToolWindowState(state: DesktopState) =
+    ReviewToolWindowState(
         project = state.project,
         selected = state.selectedFile,
+        selectedSymbol = state.selectedSymbol,
         session = state.chat.session,
         editor = state.review.editor,
         draft = state.review.draft,
@@ -486,13 +509,13 @@ private fun reviewContextPaneState(state: DesktopState) =
         checksRunning = state.loading,
     )
 
-private fun reviewEvidenceActions(
+private fun reviewToolWindowActions(
     presenter: DesktopWorkflowPresenter,
     chatMode: ChatEditMode,
     newChatSymbol: String,
     editDraft: () -> Unit,
 ) =
-    ReviewEvidenceActions(
+    ReviewToolWindowActions(
         runChecks = presenter::runDraftChecks,
         reviseWithCheckOutput = { presenter.reviseWithCheckOutput(chatMode, newChatSymbol) },
         editDraft = editDraft,

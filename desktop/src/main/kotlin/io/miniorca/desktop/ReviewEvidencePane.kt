@@ -286,9 +286,9 @@ internal fun ReviewDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Mod
 }
 
 @Composable
-internal fun ReviewContextPane(
-    state: ReviewContextPaneState,
-    evidenceActions: ReviewEvidenceActions,
+internal fun ReviewToolWindow(
+    state: ReviewToolWindowState,
+    evidenceActions: ReviewToolWindowActions,
     applicationActions: DraftApplicationActions,
     modifier: Modifier = Modifier,
 ) {
@@ -310,185 +310,198 @@ internal fun ReviewContextPane(
   var showDiagnostics by
       remember(state.draft?.id, state.draft?.revision, state.draft?.hash) { mutableStateOf(false) }
 
-  Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-    if (decision.receiptTitle != null && state.applied != null) {
-      FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-        SectionLabel("APPLIED RECEIPT")
-        Text(
-            decision.receiptTitle,
-            color = PrimaryText,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 17.sp,
-            modifier = Modifier.padding(top = 4.dp))
-        Text(
-            decision.receiptDetail,
-            color = SecondaryText,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 6.dp))
-        Text(
-            if (state.applied.undoAvailable) "Undo is available for this applied change."
-            else "Undo is no longer available for this applied change.",
-            color = SecondaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 6.dp))
-        FocusFlowButton(
-            onClick = applicationActions.undo,
-            enabled = state.applied.undoAvailable,
-            tone = ActionTone.Attention,
-            modifier = Modifier.padding(top = 10.dp)) {
-              Text(decision.undoLabel)
-            }
-      }
-      return@Column
-    }
-    FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-      SectionLabel("REVIEW")
-      Text(
-          "Current scope and validation",
-          color = PrimaryText,
-          fontWeight = FontWeight.SemiBold,
-          fontSize = 17.sp,
-          modifier = Modifier.padding(top = 4.dp))
-      Spacer(Modifier.height(10.dp))
-      EvidenceRow(evidence.identity)
-      Spacer(Modifier.height(8.dp))
-      EvidenceRow(evidence.validation)
-      val diagnostics = state.editor?.diagnostics.orEmpty().take(8)
-      if (diagnostics.isNotEmpty()) {
-        FocusFlowButton(
-            onClick = { showDiagnostics = !showDiagnostics },
-            tone = ActionTone.Neutral,
-            modifier = Modifier.padding(top = 8.dp)) {
+  Column(modifier.fillMaxSize()) {
+    ToolWindowScopeHeader(
+        "REVIEW",
+        reviewToolWindowScope(state.selected, state.selectedSymbol, state.draft, state.applied),
+        Modifier.padding(12.dp))
+    Column(
+        Modifier.weight(1f)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 12.dp)) {
+          if (decision.receiptTitle != null && state.applied != null) {
+            FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+              SectionLabel("APPLIED RECEIPT")
               Text(
-                  if (showDiagnostics) "Hide validation diagnostics"
-                  else "Show validation diagnostics (${diagnostics.size})")
-            }
-        if (showDiagnostics)
-            SelectionContainer {
-              Column(Modifier.padding(top = 5.dp)) {
-                diagnostics.forEach { diagnostic ->
-                  Text(
-                      "${diagnostic.code}: ${diagnostic.message}",
-                      color = Error,
-                      fontSize = 11.sp,
-                      modifier = Modifier.padding(top = 3.dp))
-                }
-              }
-            }
-      }
-      if (state.editor != null && state.draft != null)
-          FocusFlowButton(
-              onClick = evidenceActions.editDraft,
-              tone = ActionTone.Neutral,
-              modifier = Modifier.padding(top = 8.dp)) {
-                Text("Edit draft")
-              }
-    }
-    Spacer(Modifier.height(10.dp))
-    FocusFlowPanel(Modifier.fillMaxWidth()) {
-      EvidenceRow(evidence.checks)
-      if (evidence.canRunChecks)
-          FocusFlowButton(
-              onClick = evidenceActions.runChecks,
-              tone = ActionTone.Primary,
-              modifier = Modifier.padding(top = 8.dp)) {
-                Text(evidence.runChecksLabel)
-              }
-      val repairMessage = repairMessageForChecks(state.session, state.draft, state.checks)
-      if (repairMessage != null || repairLimitReached(state.session, state.draft, state.checks)) {
-        FocusFlowButton(
-            onClick = evidenceActions.reviseWithCheckOutput,
-            enabled = repairMessage != null && !state.checksRunning,
-            tone = ActionTone.Attention,
-            modifier = Modifier.padding(top = 8.dp)) {
+                  decision.receiptTitle,
+                  color = PrimaryText,
+                  fontWeight = FontWeight.SemiBold,
+                  fontSize = 17.sp,
+                  modifier = Modifier.padding(top = 4.dp))
               Text(
-                  if (repairMessage != null) "Revise with check output" else "Repair limit reached")
+                  decision.receiptDetail,
+                  color = SecondaryText,
+                  fontFamily = FontFamily.Monospace,
+                  fontSize = 11.sp,
+                  modifier = Modifier.padding(top = 6.dp))
+              Text(
+                  if (state.applied.undoAvailable) "Undo is available for this applied change."
+                  else "Undo is no longer available for this applied change.",
+                  color = SecondaryText,
+                  fontSize = 12.sp,
+                  modifier = Modifier.padding(top = 6.dp))
+              FocusFlowButton(
+                  onClick = applicationActions.undo,
+                  enabled = state.applied.undoAvailable,
+                  tone = ActionTone.Attention,
+                  modifier = Modifier.padding(top = 10.dp)) {
+                    Text(decision.undoLabel)
+                  }
             }
-      }
-      state.checks?.checks.orEmpty().forEach { check ->
-        Text(
-            "${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}",
-            color = evidenceColor(checkStatus(check.state)),
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 6.dp))
-      }
-      val checksWithOutput =
-          state.checks?.checks.orEmpty().filter {
-            it.command.isNotEmpty() || it.output.isNotBlank()
+            return@Column
           }
-      if (checksWithOutput.isNotEmpty()) {
-        FocusFlowButton(
-            onClick = { showCommandOutput = !showCommandOutput },
-            tone = ActionTone.Neutral,
-            modifier = Modifier.padding(top = 8.dp)) {
+          FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+            SectionLabel("REVIEW")
+            Text(
+                "Current scope and validation",
+                color = PrimaryText,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 17.sp,
+                modifier = Modifier.padding(top = 4.dp))
+            Spacer(Modifier.height(10.dp))
+            EvidenceRow(evidence.identity)
+            Spacer(Modifier.height(8.dp))
+            EvidenceRow(evidence.validation)
+            val diagnostics = state.editor?.diagnostics.orEmpty().take(8)
+            if (diagnostics.isNotEmpty()) {
+              FocusFlowButton(
+                  onClick = { showDiagnostics = !showDiagnostics },
+                  tone = ActionTone.Neutral,
+                  modifier = Modifier.padding(top = 8.dp)) {
+                    Text(
+                        if (showDiagnostics) "Hide validation diagnostics"
+                        else "Show validation diagnostics (${diagnostics.size})")
+                  }
+              if (showDiagnostics)
+                  SelectionContainer {
+                    Column(Modifier.padding(top = 5.dp)) {
+                      diagnostics.forEach { diagnostic ->
+                        Text(
+                            "${diagnostic.code}: ${diagnostic.message}",
+                            color = Error,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 3.dp))
+                      }
+                    }
+                  }
+            }
+            if (state.editor != null && state.draft != null)
+                FocusFlowButton(
+                    onClick = evidenceActions.editDraft,
+                    tone = ActionTone.Neutral,
+                    modifier = Modifier.padding(top = 8.dp)) {
+                      Text("Edit draft")
+                    }
+          }
+          Spacer(Modifier.height(10.dp))
+          FocusFlowPanel(Modifier.fillMaxWidth()) {
+            EvidenceRow(evidence.checks)
+            if (evidence.canRunChecks)
+                FocusFlowButton(
+                    onClick = evidenceActions.runChecks,
+                    tone = ActionTone.Primary,
+                    modifier = Modifier.padding(top = 8.dp)) {
+                      Text(evidence.runChecksLabel)
+                    }
+            val repairMessage = repairMessageForChecks(state.session, state.draft, state.checks)
+            if (repairMessage != null ||
+                repairLimitReached(state.session, state.draft, state.checks)) {
+              FocusFlowButton(
+                  onClick = evidenceActions.reviseWithCheckOutput,
+                  enabled = repairMessage != null && !state.checksRunning,
+                  tone = ActionTone.Attention,
+                  modifier = Modifier.padding(top = 8.dp)) {
+                    Text(
+                        if (repairMessage != null) "Revise with check output"
+                        else "Repair limit reached")
+                  }
+            }
+            state.checks?.checks.orEmpty().forEach { check ->
               Text(
-                  if (showCommandOutput) "Hide command output"
-                  else "Show command output (${checksWithOutput.size})")
+                  "${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}",
+                  color = evidenceColor(checkStatus(check.state)),
+                  fontSize = 11.sp,
+                  modifier = Modifier.padding(top = 6.dp))
             }
-        if (showCommandOutput)
-            SelectionContainer {
-              Column(Modifier.padding(top = 6.dp)) {
-                checksWithOutput.forEach { check ->
-                  Text(
-                      check.name,
-                      color = PrimaryText,
-                      fontWeight = FontWeight.SemiBold,
-                      fontSize = 11.sp)
-                  if (check.command.isNotEmpty())
-                      Text(
-                          "\$ ${check.command.joinToString(" ")}",
-                          color = SecondaryText,
-                          fontFamily = FontFamily.Monospace,
-                          fontSize = 10.sp)
-                  if (check.output.isNotBlank())
-                      Text(
-                          check.output,
-                          color = SecondaryText,
-                          fontFamily = FontFamily.Monospace,
-                          fontSize = 10.sp,
-                          modifier = Modifier.padding(top = 2.dp))
+            val checksWithOutput =
+                state.checks?.checks.orEmpty().filter {
+                  it.command.isNotEmpty() || it.output.isNotBlank()
                 }
-              }
+            if (checksWithOutput.isNotEmpty()) {
+              FocusFlowButton(
+                  onClick = { showCommandOutput = !showCommandOutput },
+                  tone = ActionTone.Neutral,
+                  modifier = Modifier.padding(top = 8.dp)) {
+                    Text(
+                        if (showCommandOutput) "Hide command output"
+                        else "Show command output (${checksWithOutput.size})")
+                  }
+              if (showCommandOutput)
+                  SelectionContainer {
+                    Column(Modifier.padding(top = 6.dp)) {
+                      checksWithOutput.forEach { check ->
+                        Text(
+                            check.name,
+                            color = PrimaryText,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp)
+                        if (check.command.isNotEmpty())
+                            Text(
+                                "\$ ${check.command.joinToString(" ")}",
+                                color = SecondaryText,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp)
+                        if (check.output.isNotBlank())
+                            Text(
+                                check.output,
+                                color = SecondaryText,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(top = 2.dp))
+                      }
+                    }
+                  }
             }
-      }
-    }
-    Spacer(Modifier.height(10.dp))
-    ReadOnlyImpactPane(state.impact, state.gitStatus)
-    Spacer(Modifier.height(12.dp))
-    FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-      if (decision.eligible) {
-        Text(
-            "Ready for the one guarded write",
-            color = PrimaryText,
-            fontWeight = FontWeight.SemiBold)
-        Text(
-            "Nothing has changed yet. This action applies only the named declaration in the named file.",
-            color = SecondaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 4.dp))
-        FocusFlowButton(
-            onClick = applicationActions.apply,
-            tone = ActionTone.Positive,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-              Text(decision.actionLabel)
+          }
+          Spacer(Modifier.height(10.dp))
+          ReadOnlyImpactPane(state.impact, state.gitStatus)
+          Spacer(Modifier.height(12.dp))
+          FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+            if (decision.eligible) {
+              Text(
+                  "Ready for the one guarded write",
+                  color = PrimaryText,
+                  fontWeight = FontWeight.SemiBold)
+              Text(
+                  "Nothing has changed yet. This action applies only the named declaration in the named file.",
+                  color = SecondaryText,
+                  fontSize = 12.sp,
+                  modifier = Modifier.padding(top = 4.dp))
+              FocusFlowButton(
+                  onClick = applicationActions.apply,
+                  tone = ActionTone.Positive,
+                  modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text(decision.actionLabel)
+                  }
+            } else {
+              Text("Apply remains locked", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+              Text(
+                  decision.reason,
+                  color = Warning,
+                  fontSize = 11.sp,
+                  modifier = Modifier.padding(top = 5.dp))
             }
-      } else {
-        Text("Apply remains locked", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-        Text(
-            decision.reason,
-            color = Warning,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 5.dp))
-      }
-    }
+          }
+        }
   }
 }
 
 /** Immutable daemon-derived review evidence for one file-scoped candidate. */
-internal data class ReviewContextPaneState(
+internal data class ReviewToolWindowState(
     val project: ProjectAnalysis?,
     val selected: ProjectFileInfo?,
+    val selectedSymbol: SymbolInfo?,
     val session: ChatSession?,
     val editor: EditableDraftState?,
     val draft: DeclarationDraft?,
@@ -500,7 +513,7 @@ internal data class ReviewContextPaneState(
 )
 
 /** Review and repair intents that leave guarded Apply and Undo separate. */
-internal data class ReviewEvidenceActions(
+internal data class ReviewToolWindowActions(
     val runChecks: () -> Unit,
     val reviseWithCheckOutput: () -> Unit,
     val editDraft: () -> Unit,
