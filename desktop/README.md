@@ -11,6 +11,16 @@ The client uses `http://localhost:9090` by default. Set `MINI_ORCA_URL` to point
 
 The Editor workflow is Go-first: exact replace/create declaration drafts receive composition and focused validation. Other language views remain analysis-only until equivalent validators are available.
 
+## Build compatibility
+
+The checked-in wrapper uses Gradle 8.6 with Kotlin 2.0.21 and Compose
+Multiplatform 1.7.0. Kotlin's [Gradle compatibility table](https://kotlinlang.org/docs/gradle-configure-project.html#apply-the-plugin)
+lists Gradle 8.6 as fully supported for Kotlin 2.0.20–2.0.21; the
+[Compose Multiplatform 1.7.0 release](https://blog.jetbrains.com/kotlin/2024/10/compose-multiplatform-1-7-0-released/)
+documents its Kotlin 2.0.20 pairing. Keep the wrapper and plugins aligned, and
+use `./desktop/gradlew -p desktop test --warning-mode all` to check the desktop
+build without a globally installed Gradle.
+
 ## Opening a project
 
 After the first successful project open, Mini-Orca remembers the canonical local path.
