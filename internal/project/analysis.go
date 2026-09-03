@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -21,7 +20,7 @@ const (
 	maxProjectFiles      = 20000
 )
 
-var ignoredDirectories = map[string]bool{
+var ignoredProjectDirectories = map[string]bool{
 	".git": true, ".gradle": true, ".idea": true, ".mini-orca": true,
 	"node_modules": true, "vendor": true, "build": true, "dist": true,
 	"target": true, "out": true, ".next": true, ".cache": true,
@@ -107,7 +106,7 @@ func NewAnalyzerWithProvenance(client chatClient, model, scope, providerOrigin, 
 }
 
 func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) {
-	analysis, err := a.scan(root)
+	analysis, err := a.scan(ctx, root)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +159,7 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 // Restore reloads deterministic facts and the persisted project interpretation
 // without contacting a model or rewriting project artifacts.
 func (a *Analyzer) Restore(root string) (*Analysis, error) {
-	analysis, err := a.scan(root)
+	analysis, err := a.scan(context.Background(), root)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +186,7 @@ func (a *Analyzer) Restore(root string) (*Analysis, error) {
 	return analysis, nil
 }
 
-func (a *Analyzer) scan(root string) (*Analysis, error) {
+func (a *Analyzer) scan(ctx context.Context, root string) (*Analysis, error) {
 	canonical, err := CanonicalRoot(root)
 	if err != nil {
 		return nil, err
@@ -196,7 +195,7 @@ func (a *Analyzer) scan(root string) (*Analysis, error) {
 	if err != nil {
 		return nil, err
 	}
-	analysis, err := scanWithPolicy(canonical, policy)
+	analysis, err := scanWithPolicy(ctx, canonical, policy)
 	if err != nil {
 		return nil, err
 	}
@@ -208,15 +207,7 @@ func (a *Analyzer) scan(root string) (*Analysis, error) {
 	return analysis, nil
 }
 
-func scan(root string) (*Analysis, error) {
-	policy, err := NewContextPolicy(root)
-	if err != nil {
-		return nil, err
-	}
-	return scanWithPolicy(root, policy)
-}
-
-func scanWithPolicy(root string, policy *ContextPolicy) (*Analysis, error) {
+func scanWithPolicy(ctx context.Context, root string, policy *ContextPolicy) (*Analysis, error) {
 	result := &Analysis{
 		Name: filepath.Base(root), Path: root, Type: "unknown",
 		Languages: make(map[string]int), AnalysisFile: analysisRelativePath, AnalyzedAt: time.Now().UTC(),
@@ -224,45 +215,30 @@ func scanWithPolicy(root string, policy *ContextPolicy) (*Analysis, error) {
 	detection := detectProject(root)
 	result.Type = detection.Type
 	result.BuildFile = detection.BuildFile
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return nil
-		}
-		if entry.IsDir() {
-			if path != root && ignoredDirectories[entry.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if len(result.Files) >= maxProjectFiles {
-			return fmt.Errorf("project contains more than %d files", maxProjectFiles)
-		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return nil
-		}
-		relativePath := filepath.ToSlash(relative)
-		if !policy.Decide(relativePath).Include {
-			return nil
-		}
-		result.Files = append(result.Files, relativePath)
-		result.FileCount++
-		language := detectLanguage(path)
-		if language == "Text" {
-			return nil
-		}
-		result.SourceFileCount++
-		result.Languages[language]++
-		data, err := readLimited(path, maxFileViewBytes)
-		if err == nil && !isBinary(data) {
-			result.TotalLines += countLines(data)
-		}
-		return nil
+	paths, err := WalkProjectFiles(ctx, ProjectWalkOptions{
+		Root: root, Policy: policy, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("scan project: %w", err)
 	}
-	sort.Strings(result.Files)
+	result.Files = paths
+	result.FileCount = len(paths)
+	for _, relativePath := range paths {
+		language := detectLanguage(relativePath)
+		if language == "Text" {
+			continue
+		}
+		result.SourceFileCount++
+		result.Languages[language]++
+		path, err := ResolveFile(root, relativePath)
+		if err != nil {
+			continue
+		}
+		data, err := readLimited(path, maxFileViewBytes)
+		if err == nil && !isBinary(data) {
+			result.TotalLines += countLines(data)
+		}
+	}
 	return result, nil
 }
 

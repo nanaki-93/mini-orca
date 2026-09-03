@@ -1,11 +1,11 @@
 package project
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"time"
 )
 
@@ -81,11 +81,12 @@ func buildIndex(root, id, revision string, persist bool) (*ProjectIndex, error) 
 			previousFiles[file.Path] = file
 		}
 	}
-	paths, err := listFiles(canonical)
+	paths, err := WalkProjectFiles(context.Background(), ProjectWalkOptions{
+		Root: canonical, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles,
+	})
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(paths)
 	index := &ProjectIndex{
 		SchemaVersion: indexSchemaVersion, ProjectID: id, ProjectRevision: revision,
 		GeneratedAt: time.Now().UTC(), Files: make([]IndexFile, 0, len(paths)),

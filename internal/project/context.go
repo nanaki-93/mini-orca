@@ -1,12 +1,12 @@
 package project
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -60,7 +60,9 @@ func (b *ContextBuilder) BuildWithManifest(root, target string) (string, Context
 	if err != nil {
 		return "", manifest, err
 	}
-	allFiles, err := listFiles(canonical)
+	allFiles, err := WalkProjectFiles(context.Background(), ProjectWalkOptions{
+		Root: canonical, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles,
+	})
 	if err != nil {
 		return "", manifest, err
 	}
@@ -147,20 +149,6 @@ func (b *ContextBuilder) BuildWithManifest(root, target string) (string, Context
 	return result.String(), manifest, nil
 }
 
-func listContextFiles(root string, policy *ContextPolicy) ([]string, error) {
-	files, err := listFiles(root)
-	if err != nil {
-		return nil, err
-	}
-	allowed := files[:0]
-	for _, file := range files {
-		if policy.Decide(file).Include {
-			allowed = append(allowed, file)
-		}
-	}
-	return allowed, nil
-}
-
 func estimateTokens(text string) int {
 	if text == "" {
 		return 0
@@ -173,34 +161,6 @@ func min(left, right int) int {
 		return left
 	}
 	return right
-}
-
-func listFiles(root string) ([]string, error) {
-	files := make([]string, 0)
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return nil
-		}
-		if entry.IsDir() {
-			if path != root && ignoredDirectories[entry.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if len(files) >= maxProjectFiles {
-			return fmt.Errorf("project contains more than %d files", maxProjectFiles)
-		}
-		relative, err := filepath.Rel(root, path)
-		if err == nil {
-			files = append(files, filepath.ToSlash(relative))
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(files)
-	return files, nil
 }
 
 func prioritize(files []string, target string) []string {
