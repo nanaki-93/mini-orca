@@ -54,7 +54,7 @@ The previous sequence remains reproducible through
 | 126 | [Add the Problems tool window](completed/126_problems_tool_window.md) | 125 | Complete |
 | 127 | [Add Checks and Output tool windows](completed/127_checks_output_tool_windows.md) | 126 | Complete |
 | 128 | [Simplify the toolbar and command search](completed/128_toolbar_and_command_search.md) | 127 | Complete |
-| 129 | [Add the persistent Desktop status bar](129_persistent_status_bar.md) | 128 | Pending |
+| 129 | [Add the persistent Desktop status bar](completed/129_persistent_status_bar.md) | 128 | Complete |
 | 130 | [Harden responsive and accessible IDE navigation](130_responsive_accessible_ide_shell.md) | 129 | Pending |
 | 131 | [Unify workspace density and visual states](131_workspace_density_polish.md) | 130 | Pending |
 | 132 | [Complete IDE UI acceptance](132_ide_ui_acceptance.md) | 118–131 | Pending |

@@ -161,7 +161,25 @@ internal data class DesktopShellState(
     val editor: DesktopShellEditorState,
     val context: DesktopShellContextState,
     val palette: DesktopShellPaletteState,
+    val statusProviders: DesktopShellStatusProviders,
 )
+
+internal data class DesktopShellStatusProviders(
+    val analyze: ScopedModel,
+    val bugs: ScopedModel,
+    val functionEdits: ScopedModel,
+)
+
+internal fun statusProviderForWorkspace(
+    workspace: Workspace,
+    providers: DesktopShellStatusProviders,
+): DesktopStatusProvider =
+    when (workspace) {
+      Workspace.Summary -> DesktopStatusProvider(ModelScope.Analyze, providers.analyze)
+      Workspace.Analysis,
+      Workspace.Bugs -> DesktopStatusProvider(ModelScope.Bug, providers.bugs)
+      Workspace.Editor -> DesktopStatusProvider(ModelScope.Function, providers.functionEdits)
+    }
 
 internal data class DesktopShellEditorState(
     val progress: EditorProgressUiState,
@@ -242,6 +260,7 @@ private data class ShellFocusRequesters(
     val editor: FocusRequester,
     val rightToolWindow: FocusRequester,
     val bottomToolWindow: FocusRequester,
+    val statusBar: FocusRequester,
 )
 
 internal fun paletteFocusRestorationRegion(
@@ -254,7 +273,6 @@ internal fun paletteFocusRestorationRegion(
           if (rightToolWindowVisible) previous else DesktopFocusRegion.Editor
       DesktopFocusRegion.BottomToolWindow ->
           if (bottomToolWindowVisible) previous else DesktopFocusRegion.Editor
-      DesktopFocusRegion.StatusBar -> DesktopFocusRegion.Toolbar
       else -> previous
     }
 
@@ -265,7 +283,7 @@ private fun ShellFocusRequesters.forRegion(region: DesktopFocusRegion): FocusReq
       DesktopFocusRegion.Editor -> editor
       DesktopFocusRegion.RightToolWindow -> rightToolWindow
       DesktopFocusRegion.BottomToolWindow -> bottomToolWindow
-      DesktopFocusRegion.StatusBar -> fallback
+      DesktopFocusRegion.StatusBar -> statusBar
     }
 
 @Composable
@@ -284,6 +302,10 @@ internal fun DesktopShell(
   val editor = state.editor
   val context = state.context
   val palette = state.palette
+  val statusPresentation =
+      desktopStatusBarPresentation(
+          desktopStatusBarState(
+              appState, statusProviderForWorkspace(appState.workspace, state.statusProviders)))
   val workspace = appState.workspace
   val shellMode = desktopShellMode(appState)
   val scope = rememberCoroutineScope()
@@ -295,11 +317,13 @@ internal fun DesktopShell(
         editor = FocusRequester(),
         rightToolWindow = FocusRequester(),
         bottomToolWindow = FocusRequester(),
+        statusBar = FocusRequester(),
     )
   }
   val drawerState = rememberDrawerState(DrawerValue.Closed)
   var narrowDrawer by remember { mutableStateOf(NarrowDrawer.Files) }
   var paletteFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
+  var statusDetailsVisible by remember { mutableStateOf(false) }
   val showsEditorChrome =
       shellMode == DesktopShellMode.ProjectWorkspace && editorChromeVisible(workspace)
   fun openDrawer(drawer: NarrowDrawer) {
@@ -336,9 +360,16 @@ internal fun DesktopShell(
     layoutActions.updateLayout(updated)
     layoutActions.saveLayout(updated)
   }
+  LaunchedEffect(appState.project?.projectId, appState.project?.projectRevision) {
+    statusDetailsVisible = false
+  }
   fun dismissPaletteAndRestoreFocus() {
     paletteFocusRestoreTarget = layout.lastFocusedRegion
     paletteActions.dismiss()
+  }
+  fun showStatusDetails() {
+    layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.StatusBar))
+    statusDetailsVisible = true
   }
   LaunchedEffect(showsEditorChrome) { if (!showsEditorChrome) drawerState.close() }
   Surface(
@@ -507,7 +538,14 @@ internal fun DesktopShell(
                 content = panes.bottomToolWindows,
                 modifier = Modifier.focusRequester(focusRequesters.bottomToolWindow).focusable(),
             )
-            ShellStatusRegion(appState.status, appState.error, appState.loading)
+            if (desktopStatusBarVisible(appState.project)) {
+              PersistentStatusBar(
+                  presentation = statusPresentation,
+                  widthDp = widthDp,
+                  onOpenDetails = ::showStatusDetails,
+                  modifier = Modifier.focusRequester(focusRequesters.statusBar).focusable(),
+              )
+            }
           }
         }
         if (palette.visible) {
@@ -534,6 +572,9 @@ internal fun DesktopShell(
               },
               ::dismissPaletteAndRestoreFocus,
           )
+        }
+        if (statusDetailsVisible) {
+          DesktopStatusDetailsDialog(statusPresentation) { statusDetailsVisible = false }
         }
       }
       if (context.visible)

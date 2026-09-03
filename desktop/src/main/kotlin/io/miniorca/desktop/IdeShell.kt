@@ -8,12 +8,10 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -251,31 +249,4 @@ internal fun HorizontalResizableDivider(onDelta: (Float) -> Unit, onCommit: () -
   ) {
     Box(Modifier.fillMaxWidth().height(1.dp).background(Border))
   }
-}
-
-internal fun desktopStatusBarVisible(loading: Boolean, error: String?): Boolean =
-    loading || error != null
-
-@Composable
-internal fun ShellStatusRegion(status: String, error: String?, loading: Boolean) {
-  if (!desktopStatusBarVisible(loading, error)) return
-  Row(
-      Modifier.fillMaxWidth()
-          .height(30.dp)
-          .background(Panel)
-          .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
-          .padding(horizontal = 12.dp),
-      verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(7.dp)
-                .background(
-                    if (error == null) Warning else Error,
-                    androidx.compose.foundation.shape.RoundedCornerShape(50)))
-        Spacer(Modifier.width(7.dp))
-        Text(
-            error ?: status,
-            color = if (error == null) SecondaryText else Error,
-            fontSize = 11.sp,
-            maxLines = 1)
-      }
 }

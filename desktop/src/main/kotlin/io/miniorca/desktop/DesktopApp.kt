@@ -451,6 +451,12 @@ internal fun MiniOrcaApp(
                       bugProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
                   ),
               palette = DesktopShellPaletteState(paletteMode, paletteQuery, showPalette),
+              statusProviders =
+                  DesktopShellStatusProviders(
+                      analyze = analyzeModel,
+                      bugs = bugModel,
+                      functionEdits = functionModel,
+                  ),
           ),
       layoutActions =
           DesktopShellLayoutActions(
