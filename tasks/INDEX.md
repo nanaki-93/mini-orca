@@ -113,7 +113,7 @@ Tasks 57–74 retain the completed Desktop visual-refactor history documented in
 | 102 | [Scoped-model acceptance](completed/102_model_scopes_acceptance.md) | 95–101 | Complete |
 | 103 | [Cleanup contract and characterization baseline](completed/103_cleanup_contract_baseline.md) | 102 | Complete |
 | 104 | [Retire autonomous orchestration](completed/104_retire_autonomous_orchestration.md) | 103 | Complete |
-| 105 | [Simplify scoped model execution](105_simplify_scoped_model_execution.md) | 104 | Pending |
+| 105 | [Simplify scoped model execution](completed/105_simplify_scoped_model_execution.md) | 104 | Complete |
 | 106 | [Consolidate project detection and remove tools](106_consolidate_project_detection.md) | 105 | Pending |
 | 107 | [Enforce one scoped configuration and LLM boundary](107_strict_scoped_configuration.md) | 106 | Pending |
 | 108 | [Introduce draft-native identities and Apply stages](108_draft_identities_apply.md) | 107 | Pending |

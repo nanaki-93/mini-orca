@@ -18,7 +18,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
 )
 
-func TestGenerateUsesConfiguredCoderProfile(t *testing.T) {
+func TestGenerateUsesConfiguredFunctionProfile(t *testing.T) {
 	var received llm.ChatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
@@ -44,7 +44,7 @@ func TestGenerateUsesConfiguredCoderProfile(t *testing.T) {
 	}
 	service, err := New(&config.Config{
 		LLM:    config.LLMConfig{BaseURL: server.URL, Model: "default-model", Temperature: 0.25, MaxTokens: 321},
-		Agents: config.AgentsConfig{Coder: config.AgentConfig{Model: "coder-override", Skills: []string{"custom_skill"}, TimeoutSeconds: 30}},
+		Agents: config.AgentsConfig{Coder: config.AgentConfig{Model: "coder-override", TimeoutSeconds: 30}},
 		Retry:  config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1},
 	}, manager)
 	if err != nil {
@@ -61,8 +61,8 @@ func TestGenerateUsesConfiguredCoderProfile(t *testing.T) {
 	if received.Model != "coder-override" || received.Temperature != 0.25 || received.MaxTokens != 321 {
 		t.Fatalf("generation used %+v, want configured coder model and LLM settings", received)
 	}
-	if len(received.Messages) != 1 || !strings.Contains(received.Messages[0].Content, "Use the custom_skill skill.") {
-		t.Fatalf("coder skills missing from prompt: %+v", received.Messages)
+	if len(received.Messages) != 1 || !strings.Contains(received.Messages[0].Content, "## Atomic code request") || strings.Contains(received.Messages[0].Content, "Use the custom_skill skill.") {
+		t.Fatalf("function request = %+v", received.Messages)
 	}
 	manifest, err := service.ContextManifest("sample.go")
 	if err != nil {
@@ -258,8 +258,8 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&bugRequest); err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(bugRequest.Messages[0].Content, "Use the function_skill skill.") {
-			t.Fatal("semantic analysis received function coder skills")
+		if strings.Contains(bugRequest.Messages[0].Content, "## Immutable session scope") {
+			t.Fatal("semantic analysis received a function request")
 		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "bug-returned", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
 	}))
@@ -269,8 +269,8 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&functionRequest); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(functionRequest.Messages[0].Content, "Use the function_skill skill.") {
-			t.Fatal("function proposal did not receive coder skills")
+		if !strings.Contains(functionRequest.Messages[0].Content, "## Immutable session scope") || strings.Contains(functionRequest.Messages[0].Content, "Use the function_skill skill.") {
+			t.Fatal("function proposal did not receive the direct scoped request")
 		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "function-returned", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"version":"v1","declaration":"func Run() {}","explanation":"Keeps the declaration focused."}`}}}})
 	}))
@@ -291,8 +291,7 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 			Bug:      config.ModelProfileConfig{APIBaseURL: bugServer.URL + "/v1", Model: "bug-model", ReasoningEffort: "medium"},
 			Function: config.ModelProfileConfig{APIBaseURL: functionServer.URL + "/v1", Model: "function-model", ReasoningEffort: "low"},
 		},
-		Agents: config.AgentsConfig{Coder: config.AgentConfig{Skills: []string{"function_skill"}}},
-		Retry:  config.RetryConfig{MaxRetries: 0, BackoffBase: 1, BackoffMax: 1},
+		Retry: config.RetryConfig{MaxRetries: 0, BackoffBase: 1, BackoffMax: 1},
 	}, manager)
 	if err != nil {
 		t.Fatal(err)
