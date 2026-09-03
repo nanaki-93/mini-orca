@@ -9,7 +9,6 @@ enum class DesktopShortcut {
   OpenProject,
   OpenFile,
   OpenSymbol,
-  OpenAction,
   Generate,
   Cancel,
   NextTab,

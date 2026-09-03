@@ -63,3 +63,28 @@ Summary facts, Analysis progress/errors, Bugs filters/scan state, compact findin
 selected finding details region retain readable labels and scroll rather than clipping; confirm
 the shared palette, focus treatment, disabled controls, and verified/advisory labels remain
 recognizable.
+
+## Task 132 final acceptance record
+
+Automated acceptance completed in this environment. The desktop unit/presentation suite covers
+landing and restore state, workspace navigation, long-path and duplicate-basename identity,
+tree and tab keyboard behavior, stale analysis and responses, filtered findings, remote-provider
+confirmation gates, validation/check identity, cancellation, daemon status, and Apply/Undo
+receipt refresh. The repository quality gate also covers the daemon and workflow contracts.
+
+Commit-history audit: each required Task 118–132 implementation commit appears
+once and in numeric order. The only additional commit is the explicitly
+user-authorized metadata-only Task 119 record (`133bf0a`); it did not replace,
+combine, amend, tag, or push any required implementation commit.
+
+The following live checks remain release-operator work because no Mini-Orca desktop window or
+provider-backed fixture is available here:
+
+- Capture the final `1440x900`, `1100x760`, `1000dp`, and `<1000dp` screenshot matrix for
+  landing, Source, Review, Analysis, and Bugs, including long paths and compact bottom details.
+- Perform the numbered keyboard checklist with mouse-only, keyboard-only, and mixed input;
+  confirm dialog/drawer focus restoration and the cyan focus treatment.
+- Check supported platform text scaling and screen-reader output for paths, selected symbols,
+  provider destination, workflow states, source, and diff read-only labels.
+- Exercise local and remote provider flows, disconnect/reconnect behavior, and a real
+  provider-backed draft/validation/check/Apply/Undo fixture.

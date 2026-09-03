@@ -7,24 +7,23 @@ This directory contains the implementation backlog for [`../plan.md`](../plan.md
 - Pending tasks live in this directory as `NN_snake_case.md`.
 - Completed tasks move to `completed/` without changing their identifier.
 - [`INDEX.md`](INDEX.md) is the authoritative dependency order and status list.
-- [`PROMPT_EXECUTE_IDE_UI.md`](PROMPT_EXECUTE_IDE_UI.md) runs the active Tasks
-  118–132 strictly sequentially with one implementation writer and one verified commit
-  per task.
+- [`PROMPT_EXECUTE_IDE_UI.md`](PROMPT_EXECUTE_IDE_UI.md) is the completed execution record for
+  Tasks 118–132. It required strict sequencing, one implementation writer, and one verified
+  commit per task.
 - [`PROMPT_EXECUTE_LEGACY_CLEANUP.md`](PROMPT_EXECUTE_LEGACY_CLEANUP.md) and completed
   Tasks 103–117 remain as the audit record for the previous cleanup sequence.
 - [`INDEX.md`](INDEX.md) contains the concise historical ledger for Tasks 01–102. Git
   history is the full archive.
 
-## Active backlog
+## Completed IDE redesign
 
-Tasks 118–132 implement the IDE-style Compose Desktop redesign while preserving the
-current Focus Flow palette and Mini-Orca's one-project, one-file, one-symbol,
-preview-first workflow.
+Tasks 118–132 completed the IDE-style Compose Desktop redesign while preserving the current
+Focus Flow palette and Mini-Orca's one-project, one-file, one-symbol, preview-first workflow.
+The completed task records and [`INDEX.md`](INDEX.md) provide the delivery ledger.
 
-Task 118 owns the initially uncommitted plan, task files, index/workflow updates, and
-execution prompt together with its characterization work. Tasks 119–132 must not
-recommit or rewrite that planning baseline except where their own acceptance criteria
-explicitly update plan or documentation status.
+Task 118 established the plan, task files, index/workflow updates, execution prompt, and
+characterization baseline. Tasks 119–132 then implemented and verified each dependency-ordered
+slice without rewriting the preview-first safety contract.
 
 ## Status lifecycle
 

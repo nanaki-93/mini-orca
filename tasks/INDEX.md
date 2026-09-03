@@ -57,7 +57,7 @@ The previous sequence remains reproducible through
 | 129 | [Add the persistent Desktop status bar](completed/129_persistent_status_bar.md) | 128 | Complete |
 | 130 | [Harden responsive and accessible IDE navigation](completed/130_responsive_accessible_ide_shell.md) | 129 | Complete |
 | 131 | [Unify workspace density and visual states](completed/131_workspace_density_polish.md) | 130 | Complete |
-| 132 | [Complete IDE UI acceptance](132_ide_ui_acceptance.md) | 118–131 | Pending |
+| 132 | [Complete IDE UI acceptance](completed/132_ide_ui_acceptance.md) | 118–131 | Complete |
 
 ### Plan coverage
 
