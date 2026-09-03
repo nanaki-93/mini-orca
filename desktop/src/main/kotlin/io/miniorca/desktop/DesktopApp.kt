@@ -119,6 +119,12 @@ internal fun MiniOrcaApp(
     pendingComposerFocus = target
   }
 
+  fun focusAssistantControl(target: ComposerFocusTarget) {
+    layout =
+        layout.openRight(RightToolWindow.Assistant).withFocus(DesktopFocusRegion.RightToolWindow)
+    focusComposerControl(target)
+  }
+
   fun startReplaceEdit(request: DirectEditRequest) {
     if (appState.selectedSymbol != request.selectedSymbol)
         presenter.dispatch(DesktopEvent.SymbolSelected(request.selectedSymbol))
@@ -219,18 +225,40 @@ internal fun MiniOrcaApp(
     )
   }
   val contextPane: @Composable (Modifier) -> Unit = { modifier ->
-    if (appState.workspace != Workspace.Editor) {
-      SystemStateMessage(
-          "Editor context",
-          "Open the Editor workspace to inspect one declaration.",
-          modifier = modifier)
-    } else if (editorProgress.progress == EditorProgress.Receipt) {
-      ReviewContextPane(
-          reviewContextPaneState(appState),
-          reviewEvidenceActions(presenter, chatMode, newChatSymbol) { composerRequested = true },
-          draftApplicationActions(presenter),
-          modifier)
-    } else if (composerRequested || editorProgress.progress == EditorProgress.Edit) {
+    ContextToolWindow(
+        state =
+            ContextToolWindowState(
+                inspector =
+                    symbolInspectorUiState(
+                        selectedFile = appState.selectedFile,
+                        symbols = appState.symbols,
+                        selectedSymbol = appState.selectedSymbol,
+                        analysis = appState.analysis,
+                        analysisInProgress = workflow.analysisInProgress,
+                        provider =
+                            InspectorProviderState(
+                                bugModel.remoteProvider,
+                                workflow.providerConfirmed(ModelScope.Bug)),
+                        currentEditIdentity = currentEditIdentity(appState),
+                    ),
+                bugModel = bugModel,
+                remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
+                impact = appState.impact,
+                gitStatus = appState.gitStatus,
+            ),
+        actions =
+            ContextToolWindowActions(
+                confirmRemoteProvider = { presenter.setProviderConfirmation(ModelScope.Bug, it) },
+                analyze = { presenter.analyzeSelected(false) },
+                refresh = { presenter.analyzeSelected(true) },
+                cancel = presenter::cancelAnalysis,
+                editSelected = ::requestDirectEdit,
+            ),
+        modifier = modifier,
+    )
+  }
+  val assistantPane: @Composable (Modifier) -> Unit = { modifier ->
+    if (composerRequested || editorProgress.progress == EditorProgress.Edit) {
       val target =
           validateChatTarget(
                   appState.selectedFile,
@@ -292,42 +320,32 @@ internal fun MiniOrcaApp(
               ),
           modifier = modifier,
       )
-    } else if (editorProgress.progress == EditorProgress.Review) {
+    } else {
+      SystemStateMessage(
+          "Assistant",
+          "Start one declaration edit to open a bound conversation.",
+          modifier = modifier)
+    }
+  }
+  val reviewPane: @Composable (Modifier) -> Unit = { modifier ->
+    if (editorProgress.progress in setOf(EditorProgress.Review, EditorProgress.Receipt)) {
       ReviewContextPane(
           reviewContextPaneState(appState),
           reviewEvidenceActions(presenter, chatMode, newChatSymbol) { composerRequested = true },
           draftApplicationActions(presenter),
           modifier)
     } else {
-      SymbolInspectorPane(
-          state =
-              SymbolInspectorPaneState(
-                  inspector =
-                      symbolInspectorUiState(
-                          selectedFile = appState.selectedFile,
-                          symbols = appState.symbols,
-                          selectedSymbol = appState.selectedSymbol,
-                          analysis = appState.analysis,
-                          analysisInProgress = workflow.analysisInProgress,
-                          provider =
-                              InspectorProviderState(
-                                  bugModel.remoteProvider,
-                                  workflow.providerConfirmed(ModelScope.Bug)),
-                          currentEditIdentity = currentEditIdentity(appState),
-                      ),
-                  bugModel = bugModel,
-                  remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
-              ),
-          actions =
-              SymbolInspectorActions(
-                  confirmRemoteProvider = { presenter.setProviderConfirmation(ModelScope.Bug, it) },
-                  analyze = { presenter.analyzeSelected(false) },
-                  refresh = { presenter.analyzeSelected(true) },
-                  cancel = presenter::cancelAnalysis,
-                  editSelected = ::requestDirectEdit,
-              ),
-          modifier = modifier,
-      )
+      SystemStateMessage(
+          "Review",
+          "Validate the current candidate to inspect evidence and guarded Apply.",
+          modifier = modifier)
+    }
+  }
+  val rightToolWindows: @Composable (RightToolWindow, Modifier) -> Unit = { toolWindow, modifier ->
+    when (toolWindow) {
+      RightToolWindow.Context -> contextPane(modifier)
+      RightToolWindow.Assistant -> assistantPane(modifier)
+      RightToolWindow.Review -> reviewPane(modifier)
     }
   }
   val contextualActions =
@@ -378,8 +396,8 @@ internal fun MiniOrcaApp(
               selectEditorSurface = { surface ->
                 layout = layout.withEditorSurface(surface).withFocus(DesktopFocusRegion.Editor)
               },
-              focusChat = { focusComposerControl(ComposerFocusTarget.Chat) },
-              focusDraft = { focusComposerControl(ComposerFocusTarget.Draft) },
+              focusChat = { focusAssistantControl(ComposerFocusTarget.Chat) },
+              focusDraft = { focusAssistantControl(ComposerFocusTarget.Draft) },
               cancelAnalysis = presenter::cancelAnalysis,
               sourceLineSelected = { selection ->
                 presenter.dispatch(DesktopEvent.SourceLineSelected(selection))
@@ -435,7 +453,7 @@ internal fun MiniOrcaApp(
                 }
               },
           ),
-      panes = DesktopShellPanes(explorer, contextPane),
+      panes = DesktopShellPanes(explorer, rightToolWindows),
   )
   pendingDraftDiscard?.let { pending ->
     DraftDiscardDialog(pending, ::discardDraftAndContinue) { pendingDraftDiscard = null }
