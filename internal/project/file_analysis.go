@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const (
@@ -117,7 +119,7 @@ func (c *FileAnalysisCache) Load(input FileAnalysisInput) (*FileAnalysis, error)
 	}
 	var analysis FileAnalysis
 	if err := json.Unmarshal(data, &analysis); err != nil || !validStoredAnalysis(analysis) {
-		if err := c.recoverCorrupt(path); err != nil {
+		if err := storage.RecoverCorrupt(path); err != nil {
 			return nil, err
 		}
 		return newMissingAnalysis(input), nil
@@ -157,33 +159,8 @@ func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 	if err != nil {
 		return fmt.Errorf("encode file analysis cache: %w", err)
 	}
-	directory := filepath.Join(c.root, fileAnalysisRelativeDir)
-	if err := os.MkdirAll(directory, 0700); err != nil {
-		return fmt.Errorf("create file analysis cache directory: %w", err)
-	}
-	temp, err := os.CreateTemp(directory, ".analysis-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create file analysis cache temp file: %w", err)
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath)
-	if _, err := temp.Write(data); err != nil {
-		temp.Close()
-		return fmt.Errorf("write file analysis cache: %w", err)
-	}
-	if err := temp.Chmod(0600); err != nil {
-		temp.Close()
-		return fmt.Errorf("set file analysis cache permissions: %w", err)
-	}
-	if err := temp.Sync(); err != nil {
-		temp.Close()
-		return fmt.Errorf("sync file analysis cache: %w", err)
-	}
-	if err := temp.Close(); err != nil {
-		return fmt.Errorf("close file analysis cache: %w", err)
-	}
-	if err := os.Rename(tempPath, c.cachePath(analysis.Path)); err != nil {
-		return fmt.Errorf("replace file analysis cache: %w", err)
+	if err := storage.WriteFile(c.cachePath(analysis.Path), data, 0600); err != nil {
+		return fmt.Errorf("store file analysis cache: %w", err)
 	}
 	return nil
 }
@@ -229,14 +206,6 @@ func (c *FileAnalysisCache) validateInput(input FileAnalysisInput) error {
 
 func (c *FileAnalysisCache) cachePath(relative string) string {
 	return filepath.Join(c.root, fileAnalysisRelativeDir, analysisPathKey(normalizedAnalysisPath(relative))+".json")
-}
-
-func (c *FileAnalysisCache) recoverCorrupt(path string) error {
-	corrupt := path + ".corrupt-" + time.Now().UTC().Format("20060102T150405.000000000")
-	if err := os.Rename(path, corrupt); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("recover corrupt file analysis cache: %w", err)
-	}
-	return nil
 }
 
 func newMissingAnalysis(input FileAnalysisInput) *FileAnalysis {

@@ -111,7 +111,7 @@ class DesktopIntegrationCoverageTest {
         assertTrue(controller.projectLoaded(projectRequest, project(), ProjectIndex("project", "revision")))
     }
 
-    private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 2, sourceFileCount = 2, totalLines = 2, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+    private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 2, sourceFileCount = 2, totalLines = 2, summary = "", aiStatus = "fresh", analyzedAt = "")
     private fun file(path: String = "main.go", hash: String = "base") = ProjectFileInfo(path, hash, path, language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
     private fun symbol() = SymbolInfo("Run", "function", "func Run()", 3, 5, "exact", true)
     private fun session() = ChatSession("session", "project", "revision", "base", "main.go", "replace_symbol", "Run", "active")

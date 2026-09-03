@@ -6,11 +6,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const (
@@ -34,7 +34,7 @@ type ProjectAnalysisRisk struct {
 }
 
 // ProjectAnalysisReport is the authoritative, persisted interpretation of one
-// project revision. Markdown is derived from this contract and is never parsed.
+// project revision.
 type ProjectAnalysisReport struct {
 	SchemaVersion   string                `json:"schema_version"`
 	ProjectID       string                `json:"project_id"`
@@ -79,10 +79,6 @@ type projectAnalysisResponse struct {
 	Flows        []string              `json:"flows"`
 	Risks        []ProjectAnalysisRisk `json:"risks"`
 	NextSteps    []string              `json:"next_steps"`
-}
-
-func newProjectAnalysisReport(projectID, revision, model, profile string) ProjectAnalysisReport {
-	return newProjectAnalysisReportWithProvenance(projectID, revision, model, profile, profile, "", "")
 }
 
 func newProjectAnalysisReportWithProvenance(projectID, revision, model, profile, scope, providerOrigin, reasoningEffort string) ProjectAnalysisReport {
@@ -193,7 +189,10 @@ func StoreProjectAnalysisReport(root string, report ProjectAnalysisReport) error
 	if err != nil {
 		return fmt.Errorf("encode project analysis report: %w", err)
 	}
-	return writeProjectAnalysisFile(root, projectAnalysisReportPath, data)
+	if err := storage.WriteFile(filepath.Join(root, projectAnalysisReportPath), data, 0600); err != nil {
+		return fmt.Errorf("store project analysis report: %w", err)
+	}
+	return nil
 }
 
 func validStoredProjectAnalysisReport(report ProjectAnalysisReport) bool {
@@ -242,90 +241,4 @@ func projectAnalysisSummary(report ProjectAnalysisReport) string {
 		return report.Failure
 	}
 	return report.Purpose + "\n\n" + report.Architecture
-}
-
-func writeAnalysisProjection(root string, analysis *Analysis) error {
-	var markdown strings.Builder
-	markdown.WriteString("# Project analysis: " + analysis.Name + "\n\n")
-	markdown.WriteString(fmt.Sprintf("Generated: %s  \nAI status: %s  \nProject type: %s  \nBuild file: %s  \nFiles: %d (%d source)  \nLines: %d\n\n", analysis.AnalyzedAt.Format(time.RFC3339), analysis.Report.Status, analysis.Type, analysis.BuildFile, analysis.FileCount, analysis.SourceFileCount, analysis.TotalLines))
-	writeProjectAnalysisSection(&markdown, "Purpose", analysis.Report.Purpose)
-	writeProjectAnalysisSection(&markdown, "Architecture", analysis.Report.Architecture)
-	writeProjectAnalysisList(&markdown, "Components", analysis.Report.Components)
-	writeProjectAnalysisList(&markdown, "Entry points", analysis.Report.EntryPoints)
-	writeProjectAnalysisList(&markdown, "Data and control flows", analysis.Report.Flows)
-	if len(analysis.Report.Risks) > 0 {
-		markdown.WriteString("## Risks (AI suggestions)\n\n")
-		for _, risk := range analysis.Report.Risks {
-			markdown.WriteString("- " + risk.Severity + ": " + risk.Summary + "\n")
-		}
-		markdown.WriteString("\n")
-	}
-	writeProjectAnalysisList(&markdown, "Suggested next steps", analysis.Report.NextSteps)
-	if analysis.Report.Failure != "" {
-		writeProjectAnalysisSection(&markdown, "AI analysis status", analysis.Report.Failure)
-	}
-	markdown.WriteString("## Languages\n\n")
-	languages := make([]string, 0, len(analysis.Languages))
-	for language := range analysis.Languages {
-		languages = append(languages, language)
-	}
-	sort.Strings(languages)
-	for _, language := range languages {
-		markdown.WriteString(fmt.Sprintf("- %s: %d files\n", language, analysis.Languages[language]))
-	}
-	markdown.WriteString("\n## File inventory\n\n")
-	for _, file := range analysis.Files {
-		markdown.WriteString("- `" + strings.ReplaceAll(file, "`", "") + "`\n")
-	}
-	return writeProjectAnalysisFile(root, analysisRelativePath, []byte(markdown.String()))
-}
-
-func writeProjectAnalysisSection(markdown *strings.Builder, title, value string) {
-	if value == "" {
-		return
-	}
-	markdown.WriteString("## " + title + "\n\n" + value + "\n\n")
-}
-
-func writeProjectAnalysisList(markdown *strings.Builder, title string, values []string) {
-	if len(values) == 0 {
-		return
-	}
-	markdown.WriteString("## " + title + "\n\n")
-	for _, value := range values {
-		markdown.WriteString("- " + value + "\n")
-	}
-	markdown.WriteString("\n")
-}
-
-func writeProjectAnalysisFile(root, relative string, data []byte) error {
-	path := filepath.Join(root, relative)
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return fmt.Errorf("create project analysis directory: %w", err)
-	}
-	temp, err := os.CreateTemp(filepath.Dir(path), ".project-analysis-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create project analysis temp file: %w", err)
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath)
-	if _, err := temp.Write(data); err != nil {
-		temp.Close()
-		return fmt.Errorf("write project analysis: %w", err)
-	}
-	if err := temp.Chmod(0600); err != nil {
-		temp.Close()
-		return fmt.Errorf("set project analysis permissions: %w", err)
-	}
-	if err := temp.Sync(); err != nil {
-		temp.Close()
-		return fmt.Errorf("sync project analysis: %w", err)
-	}
-	if err := temp.Close(); err != nil {
-		return fmt.Errorf("close project analysis: %w", err)
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("replace project analysis: %w", err)
-	}
-	return nil
 }

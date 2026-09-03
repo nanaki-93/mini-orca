@@ -514,7 +514,7 @@ components:
         project_path: {type: string, description: Absolute path of a previously imported local project.}
     ProjectAnalysis:
       type: object
-      required: [project_id, project_revision, name, path, type, file_count, source_file_count, total_lines, languages, files, analysis_file, summary, ai_status, analyzed_at]
+      required: [project_id, project_revision, name, path, type, file_count, source_file_count, total_lines, languages, files, summary, ai_status, analyzed_at]
       properties:
         project_id: {type: string, description: Stable hash of the canonical imported root.}
         project_revision: {type: string, description: Content-derived revision captured by mutable requests.}
@@ -527,7 +527,6 @@ components:
         total_lines: {type: integer}
         languages: {type: object, additionalProperties: {type: integer}}
         files: {type: array, items: {type: string}}
-        analysis_file: {type: string}
         summary: {type: string}
         ai_status: {type: string}
         report: {$ref: '#/components/schemas/ProjectAnalysisReport'}

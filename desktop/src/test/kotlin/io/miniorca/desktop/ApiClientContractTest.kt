@@ -228,5 +228,5 @@ class ApiClientContractTest {
 
     private fun jobResponse(status: String) = """{"project_id":"project","project_revision":"revision","status":"$status","max_files":10,"max_retries":2,"files":null}"""
 
-    private fun projectResponse() = """{"project_id":"project","project_revision":"revision","name":"fixture","path":"/tmp/fixture","type":"go","file_count":1,"source_file_count":1,"total_lines":1,"analysis_file":".mini-orca/analysis.md","summary":"Fixture","ai_status":"fresh","analyzed_at":"2026-09-02T00:00:00Z"}"""
+    private fun projectResponse() = """{"project_id":"project","project_revision":"revision","name":"fixture","path":"/tmp/fixture","type":"go","file_count":1,"source_file_count":1,"total_lines":1,"summary":"Fixture","ai_status":"fresh","analyzed_at":"2026-09-02T00:00:00Z"}"""
 }

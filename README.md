@@ -56,6 +56,12 @@ one-file semantic analysis, and Analyze-all are explicit user actions. Bugs
 keeps verified tool findings distinct from AI suggestions, including provenance,
 confidence, lifecycle state, and freshness.
 
+The canonical persisted project interpretation is
+`.mini-orca/project-analysis.json`. Mini-Orca no longer reads or writes the
+retired `.mini-orca/analysis.md` projection or activity files. Existing legacy
+files are left untouched and may be removed manually from a project’s
+`.mini-orca` directory when no longer needed.
+
 Exact declaration editing, composition, and required parsing/formatting are
 currently Go-first. Other languages can have conservative analysis and symbol
 information, but not equivalent exact editing or validators.

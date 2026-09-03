@@ -49,16 +49,9 @@ func TestResolveFileRejectsSiblingPrefixAndSymlinkEscape(t *testing.T) {
 	if _, err := ResolveFile(root, "link.txt"); err == nil {
 		t.Fatal("expected symlink escape to be rejected")
 	}
-	if _, err := ResolvePathForWrite(root, filepath.Join("..", "app2", "new.go")); err == nil {
-		t.Fatal("expected output traversal to be rejected")
-	}
-	canonicalRoot, _ := CanonicalRoot(root)
-	if output, err := ResolvePathForWrite(root, "new.go"); err != nil || output != filepath.Join(canonicalRoot, "new.go") {
-		t.Fatalf("expected safe new output path, got %q, %v", output, err)
-	}
 }
 
-func TestAnalyzerWritesAnalysisAndContextIncludesInventory(t *testing.T) {
+func TestAnalyzerWritesCanonicalReportAndContextIncludesInventory(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.test/app\n\ngo 1.22\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -73,22 +66,21 @@ func TestAnalyzerWritesAnalysisAndContextIncludesInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	analysis, err := NewAnalyzer(mockChatClient{}).Analyze(context.Background(), root)
+	analysis, err := NewAnalyzerWithProvenance(mockChatClient{}, "", "analysis", "", "").Analyze(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if analysis.Type != "go" || analysis.FileCount != 3 || analysis.SourceFileCount != 2 {
 		t.Fatalf("unexpected analysis: %+v", analysis)
 	}
-	data, err := os.ReadFile(filepath.Join(root, analysisRelativePath))
-	if err != nil {
-		t.Fatal(err)
-	}
 	if analysis.Report.Status != ProjectAnalysisStatusFresh || analysis.Report.Purpose != "A small test project." {
 		t.Fatalf("structured report = %+v", analysis.Report)
 	}
-	if !strings.Contains(string(data), "A small test project") || !strings.Contains(string(data), "internal/service.go") {
-		t.Fatalf("analysis file missing AI summary or inventory:\n%s", data)
+	if _, err := os.Stat(filepath.Join(root, projectAnalysisReportPath)); err != nil {
+		t.Fatalf("canonical report was not persisted: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".mini-orca", "analysis.md")); !os.IsNotExist(err) {
+		t.Fatalf("legacy markdown report was generated: %v", err)
 	}
 
 	contextText, err := NewContextBuilder().Build(root, "main.go")
@@ -163,7 +155,7 @@ func TestContextPolicyExcludesSecretsIgnoredAndGeneratedFiles(t *testing.T) {
 	}
 
 	client := &recordingChatClient{}
-	if _, err := NewAnalyzer(client).Analyze(context.Background(), root); err != nil {
+	if _, err := NewAnalyzerWithProvenance(client, "", "analysis", "", "").Analyze(context.Background(), root); err != nil {
 		t.Fatal(err)
 	}
 	var prompt strings.Builder

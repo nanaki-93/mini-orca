@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const (
@@ -159,37 +161,12 @@ func loadIndex(root string) (*ProjectIndex, error) {
 }
 
 func writeIndex(root string, index *ProjectIndex) error {
-	directory := filepath.Join(root, filepath.Dir(indexRelativePath))
-	if err := os.MkdirAll(directory, 0700); err != nil {
-		return fmt.Errorf("create index directory: %w", err)
-	}
 	data, err := json.MarshalIndent(index, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode index: %w", err)
 	}
-	temp, err := os.CreateTemp(directory, ".index-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create index temp file: %w", err)
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath)
-	if _, err := temp.Write(data); err != nil {
-		temp.Close()
-		return fmt.Errorf("write index temp file: %w", err)
-	}
-	if err := temp.Chmod(0600); err != nil {
-		temp.Close()
-		return fmt.Errorf("set index permissions: %w", err)
-	}
-	if err := temp.Sync(); err != nil {
-		temp.Close()
-		return fmt.Errorf("sync index temp file: %w", err)
-	}
-	if err := temp.Close(); err != nil {
-		return fmt.Errorf("close index temp file: %w", err)
-	}
-	if err := os.Rename(tempPath, filepath.Join(root, indexRelativePath)); err != nil {
-		return fmt.Errorf("replace index: %w", err)
+	if err := storage.WriteFile(filepath.Join(root, indexRelativePath), data, 0600); err != nil {
+		return fmt.Errorf("store index: %w", err)
 	}
 	return nil
 }

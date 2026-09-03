@@ -45,6 +45,6 @@ class DraftReviewWorkflowTest {
 
     private fun draft(revision: Long, hash: String, validation: DeclarationValidation?) = DeclarationDraft("draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}", revision = revision, hash = hash, validation = validation)
     private fun file() = ProjectFileInfo("main.go", "base", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
-    private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+    private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, summary = "", aiStatus = "fresh", analyzedAt = "")
     private fun draftJson(revision: Long, hash: String, validation: String) = "{\"id\":\"draft\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"target_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"declaration\":\"func Run() error { return nil }\",\"imports\":[],\"revision\":$revision,\"hash\":\"$hash\",\"state\":\"valid\",\"validation\":$validation}"
 }

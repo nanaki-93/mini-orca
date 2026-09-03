@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	analysisRelativePath = ".mini-orca/analysis.md"
-	maxFileViewBytes     = 1024 * 1024
-	maxProjectFiles      = 20000
+	maxFileViewBytes = 1024 * 1024
+	maxProjectFiles  = 20000
 )
 
 var ignoredProjectDirectories = map[string]bool{
@@ -51,7 +50,6 @@ type Analysis struct {
 	TotalLines      int                   `json:"total_lines"`
 	Languages       map[string]int        `json:"languages"`
 	Files           []string              `json:"files"`
-	AnalysisFile    string                `json:"analysis_file"`
 	Summary         string                `json:"summary"`
 	AIStatus        string                `json:"ai_status"`
 	AnalyzedAt      time.Time             `json:"analyzed_at"`
@@ -80,16 +78,6 @@ type Analyzer struct {
 	scope           string
 	providerOrigin  string
 	reasoningEffort string
-}
-
-func NewAnalyzer(client chatClient) *Analyzer {
-	return NewAnalyzerWithProfile(client, "", "analysis")
-}
-
-// NewAnalyzerWithProfile records the configured analysis model identity with
-// every structured report so cached interpretations can be invalidated safely.
-func NewAnalyzerWithProfile(client chatClient, model, profile string) *Analyzer {
-	return NewAnalyzerWithProvenance(client, model, profile, "", "")
 }
 
 // NewAnalyzerWithProvenance records the effective scope and sanitized provider
@@ -150,9 +138,6 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 	if err := StoreProjectAnalysisReport(analysis.Path, report); err != nil {
 		return nil, err
 	}
-	if err := writeAnalysisProjection(analysis.Path, analysis); err != nil {
-		return nil, err
-	}
 	return analysis, nil
 }
 
@@ -210,7 +195,7 @@ func (a *Analyzer) scan(ctx context.Context, root string) (*Analysis, error) {
 func scanWithPolicy(ctx context.Context, root string, policy *ContextPolicy) (*Analysis, error) {
 	result := &Analysis{
 		Name: filepath.Base(root), Path: root, Type: "unknown",
-		Languages: make(map[string]int), AnalysisFile: analysisRelativePath, AnalyzedAt: time.Now().UTC(),
+		Languages: make(map[string]int), AnalyzedAt: time.Now().UTC(),
 	}
 	detection := detectProject(root)
 	result.Type = detection.Type

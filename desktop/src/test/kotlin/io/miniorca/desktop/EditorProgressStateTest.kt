@@ -79,7 +79,7 @@ class EditorProgressStateTest {
         )
     }
 
-    private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
+    private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, summary = "", aiStatus = "fresh", analyzedAt = "")
     private fun file() = ProjectFileInfo("main.go", "base", "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
     private fun symbol() = SymbolInfo("Run", "function", "func Run()", 1, 3, "exact", true)
     private fun session() = ChatSession("session", "project", "revision", "base", "main.go", "replace_symbol", "Run", "active", "draft")

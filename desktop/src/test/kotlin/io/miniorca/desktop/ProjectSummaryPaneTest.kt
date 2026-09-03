@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 
 class ProjectSummaryPaneTest {
     @Test fun deterministicFactsRemainAvailableWhenModelInterpretationIsMissing() {
-        val project = ProjectAnalysis("project", "revision", "Mini", "/tmp/project", "go", buildFile = "go.mod", fileCount = 4, sourceFileCount = 3, totalLines = 120, languages = mapOf("Go" to 3), analysisFile = "", summary = "", aiStatus = "", analyzedAt = "")
+        val project = ProjectAnalysis("project", "revision", "Mini", "/tmp/project", "go", buildFile = "go.mod", fileCount = 4, sourceFileCount = 3, totalLines = 120, languages = mapOf("Go" to 3), summary = "", aiStatus = "", analyzedAt = "")
 
         val summary = projectSummaryPresentation(null, project)
 

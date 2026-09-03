@@ -40,7 +40,7 @@ func TestParseProjectAnalysisResponseRejectsMalformedUnknownAndOversizedOutput(t
 
 func TestProjectAnalysisReportPersistsAndInvalidatesChangedInputs(t *testing.T) {
 	root := t.TempDir()
-	report := newProjectAnalysisReport("project", "revision-one", "model-a", "analysis")
+	report := newProjectAnalysisReportWithProvenance("project", "revision-one", "model-a", "analysis", "analysis", "", "")
 	report.Purpose = "Explains the project."
 	report.Architecture = "One daemon."
 	if err := StoreProjectAnalysisReport(root, report); err != nil {
@@ -88,24 +88,20 @@ func TestProjectAnalysisReportInvalidatesChangedReasoningEffort(t *testing.T) {
 	}
 }
 
-func TestAnalyzerFailureKeepsInventoryAndWritesTruthfulProjection(t *testing.T) {
+func TestAnalyzerFailureKeepsInventoryAndWritesCanonicalReport(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc main() {}\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	analysis, err := NewAnalyzerWithProfile(&projectAnalysisFixtureClient{output: "not JSON"}, "fixture-model", "analysis").Analyze(context.Background(), root)
+	analysis, err := NewAnalyzerWithProvenance(&projectAnalysisFixtureClient{output: "not JSON"}, "fixture-model", "analysis", "", "").Analyze(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if analysis.AIStatus != ProjectAnalysisStatusFailed || analysis.FileCount != 1 || analysis.SourceFileCount != 1 || analysis.Report.Failure == "" {
 		t.Fatalf("failed analysis = %+v", analysis)
 	}
-	markdown, err := os.ReadFile(filepath.Join(root, analysisRelativePath))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(markdown), analysis.Report.Failure) || !strings.Contains(string(markdown), "main.go") {
-		t.Fatalf("projection does not retain deterministic facts: %s", markdown)
+	if _, err := os.Stat(filepath.Join(root, ".mini-orca", "analysis.md")); !os.IsNotExist(err) {
+		t.Fatalf("legacy markdown report was generated: %v", err)
 	}
 	stored, err := LoadProjectAnalysisReport(root, ProjectAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Model: "fixture-model", Profile: "analysis", PromptVersion: projectAnalysisPromptVersion})
 	if err != nil || stored == nil || stored.Status != ProjectAnalysisStatusFailed {
@@ -119,7 +115,7 @@ func TestAnalyzerRestoreLoadsStoredReportWithoutContactingModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &projectAnalysisFixtureClient{output: `{"purpose":"Restored project.","architecture":"One package.","components":[],"entry_points":[],"flows":[],"risks":[],"next_steps":[]}`}
-	analyzer := NewAnalyzerWithProfile(client, "fixture-model", "analysis")
+	analyzer := NewAnalyzerWithProvenance(client, "fixture-model", "analysis", "", "")
 	imported, err := analyzer.Analyze(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +135,7 @@ func TestAnalyzerRestoreLoadsStoredReportWithoutContactingModel(t *testing.T) {
 }
 
 func TestProjectAnalysisReportRequiresGeneratedTime(t *testing.T) {
-	report := newProjectAnalysisReport("project", "revision", "model", "analysis")
+	report := newProjectAnalysisReportWithProvenance("project", "revision", "model", "analysis", "analysis", "", "")
 	report.Purpose = "Purpose"
 	report.Architecture = "Architecture"
 	report.GeneratedAt = time.Time{}
