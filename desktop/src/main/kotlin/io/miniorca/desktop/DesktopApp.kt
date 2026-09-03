@@ -96,6 +96,12 @@ internal fun MiniOrcaApp(
   LaunchedEffect(appState.project?.projectId, appState.project?.projectRevision) {
     appState.index?.let { collapsedDirectories = explorerDirectories(it.files) }
   }
+  LaunchedEffect(appState.selectedFile?.path, appState.index?.projectRevision) {
+    val activePath = appState.selectedFile?.path ?: return@LaunchedEffect
+    val index = appState.index ?: return@LaunchedEffect
+    filter = ""
+    collapsedDirectories = revealExplorerPath(index.files, collapsedDirectories, activePath)
+  }
   LaunchedEffect(appState.review.draft?.id) { if (appState.review.draft != null) chatMessage = "" }
   LaunchedEffect(workflow.contextManifest) {
     if (workflow.contextManifest != null) showContext = true
@@ -187,6 +193,17 @@ internal fun MiniOrcaApp(
                   collapsedDirectories =
                       if (path in collapsedDirectories) collapsedDirectories - path
                       else collapsedDirectories + path
+                },
+                collapseAll = {
+                  collapsedDirectories = explorerDirectories(appState.index?.files.orEmpty())
+                },
+                revealActiveFile = {
+                  appState.selectedFile?.path?.let { activePath ->
+                    filter = ""
+                    collapsedDirectories =
+                        revealExplorerPath(
+                            appState.index?.files.orEmpty(), collapsedDirectories, activePath)
+                  }
                 },
                 selectFile = { path ->
                   presenter.openFileInEditor(path)

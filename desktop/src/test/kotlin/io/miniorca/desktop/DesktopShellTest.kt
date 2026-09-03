@@ -96,7 +96,7 @@ class DesktopShellTest {
     val folder = ExplorerRow("internal", "internal", 0, true)
 
     assertEquals(
-        "Go file main.go, Stale, selected",
+        "Go file main.go at internal/main.go, Stale, selected",
         explorerRowDescription(file, selected = true, expanded = false))
     assertEquals(
         "Folder internal, collapsed",

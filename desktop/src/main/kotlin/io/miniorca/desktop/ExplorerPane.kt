@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -26,6 +32,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -45,11 +56,55 @@ internal fun ExplorerPane(
 ) {
   val rows =
       visibleExplorerRows(state.index?.files.orEmpty(), state.filter, state.collapsedDirectories)
-  FocusFlowPanel(
-      modifier = modifier,
-      contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
-        SectionLabel("PROJECT EXPLORER")
-        Spacer(Modifier.height(8.dp))
+  var focusedPath by remember(state.index?.projectRevision) { mutableStateOf(state.selectedPath) }
+  LaunchedEffect(state.selectedPath, rows) {
+    if (state.selectedPath in rows.map(ExplorerRow::path)) focusedPath = state.selectedPath
+    else if (focusedPath !in rows.map(ExplorerRow::path)) focusedPath = rows.firstOrNull()?.path
+  }
+  Column(
+      modifier =
+          modifier
+              .background(Panel)
+              .padding(horizontal = 8.dp, vertical = 6.dp)
+              .focusable()
+              .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val interaction =
+                    explorerTreeInteraction(
+                        rows,
+                        focusedPath,
+                        state.collapsedDirectories,
+                        explorerTreeKey(event.key),
+                    )
+                if (interaction == null) return@onPreviewKeyEvent false
+                focusedPath = interaction.focusedPath
+                interaction.toggleDirectory?.let(actions.toggleDirectory)
+                interaction.selectFile?.let(actions.selectFile)
+                true
+              }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Text(
+              "PROJECT",
+              color = PrimaryText,
+              fontSize = 11.sp,
+              fontWeight = FontWeight.SemiBold,
+              modifier = Modifier.weight(1f))
+          FocusFlowButton(
+              onClick = actions.collapseAll,
+              tone = ActionTone.Navigation,
+              density = ButtonDensity.Toolbar) {
+                Text("Collapse", fontSize = 10.sp)
+              }
+          Spacer(Modifier.width(4.dp))
+          FocusFlowButton(
+              onClick = actions.revealActiveFile,
+              enabled = state.selectedPath != null,
+              tone = ActionTone.Navigation,
+              density = ButtonDensity.Toolbar) {
+                Text("Active file", fontSize = 10.sp)
+              }
+        }
+        Spacer(Modifier.height(6.dp))
         CompactSingleLineField(
             value = state.filter,
             onValueChange = actions.updateFilter,
@@ -60,7 +115,7 @@ internal fun ExplorerPane(
                   contentDescription = "Filter indexed relative file paths"
                 },
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         when {
           state.index == null && state.loading -> LoadingRows("Loading indexed files")
           state.index == null ->
@@ -70,11 +125,12 @@ internal fun ExplorerPane(
               SystemStateMessage(
                   "No matching files", "Change the filter to view indexed relative paths.")
           else ->
-              LazyColumn {
+              LazyColumn(Modifier.weight(1f)) {
                 items(rows, key = { it.path }) { row ->
                   ExplorerItem(
                       row = row,
                       selected = !row.directory && row.path == state.selectedPath,
+                      focused = row.path == focusedPath,
                       expanded = row.path !in state.collapsedDirectories,
                       onActivate = {
                         if (row.directory) actions.toggleDirectory(row.path)
@@ -84,7 +140,6 @@ internal fun ExplorerPane(
                 }
               }
         }
-        Spacer(Modifier.height(8.dp))
       }
 }
 
@@ -101,13 +156,115 @@ internal data class ExplorerPaneState(
 internal data class ExplorerPaneActions(
     val updateFilter: (String) -> Unit,
     val toggleDirectory: (String) -> Unit,
+    val collapseAll: () -> Unit,
+    val revealActiveFile: () -> Unit,
     val selectFile: (String) -> Unit,
 )
+
+internal enum class ExplorerTreeKey {
+  Previous,
+  Next,
+  Expand,
+  Collapse,
+  Activate,
+}
+
+internal data class ExplorerTreeInteraction(
+    val focusedPath: String,
+    val toggleDirectory: String? = null,
+    val selectFile: String? = null,
+)
+
+internal fun explorerTreeKey(key: Key): ExplorerTreeKey? =
+    when (key) {
+      Key.DirectionUp -> ExplorerTreeKey.Previous
+      Key.DirectionDown -> ExplorerTreeKey.Next
+      Key.DirectionRight -> ExplorerTreeKey.Expand
+      Key.DirectionLeft -> ExplorerTreeKey.Collapse
+      Key.Enter,
+      Key.Spacebar -> ExplorerTreeKey.Activate
+      else -> null
+    }
+
+internal fun explorerTreeInteraction(
+    rows: List<ExplorerRow>,
+    focusedPath: String?,
+    collapsedDirectories: Set<String>,
+    key: ExplorerTreeKey?,
+): ExplorerTreeInteraction? {
+  val command = key ?: return null
+  val currentIndex = rows.indexOfFirst { it.path == focusedPath }.takeIf { it >= 0 } ?: 0
+  val current = rows.getOrNull(currentIndex) ?: return null
+  return when (command) {
+    ExplorerTreeKey.Previous ->
+        ExplorerTreeInteraction(rows[(currentIndex - 1).coerceAtLeast(0)].path)
+    ExplorerTreeKey.Next ->
+        ExplorerTreeInteraction(rows[(currentIndex + 1).coerceAtMost(rows.lastIndex)].path)
+    ExplorerTreeKey.Activate ->
+        if (current.directory) ExplorerTreeInteraction(current.path, toggleDirectory = current.path)
+        else ExplorerTreeInteraction(current.path, selectFile = current.path)
+    ExplorerTreeKey.Expand -> expandExplorerRow(rows, current, collapsedDirectories)
+    ExplorerTreeKey.Collapse -> collapseExplorerRow(rows, current, collapsedDirectories)
+  }
+}
+
+internal fun revealExplorerPath(
+    indexedFiles: List<IndexedFile>,
+    collapsedDirectories: Set<String>,
+    path: String?,
+): Set<String> {
+  if (path == null || indexedFiles.none { it.path == path }) return collapsedDirectories
+  return collapsedDirectories - explorerAncestorPaths(path)
+}
+
+private fun expandExplorerRow(
+    rows: List<ExplorerRow>,
+    current: ExplorerRow,
+    collapsedDirectories: Set<String>,
+): ExplorerTreeInteraction =
+    when {
+      !current.directory -> ExplorerTreeInteraction(current.path)
+      current.path in collapsedDirectories ->
+          ExplorerTreeInteraction(current.path, toggleDirectory = current.path)
+      else ->
+          ExplorerTreeInteraction(
+              rows
+                  .dropWhile { it.path != current.path }
+                  .drop(1)
+                  .firstOrNull { it.depth == current.depth + 1 }
+                  ?.path ?: current.path)
+    }
+
+private fun collapseExplorerRow(
+    rows: List<ExplorerRow>,
+    current: ExplorerRow,
+    collapsedDirectories: Set<String>,
+): ExplorerTreeInteraction =
+    when {
+      current.directory && current.path !in collapsedDirectories ->
+          ExplorerTreeInteraction(current.path, toggleDirectory = current.path)
+      else -> {
+        val parent = current.path.substringBeforeLast('/', "")
+        ExplorerTreeInteraction(rows.firstOrNull { it.path == parent }?.path ?: current.path)
+      }
+    }
+
+private fun explorerAncestorPaths(path: String): Set<String> =
+    path
+        .substringBeforeLast('/', "")
+        .split('/')
+        .filter(String::isNotBlank)
+        .fold(mutableListOf<String>()) { ancestors, segment ->
+          ancestors += "${ancestors.lastOrNull()?.plus("/").orEmpty()}$segment"
+          ancestors
+        }
+        .toSet()
 
 @Composable
 private fun ExplorerItem(
     row: ExplorerRow,
     selected: Boolean,
+    focused: Boolean,
     expanded: Boolean,
     onActivate: () -> Unit
 ) {
@@ -122,9 +279,11 @@ private fun ExplorerItem(
                 role = Role.Button
               }
               .background(
-                  if (selected) StrongSurface else Color.Transparent, RoundedCornerShape(8.dp))
+                  if (selected) StrongSurface
+                  else if (focused) CyanAccent.copy(alpha = 0.14f) else Color.Transparent,
+                  RoundedCornerShape(4.dp))
               .clickable(onClick = onActivate)
-              .padding(start = (8 + row.depth * 14).dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
+              .padding(start = (6 + row.depth * 14).dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
       verticalAlignment = Alignment.CenterVertically,
   ) {
     ExplorerNodeIcon(row, expanded, nodeColor)
@@ -277,9 +436,9 @@ internal fun explorerRowDescription(
 ): String =
     when {
       row.directory ->
-          "Folder ${row.name}, ${if (expanded) "expanded" else "collapsed"}${if (selected) ", selected" else ""}"
+          "Folder ${row.path}, ${if (expanded) "expanded" else "collapsed"}${if (selected) ", selected" else ""}"
       else ->
-          "${row.language.ifBlank { "text" }} file ${row.name}, ${statusBadgeStyle(row.analysisStatus).label}${if (selected) ", selected" else ", not selected"}"
+          "${row.language.ifBlank { "text" }} file ${row.name} at ${row.path}, ${statusBadgeStyle(row.analysisStatus).label}${if (selected) ", selected" else ", not selected"}"
     }
 
 @Composable
