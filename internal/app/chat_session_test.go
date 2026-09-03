@@ -209,13 +209,13 @@ func TestTaskBoundChatRepairsAreExplicitAndLimitedToThreeProviderRequests(t *tes
 func markTaskDraftChecksFailed(t *testing.T, service *Service, draftID string) {
 	t.Helper()
 	draft, err := service.ValidateDraft(draftID, 1)
-	if err != nil || draft.CandidateHash == "" {
+	if err != nil || draft.CompositionHash == "" {
 		t.Fatalf("validate task draft = %+v, %v", draft, err)
 	}
 	service.draftMu.Lock()
 	defer service.draftMu.Unlock()
 	stored := service.drafts[draftID]
-	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CandidateHash: draft.CandidateHash, Report: CandidateCheckReport{DraftID: draft.ID, DraftRevision: draft.Revision, DraftHash: draft.Hash, CandidateHash: draft.CandidateHash, Applicable: false, Checks: []CandidateCheck{{Name: "task test candidate", Required: true, State: CheckFailed, Output: "sanitized failure"}}}}
+	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CompositionHash: draft.CompositionHash, Report: DraftCheckReport{DraftID: draft.ID, DraftRevision: draft.Revision, DraftHash: draft.Hash, CompositionHash: draft.CompositionHash, Applicable: false, Checks: []DraftCheck{{Name: "task test verification", Required: true, State: CheckFailed, Output: "sanitized failure"}}}}
 }
 
 func TestParseDeclarationDraftResponseContract(t *testing.T) {

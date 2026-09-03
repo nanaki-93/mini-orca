@@ -6,7 +6,6 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
-	"github.com/nanaki-93/mini-orca/v2/internal/workflow"
 )
 
 type ContextHandler struct{ service *app.Service }
@@ -24,7 +23,7 @@ func (h *ContextHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	var manifest project.ContextManifest
 	var err error
-	if r.URL.Query().Get("action") == string(workflow.ActionAnalyzeFile) {
+	if r.URL.Query().Get("action") == "analyze_file" {
 		manifest, err = h.service.AnalysisContextManifest(path)
 	} else {
 		manifest, err = h.service.ContextManifest(path)

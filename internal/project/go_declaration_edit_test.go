@@ -42,17 +42,17 @@ func Other() {}
 			if !result.Validation.Applicable {
 				t.Fatalf("composition diagnostics = %#v", result.Validation.Diagnostics)
 			}
-			if result.CandidateHash == "" || !strings.Contains(result.CandidateContent, test.want) {
-				t.Fatalf("candidate = %q, hash = %q", result.CandidateContent, result.CandidateHash)
+			if result.CompositionHash == "" || !strings.Contains(result.Source, test.want) {
+				t.Fatalf("composition = %q, hash = %q", result.Source, result.CompositionHash)
 			}
-			if !strings.Contains(result.CandidateContent, "func Other() {}") || !strings.Contains(result.CandidateContent, `import "fmt"`) {
-				t.Fatalf("unrelated source changed: %q", result.CandidateContent)
+			if !strings.Contains(result.Source, "func Other() {}") || !strings.Contains(result.Source, `import "fmt"`) {
+				t.Fatalf("unrelated source changed: %q", result.Source)
 			}
 			if result.NormalizedDeclaration == "" {
 				t.Fatal("normalized declaration is empty")
 			}
-			if test.target == "Run" && (!strings.Contains(result.CandidateContent, "// Run has new behavior.") || strings.Contains(result.CandidateContent, "// Run keeps the original behavior.")) {
-				t.Fatalf("target comment was not replaced: %q", result.CandidateContent)
+			if test.target == "Run" && (!strings.Contains(result.Source, "// Run has new behavior.") || strings.Contains(result.Source, "// Run keeps the original behavior.")) {
+				t.Fatalf("target comment was not replaced: %q", result.Source)
 			}
 		})
 	}
@@ -75,11 +75,11 @@ func Existing() { fmt.Println("existing") }
 	if !result.Validation.Applicable {
 		t.Fatalf("composition diagnostics = %#v", result.Validation.Diagnostics)
 	}
-	if !strings.Contains(result.CandidateContent, `import "fmt"`) || !strings.Contains(result.CandidateContent, `"strings"`) || !strings.Contains(result.CandidateContent, `alias "example.com/alias"`) {
-		t.Fatalf("imports = %q", result.CandidateContent)
+	if !strings.Contains(result.Source, `import "fmt"`) || !strings.Contains(result.Source, `"strings"`) || !strings.Contains(result.Source, `alias "example.com/alias"`) {
+		t.Fatalf("imports = %q", result.Source)
 	}
-	if strings.Index(result.CandidateContent, "func Existing") > strings.Index(result.CandidateContent, "type NewWorker") {
-		t.Fatalf("new declaration was not inserted after existing declarations: %q", result.CandidateContent)
+	if strings.Index(result.Source, "func Existing") > strings.Index(result.Source, "type NewWorker") {
+		t.Fatalf("new declaration was not inserted after existing declarations: %q", result.Source)
 	}
 	if added := diffLines(result.Validation.Diff); len(added) == 0 || !containsDiffText(added, "type NewWorker struct{ Name string }") {
 		t.Fatalf("diff = %#v", result.Validation.Diff.Lines)
@@ -105,11 +105,11 @@ func Run() {}
 	if !result.Validation.Applicable {
 		t.Fatalf("composition diagnostics = %#v", result.Validation.Diagnostics)
 	}
-	if !strings.Contains(result.CandidateContent, "// Worker has the replacement shape.\n\tWorker struct{ Name string }") {
-		t.Fatalf("replacement type spec = %q", result.CandidateContent)
+	if !strings.Contains(result.Source, "// Worker has the replacement shape.\n\tWorker struct{ Name string }") {
+		t.Fatalf("replacement type spec = %q", result.Source)
 	}
-	if strings.Contains(result.CandidateContent, "// Worker is the original target.") || !strings.Contains(result.CandidateContent, "Other") || !strings.Contains(result.CandidateContent, "func Run() {}") {
-		t.Fatalf("unrelated grouped declarations changed: %q", result.CandidateContent)
+	if strings.Contains(result.Source, "// Worker is the original target.") || !strings.Contains(result.Source, "Other") || !strings.Contains(result.Source, "func Run() {}") {
+		t.Fatalf("unrelated grouped declarations changed: %q", result.Source)
 	}
 }
 
@@ -136,7 +136,7 @@ func Other() {}
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result := ComposeGoDeclaration("fixture.go", original, test.edit)
-			if result.Validation.Applicable || result.CandidateContent != "" || result.CandidateHash != "" {
+			if result.Validation.Applicable || result.Source != "" || result.CompositionHash != "" {
 				t.Fatalf("invalid composition = %#v", result)
 			}
 			if len(result.Validation.Diagnostics) != 1 || result.Validation.Diagnostics[0].Code != test.code {
@@ -156,23 +156,23 @@ func Other() {}
 `
 	edit := GoDeclarationEdit{Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run", Declaration: `func Run() { fmt.Println("new") }`}
 	for _, test := range []struct {
-		name      string
-		candidate string
-		code      string
+		name     string
+		composed string
+		code     string
 	}{
 		{
-			name:      "unrelated declaration",
-			candidate: strings.Replace(strings.Replace(original, "old", "new", 1), "func Other() {}", `func Other() { fmt.Println("changed") }`, 1),
-			code:      "out_of_scope_declaration",
+			name:     "unrelated declaration",
+			composed: strings.Replace(strings.Replace(original, "old", "new", 1), "func Other() {}", `func Other() { fmt.Println("changed") }`, 1),
+			code:     "out_of_scope_declaration",
 		},
 		{
-			name:      "unrequested import",
-			candidate: strings.Replace(strings.Replace(original, "old", "new", 1), `import "fmt"`, "import (\n\t\"fmt\"\n\t\"strings\"\n)", 1),
-			code:      "out_of_scope_import",
+			name:     "unrequested import",
+			composed: strings.Replace(strings.Replace(original, "old", "new", 1), `import "fmt"`, "import (\n\t\"fmt\"\n\t\"strings\"\n)", 1),
+			code:     "out_of_scope_import",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			validation := validateGoDeclarationComposition("fixture.go", original, test.candidate, edit, nil)
+			validation := validateGoDeclarationComposition("fixture.go", original, test.composed, edit, nil)
 			if validation.Applicable || len(validation.Diagnostics) != 1 || validation.Diagnostics[0].Code != test.code {
 				t.Fatalf("validation = %#v, want %q", validation, test.code)
 			}

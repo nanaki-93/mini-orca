@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 class ReviewContextPaneTest {
     @Test fun eligibleDecisionNamesExactlyOneSymbolAndFile() {
         val current = draft()
-        val checks = CandidateCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
+        val checks = DraftCheckReport("main.go", true, draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
 
         val decision = applyDecisionUiState(project(), file(), editableDraft(current), current, checks, applied = null)
 
@@ -21,8 +21,8 @@ class ReviewContextPaneTest {
         val current = draft()
         val dirty = editDraft(editableDraft(current), declaration = "func Run() error { return nil }")
         val noChecks = applyDecisionUiState(project(), file(), dirty, current.copy(validation = null), checks = null, applied = null)
-        val invalid = current.copy(validation = GenerationValidation(false, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
-        val failedChecks = CandidateCheckReport("main.go", true, checks = listOf(CandidateCheck("go test", required = true, state = "failed")), draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
+        val invalid = current.copy(validation = DeclarationValidation(false, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
+        val failedChecks = DraftCheckReport("main.go", true, checks = listOf(DraftCheck("go test", required = true, state = "failed")), draftId = current.id, draftRevision = current.revision, draftHash = current.hash)
         val failed = applyDecisionUiState(project(), file(), editableDraft(invalid), invalid, failedChecks, applied = null)
 
         assertFalse(noChecks.eligible)
@@ -46,7 +46,7 @@ class ReviewContextPaneTest {
         "draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}",
         revision = 2,
         hash = "draft-hash",
-        validation = GenerationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")),
+        validation = DeclarationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")),
     )
 
     private fun project() = ProjectAnalysis("project", "revision", "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")

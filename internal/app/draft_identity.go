@@ -1,11 +1,30 @@
 package app
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
+
+func newDraftID() string {
+	return newOpaqueID("draft")
+}
+
+func newChatSessionID() string {
+	return newOpaqueID("chat")
+}
+
+func newOpaqueID(prefix string) string {
+	var token [16]byte
+	if _, err := rand.Read(token[:]); err == nil {
+		return prefix + "-" + hex.EncodeToString(token[:])
+	}
+	return fmt.Sprintf("%s-%d", prefix, time.Now().UTC().UnixNano())
+}
 
 // projectSnapshot identifies exactly one indexed project state.
 type projectSnapshot struct {

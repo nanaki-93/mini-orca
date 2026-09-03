@@ -118,9 +118,9 @@ class DesktopStateTest {
 
     @Test fun draftEligibilityRequiresMatchingLatestValidationAndChecks() {
         val selected = file("main.go", "base")
-        val draft = DeclarationDraft(id = "draft", baseFileHash = "base", targetPath = "main.go", revision = 2, hash = "latest", validation = GenerationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
-        val staleChecks = CandidateCheckReport("main.go", true, draftId = "draft", draftRevision = 1, draftHash = "old")
-        val currentChecks = CandidateCheckReport("main.go", true, draftId = "draft", draftRevision = 2, draftHash = "latest")
+        val draft = DeclarationDraft(id = "draft", baseFileHash = "base", targetPath = "main.go", revision = 2, hash = "latest", validation = DeclarationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
+        val staleChecks = DraftCheckReport("main.go", true, draftId = "draft", draftRevision = 1, draftHash = "old")
+        val currentChecks = DraftCheckReport("main.go", true, draftId = "draft", draftRevision = 2, draftHash = "latest")
 
         assertTrue(!draftApplyEligibility(draft, staleChecks, selected).eligible)
         assertTrue(draftApplyEligibility(draft, currentChecks, selected).eligible)
@@ -222,7 +222,7 @@ class DesktopStateTest {
         val initial = DesktopState(
             selection = FileSelectionState(selectedFile = selected),
             chat = ChatState(ChatSession(id = "session")),
-            review = DraftReviewState(draft = draft, editor = editableDraft(draft), checks = CandidateCheckReport("main.go", true), applied = receipt),
+            review = DraftReviewState(draft = draft, editor = editableDraft(draft), checks = DraftCheckReport("main.go", true), applied = receipt),
         )
 
         val discarded = initial.reduce(DesktopEvent.DraftDiscarded)

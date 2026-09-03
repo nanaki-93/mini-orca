@@ -8,12 +8,12 @@ import kotlin.test.assertTrue
 
 class DraftEditorStateTest {
     @Test fun manualDeclarationOrImportEditMakesTheDraftDirtyAndClearsEvidence() {
-        val original = draft(validation = GenerationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
+        val original = draft(validation = DeclarationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
         val state = DesktopState(
             review = DraftReviewState(
                 draft = original,
                 editor = editableDraft(original),
-                checks = CandidateCheckReport("main.go", true, draftId = original.id, draftRevision = original.revision, draftHash = original.hash),
+                checks = DraftCheckReport("main.go", true, draftId = original.id, draftRevision = original.revision, draftHash = original.hash),
             ),
         ).reduce(DesktopEvent.DraftEdited(declaration = "func Run() error { return nil }", imports = listOf("fmt")))
 
@@ -42,7 +42,7 @@ class DraftEditorStateTest {
             imports = listOf("fmt"),
             revision = 3,
             hash = "normalized",
-            validation = GenerationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")),
+            validation = DeclarationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")),
         )
         val state = DesktopState(review = DraftReviewState(draft = generated, editor = editDraft(editableDraft(generated), declaration = "func Run() error{return nil}")))
             .reduce(DesktopEvent.DraftLoaded(normalized))
@@ -54,7 +54,7 @@ class DraftEditorStateTest {
     }
 
     @Test fun invalidValidationResultStaysEditableAndCannotAuthorizeChecksOrApply() {
-        val invalid = draft(validation = GenerationValidation(false, "replace_symbol", diagnostics = listOf(GenerationFinding("syntax", "missing brace")), diff = UnifiedDiff("main.go", "main.go")))
+        val invalid = draft(validation = DeclarationValidation(false, "replace_symbol", diagnostics = listOf(DeclarationFinding("syntax", "missing brace")), diff = UnifiedDiff("main.go", "main.go")))
         val state = DesktopState().reduce(DesktopEvent.DraftLoaded(invalid))
 
         assertEquals(DraftEditorStatus.Invalid, state.review.editor?.status)
@@ -64,8 +64,8 @@ class DraftEditorStateTest {
     }
 
     @Test fun optimisticConflictMarksTheDraftStaleAndPreservesNoPriorApproval() {
-        val valid = draft(validation = GenerationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
-        val state = DesktopState(review = DraftReviewState(draft = valid, editor = editableDraft(valid), checks = CandidateCheckReport("main.go", true, draftId = valid.id, draftRevision = valid.revision, draftHash = valid.hash)))
+        val valid = draft(validation = DeclarationValidation(true, "replace_symbol", diff = UnifiedDiff("main.go", "main.go")))
+        val state = DesktopState(review = DraftReviewState(draft = valid, editor = editableDraft(valid), checks = DraftCheckReport("main.go", true, draftId = valid.id, draftRevision = valid.revision, draftHash = valid.hash)))
             .reduce(DesktopEvent.DraftMarkedStale)
 
         assertEquals(DraftEditorStatus.Stale, state.review.editor?.status)
@@ -82,7 +82,7 @@ class DraftEditorStateTest {
         assertFalse(draftEditorMatchesOpenFile(editor, file(), project(revision = "next")))
     }
 
-    private fun draft(validation: GenerationValidation? = null, imports: List<String> = emptyList()) = DeclarationDraft("draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}", imports = imports, revision = 2, hash = "hash", validation = validation)
+    private fun draft(validation: DeclarationValidation? = null, imports: List<String> = emptyList()) = DeclarationDraft("draft", "project", "revision", "base", "main.go", "replace_symbol", "Run", "func Run() {}", imports = imports, revision = 2, hash = "hash", validation = validation)
     private fun file(hash: String = "base") = ProjectFileInfo("main.go", hash, "main.go", language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false)
     private fun project(revision: String = "revision") = ProjectAnalysis("project", revision, "project", "/tmp/project", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "fresh", analyzedAt = "")
 }

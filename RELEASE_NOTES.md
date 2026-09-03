@@ -54,9 +54,6 @@ immediate guarded Undo.
 - POST /api/chat/message remains registered only to return 410 Gone. GET
   /api/chat/history is a deprecated source-free activity alias; use GET
   /api/projects/current/activity instead.
-- The older candidate comparison/check/export routes remain compatibility routes
-  for pre-draft review metadata only. New Desktop workflow code uses draft
-  routes; no current example represents them as a generation workflow.
 
 ### Privacy and limits
 

@@ -70,7 +70,7 @@ class DesktopWorkflowControllerTest {
     @Test fun applyEligibilityRequiresTheLatestValidatedAndCheckedDraft() {
         val selected = file("main.go", "main-hash")
         val draft = draft()
-        val matchingChecks = CandidateCheckReport(
+        val matchingChecks = DraftCheckReport(
             targetPath = "main.go", applicable = true, draftId = draft.id, draftRevision = draft.revision,
             draftHash = draft.hash, projectId = draft.projectId, projectRevision = draft.projectRevision, baseFileHash = draft.baseFileHash,
         )
@@ -89,5 +89,5 @@ class DesktopWorkflowControllerTest {
     private fun project(id: String, revision: String) = ProjectAnalysis(id, revision, id, "/tmp/$id", "go", fileCount = 1, sourceFileCount = 1, totalLines = 1, analysisFile = "", summary = "", aiStatus = "missing", analyzedAt = "")
     private fun index(id: String, revision: String) = ProjectIndex(id, revision)
     private fun file(path: String, hash: String) = ProjectFileInfo(path, hash, path, language = "Go", sizeBytes = 1, lineCount = 1, modifiedAt = "", binary = false, content = "package main")
-    private fun draft() = DeclarationDraft(id = "draft", projectId = "project", projectRevision = "revision", baseFileHash = "main-hash", targetPath = "main.go", revision = 2, hash = "draft-hash", validation = GenerationValidation(true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")))
+    private fun draft() = DeclarationDraft(id = "draft", projectId = "project", projectRevision = "revision", baseFileHash = "main-hash", targetPath = "main.go", revision = 2, hash = "draft-hash", validation = DeclarationValidation(true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")))
 }

@@ -64,9 +64,6 @@ the current declaration-draft workflow.
 | POST | `/api/projects/current/drafts/{draftID}/validate` | Compose and validate one exact draft revision. |
 | POST | `/api/projects/current/drafts/{draftID}/checks` | Run scoped checks for one validated draft revision and hash. |
 | GET | `/api/projects/current/drafts/{draftID}/review` | Read draft validation/check evidence and Apply eligibility. |
-| POST | `/api/projects/current/candidates/checks` | Deprecated compatibility check route for pre-draft candidate metadata. |
-| POST | `/api/projects/current/candidates/compare` | Deprecated compatibility comparison for pre-draft candidate metadata. |
-| POST | `/api/projects/current/candidates/export` | Deprecated compatibility export for pre-draft review metadata. |
 | POST | `/api/projects/current/apply` | Apply one validated, checked declaration draft only after `confirm: true`. |
 | POST | `/api/projects/current/undo` | Restore only the immediately preceding unchanged apply after `confirm: true`. |
 | GET | `/api/projects/current/audit` | Read source-free one-file Apply/Undo audit history for `project_revision`. |

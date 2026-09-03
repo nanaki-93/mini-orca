@@ -166,9 +166,6 @@ func registeredRoutes() []routeSpec {
 		{http.MethodPost, "/api/projects/current/drafts/{draftID}/validate", routeRetained, "Desktop ApiClient.validateDraft"},
 		{http.MethodPost, "/api/projects/current/drafts/{draftID}/checks", routeRetained, "Desktop ApiClient.checkDraft"},
 		{http.MethodGet, "/api/projects/current/drafts/{draftID}/review", routeRetired, ""},
-		{http.MethodPost, "/api/projects/current/candidates/checks", routeRetired, ""},
-		{http.MethodPost, "/api/projects/current/candidates/compare", routeRetired, ""},
-		{http.MethodPost, "/api/projects/current/candidates/export", routeRetired, ""},
 		{http.MethodPost, "/api/projects/current/apply", routeRetained, "Desktop ApiClient.applyDraft"},
 		{http.MethodPost, "/api/projects/current/undo", routeRetained, "Desktop ApiClient.undo"},
 		{http.MethodGet, "/api/projects/current/audit", routeRetired, ""},
@@ -220,7 +217,7 @@ func newHTTPMux(
 	mux.HandleFunc("GET /api/projects/current/context", contextHandler.Preview)
 
 	projectHandler := handlers.NewProjectHandler(projectManager, application)
-	candidateHandler := handlers.NewCandidateHandler(application, projectManager)
+	draftHandler := handlers.NewDraftHandler(application, projectManager)
 	mux.HandleFunc("POST /api/projects/import", projectHandler.Import)
 	mux.HandleFunc("POST /api/projects/restore", projectHandler.Restore)
 	mux.HandleFunc("GET /api/projects/current", projectHandler.Current)
@@ -244,17 +241,14 @@ func newHTTPMux(
 	mux.HandleFunc("POST /api/projects/current/analysis-job/resume", projectHandler.ResumeAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/analysis-job/cancel", projectHandler.CancelAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/reindex", projectHandler.Reindex)
-	mux.HandleFunc("GET /api/projects/current/drafts/{draftID}", candidateHandler.Draft)
-	mux.HandleFunc("PATCH /api/projects/current/drafts/{draftID}", candidateHandler.UpdateDraft)
-	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/validate", candidateHandler.ValidateDraft)
-	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/checks", candidateHandler.CheckDraft)
-	mux.HandleFunc("GET /api/projects/current/drafts/{draftID}/review", candidateHandler.ReviewDraft)
-	mux.HandleFunc("POST /api/projects/current/candidates/checks", candidateHandler.Check)
-	mux.HandleFunc("POST /api/projects/current/candidates/compare", candidateHandler.Compare)
-	mux.HandleFunc("POST /api/projects/current/candidates/export", candidateHandler.Export)
-	mux.HandleFunc("POST /api/projects/current/apply", candidateHandler.Apply)
-	mux.HandleFunc("POST /api/projects/current/undo", candidateHandler.Undo)
-	mux.HandleFunc("GET /api/projects/current/audit", candidateHandler.Audit)
+	mux.HandleFunc("GET /api/projects/current/drafts/{draftID}", draftHandler.Draft)
+	mux.HandleFunc("PATCH /api/projects/current/drafts/{draftID}", draftHandler.UpdateDraft)
+	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/validate", draftHandler.ValidateDraft)
+	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/checks", draftHandler.CheckDraft)
+	mux.HandleFunc("GET /api/projects/current/drafts/{draftID}/review", draftHandler.ReviewDraft)
+	mux.HandleFunc("POST /api/projects/current/apply", draftHandler.Apply)
+	mux.HandleFunc("POST /api/projects/current/undo", draftHandler.Undo)
+	mux.HandleFunc("GET /api/projects/current/audit", draftHandler.Audit)
 
 	return mux
 }
