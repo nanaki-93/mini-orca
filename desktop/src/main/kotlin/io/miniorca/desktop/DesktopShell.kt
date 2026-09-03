@@ -232,7 +232,7 @@ internal data class DesktopShellPaletteActions(
 
 internal data class DesktopShellPanes(
     val explorer: @Composable (Modifier, () -> Unit) -> Unit,
-    val context: @Composable (Modifier) -> Unit,
+    val rightToolWindows: @Composable (RightToolWindow, Modifier) -> Unit,
 )
 
 @Composable
@@ -278,6 +278,10 @@ internal fun DesktopShell(
     if (!editorChromeVisible(nextWorkspace)) scope.launch { drawerState.close() }
     editorActions.selectWorkspace(nextWorkspace)
   }
+  fun selectRightToolWindow(toolWindow: RightToolWindow) {
+    layoutActions.updateLayout(
+        layout.openRight(toolWindow).withFocus(DesktopFocusRegion.RightToolWindow))
+  }
   LaunchedEffect(showsEditorChrome) { if (!showsEditorChrome) drawerState.close() }
   Surface(
       modifier =
@@ -317,8 +321,14 @@ internal fun DesktopShell(
                       modifier = Modifier.fillMaxHeight().width(320.dp))
                 } else {
                   DockedToolWindow(
-                      "Context",
-                      content = panes.context,
+                      "Tool windows",
+                      content = { modifier ->
+                        RightToolWindowContainer(
+                            layout.activeRightToolWindow,
+                            ::selectRightToolWindow,
+                            panes.rightToolWindows,
+                            modifier)
+                      },
                       modifier = Modifier.fillMaxHeight().width(360.dp))
                 }
               }
@@ -370,8 +380,14 @@ internal fun DesktopShell(
                     },
                     onCommit = layoutActions.saveLayout)
                 DockedToolWindow(
-                    "Context",
-                    content = panes.context,
+                    "Tool windows",
+                    content = { modifier ->
+                      RightToolWindowContainer(
+                          layout.activeRightToolWindow,
+                          ::selectRightToolWindow,
+                          panes.rightToolWindows,
+                          modifier)
+                    },
                     modifier = Modifier.width(layout.actionWidth.dp).fillMaxHeight())
               }
             }

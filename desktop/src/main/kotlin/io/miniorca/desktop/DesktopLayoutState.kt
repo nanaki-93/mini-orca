@@ -45,6 +45,13 @@ internal fun leftToolWindowLabel(toolWindow: LeftToolWindow): String =
       LeftToolWindow.Editor -> "Editor"
     }
 
+internal fun rightToolWindowLabel(toolWindow: RightToolWindow): String =
+    when (toolWindow) {
+      RightToolWindow.Context -> "Context"
+      RightToolWindow.Assistant -> "Assistant"
+      RightToolWindow.Review -> "Review"
+    }
+
 internal fun leftToolWindowForWorkspace(workspace: Workspace): LeftToolWindow =
     when (workspace) {
       Workspace.Summary -> LeftToolWindow.Summary
