@@ -1,7 +1,6 @@
 package logging
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"os"
@@ -88,11 +87,6 @@ func Init(cfg Config) {
 	slog.SetDefault(logger)
 }
 
-// Debug logs a message at debug level
-func Debug(msg string, args ...any) {
-	logger.Debug(msg, args...)
-}
-
 // Info logs a message at info level
 func Info(msg string, args ...any) {
 	logger.Info(msg, args...)
@@ -106,20 +100,4 @@ func Warn(msg string, args ...any) {
 // Error logs a message at error level
 func Error(msg string, args ...any) {
 	logger.Error(msg, args...)
-}
-
-// With returns a new logger with the given attributes
-func With(args ...any) *slog.Logger {
-	return logger.With(args...)
-}
-
-// GetLogger returns the current global logger
-func GetLogger() *slog.Logger {
-	return logger
-}
-
-// LogContext returns a context with the logger attached (if needed in future)
-func LogContext(ctx context.Context, l *slog.Logger) context.Context {
-	// This is a placeholder for future context-based logging
-	return ctx
 }

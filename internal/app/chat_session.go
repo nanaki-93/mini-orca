@@ -103,10 +103,7 @@ func (s *Service) OpenChatSession(request ChatSessionCreateRequest) (*ChatSessio
 		return nil, err
 	}
 	session := ChatSession{ID: newChatSessionID(), ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, BaseFileHash: request.BaseFileHash, OpenPath: request.OpenPath, Mode: request.Mode, TargetSymbol: request.TargetSymbol, TaskSpec: taskSpec, State: "active", Messages: []ChatSessionMessage{}, CreatedAt: now, UpdatedAt: now}
-	s.chatSessionMu.Lock()
-	s.chatSessions[session.ID] = &chatSession{session: cloneChatSession(session)}
-	s.chatSessionMu.Unlock()
-	return pointerToChatSession(session), nil
+	return s.chatSessions.create(session), nil
 }
 
 func validateChatTarget(file project.IndexFile, mode project.DeclarationEditMode, target string) error {
@@ -137,14 +134,11 @@ func validateChatTarget(file project.IndexFile, mode project.DeclarationEditMode
 // ChatSession returns the current conversation and marks it stale if the
 // project revision, open path, or base file hash no longer matches.
 func (s *Service) ChatSession(id string) (*ChatSession, error) {
-	s.chatSessionMu.Lock()
-	defer s.chatSessionMu.Unlock()
-	stored := s.chatSessions[id]
-	if stored == nil {
-		return nil, fmt.Errorf("chat session not found")
+	session, err := s.refreshChatSession(id)
+	if err != nil {
+		return nil, err
 	}
-	s.expireChatSessionLocked(stored)
-	return pointerToChatSession(cloneChatSession(stored.session)), nil
+	return pointerToChatSession(session), nil
 }
 
 // SendChatSessionMessage produces one declaration draft while retaining the
@@ -173,18 +167,19 @@ func (s *Service) SendChatSessionMessage(ctx context.Context, request ChatSessio
 	if err != nil {
 		return nil, err
 	}
-	projectContext, manifest, err := project.NewContextBuilder().BuildFunctionWithManifest(s.manager.Root(), project.FunctionContextOptions{TargetPath: session.OpenPath, TargetSymbol: session.TargetSymbol, Mode: session.Mode, Index: index, TaskSpec: session.TaskSpec, PriorDeclaration: priorDeclaration, MaxTokens: sessionFunctionContextLimit(s.functionRuntime.effective.ContextMaxTokens)})
+	runtime := s.runtimes.function
+	projectContext, manifest, err := project.NewContextBuilder().BuildFunctionWithManifest(s.manager.Root(), project.FunctionContextOptions{TargetPath: session.OpenPath, TargetSymbol: session.TargetSymbol, Mode: session.Mode, Index: index, TaskSpec: session.TaskSpec, PriorDeclaration: priorDeclaration, MaxTokens: sessionFunctionContextLimit(runtime.effective.ContextMaxTokens)})
 	if err != nil {
 		return nil, fmt.Errorf("build session context: %w", err)
 	}
-	manifest = s.contextManifestForRuntime(manifest, s.functionRuntime)
+	manifest = s.contextManifestForRuntime(manifest, runtime)
 	messages, err := declarationDraftMessages(request.Message, "", projectContext, session.OpenPath, session.TargetSymbol, session.Mode)
 	if err != nil {
 		return nil, err
 	}
-	timed, cancel := context.WithTimeout(ctx, duration(s.functionRuntime.effective.Timeout))
+	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
-	result, err := s.retry(timed, s.functionRuntime, messages)
+	result, err := s.retry(timed, runtime, messages)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
@@ -256,25 +251,14 @@ func (s *Service) reserveTaskRepair(session ChatSession, parentDraftID string) e
 	if err := s.taskDraftHasFailedChecks(parentDraftID, session); err != nil {
 		return err
 	}
-	s.chatSessionMu.Lock()
-	defer s.chatSessionMu.Unlock()
-	stored := s.chatSessions[session.ID]
-	if stored == nil || stored.session.State != "active" || stored.session.LatestDraftID != parentDraftID {
-		return project.ErrRevisionConflict
-	}
-	if stored.session.RepairCount >= 3 {
-		return fmt.Errorf("check-driven repair limit reached")
-	}
-	stored.session.RepairCount++
-	stored.session.UpdatedAt = time.Now().UTC()
-	return nil
+	return s.chatSessions.reserveRepair(session.ID, parentDraftID)
 }
 
 func (s *Service) taskDraftHasFailedChecks(id string, session ChatSession) error {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
-	stored := s.drafts[id]
-	if stored == nil || !sameTaskSpec(stored.draft.TaskSpec, session.TaskSpec) || stored.checks == nil || stored.checks.Revision != stored.draft.Revision || stored.checks.CompositionHash != stored.draft.CompositionHash || !checksFailed(stored.checks.Report) {
+	if _, err := s.requireCurrentDraft(id); err != nil {
+		return err
+	}
+	if !s.drafts.hasFailedChecks(id, session.TaskSpec) {
 		return fmt.Errorf("check-driven repair requires failed checks for the current task draft")
 	}
 	return nil
@@ -297,63 +281,52 @@ func sameTaskSpec(left, right *project.BugTaskSpec) bool {
 }
 
 func (s *Service) chatSessionForMessage(id, parentDraftID string) (ChatSession, error) {
-	s.chatSessionMu.Lock()
-	defer s.chatSessionMu.Unlock()
-	stored := s.chatSessions[id]
-	if stored == nil {
-		return ChatSession{}, fmt.Errorf("chat session not found")
+	if _, err := s.requireCurrentChatSession(id); err != nil {
+		return ChatSession{}, err
 	}
-	s.expireChatSessionLocked(stored)
-	if stored.session.State != "active" {
-		return ChatSession{}, project.ErrRevisionConflict
-	}
-	if stored.session.LatestDraftID != parentDraftID {
-		return ChatSession{}, project.ErrRevisionConflict
-	}
-	return cloneChatSession(stored.session), nil
+	return s.chatSessions.forMessage(id, parentDraftID)
 }
 
 func (s *Service) appendChatSessionProposal(id, parentDraftID, userMessage string, assistantMessage ChatSessionMessage) error {
-	s.chatSessionMu.Lock()
-	defer s.chatSessionMu.Unlock()
-	stored := s.chatSessions[id]
-	if stored == nil {
-		return project.ErrRevisionConflict
+	if _, err := s.requireCurrentChatSession(id); err != nil {
+		return err
 	}
-	s.expireChatSessionLocked(stored)
-	if stored.session.State != "active" || stored.session.LatestDraftID != parentDraftID {
-		return project.ErrRevisionConflict
-	}
-	now := time.Now().UTC()
-	stored.session.Messages = append(stored.session.Messages, ChatSessionMessage{Role: "user", Content: userMessage, CreatedAt: now}, assistantMessage)
-	stored.session.LatestDraftID = assistantMessage.DraftID
-	stored.session.UpdatedAt = now
-	return nil
+	return s.chatSessions.appendProposal(id, parentDraftID, userMessage, assistantMessage)
 }
 
-func (s *Service) expireChatSessionLocked(stored *chatSession) {
-	if stored.session.State != "active" {
-		return
+func (s *Service) refreshChatSession(id string) (ChatSession, error) {
+	session, ok := s.chatSessions.snapshot(id)
+	if !ok {
+		return ChatSession{}, fmt.Errorf("chat session not found")
 	}
-	if err := s.ValidateMutableRequest(stored.session.ProjectID, stored.session.ProjectRevision, stored.session.OpenPath, stored.session.BaseFileHash); err != nil {
-		stored.session.State = "stale"
-		stored.session.UpdatedAt = time.Now().UTC()
+	if session.State == "active" && s.ValidateMutableRequest(session.ProjectID, session.ProjectRevision, session.OpenPath, session.BaseFileHash) != nil {
+		s.chatSessions.markStale(id)
+		refreshed, ok := s.chatSessions.snapshot(id)
+		if !ok {
+			return ChatSession{}, fmt.Errorf("chat session not found")
+		}
+		return refreshed, nil
 	}
+	return session, nil
+}
+
+func (s *Service) requireCurrentChatSession(id string) (ChatSession, error) {
+	session, err := s.refreshChatSession(id)
+	if err != nil {
+		return ChatSession{}, err
+	}
+	if session.State != "active" {
+		return ChatSession{}, project.ErrRevisionConflict
+	}
+	return session, nil
 }
 
 func (s *Service) markChatSessionStale(id string) {
-	s.chatSessionMu.Lock()
-	defer s.chatSessionMu.Unlock()
-	if stored := s.chatSessions[id]; stored != nil {
-		stored.session.State = "stale"
-		stored.session.UpdatedAt = time.Now().UTC()
-	}
+	s.chatSessions.markStale(id)
 }
 
 func (s *Service) clearChatSessions() {
-	s.chatSessionMu.Lock()
-	defer s.chatSessionMu.Unlock()
-	s.chatSessions = make(map[string]*chatSession)
+	s.chatSessions.clear()
 }
 
 func ParseDeclarationDraftResponse(output string) (DeclarationDraftResponse, error) {

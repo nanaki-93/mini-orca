@@ -118,25 +118,45 @@ func (s *Service) StartGoScan(revision string) (*GoScanReport, error) {
 	if revision == "" || revision != analysis.ProjectRevision {
 		return nil, project.ErrRevisionConflict
 	}
+	worker, cancel := context.WithCancel(context.Background())
 	s.goScan.mu.Lock()
-	defer s.goScan.mu.Unlock()
 	if s.goScan.cancel != nil && s.goScan.report != nil && s.goScan.report.ProjectID == analysis.ProjectID && s.goScan.report.ProjectRevision == revision {
-		return cloneGoScanReport(s.goScan.report), nil
+		existing := cloneGoScanReport(s.goScan.report)
+		s.goScan.mu.Unlock()
+		cancel()
+		return existing, nil
 	}
 	now := time.Now().UTC()
 	report := &GoScanReport{ProjectID: analysis.ProjectID, ProjectRevision: revision, Status: "running", StartedAt: now, UpdatedAt: now, Phases: []GoScanPhase{}}
+	s.goScan.report = cloneGoScanReport(report)
+	s.goScan.cancel = cancel
+	s.goScan.mu.Unlock()
 	data, err := marshalGoScanReport(report)
 	if err != nil {
+		s.clearStartedGoScan(report)
 		return nil, err
 	}
 	if err := writeGoScanReport(analysis.Path, data); err != nil {
+		s.clearStartedGoScan(report)
 		return nil, err
 	}
-	worker, cancel := context.WithCancel(context.Background())
-	s.goScan.report = cloneGoScanReport(report)
-	s.goScan.cancel = cancel
 	go s.runStartedGoScan(worker, report.ProjectID, revision)
 	return cloneGoScanReport(report), nil
+}
+
+func (s *Service) clearStartedGoScan(report *GoScanReport) {
+	s.goScan.mu.Lock()
+	if s.goScan.report != nil && s.goScan.report.ProjectID == report.ProjectID && s.goScan.report.ProjectRevision == report.ProjectRevision {
+		cancel := s.goScan.cancel
+		s.goScan.report = nil
+		s.goScan.cancel = nil
+		s.goScan.mu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+		return
+	}
+	s.goScan.mu.Unlock()
 }
 
 // GoScanProgress returns the report for the requested active revision. A

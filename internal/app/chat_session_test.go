@@ -212,9 +212,9 @@ func markTaskDraftChecksFailed(t *testing.T, service *Service, draftID string) {
 	if err != nil || draft.CompositionHash == "" {
 		t.Fatalf("validate task draft = %+v, %v", draft, err)
 	}
-	service.draftMu.Lock()
-	defer service.draftMu.Unlock()
-	stored := service.drafts[draftID]
+	service.drafts.mu.Lock()
+	defer service.drafts.mu.Unlock()
+	stored := service.drafts.records[draftID]
 	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CompositionHash: draft.CompositionHash, Report: DraftCheckReport{DraftID: draft.ID, DraftRevision: draft.Revision, DraftHash: draft.Hash, CompositionHash: draft.CompositionHash, Applicable: false, Checks: []DraftCheck{{Name: "task test verification", Required: true, State: CheckFailed, Output: "sanitized failure"}}}}
 }
 

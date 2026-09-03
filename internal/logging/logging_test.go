@@ -18,27 +18,18 @@ func TestLogging(t *testing.T) {
 
 	Init(cfg)
 
-	Debug("debug message", "key", "value")
 	Info("info message", "password", "secret123")
 	Warn("warn message")
 	Error("error message")
 
 	output := buf.String()
 	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) != 4 {
-		t.Errorf("expected 4 log lines, got %d", len(lines))
-	}
-
-	var debugEntry map[string]any
-	if err := json.Unmarshal([]byte(lines[0]), &debugEntry); err != nil {
-		t.Fatal(err)
-	}
-	if debugEntry["msg"] != "debug message" || debugEntry["level"] != "DEBUG" || debugEntry["key"] != "value" {
-		t.Errorf("unexpected debug entry: %v", debugEntry)
+	if len(lines) != 3 {
+		t.Errorf("expected 3 log lines, got %d", len(lines))
 	}
 
 	var infoEntry map[string]any
-	if err := json.Unmarshal([]byte(lines[1]), &infoEntry); err != nil {
+	if err := json.Unmarshal([]byte(lines[0]), &infoEntry); err != nil {
 		t.Fatal(err)
 	}
 	if infoEntry["password"] != "[REDACTED]" {
