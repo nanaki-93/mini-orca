@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -35,150 +35,167 @@ internal fun AnalysisWorkspacePane(
           )
           .bounded()
   val presentation = analyzeAllPresentation(state.job, state.coverage)
-  LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
+  LazyColumn(Modifier.fillMaxSize().padding(12.dp)) {
     item {
-      Text(
-          "PROJECT ANALYSIS",
-          color = PrimaryText,
-          fontSize = 18.sp,
-          fontWeight = FontWeight.SemiBold)
-      Spacer(Modifier.height(12.dp))
-      FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-        SectionLabel("PROJECT COVERAGE")
-        Text(
-            "Total: ${presentation.coverage.total} · Fresh: ${presentation.coverage.fresh} · Stale: ${presentation.coverage.stale}",
-            color = PrimaryText,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 7.dp),
-        )
-        Text(
-            "Missing: ${presentation.coverage.missing} · Running: ${presentation.coverage.running} · Failed: ${presentation.coverage.failed}",
-            color = SecondaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-      }
-      Spacer(Modifier.height(10.dp))
-      FocusFlowPanel(Modifier.fillMaxWidth()) {
-        SectionLabel("CURRENT / LAST RUN")
+      WorkspacePaneHeader("Analysis")
+      Spacer(Modifier.height(8.dp))
+      FocusFlowPanel(
+          Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+            SectionLabel("Coverage")
+            CompactKeyValueRows(
+                listOf(
+                    "Total" to presentation.coverage.total.toString(),
+                    "Fresh / stale" to
+                        "${presentation.coverage.fresh} / ${presentation.coverage.stale}",
+                    "Missing / running" to
+                        "${presentation.coverage.missing} / ${presentation.coverage.running}",
+                    "Failed" to presentation.coverage.failed.toString(),
+                ),
+                modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
+            )
+          }
+      Spacer(Modifier.height(8.dp))
+      FocusFlowPanel(
+          Modifier.fillMaxWidth(),
+          raised = presentation.run.statusLabel in setOf("Running", "Paused", "Failed"),
+          contentPadding = PaddingValues(MiniOrcaSpacing.standard),
+      ) {
+        SectionLabel("Current run")
         Text(
             presentation.run.statusLabel,
             color = if (presentation.run.statusLabel == "Failed") Error else PrimaryText,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 7.dp))
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+        CompactKeyValueRows(
+            listOf(
+                "Progress" to
+                    "${presentation.run.completed} complete · ${presentation.run.running} running · ${presentation.run.remaining} remaining",
+                "Failures" to presentation.run.failed.toString(),
+                "Limits" to
+                    "${presentation.run.maxFiles} files · ${presentation.run.maxRetries} retries per file",
+            ),
+            modifier = Modifier.padding(top = MiniOrcaSpacing.compact),
+        )
         Text(
             presentation.run.statusDetail,
             color = SecondaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 4.dp))
-        Text(
-            "Candidates: ${presentation.run.candidates} · Completed: ${presentation.run.completed} · Failed: ${presentation.run.failed} · Running: ${presentation.run.running} · Remaining: ${presentation.run.remaining}",
-            color = SecondaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        state.job?.let {
-          Text(
-              "Limits: ${presentation.run.maxFiles} files · ${presentation.run.maxRetries} retries per file",
-              color = SecondaryText,
-              fontSize = 11.sp,
-              modifier = Modifier.padding(top = 4.dp))
-        }
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
       }
-      Spacer(Modifier.height(10.dp))
-      FocusFlowPanel(Modifier.fillMaxWidth()) {
-        SectionLabel("ANALYZE-ALL CONTROLS")
-        when (presentation.run.statusLabel) {
-          "Running" -> {
-            ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-              FocusFlowButton(onClick = actions.pause, tone = ActionTone.Attention) {
-                Text("Pause")
+      Spacer(Modifier.height(8.dp))
+      FocusFlowPanel(
+          Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+            SectionLabel("Run controls")
+            when (presentation.run.statusLabel) {
+              "Running" -> {
+                ResponsiveActionGroup(
+                    Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
+                      FocusFlowButton(
+                          onClick = actions.pause,
+                          tone = ActionTone.Attention,
+                          density = ButtonDensity.Toolbar) {
+                            Text("Pause", fontSize = 11.sp)
+                          }
+                      FocusFlowButton(
+                          onClick = actions.cancel,
+                          tone = ActionTone.Destructive,
+                          density = ButtonDensity.Toolbar) {
+                            Text("Cancel", fontSize = 11.sp)
+                          }
+                    }
               }
-              FocusFlowButton(onClick = actions.cancel, tone = ActionTone.Destructive) {
-                Text("Cancel")
+              "Pausing",
+              "Canceling" -> {
+                Text(
+                    presentation.controls,
+                    color = Warning,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+                FocusFlowButton(
+                    onClick = actions.cancel,
+                    enabled = presentation.run.statusLabel == "Pausing",
+                    tone = ActionTone.Destructive,
+                    density = ButtonDensity.Toolbar,
+                    modifier = Modifier.padding(top = MiniOrcaSpacing.standard)) {
+                      Text("Cancel", fontSize = 11.sp)
+                    }
+              }
+              "Paused" -> {
+                RemoteProviderConfirmation(
+                    ModelScope.Bug,
+                    state.model,
+                    state.remoteProviderConfirmed,
+                    actions.confirmRemoteProvider)
+                ResponsiveActionGroup(
+                    Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
+                      FocusFlowButton(
+                          onClick = { actions.resume(state.remoteProviderConfirmed) },
+                          enabled = !state.model.remoteProvider || state.remoteProviderConfirmed,
+                          tone = ActionTone.Primary,
+                          density = ButtonDensity.Toolbar) {
+                            Text("Resume", fontSize = 11.sp)
+                          }
+                      FocusFlowButton(
+                          onClick = actions.cancel,
+                          tone = ActionTone.Destructive,
+                          density = ButtonDensity.Toolbar) {
+                            Text("Cancel", fontSize = 11.sp)
+                          }
+                    }
+              }
+              else -> {
+                AnalyzeAllStartControls(
+                    state =
+                        AnalyzeAllStartControlsState(
+                            maxFiles,
+                            maxRetries,
+                            state.model,
+                            state.remoteProviderConfirmed,
+                            options),
+                    actions =
+                        AnalyzeAllStartActions(
+                            updateMaxFiles = { maxFiles = it },
+                            updateMaxRetries = { maxRetries = it },
+                            confirmRemoteProvider = actions.confirmRemoteProvider,
+                            start = actions.start,
+                        ),
+                )
               }
             }
           }
-          "Pausing",
-          "Canceling" -> {
-            Text(
-                presentation.controls,
-                color = Warning,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 7.dp))
-            FocusFlowButton(
-                onClick = actions.cancel,
-                enabled = presentation.run.statusLabel == "Pausing",
-                tone = ActionTone.Destructive,
-                modifier = Modifier.padding(top = 8.dp)) {
-                  Text("Cancel")
-                }
-          }
-          "Paused" -> {
-            RemoteProviderConfirmation(
-                ModelScope.Bug,
-                state.model,
-                state.remoteProviderConfirmed,
-                actions.confirmRemoteProvider)
-            ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-              FocusFlowButton(
-                  onClick = { actions.resume(state.remoteProviderConfirmed) },
-                  enabled = !state.model.remoteProvider || state.remoteProviderConfirmed,
-                  tone = ActionTone.Primary) {
-                    Text("Resume")
-                  }
-              FocusFlowButton(onClick = actions.cancel, tone = ActionTone.Destructive) {
-                Text("Cancel")
-              }
-            }
-          }
-          else -> {
-            AnalyzeAllStartControls(
-                state =
-                    AnalyzeAllStartControlsState(
-                        maxFiles, maxRetries, state.model, state.remoteProviderConfirmed, options),
-                actions =
-                    AnalyzeAllStartActions(
-                        updateMaxFiles = { maxFiles = it },
-                        updateMaxRetries = { maxRetries = it },
-                        confirmRemoteProvider = actions.confirmRemoteProvider,
-                        start = actions.start,
-                    ),
-            )
-          }
-        }
-      }
-      Spacer(Modifier.height(10.dp))
-      SectionLabel("ANALYSIS ERRORS")
+      Spacer(Modifier.height(8.dp))
+      SectionLabel("Analysis errors")
     }
     if (presentation.failures.isEmpty()) {
       item {
-        Text(
+        SystemStateMessage(
+            "No analysis errors",
             presentation.noErrorsMessage,
-            color = SecondaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 7.dp))
+            modifier = Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard),
+        )
       }
     } else {
-      items(presentation.failures, key = { it.path }) { failure ->
-        FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 7.dp)) {
-          Text(
-              failure.path, color = PrimaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-          Text(
-              "Attempt ${failure.attempts}",
-              color = SecondaryText,
-              fontSize = 11.sp,
-              modifier = Modifier.padding(top = 4.dp))
-          Text(
-              failure.error,
-              color = Error,
-              fontSize = 11.sp,
-              modifier = Modifier.padding(top = 4.dp))
-        }
-      }
+      items(presentation.failures, key = { it.path }) { failure -> AnalysisFailureRow(failure) }
     }
   }
+}
+
+@Composable
+private fun AnalysisFailureRow(failure: AnalysisFailurePresentation) {
+  FocusFlowPanel(
+      Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact),
+      raised = true,
+      contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+        CompactKeyValueRows(
+            listOf("File" to failure.path, "Attempt" to failure.attempts.toString()),
+        )
+        Text(
+            failure.error,
+            color = Error,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = MiniOrcaSpacing.compact),
+        )
+      }
 }
 
 @Composable
@@ -187,7 +204,7 @@ private fun AnalyzeAllStartControls(
     actions: AnalyzeAllStartActions
 ) {
   ResponsiveFieldPair(
-      modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+      modifier = Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard),
       first = { modifier ->
         CompactSingleLineField(
             state.maxFiles,
@@ -209,8 +226,9 @@ private fun AnalyzeAllStartControls(
       onClick = { actions.start(state.options) },
       enabled = !state.model.remoteProvider || state.remoteConfirmed,
       tone = ActionTone.Primary,
-      modifier = Modifier.padding(top = 6.dp)) {
-        Text("Start Analyze-all")
+      density = ButtonDensity.Toolbar,
+      modifier = Modifier.padding(top = MiniOrcaSpacing.standard)) {
+        Text("Start Analyze-all", fontSize = 11.sp)
       }
 }
 
@@ -257,17 +275,18 @@ internal fun RemoteProviderConfirmation(
       modelDestinationLabel(scope, model),
       color = if (model.remoteProvider) Warning else SecondaryText,
       fontSize = 11.sp,
-      modifier = Modifier.padding(top = 7.dp),
+      modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
   )
   if (model.remoteProvider)
-      androidx.compose.foundation.layout.Row(modifier = Modifier.padding(top = 2.dp)) {
-        Checkbox(checked = confirmed, onCheckedChange = onConfirmed)
-        Text(
-            "Confirm remote destination",
-            color = SecondaryText,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 12.dp))
-      }
+      androidx.compose.foundation.layout.Row(
+          modifier = Modifier.padding(top = MiniOrcaSpacing.compact)) {
+            Checkbox(checked = confirmed, onCheckedChange = onConfirmed)
+            Text(
+                "Confirm remote destination",
+                color = SecondaryText,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 12.dp))
+          }
 }
 
 @Composable
@@ -275,73 +294,148 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
   val filters = rememberFindingsFilterState()
   val presentation = findingsPresentation(state.findings, filters.filters, state.loading)
   val progress = verifiedScanProgress(state.scan)
-  LazyColumn(Modifier.fillMaxSize().padding(18.dp)) {
+  var selectedFindingKey by remember { mutableStateOf<String?>(null) }
+  val selectedFinding = visibleFindingByDisplayKey(presentation, selectedFindingKey)
+  LazyColumn(Modifier.fillMaxSize().padding(12.dp)) {
     item {
-      Text("PROJECT BUGS", color = PrimaryText, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-      Spacer(Modifier.height(12.dp))
-      FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
-        SectionLabel("SEARCH AND FILTER")
-        FindingsFilterControls(
-            filters, presentation, modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
+      WorkspacePaneHeader("Bugs")
+      Spacer(Modifier.height(8.dp))
+      FocusFlowPanel(
+          Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+            SectionLabel("Search and filter")
+            FindingsFilterControls(
+                filters,
+                presentation,
+                modifier = Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard))
+          }
+      Spacer(Modifier.height(8.dp))
+      FocusFlowPanel(
+          Modifier.fillMaxWidth(),
+          raised = progress.warnings.isNotEmpty(),
+          contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+            SectionLabel("Verified scan")
+            Text(
+                progress.summary,
+                color = if (progress.warnings.isNotEmpty()) Warning else SecondaryText,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+            progress.warnings.forEach { warning ->
+              Text(
+                  "Warning: $warning",
+                  color = Error,
+                  fontSize = 11.sp,
+                  modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
+            }
+            if (progress.canCancel) {
+              FocusFlowButton(
+                  onClick = actions.cancelScan,
+                  enabled = state.scan?.status?.lowercase() == "running",
+                  tone = ActionTone.Destructive,
+                  density = ButtonDensity.Toolbar,
+                  modifier = Modifier.padding(top = MiniOrcaSpacing.standard)) {
+                    Text(
+                        if (state.scan?.status?.lowercase() == "canceling") "Canceling…"
+                        else "Cancel scan",
+                        fontSize = 11.sp)
+                  }
+            } else {
+              FocusFlowButton(
+                  onClick = actions.startScan,
+                  tone = ActionTone.Primary,
+                  density = ButtonDensity.Toolbar,
+                  modifier = Modifier.padding(top = MiniOrcaSpacing.standard)) {
+                    Text("Run verified scan", fontSize = 11.sp)
+                  }
+            }
+          }
+      selectedFinding?.let { finding ->
+        Spacer(Modifier.height(8.dp))
+        FindingDetailsRegion(finding) { selectedFindingKey = null }
       }
-      Spacer(Modifier.height(10.dp))
-      FocusFlowPanel(Modifier.fillMaxWidth()) {
-        SectionLabel("VERIFIED SCAN")
-        Text(
-            progress.summary,
-            color = if (progress.warnings.isNotEmpty()) Warning else SecondaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 7.dp))
-        progress.warnings.forEach { warning ->
-          Text(
-              "Warning: $warning",
-              color = Error,
-              fontSize = 11.sp,
-              modifier = Modifier.padding(top = 4.dp))
-        }
-        if (progress.canCancel) {
-          FocusFlowButton(
-              onClick = actions.cancelScan,
-              enabled = state.scan?.status?.lowercase() == "running",
-              tone = ActionTone.Destructive,
-              modifier = Modifier.padding(top = 8.dp)) {
-                Text(
-                    if (state.scan?.status?.lowercase() == "canceling") "Canceling…"
-                    else "Cancel verified scan")
-              }
-        } else {
-          FocusFlowButton(
-              onClick = actions.startScan,
-              tone = ActionTone.Primary,
-              modifier = Modifier.padding(top = 8.dp)) {
-                Text("Run verified scan")
-              }
-        }
-      }
-      Spacer(Modifier.height(10.dp))
-      SectionLabel("FINDINGS")
+      Spacer(Modifier.height(8.dp))
+      SectionLabel("Findings")
     }
     if (presentation.priorityGroups.isEmpty()) {
       item {
-        Text(
+        SystemStateMessage(
+            "No findings",
             presentation.emptyMessage,
-            color = SecondaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 9.dp))
+            modifier = Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard),
+        )
       }
     } else {
       presentation.priorityGroups.forEach { group ->
-        item { SectionLabel(group.priority.sectionLabel, Modifier.padding(top = 9.dp)) }
+        item { SectionLabel(group.priority.sectionLabel, Modifier.padding(top = 8.dp)) }
         items(
             group.findings,
-            key = { finding ->
-              "${group.priority.name}:${finding.id}:${finding.location.path}:${finding.location.startLine}"
-            }) { finding ->
-              DetailedFindingCard(finding, actions.findingActions)
+            key = { finding -> "${group.priority.name}:${findingDisplayKey(finding)}" }) { finding
+              ->
+              CompactProblemRow(
+                  finding,
+                  actions.findingActions,
+                  onShowDetails = { selectedFindingKey = findingDisplayKey(finding) })
             }
       }
     }
   }
+}
+
+@Composable
+private fun FindingDetailsRegion(finding: UnifiedFinding, onDismiss: () -> Unit) {
+  FocusFlowPanel(
+      Modifier.fillMaxWidth(),
+      raised = true,
+      contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+        Row(Modifier.fillMaxWidth()) {
+          SectionLabel("Finding details", Modifier.weight(1f))
+          FocusFlowButton(
+              onClick = onDismiss, tone = ActionTone.Neutral, density = ButtonDensity.Toolbar) {
+                Text("Clear", fontSize = 11.sp)
+              }
+        }
+        Text(
+            finding.title.ifBlank { "Untitled finding" },
+            color = PrimaryText,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+        CompactKeyValueRows(
+            listOf(
+                "Severity" to finding.severity.ifBlank { "unknown" },
+                "Provenance" to findingProvenanceLabel(finding),
+                "Location" to findingLocationLabel(finding),
+                "Status" to findingStatusLabel(finding),
+            ),
+            modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
+        )
+        Text(
+            finding.message.ifBlank { "No message supplied." },
+            color = PrimaryText,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+        if (finding.evidence.isNotBlank())
+            Text(
+                "Evidence: ${finding.evidence}",
+                color = SecondaryText,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
+        finding.taskSpec?.let { task ->
+          CompactKeyValueRows(
+              listOf("Fix task" to "${task.targetSymbol} · ${task.targetSignature}"),
+              modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
+          )
+          Text(
+              "Acceptance: ${task.acceptanceCriteria.joinToString(" · ")}",
+              color = SecondaryText,
+              fontSize = 11.sp,
+              modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
+          if (task.nonGoals.isNotEmpty())
+              Text(
+                  "Non-goals: ${task.nonGoals.joinToString(" · ")}",
+                  color = SecondaryText,
+                  fontSize = 11.sp,
+                  modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
+        }
+      }
 }
 
 /** Read-only Bugs workspace inputs from the current project snapshot. */

@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -113,71 +114,16 @@ internal fun FindingsFilterControls(
 }
 
 @Composable
-internal fun DetailedFindingCard(finding: UnifiedFinding, actions: FindingActions) {
-  FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 7.dp)) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      Text(
-          "${finding.severity.ifBlank { "unknown" }.uppercase()} · ${finding.title.ifBlank { "Untitled finding" }}",
-          color = PrimaryText,
-          fontSize = 13.sp,
-          fontWeight = FontWeight.SemiBold,
-          modifier = Modifier.weight(1f))
-      StatusBadge(finding.freshness.ifBlank { "missing" })
-    }
-    Text(
-        findingProvenanceLabel(finding),
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 5.dp))
-    Text(
-        "Location: ${findingLocationLabel(finding)}",
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 3.dp))
-    Text(
-        "Status: ${findingStatusLabel(finding)}",
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 3.dp))
-    Text(
-        finding.message.ifBlank { "No message supplied." },
-        color = PrimaryText,
-        fontSize = 12.sp,
-        modifier = Modifier.padding(top = 6.dp))
-    if (finding.evidence.isNotBlank())
-        Text(
-            "Evidence: ${finding.evidence}",
-            color = SecondaryText,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 4.dp))
-    finding.taskSpec?.let { task ->
-      Text(
-          "Fix task: ${task.targetSymbol} · ${task.targetSignature}",
-          color = SecondaryText,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 4.dp))
-      Text(
-          "Acceptance: ${task.acceptanceCriteria.joinToString(" · ")}",
-          color = SecondaryText,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 3.dp))
-      if (task.nonGoals.isNotEmpty())
-          Text(
-              "Non-goals: ${task.nonGoals.joinToString(" · ")}",
-              color = SecondaryText,
-              fontSize = 11.sp,
-              modifier = Modifier.padding(top = 3.dp))
-    }
-    FindingActionButtons(finding, actions)
-  }
-}
-
-@Composable
-internal fun CompactProblemRow(finding: UnifiedFinding, actions: FindingActions) {
+internal fun CompactProblemRow(
+    finding: UnifiedFinding,
+    actions: FindingActions,
+    onShowDetails: (() -> Unit)? = null,
+) {
   FocusFlowPanel(
-      Modifier.fillMaxWidth().padding(top = 5.dp).semantics {
+      Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact).semantics {
         contentDescription = compactProblemRowDescription(finding)
-      }) {
+      },
+      contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
           Text(
               finding.severity.ifBlank { "unknown" }.uppercase(),
@@ -196,19 +142,19 @@ internal fun CompactProblemRow(finding: UnifiedFinding, actions: FindingActions)
             findingProvenanceLabel(finding),
             color = SecondaryText,
             fontSize = 10.sp,
-            modifier = Modifier.padding(top = 3.dp))
+            modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
         Text(
             findingLocationLabel(finding),
             color = SecondaryText,
             fontSize = 10.sp,
-            modifier = Modifier.padding(top = 2.dp))
+            modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
         Text(
             finding.message.ifBlank { "No summary supplied." },
             color = PrimaryText,
             fontSize = 11.sp,
             maxLines = 2,
-            modifier = Modifier.padding(top = 4.dp))
-        FindingActionButtons(finding, actions, compact = true)
+            modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
+        FindingActionButtons(finding, actions, onShowDetails)
       }
 }
 
@@ -216,26 +162,35 @@ internal fun CompactProblemRow(finding: UnifiedFinding, actions: FindingActions)
 private fun FindingActionButtons(
     finding: UnifiedFinding,
     actions: FindingActions,
-    compact: Boolean = false,
+    onShowDetails: (() -> Unit)? = null,
 ) {
-  ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = if (compact) 5.dp else 7.dp)) {
+  ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact)) {
+    onShowDetails?.let { onDetails ->
+      FocusFlowButton(
+          onClick = onDetails, tone = ActionTone.Neutral, density = ButtonDensity.Toolbar) {
+            Text("Details", fontSize = 11.sp)
+          }
+    }
     FocusFlowButton(
         onClick = { actions.select(finding) },
         enabled = finding.location.path.isNotBlank(),
-        tone = ActionTone.Navigation) {
-          Text(if (compact) "Open source" else "Open in Editor")
+        tone = ActionTone.Navigation,
+        density = ButtonDensity.Toolbar) {
+          Text("Open source", fontSize = 11.sp)
         }
     FocusFlowButton(
         onClick = { actions.prepareFix(finding) },
         enabled = findingCanPrepareFix(finding),
-        tone = ActionTone.Navigation) {
-          Text("Prepare fix")
+        tone = ActionTone.Navigation,
+        density = ButtonDensity.Toolbar) {
+          Text("Prepare fix", fontSize = 11.sp)
         }
     findingLifecycleActions(finding).forEach { action ->
       FocusFlowButton(
           onClick = { actions.triage(finding, action) },
-          tone = if (action.status == "dismissed") ActionTone.Destructive else ActionTone.Neutral) {
-            Text(action.label)
+          tone = if (action.status == "dismissed") ActionTone.Destructive else ActionTone.Neutral,
+          density = ButtonDensity.Toolbar) {
+            Text(action.label, fontSize = 11.sp)
           }
     }
   }

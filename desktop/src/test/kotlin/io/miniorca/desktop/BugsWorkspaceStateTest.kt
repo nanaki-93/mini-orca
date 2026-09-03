@@ -108,6 +108,16 @@ class BugsWorkspaceStateTest {
   }
 
   @Test
+  fun detailsSelectionUsesTheVisibleSharedFindingPresentation() {
+    val presentation =
+        findingsPresentation(listOf(verified, suggested), BugsFilters(source = "vet"))
+
+    assertEquals(verified, visibleFindingByDisplayKey(presentation, findingDisplayKey(verified)))
+    assertEquals(null, visibleFindingByDisplayKey(presentation, findingDisplayKey(suggested)))
+    assertEquals(null, visibleFindingByDisplayKey(presentation, null))
+  }
+
+  @Test
   fun triageAndPrepareFixRemainRevisionAndLocationSafe() {
     assertEquals(
         listOf(
