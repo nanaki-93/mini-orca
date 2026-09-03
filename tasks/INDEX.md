@@ -1,23 +1,22 @@
 # Mini-Orca implementation tasks
 
-Current cleanup plan: [`../PLAN.md`](../PLAN.md)
+Current UI plan: [`../plan.md`](../plan.md)
 
 ## Historical ledger: Tasks 01–102
 
 Tasks 01–102 are completed implementation history. Their detailed task files,
-obsolete execution prompts, and retired UI-mock material were consolidated in
-Task 116. Git history remains the full, immutable archive; this ledger records
-the delivery sequence without presenting pre-cleanup work as the active roadmap.
+obsolete execution prompts, and retired UI-mock material were consolidated in Task
+116. Git history remains the full, immutable archive.
 
 | Range | Completed delivery |
 | --- | --- |
 | 01–31 | Preview-first single-project Desktop safety foundation, API, configuration, and release baseline. |
-| 32–56 | Restored validation/configuration hygiene; added project analysis, findings, scans, Go declaration drafts, checks, Apply/Undo, and Desktop workspaces. |
-| 57–79 | Completed the focused Desktop presentation, responsive shell, Editor review flow, and visual acceptance. |
-| 80–94 | Refined compact, accessible Desktop controls and direct selected-symbol editing. |
-| 95–102 | Added strict scoped-model configuration, OpenAI-compatible routing, task repair, and scoped-model acceptance. |
+| 32–56 | Project analysis, findings, scans, Go declaration drafts, checks, Apply/Undo, and Desktop workspaces. |
+| 57–79 | Focused Desktop presentation, responsive shell, Editor review flow, and visual acceptance. |
+| 80–94 | Compact accessible Desktop controls and direct selected-symbol editing. |
+| 95–102 | Strict scoped-model configuration, OpenAI-compatible routing, task repair, and scoped-model acceptance. |
 
-## Active cleanup execution record
+## Completed cleanup sequence: Tasks 103–117
 
 | Order | Task | Depends on | Status |
 | ---: | --- | --- | --- |
@@ -37,9 +36,44 @@ the delivery sequence without presenting pre-cleanup work as the active roadmap.
 | 116 | [Clean documentation and build residue](completed/116_clean_docs_and_build.md) | 115 | Complete |
 | 117 | [Complete cleanup quality and acceptance](completed/117_cleanup_acceptance.md) | 103–116 | Complete |
 
-Tasks 103–117 execute strictly in numeric order through
-[`PROMPT_EXECUTE_LEGACY_CLEANUP.md`](PROMPT_EXECUTE_LEGACY_CLEANUP.md). Each
-task has one implementation writer, required user-facing start/completion
-commentary, and exactly one isolated verified commit. The workflow never
-authorizes direct source editing, automatic writes, commits, or pushes outside
-the explicit reviewed Apply/Undo boundary.
+The previous sequence remains reproducible through
+[`PROMPT_EXECUTE_LEGACY_CLEANUP.md`](PROMPT_EXECUTE_LEGACY_CLEANUP.md).
+
+## Active IDE-style UI sequence: Tasks 118–132
+
+| Order | Task | Depends on | Status |
+| ---: | --- | --- | --- |
+| 118 | [Establish the IDE UI contract baseline](completed/118_ide_ui_contract_baseline.md) | 117 | Complete |
+| 119 | [Add Desktop IDE layout state](119_desktop_layout_state.md) | 118 | Pending |
+| 120 | [Build the IDE shell foundation](120_ide_shell_foundation.md) | 119 | Pending |
+| 121 | [Rebuild Project as a navigation tool window](121_project_tool_window.md) | 120 | Pending |
+| 122 | [Add active-file editor chrome](122_editor_chrome.md) | 121 | Pending |
+| 123 | [Improve the source gutter and viewport](123_source_gutter_and_viewport.md) | 122 | Pending |
+| 124 | [Add the Context tool window](124_context_tool_window.md) | 123 | Pending |
+| 125 | [Add Assistant and Review tool windows](125_assistant_review_tool_windows.md) | 124 | Pending |
+| 126 | [Add the Problems tool window](126_problems_tool_window.md) | 125 | Pending |
+| 127 | [Add Checks and Output tool windows](127_checks_output_tool_windows.md) | 126 | Pending |
+| 128 | [Simplify the toolbar and command search](128_toolbar_and_command_search.md) | 127 | Pending |
+| 129 | [Add the persistent Desktop status bar](129_persistent_status_bar.md) | 128 | Pending |
+| 130 | [Harden responsive and accessible IDE navigation](130_responsive_accessible_ide_shell.md) | 129 | Pending |
+| 131 | [Unify workspace density and visual states](131_workspace_density_polish.md) | 130 | Pending |
+| 132 | [Complete IDE UI acceptance](132_ide_ui_acceptance.md) | 118–131 | Pending |
+
+### Plan coverage
+
+| Plan phase | Implementation tasks |
+| --- | --- |
+| Phase 0 — Baseline and UI contract | 118 |
+| Phase 1 — IDE shell foundation | 119–120 |
+| Phase 2 — Project navigation and editor chrome | 121–123 |
+| Phase 3 — Context, Assistant, and Review | 124–125 |
+| Phase 4 — Problems, checks, and output | 126–127 |
+| Phase 5 — Toolbar, commands, and status | 128–129 |
+| Phase 6 — Responsive behavior and visual polish | 130–131 |
+| Phase 7 — Validation and rollout | 132 |
+
+Tasks 118–132 execute strictly in numeric order through
+[`PROMPT_EXECUTE_IDE_UI.md`](PROMPT_EXECUTE_IDE_UI.md). Each task has one
+implementation writer, required user-facing start/completion commentary, focused
+verification, and exactly one isolated commit. No task authorizes a push or weakens
+the preview-first Apply/Undo boundary.
