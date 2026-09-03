@@ -44,7 +44,7 @@ func TestDraftValidateCheckApplyAndUndoRequireCurrentEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ApplyCandidate(context.Background(), applyDraftRequest(validated)); !errors.Is(err, project.ErrRevisionConflict) {
+	if _, err := service.ApplyDraft(context.Background(), applyDraftRequest(validated)); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("stale apply error = %v", err)
 	}
 	current, err := os.ReadFile(filepath.Join(root, "main.go"))
@@ -65,7 +65,7 @@ func TestDraftValidateCheckApplyAndUndoRequireCurrentEvidence(t *testing.T) {
 	if _, err := service.CheckDraft(context.Background(), DraftCheckRequest{ID: validated.ID, ExpectedRevision: validated.Revision, ExpectedHash: validated.Hash}); err != nil {
 		t.Fatal(err)
 	}
-	applied, err := service.ApplyCandidate(context.Background(), applyDraftRequest(validated))
+	applied, err := service.ApplyDraft(context.Background(), applyDraftRequest(validated))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestDraftValidateCheckApplyAndUndoRequireCurrentEvidence(t *testing.T) {
 	if err != nil || string(content) != "package main\n\nimport \"fmt\"\n\nfunc Run() { println(\"edited\") }\n" {
 		t.Fatalf("applied content = %q, %v", content, err)
 	}
-	if _, err := service.UndoCandidate(context.Background(), UndoRequest{ProjectID: validated.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true}); err != nil {
+	if _, err := service.UndoDraft(context.Background(), UndoRequest{ProjectID: validated.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -95,7 +95,7 @@ func TestInvalidDraftCannotBeCheckedOrApplied(t *testing.T) {
 	if _, err := service.CheckDraft(context.Background(), DraftCheckRequest{ID: invalid.ID, ExpectedRevision: invalid.Revision, ExpectedHash: invalid.Hash}); err == nil {
 		t.Fatal("expected invalid draft checks to fail")
 	}
-	if _, err := service.ApplyCandidate(context.Background(), applyDraftRequest(invalid)); err == nil {
+	if _, err := service.ApplyDraft(context.Background(), applyDraftRequest(invalid)); err == nil {
 		t.Fatal("expected invalid draft Apply to fail")
 	}
 }

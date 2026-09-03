@@ -23,7 +23,7 @@ func TestCandidateChecksUseIsolatedWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	candidate := "package main\n\nimport \"fmt\"\n\nfunc Run() { fmt.Println(\"changed\") }\n"
-	report, err := service.RunCandidateChecks(context.Background(), "main.go", candidate, CandidateCheckOptions{})
+	report, err := runFixtureDraftChecks(service, context.Background(), candidate, CandidateCheckOptions{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestCandidateChecksUseIsolatedWorkspace(t *testing.T) {
 func TestCandidateChecksReportFormatterFailure(t *testing.T) {
 	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	candidate := "package main\nimport \"fmt\"\nfunc Run(){fmt.Println(\"changed\")}\n"
-	report, err := service.RunCandidateChecks(context.Background(), "main.go", candidate, CandidateCheckOptions{})
+	report, err := runFixtureDraftChecks(service, context.Background(), candidate, CandidateCheckOptions{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestTaskTestChecksRequireBaseFailureAndCandidatePassWithoutWritingProject(t
 		t.Fatal(err)
 	}
 	test := project.GoTestCandidateSpec{Name: "TestRun", Content: "package main\n\nimport \"testing\"\n\nfunc TestRun(t *testing.T) { if !Run() { t.Fatal(\"expected true\") } }\n"}
-	report, err := service.RunCandidateChecksForTask(context.Background(), "main.go", "package main\n\nfunc Run() bool { return true }\n", CandidateCheckOptions{}, &test)
+	report, err := runFixtureDraftChecks(service, context.Background(), "package main\n\nfunc Run() bool { return true }\n", CandidateCheckOptions{}, &test)
 	checks := taskChecks(report.Checks)
 	if err != nil || len(checks) != 2 || checks[0].State != CheckPassed || checks[1].State != CheckPassed {
 		t.Fatalf("task checks = %+v, err = %v", checks, err)
@@ -87,7 +87,7 @@ func TestTaskTestChecksRequireBaseFailureAndCandidatePassWithoutWritingProject(t
 	if _, err := service.Reindex(); err != nil {
 		t.Fatal(err)
 	}
-	report, err = service.RunCandidateChecksForTask(context.Background(), "main.go", "package main\n\nfunc Run() bool { return true }\n", CandidateCheckOptions{}, &test)
+	report, err = runFixtureDraftChecks(service, context.Background(), "package main\n\nfunc Run() bool { return true }\n", CandidateCheckOptions{}, &test)
 	checks = taskChecks(report.Checks)
 	if err != nil || len(checks) != 1 || checks[0].State != CheckFailed {
 		t.Fatalf("unexpectedly passing baseline = %+v, err = %v", checks, err)
@@ -109,7 +109,7 @@ func TestTaskTestChecksReportCandidateFailureAndUseNonConflictingFilename(t *tes
 		t.Fatal(err)
 	}
 	test := project.GoTestCandidateSpec{Name: "TestRun", Content: "package main\n\nimport \"testing\"\n\nfunc TestRun(t *testing.T) { if !Run() { t.Fatal(\"expected true\") } }\n"}
-	report, err := service.RunCandidateChecksForTask(context.Background(), "main.go", "package main\n\nfunc Run() bool { return false }\n", CandidateCheckOptions{}, &test)
+	report, err := runFixtureDraftChecks(service, context.Background(), "package main\n\nfunc Run() bool { return false }\n", CandidateCheckOptions{}, &test)
 	checks := taskChecks(report.Checks)
 	if err != nil || len(checks) != 2 || checks[0].State != CheckPassed || checks[1].State != CheckFailed {
 		t.Fatalf("candidate failure checks = %+v, err = %v", checks, err)
@@ -176,7 +176,7 @@ func TestApplyUndoAndAuditAreConflictSafeAndSourceFree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	applied, err := service.ApplyCandidate(context.Background(), ApplyRequest{DraftID: preview.GenerationID, DraftRevision: draft.Revision, DraftHash: draft.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true})
+	applied, err := service.ApplyDraft(context.Background(), ApplyRequest{DraftID: preview.GenerationID, DraftRevision: draft.Revision, DraftHash: draft.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestApplyUndoAndAuditAreConflictSafeAndSourceFree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	undone, err := restarted.UndoCandidate(context.Background(), UndoRequest{ProjectID: analysis.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true})
+	undone, err := restarted.UndoDraft(context.Background(), UndoRequest{ProjectID: analysis.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true})
 	if err != nil || undone.UndoAvailable {
 		t.Fatalf("undo = %+v, %v", undone, err)
 	}
@@ -232,7 +232,7 @@ func TestApplyRejectsFileConflict(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() { println(\"external\") }\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ApplyCandidate(context.Background(), ApplyRequest{DraftID: "candidate", DraftRevision: draft.Revision, DraftHash: draft.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true}); !errors.Is(err, project.ErrRevisionConflict) {
+	if _, err := service.ApplyDraft(context.Background(), ApplyRequest{DraftID: "candidate", DraftRevision: draft.Revision, DraftHash: draft.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Confirm: true}); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("apply conflict = %v", err)
 	}
 }
@@ -247,3 +247,11 @@ func jsonAudit(t *testing.T, audits []AuditEntry) string {
 }
 
 func stringMustContain(value, unwanted string) bool { return strings.Contains(value, unwanted) }
+
+func runFixtureDraftChecks(service *Service, ctx context.Context, source string, options CandidateCheckOptions, taskTest *project.GoTestCandidateSpec) (CandidateCheckReport, error) {
+	file, err := service.manager.IndexedFile("main.go")
+	if err != nil {
+		return CandidateCheckReport{}, err
+	}
+	return service.runDraftChecks(ctx, draftCheckInput{file: *file, source: source, taskTest: taskTest}, options)
+}
