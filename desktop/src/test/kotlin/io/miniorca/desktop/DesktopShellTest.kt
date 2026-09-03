@@ -199,10 +199,18 @@ class DesktopShellTest {
   }
 
   @Test
-  fun statusBarOnlyAppearsForLoadingOrActionableErrors() {
-    assertTrue(!desktopStatusBarVisible(loading = false, error = null))
-    assertTrue(desktopStatusBarVisible(loading = true, error = null))
-    assertTrue(desktopStatusBarVisible(loading = false, error = "Connection lost"))
+  fun statusProviderTracksTheCurrentWorkspaceScope() {
+    val providers =
+        DesktopShellStatusProviders(
+            analyze = ScopedModel(model = "analyze"),
+            bugs = ScopedModel(model = "bugs"),
+            functionEdits = ScopedModel(model = "function"),
+        )
+
+    assertEquals(ModelScope.Analyze, statusProviderForWorkspace(Workspace.Summary, providers).scope)
+    assertEquals(ModelScope.Bug, statusProviderForWorkspace(Workspace.Analysis, providers).scope)
+    assertEquals(ModelScope.Bug, statusProviderForWorkspace(Workspace.Bugs, providers).scope)
+    assertEquals(ModelScope.Function, statusProviderForWorkspace(Workspace.Editor, providers).scope)
   }
 
   @Test
@@ -239,7 +247,7 @@ class DesktopShellTest {
         ),
     )
     assertEquals(
-        DesktopFocusRegion.Toolbar,
+        DesktopFocusRegion.StatusBar,
         paletteFocusRestorationRegion(
             DesktopFocusRegion.StatusBar,
             rightToolWindowVisible = true,
