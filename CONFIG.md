@@ -31,9 +31,9 @@ Defines the LLM provider settings. This is a flat configuration (no nested provi
 `analyze` for import, `bug` for one-file analysis and Analyze-all, and
 `function` for declaration proposals and explicit check-driven repairs. Each
 explicit profile needs `api_base_url` and `model`; an empty `api_key` is valid
-for local servers. `temperature`, `max_tokens`, and `context_max_tokens` are
-optional. The default context budgets are 120000, 32000, and 4000 tokens in
-scope order.
+for local servers. `temperature`, `max_tokens`, `context_max_tokens`, and
+`reasoning_effort` are optional. The default context budgets are 120000, 32000,
+and 4000 tokens in scope order.
 
 An omitted `analyze` or `bug` scope inherits the complete legacy `llm` profile.
 An omitted `function` scope inherits `llm`, except that `agents.coder.model`
@@ -49,6 +49,7 @@ model_scopes:
     api_base_url: "https://api.openai.com/v1"
     api_key: "replace-in-local-config"
     model: "replace-with-analysis-model-id"
+    reasoning_effort: "high" # Optional; leave absent to use the provider default.
   bug: # Claude-compatible or Gemini-compatible OpenAI endpoint
     api_base_url: "https://api.anthropic.com/v1" # or https://generativelanguage.googleapis.com/v1beta/openai
     api_key: "replace-in-local-config"
@@ -60,10 +61,14 @@ model_scopes:
 ```
 
 Native Anthropic Messages, Gemini `generateContent`, OpenAI Responses,
-streaming, tool calls, vendor SDKs, and provider-specific reasoning controls
-are not supported by this compatibility layer. A provider that lacks compatible
-Chat Completions or `/models` support can still be used for generation; model
-listing is informational only.
+streaming, tool calls, and vendor SDKs are not supported by this compatibility
+layer. For providers that support it, `reasoning_effort` is the standard OpenAI
+Chat Completions request field and is forwarded unchanged when set. Valid values
+are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; support
+varies by model, so leave it absent for a provider's default or for local
+servers that do not accept the field. A provider that lacks compatible Chat
+Completions or `/models` support can still be used for generation; model listing
+is informational only.
 
 API keys are read only from ignored local configuration. Mini-Orca never logs
 or returns them, but it does not provide a vault, encryption, Keychain,

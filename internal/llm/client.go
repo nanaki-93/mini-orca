@@ -23,11 +23,12 @@ type ChatMessage struct {
 
 // ChatRequest is the request payload for a chat completion call
 type ChatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	Temperature float32       `json:"temperature,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Stream      bool          `json:"stream,omitempty"`
+	Model           string        `json:"model"`
+	Messages        []ChatMessage `json:"messages"`
+	Temperature     float32       `json:"temperature,omitempty"`
+	MaxTokens       int           `json:"max_tokens,omitempty"`
+	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
+	Stream          bool          `json:"stream,omitempty"`
 }
 
 // ChatChoice represents a single choice in the response
@@ -63,12 +64,13 @@ type Model struct {
 
 // Client handles all LLM API interactions with a single configuration
 type Client struct {
-	apiBaseURL  string
-	apiKey      string
-	model       string
-	temperature float32
-	maxTokens   int
-	httpClient  *http.Client
+	apiBaseURL      string
+	apiKey          string
+	model           string
+	temperature     float32
+	maxTokens       int
+	reasoningEffort string
+	httpClient      *http.Client
 }
 
 // NewClient creates a client for the legacy host-style base URL. Existing callers
@@ -84,13 +86,20 @@ func NewClient(baseURL, apiKey, model string, temperature float32, maxTokens int
 // NewClientWithAPIBase creates a client for an OpenAI-compatible API prefix, such
 // as /v1 or /v1beta/openai. It always uses the Chat Completions wire contract.
 func NewClientWithAPIBase(apiBaseURL, apiKey, model string, temperature float32, maxTokens int) *Client {
+	return NewClientWithAPIBaseAndReasoningEffort(apiBaseURL, apiKey, model, temperature, maxTokens, "")
+}
+
+// NewClientWithAPIBaseAndReasoningEffort creates an OpenAI-compatible client
+// with an optional Chat Completions reasoning effort.
+func NewClientWithAPIBaseAndReasoningEffort(apiBaseURL, apiKey, model string, temperature float32, maxTokens int, reasoningEffort string) *Client {
 	return &Client{
-		apiBaseURL:  strings.TrimRight(apiBaseURL, "/"),
-		apiKey:      apiKey,
-		model:       model,
-		temperature: temperature,
-		maxTokens:   maxTokens,
-		httpClient:  &http.Client{Timeout: 5 * time.Minute},
+		apiBaseURL:      strings.TrimRight(apiBaseURL, "/"),
+		apiKey:          apiKey,
+		model:           model,
+		temperature:     temperature,
+		maxTokens:       maxTokens,
+		reasoningEffort: reasoningEffort,
+		httpClient:      &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
@@ -105,10 +114,11 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatRespons
 	}
 
 	req := ChatRequest{
-		Model:       c.model,
-		Messages:    messages,
-		Temperature: c.temperature,
-		MaxTokens:   c.maxTokens,
+		Model:           c.model,
+		Messages:        messages,
+		Temperature:     c.temperature,
+		MaxTokens:       c.maxTokens,
+		ReasoningEffort: c.reasoningEffort,
 	}
 
 	body, err := json.Marshal(req)

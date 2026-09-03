@@ -29,7 +29,8 @@ and `function` profiles; legacy top-level fields remain the effective function
 profile. It never includes an API key. Import sends prompt content only to
 `analyze`, file analysis and Analyze-all only to `bug`, and declaration messages
 only to `function`. Confirmation is evaluated independently for each remote
-scope.
+scope. An optional configured `reasoning_effort` is reported as non-secret
+metadata and forwarded only in the selected scope's Chat Completions request.
 
 An AI finding may include a validated `task_spec` for one exact Go declaration.
 Pass that spec only when opening a matching replace-symbol chat session. The

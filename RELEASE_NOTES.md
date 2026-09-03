@@ -7,6 +7,8 @@
   OpenAI Chat Completions-compatible API base, model, and optional local key.
 - Added safe scope metadata and per-scope remote confirmation across the daemon,
   API, cache provenance, and Desktop. Provider keys are never returned or logged.
+- Added optional per-scope `reasoning_effort` forwarding for Chat Completions
+  providers, with validation, safe Desktop/API metadata, and cache invalidation.
 - AI file findings can now supply one bounded, exact task specification. A
   reviewed optional Go test runs only in the temporary check workspace and must
   fail on the base then pass on the candidate.

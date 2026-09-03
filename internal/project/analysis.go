@@ -76,11 +76,12 @@ type FileInfo struct {
 
 // Analyzer scans projects and asks the configured model for an architectural summary.
 type Analyzer struct {
-	llm            chatClient
-	model          string
-	profile        string
-	scope          string
-	providerOrigin string
+	llm             chatClient
+	model           string
+	profile         string
+	scope           string
+	providerOrigin  string
+	reasoningEffort string
 }
 
 func NewAnalyzer(client chatClient) *Analyzer {
@@ -90,12 +91,12 @@ func NewAnalyzer(client chatClient) *Analyzer {
 // NewAnalyzerWithProfile records the configured analysis model identity with
 // every structured report so cached interpretations can be invalidated safely.
 func NewAnalyzerWithProfile(client chatClient, model, profile string) *Analyzer {
-	return NewAnalyzerWithProvenance(client, model, profile, "")
+	return NewAnalyzerWithProvenance(client, model, profile, "", "")
 }
 
 // NewAnalyzerWithProvenance records the effective scope and sanitized provider
 // origin alongside the configured model for cache freshness.
-func NewAnalyzerWithProvenance(client chatClient, model, scope, providerOrigin string) *Analyzer {
+func NewAnalyzerWithProvenance(client chatClient, model, scope, providerOrigin, reasoningEffort string) *Analyzer {
 	profile := scope
 	if profile == "" {
 		profile = "analysis"
@@ -103,7 +104,7 @@ func NewAnalyzerWithProvenance(client chatClient, model, scope, providerOrigin s
 	if scope == "" {
 		scope = profile
 	}
-	return &Analyzer{llm: client, model: model, profile: profile, scope: scope, providerOrigin: providerOrigin}
+	return &Analyzer{llm: client, model: model, profile: profile, scope: scope, providerOrigin: providerOrigin, reasoningEffort: reasoningEffort}
 }
 
 func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) {
@@ -116,7 +117,7 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 	if err != nil {
 		return nil, fmt.Errorf("build analysis context: %w", err)
 	}
-	report := newProjectAnalysisReportWithProvenance(analysis.ProjectID, analysis.ProjectRevision, a.model, a.profile, a.scope, a.providerOrigin)
+	report := newProjectAnalysisReportWithProvenance(analysis.ProjectID, analysis.ProjectRevision, a.model, a.profile, a.scope, a.providerOrigin, a.reasoningEffort)
 	if a.llm == nil {
 		report.Status = ProjectAnalysisStatusUnavailable
 		report.Failure = "AI analysis is unavailable because no LLM client is configured."
@@ -171,6 +172,7 @@ func (a *Analyzer) Restore(root string) (*Analysis, error) {
 		Profile:         a.profile,
 		Scope:           a.scope,
 		ProviderOrigin:  a.providerOrigin,
+		ReasoningEffort: a.reasoningEffort,
 		PromptVersion:   projectAnalysisPromptVersion,
 	})
 	if err != nil {

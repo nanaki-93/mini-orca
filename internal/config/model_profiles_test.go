@@ -26,6 +26,9 @@ func TestResolveModelProfilesLegacyFallback(t *testing.T) {
 	if profiles.Analyze.ContextMaxTokens != 120000 || profiles.Bug.ContextMaxTokens != 32000 || profiles.Function.ContextMaxTokens != 4000 {
 		t.Fatalf("unexpected context budgets: %+v", profiles)
 	}
+	if profiles.Analyze.ReasoningEffort != "" || profiles.Bug.ReasoningEffort != "" || profiles.Function.ReasoningEffort != "" {
+		t.Fatalf("legacy profiles must omit reasoning effort: %+v", profiles)
+	}
 }
 
 func TestResolveModelProfilesIndependentExplicitProfiles(t *testing.T) {
@@ -35,7 +38,7 @@ func TestResolveModelProfilesIndependentExplicitProfiles(t *testing.T) {
 	cfg := &Config{
 		LLM: LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy", Temperature: 0.7, MaxTokens: 8192},
 		ModelScopes: ModelScopesConfig{
-			Analyze:  ModelProfileConfig{APIBaseURL: "https://analysis.example/v1", APIKey: "remote-key", Model: "analysis-model", Temperature: &zero, MaxTokens: &maxTokens, ContextMaxTokens: &contextTokens},
+			Analyze:  ModelProfileConfig{APIBaseURL: "https://analysis.example/v1", APIKey: "remote-key", Model: "analysis-model", ReasoningEffort: "high", Temperature: &zero, MaxTokens: &maxTokens, ContextMaxTokens: &contextTokens},
 			Bug:      ModelProfileConfig{APIBaseURL: "https://bugs.example/v1beta/openai/", Model: "bug-model"},
 			Function: ModelProfileConfig{APIBaseURL: "http://localhost:11434/v1", Model: "function-model"},
 		},
@@ -45,7 +48,7 @@ func TestResolveModelProfilesIndependentExplicitProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveModelProfiles() error = %v", err)
 	}
-	if profiles.Analyze.Temperature != 0 || profiles.Analyze.MaxTokens != 2048 || profiles.Analyze.ContextMaxTokens != 6000 {
+	if profiles.Analyze.Temperature != 0 || profiles.Analyze.MaxTokens != 2048 || profiles.Analyze.ContextMaxTokens != 6000 || profiles.Analyze.ReasoningEffort != "high" {
 		t.Fatalf("analyze optional values = %+v", profiles.Analyze)
 	}
 	if profiles.Bug.APIBaseURL != "https://bugs.example/v1beta/openai" || profiles.Bug.APIKey != "" || profiles.Bug.Model != "bug-model" {
@@ -63,6 +66,7 @@ func TestResolveModelProfilesRejectsUnsafeOrPartialProfiles(t *testing.T) {
 		profile ModelProfileConfig
 	}{
 		{name: "missing API base", profile: ModelProfileConfig{Model: "model"}},
+		{name: "reasoning effort without API base", profile: ModelProfileConfig{ReasoningEffort: "high"}},
 		{name: "missing model", profile: ModelProfileConfig{APIBaseURL: "https://provider.example/v1", APIKey: secret}},
 		{name: "user information", profile: ModelProfileConfig{APIBaseURL: "https://user:password@provider.example/v1", Model: "model", APIKey: secret}},
 		{name: "query", profile: ModelProfileConfig{APIBaseURL: "https://provider.example/v1?secret=value", Model: "model", APIKey: secret}},
@@ -95,6 +99,7 @@ func TestResolveModelProfilesRejectsInvalidNumericValues(t *testing.T) {
 		{name: "zero max tokens", profile: ModelProfileConfig{APIBaseURL: "http://localhost:11434/v1", Model: "model", MaxTokens: &zero}},
 		{name: "output limit", profile: ModelProfileConfig{APIBaseURL: "http://localhost:11434/v1", Model: "model", MaxTokens: &overLimit}},
 		{name: "temperature", profile: ModelProfileConfig{APIBaseURL: "http://localhost:11434/v1", Model: "model", Temperature: &negativeTemperature}},
+		{name: "reasoning effort", profile: ModelProfileConfig{APIBaseURL: "http://localhost:11434/v1", Model: "model", ReasoningEffort: "ultra"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

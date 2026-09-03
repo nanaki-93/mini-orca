@@ -76,6 +76,7 @@ func TestFileAnalysisCacheInvalidatesOnlyChangedInputs(t *testing.T) {
 		func(value *FileAnalysisInput) { value.Profile = "new-profile" },
 		func(value *FileAnalysisInput) { value.Scope = "new-scope" },
 		func(value *FileAnalysisInput) { value.ProviderOrigin = "https://new-provider.example" },
+		func(value *FileAnalysisInput) { value.ReasoningEffort = "high" },
 		func(value *FileAnalysisInput) { value.ContextPolicyVersion = "policy-v2" },
 		func(value *FileAnalysisInput) { value.PromptVersion = "prompt-v2" },
 	} {
@@ -189,9 +190,9 @@ func TestFileAnalysisCacheRecoversCorruptionAndConcurrentAccess(t *testing.T) {
 }
 
 func analysisCacheInput(path, hash string) FileAnalysisInput {
-	return FileAnalysisInput{ProjectID: "sha256:project", ProjectRevision: "sha256:revision", Path: path, ContentHash: hash, Language: "Go", Model: "local-model", Profile: "bug", Scope: "bug", ProviderOrigin: "http://localhost:11434", PromptVersion: "prompt-v1", ContextPolicyVersion: "policy-v1"}
+	return FileAnalysisInput{ProjectID: "sha256:project", ProjectRevision: "sha256:revision", Path: path, ContentHash: hash, Language: "Go", Model: "local-model", Profile: "bug", Scope: "bug", ProviderOrigin: "http://localhost:11434", ReasoningEffort: "medium", PromptVersion: "prompt-v1", ContextPolicyVersion: "policy-v1"}
 }
 
 func newFreshAnalysis(input FileAnalysisInput) FileAnalysis {
-	return FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusFresh, Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
+	return FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusFresh, Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
 }

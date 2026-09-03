@@ -152,11 +152,12 @@ class DesktopShellTest {
 
     @Test fun providerDestinationAndContextManifestCountsAreExplicit() {
         val remote = ScopedModel(scope = "function", profile = "function", model = "cloud-model", remoteProvider = true)
-        val local = ScopedModel(scope = "bug", profile = "bug", model = "local-model")
+        val local = ScopedModel(scope = "bug", profile = "bug", model = "local-model", reasoningEffort = "medium")
         assertTrue(modelDestinationLabel(ModelScope.Function, remote).contains("remote provider"))
         assertTrue(modelDestinationLabel(ModelScope.Function, remote).contains("confirmation required"))
         assertTrue(modelDestinationLabel(ModelScope.Bug, local).contains("local provider"))
         assertTrue(modelDestinationLabel(ModelScope.Bug, local).contains("local-model"))
+        assertTrue(modelDestinationLabel(ModelScope.Bug, local).contains("reasoning: medium"))
         assertEquals("1 included · 1 excluded · 12 estimated tokens · truncated", contextManifestSummary(ContextManifest(
             included = listOf(ContextFile("main.go", 12, "hash", 6)),
             excluded = listOf(ContextDecision("secret.env", false, "secret")),

@@ -20,9 +20,9 @@ func TestCurrentModelCatalogPreservesFunctionProjectionWithoutSecrets(t *testing
 	service, err := app.New(&config.Config{
 		LLM: config.LLMConfig{BaseURL: "http://localhost:1234", Model: "legacy", Temperature: 0.3, MaxTokens: 1024},
 		ModelScopes: config.ModelScopesConfig{
-			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "secret-value", Model: "analyze"},
-			Bug:      config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug"},
-			Function: config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", APIKey: "secret-value", Model: "function"},
+			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "secret-value", Model: "analyze", ReasoningEffort: "high"},
+			Bug:      config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug", ReasoningEffort: "low"},
+			Function: config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", APIKey: "secret-value", Model: "function", ReasoningEffort: "max"},
 		},
 	}, manager)
 	if err != nil {
@@ -37,7 +37,7 @@ func TestCurrentModelCatalogPreservesFunctionProjectionWithoutSecrets(t *testing
 	if err := json.NewDecoder(response.Body).Decode(&catalog); err != nil {
 		t.Fatal(err)
 	}
-	if catalog.Model != "function" || catalog.Scopes["analyze"].Model != "analyze" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
+	if catalog.Model != "function" || catalog.ReasoningEffort != "max" || catalog.Scopes["analyze"].Model != "analyze" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
 		t.Fatalf("catalog = %+v", catalog)
 	}
 	if strings.Contains(response.Body.String(), "secret-value") || strings.Contains(response.Body.String(), "/v1") {

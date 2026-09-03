@@ -53,7 +53,7 @@ func main() {
 	// Log successful startup
 	logging.Info("Mini-Orca daemon started successfully")
 	for _, model := range application.EffectiveModels() {
-		logging.Info("Model scope initialized", "scope", model.Scope, "model", model.Model, "provider_origin", model.ProviderOrigin, "remote_provider", model.RemoteProvider)
+		logging.Info("Model scope initialized", "scope", model.Scope, "model", model.Model, "reasoning_effort", model.ReasoningEffort, "provider_origin", model.ProviderOrigin, "remote_provider", model.RemoteProvider)
 	}
 	logging.Info("Workflow: single-coder preview with explicit review")
 

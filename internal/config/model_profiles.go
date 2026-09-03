@@ -26,6 +26,7 @@ type ModelProfile struct {
 	APIBaseURL       string
 	APIKey           string
 	Model            string
+	ReasoningEffort  string
 	Temperature      float32
 	MaxTokens        int
 	ContextMaxTokens int
@@ -104,7 +105,7 @@ func legacyMaxTokens(value int) int {
 
 func resolveProfile(scope ModelScope, configured ModelProfileConfig, fallback ModelProfile, defaultContext int) (ModelProfile, error) {
 	if configured.APIBaseURL == "" {
-		if configured.Model != "" || configured.APIKey != "" || configured.Temperature != nil || configured.MaxTokens != nil || configured.ContextMaxTokens != nil {
+		if configured.Model != "" || configured.APIKey != "" || configured.ReasoningEffort != "" || configured.Temperature != nil || configured.MaxTokens != nil || configured.ContextMaxTokens != nil {
 			return ModelProfile{}, fmt.Errorf("model_scopes.%s.api_base_url is required when configuring a scope", scope)
 		}
 		fallback.Scope = scope
@@ -125,6 +126,7 @@ func resolveProfile(scope ModelScope, configured ModelProfileConfig, fallback Mo
 		APIBaseURL:       apiBase,
 		APIKey:           configured.APIKey,
 		Model:            configured.Model,
+		ReasoningEffort:  strings.TrimSpace(configured.ReasoningEffort),
 		Temperature:      fallback.Temperature,
 		MaxTokens:        fallback.MaxTokens,
 		ContextMaxTokens: defaultContext,
@@ -189,5 +191,17 @@ func validateProfileValues(scope ModelScope, profile ModelProfile) error {
 	if profile.ContextMaxTokens <= 0 || profile.ContextMaxTokens > MaxModelContextTokens {
 		return fmt.Errorf("model_scopes.%s.context_max_tokens must be between 1 and %d", scope, MaxModelContextTokens)
 	}
+	if !validReasoningEffort(profile.ReasoningEffort) {
+		return fmt.Errorf("model_scopes.%s.reasoning_effort must be one of none, minimal, low, medium, high, xhigh, or max", scope)
+	}
 	return nil
+}
+
+func validReasoningEffort(value string) bool {
+	switch value {
+	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max":
+		return true
+	default:
+		return false
+	}
 }

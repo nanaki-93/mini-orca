@@ -21,13 +21,16 @@ llm:
 # https://generativelanguage.googleapis.com/v1beta/openai; Ollama
 # http://localhost:11434/v1; LM Studio http://localhost:1234/v1; or a custom
 # compatible gateway such as https://gateway.example/v1. Keep actual keys only
-# in ignored config.yaml. Restart the daemon after changing scopes.
+# in ignored config.yaml. reasoning_effort is optional and is forwarded only to
+# providers that accept the OpenAI Chat Completions field. Restart the daemon
+# after changing scopes.
 #
 # model_scopes:
 #   analyze:
 #     api_base_url: "https://api.openai.com/v1"
 #     api_key: "replace-with-personal-key"
 #     model: "replace-with-analysis-model-id"
+#     reasoning_effort: "high" # Optional: none, minimal, low, medium, high, xhigh, or max.
 #     temperature: 0.1
 #     max_tokens: 16000
 #     context_max_tokens: 120000

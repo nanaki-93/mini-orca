@@ -97,7 +97,7 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 		Imports: append([]string(nil), indexedFile.Imports...), Dependencies: parsed.Dependencies,
 		SideEffects: parsed.SideEffects, Risks: parsed.Risks, Suggestions: parsed.Suggestions,
 		SymbolExplanations: parsed.SymbolExplanations, Status: project.AnalysisStatusFresh,
-		Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
+		Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
 		GeneratedAt: time.Now().UTC(),
 	}
 	if model := result.Metadata["model"]; model != "" {
@@ -170,7 +170,7 @@ func (s *Service) fileAnalysisCacheInput(analysis *project.Analysis, file *proje
 		return nil, project.FileAnalysisInput{}, err
 	}
 	runtime := s.bugRuntime
-	return cache, project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: contentHash, Language: file.Language, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, PromptVersion: semanticAnalysisPromptVersion, ContextPolicyVersion: policy.Version()}, nil
+	return cache, project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: contentHash, Language: file.Language, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, ReasoningEffort: runtime.effective.ReasoningEffort, PromptVersion: semanticAnalysisPromptVersion, ContextPolicyVersion: policy.Version()}, nil
 }
 
 func (s *Service) syncFileAnalysisStatus(input project.FileAnalysisInput, status string) error {
@@ -181,7 +181,7 @@ func (s *Service) storeAnalysisFailure(cache *project.FileAnalysisCache, input p
 	if strings.Contains(cause.Error(), "context canceled") || strings.Contains(cause.Error(), "deadline exceeded") {
 		return nil, cause
 	}
-	failed := project.FileAnalysis{SchemaVersion: "1", ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: project.AnalysisStatusFailed, Failure: "The model returned an unusable file summary. Retry the analysis.", Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion, GeneratedAt: time.Now().UTC()}
+	failed := project.FileAnalysis{SchemaVersion: "1", ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: project.AnalysisStatusFailed, Failure: "The model returned an unusable file summary. Retry the analysis.", Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion, GeneratedAt: time.Now().UTC()}
 	if err := cache.Store(failed); err != nil {
 		return nil, err
 	}

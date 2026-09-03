@@ -170,6 +170,7 @@ func TestSaveLoadJSONScopedModelConfiguration(t *testing.T) {
 		ModelScopes: ModelScopesConfig{Function: ModelProfileConfig{
 			APIBaseURL:       "http://localhost:11434/v1",
 			Model:            "local-function",
+			ReasoningEffort:  "medium",
 			Temperature:      &temperature,
 			MaxTokens:        &maxTokens,
 			ContextMaxTokens: &contextMaxTokens,
@@ -187,7 +188,7 @@ func TestSaveLoadJSONScopedModelConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveModelProfiles() error = %v", err)
 	}
-	if profiles.Function.Model != "local-function" || profiles.Function.Temperature != 0 {
+	if profiles.Function.Model != "local-function" || profiles.Function.Temperature != 0 || profiles.Function.ReasoningEffort != "medium" {
 		t.Fatalf("JSON scope profile = %+v", profiles.Function)
 	}
 }

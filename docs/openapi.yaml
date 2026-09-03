@@ -625,6 +625,7 @@ components:
         scope: {type: string, example: function}
         profile: {type: string, example: function}
         model: {type: string}
+        reasoning_effort: {type: string, enum: [none, minimal, low, medium, high, xhigh, max], description: Optional configured Chat Completions reasoning effort.}
         provider_origin: {type: string, description: Sanitized scheme, host, and optional port only.}
         remote_provider: {type: boolean, description: Whether model requests require explicit user confirmation before source is sent.}
         temperature: {type: number}
@@ -640,6 +641,7 @@ components:
         scope: {type: string, enum: [analyze, bug, function]}
         profile: {type: string, enum: [analyze, bug, function]}
         model: {type: string}
+        reasoning_effort: {type: string, enum: [none, minimal, low, medium, high, xhigh, max], description: Optional configured Chat Completions reasoning effort.}
         provider_origin: {type: string, description: Sanitized scheme, host, and optional port only.}
         remote_provider: {type: boolean}
         temperature: {type: number}
