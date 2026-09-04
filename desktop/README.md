@@ -58,6 +58,14 @@ IDE tokens, dense typography, quiet component hierarchy, and visual verification
 against the supplied mock. The guidelines distinguish target design decisions from
 the current implementation and require evaluation before a Jewel or titlebar migration.
 
+The next requested improvements are sequenced in
+[UI_REFINEMENT_PLAN.md](UI_REFINEMENT_PLAN.md): remove duplicate Project navigation,
+reduce interface prose, redesign Summary, correct Analysis width, unify menus, and
+remove replaced legacy code. This is a plan, not an implemented behavior change.
+Detailed Tasks 150–160 are listed in [the task index](../tasks/INDEX.md); their
+[execution prompt](../tasks/PROMPT_EXECUTE_UI_REFINEMENT.md) requires sequential
+implementation, verification, and one isolated local commit per task when invoked.
+
 The desktop uses charcoal surfaces, blue selection and action states, a labeled 88dp line-icon
 rail, compact editor chrome, structured AI Context, a current-draft candidate summary, and a
 persistent status strip. At 1000dp and above, temporary pane clamping preserves a 360dp editor
