@@ -80,11 +80,11 @@ implementation writer, required user-facing start/completion commentary, focused
 verification, and exactly one isolated commit. No task authorizes a push or weakens
 the preview-first Apply/Undo boundary.
 
-## Pending insights and performance sequence: Tasks 133–139
+## Active insights and performance sequence: Tasks 133–139
 
 | Order | Task | Depends on | Status |
 | ---: | --- | --- | --- |
-| 133 | [Establish the insights and performance contract baseline](133_insights_performance_contract_baseline.md) | 132 | Pending |
+| 133 | [Establish the insights and performance contract baseline](completed/133_insights_performance_contract_baseline.md) | 132 | Complete |
 | 134 | [Generate and transport contextual engineering insights](134_engineering_insight_generation.md) | 133 | Pending |
 | 135 | [Add the collapsible in-page engineering insight panel](135_inline_engineering_insight_panel.md) | 134 | Pending |
 | 136 | [Implement bounded source-based performance file review](136_performance_file_review.md) | 135 | Pending |
@@ -94,8 +94,7 @@ the preview-first Apply/Undo boundary.
 
 Execute through
 [PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md](PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md).
-These task files are prepared only; no implementation or task commit has started.
-Execution is strictly sequential with one implementation agent and one verified
+Task 133 is in progress. Execution is strictly sequential with one implementation agent and one verified
 local commit per task. No push is authorized.
 
 ### Feature plan coverage
