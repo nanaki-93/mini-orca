@@ -284,7 +284,7 @@ private fun SourceGutter(
     onSourceLineSelected: (SourceLineSelection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-  Column(modifier.background(AppBackground)) {
+  Column(modifier.background(EditorCanvas)) {
     rows.forEach { row ->
       val emphasis = sourceLineEmphasis(row.line, selectedSymbol, focusedLine)
       Row(

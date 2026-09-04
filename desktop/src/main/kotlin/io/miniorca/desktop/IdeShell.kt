@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,10 +34,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -48,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.awt.Cursor
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -63,7 +68,7 @@ internal fun ToolWindowBar(
       modifier
           .width(TOOL_WINDOW_BAR_WIDTH.dp)
           .fillMaxHeight()
-          .background(Chrome)
+          .background(ActivityRail)
           .padding(vertical = 8.dp)
           .verticalScroll(rememberScrollState())
           .onFocusChanged { tabGroupHasFocus = it.hasFocus }
@@ -154,11 +159,9 @@ internal fun DockedToolWindow(
     onClose: (() -> Unit)? = null,
 ) {
   Column(
-      modifier
-          .fillMaxHeight()
-          .background(Panel)
-          .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
-          .semantics { contentDescription = "$title tool window" },
+      modifier.fillMaxHeight().background(ToolWindowSurface).semantics {
+        contentDescription = "$title tool window"
+      },
   ) {
     ToolWindowHeader(title, onClose)
     content(Modifier.fillMaxWidth().weight(1f))
@@ -186,7 +189,7 @@ private fun ToolWindowHeader(title: String, onClose: (() -> Unit)?) {
 @Composable
 internal fun EditorArea(content: @Composable () -> Unit, modifier: Modifier = Modifier) {
   Box(
-      modifier.fillMaxHeight().background(AppBackground).semantics {
+      modifier.fillMaxHeight().background(EditorCanvas).semantics {
         contentDescription = "Editor area"
       }) {
         content()
@@ -216,10 +219,10 @@ internal fun BottomToolWindowRegion(
       modifier
           .fillMaxWidth()
           .height(if (collapsed) 40.dp else layout.bottomHeight.dp)
-          .background(Chrome)
-          .border(androidx.compose.foundation.BorderStroke(1.dp, Border)),
+          .background(ToolWindowSurface),
   ) {
-    if (!collapsed) HorizontalResizableDivider(onHeightDelta, onHeightCommit)
+    if (collapsed) IdeHorizontalSeparator()
+    else HorizontalResizableDivider(onHeightDelta, onHeightCommit)
     Row(
         Modifier.fillMaxWidth().height(38.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
@@ -259,31 +262,28 @@ internal fun NarrowBottomToolWindowSummary(
       layout.activeBottomToolWindow.takeIf { it in availableToolWindows }
           ?: availableToolWindows.first()
   val summary = bottomToolWindowSummary(activeToolWindow, summaries)
-  Row(
-      modifier
-          .fillMaxWidth()
-          .height(38.dp)
-          .background(Chrome)
-          .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
-          .padding(horizontal = 8.dp)
-          .semantics {
-            contentDescription =
-                "Bottom tools summary. ${bottomToolWindowLabel(activeToolWindow)} selected. ${summary?.text.orEmpty()}"
-          },
-      verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Text(bottomToolWindowLabel(activeToolWindow), color = PrimaryText, fontSize = 11.sp)
-    Text(
-        summary?.text.orEmpty(),
-        color = if (summary?.attention == true) Warning else SecondaryText,
-        fontSize = 11.sp,
-        maxLines = 1,
-        modifier = Modifier.weight(1f).padding(start = 8.dp),
-    )
-    ChromeButton(onClick = onOpen) {
-      DesktopLineIcon(DesktopIcon.ChevronRight, "Open tools", iconSize = 16.dp)
-      Spacer(Modifier.width(4.dp))
-      Text("Open tools", fontSize = 11.sp)
+  Column(modifier.fillMaxWidth().background(ToolWindowSurface)) {
+    IdeHorizontalSeparator()
+    Row(
+        Modifier.fillMaxWidth().height(37.dp).padding(horizontal = 8.dp).semantics {
+          contentDescription =
+              "Bottom tools summary. ${bottomToolWindowLabel(activeToolWindow)} selected. ${summary?.text.orEmpty()}"
+        },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(bottomToolWindowLabel(activeToolWindow), color = PrimaryText, fontSize = 11.sp)
+      Text(
+          summary?.text.orEmpty(),
+          color = if (summary?.attention == true) Warning else SecondaryText,
+          fontSize = 11.sp,
+          maxLines = 1,
+          modifier = Modifier.weight(1f).padding(start = 8.dp),
+      )
+      ChromeButton(onClick = onOpen) {
+        DesktopLineIcon(DesktopIcon.ChevronRight, "Open tools", iconSize = 16.dp)
+        Spacer(Modifier.width(4.dp))
+        Text("Open tools", fontSize = 11.sp)
+      }
     }
   }
 }
@@ -431,21 +431,56 @@ internal fun toolWindowSemanticsLabel(
 ): String =
     "${leftToolWindowLabel(toolWindow)} tool window${if (selected) ", selected" else ", not selected"}${if (focused) ", focused" else ""}"
 
+internal const val KEYBOARD_SPLITTER_STEP = 12f
+
+internal fun verticalSplitterKeyboardDelta(key: Key): Float? =
+    when (key) {
+      Key.DirectionLeft -> -KEYBOARD_SPLITTER_STEP
+      Key.DirectionRight -> KEYBOARD_SPLITTER_STEP
+      else -> null
+    }
+
+internal fun horizontalSplitterKeyboardDelta(key: Key): Float? =
+    when (key) {
+      Key.DirectionDown -> -KEYBOARD_SPLITTER_STEP
+      Key.DirectionUp -> KEYBOARD_SPLITTER_STEP
+      else -> null
+    }
+
 @Composable
 internal fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
   val density = LocalDensity.current
   val currentOnDelta by rememberUpdatedState(onDelta)
   val currentOnCommit by rememberUpdatedState(onCommit)
+  var commitPending by remember { mutableStateOf(false) }
+  LaunchedEffect(commitPending) {
+    if (commitPending) {
+      currentOnCommit()
+      commitPending = false
+    }
+  }
   Box(
-      Modifier.fillMaxHeight().width(8.dp).pointerInput(Unit) {
-        detectDragGestures(
-            onDrag = { change, amount ->
-              change.consume()
-              currentOnDelta(with(density) { amount.x.toDp().value })
-            },
-            onDragEnd = currentOnCommit,
-        )
-      },
+      Modifier.fillMaxHeight()
+          .width(RESIZE_DIVIDER_WIDTH.dp)
+          .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR)))
+          .semantics { contentDescription = "Resize adjacent panes. Use Left or Right Arrow." }
+          .focusable()
+          .onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val delta = verticalSplitterKeyboardDelta(event.key) ?: return@onPreviewKeyEvent false
+            currentOnDelta(delta)
+            commitPending = true
+            true
+          }
+          .pointerInput(Unit) {
+            detectDragGestures(
+                onDrag = { change, amount ->
+                  change.consume()
+                  currentOnDelta(with(density) { amount.x.toDp().value })
+                },
+                onDragEnd = { commitPending = true },
+            )
+          },
       contentAlignment = Alignment.Center,
   ) {
     IdeVerticalSeparator()
@@ -457,16 +492,35 @@ internal fun HorizontalResizableDivider(onDelta: (Float) -> Unit, onCommit: () -
   val density = LocalDensity.current
   val currentOnDelta by rememberUpdatedState(onDelta)
   val currentOnCommit by rememberUpdatedState(onCommit)
+  var commitPending by remember { mutableStateOf(false) }
+  LaunchedEffect(commitPending) {
+    if (commitPending) {
+      currentOnCommit()
+      commitPending = false
+    }
+  }
   Box(
-      Modifier.fillMaxWidth().height(6.dp).pointerInput(Unit) {
-        detectDragGestures(
-            onDrag = { change, amount ->
-              change.consume()
-              currentOnDelta(-with(density) { amount.y.toDp().value })
-            },
-            onDragEnd = currentOnCommit,
-        )
-      },
+      Modifier.fillMaxWidth()
+          .height(RESIZE_DIVIDER_WIDTH.dp)
+          .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR)))
+          .semantics { contentDescription = "Resize bottom pane. Use Up or Down Arrow." }
+          .focusable()
+          .onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val delta = horizontalSplitterKeyboardDelta(event.key) ?: return@onPreviewKeyEvent false
+            currentOnDelta(delta)
+            commitPending = true
+            true
+          }
+          .pointerInput(Unit) {
+            detectDragGestures(
+                onDrag = { change, amount ->
+                  change.consume()
+                  currentOnDelta(-with(density) { amount.y.toDp().value })
+                },
+                onDragEnd = { commitPending = true },
+            )
+          },
       contentAlignment = Alignment.Center,
   ) {
     IdeHorizontalSeparator()

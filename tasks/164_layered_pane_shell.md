@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -36,10 +36,10 @@ Inspect these boundaries before editing; change only files needed for this task.
 
 ## Acceptance criteria
 
-- [ ] Wide Editor captures clearly show three surface levels with thin continuous boundaries and no heavy permanent gutters or whole-pane rounded containers.
-- [ ] Each boundary has one divider owner. Resize targets remain practical with pointer and keyboard; resizing does not overwrite stored preferences during temporary clamping.
-- [ ] Layouts at 1000dp and 999dp select the correct docked/drawer mode, with no lost selected file, symbol, draft, or hidden reopen control.
-- [ ] Surface and splitter changes are present in production shell scenes, not only a control showcase.
+- [x] Wide Editor captures clearly show three surface levels with thin continuous boundaries and no heavy permanent gutters or whole-pane rounded containers.
+- [x] Each boundary has one divider owner. Resize targets remain practical with pointer and keyboard; resizing does not overwrite stored preferences during temporary clamping.
+- [x] Layouts at 1000dp and 999dp select the correct docked/drawer mode, with no lost selected file, symbol, draft, or hidden reopen control.
+- [x] Surface and splitter changes are present in production shell scenes, not only a control showcase.
 
 ## Verification
 
@@ -60,6 +60,26 @@ prompt. Do not create a partial/completion commit while acceptance is blocked; n
 
 ## Execution record
 
-Not started. Record actual commands/results, evidence paths, exceptions approved by
-the user, and any runtime/configuration impact during execution. Do not prefill passing results.
+Completed 2026-09-05.
 
+- Reassigned the activity rail, docked tool windows, editor canvas, and restrained chrome to
+  their semantic surfaces. Docked panes now meet through one owned separator; the rail has a
+  single boundary separator, while each 8dp splitter owns its centered 1dp line.
+- Kept render-time pane clamping separate from stored preferences. Added the rail separator to
+  the width calculation while retaining the 360dp editor floor at the 1000dp breakpoint.
+  Splitters now expose resize cursor, accessible name, focus, and arrow-key resizing.
+- Updated the Editor visual fixture to compose the production shell primitives. Inspected
+  component-rendered captures at 1440dp, 1000dp, and 999dp:
+  `desktop/build/reports/ui-precision/task-164/editor-1440.png`,
+  `desktop/build/reports/ui-precision/task-164/editor-1000.png`, and
+  `desktop/build/reports/ui-precision/task-164/editor-999.png`. The 999dp scene retains the
+  selected source and explicit Files/Context reopen actions; native-window evidence remains
+  owned by Task 170.
+- Passed focused shell/layout/visual tests under JBR 25. Passed
+  `./desktop/gradlew -p desktop spotlessCheck detekt test` using JDK 21 to launch Gradle with
+  the JBR 25 toolchain path, and passed JBR 25
+  `./desktop/gradlew -p desktop packageDistributionForCurrentOS`. JBR 25 directly cannot run
+  the current Detekt task (`25.0.4`); this is the established Detekt launcher limitation, not a
+  production runtime failure. Skiko restricted-native-access and Jewel `Unsafe` warnings were
+  non-fatal and unchanged.
+- Ran `git diff --check`. No configuration or migration action is required.

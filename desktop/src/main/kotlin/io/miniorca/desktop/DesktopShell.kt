@@ -486,7 +486,7 @@ internal fun DesktopShell(
                     onWorkspaceSelected = ::selectWorkspace,
                 )
               },
-      color = AppBackground,
+      color = ToolWindowSurface,
   ) {
     if (shellMode == DesktopShellMode.ProjectLanding) {
       ProjectLanding(appState, projectActions.importProject)
@@ -589,6 +589,7 @@ internal fun DesktopShell(
                   ::selectToolWindow,
                   Modifier.focusRequester(focusRequesters.leftToolWindow),
               )
+              IdeVerticalSeparator()
               val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
               Column(Modifier.weight(1f).fillMaxHeight()) {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -968,7 +969,7 @@ private fun ContentPane(
     performanceActions: PerformanceWorkspaceActions,
     modifier: Modifier,
 ) {
-  Column(modifier.background(AppBackground)) {
+  Column(modifier.background(EditorCanvas)) {
     when (state.workspace) {
       Workspace.Summary ->
           ProjectSummaryPane(state.overview, state.project, navigation.selectWorkspace)
