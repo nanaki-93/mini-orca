@@ -64,10 +64,19 @@ type ChatSessionMessageRequest struct {
 // The absence of a target path and complete file prevents model-directed
 // retargeting or writing.
 type DeclarationDraftResponse struct {
-	Version     string   `json:"version"`
-	Declaration string   `json:"declaration"`
-	Imports     []string `json:"imports,omitempty"`
-	Explanation string   `json:"explanation"`
+	Version            string                      `json:"version"`
+	Declaration        string                      `json:"declaration"`
+	Imports            []string                    `json:"imports,omitempty"`
+	Explanation        string                      `json:"explanation"`
+	EngineeringInsight *project.EngineeringInsight `json:"engineering_insight,omitempty"`
+}
+
+type declarationDraftWireResponse struct {
+	Version     string          `json:"version"`
+	Declaration string          `json:"declaration"`
+	Imports     []string        `json:"imports,omitempty"`
+	Explanation string          `json:"explanation"`
+	Insight     json.RawMessage `json:"engineering_insight"`
 }
 
 type ChatDraftProposal struct {
@@ -213,7 +222,7 @@ func (s *Service) persistChatDraftProposal(session ChatSession, request ChatSess
 		s.markChatSessionStale(session.ID)
 		return nil, err
 	}
-	draft, err := s.CreateDraft(DraftCreateRequest{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, BaseFileHash: session.BaseFileHash, TargetPath: session.OpenPath, Mode: session.Mode, TargetSymbol: session.TargetSymbol, Declaration: response.Declaration, Imports: response.Imports, ParentDraftID: request.ParentDraftID, EffectiveModel: s.EffectiveModel(), TaskSpec: session.TaskSpec})
+	draft, err := s.CreateDraft(DraftCreateRequest{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, BaseFileHash: session.BaseFileHash, TargetPath: session.OpenPath, Mode: session.Mode, TargetSymbol: session.TargetSymbol, Declaration: response.Declaration, Imports: response.Imports, ParentDraftID: request.ParentDraftID, EffectiveModel: s.EffectiveModel(), TaskSpec: session.TaskSpec, EngineeringInsight: response.EngineeringInsight})
 	if err != nil {
 		return nil, err
 	}
@@ -353,15 +362,17 @@ func ParseDeclarationDraftResponse(output string) (DeclarationDraftResponse, err
 	if trimmed == "" || len(trimmed) > maxSemanticAnalysisBytes {
 		return DeclarationDraftResponse{}, fmt.Errorf("declaration draft response is empty or exceeds the size limit")
 	}
-	var response DeclarationDraftResponse
+	var wire declarationDraftWireResponse
 	decoder := json.NewDecoder(strings.NewReader(trimmed))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&response); err != nil {
+	if err := decoder.Decode(&wire); err != nil {
 		return DeclarationDraftResponse{}, fmt.Errorf("parse declaration draft response: %w", err)
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return DeclarationDraftResponse{}, fmt.Errorf("declaration draft response must contain one JSON object")
 	}
+	response := DeclarationDraftResponse{Version: wire.Version, Declaration: wire.Declaration, Imports: wire.Imports, Explanation: wire.Explanation}
+	response.EngineeringInsight, _ = project.ParseOptionalEngineeringInsight(wire.Insight)
 	if response.Version != chatSessionResponseVersion || strings.TrimSpace(response.Declaration) == "" || strings.TrimSpace(response.Explanation) == "" {
 		return DeclarationDraftResponse{}, fmt.Errorf("declaration draft response does not satisfy the required contract")
 	}

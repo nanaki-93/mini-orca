@@ -91,6 +91,7 @@ data class FileAnalysis(
     val risks: List<Finding> = emptyList(),
     val suggestions: List<Suggestion> = emptyList(),
     @SerialName("symbol_explanations") val symbolExplanations: Map<String, String> = emptyMap(),
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null,
     val failure: String = "",
     @SerialName("generated_at") val generatedAt: String = ""
 )
@@ -109,10 +110,19 @@ data class BugTaskSpec(
 @Serializable data class GoTestCandidateSpec(val name: String = "", val content: String = "")
 
 @Serializable
+data class EngineeringInsight(
+    val mechanism: String = "",
+    @SerialName("why_it_matters_here") val whyItMattersHere: String = "",
+    @SerialName("tradeoff_or_failure_mode") val tradeoffOrFailureMode: String = "",
+    @SerialName("transferable_lesson") val transferableLesson: String = ""
+)
+
+@Serializable
 data class Finding(
     val severity: String,
     val summary: String,
-    @SerialName("task_spec") val taskSpec: BugTaskSpec? = null
+    @SerialName("task_spec") val taskSpec: BugTaskSpec? = null,
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null
 )
 
 @Serializable
@@ -120,7 +130,8 @@ data class Suggestion(
     val title: String,
     val summary: String,
     @SerialName("target_symbol") val targetSymbol: String = "",
-    val action: String = ""
+    val action: String = "",
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null
 )
 
 @Serializable
@@ -295,7 +306,12 @@ data class ApiError(
     @SerialName("user_message") val userMessage: String = ""
 )
 
-@Serializable data class ProjectAnalysisRisk(val severity: String = "", val summary: String = "")
+@Serializable
+data class ProjectAnalysisRisk(
+    val severity: String = "",
+    val summary: String = "",
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null
+)
 
 @Serializable
 data class StructuredProjectAnalysis(
@@ -309,6 +325,7 @@ data class StructuredProjectAnalysis(
     val flows: List<String> = emptyList(),
     val risks: List<ProjectAnalysisRisk> = emptyList(),
     @SerialName("next_steps") val nextSteps: List<String> = emptyList(),
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null,
     val status: String = "",
     val failure: String = "",
     val model: String = "",
@@ -379,7 +396,8 @@ data class UnifiedFinding(
     val freshness: String = "",
     @SerialName("detected_at") val detectedAt: String = "",
     @SerialName("originating_analysis") val originatingAnalysis: String = "",
-    @SerialName("task_spec") val taskSpec: BugTaskSpec? = null
+    @SerialName("task_spec") val taskSpec: BugTaskSpec? = null,
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null
 )
 
 @Serializable
@@ -491,5 +509,6 @@ data class DeclarationDraft(
     @SerialName("previous_hash") val previousHash: String = "",
     val state: String = "",
     val validation: DeclarationValidation? = null,
-    @SerialName("task_spec") val taskSpec: BugTaskSpec? = null
+    @SerialName("task_spec") val taskSpec: BugTaskSpec? = null,
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null
 )

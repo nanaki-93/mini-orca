@@ -26,49 +26,52 @@ const (
 
 // Finding is model-derived advice, not a deterministic project fact.
 type Finding struct {
-	Severity string       `json:"severity"`
-	Summary  string       `json:"summary"`
-	TaskSpec *BugTaskSpec `json:"task_spec,omitempty"`
+	Severity           string              `json:"severity"`
+	Summary            string              `json:"summary"`
+	TaskSpec           *BugTaskSpec        `json:"task_spec,omitempty"`
+	EngineeringInsight *EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
 // Suggestion is an optional, user-reviewed atomic improvement proposal.
 type Suggestion struct {
-	Title        string `json:"title"`
-	Summary      string `json:"summary"`
-	TargetSymbol string `json:"target_symbol,omitempty"`
-	Action       string `json:"action,omitempty"`
+	Title              string              `json:"title"`
+	Summary            string              `json:"summary"`
+	TargetSymbol       string              `json:"target_symbol,omitempty"`
+	Action             string              `json:"action,omitempty"`
+	EngineeringInsight *EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
 // FileAnalysis is a source-free, versioned semantic summary for one file.
 // Deterministic symbols and imports remain in ProjectIndex; this record only
 // stores model interpretation and its validity inputs.
 type FileAnalysis struct {
-	SchemaVersion        string            `json:"schema_version"`
-	ProjectID            string            `json:"project_id"`
-	ProjectRevision      string            `json:"project_revision"`
-	Path                 string            `json:"path"`
-	ContentHash          string            `json:"content_hash"`
-	Language             string            `json:"language"`
-	Purpose              string            `json:"purpose,omitempty"`
-	Responsibilities     []string          `json:"responsibilities,omitempty"`
-	Symbols              []SymbolInfo      `json:"symbols,omitempty"`
-	Imports              []string          `json:"imports,omitempty"`
-	Dependencies         []string          `json:"dependencies,omitempty"`
-	SideEffects          []string          `json:"side_effects,omitempty"`
-	Risks                []Finding         `json:"risks,omitempty"`
-	Suggestions          []Suggestion      `json:"suggestions,omitempty"`
-	SymbolExplanations   map[string]string `json:"symbol_explanations,omitempty"`
-	Status               string            `json:"status"`
-	Failure              string            `json:"failure,omitempty"`
-	Model                string            `json:"model,omitempty"`
-	ConfiguredModel      string            `json:"configured_model,omitempty"`
-	Profile              string            `json:"profile,omitempty"`
-	Scope                string            `json:"scope,omitempty"`
-	ProviderOrigin       string            `json:"provider_origin,omitempty"`
-	ReasoningEffort      string            `json:"reasoning_effort,omitempty"`
-	PromptVersion        string            `json:"prompt_version"`
-	ContextPolicyVersion string            `json:"context_policy_version"`
-	GeneratedAt          time.Time         `json:"generated_at"`
+	SchemaVersion        string              `json:"schema_version"`
+	ProjectID            string              `json:"project_id"`
+	ProjectRevision      string              `json:"project_revision"`
+	Path                 string              `json:"path"`
+	ContentHash          string              `json:"content_hash"`
+	Language             string              `json:"language"`
+	Purpose              string              `json:"purpose,omitempty"`
+	Responsibilities     []string            `json:"responsibilities,omitempty"`
+	Symbols              []SymbolInfo        `json:"symbols,omitempty"`
+	Imports              []string            `json:"imports,omitempty"`
+	Dependencies         []string            `json:"dependencies,omitempty"`
+	SideEffects          []string            `json:"side_effects,omitempty"`
+	EngineeringInsight   *EngineeringInsight `json:"engineering_insight,omitempty"`
+	Risks                []Finding           `json:"risks,omitempty"`
+	Suggestions          []Suggestion        `json:"suggestions,omitempty"`
+	SymbolExplanations   map[string]string   `json:"symbol_explanations,omitempty"`
+	Status               string              `json:"status"`
+	Failure              string              `json:"failure,omitempty"`
+	Model                string              `json:"model,omitempty"`
+	ConfiguredModel      string              `json:"configured_model,omitempty"`
+	Profile              string              `json:"profile,omitempty"`
+	Scope                string              `json:"scope,omitempty"`
+	ProviderOrigin       string              `json:"provider_origin,omitempty"`
+	ReasoningEffort      string              `json:"reasoning_effort,omitempty"`
+	PromptVersion        string              `json:"prompt_version"`
+	ContextPolicyVersion string              `json:"context_policy_version"`
+	GeneratedAt          time.Time           `json:"generated_at"`
 }
 
 // FileAnalysisInput identifies the exact inputs that make an analysis valid.
@@ -138,6 +141,7 @@ func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 	analysis = *cloneFileAnalysis(&analysis)
 	for index := range analysis.Risks {
 		analysis.Risks[index].TaskSpec = SanitizeBugTaskSpec(analysis.Risks[index].TaskSpec)
+		analysis.Risks[index].EngineeringInsight = CloneEngineeringInsight(analysis.Risks[index].EngineeringInsight)
 		if !validPersistedBugTaskSpec(analysis.Risks[index].TaskSpec) {
 			return fmt.Errorf("file analysis task specification is invalid")
 		}
@@ -242,8 +246,13 @@ func cloneFileAnalysis(source *FileAnalysis) *FileAnalysis {
 	copy.Risks = append([]Finding(nil), source.Risks...)
 	for index := range copy.Risks {
 		copy.Risks[index].TaskSpec = cloneBugTaskSpec(source.Risks[index].TaskSpec)
+		copy.Risks[index].EngineeringInsight = CloneEngineeringInsight(source.Risks[index].EngineeringInsight)
 	}
 	copy.Suggestions = append([]Suggestion(nil), source.Suggestions...)
+	for index := range copy.Suggestions {
+		copy.Suggestions[index].EngineeringInsight = CloneEngineeringInsight(source.Suggestions[index].EngineeringInsight)
+	}
+	copy.EngineeringInsight = CloneEngineeringInsight(source.EngineeringInsight)
 	if source.SymbolExplanations != nil {
 		copy.SymbolExplanations = make(map[string]string, len(source.SymbolExplanations))
 		for name, explanation := range source.SymbolExplanations {

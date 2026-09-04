@@ -94,6 +94,7 @@ func (s *draftStore) update(request DraftUpdateRequest) (*Draft, error) {
 	stored.draft.Hash = draftHash(stored.draft.Declaration, stored.draft.Imports)
 	stored.draft.Validation = nil
 	stored.draft.CompositionHash = ""
+	stored.draft.EngineeringInsight = nil
 	stored.draft.State = DraftDirty
 	stored.checks = nil
 	published := cloneDraft(stored.draft)

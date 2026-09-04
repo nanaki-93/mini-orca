@@ -125,6 +125,7 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 				report.Flows = parsed.Flows
 				report.Risks = parsed.Risks
 				report.NextSteps = parsed.NextSteps
+				report.EngineeringInsight = CloneEngineeringInsight(parsed.EngineeringInsight)
 				if response.Model != "" {
 					report.Model = response.Model
 				}

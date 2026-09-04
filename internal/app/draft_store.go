@@ -28,41 +28,43 @@ const (
 // Draft is the source-free, project-scoped representation of one editable Go
 // declaration. The full file is composed only when a caller needs it.
 type Draft struct {
-	ID              string                         `json:"id"`
-	ProjectID       string                         `json:"project_id"`
-	ProjectRevision string                         `json:"project_revision"`
-	BaseFileHash    string                         `json:"base_file_hash"`
-	TargetPath      string                         `json:"target_path"`
-	Mode            project.DeclarationEditMode    `json:"mode"`
-	TargetSymbol    string                         `json:"target_symbol"`
-	Declaration     string                         `json:"declaration"`
-	Imports         []string                       `json:"imports,omitempty"`
-	Revision        int64                          `json:"revision"`
-	Hash            string                         `json:"hash"`
-	CompositionHash string                         `json:"candidate_hash,omitempty"`
-	ParentDraftID   string                         `json:"parent_draft_id,omitempty"`
-	EffectiveModel  EffectiveModel                 `json:"effective_model,omitempty"`
-	PreviousHash    string                         `json:"previous_hash,omitempty"`
-	State           DraftState                     `json:"state"`
-	Validation      *project.DeclarationValidation `json:"validation,omitempty"`
-	TaskSpec        *project.BugTaskSpec           `json:"task_spec,omitempty"`
+	ID                 string                         `json:"id"`
+	ProjectID          string                         `json:"project_id"`
+	ProjectRevision    string                         `json:"project_revision"`
+	BaseFileHash       string                         `json:"base_file_hash"`
+	TargetPath         string                         `json:"target_path"`
+	Mode               project.DeclarationEditMode    `json:"mode"`
+	TargetSymbol       string                         `json:"target_symbol"`
+	Declaration        string                         `json:"declaration"`
+	Imports            []string                       `json:"imports,omitempty"`
+	Revision           int64                          `json:"revision"`
+	Hash               string                         `json:"hash"`
+	CompositionHash    string                         `json:"candidate_hash,omitempty"`
+	ParentDraftID      string                         `json:"parent_draft_id,omitempty"`
+	EffectiveModel     EffectiveModel                 `json:"effective_model,omitempty"`
+	PreviousHash       string                         `json:"previous_hash,omitempty"`
+	State              DraftState                     `json:"state"`
+	Validation         *project.DeclarationValidation `json:"validation,omitempty"`
+	TaskSpec           *project.BugTaskSpec           `json:"task_spec,omitempty"`
+	EngineeringInsight *project.EngineeringInsight    `json:"engineering_insight,omitempty"`
 }
 
 // DraftCreateRequest supplies immutable project identity and the first
 // declaration revision. ParentDraftID connects explicit revision proposals.
 type DraftCreateRequest struct {
-	ID              string
-	ProjectID       string
-	ProjectRevision string
-	BaseFileHash    string
-	TargetPath      string
-	Mode            project.DeclarationEditMode
-	TargetSymbol    string
-	Declaration     string
-	Imports         []string
-	ParentDraftID   string
-	EffectiveModel  EffectiveModel
-	TaskSpec        *project.BugTaskSpec
+	ID                 string
+	ProjectID          string
+	ProjectRevision    string
+	BaseFileHash       string
+	TargetPath         string
+	Mode               project.DeclarationEditMode
+	TargetSymbol       string
+	Declaration        string
+	Imports            []string
+	ParentDraftID      string
+	EffectiveModel     EffectiveModel
+	TaskSpec           *project.BugTaskSpec
+	EngineeringInsight *project.EngineeringInsight
 }
 
 // DraftUpdateRequest changes only the isolated declaration/imports. Base
@@ -111,7 +113,7 @@ func (s *Service) CreateDraft(request DraftCreateRequest) (*Draft, error) {
 		ID: request.ID, ProjectID: target.project.id, ProjectRevision: target.project.revision,
 		BaseFileHash: target.file.baseHash, TargetPath: target.file.path, Mode: target.mode,
 		TargetSymbol: target.symbol, Declaration: request.Declaration, Imports: append([]string(nil), request.Imports...),
-		Revision: 1, ParentDraftID: request.ParentDraftID, EffectiveModel: request.EffectiveModel, TaskSpec: project.SanitizeBugTaskSpec(request.TaskSpec), State: DraftGenerated,
+		Revision: 1, ParentDraftID: request.ParentDraftID, EffectiveModel: request.EffectiveModel, TaskSpec: project.SanitizeBugTaskSpec(request.TaskSpec), EngineeringInsight: project.CloneEngineeringInsight(request.EngineeringInsight), State: DraftGenerated,
 	}
 	draft.Hash = draftHash(draft.Declaration, draft.Imports)
 	return s.drafts.create(draft)
@@ -324,6 +326,7 @@ func cloneDraft(source Draft) Draft {
 	copy := source
 	copy.Imports = append([]string(nil), source.Imports...)
 	copy.TaskSpec = project.SanitizeBugTaskSpec(source.TaskSpec)
+	copy.EngineeringInsight = project.CloneEngineeringInsight(source.EngineeringInsight)
 	if source.Validation != nil {
 		validation := cloneValidation(*source.Validation)
 		copy.Validation = &validation

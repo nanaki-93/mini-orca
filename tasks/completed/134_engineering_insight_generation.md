@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -92,3 +92,16 @@ feat(analysis): add contextual engineering insights
 ```
 
 Do not amend, squash, tag, or push. Verify no Task 134 work remains uncommitted.
+
+## Verification evidence
+
+- `make fmt-check` — passed.
+- `go test ./...` — passed.
+- `make test-race` — passed.
+- `make vet` — passed.
+- `./desktop/gradlew -p desktop spotlessCheck detekt test` — passed.
+- `git diff --check` — passed.
+- Added deterministic parser/owner tests for required fields, unknown fields,
+  Unicode bounds, malformed optional content, finding-ID stability, and manual
+  draft edits clearing the current-candidate insight. Provider fixtures verify
+  transport only; live content quality remains final manual acceptance.
