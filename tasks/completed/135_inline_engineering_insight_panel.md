@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -86,3 +86,13 @@ feat(desktop): add collapsible engineering insights
 ```
 
 Do not amend, squash, tag, or push. Verify no Task 135 work remains uncommitted.
+
+## Verification evidence
+
+- `./desktop/gradlew -p desktop spotlessCheck detekt test` — passed.
+- `make check` — passed.
+- `git diff --check` — passed.
+- The panel is presentation-only and is embedded in Summary, Context, selected
+  Bugs details, Assistant, and Review. Interactive viewport, scaling, and
+  screen-reader verification remains a release-operator follow-up because no
+  interactive Mini-Orca window is available in this environment.

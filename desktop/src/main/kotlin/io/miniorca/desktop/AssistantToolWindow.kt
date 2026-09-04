@@ -109,6 +109,10 @@ internal fun AssistantToolWindow(
           if (state.draft != null &&
               state.editor != null &&
               chatDraftMatchesSession(state.draft, state.session)) {
+            EngineeringInsightPanel(
+                state.draft.engineeringInsight,
+                stale = state.draft.state.equals("stale", ignoreCase = true),
+                scopeLabel = "Current proposal")
             AssistantDraftEditorCard(state.editor, state.draftFocus, editorActions)
           }
         }

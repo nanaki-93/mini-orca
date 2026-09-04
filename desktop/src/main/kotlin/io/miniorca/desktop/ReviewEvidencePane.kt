@@ -466,6 +466,10 @@ internal fun ReviewToolWindow(
           }
           Spacer(Modifier.height(10.dp))
           ReadOnlyImpactPane(state.impact, state.gitStatus)
+          EngineeringInsightPanel(
+              state.draft?.engineeringInsight,
+              stale = state.draft?.state.equals("stale", ignoreCase = true),
+              scopeLabel = "Current candidate")
           Spacer(Modifier.height(12.dp))
           FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
             if (decision.eligible) {

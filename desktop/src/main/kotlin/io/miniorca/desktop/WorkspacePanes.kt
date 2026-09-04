@@ -418,6 +418,10 @@ private fun FindingDetailsRegion(finding: UnifiedFinding, onDismiss: () -> Unit)
                 color = SecondaryText,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
+        EngineeringInsightPanel(
+            finding.engineeringInsight,
+            stale = finding.freshness.equals("stale", ignoreCase = true),
+            scopeLabel = "Selected finding")
         finding.taskSpec?.let { task ->
           CompactKeyValueRows(
               listOf("Fix task" to "${task.targetSymbol} · ${task.targetSignature}"),
