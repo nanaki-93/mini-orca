@@ -267,6 +267,33 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun analysisHeaderPreventsRepeatedActionsAndKeepsErrorsReachable() {
+    var pauses = 0
+    val failedJob =
+        visualFixtureJob.copy(
+            files =
+                visualFixtureJob.files +
+                    AnalyzeAllFileJob(
+                        path = "internal/api/failed.go",
+                        status = "failed",
+                        attempts = 2,
+                        error = "sanitized analysis failure"))
+    val actions = AnalysisWorkspaceActions({}, {}, { pauses++ }, {}, {})
+
+    ComposeVisualFixture(800, 650, 1.3f) { AnalysisPaneVisualFixture(failedJob, actions) }
+        .use { fixture ->
+          fixture.render("analysis-errors-800-1.3")
+          fixture.clickText("Pause")
+          fixture.render()
+          assertEquals(1, pauses)
+          assertFalse(fixture.tryClick("Pause"))
+          fixture.clickText("Analysis errors")
+          fixture.render("analysis-errors-expanded-800-1.3")
+          assertTrue(fixture.hasText("sanitized analysis failure"))
+        }
+  }
+
+  @Test
   fun editorComponentsRenderAtDockedAndDrawerWidths() {
     listOf(1440 to 900, 1000 to 760, 999 to 760).forEach { (width, height) ->
       ComposeVisualFixture(width, height) { EditorVisualFixture(width.toFloat()) }
@@ -1279,12 +1306,15 @@ private fun AnalysisVisualFixture(
 }
 
 @Composable
-private fun AnalysisPaneVisualFixture(job: AnalyzeAllJob?) {
+private fun AnalysisPaneVisualFixture(
+    job: AnalyzeAllJob?,
+    actions: AnalysisWorkspaceActions = AnalysisWorkspaceActions({}, {}, {}, {}, {}),
+) {
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     AnalysisWorkspacePane(
         AnalysisWorkspacePaneState(
             job, AnalysisCoverage(total = 23, stale = 23), ScopedModel(), false),
-        AnalysisWorkspaceActions({}, {}, {}, {}, {}))
+        actions)
   }
 }
 

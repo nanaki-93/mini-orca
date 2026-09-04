@@ -1,6 +1,6 @@
 # Mini-Orca UI precision plan
 
-**Status:** In progress — Tasks 161–164 are complete; Tasks 165–171 are Pending.
+**Status:** In progress — Tasks 161–165 are complete; Tasks 166–171 are Pending.
 **Prepared:** 2026-09-04.
 **Scope:** Desktop presentation, the necessary Jewel build/runtime migration,
 desktop tests, and supporting documentation. No daemon/API or workflow expansion.

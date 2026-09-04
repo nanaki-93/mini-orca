@@ -9,14 +9,64 @@ import kotlin.test.assertTrue
 
 class AnalysisWorkspaceStateTest {
   @Test
-  fun workspaceWidthRulesUseSharedGuttersAndStackOnlyWhenTheRunWouldBeTooNarrow() {
+  fun workspaceWidthRulesKeepTheSharedGutterWithoutASeparateRunControlsColumn() {
     assertEquals(16.dp, workspacePageHorizontalGutter(899.dp))
     assertEquals(24.dp, workspacePageHorizontalGutter(900.dp))
-    assertEquals(360.dp, analysisRunControlLayout(1_440.dp).controlsWidth)
-    assertFalse(analysisRunControlLayout(720.dp).stacked)
-    assertTrue(analysisRunControlLayout(719.dp).stacked)
-    assertEquals(320.dp, analysisRunControlLayout(1_000.dp, fontScale = 1.3f).controlsWidth)
-    assertFalse(analysisRunControlLayout(1_000.dp, fontScale = 1.3f).stacked)
+  }
+
+  @Test
+  fun headerToolbarExposesOnlyValidLifecycleActionsAndHonorsRemoteConfirmation() {
+    val localModel = ScopedModel(model = "local-model")
+    val remoteModel = ScopedModel(model = "remote-model", remoteProvider = true)
+
+    assertEquals(
+        listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Start, true)),
+        analyzeAllToolbarActions(analyzeAllPresentation(null, null).run, localModel, false),
+    )
+    assertEquals(
+        listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Start, false)),
+        analyzeAllToolbarActions(analyzeAllPresentation(null, null).run, remoteModel, false),
+    )
+    assertEquals(
+        listOf(
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Pause, true),
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, true),
+        ),
+        analyzeAllToolbarActions(
+            analyzeAllPresentation(job("running"), null).run, localModel, false),
+    )
+    assertEquals(
+        listOf(
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Resume, false),
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, true),
+        ),
+        analyzeAllToolbarActions(
+            analyzeAllPresentation(job("paused"), null).run, remoteModel, false),
+    )
+    assertEquals(
+        listOf(
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Resume, true),
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, true),
+        ),
+        analyzeAllToolbarActions(
+            analyzeAllPresentation(job("paused"), null).run, remoteModel, true),
+    )
+    assertEquals(
+        listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, true)),
+        analyzeAllToolbarActions(
+            analyzeAllPresentation(job("pausing"), null).run, localModel, false),
+    )
+    assertTrue(
+        analyzeAllToolbarActions(
+                analyzeAllPresentation(job("canceling"), null).run, localModel, false)
+            .isEmpty())
+    listOf("starting", "completed", "canceled", "failed", "stale").forEach { status ->
+      assertEquals(
+          listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Start, true)),
+          analyzeAllToolbarActions(
+              analyzeAllPresentation(job(status), null).run, localModel, false),
+      )
+    }
   }
 
   @Test

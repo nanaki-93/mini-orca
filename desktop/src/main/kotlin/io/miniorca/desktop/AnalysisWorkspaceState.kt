@@ -78,6 +78,54 @@ internal data class AnalyzeAllRunPresentation(
     val remaining: Int,
 )
 
+/** The header only exposes actions that are valid for the daemon-reported run state. */
+internal enum class AnalyzeAllToolbarAction {
+  Start,
+  Pause,
+  Resume,
+  Cancel,
+}
+
+internal data class AnalyzeAllToolbarActionPresentation(
+    val action: AnalyzeAllToolbarAction,
+    val enabled: Boolean,
+)
+
+internal fun analyzeAllToolbarActions(
+    run: AnalyzeAllRunPresentation,
+    model: ScopedModel,
+    remoteProviderConfirmed: Boolean,
+): List<AnalyzeAllToolbarActionPresentation> {
+  val providerConfirmed = !model.remoteProvider || remoteProviderConfirmed
+  return when (run.statusLabel) {
+    "Running" ->
+        listOf(
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Pause, enabled = true),
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, enabled = true),
+        )
+    "Pausing" ->
+        listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, enabled = true))
+    "Paused" ->
+        listOf(
+            AnalyzeAllToolbarActionPresentation(
+                AnalyzeAllToolbarAction.Resume, enabled = providerConfirmed),
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, enabled = true),
+        )
+    "Canceling" -> emptyList()
+    else ->
+        listOf(
+            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Start, providerConfirmed))
+  }
+}
+
+internal fun analyzeAllToolbarActionLabel(action: AnalyzeAllToolbarAction): String =
+    when (action) {
+      AnalyzeAllToolbarAction.Start -> "Start Analyze-all"
+      AnalyzeAllToolbarAction.Pause -> "Pause"
+      AnalyzeAllToolbarAction.Resume -> "Resume"
+      AnalyzeAllToolbarAction.Cancel -> "Cancel"
+    }
+
 internal data class AnalysisFailurePresentation(
     val path: String,
     val attempts: Int,
