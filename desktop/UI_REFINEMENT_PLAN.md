@@ -1,10 +1,10 @@
 # UI refinement plan
 
-**Status:** In Progress — Tasks 150–159 established the baseline, removed duplicate Project
+**Status:** Complete — Tasks 150–160 established the baseline, removed duplicate Project
 navigation, unified shared IDE tokens, corrected workspace widths, refined popup/disclosure and
-tool-window surfaces, rebuilt Summary, reduced routine workspace narration, and polished the
-Editor/review workflow, and verified the responsive/component accessibility matrix; Task 160
-remains Pending.
+tool-window surfaces, rebuilt Summary, reduced routine workspace narration, polished the
+Editor/review workflow, and verified the responsive/component accessibility matrix. Automated
+and rendered-component acceptance passed; native release checks remain explicit follow-ups.
 
 **Requested:** 2026-09-04.
 
@@ -232,6 +232,7 @@ remaining native/manual checks. No user configuration migration is expected;
 saved obsolete navigation resolves through the current preference reader. A custom
 native titlebar or broader Jewel/toolchain migration is not required for this plan.
 
-This planning change only adds documentation. Runtime code has not been changed
-or tested as part of writing the plan/tasks. On execution, replace this planning
-status with actual progress and, at Task 160, the verified outcome and limitations.
+The sequence is implemented. Its evidence and remaining native release checks are
+recorded in [UI_REFINEMENT_ACCEPTANCE.md](UI_REFINEMENT_ACCEPTANCE.md); no user
+configuration or saved-pane-preference migration is required. Task 149 remains an
+independent Pending historical acceptance record.

@@ -59,3 +59,66 @@ operator must:
 Any observed native defect blocks release acceptance and must be fixed in its
 owning component. These follow-ups do not alter Task 149's independent Pending
 status.
+
+## Final Task 160 audit
+
+Tasks 150–159 each have one reviewed local commit in numeric order. Task 160
+audited the range from the Task 150 baseline through Task 159, including active
+desktop sources, tests, task records, and current documentation. The active rail
+contains only Summary, Analysis, Performance, Bugs & Problems, and Editor;
+`LeftToolWindow.Project` and any duplicate Project workspace route are absent.
+The Project toolbar menu, project open/re-index flows, Files tree/drawer, and
+stored-preference recovery remain the supported project boundary.
+
+The replacement has one token-driven Compose implementation: shared popup and
+disclosure surfaces, concise Summary/Analysis/workspace presentation, and the
+existing guarded review workflow. No parallel shell, legacy theme/menu/Summary
+branch, fixture-only production path, debug output, or generated capture is part
+of the delivery. Source and diff remain selectable/read-only; Preview stays local;
+remote consent, candidate evidence, validation/check identity, guarded Apply,
+receipt, and Undo remain explicit. There is no daemon, API, configuration, or
+saved-pane-preference migration.
+
+The component-library decision remains [UI_COMPONENT_DECISION.md](UI_COMPONENT_DECISION.md):
+Jewel is not compatible with the pinned Compose 1.7.0 toolchain without a broader
+migration, so the focused token-styled Compose components are the supported
+replacement.
+
+### Before/after conclusion
+
+The Task 150 baseline retained a duplicate Project rail destination, separate
+popup/disclosure treatments, a wide fixed Analysis presentation, a stacked Summary,
+and routine repeated narration. The delivered shell has one Editor source route,
+shared token-styled chrome, available-width Analysis/Summary layout, compact
+expandable project interpretation, concise workspace copy, and an evidence-first
+Editor/Review surface. The existing project operations and preview-first mutation
+boundary were preserved rather than replaced.
+
+### Delivery ledger through Task 159
+
+| Task | Commit |
+| --- | --- |
+| 150 | `355e5b390c4d3ccf425c5f96c567d3aac647431a` |
+| 151 | `e2f601b62e8f4c2442a6041498f5c8ddb822f5b2` |
+| 152 | `b55eb06a4eba5d73bad44257782698740eece32f` |
+| 153 | `267d69ca630018eb5f29e7c05bb9910c2a65f683` |
+| 154 | `14ff9eda74803748a51ade0a32d38b429bb308b7` |
+| 155 | `82bb62557d4df6c7d49500b014072cc31d0a5528` |
+| 156 | `a54accd6c9f83a935b81e22f87b50cdccb41110c` |
+| 157 | `9b806f935d14a353a73d45e0d85051e7d20bb7d0` |
+| 158 | `cede87e58b5134c7c9d838684a8ddc431a9c68d2` |
+| 159 | `ba545a9c97046c14fecb57dd1e239e6b4f8e3865` |
+
+### Final verification
+
+| Check | Result |
+| --- | --- |
+| `./desktop/gradlew -p desktop spotlessCheck detekt test` | Passed. |
+| `make check` | Passed: Go formatting, tests, race tests, vet, and desktop tests. |
+| `make quality` | Not passed. It stops at the unchanged `gocyclo -over 15` findings: `(*Service).reviewPerformanceFile` (19), `validPerformanceJob` (19), `validPerformanceFinding` (18), `(*Service).StartPerformanceJob` (18), and `(*Service).StartAnalyzeAll` (16). This exactly matches the Task 150 baseline; no Go file in this UI sequence was changed, and the later clone check did not run. |
+| `git diff --check` | Passed before the Task 160 commit. |
+
+Automated and rendered-component acceptance is complete. This is not full native
+or release acceptance: the native-window, OS keyboard, screen-reader, popup/dialog
+placement, and provider-backed end-to-end checks above remain release follow-ups.
+Task 149 remains independently Pending.

@@ -60,13 +60,13 @@ the current implementation and require evaluation before a Jewel or titlebar mig
 The current token roles and measured contrast pairs are recorded in
 [UI_CONTRAST.md](UI_CONTRAST.md).
 
-The next requested improvements are sequenced in
-[UI_REFINEMENT_PLAN.md](UI_REFINEMENT_PLAN.md): remove duplicate Project navigation,
-reduce interface prose, redesign Summary, correct Analysis width, unify menus, and
-remove replaced legacy code. This is a plan, not an implemented behavior change.
-Detailed Tasks 150–160 are listed in [the task index](../tasks/INDEX.md); their
-[execution prompt](../tasks/PROMPT_EXECUTE_UI_REFINEMENT.md) requires sequential
-implementation, verification, and one isolated local commit per task when invoked.
+The completed [UI_REFINEMENT_PLAN.md](UI_REFINEMENT_PLAN.md) removed the duplicate
+Project rail destination, reduced routine narration, redesigned Summary, corrected
+Analysis width, unified menus/disclosures, and removed replaced desktop UI paths.
+The [UI_REFINEMENT_ACCEPTANCE.md](UI_REFINEMENT_ACCEPTANCE.md) record distinguishes
+passing automated/component evidence from native release follow-ups. Detailed
+Tasks 150–160 remain in [the task index](../tasks/INDEX.md) as the implementation
+ledger; Task 149 remains a separate Pending historical acceptance record.
 
 The desktop uses charcoal surfaces, blue selection and action states, a labeled 88dp line-icon
 rail, compact editor chrome, structured AI Context, a current-draft candidate summary, and a
@@ -129,10 +129,14 @@ text-scaling, and viewport checks, is maintained in
 
 ## Verification status
 
-The automated desktop and repository suites cover layout breakpoint behavior, source/diff
-read-only safety, selection scope, stale responses, provider confirmation, validation/check
-identity, Apply/Undo, command navigation, status state, and compact findings presentation.
-`DesktopVisualLayoutTest` also renders the production Compose components with explicit test
-data and checks layout and interactions. See [VISUAL_REVIEW.md](VISUAL_REVIEW.md) for the
-render command and reviewed viewports. Native window appearance, screen-reader checks, and
+The UI refinement's desktop formatting, static analysis, tests, and `make check` passed. They
+cover layout breakpoint behavior, source/diff read-only safety, selection scope, stale responses,
+provider confirmation, validation/check identity, Apply/Undo, command navigation, status state,
+and compact findings presentation. `DesktopVisualLayoutTest` renders the production Compose
+components with explicit test data and checks layout and interactions. See
+[VISUAL_REVIEW.md](VISUAL_REVIEW.md) for the render command and reviewed viewports.
+
+`make quality` remains a failed repository gate because the unchanged baseline Go complexity
+findings stop it before clone analysis; see [UI_REFINEMENT_ACCEPTANCE.md](UI_REFINEMENT_ACCEPTANCE.md)
+for the exact list. Native window appearance, screen-reader checks, popup/dialog placement, and
 provider-backed end-to-end runs remain separate release-operator checks.

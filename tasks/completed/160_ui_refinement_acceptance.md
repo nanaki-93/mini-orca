@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -109,5 +109,35 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+Passed on 2026-09-04:
+
+```sh
+./desktop/gradlew -p desktop spotlessCheck detekt test
+make check
+make quality
+git diff --check
+```
+
+The desktop formatting, static analysis, and test suite passed; `make check` also
+passed Go formatting, tests, race tests, and vet. The full Task 150–159 ledger was
+audited in numeric order with its required exact subjects and matching completed
+task records/index links. The active desktop sources contain no `LeftToolWindow.Project`
+or duplicate Project workspace route; project opening, re-indexing, Files, and
+preference recovery remain intentional supported behavior. No generated capture or
+user configuration was staged.
+
+`make quality` is not passed. It stops at the same pre-existing out-of-scope
+`gocyclo -over 15` findings recorded by Task 150:
+`(*Service).reviewPerformanceFile` (19), `validPerformanceJob` (19),
+`validPerformanceFinding` (18), `(*Service).StartPerformanceJob` (18), and
+`(*Service).StartAnalyzeAll` (16). No Go source changed in this sequence, and the
+later clone check did not run. This is the permitted unchanged repository-quality
+limitation, not a successful quality gate.
+
+`desktop/UI_REFINEMENT_ACCEPTANCE.md` contains the requirement/evidence matrix,
+component decision, final verification results, Task 150–159 ledger, and release
+follow-ups. It records automated/component acceptance only: no Mini-Orca native
+window or screen-reader surface was available, so native window/keyboard,
+popup/dialog placement, screen-reader, and provider-backed end-to-end checks remain
+release work. Task 149 remains independently Pending. No daemon/API/configuration
+or saved-pane-preference migration is required.

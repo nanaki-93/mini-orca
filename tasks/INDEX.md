@@ -5,12 +5,11 @@ Active feature plan: [UI refinement](../desktop/UI_REFINEMENT_PLAN.md).
 Completed plans: [IDE-style desktop UI](../plan.md) and
 [Engineering insights and project performance analysis](../docs/insights-performance/PLAN.md).
 
-## Planned UI refinement: Tasks 150–160
+## Completed UI refinement: Tasks 150–160
 
-Execute only when requested, using
-[PROMPT_EXECUTE_UI_REFINEMENT.md](PROMPT_EXECUTE_UI_REFINEMENT.md).
-The sequence requires one implementation agent, strict numeric order, verification,
-and exactly one isolated local commit per completed task. No pushes.
+Executed through [PROMPT_EXECUTE_UI_REFINEMENT.md](PROMPT_EXECUTE_UI_REFINEMENT.md)
+with one implementation agent, strict numeric order, verification, and one isolated
+local commit per task. No push was made.
 
 | Order | Task | Depends on | Status |
 | ---: | --- | --- | --- |
@@ -24,7 +23,7 @@ and exactly one isolated local commit per completed task. No pushes.
 | 157 | [Simplify workspace copy and information density](completed/157_simplify_workspace_copy.md) | 156 | Complete |
 | 158 | [Polish Editor, workflow surfaces, and global UI copy](completed/158_polish_editor_workflow_surfaces.md) | 157 | Complete |
 | 159 | [Verify responsive layout and accessible UI interactions](completed/159_verify_refined_ui_accessibility.md) | 158 | Complete |
-| 160 | [Complete UI refinement acceptance and cleanup](160_ui_refinement_acceptance.md) | 159 | Pending |
+| 160 | [Complete UI refinement acceptance and cleanup](completed/160_ui_refinement_acceptance.md) | 159 | Complete |
 
 Task 150 verifies the current implementation after Tasks 140–148 and the subsequent
 visual correction. Task 149 remains a separate outstanding acceptance record, not
