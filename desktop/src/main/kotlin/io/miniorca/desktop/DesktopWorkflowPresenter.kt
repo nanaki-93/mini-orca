@@ -78,6 +78,7 @@ class DesktopWorkflowPresenter(
   private var draftValidationJob: Job? = null
   private var draftChecksJob: Job? = null
   private var analyzeAllPollJob: Job? = null
+  private var performancePollJob: Job? = null
   private var scanPollJob: Job? = null
   private var analysisGeneration = 0L
   private var activeTask: WorkflowTaskIdentity? = null
@@ -663,6 +664,50 @@ class DesktopWorkflowPresenter(
   fun cancelAnalyzeAll() =
       runAnalyzeAllAction("Unable to update Analyze-all") { api.cancelAnalyzeAll(it) }
 
+  fun previewPerformance(maxFiles: Int = 100, runBudgetSeconds: Int = 900) {
+    val project = snapshot.value.state.project ?: return
+    val identity = project.identity()
+    scope.launch {
+      try {
+        val preview = io { api.performanceContext(identity.revision, maxFiles, runBudgetSeconds) }
+        if (matchesProject(identity)) dispatch(DesktopEvent.PerformanceContextLoaded(preview))
+      } catch (_: CancellationException) {
+        throw CancellationException()
+      } catch (error: Exception) {
+        if (matchesProject(identity))
+            dispatch(DesktopEvent.Failed(error.message ?: "Performance preview failed"))
+      }
+    }
+  }
+
+  fun startPerformance(preview: PerformanceQueuePreview, confirmRemoteProvider: Boolean) =
+      runPerformanceAction("Unable to start Performance review") { revision ->
+        api.startPerformanceJob(
+            revision,
+            preview.maxFiles,
+            queueId = preview.queueId,
+            policyFingerprint = preview.policyFingerprint,
+            confirmRemoteProvider = confirmRemoteProvider)
+      }
+
+  fun pausePerformance() =
+      runPerformanceAction("Unable to pause Performance review") { revision ->
+        val job = snapshot.value.state.findings.performanceJob ?: error("No Performance job")
+        api.pausePerformanceJob(revision, job.id)
+      }
+
+  fun resumePerformance(confirmRemoteProvider: Boolean) =
+      runPerformanceAction("Unable to resume Performance review") { revision ->
+        val job = snapshot.value.state.findings.performanceJob ?: error("No Performance job")
+        api.resumePerformanceJob(revision, job.id, confirmRemoteProvider)
+      }
+
+  fun cancelPerformance() =
+      runPerformanceAction("Unable to cancel Performance review") { revision ->
+        val job = snapshot.value.state.findings.performanceJob ?: error("No Performance job")
+        api.cancelPerformanceJob(revision, job.id)
+      }
+
   fun runVerifiedScan() {
     val project = snapshot.value.state.project ?: return
     val identity = project.identity()
@@ -715,6 +760,7 @@ class DesktopWorkflowPresenter(
     cancelDraftValidation()
     analyzeAllPolling.stop()
     analyzeAllPollJob?.cancel()
+    performancePollJob?.cancel()
     scanPollJob?.cancel()
   }
 
@@ -771,13 +817,16 @@ class DesktopWorkflowPresenter(
               api.overview(identity.revision),
               api.findings(identity.revision),
               api.analyzeAllJob(identity.revision),
-              api.goScan(identity.revision))
+              api.goScan(identity.revision),
+              api.performanceJob(identity.revision),
+              api.performanceReport(identity.revision))
         }
         if (!matchesProject(identity)) return@launch
         dispatch(DesktopEvent.OverviewLoaded(details.overview))
         dispatch(DesktopEvent.FindingsLoaded(details.findings.findings))
         dispatch(DesktopEvent.GoScanLoaded(details.scan))
         publishAnalyzeAll(identity, details.analyzeAll)
+        publishPerformance(identity, details.performanceJob, details.performanceReport)
         if (shouldPollVerifiedScan(details.scan)) pollVerifiedScan(identity)
       } catch (_: CancellationException) {
         throw CancellationException()
@@ -864,6 +913,55 @@ class DesktopWorkflowPresenter(
         }
   }
 
+  private fun runPerformanceAction(fallback: String, action: (String) -> PerformanceJob) {
+    val project = snapshot.value.state.project ?: return
+    val identity = project.identity()
+    scope.launch {
+      try {
+        val job = io { action(identity.revision) }
+        val report = io { api.performanceReport(identity.revision) }
+        if (matchesProject(identity)) publishPerformance(identity, job, report)
+      } catch (_: CancellationException) {
+        throw CancellationException()
+      } catch (error: Exception) {
+        if (matchesProject(identity)) modelRequestFailed(error, ModelScope.Analyze, fallback)
+      }
+    }
+  }
+
+  private fun publishPerformance(
+      identity: WorkflowProjectIdentity,
+      job: PerformanceJob?,
+      report: PerformanceReport?
+  ) {
+    if (!matchesProject(identity)) return
+    dispatch(DesktopEvent.PerformanceLoaded(job, report))
+    if (job?.status == "running" && performancePollJob?.isActive != true) pollPerformance(identity)
+  }
+
+  private fun pollPerformance(identity: WorkflowProjectIdentity) {
+    performancePollJob?.cancel()
+    performancePollJob =
+        scope.launch {
+          while (matchesProject(identity)) {
+            try {
+              val job = io { api.performanceJob(identity.revision) }
+              val report = io { api.performanceReport(identity.revision) }
+              if (!matchesProject(identity)) return@launch
+              publishPerformance(identity, job, report)
+              if (job?.status != "running") return@launch
+            } catch (_: CancellationException) {
+              throw CancellationException()
+            } catch (error: Exception) {
+              if (matchesProject(identity))
+                  dispatch(DesktopEvent.Failed(error.message ?: "Performance status failed"))
+              return@launch
+            }
+            delay(pollingIntervalMillis)
+          }
+        }
+  }
+
   private fun pollVerifiedScan(identity: WorkflowProjectIdentity) {
     scanPollJob?.cancel()
     scanPollJob =
@@ -911,6 +1009,7 @@ class DesktopWorkflowPresenter(
   private fun cancelProjectScopedWork() {
     analyzeAllPolling.stop()
     analyzeAllPollJob?.cancel()
+    performancePollJob?.cancel()
     scanPollJob?.cancel()
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
@@ -976,4 +1075,6 @@ private data class WorkflowProjectWorkspaceDetails(
     val findings: FindingsResponse,
     val analyzeAll: AnalyzeAllJob?,
     val scan: GoScanReport?,
+    val performanceJob: PerformanceJob?,
+    val performanceReport: PerformanceReport?,
 )

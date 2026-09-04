@@ -1,9 +1,10 @@
 package io.miniorca.desktop
 
-/** The four stable product workspaces. Rendering their navigation is Task 45. */
+/** Stable product workspaces; numbered shortcuts are mapped explicitly elsewhere. */
 enum class Workspace {
   Summary,
   Analysis,
+  Performance,
   Bugs,
   Editor
 }
@@ -37,6 +38,9 @@ data class FindingsState(
     val findings: List<UnifiedFinding> = emptyList(),
     val scan: GoScanReport? = null,
     val analyzeAll: AnalyzeAllJob? = null,
+    val performanceJob: PerformanceJob? = null,
+    val performanceReport: PerformanceReport? = null,
+    val performanceContext: PerformanceQueuePreview? = null,
 )
 
 data class EditorNavigationTarget(
@@ -51,7 +55,13 @@ data class EditorNavigationSelection(
 )
 
 fun nextWorkspace(workspace: Workspace): Workspace =
-    Workspace.entries[(workspace.ordinal + 1) % Workspace.entries.size]
+    when (workspace) {
+      Workspace.Summary -> Workspace.Analysis
+      Workspace.Analysis -> Workspace.Performance
+      Workspace.Performance -> Workspace.Bugs
+      Workspace.Bugs -> Workspace.Editor
+      Workspace.Editor -> Workspace.Summary
+    }
 
 /** Rejects stale or external paths before a finding can open the Editor. */
 fun findingNavigationTarget(
@@ -210,6 +220,11 @@ sealed interface DesktopEvent {
 
   data class AnalyzeAllLoaded(val job: AnalyzeAllJob?) : DesktopEvent
 
+  data class PerformanceLoaded(val job: PerformanceJob?, val report: PerformanceReport?) :
+      DesktopEvent
+
+  data class PerformanceContextLoaded(val context: PerformanceQueuePreview) : DesktopEvent
+
   data class GoScanLoaded(val scan: GoScanReport?) : DesktopEvent
 
   data class FileLoaded(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) : DesktopEvent
@@ -303,6 +318,12 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                             else finding
                           }))
       is DesktopEvent.AnalyzeAllLoaded -> copy(findings = findings.copy(analyzeAll = event.job))
+      is DesktopEvent.PerformanceLoaded ->
+          copy(
+              findings =
+                  findings.copy(performanceJob = event.job, performanceReport = event.report))
+      is DesktopEvent.PerformanceContextLoaded ->
+          copy(findings = findings.copy(performanceContext = event.context))
       is DesktopEvent.GoScanLoaded -> copy(findings = findings.copy(scan = event.scan))
       is DesktopEvent.FileLoaded ->
           copy(

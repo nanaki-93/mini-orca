@@ -14,21 +14,6 @@ import (
 
 const maxPerformanceSourceBytes = 64 * 1024
 
-// CachedPerformanceFileReview reads a prior performance report without model work.
-func (s *Service) CachedPerformanceFileReview(path string) (*project.PerformanceFileReport, error) {
-	file, err := s.manager.IndexedFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return project.LoadPerformanceFileReport(s.manager.Root(), file.Path, file.ContentHash)
-}
-
-// ReviewPerformanceFile explicitly reviews one eligible file's supplied source.
-// It never executes project code and has no route until the bounded job API ships.
-func (s *Service) ReviewPerformanceFile(ctx context.Context, path string, confirmRemoteProvider bool) (*project.PerformanceFileReport, error) {
-	return s.reviewPerformanceFile(ctx, path, confirmRemoteProvider, nil)
-}
-
 func (s *Service) reviewPerformanceFile(ctx context.Context, path string, confirmRemoteProvider bool, authorizePublication func() error) (*project.PerformanceFileReport, error) {
 	if err := s.RequireRemoteConfirmation(config.AnalyzeModelScope, confirmRemoteProvider); err != nil {
 		return nil, err

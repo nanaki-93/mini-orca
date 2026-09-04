@@ -257,9 +257,10 @@ class DesktopShellTest {
   }
 
   @Test
-  fun keyboardWorkspaceOrderCoversAllFourWorkspaces() {
+  fun keyboardWorkspaceOrderUsesExplicitStableMappings() {
     assertEquals(Workspace.Analysis, nextWorkspace(Workspace.Summary))
-    assertEquals(Workspace.Bugs, nextWorkspace(Workspace.Analysis))
+    assertEquals(Workspace.Performance, nextWorkspace(Workspace.Analysis))
+    assertEquals(Workspace.Bugs, nextWorkspace(Workspace.Performance))
     assertEquals(Workspace.Editor, nextWorkspace(Workspace.Bugs))
     assertEquals(Workspace.Summary, nextWorkspace(Workspace.Editor))
   }

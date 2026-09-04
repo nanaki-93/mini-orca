@@ -97,6 +97,7 @@ type PerformanceReport struct {
 	Status          string                       `json:"status"`
 	Counts          map[string]int               `json:"counts"`
 	Categories      map[string]int               `json:"categories"`
+	Paths           map[string]string            `json:"paths"`
 	Findings        []project.PerformanceFinding `json:"findings"`
 }
 
@@ -269,7 +270,7 @@ func (s *Service) PerformanceProjectReport() (*PerformanceReport, error) {
 	if job == nil {
 		return nil, nil
 	}
-	report := &PerformanceReport{ProjectID: job.ProjectID, ProjectRevision: job.ProjectRevision, QueueID: job.QueueID, Status: job.Status, Counts: map[string]int{}, Categories: map[string]int{}}
+	report := &PerformanceReport{ProjectID: job.ProjectID, ProjectRevision: job.ProjectRevision, QueueID: job.QueueID, Status: job.Status, Counts: map[string]int{}, Categories: map[string]int{}, Paths: map[string]string{}}
 	for _, file := range job.Files {
 		report.Counts[file.Status]++
 		cached, err := project.LoadPerformanceFileReport(job.Root, file.Path, file.ContentHash)
@@ -282,6 +283,7 @@ func (s *Service) PerformanceProjectReport() (*PerformanceReport, error) {
 		for _, finding := range cached.Findings {
 			report.Findings = append(report.Findings, finding)
 			report.Categories[finding.Category]++
+			report.Paths[finding.ID] = file.Path
 		}
 	}
 	return report, nil

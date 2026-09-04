@@ -6,6 +6,7 @@ internal enum class LeftToolWindow {
   Project,
   Summary,
   Analysis,
+  Performance,
   Problems,
   Editor,
 }
@@ -41,6 +42,7 @@ internal fun leftToolWindowLabel(toolWindow: LeftToolWindow): String =
       LeftToolWindow.Project -> "Project"
       LeftToolWindow.Summary -> "Summary"
       LeftToolWindow.Analysis -> "Analysis"
+      LeftToolWindow.Performance -> "Performance"
       LeftToolWindow.Problems -> "Problems"
       LeftToolWindow.Editor -> "Editor"
     }
@@ -56,6 +58,7 @@ internal fun leftToolWindowForWorkspace(workspace: Workspace): LeftToolWindow =
     when (workspace) {
       Workspace.Summary -> LeftToolWindow.Summary
       Workspace.Analysis -> LeftToolWindow.Analysis
+      Workspace.Performance -> LeftToolWindow.Performance
       Workspace.Bugs -> LeftToolWindow.Problems
       Workspace.Editor -> LeftToolWindow.Editor
     }
@@ -65,6 +68,7 @@ internal fun workspaceForLeftToolWindow(toolWindow: LeftToolWindow): Workspace =
       LeftToolWindow.Project -> Workspace.Editor
       LeftToolWindow.Summary -> Workspace.Summary
       LeftToolWindow.Analysis -> Workspace.Analysis
+      LeftToolWindow.Performance -> Workspace.Performance
       LeftToolWindow.Problems -> Workspace.Bugs
       LeftToolWindow.Editor -> Workspace.Editor
     }

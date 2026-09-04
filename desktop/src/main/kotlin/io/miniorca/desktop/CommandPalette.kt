@@ -232,8 +232,9 @@ internal fun availableCommandActions(
     analysis: FileAnalysis?,
     hasActiveFile: Boolean = true,
 ): List<String> {
-  if (!hasActiveFile) return emptyList()
+  if (!hasActiveFile) return listOf("open_performance")
   return buildList {
+    add("open_performance")
     addAll(listOf("fix", "refactor", "document", "create_declaration"))
     if (analysis?.status.equals("fresh", ignoreCase = true)) add("refresh_file_analysis")
   }
@@ -243,6 +244,7 @@ internal fun commandActionLabel(action: String): String =
     when (action) {
       "create_declaration" -> "Create declaration"
       "refresh_file_analysis" -> "Refresh file analysis"
+      "open_performance" -> "Open Performance workspace"
       else -> action.replaceFirstChar { it.uppercase() }
     }
 

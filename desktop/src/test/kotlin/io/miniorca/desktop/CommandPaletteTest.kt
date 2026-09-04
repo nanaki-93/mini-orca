@@ -41,9 +41,10 @@ class CommandPaletteTest {
   }
 
   @Test
-  fun actionsRemainScopedToAnActiveIndexedFileAndRespectCurrentAvailability() {
-    assertTrue(
-        availableCommandActions(FileAnalysis("main.go", "fresh"), hasActiveFile = false).isEmpty())
+  fun actionsKeepFileCommandsScopedAndExposePerformanceNavigation() {
+    assertEquals(
+        listOf("open_performance"),
+        availableCommandActions(FileAnalysis("main.go", "fresh"), hasActiveFile = false))
     val freshActions =
         commandSearchResults(
             PaletteMode.Actions,
@@ -54,9 +55,15 @@ class CommandPaletteTest {
             hasActiveFile = true)
 
     assertEquals(
-        listOf("Create declaration", "Document", "Fix", "Refactor", "Refresh file analysis"),
+        listOf(
+            "Create declaration",
+            "Document",
+            "Fix",
+            "Open Performance workspace",
+            "Refactor",
+            "Refresh file analysis"),
         freshActions.map { it.label })
-    assertTrue(freshActions.all { it.detail == "Current file scope only" })
+    assertTrue(freshActions.any { it.label == "Open Performance workspace" })
   }
 
   @Test

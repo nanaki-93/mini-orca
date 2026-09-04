@@ -59,7 +59,9 @@ on a wide layout, exactly 1000dp, and a window narrower than 1000dp:
    analysis labels are understandable without color; confirm the fresh-file dot has
    an accessibility description. Confirm the top bar has one text-labeled
    connection state and workspace labels have no numeric inventory counters or raw
-   revision/hash identifiers. On wide windows, Summary, Analysis,
+   revision/hash identifiers. Use `Cmd/Ctrl+K` to open **Performance** without starting
+   a review; preview the run limits and verify its source-based/not-measured label before
+   explicitly starting a run. On wide windows, Summary, Analysis,
    and Bugs must have no Explorer or Context pane; only Editor has them.
 3. On Summary, inspect deterministic facts and structured analysis. On Analysis,
    explicitly Start, Pause, Resume, and Cancel Analyze-all; it must not begin on
