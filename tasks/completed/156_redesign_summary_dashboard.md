@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -99,5 +99,16 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+Passed `./desktop/gradlew -p desktop spotlessCheck detekt test
+-PvisualOutput="$PWD/desktop/build/reports/ui-refinement/task-156"` and `git diff
+--check` on 2026-09-04. Replaced the three stacked Summary prose panels and
+phrase-based presentation fields with one shared source/freshness presentation
+consumed by Summary and AI Context. The dashboard now separates indexed files,
+lines, verified findings, and AI suggestions; preserves absent counts as `—` while
+retaining genuine zeroes; renders coverage independently; previews purpose without
+persisting a truncation; and reveals all structured details/risk severities through
+explicit controls. Analysis and Bugs links were exercised as local navigation
+callbacks only. Visual review passed for `summary-dashboard-1440.png`,
+`summary-purpose-expanded-1440.png`, `summary-details-expanded-1440.png`,
+`summary-dashboard-800-1.3.png`, and `summary-dashboard-empty-800.png`. Native
+window and screen-reader acceptance remain deferred to Tasks 159/160.
