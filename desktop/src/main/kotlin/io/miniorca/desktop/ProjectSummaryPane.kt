@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -81,74 +82,83 @@ internal fun ProjectSummaryPane(
     onWorkspace: (Workspace) -> Unit
 ) {
   val presentation = projectSummaryPresentation(overview, project)
-  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-    WorkspacePaneHeader("Summary")
-    Spacer(Modifier.height(8.dp))
-    if (!presentation.hasProject) {
-      SystemStateMessage(
-          "No project selected",
-          "Import a project to view its indexed facts.",
-          modifier = Modifier.fillMaxWidth(),
-      )
-    } else {
-      MiniOrcaPanel(
-          Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
-            SectionLabel("Project facts")
-            CompactKeyValueRows(
-                listOf(
-                    "Type" to presentation.projectType,
-                    "Build" to presentation.buildMetadata,
-                    "Languages" to presentation.languages.ifBlank { "Not detected" },
-                ),
-                modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
+  BoxWithConstraints(Modifier.fillMaxSize()) {
+    Column(
+        Modifier.fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(workspacePagePadding(maxWidth, vertical = 12.dp))) {
+          WorkspacePaneHeader("Summary")
+          Spacer(Modifier.height(8.dp))
+          if (!presentation.hasProject) {
+            SystemStateMessage(
+                "No project selected",
+                "Import a project to view its indexed facts.",
+                modifier = Modifier.fillMaxWidth(),
             )
-          }
+          } else {
+            MiniOrcaPanel(
+                Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+                  SectionLabel("Project facts")
+                  CompactKeyValueRows(
+                      listOf(
+                          "Type" to presentation.projectType,
+                          "Build" to presentation.buildMetadata,
+                          "Languages" to presentation.languages.ifBlank { "Not detected" },
+                      ),
+                      modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
+                  )
+                }
 
-      Spacer(Modifier.height(8.dp))
-      MiniOrcaPanel(
-          Modifier.fillMaxWidth(),
-          raised = presentation.analysisStatus in setOf("fresh", "stale", "failed"),
-          contentPadding = PaddingValues(MiniOrcaSpacing.standard),
-      ) {
-        SectionLabel("Interpretation · advisory")
-        StatusBadge(presentation.analysisStatus, Modifier.padding(top = MiniOrcaSpacing.standard))
-        Text(
-            presentation.analysisMessage,
-            color =
-                if (presentation.analysisStatus == "failed") Error
-                else if (presentation.analysisStatus == "stale") Warning else SecondaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
-        if (presentation.analysisStatus == "fresh" || presentation.analysisStatus == "stale") {
-          ProjectInterpretation(overview?.analysis)
-        }
-      }
-
-      Spacer(Modifier.height(8.dp))
-      MiniOrcaPanel(
-          Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
-            SectionLabel("Workspace coverage")
-            CompactKeyValueRows(
-                listOf(
-                    "File analysis" to presentation.coverage, "Findings" to presentation.findings),
-                modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
-            )
-            ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
-              MiniOrcaButton(
-                  onClick = { onWorkspace(Workspace.Analysis) },
-                  tone = ActionTone.Navigation,
-                  density = ButtonDensity.Toolbar) {
-                    Text("Open Analysis", fontSize = 11.sp)
-                  }
-              MiniOrcaButton(
-                  onClick = { onWorkspace(Workspace.Bugs) },
-                  tone = ActionTone.Navigation,
-                  density = ButtonDensity.Toolbar) {
-                    Text("Open Bugs", fontSize = 11.sp)
-                  }
+            Spacer(Modifier.height(8.dp))
+            MiniOrcaPanel(
+                Modifier.fillMaxWidth(),
+                raised = presentation.analysisStatus in setOf("fresh", "stale", "failed"),
+                contentPadding = PaddingValues(MiniOrcaSpacing.standard),
+            ) {
+              SectionLabel("Interpretation · advisory")
+              StatusBadge(
+                  presentation.analysisStatus, Modifier.padding(top = MiniOrcaSpacing.standard))
+              Text(
+                  presentation.analysisMessage,
+                  color =
+                      if (presentation.analysisStatus == "failed") Error
+                      else if (presentation.analysisStatus == "stale") Warning else SecondaryText,
+                  fontSize = 12.sp,
+                  modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+              if (presentation.analysisStatus == "fresh" ||
+                  presentation.analysisStatus == "stale") {
+                ProjectInterpretation(overview?.analysis)
+              }
             }
+
+            Spacer(Modifier.height(8.dp))
+            MiniOrcaPanel(
+                Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
+                  SectionLabel("Workspace coverage")
+                  CompactKeyValueRows(
+                      listOf(
+                          "File analysis" to presentation.coverage,
+                          "Findings" to presentation.findings),
+                      modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
+                  )
+                  ResponsiveActionGroup(
+                      Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
+                        MiniOrcaButton(
+                            onClick = { onWorkspace(Workspace.Analysis) },
+                            tone = ActionTone.Navigation,
+                            density = ButtonDensity.Toolbar) {
+                              Text("Open Analysis", fontSize = 11.sp)
+                            }
+                        MiniOrcaButton(
+                            onClick = { onWorkspace(Workspace.Bugs) },
+                            tone = ActionTone.Navigation,
+                            density = ButtonDensity.Toolbar) {
+                              Text("Open Bugs", fontSize = 11.sp)
+                            }
+                      }
+                }
           }
-    }
+        }
   }
 }
 

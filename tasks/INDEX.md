@@ -17,7 +17,7 @@ and exactly one isolated local commit per completed task. No pushes.
 | 150 | [Establish the UI refinement baseline](completed/150_ui_refinement_baseline.md) | 148 + current baseline | Complete |
 | 151 | [Remove duplicate Project navigation](completed/151_remove_project_navigation.md) | 150 | Complete |
 | 152 | [Unify IDE design tokens and control states](completed/152_unify_ide_design_tokens.md) | 151 | Complete |
-| 153 | [Correct Analysis and shared workspace widths](153_correct_workspace_widths.md) | 152 | Pending |
+| 153 | [Correct Analysis and shared workspace widths](completed/153_correct_workspace_widths.md) | 152 | Complete |
 | 154 | [Refine popup menus and menu-row controls](154_refine_popup_menus.md) | 153 | Pending |
 | 155 | [Refine disclosures, drawers, and tool-window controls](155_refine_disclosures_and_drawers.md) | 154 | Pending |
 | 156 | [Redesign Summary as a concise project dashboard](156_redesign_summary_dashboard.md) | 155 | Pending |

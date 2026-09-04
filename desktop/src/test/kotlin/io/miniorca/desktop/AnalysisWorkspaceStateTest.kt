@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -7,6 +8,24 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AnalysisWorkspaceStateTest {
+  @Test
+  fun workspaceWidthRulesUseSharedGuttersAndStackOnlyWhenTheRunWouldBeTooNarrow() {
+    assertEquals(16.dp, workspacePageHorizontalGutter(899.dp))
+    assertEquals(24.dp, workspacePageHorizontalGutter(900.dp))
+    assertEquals(360.dp, analysisRunControlLayout(1_440.dp).controlsWidth)
+    assertFalse(analysisRunControlLayout(720.dp).stacked)
+    assertTrue(analysisRunControlLayout(719.dp).stacked)
+    assertEquals(320.dp, analysisRunControlLayout(1_000.dp, fontScale = 1.3f).controlsWidth)
+    assertFalse(analysisRunControlLayout(1_000.dp, fontScale = 1.3f).stacked)
+  }
+
+  @Test
+  fun metricColumnsReflowBeforeNarrowLabelsCanCrowd() {
+    assertEquals(6, analysisMetricColumnCount(780.dp))
+    assertEquals(3, analysisMetricColumnCount(779.dp))
+    assertEquals(2, analysisMetricColumnCount(519.dp))
+  }
+
   @Test
   fun progressCountsFailuresAsProcessedAndKeepsEmptyQueuesAtZero() {
     val empty = analyzeAllPresentation(null, null).run

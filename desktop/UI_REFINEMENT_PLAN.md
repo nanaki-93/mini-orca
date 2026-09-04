@@ -1,7 +1,7 @@
 # UI refinement plan
 
-**Status:** In Progress — Tasks 150–152 established the baseline, removed duplicate Project
-navigation, and unified shared IDE tokens; Tasks 153–160 remain Pending.
+**Status:** In Progress — Tasks 150–153 established the baseline, removed duplicate Project
+navigation, unified shared IDE tokens, and corrected workspace width rules; Tasks 154–160 remain Pending.
 
 **Requested:** 2026-09-04.
 

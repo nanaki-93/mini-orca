@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -93,5 +93,4 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+Passed `./desktop/gradlew -p desktop spotlessCheck detekt test -PvisualOutput="$PWD/desktop/build/reports/ui-refinement/task-153"` and `git diff --check` on 2026-09-04. Removed the centered 1160dp Analysis cap and the total-width 820dp layout branch. Shared page gutters now use 24dp on wide pages and 16dp on narrow pages; Analysis derives a 280–360dp control column and its stack threshold from usable content width and font scale, while Summary consumes the same horizontal gutter helper. Visual review passed for `analysis-1920-1.0.png`, `analysis-long-destination-1000-1.3.png`, and `analysis-paused-800-1.3.png`; renders also cover 1440, 1000, 999, 800, empty, and failed states. Native window and screen-reader checks remain unavailable in this session and are deferred to Tasks 159/160.
