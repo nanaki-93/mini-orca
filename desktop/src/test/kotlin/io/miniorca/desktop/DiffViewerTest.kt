@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.ui.graphics.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class DiffViewerTest {
   @Test
@@ -28,5 +29,25 @@ class DiffViewerTest {
     assertEquals(DiffAddedBackground, diffLineBackground("added"))
     assertEquals(DiffRemovedBackground, diffLineBackground("removed"))
     assertEquals(Color.Transparent, diffLineBackground("context"))
+  }
+
+  @Test
+  fun diffMarkersAndStatusTextRemainReadableWithoutChangingSourceRows() {
+    val diff =
+        UnifiedDiff(
+            "main.go",
+            "main.go",
+            listOf(
+                DiffLine("removed", 4, 0, "return oldValue"),
+                DiffLine("added", 0, 4, "return newValue")))
+
+    val row = sideBySideDiffRows(diff).single()
+
+    assertEquals("removed", row.before?.change)
+    assertEquals("added", row.proposed?.change)
+    assertEquals("return oldValue", row.before?.text)
+    assertEquals("return newValue", row.proposed?.text)
+    assertTrue(contrastRatio(Error, diffLineBackground(row.before?.change)) >= 4.5)
+    assertTrue(contrastRatio(Success, diffLineBackground(row.proposed?.change)) >= 4.5)
   }
 }

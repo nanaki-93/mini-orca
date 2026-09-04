@@ -87,7 +87,7 @@ internal fun ProblemsToolWindow(
                         when (findingPriority(finding)) {
                           FindingPriority.High -> Error
                           FindingPriority.Medium -> Warning
-                          FindingPriority.Low -> SelectionAccent
+                          FindingPriority.Low -> SelectionText
                           FindingPriority.Other -> SecondaryText
                         })
               }

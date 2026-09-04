@@ -4,9 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -107,6 +111,17 @@ class DesktopVisualLayoutTest {
             if (width >= 1_000) fixture.assertTextFits("Files")
           }
     }
+  }
+
+  @Test
+  fun sharedControlsRenderReadableStatesAtEnlargedTextScale() {
+    ComposeVisualFixture(720, 180, 1.3f) { SharedControlsVisualFixture() }
+        .use { fixture ->
+          fixture.render("shared-controls-130")
+          listOf("Apply", "Selected", "Disabled", "Focused", "Search files").forEach {
+            fixture.assertTextFits(it)
+          }
+        }
   }
 
   @Test
@@ -411,6 +426,27 @@ private fun ToolbarVisualFixture(width: Float) {
             GitStatus(available = true, branch = "main"),
             false),
         ToolbarActions({}, {}, {}, {}, {}, {}))
+  }
+}
+
+@Composable
+private fun SharedControlsVisualFixture() {
+  Column(Modifier.fillMaxSize().background(AppBackground).padding(12.dp)) {
+    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+      MiniOrcaButton(onClick = {}, tone = ActionTone.Primary) { Text("Apply") }
+      MiniOrcaButton(onClick = {}, tone = ActionTone.Navigation, selected = true) {
+        Text("Selected")
+      }
+      MiniOrcaButton(onClick = {}, enabled = false) { Text("Disabled") }
+      ChromeButton(onClick = {}, focusHighlight = true) { Text("Focused") }
+    }
+    Spacer(Modifier.height(8.dp))
+    CompactSingleLineField(
+        value = "",
+        onValueChange = {},
+        label = "Search files",
+        showLabel = false,
+        modifier = Modifier.fillMaxWidth())
   }
 }
 

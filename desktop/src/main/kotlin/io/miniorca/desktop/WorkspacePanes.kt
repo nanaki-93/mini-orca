@@ -57,8 +57,7 @@ internal fun AnalysisWorkspacePane(
     ) {
       item {
         Row(verticalAlignment = Alignment.CenterVertically) {
-          DesktopLineIcon(
-              DesktopIcon.Analysis, "Analysis", tint = SelectionAccent, iconSize = 26.dp)
+          DesktopLineIcon(DesktopIcon.Analysis, "Analysis", tint = SelectionText, iconSize = 26.dp)
           Spacer(Modifier.width(12.dp))
           Column(Modifier.weight(1f)) {
             Text(
@@ -245,7 +244,7 @@ private fun AnalysisCoverageMetrics(coverage: AnalysisCoveragePresentation, avai
             Triple("Fresh", coverage.fresh, Success),
             Triple("Stale", coverage.stale, Warning),
             Triple("Not analyzed", coverage.missing, SecondaryText),
-            Triple("Running", coverage.running, SelectionAccent),
+            Triple("Running", coverage.running, SelectionText),
             Triple("Failed", coverage.failed, Error),
         )
     BoxWithConstraints {
@@ -285,7 +284,7 @@ private fun AnalysisRunCard(
       when (run.statusLabel) {
         "Failed" -> Error
         "Completed" -> Success
-        "Running" -> SelectionAccent
+        "Running" -> SelectionText
         "Paused",
         "Pausing",
         "Canceling",

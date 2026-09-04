@@ -297,7 +297,7 @@ private fun SourceGutter(
       ) {
         Text(
             row.line.toString().padStart(4),
-            color = if (row.line == focusedLine) SelectionAccent else FaintText,
+            color = if (row.line == focusedLine) SelectionText else FaintText,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
             lineHeight = 20.sp,
@@ -332,7 +332,7 @@ private fun GutterMarkerTooltip(description: String) {
 
 private fun gutterMarkerColor(kind: SourceGutterMarkerKind): Color =
     when (kind) {
-      SourceGutterMarkerKind.FocusedLine -> SelectionAccent
+      SourceGutterMarkerKind.FocusedLine -> SelectionText
       SourceGutterMarkerKind.SelectedDeclaration -> FocusAccent
       SourceGutterMarkerKind.Finding -> Warning
     }
@@ -355,8 +355,8 @@ internal fun EditorPane(
 
 private fun sourceLineBackground(emphasis: SourceLineEmphasis): Color =
     when (emphasis) {
-      SourceLineEmphasis.FocusedSelectedSymbol -> SelectionAccent.copy(alpha = 0.14f)
-      SourceLineEmphasis.FocusedLocation -> SelectionAccent.copy(alpha = 0.10f)
+      SourceLineEmphasis.FocusedSelectedSymbol -> SelectionSurface.copy(alpha = 0.72f)
+      SourceLineEmphasis.FocusedLocation -> SelectionSurface.copy(alpha = 0.52f)
       SourceLineEmphasis.SelectedSymbol,
       SourceLineEmphasis.None -> Color.Transparent
     }

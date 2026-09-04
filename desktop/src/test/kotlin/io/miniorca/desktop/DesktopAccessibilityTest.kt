@@ -46,6 +46,18 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun retainedNavigationStatesDescribeSelectionAndFocusSeparately() {
+    assertEquals(
+        "Editor tool window, selected, focused",
+        toolWindowSemanticsLabel(LeftToolWindow.Editor, selected = true, focused = true),
+    )
+    assertEquals(
+        "Editor tool window, selected",
+        toolWindowSemanticsLabel(LeftToolWindow.Editor, selected = true),
+    )
+  }
+
+  @Test
   fun editorChromeExposesTheFullSelectedFileIdentityAndReadOnlySurface() {
     val chrome =
         editorChromeUiState(

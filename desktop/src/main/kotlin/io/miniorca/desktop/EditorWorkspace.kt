@@ -135,7 +135,7 @@ private fun CandidateSummary(summary: CandidateSummaryPresentation, onReview: ()
       contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
   ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      DesktopLineIcon(DesktopIcon.Editor, "Candidate", tint = SelectionAccent, iconSize = 16.dp)
+      DesktopLineIcon(DesktopIcon.Editor, "Candidate", tint = SelectionText, iconSize = 16.dp)
       Spacer(Modifier.width(8.dp))
       Text(
           "Mini-Orca suggestion",
@@ -208,7 +208,7 @@ private fun ActiveFileEditorChrome(
                   contentDescription = "Source · ${state.title}"
                 },
         ) {
-          DesktopLineIcon(DesktopIcon.File, "Source file", tint = SelectionAccent, iconSize = 16.dp)
+          DesktopLineIcon(DesktopIcon.File, "Source file", tint = SelectionText, iconSize = 16.dp)
           Spacer(Modifier.width(8.dp))
           Text(state.title, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

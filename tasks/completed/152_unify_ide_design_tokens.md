@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -94,5 +94,4 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+Passed `./desktop/gradlew -p desktop spotlessCheck detekt test -PvisualOutput="$PWD/desktop/build/reports/ui-refinement/task-152"` and `git diff --check` on 2026-09-04. Replaced the superseded charcoal palette, 4dp contained-button shape, fixed-height shared buttons, and accent-as-text usages with one guideline-aligned semantic system; the new `UI_CONTRAST.md` records resolved contrast pairs. Visual review passed for `analysis-1440-1.0.png` and `shared-controls-130.png`, including readable selected, disabled, and focus states without clipping. Native window and screen-reader checks were unavailable because this session has no enabled native Mini-Orca surface; Task 159/160 retain those operator checks.
