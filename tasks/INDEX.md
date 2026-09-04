@@ -90,12 +90,12 @@ the preview-first Apply/Undo boundary.
 | 136 | [Implement bounded source-based performance file review](completed/136_performance_file_review.md) | 135 | Complete |
 | 137 | [Add bounded project performance jobs and API](completed/137_project_performance_job.md) | 136 | Complete |
 | 138 | [Add the Performance workspace and optimization handoff](completed/138_performance_workspace.md) | 137 | Complete |
-| 139 | [Complete insights and performance acceptance](139_insights_performance_acceptance.md) | 133–138 | Pending |
+| 139 | [Complete insights and performance acceptance](completed/139_insights_performance_acceptance.md) | 133–138 | Complete |
 
 Execute through
 [PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md](PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md).
-Task 133 is in progress. Execution is strictly sequential with one implementation agent and one verified
-local commit per task. No push is authorized.
+Tasks 133–139 are complete. Execution used one implementation agent and one verified
+local commit per task. No push was authorized.
 
 ### Feature plan coverage
 

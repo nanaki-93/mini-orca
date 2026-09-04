@@ -10,7 +10,7 @@ and the completed records for the [IDE UI plan](../plan.md) and earlier work.
 - Completed tasks move to `completed/` without changing their identifier.
 - [`INDEX.md`](INDEX.md) is the authoritative dependency order and status list.
 - [`PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md`](PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md)
-  executes pending Tasks 133–139 sequentially with one verified local commit per task.
+  is the completed execution record for Tasks 133–139, with one verified local commit per task.
 - [`PROMPT_EXECUTE_IDE_UI.md`](PROMPT_EXECUTE_IDE_UI.md) is the completed execution record for
   Tasks 118–132. It required strict sequencing, one implementation writer, and one verified
   commit per task.
@@ -19,9 +19,9 @@ and the completed records for the [IDE UI plan](../plan.md) and earlier work.
 - [`INDEX.md`](INDEX.md) contains the concise historical ledger for Tasks 01–102. Git
   history is the full archive.
 
-## Active insights and performance backlog
+## Completed insights and performance sequence
 
-Tasks 133–139 are prepared for implementation after the completed IDE sequence.
+Tasks 133–139 are complete after the completed IDE sequence.
 They add a small closeable/reopenable Engineering insight panel to existing result
 pages and an independent, explicitly unmeasured Performance review section.
 There are no quizzes, games, learning profiles, runtime profilers, or new automatic

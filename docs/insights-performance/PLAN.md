@@ -1,6 +1,8 @@
 # Engineering insights and project performance analysis
 
-**Status:** In Progress — Task 133 is establishing the implementation baseline.
+**Status:** Complete — Tasks 133–139 are implemented and automated acceptance is
+recorded in [ACCEPTANCE.md](ACCEPTANCE.md). Interactive/provider-dependent follow-ups
+and the user-authorized repository-wide quality-gate deferral remain explicit there.
 
 **Prepared:** 2026-09-04.
 
