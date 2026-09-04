@@ -6,7 +6,7 @@ Execution: [PROMPT_EXECUTE_UI_PRECISION.md](PROMPT_EXECUTE_UI_PRECISION.md).
 ## Planned UI precision — Tasks 161–171
 
 Strict numeric order; one implementation writer, one verified local commit per task,
-and no push. Tasks 161–165 are complete; later tasks remain Pending.
+and no push. Tasks 161–166 are complete; later tasks remain Pending.
 
 | Order | Task | Depends on | Status |
 | ---: | --- | --- | --- |
@@ -15,7 +15,7 @@ and no push. Tasks 161–165 are complete; later tasks remain Pending.
 | 163 | [Build shared dense headers, toolbars, and dividers](163_dense_ide_primitives.md) | 162 | Complete |
 | 164 | [Layer the shell and replace heavy pane separation](164_layered_pane_shell.md) | 163 | Complete |
 | 165 | [Flatten Analysis and move run controls into its header](165_flat_analysis_toolbar.md) | 164 | Complete |
-| 166 | [Apply dense flat sections to Summary and Performance](166_dense_summary_performance.md) | 165 | Pending |
+| 166 | [Apply dense flat sections to Summary and Performance](166_dense_summary_performance.md) | 165 | Complete |
 | 167 | [Refine the Files tree, editor tabs, and breadcrumbs](167_precise_editor_navigation.md) | 166 | Pending |
 | 168 | [Flatten Context, Assistant, and Review safely](168_flat_context_review.md) | 167 | Pending |
 | 169 | [Finish bottom panes, global controls, and migration cleanup](169_complete_ide_surface_migration.md) | 168 | Pending |

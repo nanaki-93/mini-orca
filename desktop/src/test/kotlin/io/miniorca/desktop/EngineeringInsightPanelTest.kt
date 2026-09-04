@@ -11,6 +11,10 @@ class EngineeringInsightPanelTest {
     assertEquals("AI interpretation", engineeringInsightStateLabel("", stale = false))
     assertEquals("AI interpretation · File", engineeringInsightStateLabel("File", stale = false))
     assertEquals(
+        "AI interpretation · Selected performance opportunity",
+        engineeringInsightStateLabel("Selected performance opportunity", stale = false),
+    )
+    assertEquals(
         "AI interpretation · File · stale",
         engineeringInsightStateLabel("File", stale = true),
     )

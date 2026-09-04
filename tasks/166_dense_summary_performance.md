@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -37,10 +37,10 @@ Inspect these boundaries before editing; change only files needed for this task.
 
 ## Acceptance criteria
 
-- [ ] Summary and Performance use the same 8dp insets, compact heading rhythm, and inherited section surfaces as Analysis; no generic rounded status-card stacks remain.
-- [ ] Existing scope, coverage, stale/advisory labeling, and safe optimization handoff remain unchanged and behavior-tested.
-- [ ] Only real actions appear, with textual state and named icon controls. Each operation has one primary action location.
-- [ ] Populated/empty/error scenes remain usable at wide/narrow widths and 150% text scale; long finding text can be read in full.
+- [x] Summary and Performance use the same 8dp insets, compact heading rhythm, and inherited section surfaces as Analysis; no generic rounded status-card stacks remain.
+- [x] Existing scope, coverage, stale/advisory labeling, and safe optimization handoff remain unchanged and behavior-tested.
+- [x] Only real actions appear, with textual state and named icon controls. Each operation has one primary action location.
+- [x] Populated/empty/error scenes remain usable at wide/narrow widths and 150% text scale; long finding text can be read in full.
 
 ## Verification
 
@@ -61,6 +61,16 @@ prompt. Do not create a partial/completion commit while acceptance is blocked; n
 
 ## Execution record
 
-Not started. Record actual commands/results, evidence paths, exceptions approved by
-the user, and any runtime/configuration impact during execution. Do not prefill passing results.
+Completed 2026-09-05.
 
+- Flattened Summary facts, coverage, interpretation, and shared Engineering Insight sections;
+  kept indexed facts distinct from advisory model output.
+- Moved the existing Performance lifecycle controls into the Performance header. Preview, remote
+  confirmation, start, pause, resume, cancel, editor navigation, and guarded optimization
+  preparation retain their prior workflow callbacks. Review coverage now explicitly labels
+  unknown, partial, skipped, failed, remaining, stale/canceled, and budget-limited states from
+  existing job/report fields; it makes no performance-score or measured-speed claim.
+- Ran `spotlessApply`, focused workspace/panel and visual tests, then
+  `JAVA_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem ./desktop/gradlew -p desktop spotlessCheck detekt test -Porg.gradle.java.installations.paths=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home` successfully. Detekt requires the JDK 21 Gradle launch; the supported JBR 25 path remains the Kotlin toolchain.
+- Ran `JAVA_HOME=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home ./desktop/gradlew -p desktop packageDistributionForCurrentOS` successfully, and `git diff --check` passed.
+- Inspected production fixture evidence: `desktop/build/reports/ui-precision/task-166/summary-dashboard-1440.png`, `summary-dashboard-800-1.3.png`, `performance-populated-1440.png`, `performance-empty-800-1.3.png`, and `engineering-insight-expanded-720-1.3.png`. These are offscreen Compose renders; native-window, OS keyboard, and screen-reader verification remains for Task 170. No configuration or runtime migration is required.

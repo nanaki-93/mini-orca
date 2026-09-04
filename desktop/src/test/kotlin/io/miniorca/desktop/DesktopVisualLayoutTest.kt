@@ -189,6 +189,8 @@ class DesktopVisualLayoutTest {
           fixture.render("performance-empty-800-1.3")
           assertTrue(fixture.hasText("No performance review"))
           assertTrue(fixture.hasText("Confirm remote destination"))
+          fixture.assertTextFits("Preview limits")
+          fixture.assertTextFits("Analyze performance")
           kotlin.test.assertEquals(0, performanceActions)
           fixture.clickText("Preview limits")
           kotlin.test.assertEquals(1, performanceActions)

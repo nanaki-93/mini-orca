@@ -1,8 +1,6 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -177,8 +175,8 @@ internal fun ProjectSummaryPane(
   BoxWithConstraints(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = workspacePagePadding(maxWidth, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = workspacePagePadding(maxWidth, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       item { SummaryHeader(presentation) }
       if (!presentation.hasProject) {
@@ -208,66 +206,52 @@ internal fun ProjectSummaryPane(
 
 @Composable
 private fun SummaryHeader(presentation: ProjectSummaryPresentation) {
-  Row(verticalAlignment = Alignment.CenterVertically) {
-    DesktopLineIcon(DesktopIcon.Summary, "Summary", tint = SelectionText, iconSize = 26.dp)
-    Spacer(Modifier.width(12.dp))
-    Column(Modifier.weight(1f)) {
-      Text(
-          presentation.projectName,
-          color = PrimaryText,
-          fontSize = 22.sp,
-          fontWeight = FontWeight.SemiBold,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis)
-      Text(
+  IdePaneHeader(
+      title = presentation.projectName,
+      icon = DesktopIcon.Summary,
+      stateLabel =
           listOf(
                   presentation.projectType,
                   presentation.languages.takeIf { it.isNotBlank() } ?: "Languages unavailable",
                   presentation.buildMetadata)
               .joinToString(" · "),
-          color = SecondaryText,
-          fontSize = 12.sp,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.padding(top = 4.dp))
-    }
-  }
+  )
 }
 
 @Composable
 private fun SummaryMetricStrip(metrics: List<ProjectSummaryMetric>) {
-  MiniOrcaPanel(Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+  Column(Modifier.fillMaxWidth()) {
     SectionLabel("Project facts")
-    Spacer(Modifier.height(16.dp))
-    SummaryMetricGrid(metrics)
+    IdeHorizontalSeparator(Modifier.padding(top = 4.dp))
+    SummaryMetricGrid(metrics, Modifier.padding(top = 8.dp))
   }
 }
 
 @Composable
 private fun SummaryCoverage(status: String, metrics: List<ProjectSummaryMetric>) {
-  MiniOrcaPanel(Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
+  Column(Modifier.fillMaxWidth()) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       SectionLabel("Analysis coverage")
       Spacer(Modifier.weight(1f))
       StatusBadge(status)
     }
-    Spacer(Modifier.height(16.dp))
-    SummaryMetricGrid(metrics)
+    IdeHorizontalSeparator(Modifier.padding(top = 4.dp))
+    SummaryMetricGrid(metrics, Modifier.padding(top = 8.dp))
   }
 }
 
 @Composable
-private fun SummaryMetricGrid(metrics: List<ProjectSummaryMetric>) {
-  BoxWithConstraints(Modifier.fillMaxWidth()) {
+private fun SummaryMetricGrid(metrics: List<ProjectSummaryMetric>, modifier: Modifier = Modifier) {
+  BoxWithConstraints(modifier.fillMaxWidth()) {
     val columns = summaryMetricColumnCount(maxWidth)
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
       metrics.chunked(columns).forEach { row ->
         Row(Modifier.fillMaxWidth()) {
           row.forEachIndexed { index, metric ->
-            if (index > 0) Box(Modifier.height(48.dp).width(1.dp).background(Border))
+            if (index > 0) IdeVerticalSeparator(Modifier.height(40.dp))
             SummaryMetric(
                 metric = metric,
-                modifier = Modifier.weight(1f).padding(start = if (index == 0) 0.dp else 16.dp))
+                modifier = Modifier.weight(1f).padding(start = if (index == 0) 0.dp else 8.dp))
           }
         }
       }
@@ -281,13 +265,13 @@ private fun SummaryMetric(metric: ProjectSummaryMetric, modifier: Modifier = Mod
     Text(
         metric.value?.toString() ?: "—",
         color = if (metric.value == null) FaintText else summaryMetricTint(metric.tone),
-        fontSize = 24.sp,
+        fontSize = 16.sp,
         fontWeight = FontWeight.Medium)
     Text(
         metric.label,
         color = SecondaryText,
         fontSize = 11.sp,
-        modifier = Modifier.padding(top = 4.dp))
+        modifier = Modifier.padding(top = 2.dp))
   }
 }
 
@@ -311,52 +295,51 @@ private fun SummaryInterpretation(
     detailsExpanded: Boolean,
     onDetailsExpanded: () -> Unit,
 ) {
-  MiniOrcaPanel(
-      Modifier.fillMaxWidth(),
-      raised = presentation.analysisStatus in setOf("stale", "failed"),
-      contentPadding = PaddingValues(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          SectionLabel("AI interpretation")
-          Spacer(Modifier.weight(1f))
-          StatusBadge(presentation.analysisStatus)
-        }
-        if (presentation.analysisStatus != "fresh" || presentation.purpose == null)
-            Text(
-                presentation.analysisMessage,
-                color = summaryStatusTint(presentation.analysisStatus),
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(top = 12.dp))
-        presentation.purpose?.let { purpose ->
-          Text(
-              purpose,
-              color = PrimaryText,
-              fontSize = 13.sp,
-              lineHeight = 20.sp,
-              maxLines = if (purposeExpanded) Int.MAX_VALUE else 3,
-              overflow = if (purposeExpanded) TextOverflow.Clip else TextOverflow.Ellipsis,
-              modifier = Modifier.padding(top = 12.dp))
-          ChromeButton(
-              onClick = onPurposeExpanded,
-              modifier = Modifier.padding(top = 8.dp),
-              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                Text(if (purposeExpanded) "Show less" else "Show full purpose", fontSize = 11.sp)
-              }
-        }
-        if (presentation.details.isNotEmpty()) {
-          IdeDisclosureHeader(
-              title = "Interpretation details",
-              expanded = detailsExpanded,
-              onToggle = onDetailsExpanded,
-              stateLabel = "${presentation.details.size} sections",
-              modifier = Modifier.padding(top = 12.dp))
-          if (detailsExpanded) SummaryDetails(presentation.details)
-        }
-        EngineeringInsightPanel(
-            presentation.engineeringInsight,
-            stale = presentation.analysisStatus == "stale",
-            scopeLabel = "Project")
-      }
+  Column(Modifier.fillMaxWidth()) {
+    IdePaneHeader(
+        title = "AI interpretation",
+        icon = DesktopIcon.Analysis,
+        stateLabel = presentation.analysisStatus.replaceFirstChar { it.uppercase() },
+        stateTint = summaryStatusTint(presentation.analysisStatus),
+        actions = { StatusBadge(presentation.analysisStatus) },
+    )
+    if (presentation.analysisStatus != "fresh" || presentation.purpose == null)
+        Text(
+            presentation.analysisMessage,
+            color = summaryStatusTint(presentation.analysisStatus),
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 8.dp))
+    presentation.purpose?.let { purpose ->
+      Text(
+          purpose,
+          color = PrimaryText,
+          fontSize = 13.sp,
+          lineHeight = 20.sp,
+          maxLines = if (purposeExpanded) Int.MAX_VALUE else 3,
+          overflow = if (purposeExpanded) TextOverflow.Clip else TextOverflow.Ellipsis,
+          modifier = Modifier.padding(start = 8.dp, top = 8.dp, end = 8.dp))
+      ChromeButton(
+          onClick = onPurposeExpanded,
+          modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+            Text(if (purposeExpanded) "Show less" else "Show full purpose", fontSize = 11.sp)
+          }
+    }
+    if (presentation.details.isNotEmpty()) {
+      IdeDisclosureHeader(
+          title = "Interpretation details",
+          expanded = detailsExpanded,
+          onToggle = onDetailsExpanded,
+          stateLabel = "${presentation.details.size} sections",
+          modifier = Modifier.padding(top = 8.dp))
+      if (detailsExpanded) SummaryDetails(presentation.details)
+    }
+    EngineeringInsightPanel(
+        presentation.engineeringInsight,
+        stale = presentation.analysisStatus == "stale",
+        scopeLabel = "Project")
+  }
 }
 
 private fun summaryStatusTint(status: String): Color =
@@ -369,7 +352,7 @@ private fun summaryStatusTint(status: String): Color =
 @Composable
 private fun SummaryDetails(details: List<ProjectSummaryDetail>) {
   SelectionContainer {
-    Column(Modifier.padding(top = 12.dp)) {
+    Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
       details.forEach { detail ->
         Text(detail.title, color = SecondaryText, fontSize = 11.sp)
         detail.values.forEach { value ->
@@ -380,7 +363,7 @@ private fun SummaryDetails(details: List<ProjectSummaryDetail>) {
               lineHeight = 18.sp,
               modifier = Modifier.padding(top = 4.dp))
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
       }
     }
   }

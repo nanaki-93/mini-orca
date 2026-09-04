@@ -62,6 +62,10 @@ class ProjectSummaryPaneTest {
     assertEquals("Coordinate requests through one handler.", summary.purpose)
     assertTrue(summary.analysisMessage.contains("source may have changed"))
     assertEquals(listOf(2, 20, 2, 3), summary.projectMetrics.map { it.value })
+    assertEquals(
+        listOf("Fresh", "Stale", "Missing", "Running", "Failed"),
+        summary.coverageMetrics.map { it.label },
+    )
     assertEquals(listOf(1, 1, 0, 0, 1), summary.coverageMetrics.map { it.value })
     assertEquals(
         listOf("Architecture", "Components", "Risks · AI suggestions"),
