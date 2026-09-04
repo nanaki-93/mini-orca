@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,7 +14,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -214,7 +215,7 @@ internal fun advisoryImpactLabel(impact: ImpactPreview?): String =
       impact?.references.isNullOrEmpty() ->
           "No indexed dependents found. This is read-only context and cannot change project files."
       else ->
-          "${impact!!.references.size} indexed dependents are visible as read-only context; they cannot be changed by this draft."
+          "${impact.references.size} indexed dependents are visible as read-only context; they cannot be changed by this draft."
     }
 
 internal fun gitContextLabel(gitStatus: GitStatus?): String =
@@ -299,190 +300,157 @@ internal fun ReviewToolWindow(
   val decision =
       applyDecisionUiState(
           state.project, state.selected, state.editor, state.draft, state.checks, state.applied)
-  var showCommandOutput by
-      remember(state.checks?.draftId, state.checks?.draftRevision, state.checks?.draftHash) {
+  var diagnosticsExpanded by
+      rememberSaveable(state.draft?.id, state.draft?.revision, state.draft?.hash) {
         mutableStateOf(false)
       }
-  var showDiagnostics by
-      remember(state.draft?.id, state.draft?.revision, state.draft?.hash) { mutableStateOf(false) }
+  var checksEvidenceExpanded by
+      rememberSaveable(
+          state.checks?.draftId, state.checks?.draftRevision, state.checks?.draftHash) {
+            mutableStateOf(false)
+          }
 
   Column(modifier.fillMaxSize()) {
     ToolWindowScopeHeader(
         "REVIEW",
         reviewToolWindowScope(state.selected, state.selectedSymbol, state.draft, state.applied),
-        Modifier.padding(12.dp))
+        Modifier)
     Column(
         Modifier.weight(1f)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp)
-            .padding(bottom = 12.dp)) {
+            .padding(horizontal = 8.dp)
+            .padding(bottom = 8.dp)) {
           if (decision.receiptTitle != null && state.applied != null) {
-            MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
-              SectionLabel("Receipt")
-              Text(
-                  decision.receiptTitle,
-                  color = PrimaryText,
-                  fontWeight = FontWeight.SemiBold,
-                  fontSize = 17.sp,
-                  modifier = Modifier.padding(top = 4.dp))
-              Text(
-                  decision.receiptDetail,
-                  color = SecondaryText,
-                  fontFamily = FontFamily.Monospace,
-                  fontSize = 11.sp,
-                  modifier = Modifier.padding(top = 6.dp))
-              Text(
-                  if (state.applied.undoAvailable) "Undo available." else "Undo unavailable.",
-                  color = SecondaryText,
-                  fontSize = 12.sp,
-                  modifier = Modifier.padding(top = 6.dp))
-              MiniOrcaButton(
-                  onClick = applicationActions.undo,
-                  enabled = state.applied.undoAvailable,
-                  tone = ActionTone.Attention,
-                  modifier = Modifier.padding(top = 10.dp)) {
-                    Text(decision.undoLabel)
-                  }
-            }
+            ReviewSection(
+                title = "Receipt",
+                icon = DesktopIcon.Check,
+                stateLabel =
+                    if (state.applied.undoAvailable) "Undo available" else "Undo unavailable",
+                stateTint = if (state.applied.undoAvailable) Success else Warning) {
+                  Text(
+                      decision.receiptTitle,
+                      color = PrimaryText,
+                      fontWeight = FontWeight.SemiBold,
+                      fontSize = 17.sp,
+                      modifier = Modifier.padding(top = 4.dp))
+                  Text(
+                      decision.receiptDetail,
+                      color = SecondaryText,
+                      fontFamily = FontFamily.Monospace,
+                      fontSize = 11.sp,
+                      modifier = Modifier.padding(top = 6.dp))
+                  Text(
+                      if (state.applied.undoAvailable) "Undo available." else "Undo unavailable.",
+                      color = SecondaryText,
+                      fontSize = 12.sp,
+                      modifier = Modifier.padding(top = 6.dp))
+                  MiniOrcaButton(
+                      onClick = applicationActions.undo,
+                      enabled = state.applied.undoAvailable,
+                      tone = ActionTone.Attention,
+                      modifier = Modifier.padding(top = 10.dp)) {
+                        Text(decision.undoLabel)
+                      }
+                }
             return@Column
           }
-          MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
-            SectionLabel("Validation")
-            Spacer(Modifier.height(8.dp))
-            EvidenceRow(evidence.identity)
-            Spacer(Modifier.height(8.dp))
-            EvidenceRow(evidence.validation)
-            val diagnostics = state.editor?.diagnostics.orEmpty().take(8)
-            if (diagnostics.isNotEmpty()) {
-              MiniOrcaButton(
-                  onClick = { showDiagnostics = !showDiagnostics },
-                  tone = ActionTone.Neutral,
-                  modifier = Modifier.padding(top = 8.dp)) {
-                    Text(
-                        if (showDiagnostics) "Hide validation diagnostics"
-                        else "Show validation diagnostics (${diagnostics.size})")
-                  }
-              if (showDiagnostics)
-                  SelectionContainer {
-                    Column(Modifier.padding(top = 5.dp)) {
-                      diagnostics.forEach { diagnostic ->
+          ReviewSection(
+              title = "Review evidence",
+              icon = DesktopIcon.Check,
+              stateLabel = evidence.validation.status.label,
+              stateTint = evidenceColor(evidence.validation.status),
+              actions = {
+                if (state.editor != null && state.draft != null)
+                    ChromeButton(
+                        onClick = evidenceActions.editDraft, accessibleName = "Edit draft") {
+                          Text("Edit draft", fontSize = 11.sp)
+                        }
+              }) {
+                EvidenceRow(evidence.identity)
+                IdeHorizontalSeparator(Modifier.padding(vertical = 6.dp))
+                EvidenceRow(evidence.validation)
+                val diagnostics = state.editor?.diagnostics.orEmpty().take(8)
+                if (diagnostics.isNotEmpty())
+                    ReviewEvidenceDetails(
+                        title = "Validation diagnostics",
+                        diagnostics = diagnostics,
+                        checks = emptyList(),
+                        expanded = diagnosticsExpanded,
+                        onToggle = { diagnosticsExpanded = !diagnosticsExpanded })
+              }
+          ReviewSection(
+              title = "Focused checks",
+              icon = DesktopIcon.Run,
+              stateLabel = evidence.checks.status.label,
+              stateTint = evidenceColor(evidence.checks.status)) {
+                EvidenceRow(evidence.checks)
+                if (evidence.canRunChecks)
+                    MiniOrcaButton(
+                        onClick = evidenceActions.runChecks,
+                        tone = ActionTone.Primary,
+                        modifier = Modifier.padding(top = 8.dp)) {
+                          Text(evidence.runChecksLabel)
+                        }
+                val repairMessage = repairMessageForChecks(state.session, state.draft, state.checks)
+                if (repairMessage != null ||
+                    repairLimitReached(state.session, state.draft, state.checks)) {
+                  MiniOrcaButton(
+                      onClick = evidenceActions.reviseWithCheckOutput,
+                      enabled = repairMessage != null && !state.checksRunning,
+                      tone = ActionTone.Attention,
+                      modifier = Modifier.padding(top = 8.dp)) {
                         Text(
-                            "${diagnostic.code}: ${diagnostic.message}",
-                            color = Error,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(top = 3.dp))
+                            if (repairMessage != null) "Revise with check output"
+                            else "Repair limit reached")
                       }
-                    }
-                  }
-            }
-            if (state.editor != null && state.draft != null)
-                MiniOrcaButton(
-                    onClick = evidenceActions.editDraft,
-                    tone = ActionTone.Neutral,
-                    modifier = Modifier.padding(top = 8.dp)) {
-                      Text("Edit draft")
-                    }
-          }
-          Spacer(Modifier.height(10.dp))
-          MiniOrcaPanel(Modifier.fillMaxWidth()) {
-            EvidenceRow(evidence.checks)
-            if (evidence.canRunChecks)
-                MiniOrcaButton(
-                    onClick = evidenceActions.runChecks,
-                    tone = ActionTone.Primary,
-                    modifier = Modifier.padding(top = 8.dp)) {
-                      Text(evidence.runChecksLabel)
-                    }
-            val repairMessage = repairMessageForChecks(state.session, state.draft, state.checks)
-            if (repairMessage != null ||
-                repairLimitReached(state.session, state.draft, state.checks)) {
-              MiniOrcaButton(
-                  onClick = evidenceActions.reviseWithCheckOutput,
-                  enabled = repairMessage != null && !state.checksRunning,
-                  tone = ActionTone.Attention,
-                  modifier = Modifier.padding(top = 8.dp)) {
-                    Text(
-                        if (repairMessage != null) "Revise with check output"
-                        else "Repair limit reached")
-                  }
-            }
-            state.checks?.checks.orEmpty().forEach { check ->
-              Text(
-                  "${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}",
-                  color = evidenceColor(checkStatus(check.state)),
-                  fontSize = 11.sp,
-                  modifier = Modifier.padding(top = 6.dp))
-            }
-            val checksWithOutput =
-                state.checks?.checks.orEmpty().filter {
-                  it.command.isNotEmpty() || it.output.isNotBlank()
                 }
-            if (checksWithOutput.isNotEmpty()) {
-              MiniOrcaButton(
-                  onClick = { showCommandOutput = !showCommandOutput },
-                  tone = ActionTone.Neutral,
-                  modifier = Modifier.padding(top = 8.dp)) {
-                    Text(
-                        if (showCommandOutput) "Hide command output"
-                        else "Show command output (${checksWithOutput.size})")
-                  }
-              if (showCommandOutput)
-                  SelectionContainer {
-                    Column(Modifier.padding(top = 6.dp)) {
-                      checksWithOutput.forEach { check ->
-                        Text(
-                            check.name,
-                            color = PrimaryText,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 11.sp)
-                        if (check.command.isNotEmpty())
-                            Text(
-                                "\$ ${check.command.joinToString(" ")}",
-                                color = SecondaryText,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp)
-                        if (check.output.isNotBlank())
-                            Text(
-                                check.output,
-                                color = SecondaryText,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                modifier = Modifier.padding(top = 2.dp))
-                      }
+                val checksWithOutput =
+                    state.checks?.checks.orEmpty().filter {
+                      it.command.isNotEmpty() || it.output.isNotBlank()
                     }
-                  }
-            }
-          }
-          Spacer(Modifier.height(10.dp))
+                if (state.checks?.checks.orEmpty().isNotEmpty() || checksWithOutput.isNotEmpty())
+                    ReviewEvidenceDetails(
+                        title = "Detailed evidence",
+                        diagnostics = emptyList(),
+                        checks = state.checks?.checks.orEmpty(),
+                        expanded = checksEvidenceExpanded,
+                        onToggle = { checksEvidenceExpanded = !checksEvidenceExpanded })
+              }
           ReadOnlyImpactPane(state.impact, state.gitStatus)
-          EngineeringInsightPanel(
-              state.draft?.engineeringInsight,
-              stale = state.draft?.state.equals("stale", ignoreCase = true),
-              scopeLabel = "Current candidate")
-          Spacer(Modifier.height(12.dp))
-          MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
-            if (decision.eligible) {
-              Text("Ready to apply", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-              Text(
-                  "Only the named declaration in the named file will change.",
-                  color = SecondaryText,
-                  fontSize = 12.sp,
-                  modifier = Modifier.padding(top = 4.dp))
-              MiniOrcaButton(
-                  onClick = applicationActions.apply,
-                  tone = ActionTone.Positive,
-                  modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    Text(decision.actionLabel)
-                  }
-            } else {
-              Text("Apply unavailable", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-              Text(
-                  decision.reason,
-                  color = Warning,
-                  fontSize = 11.sp,
-                  modifier = Modifier.padding(top = 5.dp))
-            }
+          state.draft?.engineeringInsight?.let { insight ->
+            EngineeringInsightPanel(
+                insight,
+                stale = state.draft.state.equals("stale", ignoreCase = true),
+                scopeLabel = "Current candidate")
+            IdeHorizontalSeparator()
           }
+          ReviewSection(
+              title = "Apply",
+              icon = DesktopIcon.Check,
+              stateLabel = if (decision.eligible) "Ready to apply" else "Unavailable",
+              stateTint = if (decision.eligible) Success else Warning) {
+                if (decision.eligible) {
+                  Text("Ready to apply", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+                  Text(
+                      "Only the named declaration in the named file will change.",
+                      color = SecondaryText,
+                      fontSize = 12.sp,
+                      modifier = Modifier.padding(top = 4.dp))
+                  MiniOrcaButton(
+                      onClick = applicationActions.apply,
+                      tone = ActionTone.Positive,
+                      modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Text(decision.actionLabel)
+                      }
+                } else {
+                  Text("Apply unavailable", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+                  Text(
+                      decision.reason,
+                      color = Warning,
+                      fontSize = 11.sp,
+                      modifier = Modifier.padding(top = 5.dp))
+                }
+              }
         }
   }
 }
@@ -516,6 +484,99 @@ internal data class DraftApplicationActions(
 )
 
 @Composable
+private fun ReviewSection(
+    title: String,
+    icon: DesktopIcon,
+    stateLabel: String,
+    stateTint: Color,
+    actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+  Column(Modifier.fillMaxWidth()) {
+    IdePaneHeader(
+        title = title,
+        icon = icon,
+        stateLabel = stateLabel,
+        stateTint = stateTint,
+        actions = actions)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) { content() }
+    IdeHorizontalSeparator()
+  }
+}
+
+@Composable
+private fun ReviewDisclosureSection(
+    title: String,
+    icon: DesktopIcon,
+    stateLabel: String,
+    stateTint: Color,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+  Column(Modifier.fillMaxWidth()) {
+    IdePaneHeader(
+        title = title,
+        icon = icon,
+        stateLabel = stateLabel,
+        stateTint = stateTint,
+        expanded = expanded,
+        onToggle = onToggle)
+    if (expanded)
+        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) { content() }
+    IdeHorizontalSeparator()
+  }
+}
+
+@Composable
+private fun ReviewEvidenceDetails(
+    title: String,
+    diagnostics: List<DeclarationFinding>,
+    checks: List<DraftCheck>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+  val detailCount = diagnostics.size + checks.size
+  IdeDisclosureHeader(
+      title = title,
+      expanded = expanded,
+      onToggle = onToggle,
+      stateLabel = "$detailCount ${if (detailCount == 1) "item" else "items"}")
+  if (expanded)
+      SelectionContainer {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+          diagnostics.forEach { diagnostic ->
+            Text(
+                "${diagnostic.code}: ${diagnostic.message}",
+                color = Error,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 3.dp))
+          }
+          checks.forEach { check ->
+            Text(
+                "${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}",
+                color = evidenceColor(checkStatus(check.state)),
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp))
+            if (check.command.isNotEmpty())
+                Text(
+                    "\$ ${check.command.joinToString(" ")}",
+                    color = SecondaryText,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp)
+            if (check.output.isNotBlank())
+                Text(
+                    check.output,
+                    color = SecondaryText,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(top = 2.dp))
+          }
+        }
+      }
+}
+
+@Composable
 private fun EvidenceRow(row: ReviewEvidenceRow) {
   Text(row.label, color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
   Text(
@@ -527,36 +588,43 @@ private fun EvidenceRow(row: ReviewEvidenceRow) {
 
 @Composable
 private fun ReadOnlyImpactPane(impact: ImpactPreview?, gitStatus: GitStatus?) {
-  MiniOrcaPanel(Modifier.fillMaxWidth()) {
-    SectionLabel("ADVISORY IMPACT · READ-ONLY")
-    if (impact?.references.isNullOrEmpty()) {
-      Text(
-          advisoryImpactLabel(impact),
-          color = SecondaryText,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 4.dp))
-    } else {
-      Text(
-          advisoryImpactLabel(impact),
-          color = SecondaryText,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 4.dp))
-      impact!!.references.forEach { reference ->
+  var expanded by rememberSaveable { mutableStateOf(false) }
+  ReviewDisclosureSection(
+      title = "Project context",
+      icon = DesktopIcon.Branch,
+      stateLabel = "Advisory · read-only",
+      stateTint = SecondaryText,
+      expanded = expanded,
+      onToggle = { expanded = !expanded }) {
+        SectionLabel("ADVISORY IMPACT · READ-ONLY")
+        if (impact?.references.isNullOrEmpty()) {
+          Text(
+              advisoryImpactLabel(impact),
+              color = SecondaryText,
+              fontSize = 11.sp,
+              modifier = Modifier.padding(top = 4.dp))
+        } else {
+          Text(
+              advisoryImpactLabel(impact),
+              color = SecondaryText,
+              fontSize = 11.sp,
+              modifier = Modifier.padding(top = 4.dp))
+          impact.references.forEach { reference ->
+            Text(
+                "${reference.confidence} · ${reference.path} · ${reference.reason}",
+                color = SecondaryText,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp))
+          }
+        }
+        Spacer(Modifier.height(10.dp))
+        SectionLabel("GIT CONTEXT · READ-ONLY")
         Text(
-            "${reference.confidence} · ${reference.path} · ${reference.reason}",
+            gitContextLabel(gitStatus),
             color = SecondaryText,
             fontSize = 11.sp,
             modifier = Modifier.padding(top = 4.dp))
       }
-    }
-    Spacer(Modifier.height(10.dp))
-    SectionLabel("GIT CONTEXT · READ-ONLY")
-    Text(
-        gitContextLabel(gitStatus),
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 4.dp))
-  }
 }
 
 internal fun checkStatus(state: String): ReviewEvidenceStatus =

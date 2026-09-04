@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.input.TextFieldValue
 import java.io.File
 import javax.swing.JFileChooser
 
@@ -27,6 +28,15 @@ private enum class ComposerFocusTarget {
   Chat,
   Draft
 }
+
+private data class DraftFieldIdentity(
+    val id: String,
+    val revision: Long,
+    val hash: String,
+)
+
+private fun draftFieldIdentity(editor: EditableDraftState?): DraftFieldIdentity? =
+    editor?.serverDraft?.let { DraftFieldIdentity(it.id, it.revision, it.hash) }
 
 private sealed interface PendingDraftDiscard {
   val currentDraft: CurrentEditIdentity
@@ -69,7 +79,9 @@ internal fun MiniOrcaApp(
   var showPalette by remember { mutableStateOf(false) }
   var chatMode by remember { mutableStateOf(ChatEditMode.ReplaceSymbol) }
   var newChatSymbol by remember { mutableStateOf("") }
-  var chatMessage by remember { mutableStateOf("") }
+  var chatMessage by remember { mutableStateOf(TextFieldValue()) }
+  var draftFieldKey by remember { mutableStateOf<DraftFieldIdentity?>(null) }
+  var draftFieldValue by remember { mutableStateOf(TextFieldValue()) }
   var pendingImportPath by remember { mutableStateOf<String?>(null) }
   var composerRequested by remember { mutableStateOf(false) }
   var pendingComposerFocus by remember { mutableStateOf<ComposerFocusTarget?>(null) }
@@ -111,7 +123,7 @@ internal fun MiniOrcaApp(
     if (appState.preparedAction.isNotBlank()) contextAction = appState.preparedAction
     if (appState.preparedRequest.isNotBlank()) {
       if (appState.preparedTaskSpec != null) chatMode = ChatEditMode.ReplaceSymbol
-      chatMessage = appState.preparedRequest
+      chatMessage = TextFieldValue(appState.preparedRequest)
       composerRequested = true
     }
   }
@@ -126,10 +138,18 @@ internal fun MiniOrcaApp(
   }
   LaunchedEffect(appState.review.draft?.id, appState.review.draft?.revision) {
     if (appState.review.draft != null) {
-      chatMessage = ""
+      chatMessage = TextFieldValue()
       layout = layout.withEditorSurface(EditorSurface.Source)
     }
   }
+  val activeDraftFieldIdentity = draftFieldIdentity(appState.review.editor)
+  LaunchedEffect(activeDraftFieldIdentity) {
+    draftFieldKey = activeDraftFieldIdentity
+    draftFieldValue = TextFieldValue(appState.review.editor?.declaration.orEmpty())
+  }
+  val activeDraftFieldValue =
+      if (draftFieldKey == activeDraftFieldIdentity) draftFieldValue
+      else TextFieldValue(appState.review.editor?.declaration.orEmpty())
   LaunchedEffect(workflow.contextManifest) {
     if (workflow.contextManifest != null) showContext = true
   }
@@ -182,13 +202,13 @@ internal fun MiniOrcaApp(
     when (val pending = pendingDraftDiscard) {
       is PendingDraftDiscard.Replace -> {
         presenter.discardDraft()
-        chatMessage = ""
+        chatMessage = TextFieldValue()
         pendingDraftDiscard = null
         startReplaceEdit(pending.request)
       }
       is PendingDraftDiscard.Create -> {
         presenter.discardDraft()
-        chatMessage = ""
+        chatMessage = TextFieldValue()
         pendingDraftDiscard = null
         startCreateDeclaration()
       }
@@ -317,23 +337,26 @@ internal fun MiniOrcaApp(
                   target = target,
                   mode = chatMode,
                   newSymbol = newChatSymbol,
-                  message = chatMessage,
+                  message = chatMessage.text,
                   sending = workflow.generating,
                   functionModel = functionModel,
                   remoteConfirmed = workflow.providerConfirmed(ModelScope.Function),
                   chatFocus = chatFocusRequester,
                   draftFocus = draftFocusRequester,
+                  messageInput = chatMessage,
+                  draftInput = activeDraftFieldValue,
               ),
           conversationActions =
               AssistantConversationActions(
-                  updateMessage = { chatMessage = it },
+                  updateMessage = { chatMessage = TextFieldValue(it) },
                   updateNewSymbol = { newChatSymbol = it },
                   confirmRemoteProvider = {
                     presenter.setProviderConfirmation(ModelScope.Function, it)
                   },
                   inspectContext = { presenter.inspectContext(contextAction) },
-                  send = { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage) },
+                  send = { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage.text) },
                   cancel = presenter::cancelGeneration,
+                  updateMessageValue = { chatMessage = it },
               ),
           editorActions =
               DraftEditorActions(
@@ -342,6 +365,10 @@ internal fun MiniOrcaApp(
                   },
                   updateImports = { presenter.dispatch(DesktopEvent.DraftEdited(imports = it)) },
                   validate = presenter::validateEditableDraft,
+                  updateDeclarationValue = {
+                    draftFieldValue = it
+                    presenter.dispatch(DesktopEvent.DraftEdited(declaration = it.text))
+                  },
               ),
           modifier = modifier,
       )
@@ -437,7 +464,7 @@ internal fun MiniOrcaApp(
           appState,
           chatMode,
           newChatSymbol,
-          chatMessage,
+          chatMessage.text,
           sending = workflow.generating,
           functionModel = functionModel,
           remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Function),
@@ -497,7 +524,7 @@ internal fun MiniOrcaApp(
               },
               validateDraft = presenter::validateEditableDraft,
               runDraftChecks = presenter::runDraftChecks,
-              generate = { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage) },
+              generate = { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage.text) },
               cancelGeneration = presenter::cancelGeneration,
               dismissContext = {
                 showContext = false

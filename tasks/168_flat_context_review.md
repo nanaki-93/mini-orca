@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -37,10 +37,10 @@ Inspect these boundaries before editing; change only files needed for this task.
 
 ## Acceptance criteria
 
-- [ ] The right pane reads as a continuous tool window with flat sections and compact typography, not nested cards.
-- [ ] Every destructive or remote operation remains named and guarded; stale/invalid/missing evidence cannot enable Apply.
-- [ ] Collapse, tab changes, narrow drawers, and reopen preserve relevant input/draft state and restore focus correctly.
-- [ ] Local-only Preview controls remain incapable of backend calls or workflow-state mutation.
+- [x] The right pane reads as a continuous tool window with flat sections and compact typography, not nested cards.
+- [x] Every destructive or remote operation remains named and guarded; stale/invalid/missing evidence cannot enable Apply.
+- [x] Collapse, tab changes, narrow drawers, and reopen preserve relevant input/draft state and restore focus correctly.
+- [x] Local-only Preview controls remain incapable of backend calls or workflow-state mutation.
 
 ## Verification
 
@@ -61,6 +61,8 @@ prompt. Do not create a partial/completion commit while acceptance is blocked; n
 
 ## Execution record
 
-Not started. Record actual commands/results, evidence paths, exceptions approved by
-the user, and any runtime/configuration impact during execution. Do not prefill passing results.
-
+- Replaced the right-pane cards with flat scope headers, compact 8dp content insets, 1dp dividers, and independent disclosures. Assistant chat and draft inputs now use retained `TextFieldValue` state and the shared dark multiline field, preserving selections through tab/drawer recomposition.
+- Kept the existing presenter and domain guards authoritative: remote confirmation remains adjacent to named actions; review evidence, Apply, receipt, and Undo retain their named guarded controls. Preview was exercised without dispatching any context action.
+- Passed `env JAVA_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem ./desktop/gradlew -p desktop spotlessCheck detekt test -Porg.gradle.java.installations.paths=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home`.
+- Passed `env JAVA_HOME=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home ./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput=/Users/marcoandreose/DEV/lab/mini-orca/desktop/build/reports/ui-precision/task-168`; inspected no-symbol Context, invalid-draft Assistant/Review, ready Review, and receipt renders at `desktop/build/reports/ui-precision/task-168/`.
+- Passed `git diff --check`. The JBR emitted its known restricted-native-access and Jewel `Unsafe` deprecation warnings during visual tests; no runtime or configuration changes were made.

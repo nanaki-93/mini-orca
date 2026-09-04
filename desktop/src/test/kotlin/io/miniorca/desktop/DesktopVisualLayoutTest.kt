@@ -506,16 +506,24 @@ class DesktopVisualLayoutTest {
             draftId = draft.id,
             draftRevision = draft.revision,
             draftHash = draft.hash)
+    val invalidDraft =
+        draft.copy(
+            validation =
+                DeclarationValidation(
+                    applicable = false,
+                    scopeMode = "replace_symbol",
+                    diagnostics = listOf(DeclarationFinding("syntax", "missing closing brace")),
+                    diff = requireNotNull(draft.validation).diff))
     var reviewActions = 0
     var mutations = 0
-    val reviewState =
+    val invalidReviewState =
         ReviewToolWindowState(
             project,
             file,
             symbol,
             null,
-            editableDraft(draft),
-            draft,
+            editableDraft(invalidDraft),
+            invalidDraft,
             failedChecks,
             null,
             null,
@@ -523,25 +531,41 @@ class DesktopVisualLayoutTest {
             false)
     ComposeVisualFixture(800, 700, 1.3f) {
           ReviewToolWindow(
-              reviewState,
+              invalidReviewState,
               ReviewToolWindowActions(
                   { reviewActions++ }, { reviewActions++ }, { reviewActions++ }),
               DraftApplicationActions({ mutations++ }, { mutations++ }))
         }
         .use { fixture ->
-          fixture.render("review-failed-800-1.3")
-          assertTrue(fixture.hasText("Validation"))
+          fixture.render("review-invalid-draft-800-1.3")
+          assertTrue(fixture.hasText("Review evidence"))
           assertTrue(fixture.hasText("Apply unavailable"))
-          fixture.clickText("Show command output (1)")
-          fixture.render()
+          fixture.clickText("Detailed evidence")
+          fixture.render("review-invalid-draft-details-800-1.3")
           assertTrue(fixture.hasText("expected failure evidence"))
           kotlin.test.assertEquals(0, reviewActions)
           kotlin.test.assertEquals(0, mutations)
         }
 
+    val readyChecks =
+        failedChecks.copy(checks = listOf(DraftCheck("go test", required = true, state = "passed")))
+    ComposeVisualFixture(800, 700, 1.3f) {
+          ReviewToolWindow(
+              invalidReviewState.copy(
+                  editor = editableDraft(draft), draft = draft, checks = readyChecks),
+              ReviewToolWindowActions({}, {}, {}),
+              DraftApplicationActions({ mutations++ }, { mutations++ }))
+        }
+        .use { fixture ->
+          fixture.render("review-ready-800-1.3")
+          assertTrue(fixture.hasText("Ready to apply"))
+          assertTrue(fixture.hasText("Apply Serve to internal/api/server.go"))
+          kotlin.test.assertEquals(0, mutations)
+        }
+
     ComposeVisualFixture(800, 360, 1.3f) {
           ReviewToolWindow(
-              reviewState.copy(
+              invalidReviewState.copy(
                   checks = null,
                   applied =
                       ApplyResult(
@@ -566,7 +590,7 @@ class DesktopVisualLayoutTest {
             symbolInspectorUiState(
                 selectedFile = file,
                 symbols = listOf(symbol),
-                selectedSymbol = symbol,
+                selectedSymbol = null,
                 analysis = FileAnalysis(file.path, "stale", purpose = "Routes incoming requests."),
                 analysisInProgress = false,
                 provider =
@@ -596,11 +620,15 @@ class DesktopVisualLayoutTest {
               Modifier.fillMaxSize())
         }
         .use { fixture ->
-          fixture.render("context-consent-800-1.3")
+          fixture.render("context-no-symbol-800-1.3")
+          assertTrue(fixture.hasText("Focused analysis"))
           assertTrue(fixture.hasText("Actions"))
           assertTrue(fixture.hasText("Confirm remote destination"))
           assertTrue(
               fixture.hasText("Preview only · Complexity and readability scores unavailable."))
+          fixture.clickText("Generate unit test")
+          fixture.render("context-preview-isolation-800-1.3")
+          assertTrue(fixture.hasText("Generate unit test · Preview"))
           kotlin.test.assertEquals(0, contextActions)
         }
 
@@ -621,8 +649,8 @@ class DesktopVisualLayoutTest {
                   project,
                   file,
                   session,
-                  draft,
-                  EditableDraftState(draft, status = DraftEditorStatus.Stale),
+                  invalidDraft,
+                  editableDraft(invalidDraft),
                   ChatTarget(ChatEditMode.ReplaceSymbol, symbol.name),
                   ChatEditMode.ReplaceSymbol,
                   "",
@@ -648,10 +676,10 @@ class DesktopVisualLayoutTest {
               Modifier.fillMaxSize())
         }
         .use { fixture ->
-          fixture.render("assistant-stale-800-1.3")
+          fixture.render("assistant-invalid-800-1.3")
           assertTrue(fixture.hasText("Conversation"))
-          assertTrue(fixture.hasText("Editable draft · stale"))
-          assertTrue(fixture.hasText("Draft is stale. Start a new conversation."))
+          assertTrue(fixture.hasText("Editable draft"))
+          assertTrue(fixture.hasText("Fix validation diagnostics before continuing."))
           assertTrue(fixture.hasText("Confirm remote destination"))
           kotlin.test.assertEquals(0, assistantActions)
         }
