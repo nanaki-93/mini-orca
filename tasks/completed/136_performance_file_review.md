@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -100,3 +100,15 @@ feat(performance): add source-based file review
 ```
 
 Do not amend, squash, tag, or push. Verify no Task 136 work remains uncommitted.
+
+## Verification evidence
+
+- `make fmt-check`, `go test ./...`, `make test-race`, `make vet`, and
+  `git diff --check` — passed.
+- `make quality` is explicitly deferred by user authorization: its unreachable
+  code rule rejects this task's intentionally internal-only review operation.
+  Task 137 will make the operation reachable through the explicit bounded job
+  and API, after which the full quality gate must pass before final acceptance.
+- Parser/cache fixtures cover valid empty output, invalid anchors, source-free
+  persistence, and stale cache identity. No route, job, UI, source mutation, or
+  project-code execution was added in this task.
