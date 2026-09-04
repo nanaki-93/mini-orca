@@ -302,23 +302,132 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun baselineCapturesTheOpenEngineeringInsightDisclosure() {
-    ComposeVisualFixture(720, 420) {
-          EngineeringInsightPanel(
-              EngineeringInsight(
-                  mechanism = "The handler validates its identifier before the repository call.",
-                  whyItMattersHere = "The returned error remains distinguishable for the caller.",
-                  tradeoffOrFailureMode =
-                      "Malformed input otherwise reaches the persistence layer.",
-                  transferableLesson = "Keep boundary validation close to request handling."),
-              scopeLabel = "Visual fixture")
+  fun insightDisclosureUsesKeyboardToggleAndPreservesTheFullStaleInterpretation() {
+    val original = EngineeringInsightPreference.load()
+    val insight =
+        EngineeringInsight(
+            mechanism = "The handler validates its identifier before the repository call.",
+            whyItMattersHere = "The returned error remains distinguishable for the caller.",
+            tradeoffOrFailureMode = "Malformed input otherwise reaches the persistence layer.",
+            transferableLesson = "Keep boundary validation close to request handling.")
+    val prose =
+        listOf(
+                insight.mechanism,
+                insight.whyItMattersHere,
+                insight.tradeoffOrFailureMode,
+                insight.transferableLesson)
+            .joinToString(" ")
+
+    try {
+      EngineeringInsightPreference.save(false)
+      ComposeVisualFixture(720, 420, 1.3f) {
+            EngineeringInsightPanel(insight, stale = true, scopeLabel = "Visual fixture")
+          }
+          .use { fixture ->
+            fixture.render("engineering-insight-collapsed-720-1.3")
+            assertTrue(fixture.hasText("Engineering insight"))
+            assertTrue(fixture.hasText("AI interpretation · Visual fixture · stale"))
+            assertTrue(fixture.stateDescription("Engineering insight") == "Collapsed")
+            assertFalse(fixture.hasText(prose))
+            assertTrue(fixture.requestFocus("Engineering insight"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render("engineering-insight-expanded-720-1.3")
+            assertTrue(fixture.stateDescription("Engineering insight") == "Expanded")
+            assertTrue(fixture.hasText(prose))
+            assertFalse(fixture.hasText("Close insight"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+            fixture.render()
+            assertFalse(fixture.hasText(prose))
+            assertTrue(fixture.isFocused("Engineering insight"))
+          }
+      ComposeVisualFixture(360, 220, 1.3f) {
+            EngineeringInsightPanel(insight, stale = true, scopeLabel = "File")
+          }
+          .use { fixture ->
+            fixture.render("engineering-insight-narrow-360-1.3")
+            fixture.assertTextFits("Engineering insight")
+            fixture.assertTextFits("AI interpretation · File · stale")
+          }
+      ComposeVisualFixture(360, 100) { EngineeringInsightPanel(null) }
+          .use { fixture -> assertFalse(fixture.hasText("Engineering insight")) }
+    } finally {
+      EngineeringInsightPreference.save(original)
+    }
+  }
+
+  @Test
+  fun filtersAndToolWindowHeadersKeepInteractionLocalAtNarrowScale() {
+    var workflowActions = 0
+    ComposeVisualFixture(480, 420, 1.3f) {
+          ProblemsToolWindow(
+              ProblemsToolWindowState(visualFixtureFindings, false),
+              FindingActions(
+                  openFinding = { workflowActions++ },
+                  prepareFinding = { workflowActions++ },
+                  triageFinding = { _, _ -> workflowActions++ }))
         }
         .use { fixture ->
-          val wasCollapsed = fixture.hasText("> Engineering insight")
-          if (wasCollapsed) fixture.clickText("> Engineering insight")
-          fixture.render("engineering-insight-open")
-          assertTrue(fixture.hasText("Close insight"))
-          if (wasCollapsed) fixture.clickText("⌄ Engineering insight")
+          fixture.render("findings-filters-collapsed-480-1.3")
+          assertTrue(fixture.stateDescription("Filters") == "Collapsed")
+          assertTrue(fixture.requestFocus("Filters"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render("findings-filters-expanded-480-1.3")
+          assertTrue(fixture.stateDescription("Filters") == "Expanded")
+          assertTrue(fixture.hasText("Source"))
+          assertTrue(fixture.hasText("Lifecycle"))
+          assertTrue(fixture.hasScrollableContent())
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.stateDescription("Filters") == "Collapsed")
+          kotlin.test.assertEquals(0, workflowActions)
+        }
+
+    var closes = 0
+    var opens = 0
+    ComposeVisualFixture(360, 220, 1.3f) {
+          Column(Modifier.fillMaxSize().background(AppBackground)) {
+            DockedToolWindow(
+                title = "Files",
+                content = { Text("Indexed relative paths", modifier = it.padding(8.dp)) },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                onClose = { closes++ })
+            BottomToolWindowRegion(
+                layout = DesktopLayoutState(bottomCollapsed = true),
+                availableToolWindows = listOf(BottomToolWindow.Output),
+                summaries =
+                    mapOf(BottomToolWindow.Output to BottomToolWindowSummary("Output ready")),
+                onSelect = { opens++ },
+                onCollapse = {},
+                onHeightDelta = {},
+                onHeightCommit = {},
+                content = { _, _ -> })
+          }
+        }
+        .use { fixture ->
+          fixture.render("tool-window-controls-360-1.3")
+          fixture.clickDescription("Close Files drawer")
+          fixture.clickText("Open tools")
+          kotlin.test.assertEquals(1, closes)
+          kotlin.test.assertEquals(1, opens)
+        }
+
+    var overlayDismissals = 0
+    ComposeVisualFixture(480, 420, 1.3f) {
+          BottomToolWindowOverlay(
+              layout = DesktopLayoutState(activeBottomToolWindow = BottomToolWindow.Output),
+              availableToolWindows = listOf(BottomToolWindow.Output),
+              summaries = mapOf(BottomToolWindow.Output to BottomToolWindowSummary("Output ready")),
+              onSelect = {},
+              onDismiss = { overlayDismissals++ },
+              content = { _, modifier -> Text("Read-only output", modifier = modifier) })
+        }
+        .use { fixture ->
+          fixture.render("bottom-tools-overlay-480-1.3")
+          assertTrue(fixture.hasText("Bottom tools"))
+          assertTrue(fixture.hasText("Output"))
+          fixture.clickText("Close")
+          kotlin.test.assertEquals(1, overlayDismissals)
         }
   }
 
@@ -420,7 +529,19 @@ private class ComposeVisualFixture(
   }
 
   fun clickText(label: String) {
-    var node: SemanticsNode? = textNodes(label).firstOrNull()
+    clickNode(textNodes(label).firstOrNull(), label)
+  }
+
+  fun clickDescription(label: String) {
+    clickNode(
+        nodes().firstOrNull {
+          it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+        },
+        label)
+  }
+
+  private fun clickNode(start: SemanticsNode?, label: String) {
+    var node = start
     while (node != null) {
       val click = node.config.getOrNull(SemanticsActions.OnClick)?.action
       if (click != null) {
@@ -444,10 +565,29 @@ private class ComposeVisualFixture(
             .any { it.config.getOrNull(SemanticsProperties.Focused) == true }
       }
 
+  fun stateDescription(label: String): String? =
+      textNodes(label)
+          .asSequence()
+          .flatMap { node -> generateSequence(node) { it.parent } }
+          .mapNotNull { it.config.getOrNull(SemanticsProperties.StateDescription) }
+          .firstOrNull()
+
+  fun requestFocus(label: String): Boolean =
+      textNodes(label)
+          .asSequence()
+          .flatMap { node -> generateSequence(node) { it.parent } }
+          .mapNotNull { it.config.getOrNull(SemanticsActions.RequestFocus)?.action }
+          .firstOrNull()
+          ?.invoke() ?: false
+
   fun hasScrollableContent(): Boolean =
       nodes().any { it.config.getOrNull(SemanticsActions.ScrollBy) != null }
 
-  fun pressKey(key: Key): Boolean = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyDown))
+  fun pressKey(key: Key): Boolean {
+    val keyDown = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyDown))
+    val keyUp = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyUp))
+    return keyDown || keyUp
+  }
 
   fun dismissPopup(): Boolean =
       nodes()

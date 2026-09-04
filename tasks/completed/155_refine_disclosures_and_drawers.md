@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -96,5 +96,22 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+Passed `./desktop/gradlew -p desktop spotlessCheck detekt test
+-PvisualOutput="$PWD/desktop/build/reports/ui-refinement/task-155"` and `git diff
+--check` on 2026-09-04. Replaced the Engineering insight text-glyph toggle and
+redundant Close insight control with the shared semantic disclosure header,
+preserving its persisted expansion preference, explicit AI/stale state, local-only
+behavior, focus restoration, and complete bounded prose. The same header now owns
+advanced finding filters; their 520dp threshold stacks fields before 130% text can
+overlap content, and the Problems view uses one scroll region so expanded filters
+and findings remain reachable. Drawer headers now provide explicit close controls,
+and bottom pane/overlay headers share vector-icon open/collapse and title treatment.
+Visual review passed for `engineering-insight-collapsed-720-1.3.png`,
+`engineering-insight-expanded-720-1.3.png`,
+`engineering-insight-narrow-360-1.3.png`,
+`findings-filters-expanded-480-1.3.png`, and
+`tool-window-controls-360-1.3.png`. The production semantic harness exercises
+keyboard toggle/focus return, no-op disclosure/filter interactions, drawer close,
+and bottom-overlay dismissal. Detached dialog window rendering is not fully
+composited by the offscreen raster; native keyboard/window and screen-reader checks
+remain deferred to Tasks 159/160.

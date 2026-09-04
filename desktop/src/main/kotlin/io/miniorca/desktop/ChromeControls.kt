@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,8 +38,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.dismiss
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
@@ -111,6 +114,47 @@ internal fun ChromeTab(
           },
       content = content,
   )
+}
+
+/** A compact disclosure toggle with textual expanded state and a vector chevron. */
+@Composable
+internal fun IdeDisclosureHeader(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    stateLabel: String? = null,
+    stateTint: Color = SecondaryText,
+) {
+  BoxWithConstraints {
+    val stackState = stateLabel != null && maxWidth < 440.dp
+    ChromeButton(
+        onClick = onToggle,
+        modifier =
+            modifier.fillMaxWidth().semantics {
+              contentDescription =
+                  "$title, ${if (expanded) "expanded" else "collapsed"}${stateLabel?.let { ", $it" }.orEmpty()}"
+              stateDescription = if (expanded) "Expanded" else "Collapsed"
+            },
+        background = if (expanded) StrongSurface else Color.Transparent,
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+      DesktopLineIcon(
+          if (expanded) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
+          if (expanded) "Collapse $title" else "Expand $title",
+          iconSize = 16.dp)
+      androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+      if (stackState) {
+        Column(Modifier.weight(1f)) {
+          Text(title, fontSize = 12.sp)
+          stateLabel?.let { Text(it, color = stateTint, fontSize = 11.sp) }
+        }
+      } else {
+        Text(title, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        stateLabel?.let { Text(it, color = stateTint, fontSize = 11.sp, maxLines = 1) }
+      }
+    }
+  }
 }
 
 /** Retains Compose Desktop's menu placement and key handling behind shared IDE presentation. */

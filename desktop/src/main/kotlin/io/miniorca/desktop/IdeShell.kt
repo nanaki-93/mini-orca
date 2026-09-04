@@ -151,6 +151,7 @@ internal fun DockedToolWindow(
     title: String,
     content: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
+    onClose: (() -> Unit)? = null,
 ) {
   Column(
       modifier
@@ -159,15 +160,28 @@ internal fun DockedToolWindow(
           .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
           .semantics { contentDescription = "$title tool window" },
   ) {
-    Text(
-        title,
-        color = PrimaryText,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier =
-            Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 10.dp, vertical = 10.dp))
+    ToolWindowHeader(title, onClose)
     content(Modifier.fillMaxWidth().weight(1f))
   }
+}
+
+@Composable
+private fun ToolWindowHeader(title: String, onClose: (() -> Unit)?) {
+  Row(
+      Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 8.dp),
+      verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            title,
+            color = PrimaryText,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f))
+        onClose?.let { close ->
+          ChromeButton(onClick = close, contentPadding = PaddingValues(4.dp)) {
+            DesktopLineIcon(DesktopIcon.Close, "Close $title drawer", iconSize = 16.dp)
+          }
+        }
+      }
 }
 
 @Composable
@@ -221,7 +235,12 @@ internal fun BottomToolWindowRegion(
           ChromeButton(
               onClick = if (collapsed) ({ onSelect(activeToolWindow) }) else onCollapse,
           ) {
-            Text(if (collapsed) "Open" else "Collapse", fontSize = 11.sp)
+            DesktopLineIcon(
+                if (collapsed) DesktopIcon.ChevronRight else DesktopIcon.ChevronDown,
+                if (collapsed) "Open tools" else "Collapse tools",
+                iconSize = 16.dp)
+            Spacer(Modifier.width(4.dp))
+            Text(if (collapsed) "Open tools" else "Collapse", fontSize = 11.sp)
           }
         }
     if (!collapsed) content(activeToolWindow, Modifier.fillMaxWidth().weight(1f))
@@ -262,10 +281,11 @@ internal fun NarrowBottomToolWindowSummary(
         maxLines = 1,
         modifier = Modifier.weight(1f).padding(start = 8.dp),
     )
-    MiniOrcaButton(
-        onClick = onOpen, tone = ActionTone.Navigation, density = ButtonDensity.Toolbar) {
-          Text("Open", fontSize = 11.sp)
-        }
+    ChromeButton(onClick = onOpen) {
+      DesktopLineIcon(DesktopIcon.ChevronRight, "Open tools", iconSize = 16.dp)
+      Spacer(Modifier.width(4.dp))
+      Text("Open tools", fontSize = 11.sp)
+    }
   }
 }
 
@@ -285,7 +305,19 @@ internal fun BottomToolWindowOverlay(
           ?: availableToolWindows.first()
   AlertDialog(
       onDismissRequest = onDismiss,
-      title = { Text("Bottom tools · ${bottomToolWindowLabel(activeToolWindow)}") },
+      title = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          DesktopLineIcon(
+              bottomToolWindowIcon(activeToolWindow),
+              bottomToolWindowLabel(activeToolWindow),
+              iconSize = 18.dp)
+          Spacer(Modifier.width(8.dp))
+          Column {
+            Text("Bottom tools", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+            Text(bottomToolWindowLabel(activeToolWindow), color = SecondaryText, fontSize = 11.sp)
+          }
+        }
+      },
       text = {
         Column(Modifier.fillMaxWidth().semantics { contentDescription = "Bottom tools overlay" }) {
           BottomToolWindowTabs(
