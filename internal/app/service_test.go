@@ -3,12 +3,14 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
@@ -171,6 +173,44 @@ func TestAnalyzeProjectStoresStructuredReport(t *testing.T) {
 	}
 	if len(received.Messages) != 2 || !strings.Contains(received.Messages[0].Content, "exactly one JSON object") {
 		t.Fatalf("project analysis prompt = %+v", received.Messages)
+	}
+}
+
+func TestAnalyzeProjectKeepsInventoryWhenProjectSummaryTimesOut(t *testing.T) {
+	providerCanceled := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		<-r.Context().Done()
+		providerCanceled <- struct{}{}
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(scopedTestConfig(server.URL), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	analysis, err := service.AnalyzeProject(ctx, root)
+	if err != nil {
+		t.Fatalf("AnalyzeProject() error = %v", err)
+	}
+	if analysis.FileCount != 1 || analysis.Report.Status != project.ProjectAnalysisStatusFailed || analysis.Report.Failure == "" {
+		t.Fatalf("timed-out analysis = %+v", analysis)
+	}
+	select {
+	case <-providerCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("project summary request was not canceled")
 	}
 }
 

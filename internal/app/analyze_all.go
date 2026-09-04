@@ -26,6 +26,7 @@ const (
 	analysisAllFileRunning   = "running"
 	analysisAllFileCompleted = "completed"
 	analysisAllFileFailed    = "failed"
+	analysisAllTimeoutError  = "analysis timed out"
 
 	defaultAnalyzeAllFileLimit = 100
 	maxAnalyzeAllFileLimit     = 500
@@ -374,7 +375,7 @@ func (s *Service) analysisAllCandidates(index *project.ProjectIndex, limit int) 
 		if len(files) == limit {
 			break
 		}
-		if file.Binary {
+		if !isSemanticAnalysisCandidate(file) {
 			continue
 		}
 		cache, input, err := s.fileAnalysisCacheInput(analysis, &file, file.ContentHash)
@@ -393,6 +394,10 @@ func (s *Service) analysisAllCandidates(index *project.ProjectIndex, limit int) 
 		}
 	}
 	return files, nil
+}
+
+func isSemanticAnalysisCandidate(file project.IndexFile) bool {
+	return !file.Binary && file.Language != "Text" && file.Language != "Markdown"
 }
 
 func (s *Service) startAnalyzeAllWorker() {
@@ -463,7 +468,7 @@ func (s *Service) nextAnalyzeAllFile() (string, bool) {
 		return "", false
 	}
 	for i := range current.Files {
-		if current.Files[i].Status == analysisAllFilePending || current.Files[i].Status == analysisAllFileFailed && current.Files[i].Attempts <= current.MaxRetries {
+		if current.Files[i].Status == analysisAllFilePending || shouldRetryAnalyzeAllFile(current.Files[i], current.MaxRetries) {
 			current.Files[i].Status = analysisAllFileRunning
 			current.Files[i].Attempts++
 			current.Files[i].Error = ""
@@ -483,6 +488,10 @@ func (s *Service) nextAnalyzeAllFile() (string, bool) {
 	return "", false
 }
 
+func shouldRetryAnalyzeAllFile(file AnalyzeAllFileJob, maxRetries int) bool {
+	return file.Status == analysisAllFileFailed && file.Error != analysisAllTimeoutError && file.Attempts <= maxRetries
+}
+
 func (s *Service) recordAnalyzeAllResult(path string, cause error) {
 	s.analysisAll.mu.Lock()
 	job := s.analysisAll.job
@@ -496,9 +505,12 @@ func (s *Service) recordAnalyzeAllResult(path string, cause error) {
 		}
 		if cause == nil {
 			job.Files[i].Status = analysisAllFileCompleted
-		} else if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		} else if errors.Is(cause, context.DeadlineExceeded) {
 			job.Files[i].Status = analysisAllFileFailed
-			job.Files[i].Error = "analysis canceled or timed out"
+			job.Files[i].Error = analysisAllTimeoutError
+		} else if errors.Is(cause, context.Canceled) {
+			job.Files[i].Status = analysisAllFileFailed
+			job.Files[i].Error = "analysis canceled"
 		} else {
 			job.Files[i].Status = analysisAllFileFailed
 			job.Files[i].Error = "analysis failed"
