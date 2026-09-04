@@ -694,6 +694,55 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("go test · Failed · required"))
           assertTrue(fixture.hasText("expected failure evidence"))
         }
+
+    ComposeVisualFixture(800, 360, 1.3f) {
+          OutputToolWindow(
+              OutputToolWindowPresentation(
+                  listOf(
+                      OutputEntry("Generation", "Running", "Generating a preview-only draft."),
+                      OutputEntry(
+                          "Daemon failure",
+                          "Failed",
+                          "The daemon is unavailable.",
+                          "connection refused"),
+                  )))
+        }
+        .use { fixture ->
+          fixture.render("output-running-error-800-1.3")
+          assertTrue(fixture.hasText("Output"))
+          assertTrue(fixture.hasText("2 entries"))
+          assertTrue(fixture.hasText("Generation"))
+          assertTrue(fixture.hasText("Daemon failure"))
+          assertTrue(fixture.hasText("connection refused"))
+        }
+
+    var remoteConfirmation by mutableStateOf(false)
+    ComposeVisualFixture(480, 180, 1.3f) {
+          Column(Modifier.fillMaxSize().background(AppBackground).padding(8.dp)) {
+            RemoteProviderConfirmation(
+                scope = ModelScope.Analyze,
+                model =
+                    ScopedModel(
+                        scope = ModelScope.Analyze.wireValue,
+                        profile = "review-profile",
+                        model = "provider/reviewer",
+                        remoteProvider = true),
+                confirmed = remoteConfirmation,
+                onConfirmed = { remoteConfirmation = it },
+            )
+          }
+        }
+        .use { fixture ->
+          fixture.render("remote-consent-unconfirmed-480-1.3")
+          assertTrue(fixture.hasText("Confirm remote destination"))
+          assertEquals("Not confirmed", fixture.stateDescription("Confirm remote destination"))
+          fixture.clickText("Confirm remote destination")
+          fixture.render("remote-consent-confirmed-480-1.3")
+          assertTrue(remoteConfirmation)
+          assertTrue(fixture.hasText("Confirm remote destination · confirmed"))
+          assertEquals(
+              "Confirmed", fixture.stateDescription("Confirm remote destination · confirmed"))
+        }
   }
 
   @Test

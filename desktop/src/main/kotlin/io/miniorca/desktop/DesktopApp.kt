@@ -1,7 +1,6 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -661,22 +660,20 @@ private fun ProjectImportConfirmationDialog(
     onImport: () -> Unit,
     onCancel: () -> Unit,
 ) {
-  AlertDialog(
+  IdeDialog(
       onDismissRequest = onCancel,
       title = { Text("Confirm project analysis destination") },
-      text = {
+      content = {
         Column {
           Text("Import sends the selected project's analysis context to this provider.")
           RemoteProviderConfirmation(ModelScope.Analyze, model, confirmed, onConfirmed)
         }
       },
-      confirmButton = {
+      actions = {
+        MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel") }
         MiniOrcaButton(onClick = onImport, enabled = confirmed, tone = ActionTone.Primary) {
           Text("Import project")
         }
-      },
-      dismissButton = {
-        MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel") }
       },
   )
 }
@@ -687,18 +684,16 @@ private fun DraftDiscardDialog(
     onDiscard: () -> Unit,
     onCancel: () -> Unit
 ) {
-  AlertDialog(
+  IdeDialog(
       onDismissRequest = onCancel,
       title = { Text("Discard current draft?") },
-      text = {
+      content = {
         Text(
             "Discard the draft for ${pending.currentDraft.targetSymbol} and ${pending.nextLabel}? This only clears the in-memory conversation, draft, and focused checks.")
       },
-      confirmButton = {
-        MiniOrcaButton(onClick = onDiscard, tone = ActionTone.Destructive) { Text("Discard draft") }
-      },
-      dismissButton = {
+      actions = {
         MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Keep draft") }
+        MiniOrcaButton(onClick = onDiscard, tone = ActionTone.Destructive) { Text("Discard draft") }
       },
   )
 }

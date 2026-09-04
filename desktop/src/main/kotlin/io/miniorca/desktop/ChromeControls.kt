@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.PopupProperties
 
 /** Shared visual policy for all compact controls; Material is not the control implementation. */
@@ -351,7 +352,38 @@ internal fun IdeVerticalSeparator(modifier: Modifier = Modifier) {
   Box(modifier.fillMaxHeight().width(1.dp).background(PaneSeparator))
 }
 
-/** Retains Compose Desktop's menu placement and key handling behind shared IDE presentation. */
+/**
+ * Bounded desktop dialog surface that keeps standard Compose window behavior on the IDE palette.
+ */
+@Composable
+internal fun IdeDialog(
+    onDismissRequest: () -> Unit,
+    title: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+    actions: @Composable RowScope.() -> Unit,
+) {
+  Dialog(onDismissRequest = onDismissRequest) {
+    Column(
+        Modifier.widthIn(min = 320.dp, max = 640.dp)
+            .background(OverlaySurface, MiniOrcaShapes.medium)
+            .border(BorderStroke(1.dp, PaneSeparator), MiniOrcaShapes.medium)
+            .padding(16.dp)) {
+          title()
+          IdeHorizontalSeparator(Modifier.padding(vertical = 12.dp))
+          content()
+          Row(
+              Modifier.fillMaxWidth().padding(top = 16.dp),
+              horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+              content = actions)
+        }
+  }
+}
+
+/**
+ * Retains Compose Desktop's menu placement, dismissal, and keyboard handling behind shared IDE
+ * presentation. This is intentionally a non-themed popup primitive: the content surface and all
+ * rows are owned by the IDE controls below.
+ */
 internal object IdePopupMenuDefaults {
   val minWidth = 196.dp
   val maxWidth = 360.dp

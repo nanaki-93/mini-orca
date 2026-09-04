@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.Checkbox
-import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -181,11 +181,11 @@ private fun AnalysisRunHeader(
         fontSize = 13.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(top = 8.dp))
-    LinearProgressIndicator(
+    IdeProgressBar(
         progress = analysisRunProgress(run),
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(3.dp),
         color = statusTint,
-        backgroundColor = StrongSurface)
+        trackColor = StrongSurface)
     Text(
         "${run.completed} complete  ·  ${run.running} running  ·  ${run.remaining} remaining  ·  ${run.failed} failed",
         color = SecondaryText,
@@ -424,15 +424,21 @@ internal fun RemoteProviderConfirmation(
       modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
   )
   if (model.remoteProvider)
-      androidx.compose.foundation.layout.Row(
-          modifier = Modifier.padding(top = MiniOrcaSpacing.compact)) {
-            Checkbox(checked = confirmed, onCheckedChange = if (enabled) onConfirmed else null)
-            Text(
-                "Confirm remote destination",
-                color = SecondaryText,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 12.dp))
-          }
+      ChromeButton(
+          onClick = { onConfirmed(!confirmed) },
+          enabled = enabled,
+          selected = confirmed,
+          role = androidx.compose.ui.semantics.Role.Checkbox,
+          accessibleName = "Confirm remote destination",
+          modifier =
+              Modifier.padding(top = MiniOrcaSpacing.compact).semantics {
+                stateDescription = if (confirmed) "Confirmed" else "Not confirmed"
+              },
+      ) {
+        Text(if (confirmed) "✓" else "□", fontSize = 14.sp)
+        Spacer(Modifier.width(MiniOrcaSpacing.compact))
+        Text("Confirm remote destination${if (confirmed) " · confirmed" else ""}", fontSize = 11.sp)
+      }
 }
 
 @Composable

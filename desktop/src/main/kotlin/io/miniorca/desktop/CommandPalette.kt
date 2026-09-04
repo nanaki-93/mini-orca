@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -186,10 +185,10 @@ internal fun CommandPaletteDialog(
       else -> false
     }
   }
-  AlertDialog(
+  IdeDialog(
       onDismissRequest = onDismiss,
       title = { Text(commandSearchTitle(mode)) },
-      text = {
+      content = {
         Column {
           CompactSingleLineField(
               value = query,
@@ -221,7 +220,7 @@ internal fun CommandPaletteDialog(
           }
         }
       },
-      confirmButton = {
+      actions = {
         MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
       },
   )

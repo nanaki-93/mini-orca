@@ -1,6 +1,13 @@
 package io.miniorca.desktop
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -13,6 +20,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -20,13 +28,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Shapes
-import androidx.compose.material.Surface
+import androidx.compose.material.LocalContentColor
+import androidx.compose.material.ProvideTextStyle
 import androidx.compose.material.Text
-import androidx.compose.material.Typography
-import androidx.compose.material.darkColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -36,7 +42,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
@@ -136,12 +141,11 @@ internal fun ResponsiveFieldPair(
   }
 }
 
-internal val MiniOrcaShapes =
-    Shapes(
-        small = RoundedCornerShape(6.dp),
-        medium = RoundedCornerShape(6.dp),
-        large = RoundedCornerShape(8.dp),
-    )
+internal object MiniOrcaShapes {
+  val small = RoundedCornerShape(6.dp)
+  val medium = RoundedCornerShape(6.dp)
+  val large = RoundedCornerShape(8.dp)
+}
 
 internal object IdeTypography {
   val body = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, lineHeight = 20.sp)
@@ -156,16 +160,6 @@ internal object IdeTypography {
           lineHeight = 16.sp,
           letterSpacing = 0.15.sp)
 }
-
-internal val MiniOrcaTypography =
-    Typography(
-        defaultFontFamily = FontFamily.Default,
-        h6 = IdeTypography.body.copy(fontWeight = FontWeight.SemiBold),
-        body1 = IdeTypography.body,
-        body2 = IdeTypography.compactBody,
-        button = IdeTypography.action,
-        caption = IdeTypography.section,
-    )
 
 internal enum class ActionTone {
   Primary,
@@ -401,23 +395,10 @@ internal fun MiniOrcaButton(
 @Composable
 internal fun MiniOrcaTheme(content: @Composable () -> Unit) {
   IntUiTheme(isDark = true) {
-    MaterialTheme(
-        colors =
-            darkColors(
-                primary = MiniOrcaPalette.actionFill,
-                secondary = MiniOrcaPalette.selectionAccent,
-                background = MiniOrcaPalette.toolWindow,
-                surface = MiniOrcaPalette.toolWindow,
-                error = MiniOrcaPalette.error,
-                onPrimary = MiniOrcaPalette.onActionFill,
-                onBackground = MiniOrcaPalette.primaryText,
-                onSurface = MiniOrcaPalette.primaryText,
-                onError = MiniOrcaPalette.toolWindow,
-            ),
-        typography = MiniOrcaTypography,
-        shapes = MiniOrcaShapes,
-        content = content,
-    )
+    // Material's text primitive reads these locals, while all visual roles stay in the IDE palette.
+    CompositionLocalProvider(LocalContentColor provides PrimaryText) {
+      ProvideTextStyle(IdeTypography.body) { content() }
+    }
   }
 }
 
@@ -427,7 +408,6 @@ internal val EditorCanvas = MiniOrcaPalette.editorCanvas
 internal val OverlaySurface = MiniOrcaPalette.overlay
 internal val PaneSeparator = MiniOrcaPalette.paneSeparator
 
-// These aliases keep unmigrated Material call sites on the single semantic palette.
 internal val AppBackground = ToolWindowSurface
 internal val Chrome = ActivityRail
 internal val Panel = ToolWindowSurface
@@ -472,12 +452,50 @@ internal fun MiniOrcaPanel(
     contentPadding: PaddingValues = PaddingValues(MiniOrcaSpacing.roomy),
     content: @Composable () -> Unit,
 ) {
-  Surface(
-      modifier = modifier.border(BorderStroke(1.dp, Border), MiniOrcaShapes.small),
-      color = if (raised) Card else Panel,
-      shape = MiniOrcaShapes.small,
-  ) {
-    Column(Modifier.padding(contentPadding)) { content() }
+  Column(
+      modifier
+          .background(if (raised) Card else Panel, MiniOrcaShapes.small)
+          .border(BorderStroke(1.dp, Border), MiniOrcaShapes.small)
+          .padding(contentPadding)) {
+        content()
+      }
+}
+
+@Composable
+internal fun IdeBusyIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = FocusAccent,
+    strokeWidth: androidx.compose.ui.unit.Dp = 2.dp,
+) {
+  val rotation =
+      rememberInfiniteTransition(label = "ideBusyIndicator")
+          .animateFloat(
+              initialValue = 0f,
+              targetValue = 360f,
+              animationSpec =
+                  infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
+              label = "ideBusyIndicatorRotation")
+  Canvas(modifier) {
+    val stroke = strokeWidth.toPx()
+    drawArc(
+        color = color,
+        startAngle = rotation.value - 90f,
+        sweepAngle = 250f,
+        useCenter = false,
+        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke),
+    )
+  }
+}
+
+@Composable
+internal fun IdeProgressBar(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    color: Color = FocusAccent,
+    trackColor: Color = StrongSurface,
+) {
+  Box(modifier.background(trackColor)) {
+    Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(color))
   }
 }
 

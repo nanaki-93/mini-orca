@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -156,7 +155,7 @@ internal fun PreviewFeatureButton(
 
 @Composable
 internal fun PreviewFeatureDialog(feature: PreviewFeature, onDismiss: () -> Unit) {
-  AlertDialog(
+  IdeDialog(
       onDismissRequest = onDismiss,
       title = {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -165,7 +164,7 @@ internal fun PreviewFeatureDialog(feature: PreviewFeature, onDismiss: () -> Unit
           PreviewBadge()
         }
       },
-      text = {
+      content = {
         Text(
             previewFeatureDescription(feature),
             color = SecondaryText,
@@ -175,7 +174,7 @@ internal fun PreviewFeatureDialog(feature: PreviewFeature, onDismiss: () -> Unit
                   contentDescription = previewFeatureDescription(feature)
                 })
       },
-      confirmButton = {
+      actions = {
         MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Close") }
       },
   )

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -286,10 +285,10 @@ internal fun DesktopStatusDetailsDialog(
     presentation: DesktopStatusBarPresentation,
     onDismiss: () -> Unit,
 ) {
-  AlertDialog(
+  IdeDialog(
       onDismissRequest = onDismiss,
       title = { Text("Current status") },
-      text = {
+      content = {
         Column {
           presentation.segments.forEach { segment ->
             Text(
@@ -301,7 +300,7 @@ internal fun DesktopStatusDetailsDialog(
           }
         }
       },
-      confirmButton = {
+      actions = {
         MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Close") }
       },
   )

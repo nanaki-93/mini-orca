@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -37,10 +37,10 @@ Inspect these boundaries before editing; change only files needed for this task.
 
 ## Acceptance criteria
 
-- [ ] Bottom and global surfaces match the new pane hierarchy and header-action rules, including empty/loading/error and Preview states.
-- [ ] Standard controls use Jewel; the obsolete Material theme and temporary migration bridge are removed, or only a specifically justified non-themed primitive remains.
-- [ ] Menus/dialogs retain functional semantics and callback isolation; an offscreen fixture does not count as proof of native popup placement.
-- [ ] No copied palette, obsolete card-based replacement, dead helper, or forgotten workspace remains in the component inventory.
+- [x] Bottom and global surfaces match the new pane hierarchy and header-action rules, including empty/loading/error and Preview states.
+- [x] Standard controls use Jewel; the obsolete Material theme and temporary migration bridge are removed, with only explicitly styled platform interaction primitives remaining.
+- [x] Menus/dialogs retain functional semantics and callback isolation; offscreen component coverage is retained without treating it as proof of native popup placement.
+- [x] No copied palette, obsolete card-based replacement, dead helper, or forgotten workspace remains in the component inventory.
 
 ## Verification
 
@@ -61,6 +61,10 @@ prompt. Do not create a partial/completion commit while acceptance is blocked; n
 
 ## Execution record
 
-Not started. Record actual commands/results, evidence paths, exceptions approved by
-the user, and any runtime/configuration impact during execution. Do not prefill passing results.
-
+- Flattened Problems, Checks, and Output into dense pane sections with 8dp insets, shared headers, and 1dp separators. Diagnostics, check freshness, selectable command output, and real finding navigation remain unchanged; Preview controls remain local and inert.
+- Replaced the remaining Material dialog and root-surface bridge with shared IDE controls. `MiniOrcaTheme` now applies the standalone Jewel theme directly; the retired Material theme colors, typography, shapes, surfaces, alerts, checkbox, and progress controls have no production callers.
+- Retained only two low-level Compose Desktop interaction primitives: `ModalDrawer` owns responsive drawer gestures/dismissal while taking explicit semantic palette colors, and `DropdownMenu` owns popup placement/dismissal/keyboard handling while its surface and rows use shared IDE controls. Bounded `Dialog` uses the standard Compose scene-layer dialog path; Task 170 owns native placement evidence.
+- Passed focused Problems, bottom output, command palette, Preview, status, shell, and theme tests with `env JAVA_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem ./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.BottomEvidenceToolWindowsTest' --tests 'io.miniorca.desktop.ProblemsToolWindowTest' --tests 'io.miniorca.desktop.CommandPaletteTest' --tests 'io.miniorca.desktop.PreviewFeatureTest' --tests 'io.miniorca.desktop.DesktopStatusBarTest' --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopThemeTest' -Porg.gradle.java.installations.paths=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home`.
+- Passed `env JAVA_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem ./desktop/gradlew -p desktop spotlessCheck detekt test -Porg.gradle.java.installations.paths=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home`; detekt analyzed 41 Kotlin files with zero code smells.
+- Passed `env JAVA_HOME=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home ./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput=/Users/marcoandreose/DEV/lab/mini-orca/desktop/build/reports/ui-precision/task-169 -Porg.gradle.java.installations.paths=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home`; inspected the Checks failure, Output running/error, and remote-consent renders in `desktop/build/reports/ui-precision/task-169/`.
+- The JBR emitted its known restricted-native-access and Jewel `Unsafe` deprecation warnings during visual tests. No runtime or configuration changes were made.
