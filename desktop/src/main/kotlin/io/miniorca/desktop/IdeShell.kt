@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -302,7 +301,7 @@ internal fun BottomToolWindowOverlay(
   val activeToolWindow =
       layout.activeBottomToolWindow.takeIf { it in availableToolWindows }
           ?: availableToolWindows.first()
-  AlertDialog(
+  IdeDialog(
       onDismissRequest = onDismiss,
       title = {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -317,7 +316,7 @@ internal fun BottomToolWindowOverlay(
           }
         }
       },
-      text = {
+      content = {
         Column(Modifier.fillMaxWidth().semantics { contentDescription = "Bottom tools overlay" }) {
           BottomToolWindowTabs(
               availableToolWindows, activeToolWindow, summaries, onSelect, tabModifier)
@@ -326,7 +325,7 @@ internal fun BottomToolWindowOverlay(
           }
         }
       },
-      confirmButton = {
+      actions = {
         MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Close") }
       },
   )

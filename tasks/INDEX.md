@@ -6,7 +6,7 @@ Execution: [PROMPT_EXECUTE_UI_PRECISION.md](PROMPT_EXECUTE_UI_PRECISION.md).
 ## Planned UI precision — Tasks 161–171
 
 Strict numeric order; one implementation writer, one verified local commit per task,
-and no push. Tasks 161–168 are complete; later tasks remain Pending.
+and no push. Tasks 161–169 are complete; Task 170 is In Progress and Task 171 remains Pending.
 
 | Order | Task | Depends on | Status |
 | ---: | --- | --- | --- |
@@ -18,8 +18,8 @@ and no push. Tasks 161–168 are complete; later tasks remain Pending.
 | 166 | [Apply dense flat sections to Summary and Performance](166_dense_summary_performance.md) | 165 | Complete |
 | 167 | [Refine the Files tree, editor tabs, and breadcrumbs](167_precise_editor_navigation.md) | 166 | Complete |
 | 168 | [Flatten Context, Assistant, and Review safely](168_flat_context_review.md) | 167 | Complete |
-| 169 | [Finish bottom panes, global controls, and migration cleanup](169_complete_ide_surface_migration.md) | 168 | Pending |
-| 170 | [Verify responsive layout, accessibility, and native visuals](170_ui_precision_accessibility.md) | 169 | Pending |
+| 169 | [Finish bottom panes, global controls, and migration cleanup](169_complete_ide_surface_migration.md) | 168 | Complete |
+| 170 | [Verify responsive layout, accessibility, and native visuals](170_ui_precision_accessibility.md) | 169 | In Progress |
 | 171 | [Complete acceptance, documentation, and commit ledger](171_ui_precision_acceptance.md) | 170 | Pending |
 
 A dependency includes its verified task commit. Never skip an incomplete task.

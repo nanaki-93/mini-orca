@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.Divider
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,10 +41,10 @@ internal fun ProblemsToolWindow(
   val presentation = findingsPresentation(state.findings, filters.filters, state.loading)
   var selectedKey by remember { mutableStateOf<String?>(null) }
   val findings = presentation.priorityGroups.flatMap { it.findings }
-  LazyColumn(modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
+  LazyColumn(modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp)) {
     item {
       FindingsFilterControls(filters, presentation, Modifier.fillMaxWidth())
-      Spacer(Modifier.height(8.dp))
+      Spacer(Modifier.height(6.dp))
       Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp)) {
         ProblemTableCells(
             "Severity",
@@ -55,7 +54,7 @@ internal fun ProblemsToolWindow(
             severityColor = SecondaryText,
             contentColor = SecondaryText)
       }
-      Divider(color = Border)
+      IdeHorizontalSeparator()
     }
     if (findings.isEmpty()) {
       item {
@@ -92,7 +91,7 @@ internal fun ProblemsToolWindow(
                         FindingPriority.Other -> SecondaryText
                       })
             }
-        Divider(color = Border.copy(alpha = 0.35f))
+        IdeHorizontalSeparator()
         if (selectedKey == key) CompactProblemRow(finding, actions)
       }
     }

@@ -1,10 +1,8 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -86,56 +84,63 @@ internal fun ChecksToolWindow(
     presentation: ChecksToolWindowPresentation,
     modifier: Modifier = Modifier,
 ) {
-  Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-    MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
-      SectionLabel("Checks")
-      Text(
-          "Evidence only; run checks and Apply stay in Review.",
-          color = SecondaryText,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 5.dp))
-      EvidenceTextRow(presentation.evidence.identity)
-      EvidenceTextRow(presentation.evidence.validation)
-      EvidenceTextRow(presentation.evidence.checks)
-    }
-    if (presentation.diagnostics.isNotEmpty()) {
-      Spacer(Modifier.height(8.dp))
-      MiniOrcaPanel(Modifier.fillMaxWidth()) {
-        SectionLabel("VALIDATION DIAGNOSTICS")
-        SelectionContainer {
-          Column(Modifier.padding(top = 5.dp)) {
-            presentation.diagnostics.forEach { diagnostic ->
-              Text(
-                  "${diagnostic.code}: ${sanitizedOutputText(diagnostic.message, 512)}",
-                  color = Error,
-                  fontFamily = FontFamily.Monospace,
-                  fontSize = 11.sp,
-                  modifier = Modifier.padding(top = 3.dp))
-            }
-          }
-        }
-      }
-    }
-    Spacer(Modifier.height(8.dp))
-    MiniOrcaPanel(Modifier.fillMaxWidth()) {
-      SectionLabel("FOCUSED CHECKS")
-      if (presentation.checks.isEmpty())
+  Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
+    BottomEvidenceSection(
+        title = "Checks",
+        icon = DesktopIcon.Check,
+        stateLabel = presentation.evidence.checks.status.label,
+        stateTint = evidenceColor(presentation.evidence.checks.status)) {
           Text(
-              presentation.evidence.checks.detail,
+              "Evidence only; run checks and Apply stay in Review.",
               color = SecondaryText,
               fontSize = 11.sp,
               modifier = Modifier.padding(top = 5.dp))
-      presentation.checks.forEach { check ->
-        Text(
-            "${check.name} · ${check.status.label} · ${if (check.required) "required" else "optional"}",
-            color = evidenceColor(check.status),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 6.dp))
-        if (check.command.isNotBlank()) SelectableOutputText("$ ${check.command}")
-        if (check.output.isNotBlank()) SelectableOutputText(check.output)
-      }
+          EvidenceTextRow(presentation.evidence.identity)
+          EvidenceTextRow(presentation.evidence.validation)
+          EvidenceTextRow(presentation.evidence.checks)
+        }
+    if (presentation.diagnostics.isNotEmpty()) {
+      BottomEvidenceSection(
+          title = "Validation diagnostics",
+          icon = DesktopIcon.Problems,
+          stateLabel = "${presentation.diagnostics.size} items",
+          stateTint = Error) {
+            SelectionContainer {
+              Column {
+                presentation.diagnostics.forEach { diagnostic ->
+                  Text(
+                      "${diagnostic.code}: ${sanitizedOutputText(diagnostic.message, 512)}",
+                      color = Error,
+                      fontFamily = FontFamily.Monospace,
+                      fontSize = 11.sp,
+                      modifier = Modifier.padding(top = 3.dp))
+                }
+              }
+            }
+          }
     }
+    BottomEvidenceSection(
+        title = "Focused checks",
+        icon = DesktopIcon.Run,
+        stateLabel = presentation.evidence.checks.status.label,
+        stateTint = evidenceColor(presentation.evidence.checks.status)) {
+          if (presentation.checks.isEmpty())
+              Text(
+                  presentation.evidence.checks.detail,
+                  color = SecondaryText,
+                  fontSize = 11.sp,
+                  modifier = Modifier.padding(top = 5.dp))
+          presentation.checks.forEach { check ->
+            Text(
+                "${check.name} · ${check.status.label} · ${if (check.required) "required" else "optional"}",
+                color = evidenceColor(check.status),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 6.dp))
+            if (check.command.isNotBlank()) SelectableOutputText("$ ${check.command}")
+            if (check.output.isNotBlank()) SelectableOutputText(check.output)
+          }
+        }
   }
 }
 
@@ -243,15 +248,18 @@ internal fun OutputToolWindow(
     presentation: OutputToolWindowPresentation,
     modifier: Modifier = Modifier,
 ) {
-  Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-    SectionLabel("Output")
+  Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
+    IdePaneHeader(
+        title = "Output",
+        icon = DesktopIcon.Terminal,
+        stateLabel = "${presentation.entries.size} entries")
     Text(
         "Recorded operation details. Opening this tab does not start work.",
         color = SecondaryText,
         fontSize = 11.sp,
         modifier = Modifier.padding(top = 5.dp))
     presentation.entries.forEach { entry ->
-      MiniOrcaPanel(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+      Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
         Text(entry.title, color = PrimaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Text(
             entry.status,
@@ -261,7 +269,23 @@ internal fun OutputToolWindow(
         SelectableOutputText(entry.detail)
         if (entry.output.isNotBlank()) SelectableOutputText(entry.output)
       }
+      IdeHorizontalSeparator()
     }
+  }
+}
+
+@Composable
+private fun BottomEvidenceSection(
+    title: String,
+    icon: DesktopIcon,
+    stateLabel: String,
+    stateTint: androidx.compose.ui.graphics.Color,
+    content: @Composable () -> Unit,
+) {
+  Column(Modifier.fillMaxWidth()) {
+    IdePaneHeader(title = title, icon = icon, stateLabel = stateLabel, stateTint = stateTint)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) { content() }
+    IdeHorizontalSeparator()
   }
 }
 

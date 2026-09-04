@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -95,7 +94,7 @@ internal fun MainToolbar(
         Spacer(Modifier.width(6.dp))
       }
       if (state.busy) {
-        CircularProgressIndicator(
+        IdeBusyIndicator(
             Modifier.size(14.dp).semantics { contentDescription = state.operationStatus },
             color = FocusAccent,
             strokeWidth = 2.dp)

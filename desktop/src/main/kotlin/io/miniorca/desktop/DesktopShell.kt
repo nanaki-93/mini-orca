@@ -15,13 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.AlertDialog
-import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.DrawerValue
 import androidx.compose.material.ModalDrawer
-import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -468,9 +466,10 @@ internal fun DesktopShell(
       bottomOverlayFocusRestoreTarget = null
     }
   }
-  Surface(
+  Box(
       modifier =
           Modifier.fillMaxSize()
+              .background(ToolWindowSurface)
               .focusRequester(focusRequesters.fallback)
               .focusable()
               .onPreviewKeyEvent { event ->
@@ -486,7 +485,6 @@ internal fun DesktopShell(
                     onWorkspaceSelected = ::selectWorkspace,
                 )
               },
-      color = ToolWindowSurface,
   ) {
     if (shellMode == DesktopShellMode.ProjectLanding) {
       ProjectLanding(appState, projectActions.importProject)
@@ -520,6 +518,13 @@ internal fun DesktopShell(
         }
         ModalDrawer(
             drawerState = drawerState,
+            // Compose Desktop supplies the responsive drawer gesture and dismissal boundary; its
+            // visual roles stay explicit so it does not depend on the retired Material theme.
+            drawerShape = RoundedCornerShape(0.dp),
+            drawerElevation = 0.dp,
+            drawerBackgroundColor = ToolWindowSurface,
+            drawerContentColor = PrimaryText,
+            scrimColor = EditorCanvas.copy(alpha = 0.68f),
             drawerContent = {
               if (showsEditorChrome) {
                 if (narrowDrawer == NarrowDrawer.Files) {
@@ -856,7 +861,7 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
       when {
         appState.loading -> {
           Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(Modifier.size(16.dp), color = FocusAccent, strokeWidth = 2.dp)
+            IdeBusyIndicator(Modifier.size(16.dp), color = FocusAccent, strokeWidth = 2.dp)
             Spacer(Modifier.width(8.dp))
             Text("Opening project…", color = SecondaryText, fontSize = 12.sp)
           }
@@ -1045,13 +1050,13 @@ internal fun contextManifestSummary(manifest: ContextManifest): String =
 
 @Composable
 private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> Unit) {
-  AlertDialog(
+  IdeDialog(
       onDismissRequest = onDismiss,
       title = { Text("Context inspector · read-only") },
-      text = {
+      content = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-          MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
-            SectionLabel("DESTINATION")
+          Column(Modifier.fillMaxWidth()) {
+            IdePaneHeader("Destination")
             val scope =
                 ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label
                     ?: manifest.scope.ifBlank { "Function edits" }
@@ -1065,6 +1070,7 @@ private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> U
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 5.dp))
           }
+          IdeHorizontalSeparator(Modifier.padding(top = 10.dp))
           Text(
               contextManifestSummary(manifest),
               color = PrimaryText,
@@ -1109,7 +1115,7 @@ private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> U
           }
         }
       },
-      confirmButton = {
+      actions = {
         MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
       })
 }
