@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -44,10 +47,9 @@ internal fun MainToolbar(
       modifier =
           modifier
               .fillMaxWidth()
-              .height(52.dp)
+              .heightIn(min = 52.dp)
               .background(Chrome)
-              .border(BorderStroke(1.dp, Border))
-              .padding(horizontal = 12.dp),
+              .padding(horizontal = 16.dp, vertical = 8.dp),
       verticalAlignment = Alignment.CenterVertically,
   ) {
     MiniOrcaMark()
@@ -55,7 +57,9 @@ internal fun MainToolbar(
       Spacer(Modifier.width(10.dp))
       Text("Mini-Orca", color = PrimaryText, fontWeight = FontWeight.SemiBold)
     }
-    Spacer(Modifier.width(8.dp))
+    Spacer(Modifier.width(20.dp))
+    Box(Modifier.width(1.dp).height(22.dp).background(Border))
+    Spacer(Modifier.width(16.dp))
     ProjectActionsMenu(
         projectLabel = projectBreadcrumbLabel(state.project),
         projectAvailable = state.project != null,
@@ -63,52 +67,45 @@ internal fun MainToolbar(
         onImport = actions.onImport,
         onReanalyze = actions.onReanalyze,
         onReconnect = actions.onReconnect,
-        modifier = Modifier.weight(1f))
+        modifier = Modifier.width(if (presentation.showProductName) 164.dp else 128.dp))
     if (presentation.showBranchContext) {
       Spacer(Modifier.width(8.dp))
       BranchContext(state.gitStatus)
     }
-    if (state.busy) {
-      Spacer(Modifier.width(8.dp))
-      CircularProgressIndicator(Modifier.size(16.dp), color = FocusAccent, strokeWidth = 2.dp)
-      Text(
-          state.operationStatus,
-          color = SecondaryText,
-          fontSize = 11.sp,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.padding(start = 6.dp))
+    Box(Modifier.weight(1f).padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
+      ChromeButton(
+          onClick = actions.onPalette,
+          background = Panel,
+          modifier =
+              Modifier.widthIn(max = 340.dp).fillMaxWidth().semantics {
+                contentDescription = "Search files, symbols, commands"
+              }) {
+            DesktopLineIcon(DesktopIcon.Search, "Search", iconSize = 16.dp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (presentation.showSearchLabel) "Search files, symbols, commands" else "Search",
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f))
+          }
     }
-    Spacer(Modifier.width(8.dp))
-    ConnectionChip(connectionPresentation)
-    Spacer(Modifier.width(8.dp))
     if (state.showEditorDrawerActions) {
-      TopBarButton("Files", actions.onOpenExplorer, tone = ActionTone.Navigation)
+      TopBarButton("Files", actions.onOpenExplorer)
       Spacer(Modifier.width(6.dp))
-      TopBarButton("Context", actions.onOpenContext, tone = ActionTone.Navigation)
+      TopBarButton("Context", actions.onOpenContext)
       Spacer(Modifier.width(6.dp))
     }
-    TopBarButton(
-        if (presentation.showSearchLabel) "Search files, symbols, commands" else "Search",
-        actions.onPalette,
-        tone = ActionTone.Navigation,
-        icon = DesktopIcon.Search)
-    if (presentation.showSearchLabel) {
-      Spacer(Modifier.width(6.dp))
-      PreviewFeatureButton(
-          PreviewFeature("New file", "Filesystem mutation is not available from this control."))
-      Spacer(Modifier.width(6.dp))
-      PreviewFeatureButton(
-          PreviewFeature("Branch actions", "Branch switching and sync are not available."))
-      Spacer(Modifier.width(6.dp))
-      PreviewFeatureButton(
-          PreviewFeature("Content search", "Global file-content search is not available."))
-      Spacer(Modifier.width(6.dp))
-      PreviewFeatureButton(
-          PreviewFeature(
-              "Settings & Help", "Account, notifications, settings, and help are not available."))
+    if (state.busy) {
+      CircularProgressIndicator(
+          Modifier.size(14.dp).semantics { contentDescription = state.operationStatus },
+          color = FocusAccent,
+          strokeWidth = 2.dp)
+      Spacer(Modifier.width(10.dp))
     }
-    Spacer(Modifier.width(6.dp))
+    ConnectionChip(connectionPresentation, compact = !presentation.showProductName)
+    Spacer(Modifier.width(12.dp))
+    PreviewFeatureMenu(toolbarPreviewFeatures)
   }
 }
 
@@ -159,7 +156,6 @@ private fun ProjectActionsMenu(
     TopBarButton(
         projectLabel,
         { expanded = true },
-        tone = ActionTone.Neutral,
         icon = DesktopIcon.Project,
         modifier = Modifier.fillMaxWidth())
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -194,24 +190,24 @@ private fun ProjectActionsMenu(
 private fun TopBarButton(
     label: String,
     onClick: () -> Unit,
-    enabled: Boolean = true,
-    tone: ActionTone = ActionTone.Neutral,
     icon: DesktopIcon? = null,
     modifier: Modifier = Modifier,
 ) {
-  MiniOrcaButton(
+  ChromeButton(
       onClick = onClick,
-      enabled = enabled,
-      tone = tone,
-      density = ButtonDensity.Toolbar,
       modifier = modifier,
   ) {
     icon?.let {
-      DesktopLineIcon(
-          it, label, tint = if (tone == ActionTone.Primary) OnActionFill else SelectionAccent)
-      Spacer(Modifier.width(4.dp))
+      DesktopLineIcon(it, label, iconSize = 18.dp)
+      Spacer(Modifier.width(8.dp))
     }
-    Text(label, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(
+        label,
+        fontSize = 12.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = if (icon != null) Modifier.weight(1f) else Modifier)
+    if (icon != null) DesktopLineIcon(DesktopIcon.ChevronDown, "Project menu", iconSize = 12.dp)
   }
 }
 
@@ -249,7 +245,6 @@ private fun BranchContext(gitStatus: GitStatus?) {
   Row(
       modifier =
           Modifier.semantics { contentDescription = presentation.detail }
-              .border(BorderStroke(1.dp, Border), MiniOrcaShapes.small)
               .padding(horizontal = 8.dp, vertical = 6.dp),
       verticalAlignment = Alignment.CenterVertically) {
         DesktopLineIcon(DesktopIcon.Branch, presentation.detail, tint = SecondaryText)
@@ -260,7 +255,7 @@ private fun BranchContext(gitStatus: GitStatus?) {
             fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(112.dp))
+            modifier = Modifier.widthIn(max = 112.dp))
       }
 }
 
@@ -279,23 +274,39 @@ internal fun connectionPresentation(connection: ConnectionState): ConnectionPres
     }
 
 @Composable
-private fun ConnectionChip(presentation: ConnectionPresentation) {
-  Text(
-      presentation.label,
-      color = presentation.color,
-      fontSize = 12.sp,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
+private fun ConnectionChip(presentation: ConnectionPresentation, compact: Boolean) {
+  Row(
       modifier =
-          Modifier.border(
-                  BorderStroke(1.dp, presentation.color.copy(alpha = 0.55f)), MiniOrcaShapes.small)
-              .padding(horizontal = 8.dp, vertical = 6.dp)
+          Modifier.background(presentation.color.copy(alpha = 0.07f), RoundedCornerShape(20.dp))
+              .border(
+                  BorderStroke(1.dp, presentation.color.copy(alpha = 0.20f)),
+                  RoundedCornerShape(20.dp))
               .semantics {
                 contentDescription =
                     "${presentation.label}; this is daemon status, not model connectivity"
-              },
-  )
+              }
+              .padding(horizontal = 10.dp, vertical = 6.dp),
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Canvas(Modifier.size(6.dp)) { drawCircle(presentation.color) }
+    Spacer(Modifier.width(7.dp))
+    Text(
+        if (compact) presentation.label.removePrefix("Daemon ").replaceFirstChar { it.uppercase() }
+        else presentation.label,
+        color = presentation.color,
+        fontSize = 11.sp,
+        maxLines = 1)
+  }
 }
+
+private val toolbarPreviewFeatures =
+    listOf(
+        PreviewFeature("New file", "Filesystem mutation is not available from this control."),
+        PreviewFeature("Branch actions", "Branch switching and sync are not available."),
+        PreviewFeature("Content search", "Global file-content search is not available."),
+        PreviewFeature(
+            "Settings & Help", "Account, notifications, settings, and help are not available."),
+    )
 
 private const val COMPACT_TOOLBAR_WIDTH = 1_000f
 private const val EXPANDED_TOOLBAR_WIDTH = 1_220f

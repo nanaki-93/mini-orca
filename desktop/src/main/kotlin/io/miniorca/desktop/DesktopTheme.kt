@@ -4,38 +4,39 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonColors
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Shapes
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.material.TextFieldColors
-import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.Typography
 import androidx.compose.material.darkColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -167,7 +168,6 @@ internal enum class ActionTone {
 internal enum class ButtonDensity {
   Standard,
   Toolbar,
-  Rail,
 }
 
 internal data class ActionToneStyle(
@@ -199,7 +199,7 @@ internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
               SelectionAccent,
               Panel,
               FaintText,
-              SelectionAccent.copy(alpha = 0.72f))
+              Border)
       ActionTone.Positive ->
           ActionToneStyle(
               Card,
@@ -208,7 +208,7 @@ internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
               Success,
               Panel,
               FaintText,
-              Success.copy(alpha = 0.72f))
+              Border)
       ActionTone.Attention ->
           ActionToneStyle(
               Card,
@@ -217,7 +217,7 @@ internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
               Warning,
               Panel,
               FaintText,
-              Warning.copy(alpha = 0.72f))
+              Border)
       ActionTone.Destructive ->
           ActionToneStyle(
               Card,
@@ -226,7 +226,7 @@ internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
               Error,
               Panel,
               FaintText,
-              Error.copy(alpha = 0.72f))
+              Border)
       ActionTone.Neutral ->
           ActionToneStyle(
               Card,
@@ -249,8 +249,6 @@ internal fun buttonDensityStyle(density: ButtonDensity): ButtonDensityStyle =
           ButtonDensityStyle(36.dp, PaddingValues(horizontal = 10.dp, vertical = 4.dp))
       ButtonDensity.Toolbar ->
           ButtonDensityStyle(32.dp, PaddingValues(horizontal = 8.dp, vertical = 4.dp))
-      ButtonDensity.Rail ->
-          ButtonDensityStyle(64.dp, PaddingValues(horizontal = 6.dp, vertical = 6.dp))
     }
 
 internal object MiniOrcaButtonDefaults {
@@ -280,38 +278,54 @@ internal object MiniOrcaButtonDefaults {
 internal fun CompactSingleLineField(
     value: String,
     onValueChange: (String) -> Unit,
-    label: @Composable (() -> Unit),
+    label: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    placeholder: @Composable (() -> Unit)? = null,
+    showLabel: Boolean = true,
+    placeholder: String? = null,
     textStyle: TextStyle = TextStyle(fontSize = 12.sp),
 ) {
-  androidx.compose.foundation.layout.Box(modifier.heightIn(min = 36.dp, max = 40.dp)) {
-    OutlinedTextField(
+  val interactions = remember { MutableInteractionSource() }
+  val focused by interactions.collectIsFocusedAsState()
+  Column(modifier) {
+    if (showLabel)
+        Text(
+            label,
+            color = SecondaryText,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(bottom = 5.dp))
+    BasicTextField(
         value = value,
         onValueChange = onValueChange,
         enabled = enabled,
-        label = label,
-        placeholder = placeholder,
         singleLine = true,
-        textStyle = textStyle,
-        colors = compactTextFieldColors(),
-        modifier = Modifier.fillMaxSize(),
+        interactionSource = interactions,
+        textStyle = textStyle.copy(color = if (enabled) PrimaryText else FaintText),
+        cursorBrush = SolidColor(FocusAccent),
+        modifier =
+            Modifier.fillMaxWidth()
+                .heightIn(min = 34.dp)
+                .background(Panel, MiniOrcaShapes.small)
+                .border(
+                    BorderStroke(1.dp, if (focused) FocusAccent else Border), MiniOrcaShapes.small)
+                .semantics { contentDescription = label },
+        decorationBox = { input ->
+          Box(
+              Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+              contentAlignment = Alignment.CenterStart) {
+                if (value.isEmpty())
+                    Text(
+                        placeholder ?: if (showLabel) "" else label,
+                        color = FaintText,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                input()
+              }
+        },
     )
   }
 }
-
-@Composable
-private fun compactTextFieldColors(): TextFieldColors =
-    TextFieldDefaults.outlinedTextFieldColors(
-        textColor = PrimaryText,
-        focusedBorderColor = FocusAccent,
-        unfocusedBorderColor = Border,
-        disabledBorderColor = Border.copy(alpha = 0.55f),
-        focusedLabelColor = FocusAccent,
-        unfocusedLabelColor = SecondaryText,
-        cursorColor = FocusAccent,
-    )
 
 @Composable
 internal fun MiniOrcaButton(
@@ -326,6 +340,7 @@ internal fun MiniOrcaButton(
 ) {
   val interactionSource = remember { MutableInteractionSource() }
   val pressed by interactionSource.collectIsPressedAsState()
+  val focused by interactionSource.collectIsFocusedAsState()
   val densityStyle = buttonDensityStyle(density)
   Button(
       onClick = onClick,
@@ -336,8 +351,8 @@ internal fun MiniOrcaButton(
           ButtonDefaults.elevation(
               defaultElevation = 0.dp, pressedElevation = 1.dp, disabledElevation = 0.dp),
       shape = MiniOrcaButtonDefaults.shape,
-      border = MiniOrcaButtonDefaults.border(tone, focusHighlight),
-      colors = MiniOrcaButtonDefaults.colors(tone, selected || focusHighlight, pressed),
+      border = MiniOrcaButtonDefaults.border(tone, focused || focusHighlight),
+      colors = MiniOrcaButtonDefaults.colors(tone, selected, pressed),
       contentPadding = densityStyle.contentPadding,
       content = content,
   )

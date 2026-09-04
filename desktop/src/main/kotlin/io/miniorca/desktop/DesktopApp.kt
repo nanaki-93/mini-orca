@@ -268,6 +268,8 @@ internal fun MiniOrcaApp(
                 impact = appState.impact,
                 gitStatus = appState.gitStatus,
                 fileAnalysis = appState.analysis,
+                project = appState.project,
+                overview = appState.overview,
             ),
         actions =
             ContextToolWindowActions(

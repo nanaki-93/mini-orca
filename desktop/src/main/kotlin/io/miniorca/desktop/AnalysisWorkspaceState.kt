@@ -84,6 +84,11 @@ internal data class AnalysisFailurePresentation(
     val error: String,
 )
 
+/** Failed files are processed work too; an empty queue has no progress. */
+internal fun analysisRunProgress(run: AnalyzeAllRunPresentation): Float =
+    if (run.candidates <= 0) 0f
+    else ((run.completed.toFloat() + run.failed) / run.candidates).coerceIn(0f, 1f)
+
 internal data class AnalyzeAllPresentation(
     val coverage: AnalysisCoveragePresentation,
     val run: AnalyzeAllRunPresentation,

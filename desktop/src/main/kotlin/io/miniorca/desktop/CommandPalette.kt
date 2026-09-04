@@ -195,7 +195,8 @@ internal fun CommandPaletteDialog(
           CompactSingleLineField(
               value = query,
               onValueChange = onQuery,
-              label = { Text("Filter ${mode.name.lowercase()}") },
+              label = "Filter ${mode.name.lowercase()}",
+              showLabel = false,
               modifier =
                   Modifier.fillMaxWidth()
                       .focusRequester(filterFocusRequester)

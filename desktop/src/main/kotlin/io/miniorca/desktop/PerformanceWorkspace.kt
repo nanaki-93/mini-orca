@@ -139,15 +139,13 @@ internal fun PerformanceWorkspacePane(
             ResponsiveFieldPair(
                 modifier = Modifier.padding(top = 6.dp),
                 first = { modifier ->
-                  CompactSingleLineField(
-                      category, { category = it }, { Text("Category") }, modifier)
+                  CompactSingleLineField(category, { category = it }, "Category", modifier)
                 },
                 second = { modifier ->
-                  CompactSingleLineField(
-                      impact, { impact = it }, { Text("Potential impact") }, modifier)
+                  CompactSingleLineField(impact, { impact = it }, "Potential impact", modifier)
                 })
             CompactSingleLineField(
-                path, { path = it }, { Text("Path") }, Modifier.fillMaxWidth().padding(top = 6.dp))
+                path, { path = it }, "Path", Modifier.fillMaxWidth().padding(top = 6.dp))
           }
       Spacer(Modifier.height(8.dp))
       selected?.let { finding ->

@@ -69,6 +69,9 @@ symbol, and explicitly reviews a generated candidate before applying it.
 
 ## Desktop client
 
+- Before UI work, read and follow `desktop/UI_DESIGN_GUIDELINES.md`. Treat the
+  supplied mock as the visual reference and use the shared IDE design system,
+  not unstyled Material/Swing defaults or arbitrary stacked cards.
 - Keep desktop changes within `desktop/` and use the Gradle wrapper; do not
   require a globally installed Gradle.
 - Preserve keyboard navigation, text labels for state, responsive drawer

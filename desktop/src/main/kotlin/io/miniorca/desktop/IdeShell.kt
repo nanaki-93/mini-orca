@@ -8,6 +8,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -29,17 +30,22 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -52,13 +58,13 @@ internal fun ToolWindowBar(
 ) {
   var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
   var tabGroupHasFocus by remember { mutableStateOf(false) }
+  val enlargedText = LocalDensity.current.fontScale > 1.15f
   Column(
       modifier
           .width(TOOL_WINDOW_BAR_WIDTH.dp)
           .fillMaxHeight()
           .background(Chrome)
-          .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
-          .padding(vertical = 6.dp)
+          .padding(vertical = 8.dp)
           .verticalScroll(rememberScrollState())
           .onFocusChanged { tabGroupHasFocus = it.hasFocus }
           .focusable()
@@ -78,19 +84,30 @@ internal fun ToolWindowBar(
       val label = leftToolWindowLabel(toolWindow)
       val selected = toolWindow == activeToolWindow
       TooltipArea(tooltip = { ToolWindowTooltip(label) }) {
-        MiniOrcaButton(
+        ChromeButton(
             onClick = { onSelect(toolWindow) },
             modifier =
-                Modifier.padding(horizontal = 8.dp, vertical = 2.dp).semantics {
-                  contentDescription =
-                      toolWindowSemanticsLabel(
-                          toolWindow,
-                          selected,
-                          focused = tabGroupHasFocus && toolWindow == focusedToolWindow)
-                  this.selected = selected
-                },
-            tone = ActionTone.Navigation,
-            density = ButtonDensity.Rail,
+                Modifier.fillMaxWidth()
+                    .heightIn(min = 76.dp)
+                    .drawWithContent {
+                      drawContent()
+                      if (selected)
+                          drawLine(
+                              SelectionAccent,
+                              Offset(1.dp.toPx(), 0f),
+                              Offset(1.dp.toPx(), size.height),
+                              2.dp.toPx())
+                    }
+                    .semantics {
+                      contentDescription =
+                          toolWindowSemanticsLabel(
+                              toolWindow,
+                              selected,
+                              focused = tabGroupHasFocus && toolWindow == focusedToolWindow)
+                      this.selected = selected
+                    },
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+            role = Role.Tab,
             selected = selected,
             focusHighlight = tabGroupHasFocus && toolWindow == focusedToolWindow,
         ) {
@@ -98,12 +115,17 @@ internal fun ToolWindowBar(
             DesktopLineIcon(
                 leftToolWindowIcon(toolWindow),
                 label,
+                iconSize = 24.dp,
                 tint = if (selected) SelectionAccent else SecondaryText)
+            Spacer(Modifier.height(6.dp))
             Text(
-                label,
-                color = if (selected) PrimaryText else SecondaryText,
-                fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                if (toolWindow == LeftToolWindow.Performance && enlargedText) "Perf." else label,
+                color = if (selected) SelectionAccent else SecondaryText,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
           }
         }
@@ -133,14 +155,14 @@ internal fun DockedToolWindow(
   Column(
       modifier
           .fillMaxHeight()
-          .background(Chrome)
+          .background(Panel)
           .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
           .semantics { contentDescription = "$title tool window" },
   ) {
     Text(
         title,
         color = PrimaryText,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         fontWeight = FontWeight.SemiBold,
         modifier =
             Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 10.dp, vertical = 10.dp))
@@ -180,13 +202,13 @@ internal fun BottomToolWindowRegion(
   Column(
       modifier
           .fillMaxWidth()
-          .height(if (collapsed) 38.dp else layout.bottomHeight.dp)
+          .height(if (collapsed) 40.dp else layout.bottomHeight.dp)
           .background(Chrome)
           .border(androidx.compose.foundation.BorderStroke(1.dp, Border)),
   ) {
     if (!collapsed) HorizontalResizableDivider(onHeightDelta, onHeightCommit)
     Row(
-        Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 8.dp),
+        Modifier.fillMaxWidth().height(38.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
           BottomToolWindowTabs(
               availableToolWindows, activeToolWindow, summaries, onSelect, tabModifier)
@@ -196,12 +218,11 @@ internal fun BottomToolWindowRegion(
               fontSize = 11.sp,
               maxLines = 1,
               modifier = Modifier.weight(1f).padding(start = 8.dp))
-          MiniOrcaButton(
+          ChromeButton(
               onClick = if (collapsed) ({ onSelect(activeToolWindow) }) else onCollapse,
-              tone = ActionTone.Neutral,
-              density = ButtonDensity.Toolbar) {
-                Text(if (collapsed) "Open" else "Collapse", fontSize = 11.sp)
-              }
+          ) {
+            Text(if (collapsed) "Open" else "Collapse", fontSize = 11.sp)
+          }
         }
     if (!collapsed) content(activeToolWindow, Modifier.fillMaxWidth().weight(1f))
   }
@@ -305,10 +326,8 @@ private fun BottomToolWindowTabs(
           }) {
         availableToolWindows.forEach { toolWindow ->
           val selected = toolWindow == activeToolWindow
-          MiniOrcaButton(
+          ChromeTab(
               onClick = { onSelect(toolWindow) },
-              tone = ActionTone.Navigation,
-              density = ButtonDensity.Toolbar,
               selected = selected,
               focusHighlight = tabGroupHasFocus && toolWindow == focusedToolWindow,
               modifier =

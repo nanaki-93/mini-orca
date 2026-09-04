@@ -76,32 +76,30 @@ internal fun ExplorerPane(
               }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Text(
-              "PROJECT",
+              "Project",
               color = PrimaryText,
-              fontSize = 11.sp,
+              fontSize = 12.sp,
               fontWeight = FontWeight.SemiBold,
               modifier = Modifier.weight(1f))
-          MiniOrcaButton(
+          ChromeButton(
               onClick = actions.collapseAll,
-              tone = ActionTone.Navigation,
-              density = ButtonDensity.Toolbar) {
-                Text("Collapse", fontSize = 10.sp)
-              }
+          ) {
+            DesktopLineIcon(DesktopIcon.ChevronRight, "Collapse all folders", iconSize = 16.dp)
+          }
           Spacer(Modifier.width(4.dp))
-          MiniOrcaButton(
+          ChromeButton(
               onClick = actions.revealActiveFile,
               enabled = state.selectedPath != null,
-              tone = ActionTone.Navigation,
-              density = ButtonDensity.Toolbar) {
-                Text("Active file", fontSize = 10.sp)
-              }
+          ) {
+            DesktopLineIcon(DesktopIcon.File, "Reveal active file", iconSize = 16.dp)
+          }
         }
         Spacer(Modifier.height(6.dp))
         CompactSingleLineField(
             value = state.filter,
             onValueChange = actions.updateFilter,
-            label = { Text("Filter indexed files") },
-            placeholder = { Text("Type a relative path", color = SecondaryText, fontSize = 12.sp) },
+            label = "Filter indexed files",
+            showLabel = false,
             modifier =
                 Modifier.fillMaxWidth().semantics {
                   contentDescription = "Filter indexed relative file paths"
@@ -275,8 +273,8 @@ private fun ExplorerItem(
                   else if (focused) FocusAccent.copy(alpha = 0.14f) else Color.Transparent,
                   RoundedCornerShape(4.dp))
               .clickable(onClick = onActivate)
-              .padding(start = (6 + row.depth * 14).dp, end = 6.dp, top = 4.dp, bottom = 4.dp)
-              .height(30.dp),
+              .height(30.dp)
+              .padding(start = (6 + row.depth * 14).dp, end = 6.dp),
       verticalAlignment = Alignment.CenterVertically,
   ) {
     if (row.directory) {
@@ -306,21 +304,18 @@ private fun ExplorerItem(
         overflow = TextOverflow.Ellipsis,
     )
     if (!row.directory) {
-      Text(
-          row.language.ifBlank { "Text" }.uppercase(),
-          color = FaintText,
-          fontSize = 9.sp,
-          maxLines = 1)
       Spacer(Modifier.width(6.dp))
-      StatusBadge(row.analysisStatus)
+      val status = statusBadgeStyle(row.analysisStatus)
+      Text(status.label, color = status.color, fontSize = 10.sp, maxLines = 1)
     }
   }
 }
 
 private fun explorerNodeColor(row: ExplorerRow, selected: Boolean): Color =
     when {
-      row.directory -> Warning
+      row.directory -> SecondaryText
       selected -> FocusAccent
+      row.language.equals("Go", ignoreCase = true) -> FocusAccent
       else -> SecondaryText
     }
 

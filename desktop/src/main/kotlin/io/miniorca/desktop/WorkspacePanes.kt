@@ -1,5 +1,10 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -7,16 +12,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Checkbox
+import androidx.compose.material.Divider
+import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -35,147 +49,305 @@ internal fun AnalysisWorkspacePane(
           )
           .bounded()
   val presentation = analyzeAllPresentation(state.job, state.coverage)
-  LazyColumn(Modifier.fillMaxSize().padding(12.dp)) {
-    item {
-      WorkspacePaneHeader("Analysis")
-      Spacer(Modifier.height(8.dp))
-      MiniOrcaPanel(
-          Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
-            SectionLabel("Coverage")
-            CompactKeyValueRows(
-                listOf(
-                    "Total" to presentation.coverage.total.toString(),
-                    "Fresh / stale" to
-                        "${presentation.coverage.fresh} / ${presentation.coverage.stale}",
-                    "Missing / running" to
-                        "${presentation.coverage.missing} / ${presentation.coverage.running}",
-                    "Failed" to presentation.coverage.failed.toString(),
-                ),
-                modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
-            )
+  Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    LazyColumn(
+        Modifier.widthIn(max = 1160.dp).fillMaxSize(),
+        contentPadding = PaddingValues(28.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+      item {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          DesktopLineIcon(
+              DesktopIcon.Analysis, "Analysis", tint = SelectionAccent, iconSize = 26.dp)
+          Spacer(Modifier.width(12.dp))
+          Column(Modifier.weight(1f)) {
+            Text(
+                "Analysis", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Project coverage and file analysis",
+                color = SecondaryText,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp))
           }
-      Spacer(Modifier.height(8.dp))
-      MiniOrcaPanel(
-          Modifier.fillMaxWidth(),
-          raised = presentation.run.statusLabel in setOf("Running", "Paused", "Failed"),
-          contentPadding = PaddingValues(MiniOrcaSpacing.standard),
-      ) {
-        SectionLabel("Current run")
-        Text(
-            presentation.run.statusLabel,
-            color = if (presentation.run.statusLabel == "Failed") Error else PrimaryText,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
-        CompactKeyValueRows(
-            listOf(
-                "Progress" to
-                    "${presentation.run.completed} complete · ${presentation.run.running} running · ${presentation.run.remaining} remaining",
-                "Failures" to presentation.run.failed.toString(),
-                "Limits" to
-                    "${presentation.run.maxFiles} files · ${presentation.run.maxRetries} retries per file",
-            ),
-            modifier = Modifier.padding(top = MiniOrcaSpacing.compact),
-        )
-        Text(
-            presentation.run.statusDetail,
-            color = SecondaryText,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+        }
       }
-      Spacer(Modifier.height(8.dp))
-      MiniOrcaPanel(
-          Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
-            SectionLabel("Run controls")
-            when (presentation.run.statusLabel) {
-              "Running" -> {
-                ResponsiveActionGroup(
-                    Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
-                      MiniOrcaButton(
-                          onClick = actions.pause,
-                          tone = ActionTone.Attention,
-                          density = ButtonDensity.Toolbar) {
-                            Text("Pause", fontSize = 11.sp)
-                          }
-                      MiniOrcaButton(
-                          onClick = actions.cancel,
-                          tone = ActionTone.Destructive,
-                          density = ButtonDensity.Toolbar) {
-                            Text("Cancel", fontSize = 11.sp)
-                          }
-                    }
-              }
-              "Pausing",
-              "Canceling" -> {
+      item { AnalysisCoverageMetrics(presentation.coverage, available = state.coverage != null) }
+      item {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+          val runContent: @Composable (Modifier) -> Unit = { modifier ->
+            AnalysisRunCard(presentation.run, state.job, modifier)
+          }
+          val controlsContent: @Composable (Modifier) -> Unit = { modifier ->
+            MiniOrcaPanel(modifier, contentPadding = PaddingValues(20.dp)) {
+              SectionLabel("Run controls")
+              AnalysisRunControls(
+                  run = presentation.run,
+                  state = state,
+                  actions = actions,
+                  startState =
+                      AnalyzeAllStartControlsState(
+                          maxFiles,
+                          maxRetries,
+                          state.model,
+                          state.remoteProviderConfirmed,
+                          options),
+                  startActions =
+                      AnalyzeAllStartActions(
+                          { maxFiles = it },
+                          { maxRetries = it },
+                          actions.confirmRemoteProvider,
+                          actions.start),
+              )
+              if (state.job != null &&
+                  presentation.run.statusLabel in setOf("Running", "Pausing", "Canceling")) {
                 Text(
-                    presentation.controls,
-                    color = Warning,
+                    if (state.model.model.isBlank()) "Bugs model is not configured."
+                    else modelDestinationLabel(ModelScope.Bug, state.model),
+                    color = SecondaryText,
                     fontSize = 12.sp,
-                    modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
-                MiniOrcaButton(
-                    onClick = actions.cancel,
-                    enabled = presentation.run.statusLabel == "Pausing",
-                    tone = ActionTone.Destructive,
-                    density = ButtonDensity.Toolbar,
-                    modifier = Modifier.padding(top = MiniOrcaSpacing.standard)) {
-                      Text("Cancel", fontSize = 11.sp)
-                    }
-              }
-              "Paused" -> {
-                RemoteProviderConfirmation(
-                    ModelScope.Bug,
-                    state.model,
-                    state.remoteProviderConfirmed,
-                    actions.confirmRemoteProvider)
-                ResponsiveActionGroup(
-                    Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
-                      MiniOrcaButton(
-                          onClick = { actions.resume(state.remoteProviderConfirmed) },
-                          enabled = !state.model.remoteProvider || state.remoteProviderConfirmed,
-                          tone = ActionTone.Primary,
-                          density = ButtonDensity.Toolbar) {
-                            Text("Resume", fontSize = 11.sp)
-                          }
-                      MiniOrcaButton(
-                          onClick = actions.cancel,
-                          tone = ActionTone.Destructive,
-                          density = ButtonDensity.Toolbar) {
-                            Text("Cancel", fontSize = 11.sp)
-                          }
-                    }
-              }
-              else -> {
-                AnalyzeAllStartControls(
-                    state =
-                        AnalyzeAllStartControlsState(
-                            maxFiles,
-                            maxRetries,
-                            state.model,
-                            state.remoteProviderConfirmed,
-                            options),
-                    actions =
-                        AnalyzeAllStartActions(
-                            updateMaxFiles = { maxFiles = it },
-                            updateMaxRetries = { maxRetries = it },
-                            confirmRemoteProvider = actions.confirmRemoteProvider,
-                            start = actions.start,
-                        ),
-                )
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(top = 16.dp))
               }
             }
           }
-      Spacer(Modifier.height(8.dp))
-      SectionLabel("Analysis errors")
-    }
-    if (presentation.failures.isEmpty()) {
-      item {
-        SystemStateMessage(
-            "No analysis errors",
-            presentation.noErrorsMessage,
-            modifier = Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard),
-        )
+          if (maxWidth >= 820.dp) {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+              runContent(Modifier.weight(1.7f))
+              controlsContent(Modifier.weight(1f))
+            }
+          } else {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+              controlsContent(Modifier.fillMaxWidth())
+              runContent(Modifier.fillMaxWidth())
+            }
+          }
+        }
       }
-    } else {
-      items(presentation.failures, key = { it.path }) { failure -> AnalysisFailureRow(failure) }
+      item {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+          SectionLabel("Analysis errors")
+          Spacer(Modifier.width(8.dp))
+          Text(presentation.failures.size.toString(), color = FaintText, fontSize = 12.sp)
+        }
+        Divider(Modifier.padding(top = 12.dp), color = Border)
+      }
+      if (presentation.failures.isEmpty()) {
+        item {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(36.dp).background(Success.copy(alpha = 0.08f), MiniOrcaShapes.large),
+                contentAlignment = Alignment.Center) {
+                  DesktopLineIcon(
+                      DesktopIcon.Check, "No analysis errors", tint = Success, iconSize = 20.dp)
+                }
+            Spacer(Modifier.width(12.dp))
+            Column {
+              Text("No analysis errors", color = PrimaryText, fontSize = 13.sp)
+              Text(
+                  if (state.job == null) "Errors from your next run will appear here."
+                  else presentation.noErrorsMessage,
+                  color = SecondaryText,
+                  fontSize = 12.sp,
+                  modifier = Modifier.padding(top = 4.dp))
+            }
+          }
+        }
+      } else {
+        items(presentation.failures, key = { it.path }) { failure -> AnalysisFailureRow(failure) }
+      }
+    }
+  }
+}
+
+@Composable
+private fun AnalysisRunControls(
+    run: AnalyzeAllRunPresentation,
+    state: AnalysisWorkspacePaneState,
+    actions: AnalysisWorkspaceActions,
+    startState: AnalyzeAllStartControlsState,
+    startActions: AnalyzeAllStartActions,
+) {
+  when (run.statusLabel) {
+    "Running" -> {
+      ResponsiveActionGroup(
+          Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard),
+          minimumHorizontalWidth = 220.dp) {
+            MiniOrcaButton(
+                onClick = actions.pause,
+                tone = ActionTone.Attention,
+                density = ButtonDensity.Toolbar) {
+                  Text("Pause", fontSize = 11.sp)
+                }
+            MiniOrcaButton(
+                onClick = actions.cancel,
+                tone = ActionTone.Destructive,
+                density = ButtonDensity.Toolbar) {
+                  Text("Cancel", fontSize = 11.sp)
+                }
+          }
+    }
+    "Pausing",
+    "Canceling" -> {
+      Text(
+          run.controls,
+          color = Warning,
+          fontSize = 12.sp,
+          modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+      MiniOrcaButton(
+          onClick = actions.cancel,
+          enabled = run.statusLabel == "Pausing",
+          tone = ActionTone.Destructive,
+          density = ButtonDensity.Toolbar,
+          modifier = Modifier.padding(top = MiniOrcaSpacing.standard)) {
+            Text("Cancel", fontSize = 11.sp)
+          }
+    }
+    "Paused" -> {
+      RemoteProviderConfirmation(
+          ModelScope.Bug, state.model, state.remoteProviderConfirmed, actions.confirmRemoteProvider)
+      ResponsiveActionGroup(
+          Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard),
+          minimumHorizontalWidth = 220.dp) {
+            MiniOrcaButton(
+                onClick = { actions.resume(state.remoteProviderConfirmed) },
+                enabled = !state.model.remoteProvider || state.remoteProviderConfirmed,
+                tone = ActionTone.Primary,
+                density = ButtonDensity.Toolbar) {
+                  Text("Resume", fontSize = 11.sp)
+                }
+            MiniOrcaButton(
+                onClick = actions.cancel,
+                tone = ActionTone.Destructive,
+                density = ButtonDensity.Toolbar) {
+                  Text("Cancel", fontSize = 11.sp)
+                }
+          }
+    }
+    else -> AnalyzeAllStartControls(startState, startActions)
+  }
+}
+
+@Composable
+private fun AnalysisCoverageMetrics(coverage: AnalysisCoveragePresentation, available: Boolean) {
+  MiniOrcaPanel(Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      SectionLabel("Coverage")
+      Spacer(Modifier.weight(1f))
+      Text(
+          if (available) "Current project index" else "Coverage unavailable",
+          color = FaintText,
+          fontSize = 12.sp)
+    }
+    Spacer(Modifier.height(20.dp))
+    val metrics =
+        listOf(
+            Triple("Total files", coverage.total, PrimaryText),
+            Triple("Fresh", coverage.fresh, Success),
+            Triple("Stale", coverage.stale, Warning),
+            Triple("Not analyzed", coverage.missing, SecondaryText),
+            Triple("Running", coverage.running, SelectionAccent),
+            Triple("Failed", coverage.failed, Error),
+        )
+    BoxWithConstraints {
+      val columns = if (maxWidth >= 780.dp) 6 else 3
+      Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        metrics.chunked(columns).forEach { row ->
+          Row(Modifier.fillMaxWidth()) {
+            row.forEachIndexed { index, (label, value, tint) ->
+              if (index > 0) Box(Modifier.height(54.dp).width(1.dp).background(Border))
+              Column(Modifier.weight(1f).padding(start = if (index == 0) 0.dp else 20.dp)) {
+                Text(
+                    if (available) value.toString() else "—",
+                    color = if (value > 0 || label == "Total files") tint else SecondaryText,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Medium)
+                Text(
+                    label,
+                    color = SecondaryText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 5.dp))
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun AnalysisRunCard(
+    run: AnalyzeAllRunPresentation,
+    job: AnalyzeAllJob?,
+    modifier: Modifier,
+) {
+  val tint =
+      when (run.statusLabel) {
+        "Failed" -> Error
+        "Completed" -> Success
+        "Running" -> SelectionAccent
+        "Paused",
+        "Pausing",
+        "Canceling",
+        "Stale" -> Warning
+        else -> SecondaryText
+      }
+  MiniOrcaPanel(modifier, contentPadding = PaddingValues(20.dp)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      SectionLabel("Current run")
+      Spacer(Modifier.weight(1f))
+      Text(
+          run.statusLabel,
+          color = tint,
+          fontSize = 12.sp,
+          modifier =
+              Modifier.background(tint.copy(alpha = 0.10f), MiniOrcaShapes.small)
+                  .padding(horizontal = 8.dp, vertical = 4.dp))
+    }
+    Spacer(Modifier.height(20.dp))
+    Text(
+        if (run.candidates > 0) "${run.completed + run.failed} of ${run.candidates} files processed"
+        else "No files queued",
+        color = PrimaryText,
+        fontSize = 16.sp,
+        fontWeight = FontWeight.Medium)
+    LinearProgressIndicator(
+        progress = analysisRunProgress(run),
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(4.dp),
+        color = tint,
+        backgroundColor = StrongSurface)
+    Text(
+        "${run.completed} complete  ·  ${run.running} running  ·  ${run.remaining} remaining  ·  ${run.failed} failed",
+        color = SecondaryText,
+        fontSize = 12.sp,
+        modifier = Modifier.padding(top = 12.dp))
+    job?.files
+        ?.firstOrNull { it.status.equals("running", ignoreCase = true) }
+        ?.let { file ->
+          Row(Modifier.padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            DesktopLineIcon(DesktopIcon.File, "Current file", iconSize = 16.dp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                file.path,
+                color = SecondaryText,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis)
+          }
+        }
+    Text(
+        run.statusDetail,
+        color = SecondaryText,
+        fontSize = 12.sp,
+        lineHeight = 18.sp,
+        modifier = Modifier.padding(top = 16.dp))
+    if (job != null) {
+      Divider(Modifier.padding(vertical = 16.dp), color = Border)
+      Text(
+          "${run.maxFiles} file limit  ·  ${run.maxRetries} retries per file",
+          color = FaintText,
+          fontSize = 12.sp)
     }
   }
 }
@@ -209,14 +381,14 @@ private fun AnalyzeAllStartControls(
         CompactSingleLineField(
             state.maxFiles,
             actions.updateMaxFiles,
-            label = { Text("File limit (1–500)") },
+            label = "File limit (1–500)",
             modifier = modifier)
       },
       second = { modifier ->
         CompactSingleLineField(
             state.maxRetries,
             actions.updateMaxRetries,
-            label = { Text("Retry limit (0–3)") },
+            label = "Retry limit (0–3)",
             modifier = modifier)
       },
   )

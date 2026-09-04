@@ -5,6 +5,7 @@ import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -243,19 +244,23 @@ private fun StatusBarSegment(
 ) {
   TooltipArea(tooltip = { StatusBarTooltip(segment.detail) }) {
     if (segment.actionable) {
-      MiniOrcaButton(
+      ChromeButton(
           onClick = onOpenDetails,
-          tone = if (segment.attention) ActionTone.Attention else ActionTone.Neutral,
-          density = ButtonDensity.Toolbar,
+          contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
           modifier = modifier.semantics { contentDescription = segment.detail },
       ) {
-        Text(segment.label, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            segment.label,
+            color = if (segment.attention) Warning else SecondaryText,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis)
       }
     } else {
       Text(
           segment.label,
           color = if (segment.attention) Warning else SecondaryText,
-          fontSize = 10.sp,
+          fontSize = 11.sp,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
           modifier = modifier.semantics { contentDescription = segment.detail },
