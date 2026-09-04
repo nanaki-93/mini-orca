@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,9 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.Button
-import androidx.compose.material.ButtonColors
-import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Shapes
 import androidx.compose.material.Surface
@@ -260,33 +256,10 @@ internal data class ButtonDensityStyle(
 internal fun buttonDensityStyle(density: ButtonDensity): ButtonDensityStyle =
     when (density) {
       ButtonDensity.Standard ->
-          ButtonDensityStyle(36.dp, PaddingValues(horizontal = 10.dp, vertical = 4.dp))
+          ButtonDensityStyle(32.dp, PaddingValues(horizontal = 10.dp, vertical = 4.dp))
       ButtonDensity.Toolbar ->
           ButtonDensityStyle(32.dp, PaddingValues(horizontal = 8.dp, vertical = 4.dp))
     }
-
-internal object MiniOrcaButtonDefaults {
-  val shape = MiniOrcaShapes.small
-
-  @Composable
-  fun colors(tone: ActionTone, selected: Boolean, pressed: Boolean): ButtonColors {
-    val style = actionToneStyle(tone)
-    return ButtonDefaults.buttonColors(
-        backgroundColor =
-            when {
-              pressed -> style.pressedBackground
-              selected -> style.selectedBackground
-              else -> style.background
-            },
-        contentColor = style.content,
-        disabledBackgroundColor = style.disabledBackground,
-        disabledContentColor = style.disabledContent,
-    )
-  }
-
-  fun border(tone: ActionTone, focused: Boolean): BorderStroke =
-      BorderStroke(1.dp, if (focused) FocusAccent else actionToneStyle(tone).border)
-}
 
 @Composable
 internal fun CompactSingleLineField(
@@ -352,22 +325,28 @@ internal fun MiniOrcaButton(
     focusHighlight: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-  val interactionSource = remember { MutableInteractionSource() }
-  val pressed by interactionSource.collectIsPressedAsState()
-  val focused by interactionSource.collectIsFocusedAsState()
   val densityStyle = buttonDensityStyle(density)
-  Button(
+  val style = actionToneStyle(tone)
+  IdeActionSurface(
       onClick = onClick,
-      modifier = modifier.heightIn(min = densityStyle.height),
+      colors =
+          IdeActionColors(
+              background = style.background,
+              hoveredBackground = style.pressedBackground,
+              pressedBackground = style.pressedBackground,
+              selectedBackground = style.selectedBackground,
+              disabledBackground = style.disabledBackground,
+              content = style.content,
+              selectedContent = style.content,
+              disabledContent = style.disabledContent,
+              border = style.border),
+      modifier = modifier,
       enabled = enabled,
-      interactionSource = interactionSource,
-      elevation =
-          ButtonDefaults.elevation(
-              defaultElevation = 0.dp, pressedElevation = 1.dp, disabledElevation = 0.dp),
-      shape = MiniOrcaButtonDefaults.shape,
-      border = MiniOrcaButtonDefaults.border(tone, focused || focusHighlight),
-      colors = MiniOrcaButtonDefaults.colors(tone, selected, pressed),
+      selected = selected,
+      focusHighlight = focusHighlight,
+      minimumHeight = densityStyle.height,
       contentPadding = densityStyle.contentPadding,
+      shape = MiniOrcaShapes.small,
       content = content,
   )
 }
@@ -462,11 +441,7 @@ internal fun SectionLabel(label: String, modifier: Modifier = Modifier) {
 
 @Composable
 internal fun WorkspacePaneHeader(title: String, modifier: Modifier = Modifier) {
-  Text(
-      title,
-      color = PrimaryText,
-      style = IdeTypography.body.copy(fontWeight = FontWeight.SemiBold),
-      modifier = modifier)
+  IdePaneHeader(title = title, modifier = modifier)
 }
 
 @Composable

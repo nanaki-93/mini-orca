@@ -42,7 +42,7 @@ class PreviewFeatureTest {
     assertEquals(196.dp, IdePopupMenuDefaults.minWidth)
     assertEquals(360.dp, IdePopupMenuDefaults.maxWidth)
     assertEquals(360.dp, IdePopupMenuDefaults.maxHeight)
-    assertEquals(36.dp, IdePopupMenuDefaults.rowMinimumHeight)
+    assertEquals(32.dp, IdePopupMenuDefaults.rowMinimumHeight)
     assertEquals(DesktopIcon.Search, previewFeatureIcon(PreviewFeature("Content search", "")))
     assertEquals(DesktopIcon.Run, previewFeatureIcon(PreviewFeature("Run / Debug", "")))
   }

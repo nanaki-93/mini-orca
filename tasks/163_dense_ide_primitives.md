@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -37,10 +37,10 @@ Inspect these boundaries before editing; change only files needed for this task.
 
 ## Acceptance criteria
 
-- [ ] A rendered control fixture demonstrates default, hover, pressed, selected, disabled, focused, and expanded/collapsed states without rounded section-card chrome.
-- [ ] Keyboard users can activate named actions and disclosures independently; disabled controls dispatch zero callbacks.
-- [ ] One implementation owns each migrated primitive; remaining screens receive the same tokens without copied per-screen styles.
-- [ ] Targets fit the default density table and remain legible/unclipped at 150% text scale. Selected tabs and focus are visually different.
+- [x] A rendered control fixture demonstrates default, hover, pressed, selected, disabled, focused, and expanded/collapsed states without rounded section-card chrome.
+- [x] Keyboard users can activate named actions and disclosures independently; disabled controls dispatch zero callbacks.
+- [x] One implementation owns each migrated primitive; remaining screens receive the same tokens without copied per-screen styles.
+- [x] Targets fit the default density table and remain legible/unclipped at 150% text scale. Selected tabs and focus are visually different.
 
 ## Verification
 
@@ -61,6 +61,43 @@ prompt. Do not create a partial/completion commit while acceptance is blocked; n
 
 ## Execution record
 
-Not started. Record actual commands/results, evidence paths, exceptions approved by
-the user, and any runtime/configuration impact during execution. Do not prefill passing results.
+Implemented shared Jewel-themed control policy through `IdeActionSurface`: flat transparent chrome
+actions, contained workflow buttons, selected tabs, and disclosures now use one interaction, focus,
+disabled-state, and typography implementation. `IdePaneHeader` provides the common flat header with
+optional icon/state/disclosure plus trailing action, overflow, and collapse slots. The docked tool-window
+header and workspace headers use it. Shared 1dp horizontal and vertical separator components now render
+inside the existing wider resizable splitter targets.
 
+`ChromeTab` now uses a 32dp target, an active fill, and a 2dp bottom accent underline. Headers and
+actions use 4dp gaps and 16dp icons; header content may grow to two lines rather than clipping at
+enlarged text scale. Tooltip and accessible-name support is supplied by the shared control; icon-only
+disclosure and close controls provide names. Existing callbacks and preview-first workflow rules remain
+unchanged.
+
+Added `ChromeControlsTest` for visual-state precedence and production-component tests for independent
+keyboard action/disclosure activation, disabled callback suppression, focus restoration, and 150% text.
+The rendered state fixture was inspected at:
+
+- `desktop/build/reports/ui-precision/task-163/shared-chrome-states-150.png`
+- `desktop/build/reports/ui-precision/task-163/shared-chrome-actions-150.png`
+- `desktop/build/reports/ui-precision/task-163/shared-chrome-actions-expanded-150.png`
+
+Verification passed with the Task 161 JDK 21 launcher and Task 162 JBR 25 toolchain:
+
+```text
+./desktop/gradlew -p desktop test --tests io.miniorca.desktop.ChromeControlsTest \
+  --tests io.miniorca.desktop.DesktopVisualLayoutTest.sharedChromeKeepsNamedActionsAndDisclosureActivationIndependent \
+  --tests io.miniorca.desktop.DesktopVisualLayoutTest.sharedChromeFixtureShowsInteractionStatesAndKeepsTextLegibleAtOneHundredFiftyPercent \
+  -Porg.gradle.java.installations.paths=<JBR 25> \
+  -PvisualOutput=desktop/build/reports/ui-precision/task-163
+
+./desktop/gradlew -p desktop spotlessCheck detekt test \
+  -Porg.gradle.java.installations.paths=<JBR 25> \
+  -PvisualOutput=desktop/build/reports/ui-precision/task-163
+
+git diff --check
+```
+
+The first full run exposed one stale `PreviewFeatureTest` expectation for the intentionally reduced
+menu row target (36dp to 32dp); the behavior-focused expectation was updated and the full suite then
+passed. JBR emitted its known Skiko and Jewel `Unsafe` warnings; no runtime/package configuration changed.
