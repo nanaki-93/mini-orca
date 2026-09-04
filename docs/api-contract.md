@@ -50,6 +50,13 @@ with the structured error response described below.
 | POST | `/api/projects/current/analysis-job/pause` | Pause Analyze-all after its active file finishes. |
 | POST | `/api/projects/current/analysis-job/resume` | Resume a persisted paused Analyze-all job. |
 | POST | `/api/projects/current/analysis-job/cancel` | Cancel active/pending Analyze-all work. |
+| GET | `/api/projects/current/performance` | Read cached source-based performance findings and queue-derived coverage; no model work occurs. |
+| GET | `/api/projects/current/performance/context` | Preview the bounded policy-filtered Performance queue and Analysis-model manifest. |
+| GET | `/api/projects/current/performance-job` | Read persisted source-free Performance-job progress. |
+| POST | `/api/projects/current/performance-job` | Explicitly start a bounded sequential Performance review with current queue identity and remote confirmation. |
+| POST | `/api/projects/current/performance-job/pause` | Pause after the active file, guarded by current revision and expected job ID. |
+| POST | `/api/projects/current/performance-job/resume` | Resume a compatible paused job with fresh remote confirmation. |
+| POST | `/api/projects/current/performance-job/cancel` | Cancel active/pending Performance work, retaining completed file reports. |
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM request. |
 | PATCH | `/api/projects/current/drafts/{draftID}` | Replace only the declaration/import list and create the next draft revision. |
 | POST | `/api/projects/current/drafts/{draftID}/validate` | Compose and validate one exact draft revision. |
@@ -117,7 +124,7 @@ equivalent validators.
 The daemon binds to loopback by default. It filters ignored, generated,
 configuration, and secret-like paths before assembling model context. Each
 prompt request checks the effective scope shown by `/api/models/current`: project
-import uses `analyze`, selected-file analysis and Analyze-all use `bug`, and
+import and explicit source-based Performance reviews use `analyze`, selected-file analysis and Analyze-all use `bug`, and
 declaration proposals use `function`. A non-loopback scope requires
 `confirm_remote_provider: true` for that request only; confirmation for one
 scope never authorizes another. Restore, reindex, scans, validation, checks,

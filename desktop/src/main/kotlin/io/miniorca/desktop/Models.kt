@@ -457,6 +457,77 @@ data class AnalyzeAllJob(
 )
 
 @Serializable
+data class PerformanceJobFile(
+    val path: String = "",
+    @SerialName("content_hash") val contentHash: String = "",
+    val status: String = "",
+    val attempts: Int = 0,
+    val reason: String = "",
+    val error: String = "",
+)
+
+@Serializable
+data class PerformanceJob(
+    val id: String = "",
+    val generation: String = "",
+    @SerialName("project_id") val projectId: String = "",
+    @SerialName("project_revision") val projectRevision: String = "",
+    val root: String = "",
+    @SerialName("policy_fingerprint") val policyFingerprint: String = "",
+    @SerialName("queue_id") val queueId: String = "",
+    val status: String = "",
+    @SerialName("max_files") val maxFiles: Int = 0,
+    @SerialName("run_budget") val runBudget: Long = 0,
+    val elapsed: Long = 0,
+    val files: List<PerformanceJobFile> = emptyList(),
+    @SerialName("created_at") val createdAt: String = "",
+    @SerialName("updated_at") val updatedAt: String = "",
+)
+
+@Serializable
+data class PerformanceQueuePreview(
+    @SerialName("project_id") val projectId: String = "",
+    @SerialName("project_revision") val projectRevision: String = "",
+    @SerialName("policy_fingerprint") val policyFingerprint: String = "",
+    @SerialName("queue_id") val queueId: String = "",
+    @SerialName("max_files") val maxFiles: Int = 0,
+    val files: List<PerformanceJobFile> = emptyList(),
+    val excluded: Int = 0,
+    val oversized: Int = 0,
+    @SerialName("outside_limit") val outsideLimit: Int = 0,
+    val provider: ScopedModel? = null,
+)
+
+@Serializable
+data class PerformanceReport(
+    @SerialName("project_id") val projectId: String = "",
+    @SerialName("project_revision") val projectRevision: String = "",
+    @SerialName("queue_id") val queueId: String = "",
+    val status: String = "",
+    val counts: Map<String, Int> = emptyMap(),
+    val categories: Map<String, Int> = emptyMap(),
+    val findings: List<PerformanceFinding> = emptyList(),
+)
+
+@Serializable
+data class PerformanceFinding(
+    val id: String = "",
+    val category: String = "",
+    @SerialName("potential_impact") val potentialImpact: String = "",
+    val confidence: String = "",
+    val title: String = "",
+    @SerialName("observed_pattern") val observedPattern: String = "",
+    @SerialName("workload_conditions") val workloadConditions: String = "",
+    val recommendation: String = "",
+    val tradeoff: String = "",
+    @SerialName("verification_plan") val verificationPlan: String = "",
+    @SerialName("start_line") val startLine: Int = 0,
+    @SerialName("end_line") val endLine: Int = 0,
+    val symbol: String = "",
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null,
+)
+
+@Serializable
 data class ChatSession(
     @SerialName("id") val id: String = "",
     @SerialName("project_id") val projectId: String = "",

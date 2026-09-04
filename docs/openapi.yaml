@@ -340,6 +340,83 @@ paths:
         '200': {description: Canceled job, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/performance:
+    get:
+      tags: [Performance]
+      summary: Read cached source-based performance review coverage and findings
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Queue-derived source-based review report, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceReport'}}}}
+        '204': {description: No performance review has been started for this project revision.}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/performance/context:
+    get:
+      tags: [Performance]
+      summary: Preview a policy-filtered bounded performance queue without provider work
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+        - {name: max_files, in: query, schema: {type: integer, minimum: 1, maximum: 500}}
+        - {name: run_budget_seconds, in: query, schema: {type: integer, minimum: 1, maximum: 3600}}
+      responses:
+        '200': {description: Source-free queue and configured Analysis-model manifest, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceQueuePreview'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/performance-job:
+    get:
+      tags: [Performance]
+      summary: Read persisted bounded performance-review progress
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Source-free progress, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
+        '204': {description: No performance job has been started for this project revision.}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Performance]
+      summary: Explicitly start a bounded sequential source-based performance review
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJobRequest'}}}
+      responses:
+        '202': {description: Job accepted; only one file is reviewed at a time, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/performance-job/pause:
+    post:
+      tags: [Performance]
+      summary: Pause a performance review after its active file finishes
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+        - {name: expected_job_id, in: query, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Paused job, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/performance-job/resume:
+    post:
+      tags: [Performance]
+      summary: Resume a compatible paused performance job with fresh provider confirmation
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJobRequest'}}}
+      responses:
+        '202': {description: Resumed job, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/performance-job/cancel:
+    post:
+      tags: [Performance]
+      summary: Cancel active or pending performance review work
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+        - {name: expected_job_id, in: query, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Canceled job; completed cached reports remain available, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/reindex:
     post:
       tags: [Projects]
@@ -798,6 +875,89 @@ components:
         status: {type: string, enum: [pending, running, completed, failed]}
         attempts: {type: integer}
         error: {type: string, description: Sanitized per-file failure state.}
+    PerformanceJobRequest:
+      type: object
+      required: [project_revision]
+      properties:
+        project_revision: {type: string}
+        max_files: {type: integer, minimum: 1, maximum: 500}
+        run_budget_seconds: {type: integer, minimum: 1, maximum: 3600, description: Provider execution budget; defaults to 900 seconds.}
+        queue_id: {type: string, description: Optional queue identity returned by the current context preview.}
+        policy_fingerprint: {type: string, description: Optional policy fingerprint returned by the current context preview.}
+        expected_job_id: {type: string, description: Required by clients when resuming a known job.}
+        confirm_remote_provider: {type: boolean}
+    PerformanceJob:
+      type: object
+      required: [id, generation, project_id, project_revision, root, policy_fingerprint, queue_id, status, max_files, run_budget, elapsed, files, created_at, updated_at]
+      properties:
+        id: {type: string}
+        generation: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        root: {type: string, description: Canonical local project root captured by the job.}
+        policy_fingerprint: {type: string}
+        queue_id: {type: string}
+        status: {type: string, enum: [running, paused, canceled, completed, stale]}
+        max_files: {type: integer}
+        run_budget: {type: integer, format: int64, description: Nanoseconds of provider execution budget.}
+        elapsed: {type: integer, format: int64, description: Nanoseconds of recorded provider execution time.}
+        active_started_at: {type: string, format: date-time, description: Persisted request start used to conservatively account interrupted provider work.}
+        files: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/PerformanceJobFile'}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    PerformanceJobFile:
+      type: object
+      required: [path, content_hash, status, attempts]
+      properties:
+        path: {type: string, description: Exact project-relative queued file.}
+        content_hash: {type: string}
+        status: {type: string, enum: [pending, running, completed, cached, failed, skipped]}
+        attempts: {type: integer}
+        reason: {type: string}
+        error: {type: string, description: Sanitized per-file failure state.}
+    PerformanceQueuePreview:
+      type: object
+      required: [project_id, project_revision, policy_fingerprint, queue_id, max_files, files, excluded, oversized, outside_limit, provider]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        policy_fingerprint: {type: string}
+        queue_id: {type: string}
+        max_files: {type: integer}
+        files: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/PerformanceJobFile'}}
+        excluded: {type: integer}
+        oversized: {type: integer}
+        outside_limit: {type: integer}
+        provider: {$ref: '#/components/schemas/ScopedModel'}
+    PerformanceReport:
+      type: object
+      required: [project_id, project_revision, queue_id, status, counts, categories, findings]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        queue_id: {type: string}
+        status: {type: string, enum: [running, paused, canceled, completed, stale]}
+        counts: {type: object, additionalProperties: {type: integer}}
+        categories: {type: object, additionalProperties: {type: integer}}
+        findings: {type: array, items: {$ref: '#/components/schemas/PerformanceFinding'}}
+    PerformanceFinding:
+      type: object
+      required: [id, category, potential_impact, confidence, title, observed_pattern, workload_conditions, recommendation, tradeoff, verification_plan, start_line, end_line]
+      properties:
+        id: {type: string}
+        category: {type: string, enum: [cpu, memory, io, concurrency, caching, ui]}
+        potential_impact: {type: string, enum: [high, medium, low, unknown]}
+        confidence: {type: string, enum: [high, medium, low]}
+        title: {type: string}
+        observed_pattern: {type: string}
+        workload_conditions: {type: string}
+        recommendation: {type: string}
+        tradeoff: {type: string}
+        verification_plan: {type: string}
+        start_line: {type: integer}
+        end_line: {type: integer}
+        symbol: {type: string}
+        engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}
     Finding:
       type: object
       properties:

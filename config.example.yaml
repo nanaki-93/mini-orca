@@ -3,7 +3,7 @@
 # variables into profile values or support legacy llm/agents/skills sections.
 
 model_scopes:
-  # Project import and architectural summaries.
+  # Project import, architectural summaries, and explicit source-based Performance reviews.
   analyze:
     api_base_url: "http://localhost:1234/v1"
     api_key: "" # Empty keys are valid for local OpenAI-compatible servers.

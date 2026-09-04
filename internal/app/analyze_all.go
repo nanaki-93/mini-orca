@@ -109,6 +109,9 @@ func (s *Service) StartAnalyzeAll(_ context.Context, options AnalyzeAllOptions, 
 	if err := s.RequireRemoteConfirmation(config.BugModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
+	if active, _ := s.PerformanceJob(); active != nil && (active.Status == performanceJobRunning || active.Status == performanceJobPaused) {
+		return nil, fmt.Errorf("performance review is already active")
+	}
 	analysis, err := s.manager.Analysis()
 	if err != nil {
 		return nil, err
@@ -251,6 +254,7 @@ func (s *Service) ResumeAnalyzeAll(_ context.Context, confirmRemoteProvider bool
 // Reindex invalidates an active job before deterministic facts are refreshed.
 func (s *Service) Reindex() (*project.ProjectIndex, error) {
 	s.invalidateAnalyzeAll()
+	s.invalidatePerformanceJob()
 	s.cancelGoScan()
 	index, err := s.manager.Reindex()
 	if err == nil {
@@ -262,6 +266,7 @@ func (s *Service) Reindex() (*project.ProjectIndex, error) {
 // ProjectChanged stops a job before an imported project replaces the active project.
 func (s *Service) ProjectChanged() {
 	s.invalidateAnalyzeAll()
+	s.invalidatePerformanceJob()
 	s.cancelGoScan()
 	s.clearDraftsForProjectChange()
 	s.clearChatSessions()

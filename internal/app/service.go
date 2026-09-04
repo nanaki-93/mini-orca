@@ -73,6 +73,7 @@ type Service struct {
 	goScan              *goScanController
 	drafts              *draftStore
 	chatSessions        *chatSessionStore
+	performance         *performanceController
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
@@ -119,6 +120,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		goScan:              newGoScanController(),
 		drafts:              newDraftStore(),
 		chatSessions:        newChatSessionStore(),
+		performance:         newPerformanceController(),
 	}, nil
 }
 

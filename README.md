@@ -30,8 +30,8 @@ automatically, writes drafts or tests automatically, commits, or pushes.
 ## Model scopes and provider compatibility
 
 `analyze`, `bug`, and `function` are three fixed independently configured
-scopes. Project import uses `analyze`; selected-file analysis and Analyze-all
-use `bug`; file-scoped declaration proposals and explicit repairs use
+scopes. Project import and explicit source-based Performance reviews use
+`analyze`; selected-file analysis and Analyze-all use `bug`; file-scoped declaration proposals and explicit repairs use
 `function`. All three `model_scopes` profiles are required at startup; there is
 no flat `llm` fallback or agent-model override.
 
@@ -58,7 +58,8 @@ confidence, lifecycle state, and freshness.
 
 Project-local metadata is persisted under `.mini-orca/`: `index.json`,
 `project-analysis.json`, `file-analysis/`, `findings.json`, the persisted
-Analyze-all job at `sessions/analyze-all.json`, guarded Apply state and audit
+Analyze-all job at `sessions/analyze-all.json`, Performance review reports at
+`performance/files/` and its source-free job state at `sessions/performance-job.json`, guarded Apply state and audit
 at `sessions/apply-state.json` and `sessions/audit.json`, and one-file Undo
 backups under `backups/`. These files are application metadata, not source
 edits. Mini-Orca no longer reads or writes the retired `.mini-orca/analysis.md`
