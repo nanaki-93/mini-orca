@@ -1,8 +1,12 @@
+import io.gitlab.arturbosch.detekt.Detekt
+import org.gradle.api.JavaVersion
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-  kotlin("jvm") version "2.0.21"
-  kotlin("plugin.serialization") version "2.0.21"
-  id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"
-  id("org.jetbrains.compose") version "1.7.0"
+  kotlin("jvm") version "2.3.20"
+  kotlin("plugin.serialization") version "2.3.20"
+  id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
+  id("org.jetbrains.compose") version "1.11.0"
   id("io.gitlab.arturbosch.detekt") version "1.23.8"
   id("com.diffplug.spotless") version "6.25.0"
 }
@@ -15,7 +19,15 @@ version =
           ?: error("Mini-Orca version is missing")
     }
 
-kotlin { jvmToolchain(21) }
+kotlin {
+  jvmToolchain(25)
+  compilerOptions { jvmTarget.set(JvmTarget.JVM_22) }
+}
+
+java {
+  sourceCompatibility = JavaVersion.VERSION_22
+  targetCompatibility = JavaVersion.VERSION_22
+}
 
 dependencies {
   implementation(compose.desktop.currentOs)
@@ -46,6 +58,11 @@ detekt {
   config.setFrom(files("config/detekt/detekt.yml"))
   source.setFrom(files("src/main/kotlin"))
 }
+
+// Jewel requires JBR 25 at runtime, but this application does not use Java 23+ APIs.
+// Keeping bytecode at 22 lets the stable Detekt 1.23.8 compiler analyze it. Upgrade
+// this target when Detekt publishes stable JDK 25 support.
+tasks.withType<Detekt>().configureEach { jvmTarget = "22" }
 
 spotless {
   kotlin {
