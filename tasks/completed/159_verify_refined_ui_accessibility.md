@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -107,5 +107,37 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+Passed on 2026-09-04:
+
+```sh
+./desktop/gradlew -p desktop spotlessCheck detekt test \
+  -PvisualOutput="$PWD/desktop/build/reports/ui-refinement/after"
+git diff --check
+```
+
+`DesktopVisualLayoutTest` now sends actual Compose arrow/Enter events through the
+production activity rail and command palette, in addition to the existing
+Enter/Space disclosure and Escape menu paths. It renders the required responsive
+matrix across Summary, Analysis, Editor/Review, Performance, Problems,
+Assistant, menus, disclosures, drawers, and bottom tools; it includes long values,
+empty/paused/failed/stale/populated states, disabled controls, and expanded
+content. The test fixture clears its raster surface per frame, removing stale
+collapsed-state pixels from later expanded-state evidence. Layout, state semantics,
+contrast, responsive-boundary, preference, workflow-isolation, source/diff, and
+focus contracts are covered by the visual, accessibility, keyboard, layout, theme,
+review, editor, and integration suites.
+
+The command produced 45 ignored captures in
+`desktop/build/reports/ui-refinement/after/`. Reviewed representative production
+component renders are recorded in `desktop/UI_REFINEMENT_ACCEPTANCE.md` and
+`desktop/VISUAL_REVIEW.md`; each is explicitly labeled as offscreen Compose/Skia
+evidence rather than a native screenshot. `DropdownMenu` and `AlertDialog` window
+layers are interaction/semantics-tested but cannot be visually painted by this
+offscreen scene.
+
+Native checks are unavailable, not passed: the 2026-09-04 desktop-surface inventory
+contained no Mini-Orca app (`apps: []`) and only the Codex in-app browser. There was
+therefore no native Mini-Orca keyboard/window or supported screen-reader surface to
+exercise. `desktop/UI_REFINEMENT_ACCEPTANCE.md` and
+`desktop/KEYBOARD_SMOKE_CHECKLIST.md` record the exact native release follow-up;
+Task 149 remains independently Pending.

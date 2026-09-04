@@ -19,7 +19,9 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -278,6 +280,59 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun keyboardEventsNavigateAndActivateTheProductionRailAndCommandPalette() {
+    var activeToolWindow by mutableStateOf(LeftToolWindow.Summary)
+    val railFocus = FocusRequester()
+    ComposeVisualFixture(120, 650, 1.3f) {
+          ToolWindowBar(
+              activeToolWindow, { activeToolWindow = it }, Modifier.focusRequester(railFocus))
+        }
+        .use { fixture ->
+          fixture.render("rail-keyboard-initial-120-1.3")
+          railFocus.requestFocus()
+          fixture.render()
+          assertTrue(fixture.pressKey(Key.DirectionDown))
+          fixture.render("rail-keyboard-arrow-120-1.3")
+          assertTrue(fixture.hasDescription("Analysis tool window, not selected, focused"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render("rail-keyboard-activated-120-1.3")
+          kotlin.test.assertEquals(LeftToolWindow.Analysis, activeToolWindow)
+          assertTrue(fixture.hasDescription("Analysis tool window, selected, focused"))
+        }
+
+    var query by mutableStateOf("")
+    val openedFiles = mutableListOf<String>()
+    ComposeVisualFixture(800, 650, 1.3f) {
+          Box(Modifier.fillMaxSize()) {
+            CommandPaletteDialog(
+                mode = PaletteMode.Files,
+                query = query,
+                onQuery = { query = it },
+                files =
+                    listOf(
+                        IndexedFile("internal/alpha.go", "alpha", "Go", false),
+                        IndexedFile("internal/zeta.go", "zeta", "Go", false)),
+                symbols = emptyList(),
+                analysis = null,
+                hasActiveFile = false,
+                onSelectFile = { openedFiles += it },
+                onSelectSymbol = {},
+                onSelectAction = {},
+                onDismiss = {})
+          }
+        }
+        .use { fixture ->
+          fixture.render("palette-files-initial-800-1.3")
+          assertTrue(fixture.isFocused("Filter files"))
+          assertTrue(fixture.pressKey(Key.DirectionDown))
+          fixture.render("palette-files-arrow-800-1.3")
+          assertTrue(fixture.hasDescription("File internal/zeta.go, selected"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          kotlin.test.assertEquals(listOf("internal/zeta.go"), openedFiles)
+        }
+  }
+
+  @Test
   fun candidateAndReviewSurfacesKeepEvidenceAndMutationGuardsExplicit() {
     val project =
         ProjectAnalysis(
@@ -347,7 +402,12 @@ class DesktopVisualLayoutTest {
     val selectedSurfaces = mutableListOf<EditorSurface>()
     ComposeVisualFixture(800, 480, 1.3f) {
           EditorWorkspace(
-              chrome, draft, { selectedSurfaces += it }, canvas = { Text("Read-only source") })
+              chrome,
+              draft,
+              { selectedSurfaces += it },
+              canvas = {
+                SourceEditorPane(project, file, listOf(symbol), symbol, 3, emptyList(), {})
+              })
         }
         .use { fixture ->
           fixture.render("editor-candidate-800-1.3")
@@ -788,7 +848,7 @@ class DesktopVisualLayoutTest {
   @Test
   fun filtersAndToolWindowHeadersKeepInteractionLocalAtNarrowScale() {
     var workflowActions = 0
-    ComposeVisualFixture(480, 420, 1.3f) {
+    ComposeVisualFixture(480, 650, 1.3f) {
           ProblemsToolWindow(
               ProblemsToolWindowState(visualFixtureFindings, false),
               FindingActions(
@@ -927,6 +987,7 @@ private class ComposeVisualFixture(
 
   fun render(name: String? = null) {
     repeat(3) {
+      surface.canvas.clear(AppBackground.toArgb())
       scene.render(surface.canvas.asComposeCanvas(), frameTime)
       frameTime += 80_000_000
     }

@@ -23,7 +23,7 @@ and exactly one isolated local commit per completed task. No pushes.
 | 156 | [Redesign Summary as a concise project dashboard](completed/156_redesign_summary_dashboard.md) | 155 | Complete |
 | 157 | [Simplify workspace copy and information density](completed/157_simplify_workspace_copy.md) | 156 | Complete |
 | 158 | [Polish Editor, workflow surfaces, and global UI copy](completed/158_polish_editor_workflow_surfaces.md) | 157 | Complete |
-| 159 | [Verify responsive layout and accessible UI interactions](159_verify_refined_ui_accessibility.md) | 158 | Pending |
+| 159 | [Verify responsive layout and accessible UI interactions](completed/159_verify_refined_ui_accessibility.md) | 158 | Complete |
 | 160 | [Complete UI refinement acceptance and cleanup](160_ui_refinement_acceptance.md) | 159 | Pending |
 
 Task 150 verifies the current implementation after Tasks 140–148 and the subsequent
