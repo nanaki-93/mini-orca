@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -36,10 +36,10 @@ Inspect these boundaries before editing; change only files needed for this task.
 
 ## Acceptance criteria
 
-- [ ] No standalone Run controls card or equivalent boxed replacement remains. The active job has exactly one action toolbar in its header.
-- [ ] Idle, starting, running, pausing, paused, cancelling, cancelled, failed, and completed states preserve the existing domain transitions; no duplicate callback dispatch.
-- [ ] Coverage and Analysis errors have dense, flat structure with the required micro-typography. Error details remain reachable and selectable.
-- [ ] Long project names, progress text, and errors do not overlap actions at 999dp/800dp or enlarged text. Cancel never disappears into an inaccessible layout.
+- [x] No standalone Run controls card or equivalent boxed replacement remains. The active job has exactly one action toolbar in its header.
+- [x] Idle, starting, running, pausing, paused, cancelling, cancelled, failed, and completed states preserve the existing domain transitions; no duplicate callback dispatch.
+- [x] Coverage and Analysis errors have dense, flat structure with the required micro-typography. Error details remain reachable and selectable.
+- [x] Long project names, progress text, and errors do not overlap actions at 999dp/800dp or enlarged text. Cancel never disappears into an inaccessible layout.
 
 ## Verification
 
@@ -60,6 +60,27 @@ prompt. Do not create a partial/completion commit while acceptance is blocked; n
 
 ## Execution record
 
-Not started. Record actual commands/results, evidence paths, exceptions approved by
-the user, and any runtime/configuration impact during execution. Do not prefill passing results.
+Completed 2026-09-05.
 
+- Replaced the separate run summary and Run controls panels with one flat Analysis header. The
+  header owns the only lifecycle toolbar, while run progress, current file, limits, and provider
+  information remain compact readable rows beneath it.
+- Added a presentation-level action map for valid Start, Pause, Resume, and Cancel transitions,
+  including remote-provider confirmation enablement. The composed header latches an action until
+  the daemon-reported job state changes, preventing rapid repeated lifecycle dispatches.
+- Moved file/retry limits and remote confirmation into a flat Advanced options disclosure.
+  Coverage is now an aligned metric strip that explicitly distinguishes unavailable data from a
+  measured zero. Analysis errors are an icon/title/count disclosure; expanded error text uses a
+  selectable text container and retains the existing no-retry-per-file behavior.
+- Inspected component-rendered wide, narrow, enlarged-text, long-destination, and expanded-error
+  scenes under `desktop/build/reports/ui-precision/task-165/`, including
+  `analysis-1440-1.0.png`, `analysis-800-1.0.png`,
+  `analysis-long-destination-1000-1.3.png`, and
+  `analysis-errors-expanded-800-1.3.png`. Native-window evidence remains owned by Task 170.
+- Passed focused lifecycle/interaction/visual tests under JBR 25. Passed
+  `./desktop/gradlew -p desktop spotlessCheck detekt test` using JDK 21 to launch Gradle with the
+  JBR 25 toolchain path, and passed JBR 25
+  `./desktop/gradlew -p desktop packageDistributionForCurrentOS`. JBR 25 directly cannot launch
+  the current Detekt task (`25.0.4`); Skiko restricted-native-access and Jewel `Unsafe` warnings
+  were non-fatal and unchanged.
+- Ran `git diff --check`. No configuration or migration action is required.
