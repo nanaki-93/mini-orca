@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -37,10 +37,10 @@ Inspect these boundaries before editing; change only files needed for this task.
 
 ## Acceptance criteria
 
-- [ ] The actual app and tests use the pinned standalone Jewel dependency and selected runtime; compilation is not satisfied only by an unused library.
-- [ ] Rail, tool-window, canvas, and overlay roles are distinct, documented, and tested. Meaningful text meets contrast targets on its actual destination surfaces.
-- [ ] All existing tests pass on the supported pairing; app initialization and host packaging work, or the task remains incomplete with a precise blocker.
-- [ ] No default Material/Swing appearance or duplicate palette is introduced. Source, diff, provider consent, and Apply/Undo domain behavior are unchanged.
+- [x] The actual app and tests use the pinned standalone Jewel dependency and selected runtime; compilation is not satisfied only by an unused library.
+- [x] Rail, tool-window, canvas, and overlay roles are distinct, documented, and tested. Meaningful text meets contrast targets on its actual destination surfaces.
+- [x] All existing tests pass on the supported pairing; app initialization and host packaging work, or the task remains incomplete with a precise blocker.
+- [x] No default Material/Swing appearance or duplicate palette is introduced. Source, diff, provider consent, and Apply/Undo domain behavior are unchanged.
 
 ## Verification
 
@@ -61,6 +61,36 @@ prompt. Do not create a partial/completion commit while acceptance is blocked; n
 
 ## Execution record
 
-Not started. Record actual commands/results, evidence paths, exceptions approved by
-the user, and any runtime/configuration impact during execution. Do not prefill passing results.
+Started after verified Task 161 commit
+`8e6f691face88366a08d7e5deaf5b48e54dbbd83`.
 
+- Added the exact verified production dependency
+  `org.jetbrains.jewel:jewel-int-ui-standalone:0.40.0-262.10315.125`. `MiniOrcaTheme`
+  now wraps every production window and the rendering test fixture in Jewel
+  `IntUiTheme(isDark = true)`, with one centrally mapped Material bridge for
+  controls that later tasks own.
+- Replaced the old overlapping palette names with central activity-rail
+  (`#18191B`), tool-window (`#1E1F22`), editor-canvas (`#2B2D30`), overlay
+  (`#26282C`), and pane-separator (`#323438`) roles. Added 13sp/20sp body,
+  12sp/18sp compact, and 11sp/16sp section typography roles. Source/diff and
+  editable-draft typography and all workflow behavior are unchanged.
+- `DesktopThemeTest` now verifies semantic role distinction, dense typography,
+  and meaningful-text/focus contrast on tool-window, canvas, and overlay
+  destinations. Reviewed full production-component renders are ignored output in
+  `desktop/build/reports/ui-precision/task-162/`; they remain offscreen evidence,
+  not native screenshots.
+- The first `createDistributable` launch smoke exposed omitted modules in Compose's
+  trimmed runtime: Jewel required `jdk.unsupported` for `sun.misc.Unsafe`, then
+  Mini-Orca's daemon transport required `java.net.http`. Declaring both modules
+  in `nativeDistributions` produced a final macOS arm64 bundle with JBR 25.0.4,
+  all Jewel jars, and a clean six-second isolated launch smoke. No app data was
+  used; each smoke run had a disposable `user.home`.
+- `spotlessCheck detekt test createDistributable` passed with the JDK 21 launcher
+  and JBR 25 toolchain. The final distribution was then rebuilt directly with
+  JBR 25 (the packager derives its image from the launcher JVM) and smoke-tested.
+  Upstream JDK-25 restricted-native-access notices from Skiko/Jewel remain
+  observed but non-fatal. Runtime setup, module rationale, artifact evidence,
+  and the native-verification boundary are documented in `desktop/README.md`,
+  `desktop/UI_COMPONENT_DECISION.md`, and `desktop/UI_CONTRAST.md`.
+
+The final `git diff --check` passed before staging this task's reviewed files.

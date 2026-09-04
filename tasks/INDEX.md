@@ -6,12 +6,12 @@ Execution: [PROMPT_EXECUTE_UI_PRECISION.md](PROMPT_EXECUTE_UI_PRECISION.md).
 ## Planned UI precision — Tasks 161–171
 
 Strict numeric order; one implementation writer, one verified local commit per task,
-and no push. Task 161 is complete; Task 162 is next and later tasks remain Pending.
+and no push. Tasks 161–162 are complete; Task 163 is next and later tasks remain Pending.
 
 | Order | Task | Depends on | Status |
 | ---: | --- | --- | --- |
 | 161 | [Establish the baseline and prove Jewel compatibility](161_ui_precision_baseline.md) | Current baseline | Complete |
-| 162 | [Integrate Jewel and the semantic IDE theme](162_jewel_theme_integration.md) | 161 | Pending |
+| 162 | [Integrate Jewel and the semantic IDE theme](162_jewel_theme_integration.md) | 161 | Complete |
 | 163 | [Build shared dense headers, toolbars, and dividers](163_dense_ide_primitives.md) | 162 | Pending |
 | 164 | [Layer the shell and replace heavy pane separation](164_layered_pane_shell.md) | 163 | Pending |
 | 165 | [Flatten Analysis and move run controls into its header](165_flat_analysis_toolbar.md) | 164 | Pending |
