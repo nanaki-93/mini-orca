@@ -55,18 +55,22 @@ editing, multi-file tabs, terminal execution, or VCS operations.
 
 Future UI changes follow [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md): shared
 IDE tokens, dense typography, quiet component hierarchy, and visual verification
-against the supplied mock. The guidelines distinguish target design decisions from
-the current implementation and require evaluation before a Jewel or titlebar migration.
+against the supplied mock. The active [UI precision plan](../Plan.md) prioritizes
+Jewel adoption, layered divider-separated panes, and compact header action bars.
+Its compatibility task includes the necessary desktop toolchain/runtime migration;
+the current build versions above remain unchanged until implementation. Custom
+titlebar migration is not part of this plan.
 The current token roles and measured contrast pairs are recorded in
 [UI_CONTRAST.md](UI_CONTRAST.md).
 
-The completed [UI_REFINEMENT_PLAN.md](UI_REFINEMENT_PLAN.md) removed the duplicate
+The previous UI refinement removed the duplicate
 Project rail destination, reduced routine narration, redesigned Summary, corrected
 Analysis width, unified menus/disclosures, and removed replaced desktop UI paths.
 The [UI_REFINEMENT_ACCEPTANCE.md](UI_REFINEMENT_ACCEPTANCE.md) record distinguishes
-passing automated/component evidence from native release follow-ups. Detailed
-Tasks 150–160 remain in [the task index](../tasks/INDEX.md) as the implementation
-ledger; Task 149 remains a separate Pending historical acceptance record.
+passing automated/component evidence from native release follow-ups. The detailed
+records for Tasks 150–160 and their completed plan/prompt were retired from the working tree;
+Git and the acceptance record preserve their history. The [task index](../tasks/INDEX.md)
+now lists planned Tasks 161–171; Task 149 remains Pending historical acceptance.
 
 The desktop uses charcoal surfaces, blue selection and action states, a labeled 88dp line-icon
 rail, compact editor chrome, structured AI Context, a current-draft candidate summary, and a

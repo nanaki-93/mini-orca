@@ -53,6 +53,6 @@ Recorded before cleanup implementation (2026-09-03):
 The verified baseline commands are `make fmt-check`, `go test ./...`, `make
 test-race`, `make vet`, and `./desktop/gradlew -p desktop test`. Before Task
 103, static analysis still reported the known legacy/dead-code findings listed
-in [PLAN.md](../PLAN.md), `go mod tidy -diff` was non-empty, and the desktop
+in the historical cleanup plan (available in Git history), `go mod tidy -diff` was non-empty, and the desktop
 build emitted its Gradle usage-attribute compatibility warning. Later cleanup
 tasks must not represent these as already fixed by this baseline.

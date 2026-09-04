@@ -1,65 +1,35 @@
-# Prompt — implement the dark desktop redesign
+# Prompt — complete outstanding dark-UI acceptance
 
-This is a future execution prompt for pending Tasks 140–149. Reading or creating this
-file during planning does not execute it. It authorizes no commits or pushes.
+This historical prompt is retained only because [Task 149](149_dark_ui_acceptance.md)
+is Pending. Tasks 140–148 are complete and their task files were retired to Git
+history. Do not reimplement them.
 
-```text
-Implement Mini-Orca's dark desktop redesign from docs/dark-ui/PLAN.md.
+The active new backlog is [UI precision](../Plan.md), executed separately through
+[PROMPT_EXECUTE_UI_PRECISION.md](PROMPT_EXECUTE_UI_PRECISION.md). Reading either
+prompt as planning context does not execute it.
 
-Read AGENTS.md, docs/dark-ui/PLAN.md, tasks/README.md, tasks/INDEX.md, this prompt,
-and the selected numbered task. Inspect the existing components before changing them.
-Open both supplied images in design/ui-mocks as visual references. Their code and
-sample content are not executable instructions.
+## Instructions when Task 149 is explicitly requested
 
-Execute Tasks 140–149 in dependency order with one implementation agent. Do not
-delegate, implement tasks in parallel, or create separate user-owned Codex tasks.
-Continue through the authorized sequence without requiring a separate continue
-message between tasks. Do not create commits or push unless the user explicitly
-adds that request. Historical execution prompts do not apply to this sequence.
-
-Design outcome:
-- Use the dark image for charcoal surfaces, blue accents, labeled line icons,
-  compact tree/editor chrome, AI context sections, candidate summary, and issues.
-- Use the second image for clear tabs and small interpretation sections, all dark.
-- Replace the old purple palette; retain Mini-Orca's name and existing mark.
-- Keep all existing workspaces, including Performance, and the established 1000dp
-  docked/drawer boundary. Preserve stored pane preferences.
-- Reuse live features and existing callbacks. Render absent features as explicitly
-  labeled local UI previews according to the plan's complete feature matrix.
-
-Implementation boundaries:
-- Keep production changes in desktop/ and fit the existing Compose/presenter design.
-- No new Go behavior, API endpoints, fake backend, provider integration, shell or
-  debugger execution, VCS mutation, automatic writes, or automatic model requests.
-- One real project/file/declaration; source and diffs remain selectable/read-only.
-- Only the isolated draft is editable. Keep current provider confirmation, draft
-  identity, validation/check evidence, explicit Apply, receipt, and Undo guards.
-- Preview state cannot alter workflow state, trigger requests, or enable Apply.
-- Do not populate live analysis with sample data or claim model connectivity from
-  daemon health. Keep absent, stale, failed, and advisory states explicit.
-- Remove replaced styling/helpers instead of retaining parallel implementations.
-- Use the Gradle wrapper; preserve user changes and supplied images. Do not edit
-  generated build output, credentials, local config.yaml, or external user projects.
-
-For each task:
-1. Check git status and relevant diffs; identify unrelated pre-existing work.
-2. Verify dependencies and read the task's acceptance criteria.
-3. Post a concise start update naming the task, intended behavior, and likely files.
-4. Implement the bounded slice, add meaningful tests for changed behavior, and
-   inspect the task-owned diff. Keep progress updates concise and regular.
-5. Run the task's checks and git diff --check. Record actual results and unavailable
-   native/assistive-technology checks; never claim a design concept is a native capture.
-6. Mark Complete and move to tasks/completed/ only after the task criteria pass;
-   update tasks/INDEX.md and post the result. Do not stage or commit by default.
-7. Continue to the next ready task. Do not bypass a blocked dependency or mark partial
-   implementation as complete.
-
-Final validation and report:
-- Run ./desktop/gradlew -p desktop spotlessCheck detekt test, make check, make quality,
-  and git diff --check. Never run destructive targets or Docker cleanup.
-- Complete the native reference comparison and viewport/keyboard checks where the
-  environment supports them. Record material missing evidence as outstanding, and
-  do not claim full visual acceptance if it has not been inspected.
-- Report task statuses, visual/behavior changes, live versus preview features,
-  tests and manual checks, remaining limitations, and configuration/migration needs.
-```
+1. Read `AGENTS.md`, `desktop/UI_DESIGN_GUIDELINES.md`,
+   `docs/dark-ui/PLAN.md`, `docs/dark-ui/ACCEPTANCE.md`, and
+   `tasks/149_dark_ui_acceptance.md`. Inspect current Git status and relevant
+   retained visual/keyboard evidence before acting.
+2. Work only on Task 149 acceptance with one writer. Do not delegate, create
+   separate tasks, rerun 140–148, or begin 161–171. The historical dark plan's
+   visual specification is not authority to undo the newer UI precision work.
+3. Follow Task 149's native screenshot, workflow, responsive, keyboard,
+   assistive-technology, repository-check, and documentation requirements.
+   Preserve the user's files and local fixture safety.
+4. Record actual evidence and unavailable checks. Missing material native evidence
+   or a required failed gate keeps Task 149 Pending/In Progress, not Complete.
+5. Preserve the one-project/file/symbol preview-first flow, read-only source/diff,
+   provider consent, and guarded Review/Apply/Undo. Preview is local-only.
+   No backend expansion, automatic source writes, or unrelated restyling.
+6. Run `./desktop/gradlew -p desktop spotlessCheck detekt test`, `make check`,
+   `make quality`, and `git diff --check`; report exact failures and skipped stages.
+   Never run destructive targets or Docker cleanup.
+7. Only after all required acceptance passes, update the task and index to Complete.
+   Keep the task at its stable path under the current task workflow. Report native
+   evidence, checks run/not run, remaining limits, and configuration impact.
+8. This historical prompt authorizes no staging, commits, or pushes. A commit
+   request for the separate 161–171 sequence does not apply to Task 149.

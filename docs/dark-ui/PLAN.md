@@ -4,6 +4,12 @@
 **Prepared:** 2026-09-04.
 **Implementation scope:** Kotlin/Compose Desktop in `desktop/`. No new daemon behavior or API.
 
+**Historical acceptance context:** retained because Task 149 is still Pending.
+The active [UI precision plan](../../Plan.md) supersedes this document's visual
+direction and dependency constraints for new work. Tasks 140–148 are complete and
+their individual files have been retired; do not reimplement them. Only Task 149
+may be executed through this sequence's separate prompt when explicitly requested.
+
 ## Design direction
 
 Use the first reference as the visual anchor: charcoal surfaces, a restrained blue
@@ -21,7 +27,7 @@ execute or requirements to implement backend functionality. In particular, the
 example that extracts a helper into another file does not authorize multi-file edits.
 
 The user's new direction replaces the old **preserve Focus Flow palette** requirement
-in the completed [IDE plan](../../plan.md). It also permits visible UI placeholders
+in the completed IDE plan (retired to Git history). It also permits visible UI placeholders
 for unsupported reference features. All existing workflow, scope, and Apply/Undo
 guards remain in force. Earlier execution prompts are historical records; this
 planning request does not execute them or authorize commits.
@@ -220,9 +226,10 @@ verified/advisory labels remain visible; cosmetic work must not change their mea
 
 ## Task sequence and delivery
 
-The detailed [task index](../../tasks/INDEX.md) is authoritative. Execute in dependency
-order using [the dark UI execution prompt](../../tasks/PROMPT_EXECUTE_DARK_UI.md) only
-when implementation is requested. This plan does not require a new approval workflow.
+The [task index](../../tasks/INDEX.md) tracks the outstanding Task 149. The table
+below is historical delivery order; Tasks 140–148 must not be re-executed. Use
+[the dark UI acceptance prompt](../../tasks/PROMPT_EXECUTE_DARK_UI.md) only when
+Task 149 is explicitly requested. It does not execute the new UI precision plan.
 
 | Task | Deliverable | Depends on |
 | ---: | --- | --- |
