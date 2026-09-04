@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -37,7 +38,7 @@ internal fun EngineeringInsightPanel(
     EngineeringInsightPreference.save(expanded)
     if (!expanded) restoreHeaderFocus = true
   }
-  MiniOrcaPanel(modifier.fillMaxWidth().padding(top = 8.dp), raised = expanded) {
+  Column(modifier.fillMaxWidth().padding(top = 8.dp)) {
     IdeDisclosureHeader(
         title = "Engineering insight",
         expanded = expanded,
@@ -58,8 +59,8 @@ internal fun EngineeringInsightPanel(
           Modifier.fillMaxWidth()
               .heightIn(max = 240.dp)
               .verticalScroll(rememberScrollState())
-              .padding(top = 8.dp)) {
-            Text(prose, color = PrimaryText, fontSize = 12.sp)
+              .padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Text(prose, color = PrimaryText, fontSize = 12.sp, lineHeight = 18.sp)
           }
     }
   }
