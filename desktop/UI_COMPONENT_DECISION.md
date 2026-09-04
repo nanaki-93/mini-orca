@@ -1,5 +1,15 @@
 # Desktop component decision
 
+## Active direction — UI precision planning
+
+[Plan.md](../Plan.md) supersedes the old Task 154 migration-scope restriction.
+Tasks 161–162 must verify and adopt standalone Jewel with a supported aligned
+toolchain/runtime; the current Kotlin/Compose build has not yet changed. Treat the
+version examples below as historical evidence, not current dependency recommendations.
+Task 161 will replace this note with verified coordinates, compatibility results,
+and runtime/package requirements before Task 162 changes production dependencies.
+The active plan requires evidence and user direction before a token-only fallback.
+
 ## Jewel evaluation — 2026-09-04
 
 Mini-Orca is a standalone Compose Desktop application pinned to Kotlin 2.0.21,

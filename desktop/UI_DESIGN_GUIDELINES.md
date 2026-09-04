@@ -1,9 +1,9 @@
 # Mini-Orca UI design guidelines
 
-Recorded from the user's design direction on 2026-09-04. Apply these guidelines to
-future desktop UI improvements. They establish the intended design language; this
-document does not itself migrate the current palette, introduce Jewel, or replace
-the native window frame.
+Recorded from the user's design direction on 2026-09-04 and updated with the UI
+precision requirements. Apply these guidelines to future desktop UI improvements.
+The active [Plan.md](../Plan.md) specifies Tasks 161–171; this document does not
+itself implement that plan or replace the native window frame.
 
 ## Visual direction
 
@@ -23,23 +23,25 @@ theme rather than hexadecimal colors scattered through composables:
 
 | Role | Target |
 | --- | --- |
-| Window/workspace background | `#1E1F22` |
-| Navigation panel | `#18191B` |
-| Raised cards/panels | `#2B2D30` |
+| Activity rail / outer chrome | `#18191B` |
+| Tool windows / sidebars / bottom panes | `#1E1F22` |
+| Editor and main content canvas | `#2B2D30` |
 | Active indicator/action accent | `#3574F0` |
 | Muted selected/highlight surface | `#2E436E` |
 | Subtle border/separator | `#323438` |
+| Secondary section headings | Start at `#8A8D93`; verify actual background contrast |
 
-The current implementation has earlier charcoal tokens. Reconcile them centrally
-when making a palette change, updating contrast tests and documentation together;
-do not mix the old and target palettes screen by screen. Keep distinct semantic
-tokens for text, disabled content, success/warning/error, diff additions/removals,
+The existing charcoal values need precise surface ownership, not another color-only
+pass. Reconcile their semantic roles centrally, updating contrast tests and
+documentation together; do not mix old and target roles screen by screen. Keep
+distinct semantic tokens for text, disabled content, success/warning/error, diff additions/removals,
 and keyboard focus. Selection and focus must remain distinguishable. Verify
 contrast against the actual background, including blended overlays.
 
-Use a 1dp border and a 6dp corner radius as the baseline for contained controls or
-raised surfaces. Prefer quiet separators and flat sections for pane structure;
-not every section needs a border, a rounded card, or an accent-colored outline.
+Use continuous 1dp separators with one owner per pane boundary. Pane surfaces are
+square and flat, without elevation or heavy gutters. Keep wider invisible resize
+targets behind splitter lines. Reserve 4dp–6dp corners for contained controls,
+inputs, dialogs, or popups; section grouping is not a reason to add a rounded card.
 
 ## Typography and density
 
@@ -48,6 +50,10 @@ not every section needs a border, a rounded card, or an accent-colored outline.
   every nested container.
 - Use 11sp–12sp micro-labels for secondary IDE chrome. Keep primary content
   readable, source/diffs monospaced, and headings restrained but distinct.
+- Use 12sp–13sp body text with explicit 18sp–20sp line height, 12sp breadcrumbs,
+  and semibold or short uppercase section headings. Default content insets are
+  8dp; avoid nested 16dp–20dp padding. Default headers/actions are 28dp–32dp and
+  tree/list rows 24dp–28dp, growing with text scale rather than clipping.
 - Use explicit, compact line heights without clipping at increased text scale.
   These sizes are logical Compose units, not fixed physical pixels.
 - Use small status badges/chips where state needs emphasis, and quiet text where
@@ -65,7 +71,13 @@ Do not replace this structure with a stack of full-width cards.
 - Activity rail: consistent line icons and labels, quiet hover, and one narrow
   active indicator/pill; inactive items must not look like primary buttons.
 - Tool windows: explicit compact headers, selected tabs, subtle separators, and
-  discoverable collapse/reopen controls.
+  discoverable collapse/reopen controls. Put actions inside their owning header:
+  especially Start/Pause/Resume/Cancel, not in a separate Run controls card. Use
+  named/tooltipped icons or short text toolbar actions. Trailing actions must not
+  toggle the adjacent disclosure. Keep Apply/Undo explicitly labeled and guarded.
+- Tabs and breadcrumbs: active background plus a 2dp accent underline, with a
+  separate keyboard-focus treatment. Use subtle folder/file/symbol icons in real
+  path segments. Do not turn illustrative multiple files into fake or live tabs.
 - Toolbar/titlebar: visually integrated project identity, command search, and
   essential state. Group secondary utilities in menus rather than oversized
   outlined controls. A custom integrated titlebar is a future design target;
@@ -88,16 +100,18 @@ Do not rely on stock Material 3, Material, or Swing appearance. Material primiti
 may remain implementation infrastructure, but colors, typography, shapes, borders,
 and interaction states must come from the dedicated IDE design system.
 
-Evaluate JetBrains Jewel (`org.jetbrains.jewel`) first when considering a component
-library for further UI work. Verify its current standalone-desktop support,
-dependency coordinates, compatibility with the repository's pinned Kotlin/Compose
-versions, accessibility, and styling against the mock before adoption. Record the
-decision and any migration scope; adding this guideline is not a dependency upgrade.
+The active plan prioritizes standalone JetBrains Jewel (`org.jetbrains.jewel`) and
+explicitly includes necessary compatible Kotlin/Compose/wrapper/JBR migration.
+Verify a published release, runtime distribution, accessibility, and test harness
+before production adoption. The old Task 154 no-upgrade boundary is historical,
+not a reason to defer this sequence. Adding these guidelines does not upgrade
+dependencies.
 
-Where Jewel is unsuitable or migration is out of scope, build small reusable
-low-level composables. Use explicit token-driven `Surface`, `BorderStroke`, and
-`RoundedCornerShape` styling where appropriate. Avoid parallel legacy/replacement
-implementations and preserve the current workflow and state boundaries.
+Use one semantic design system mapped into Jewel, not parallel Material and Jewel
+themes. Keep small app-owned components for source/diff or genuinely specialized
+behavior. If a demonstrated integration blocker requires the user's unified-token
+alternative, document evidence and request direction before changing the plan.
+Remove replaced implementations and preserve workflow/state boundaries.
 
 ## Visual acceptance
 

@@ -4,9 +4,9 @@
 
 **Starting implementation HEAD:** `a6fc373c5f4b3a62673775a81c43447883e6bd2f`
 
-**Dependency evidence:** Task 132 is Complete in `tasks/completed/`, and its
+**Dependency evidence:** Task 132 was completed (its task record is now in Git history), and its
 implementation commit is `a10fbeb0b6c4ee67556503cea803ce4d8bb45c0e`.
-The completed IDE plan retains its truthful release-operator limitation: live
+The retired IDE plan recorded the release-operator limitation: live
 viewport, screen-reader, text-scaling, and provider-flow checks need an
 interactive Mini-Orca window and provider-backed fixture.
 

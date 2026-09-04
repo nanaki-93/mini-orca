@@ -99,6 +99,7 @@ Apply. The supported routes are documented once in the
 ## Documentation
 
 - [Desktop usage](desktop/README.md), including keyboard and responsive smoke checks
+- [UI precision plan](Plan.md) and [implementation tasks](tasks/INDEX.md)
 - [Canonical API guide](docs/api-contract.md) and [OpenAPI contract](docs/openapi.yaml)
 - [Configuration reference](CONFIG.md)
 - [Docker deployment](DOCKER.md)
