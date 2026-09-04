@@ -214,23 +214,22 @@ internal fun PersistentStatusBar(
     modifier: Modifier = Modifier,
 ) {
   val segments = visibleDesktopStatusSegments(presentation, widthDp)
-  Row(
-      modifier
-          .fillMaxWidth()
-          .height(30.dp)
-          .background(Chrome)
-          .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
-          .padding(horizontal = 10.dp)
-          .semantics { contentDescription = desktopStatusBarDescription(segments) },
-      verticalAlignment = Alignment.CenterVertically,
-  ) {
-    segments.forEachIndexed { index, segment ->
-      if (index > 0) Spacer(Modifier.width(8.dp))
-      StatusBarSegment(
-          segment = segment,
-          onOpenDetails = onOpenDetails,
-          modifier = Modifier.weight(1f, fill = false),
-      )
+  Column(modifier.fillMaxWidth().background(ActivityRail)) {
+    IdeHorizontalSeparator()
+    Row(
+        Modifier.fillMaxWidth().height(29.dp).padding(horizontal = 10.dp).semantics {
+          contentDescription = desktopStatusBarDescription(segments)
+        },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      segments.forEachIndexed { index, segment ->
+        if (index > 0) Spacer(Modifier.width(8.dp))
+        StatusBarSegment(
+            segment = segment,
+            onOpenDetails = onOpenDetails,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+      }
     }
   }
 }

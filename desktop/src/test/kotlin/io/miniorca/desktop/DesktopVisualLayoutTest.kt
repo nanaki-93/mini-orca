@@ -274,7 +274,13 @@ class DesktopVisualLayoutTest {
             fixture.render("editor-$width")
             fixture.assertTextFits("Preview")
             fixture.assertTextFits("Performance")
-            if (width >= 1_000) fixture.assertTextFits("Files")
+            fixture.assertTextFits("user.go")
+            if (width >= 1_000) {
+              fixture.assertTextFits("Files")
+            } else {
+              fixture.assertTextFits("Files")
+              fixture.assertTextFits("Context")
+            }
           }
     }
   }
@@ -1505,7 +1511,7 @@ private fun EditorVisualFixture(width: Float) {
   val inspector =
       symbolInspectorUiState(
           file, listOf(symbol), symbol, analysis, false, InspectorProviderState(false, false), null)
-  Column(Modifier.fillMaxSize().background(AppBackground)) {
+  Column(Modifier.fillMaxSize().background(ToolWindowSurface)) {
     MainToolbar(
         ToolbarState(
             width,
@@ -1518,29 +1524,38 @@ private fun EditorVisualFixture(width: Float) {
         ToolbarActions({}, {}, {}, {}, {}, {}))
     Row(Modifier.fillMaxWidth().weight(1f)) {
       ToolWindowBar(LeftToolWindow.Editor, {})
+      IdeVerticalSeparator()
       Column(Modifier.weight(1f)) {
         Row(Modifier.fillMaxWidth().weight(1f)) {
           if (!useNarrowLayout(width)) {
-            ExplorerPane(
-                ExplorerPaneState(index, file.path, "", emptySet(), false),
-                ExplorerPaneActions({}, {}, {}, {}, {}),
-                Modifier.width(panes.explorer.dp))
+            DockedToolWindow(
+                title = "Files",
+                content = { modifier ->
+                  ExplorerPane(
+                      ExplorerPaneState(index, file.path, "", emptySet(), false),
+                      ExplorerPaneActions({}, {}, {}, {}, {}),
+                      modifier)
+                },
+                modifier = Modifier.width(panes.explorer.dp))
             ResizableDivider({}, {})
           }
-          EditorWorkspace(
-              EditorChromeUiState(
-                  file.name,
-                  file.path,
-                  editorBreadcrumbLabel(file.path, symbol.name),
-                  "Read-only source fixture",
-                  EditorSurface.Source,
-                  false,
-                  "SOURCE"),
-              null,
-              {},
-              canvas = {
-                SourceEditorPane(
-                    visualFixtureProject, file, listOf(symbol), symbol, 7, emptyList(), {})
+          EditorArea(
+              content = {
+                EditorWorkspace(
+                    EditorChromeUiState(
+                        file.name,
+                        file.path,
+                        editorBreadcrumbLabel(file.path, symbol.name),
+                        "Read-only source fixture",
+                        EditorSurface.Source,
+                        false,
+                        "SOURCE"),
+                    null,
+                    {},
+                    canvas = {
+                      SourceEditorPane(
+                          visualFixtureProject, file, listOf(symbol), symbol, 7, emptyList(), {})
+                    })
               },
               modifier = Modifier.weight(1f))
         }
@@ -1565,32 +1580,37 @@ private fun EditorVisualFixture(width: Float) {
       }
       if (!useNarrowLayout(width)) {
         ResizableDivider({}, {})
-        RightToolWindowContainer(
-            RightToolWindow.Context,
-            {},
-            content = { _, modifier ->
-              ContextToolWindow(
-                  ContextToolWindowState(
-                      inspector,
-                      ScopedModel(),
-                      false,
-                      null,
-                      null,
-                      analysis,
-                      visualFixtureProject,
-                      ProjectOverview(
-                          analysis =
-                              StructuredProjectAnalysis(
-                                  status = "fresh",
-                                  purpose =
-                                      "Go service with a small HTTP API and a repository layer."),
-                          metrics =
-                              ProjectMetrics(
-                                  type = "Go",
-                                  buildFile = "go.mod",
-                                  languages = mapOf("Go" to 7)))),
-                  ContextToolWindowActions({}, {}, {}, {}, {}),
-                  modifier)
+        DockedToolWindow(
+            title = "Tool windows",
+            content = { modifier ->
+              RightToolWindowContainer(
+                  RightToolWindow.Context,
+                  {},
+                  content = { _, contentModifier ->
+                    ContextToolWindow(
+                        ContextToolWindowState(
+                            inspector,
+                            ScopedModel(),
+                            false,
+                            null,
+                            null,
+                            analysis,
+                            visualFixtureProject,
+                            ProjectOverview(
+                                analysis =
+                                    StructuredProjectAnalysis(
+                                        status = "fresh",
+                                        purpose =
+                                            "Go service with a small HTTP API and a repository layer."),
+                                metrics =
+                                    ProjectMetrics(
+                                        type = "Go",
+                                        buildFile = "go.mod",
+                                        languages = mapOf("Go" to 7)))),
+                        ContextToolWindowActions({}, {}, {}, {}, {}),
+                        contentModifier)
+                  },
+                  modifier = modifier)
             },
             modifier = Modifier.width(panes.action.dp))
       }

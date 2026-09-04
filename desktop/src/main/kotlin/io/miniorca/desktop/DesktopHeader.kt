@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,69 +45,67 @@ internal fun MainToolbar(
 ) {
   val connectionPresentation = connectionPresentation(state.connection)
   val presentation = toolbarPresentation(state.widthDp)
-  Row(
-      modifier =
-          modifier
-              .fillMaxWidth()
-              .heightIn(min = 52.dp)
-              .background(Chrome)
-              .padding(horizontal = 16.dp, vertical = 8.dp),
-      verticalAlignment = Alignment.CenterVertically,
-  ) {
-    MiniOrcaMark()
-    if (presentation.showProductName) {
-      Spacer(Modifier.width(10.dp))
-      Text("Mini-Orca", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+  Column(modifier.fillMaxWidth().background(ActivityRail)) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      MiniOrcaMark()
+      if (presentation.showProductName) {
+        Spacer(Modifier.width(10.dp))
+        Text("Mini-Orca", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+      }
+      Spacer(Modifier.width(20.dp))
+      IdeVerticalSeparator(Modifier.height(22.dp))
+      Spacer(Modifier.width(16.dp))
+      ProjectActionsMenu(
+          projectLabel = projectBreadcrumbLabel(state.project),
+          projectAvailable = state.project != null,
+          reconnectAvailable = connectionPresentation.canReconnect,
+          onImport = actions.onImport,
+          onReanalyze = actions.onReanalyze,
+          onReconnect = actions.onReconnect,
+          modifier = Modifier.width(if (presentation.showProductName) 164.dp else 128.dp))
+      if (presentation.showBranchContext) {
+        Spacer(Modifier.width(8.dp))
+        BranchContext(state.gitStatus)
+      }
+      Box(Modifier.weight(1f).padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
+        ChromeButton(
+            onClick = actions.onPalette,
+            background = ToolWindowSurface,
+            modifier =
+                Modifier.widthIn(max = 340.dp).fillMaxWidth().semantics {
+                  contentDescription = "Search files, symbols, commands"
+                }) {
+              DesktopLineIcon(DesktopIcon.Search, "Search", iconSize = 16.dp)
+              Spacer(Modifier.width(8.dp))
+              Text(
+                  if (presentation.showSearchLabel) "Search files, symbols, commands" else "Search",
+                  fontSize = 12.sp,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                  modifier = Modifier.weight(1f))
+            }
+      }
+      if (state.showEditorDrawerActions) {
+        TopBarButton("Files", actions.onOpenExplorer)
+        Spacer(Modifier.width(6.dp))
+        TopBarButton("Context", actions.onOpenContext)
+        Spacer(Modifier.width(6.dp))
+      }
+      if (state.busy) {
+        CircularProgressIndicator(
+            Modifier.size(14.dp).semantics { contentDescription = state.operationStatus },
+            color = FocusAccent,
+            strokeWidth = 2.dp)
+        Spacer(Modifier.width(10.dp))
+      }
+      ConnectionChip(connectionPresentation, compact = !presentation.showProductName)
+      Spacer(Modifier.width(12.dp))
+      PreviewFeatureMenu(toolbarPreviewFeatures)
     }
-    Spacer(Modifier.width(20.dp))
-    Box(Modifier.width(1.dp).height(22.dp).background(Border))
-    Spacer(Modifier.width(16.dp))
-    ProjectActionsMenu(
-        projectLabel = projectBreadcrumbLabel(state.project),
-        projectAvailable = state.project != null,
-        reconnectAvailable = connectionPresentation.canReconnect,
-        onImport = actions.onImport,
-        onReanalyze = actions.onReanalyze,
-        onReconnect = actions.onReconnect,
-        modifier = Modifier.width(if (presentation.showProductName) 164.dp else 128.dp))
-    if (presentation.showBranchContext) {
-      Spacer(Modifier.width(8.dp))
-      BranchContext(state.gitStatus)
-    }
-    Box(Modifier.weight(1f).padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-      ChromeButton(
-          onClick = actions.onPalette,
-          background = Panel,
-          modifier =
-              Modifier.widthIn(max = 340.dp).fillMaxWidth().semantics {
-                contentDescription = "Search files, symbols, commands"
-              }) {
-            DesktopLineIcon(DesktopIcon.Search, "Search", iconSize = 16.dp)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                if (presentation.showSearchLabel) "Search files, symbols, commands" else "Search",
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f))
-          }
-    }
-    if (state.showEditorDrawerActions) {
-      TopBarButton("Files", actions.onOpenExplorer)
-      Spacer(Modifier.width(6.dp))
-      TopBarButton("Context", actions.onOpenContext)
-      Spacer(Modifier.width(6.dp))
-    }
-    if (state.busy) {
-      CircularProgressIndicator(
-          Modifier.size(14.dp).semantics { contentDescription = state.operationStatus },
-          color = FocusAccent,
-          strokeWidth = 2.dp)
-      Spacer(Modifier.width(10.dp))
-    }
-    ConnectionChip(connectionPresentation, compact = !presentation.showProductName)
-    Spacer(Modifier.width(12.dp))
-    PreviewFeatureMenu(toolbarPreviewFeatures)
+    IdeHorizontalSeparator()
   }
 }
 

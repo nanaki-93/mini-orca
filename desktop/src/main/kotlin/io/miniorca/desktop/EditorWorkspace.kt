@@ -117,7 +117,7 @@ internal fun EditorWorkspace(
     canvas: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-  Column(modifier.fillMaxSize().background(AppBackground)) {
+  Column(modifier.fillMaxSize().background(EditorCanvas)) {
     ActiveFileEditorChrome(chrome, onSelectSurface)
     Box(Modifier.fillMaxWidth().weight(1f)) { canvas() }
     candidateSummaryPresentation(draft, chrome)?.let { summary ->
@@ -177,7 +177,7 @@ private fun ActiveFileEditorChrome(
   var tabGroupHasFocus by remember { mutableStateOf(false) }
   Column(
       Modifier.fillMaxWidth()
-          .background(Panel)
+          .background(EditorCanvas)
           .onFocusChanged { tabGroupHasFocus = it.hasFocus }
           .focusable()
           .onPreviewKeyEvent { event ->
@@ -219,7 +219,7 @@ private fun ActiveFileEditorChrome(
     }
     Row(
         Modifier.fillMaxWidth()
-            .background(AppBackground)
+            .background(EditorCanvas)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

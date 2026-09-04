@@ -1,10 +1,21 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class DesktopShellTest {
+  @Test
+  fun keyboardSplittersUseTheSameBoundedResizeStepAsPointerSplitters() {
+    assertEquals(-KEYBOARD_SPLITTER_STEP, verticalSplitterKeyboardDelta(Key.DirectionLeft))
+    assertEquals(KEYBOARD_SPLITTER_STEP, verticalSplitterKeyboardDelta(Key.DirectionRight))
+    assertEquals(null, verticalSplitterKeyboardDelta(Key.DirectionUp))
+    assertEquals(KEYBOARD_SPLITTER_STEP, horizontalSplitterKeyboardDelta(Key.DirectionUp))
+    assertEquals(-KEYBOARD_SPLITTER_STEP, horizontalSplitterKeyboardDelta(Key.DirectionDown))
+    assertEquals(null, horizontalSplitterKeyboardDelta(Key.DirectionLeft))
+  }
+
   @Test
   fun shellUsesADedicatedLandingBranchUntilAProjectExists() {
     assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(DesktopState()))

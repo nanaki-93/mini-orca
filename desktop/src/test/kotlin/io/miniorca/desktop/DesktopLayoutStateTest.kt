@@ -138,7 +138,7 @@ class DesktopLayoutStateTest {
         dockedPaneWidths(1_000f, preferredExplorerWidth = 520f, preferredActionWidth = 560f)
 
     assertEquals(DesktopLayoutState.MIN_EXPLORER_WIDTH, constrained.explorer)
-    assertEquals(356f, constrained.action)
+    assertEquals(355f, constrained.action)
     assertEquals(MIN_EDITOR_WIDTH, constrained.editor)
     assertEquals(520f, DesktopLayoutState().withExplorerWidth(520f).explorerWidth)
     assertEquals(560f, DesktopLayoutState().withActionWidth(560f).actionWidth)
@@ -151,7 +151,26 @@ class DesktopLayoutStateTest {
 
     assertEquals(256f, preferred.explorer)
     assertEquals(344f, preferred.action)
-    assertEquals(736f, preferred.editor)
+    assertEquals(735f, preferred.editor)
+  }
+
+  @Test
+  fun dockedPaneWidthsReserveTheRailBoundaryWithoutPersistingTemporaryClamps() {
+    val constrained =
+        dockedPaneWidths(1_000f, preferredExplorerWidth = 520f, preferredActionWidth = 560f)
+
+    assertEquals(1f, PANE_SEPARATOR_WIDTH)
+    assertEquals(
+        1_000f,
+        TOOL_WINDOW_BAR_WIDTH +
+            PANE_SEPARATOR_WIDTH +
+            RESIZE_DIVIDER_WIDTH * 2 +
+            constrained.explorer +
+            constrained.action +
+            constrained.editor,
+    )
+    assertEquals(520f, DesktopLayoutState().withExplorerWidth(520f).explorerWidth)
+    assertEquals(560f, DesktopLayoutState().withActionWidth(560f).actionWidth)
   }
 
   @Test
