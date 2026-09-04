@@ -16,16 +16,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.contentDescription
@@ -151,37 +152,53 @@ private fun ProjectActionsMenu(
     onReconnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+  val triggerFocus = remember { FocusRequester() }
   var expanded by remember { mutableStateOf(false) }
+  var restoreFocus by remember { mutableStateOf(false) }
   Box(modifier) {
     TopBarButton(
         projectLabel,
         { expanded = true },
         icon = DesktopIcon.Project,
-        modifier = Modifier.fillMaxWidth())
-    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-      DropdownMenuItem(
-          onClick = {
-            expanded = false
-            onImport()
-          }) {
-            Text("Open project")
-          }
-      DropdownMenuItem(
-          onClick = {
-            expanded = false
-            onReanalyze()
-          },
-          enabled = projectAvailable) {
-            Text("Re-index project")
-          }
-      if (reconnectAvailable)
-          DropdownMenuItem(
+        modifier = Modifier.fillMaxWidth().focusRequester(triggerFocus))
+    IdeDropdownMenu(
+        expanded = expanded,
+        onDismissRequest = {
+          expanded = false
+          restoreFocus = true
+        }) {
+          IdeDropdownMenuItem(
+              label = "Open project",
               onClick = {
                 expanded = false
-                onReconnect()
-              }) {
-                Text("Reconnect")
-              }
+                restoreFocus = true
+                onImport()
+              },
+              icon = DesktopIcon.Folder)
+          IdeDropdownMenuItem(
+              label = "Re-index project",
+              onClick = {
+                expanded = false
+                restoreFocus = true
+                onReanalyze()
+              },
+              enabled = projectAvailable,
+              icon = DesktopIcon.Refresh)
+          if (reconnectAvailable)
+              IdeDropdownMenuItem(
+                  label = "Reconnect",
+                  onClick = {
+                    expanded = false
+                    restoreFocus = true
+                    onReconnect()
+                  },
+                  icon = DesktopIcon.Refresh)
+        }
+  }
+  LaunchedEffect(restoreFocus) {
+    if (restoreFocus) {
+      triggerFocus.requestFocus()
+      restoreFocus = false
     }
   }
 }

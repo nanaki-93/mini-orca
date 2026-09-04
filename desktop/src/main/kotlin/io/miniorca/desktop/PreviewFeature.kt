@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.AlertDialog
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +30,16 @@ internal data class PreviewFeature(val label: String, val description: String)
 
 internal fun previewFeatureDescription(feature: PreviewFeature): String =
     "${feature.label} preview. ${feature.description} Local only; no project, provider, or workflow state changes."
+
+internal fun previewFeatureIcon(feature: PreviewFeature): DesktopIcon =
+    when (feature.label) {
+      "New file" -> DesktopIcon.File
+      "Branch actions" -> DesktopIcon.Branch
+      "Content search" -> DesktopIcon.Search
+      "Run / Debug" -> DesktopIcon.Run
+      "Settings & Help" -> DesktopIcon.Settings
+      else -> DesktopIcon.More
+    }
 
 @Composable
 internal fun PreviewBadge(modifier: Modifier = Modifier) {
@@ -68,22 +76,21 @@ internal fun PreviewFeatureMenu(
           Spacer(Modifier.width(4.dp))
           Text("Preview", fontSize = 11.sp)
         }
-    DropdownMenu(
+    IdeDropdownMenu(
         expanded = expanded,
         onDismissRequest = {
           expanded = false
           restoreFocus = true
         }) {
           features.forEach { feature ->
-            DropdownMenuItem(
+            IdeDropdownMenuItem(
+                label = feature.label,
                 onClick = {
                   expanded = false
                   activeFeature = feature
-                }) {
-                  Text(feature.label, modifier = Modifier.weight(1f))
-                  Spacer(Modifier.width(16.dp))
-                  PreviewBadge()
-                }
+                },
+                icon = previewFeatureIcon(feature),
+                status = { PreviewBadge() })
           }
         }
   }

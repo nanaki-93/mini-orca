@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -101,5 +101,4 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+Evaluated Jewel against current primary JetBrains sources and recorded the standalone coordinate, Compose compatibility, accessibility evidence, and no-adoption decision in `desktop/UI_COMPONENT_DECISION.md`: current Jewel releases require newer Compose than the pinned 1.7.0 toolchain, so no dependency or toolchain change was made. Passed `./desktop/gradlew -p desktop spotlessCheck detekt test -PvisualOutput="$PWD/desktop/build/reports/ui-refinement/task-154"` and `git diff --check` on 2026-09-04. Replaced separate stock dropdown call sites with the shared token-styled popup surface and 36dp minimum rows, preserving Compose Desktop popup placement, keyboard behavior, scrolling, outside dismissal, and conditional Reconnect/disabled project actions. Visual review passed for `popup-surface-320-1.3.png`; actual Project and Preview popup semantics cover live callback isolation, disabled items, long scrollable content, Dismiss, and trigger-focus restoration. The raster adapter can dispatch Escape but semantic clicks do not transfer OS popup focus; native keyboard traversal and window-layer rendering remain deferred to Tasks 159/160.
