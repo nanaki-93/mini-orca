@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -54,6 +54,9 @@ internal data class SourceGutterMarker(
     val kind: SourceGutterMarkerKind,
     val description: String,
 )
+
+internal val readOnlyCodeRowMinimumHeight = 20.dp
+internal val sourceEditorGutterWidth = 62.dp
 
 /** Cached source-only work that does not change when focus or gutter markers move. */
 internal data class SourceViewportRow(
@@ -234,7 +237,7 @@ internal fun SourceEditorPane(
             focusedLine = focusedLine,
             markersByLine = markersByLine,
             onSourceLineSelected = onSourceLineSelected,
-            modifier = Modifier.width(62.dp),
+            modifier = Modifier.width(sourceEditorGutterWidth),
         )
         Column(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()).width(IntrinsicSize.Max)) {
@@ -243,7 +246,7 @@ internal fun SourceEditorPane(
                 val declarationSymbol = row.selection?.symbol
                 Box(
                     Modifier.fillMaxWidth()
-                        .height(20.dp)
+                        .heightIn(min = readOnlyCodeRowMinimumHeight)
                         .background(sourceLineBackground(emphasis))
                         .semantics {
                           contentDescription =
@@ -289,7 +292,7 @@ private fun SourceGutter(
       val emphasis = sourceLineEmphasis(row.line, selectedSymbol, focusedLine)
       Row(
           Modifier.fillMaxWidth()
-              .height(20.dp)
+              .heightIn(min = readOnlyCodeRowMinimumHeight)
               .background(sourceLineBackground(emphasis))
               .sourceLineSelectionTap(row.selection) {
                 onSourceLineSelected(requireNotNull(row.selection))

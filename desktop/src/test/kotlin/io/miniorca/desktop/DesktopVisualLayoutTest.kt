@@ -312,6 +312,45 @@ class DesktopVisualLayoutTest {
             }
           }
     }
+
+    val longPath = "src/platform/transport/http/handlers/user_handler.go"
+    val longFile =
+        ProjectFileInfo(
+            path = longPath,
+            contentHash = "long-path-fixture",
+            name = "user_handler.go",
+            language = "Go",
+            sizeBytes = 20,
+            lineCount = 1,
+            modifiedAt = "",
+            binary = false,
+            content = "func ServeUser() {}",
+        )
+    val longChrome =
+        editorChromeUiState(
+            longFile,
+            SymbolInfo(
+                "ServeUser",
+                "function",
+                startLine = 1,
+                endLine = 1,
+                confidence = "exact",
+                atomicTarget = true),
+            EditorSurface.Source,
+            EditorProgressUiState(EditorProgress.Inspect, ""),
+            null,
+        )
+    ComposeVisualFixture(480, 240, 1.3f) {
+          EditorWorkspace(
+              longChrome, null, {}, canvas = { DiffViewer(null, Modifier.fillMaxSize()) })
+        }
+        .use { fixture ->
+          fixture.render("editor-breadcrumbs-deep-480-1.3")
+          listOf("Source · user_handler.go", "src", "…", "user_handler.go", "ServeUser")
+              .forEach(fixture::assertTextFits)
+          assertTrue(fixture.hasDescription("Project-relative path: $longPath"))
+          assertTrue(fixture.hasText("Composed diff unavailable"))
+        }
   }
 
   @Test
@@ -1577,7 +1616,7 @@ private fun EditorVisualFixture(width: Float) {
                     EditorChromeUiState(
                         file.name,
                         file.path,
-                        editorBreadcrumbLabel(file.path, symbol.name),
+                        editorBreadcrumbSegments(file.path, symbol.name),
                         "Read-only source fixture",
                         EditorSurface.Source,
                         false,

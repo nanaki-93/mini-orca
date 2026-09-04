@@ -1,5 +1,7 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -251,6 +254,7 @@ private fun explorerAncestorPaths(path: String): Set<String> =
         .toSet()
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ExplorerItem(
     row: ExplorerRow,
     selected: Boolean,
@@ -260,55 +264,67 @@ private fun ExplorerItem(
 ) {
   val description = explorerRowDescription(row, selected, expanded)
   val nodeColor = explorerNodeColor(row, selected)
-  Row(
-      modifier =
-          Modifier.fillMaxWidth()
-              .semantics {
-                contentDescription = description
-                this.selected = selected
-                role = Role.Button
-              }
-              .background(
-                  if (selected) StrongSurface
-                  else if (focused) FocusAccent.copy(alpha = 0.14f) else Color.Transparent,
-                  RoundedCornerShape(4.dp))
-              .clickable(onClick = onActivate)
-              .height(30.dp)
-              .padding(start = (6 + row.depth * 14).dp, end = 6.dp),
-      verticalAlignment = Alignment.CenterVertically,
-  ) {
-    if (row.directory) {
+  TooltipArea(tooltip = { ExplorerPathTooltip(description) }) {
+    Row(
+        modifier =
+            Modifier.fillMaxWidth()
+                .semantics {
+                  contentDescription = description
+                  this.selected = selected
+                  role = Role.Button
+                }
+                .background(
+                    if (selected) StrongSurface
+                    else if (focused) FocusAccent.copy(alpha = 0.14f) else Color.Transparent,
+                    RoundedCornerShape(4.dp))
+                .clickable(onClick = onActivate)
+                .heightIn(min = 26.dp)
+                .padding(start = (8 + row.depth * 16).dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      if (row.directory) {
+        DesktopLineIcon(
+            if (expanded) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
+            if (expanded) "Expanded folder" else "Collapsed folder",
+            iconSize = 12.dp,
+            tint = FaintText)
+        Spacer(Modifier.width(4.dp))
+      } else {
+        Spacer(Modifier.width(16.dp))
+      }
       DesktopLineIcon(
-          if (expanded) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
-          if (expanded) "Expanded folder" else "Collapsed folder",
-          iconSize = 12.dp,
-          tint = FaintText)
-      Spacer(Modifier.width(4.dp))
-    } else {
-      Spacer(Modifier.width(16.dp))
-    }
-    DesktopLineIcon(
-        if (row.directory) DesktopIcon.Folder else explorerFileIcon(row.language),
-        if (row.directory) "Folder" else "${row.language.ifBlank { "Text" }} file",
-        iconSize = 17.dp,
-        tint = nodeColor)
-    Spacer(Modifier.width(6.dp))
-    Text(
-        row.name,
-        color = if (selected || row.directory) PrimaryText else SecondaryText,
-        fontFamily = FontFamily.Monospace,
-        fontSize = 12.sp,
-        fontWeight = if (row.directory) FontWeight.SemiBold else FontWeight.Normal,
-        modifier = Modifier.weight(1f),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
-    if (!row.directory) {
+          if (row.directory) DesktopIcon.Folder else explorerFileIcon(row.language),
+          if (row.directory) "Folder" else "${row.language.ifBlank { "Text" }} file",
+          iconSize = 14.dp,
+          tint = nodeColor)
       Spacer(Modifier.width(6.dp))
-      val status = statusBadgeStyle(row.analysisStatus)
-      Text(status.label, color = status.color, fontSize = 10.sp, maxLines = 1)
+      Text(
+          row.name,
+          color = if (selected || row.directory) PrimaryText else SecondaryText,
+          fontFamily = FontFamily.Monospace,
+          fontSize = 12.sp,
+          fontWeight = if (row.directory) FontWeight.SemiBold else FontWeight.Normal,
+          modifier = Modifier.weight(1f),
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+      )
+      if (!row.directory) {
+        Spacer(Modifier.width(6.dp))
+        val status = statusBadgeStyle(row.analysisStatus)
+        Text(status.label, color = status.color, fontSize = 10.sp, maxLines = 1)
+      }
     }
   }
+}
+
+@Composable
+private fun ExplorerPathTooltip(description: String) {
+  Text(
+      description,
+      color = PrimaryText,
+      fontSize = 11.sp,
+      modifier = Modifier.background(OverlaySurface).padding(horizontal = 6.dp, vertical = 4.dp),
+  )
 }
 
 private fun explorerNodeColor(row: ExplorerRow, selected: Boolean): Color =
@@ -326,7 +342,14 @@ internal fun explorerRoleLabel(row: ExplorerRow, expanded: Boolean): String =
       else -> "FILE"
     }
 
-internal fun explorerFileIcon(language: String): DesktopIcon = DesktopIcon.File
+internal fun explorerFileIcon(language: String): DesktopIcon =
+    when (language.lowercase()) {
+      "go",
+      "kotlin",
+      "java" -> DesktopIcon.Code
+      "markdown" -> DesktopIcon.Document
+      else -> DesktopIcon.File
+    }
 
 internal fun explorerRowDescription(
     row: ExplorerRow,

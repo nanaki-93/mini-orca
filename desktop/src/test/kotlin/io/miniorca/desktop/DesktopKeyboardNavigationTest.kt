@@ -129,8 +129,8 @@ class DesktopKeyboardNavigationTest {
     assertEquals(ToolbarPresentation(false, false, false), toolbarPresentation(999f))
     assertEquals(ToolbarPresentation(true, false, true), toolbarPresentation(1_000f))
     assertEquals(
-        "very / … / main.go / Run",
-        editorBreadcrumbLabel("very/long/project/path/main.go", "Run"),
+        listOf("very", "…", "main.go", "Run"),
+        editorBreadcrumbSegments("very/long/project/path/main.go", "Run").map { it.label },
     )
   }
 }

@@ -1,7 +1,10 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,11 +36,24 @@ import androidx.compose.ui.unit.sp
 internal data class EditorChromeUiState(
     val title: String,
     val path: String,
-    val breadcrumbs: String,
+    val breadcrumbSegments: List<EditorBreadcrumbSegment>,
     val accessibleDescription: String,
     val activeSurface: EditorSurface,
     val reviewAvailable: Boolean,
     val stageLabel: String,
+)
+
+internal enum class EditorBreadcrumbKind(val icon: DesktopIcon?) {
+  Folder(DesktopIcon.Folder),
+  File(DesktopIcon.File),
+  Symbol(DesktopIcon.Code),
+  Collapsed(null),
+  Placeholder(DesktopIcon.File),
+}
+
+internal data class EditorBreadcrumbSegment(
+    val label: String,
+    val kind: EditorBreadcrumbKind,
 )
 
 internal data class CandidateSummaryPresentation(
@@ -89,7 +106,7 @@ internal fun editorChromeUiState(
   return EditorChromeUiState(
       title = title,
       path = path,
-      breadcrumbs = editorBreadcrumbLabel(path, symbol),
+      breadcrumbSegments = editorBreadcrumbSegments(path, symbol),
       accessibleDescription =
           "$title. $path${symbol?.let { ". Selected declaration $it" }.orEmpty()}. Read-only ${activeSurface.name.lowercase()} surface. $stageLabel.",
       activeSurface = activeSurface,
@@ -98,15 +115,35 @@ internal fun editorChromeUiState(
   )
 }
 
-internal fun editorBreadcrumbLabel(path: String, symbol: String? = null): String {
-  val segments = path.split('/').filter(String::isNotBlank)
+internal fun editorBreadcrumbSegments(
+    path: String,
+    symbol: String? = null,
+): List<EditorBreadcrumbSegment> {
+  val pathSegments = path.split('/').filter(String::isNotBlank)
+  if (pathSegments.isEmpty() || path == "No file selected")
+      return listOf(EditorBreadcrumbSegment(path, EditorBreadcrumbKind.Placeholder))
+
   val compactPath =
       when {
-        segments.isEmpty() -> path
-        segments.size <= 3 -> segments.joinToString(" / ")
-        else -> listOf(segments.first(), "…", segments.last()).joinToString(" / ")
+        pathSegments.size <= 3 -> pathSegments
+        else -> listOf(pathSegments.first(), "…", pathSegments.last())
       }
-  return listOfNotNull(compactPath, symbol).joinToString(" / ")
+  return buildList {
+    compactPath.forEachIndexed { index, label ->
+      add(
+          EditorBreadcrumbSegment(
+              label,
+              when {
+                label == "…" -> EditorBreadcrumbKind.Collapsed
+                index == compactPath.lastIndex -> EditorBreadcrumbKind.File
+                else -> EditorBreadcrumbKind.Folder
+              },
+          ))
+    }
+    symbol?.takeIf(String::isNotBlank)?.let {
+      add(EditorBreadcrumbSegment(it, EditorBreadcrumbKind.Symbol))
+    }
+  }
 }
 
 @Composable
@@ -199,18 +236,24 @@ private fun ActiveFileEditorChrome(
             focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source,
             modifier =
                 Modifier.weight(1f, fill = false).semantics {
-                  contentDescription = "Source · ${state.title}"
+                  contentDescription = "Source file · ${state.title}"
                 },
         ) {
           DesktopLineIcon(DesktopIcon.File, "Source file", tint = SelectionText, iconSize = 16.dp)
-          Spacer(Modifier.width(8.dp))
-          Text(state.title, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Spacer(Modifier.width(6.dp))
+          Text(
+              "Source · ${state.title}",
+              fontSize = 12.sp,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis)
         }
         if (state.reviewAvailable) {
           ChromeTab(
               onClick = { onSelectSurface(EditorSurface.Review) },
               selected = state.activeSurface == EditorSurface.Review,
               focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
+                DesktopLineIcon(DesktopIcon.Check, "Review candidate", iconSize = 14.dp)
+                Spacer(Modifier.width(6.dp))
                 Text("Review candidate", fontSize = 12.sp)
               }
         }
@@ -220,16 +263,14 @@ private fun ActiveFileEditorChrome(
     Row(
         Modifier.fillMaxWidth()
             .background(EditorCanvas)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-      Text(
-          state.breadcrumbs,
-          color = SecondaryText,
-          fontSize = 12.sp,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.weight(1f))
+      EditorBreadcrumbs(
+          state.breadcrumbSegments,
+          state.path,
+          modifier = Modifier.weight(1f),
+      )
       Spacer(Modifier.width(8.dp))
       Text(
           if (state.reviewAvailable) state.stageLabel.replace('_', ' ') else "Read-only",
@@ -237,6 +278,48 @@ private fun ActiveFileEditorChrome(
           fontSize = 11.sp)
     }
   }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun EditorBreadcrumbs(
+    segments: List<EditorBreadcrumbSegment>,
+    fullPath: String,
+    modifier: Modifier = Modifier,
+) {
+  TooltipArea(
+      tooltip = {
+        Text(
+            fullPath,
+            color = PrimaryText,
+            fontSize = 11.sp,
+            modifier =
+                Modifier.background(OverlaySurface).padding(horizontal = 6.dp, vertical = 4.dp),
+        )
+      }) {
+        Row(
+            modifier.horizontalScroll(rememberScrollState()).semantics {
+              contentDescription = "Project-relative path: $fullPath"
+            },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+          segments.forEachIndexed { index, segment ->
+            if (index > 0) {
+              Text(
+                  "›",
+                  color = FaintText,
+                  fontSize = 12.sp,
+                  modifier = Modifier.padding(horizontal = 4.dp),
+              )
+            }
+            segment.kind.icon?.let { icon ->
+              DesktopLineIcon(icon, segment.kind.name.lowercase(), iconSize = 12.dp)
+              Spacer(Modifier.width(4.dp))
+            }
+            Text(segment.label, color = SecondaryText, fontSize = 12.sp, maxLines = 1)
+          }
+        }
+      }
 }
 
 private val editorPreviewFeatures =

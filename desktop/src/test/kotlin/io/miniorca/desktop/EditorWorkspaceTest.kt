@@ -59,7 +59,15 @@ class EditorWorkspaceTest {
             draft = null,
         )
 
-    assertEquals("src / … / run.go / Run", chrome.breadcrumbs)
+    assertEquals(
+        listOf(
+            EditorBreadcrumbSegment("src", EditorBreadcrumbKind.Folder),
+            EditorBreadcrumbSegment("…", EditorBreadcrumbKind.Collapsed),
+            EditorBreadcrumbSegment("run.go", EditorBreadcrumbKind.File),
+            EditorBreadcrumbSegment("Run", EditorBreadcrumbKind.Symbol),
+        ),
+        chrome.breadcrumbSegments,
+    )
     assertTrue(chrome.accessibleDescription.contains(path))
     assertTrue(chrome.accessibleDescription.contains("Selected declaration Run"))
   }
@@ -92,6 +100,22 @@ class EditorWorkspaceTest {
   }
 
   @Test
+  fun rootAndNestedFilesKeepTheirActualSegmentsWhenNoSymbolIsSelected() {
+    assertEquals(
+        listOf(EditorBreadcrumbSegment("main.go", EditorBreadcrumbKind.File)),
+        editorBreadcrumbSegments("main.go"),
+    )
+    assertEquals(
+        listOf(
+            EditorBreadcrumbSegment("internal", EditorBreadcrumbKind.Folder),
+            EditorBreadcrumbSegment("server", EditorBreadcrumbKind.Folder),
+            EditorBreadcrumbSegment("main.go", EditorBreadcrumbKind.File),
+        ),
+        editorBreadcrumbSegments("internal/server/main.go"),
+    )
+  }
+
+  @Test
   fun emptyFileStateIsNeutralAndReadOnly() {
     val chrome =
         editorChromeUiState(
@@ -105,7 +129,10 @@ class EditorWorkspaceTest {
     assertEquals("No file open", chrome.title)
     assertEquals("No file selected", chrome.path)
     assertEquals(EditorSurface.Source, chrome.activeSurface)
-    assertEquals("No file selected", chrome.breadcrumbs)
+    assertEquals(
+        listOf(EditorBreadcrumbSegment("No file selected", EditorBreadcrumbKind.Placeholder)),
+        chrome.breadcrumbSegments,
+    )
     assertTrue(chrome.accessibleDescription.contains("Read-only source surface"))
   }
 
