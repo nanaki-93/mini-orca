@@ -32,6 +32,8 @@ internal enum class DesktopIcon(private val path: String) {
   ChevronDown("M5 9l7 7 7-7"),
   Folder("M3 5h6l2 2h10v13H3Z"),
   File("M5 3h9l5 5v13H5Z M14 3v6h5"),
+  Code("M8 6L3 12l5 6 M16 6l5 6-5 6 M14 4l-4 16"),
+  Document("M5 3h9l5 5v13H5Z M14 3v6h5 M8 12h8 M8 16h6"),
   Run("M7 3l14 9-14 9Z"),
   Debug(
       "M8 8h8v9a4 4 0 0 1-8 0Z M9 8V6a3 3 0 0 1 6 0v2 M4 6l4 4 M20 6l-4 4 M3 13h5 M16 13h5 M4 21l4-4 M16 17l4 4"),

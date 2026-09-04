@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -37,10 +37,10 @@ Inspect these boundaries before editing; change only files needed for this task.
 
 ## Acceptance criteria
 
-- [ ] Active tabs are identifiable from both background and underline, with distinct focus and non-selected hover states.
-- [ ] Breadcrumbs are legible, icon-integrated, and honest about available navigation; root-level, deeply nested, long, and no-symbol cases work.
-- [ ] Files navigation still changes only the selected supported file; no editor generalization, filesystem mutation, or fake open files are introduced.
-- [ ] Source and diff remain selectable/read-only, with correct gutter alignment and scrolling after typography changes.
+- [x] Active tabs are identifiable from both background and underline, with distinct focus and non-selected hover states.
+- [x] Breadcrumbs are legible, icon-integrated, and honest about available navigation; root-level, deeply nested, long, and no-symbol cases work.
+- [x] Files navigation still changes only the selected supported file; no editor generalization, filesystem mutation, or fake open files are introduced.
+- [x] Source and diff remain selectable/read-only, with correct gutter alignment and scrolling after typography changes.
 
 ## Verification
 
@@ -61,6 +61,21 @@ prompt. Do not create a partial/completion commit while acceptance is blocked; n
 
 ## Execution record
 
-Not started. Record actual commands/results, evidence paths, exceptions approved by
-the user, and any runtime/configuration impact during execution. Do not prefill passing results.
+Completed 2026-09-05.
 
+- Kept the existing virtualized explorer because it owns the persisted collapsed-directory set,
+  stable indexed-file identity, and established keyboard contract. The available Jewel tree state
+  would duplicate that state boundary; existing shared Jewel-adopted chrome primitives remain the
+  component foundation. Explorer rows now use a 26dp minimum, consistent indentation, compact
+  type icons, and full-path tooltips without hiding textual analysis status.
+- Replaced the flattened breadcrumb string with folder/file/symbol segment data, subtle separators,
+  compact icons, a full-path tooltip, and a full-path accessibility description. Segments remain
+  non-actionable because this workspace exposes no corresponding navigation callback. The single
+  real Source file tab and conditional Review tab retain `ChromeTab` active background, underline,
+  hover, and focus behavior; no extra files or fake tabs were added.
+- Made source and diff rows share the scale-safe minimum line-height metric, preserving selectable,
+  read-only source/diff content, gutter alignment, and horizontal/vertical scrolling.
+- Ran `spotlessApply`, focused explorer/editor/source/diff/keyboard/visual tests, then
+  `JAVA_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem ./desktop/gradlew -p desktop spotlessCheck detekt test -Porg.gradle.java.installations.paths=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home` successfully. Detekt uses the JDK 21 Gradle launch with the supported JBR 25 Kotlin toolchain.
+- Ran `JAVA_HOME=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home ./desktop/gradlew -p desktop packageDistributionForCurrentOS` successfully, and `git diff --check` passed.
+- Inspected production fixture evidence: `desktop/build/reports/ui-precision/task-167/editor-1440.png`, `editor-999.png`, `editor-breadcrumbs-deep-480-1.3.png`, `editor-candidate-800-1.3.png`, and `review-failed-800-1.3.png`. These are offscreen Compose renders; native-window, OS keyboard, and screen-reader verification remains for Task 170. No configuration or runtime migration is required.

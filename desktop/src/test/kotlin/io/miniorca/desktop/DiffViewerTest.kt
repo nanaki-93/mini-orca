@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -49,5 +50,10 @@ class DiffViewerTest {
     assertEquals("return newValue", row.proposed?.text)
     assertTrue(contrastRatio(Error, diffLineBackground(row.before?.change)) >= 4.5)
     assertTrue(contrastRatio(Success, diffLineBackground(row.proposed?.change)) >= 4.5)
+  }
+
+  @Test
+  fun diffRowsUseTheSameMinimumLineHeightAsTheReadOnlySourceGutter() {
+    assertEquals(20.dp, readOnlyCodeRowMinimumHeight)
   }
 }

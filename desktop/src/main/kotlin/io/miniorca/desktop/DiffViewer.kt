@@ -5,6 +5,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -122,11 +123,14 @@ internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
                         else if (line.kind == "removed") Error else PrimaryText,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
+                    lineHeight = 20.sp,
                     modifier =
-                        Modifier.background(diffLineBackground(line.kind)).semantics {
-                          contentDescription =
-                              "${line.kind} diff line ${line.oldLine.takeIf { it > 0 } ?: line.newLine}"
-                        },
+                        Modifier.heightIn(min = readOnlyCodeRowMinimumHeight)
+                            .background(diffLineBackground(line.kind))
+                            .semantics {
+                              contentDescription =
+                                  "${line.kind} diff line ${line.oldLine.takeIf { it > 0 } ?: line.newLine}"
+                            },
                 )
               }
         }
@@ -146,11 +150,15 @@ private fun DiffCellText(cell: DiffCell?, side: String, modifier: Modifier) {
           },
       fontFamily = FontFamily.Monospace,
       fontSize = 12.sp,
+      lineHeight = 20.sp,
       modifier =
-          modifier.background(diffLineBackground(cell?.change)).semantics {
-            contentDescription =
-                cell?.let { "$side ${it.change} line ${it.lineNumber ?: "unknown"}" }
-                    ?: "$side unchanged"
-          },
+          modifier
+              .heightIn(min = readOnlyCodeRowMinimumHeight)
+              .background(diffLineBackground(cell?.change))
+              .semantics {
+                contentDescription =
+                    cell?.let { "$side ${it.change} line ${it.lineNumber ?: "unknown"}" }
+                        ?: "$side unchanged"
+              },
   )
 }

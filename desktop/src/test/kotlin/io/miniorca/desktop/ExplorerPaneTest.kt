@@ -67,8 +67,9 @@ class ExplorerPaneTest {
   }
 
   @Test
-  fun explorerUsesTheSharedFileIconWithoutChangingItsIndexedIdentity() {
-    assertEquals(DesktopIcon.File, explorerFileIcon("Go"))
+  fun explorerUsesCompactTypeIconsWithoutChangingItsIndexedIdentity() {
+    assertEquals(DesktopIcon.Code, explorerFileIcon("Go"))
+    assertEquals(DesktopIcon.Document, explorerFileIcon("Markdown"))
     assertEquals(DesktopIcon.File, explorerFileIcon(""))
   }
 }

@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -48,6 +49,8 @@ class EditorInspectionStateTest {
 
   @Test
   fun sourceViewportKeepsGutterAndTextRowsAlignedForEmptyAndIndentedLines() {
+    assertEquals(20.dp, readOnlyCodeRowMinimumHeight)
+    assertEquals(62.dp, sourceEditorGutterWidth)
     val rows =
         sourceViewportRows(
             source = "first\n\n    nested",
