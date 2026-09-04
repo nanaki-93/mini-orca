@@ -155,9 +155,8 @@ func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Ana
 	defer cancel()
 	runtime := s.runtimes.analyze
 	analysis, err := project.NewAnalyzerWithProvenance(runtime.client, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).Analyze(timed, root)
-	if timed.Err() != nil {
-		return nil, timed.Err()
-	}
+	// Analyzer records a model timeout as a failed report while retaining the
+	// deterministic project inventory. That inventory is still safe to activate.
 	return analysis, err
 }
 

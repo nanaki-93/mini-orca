@@ -40,7 +40,7 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 	if result.Status != project.AnalysisStatusFresh || result.Purpose == "" || len(result.Symbols) != 1 || result.SymbolExplanations["Run"] == "" || result.Model != "fixture-model" || len(result.Risks) != 1 || result.Risks[0].Severity != "high" {
 		t.Fatalf("analysis = %+v", result)
 	}
-	if strings.Contains(prompt, "helper secret") || !strings.Contains(prompt, "func Run") || !strings.Contains(prompt, "TARGET_SOURCE (the only source content supplied)") {
+	if strings.Contains(prompt, "helper secret") || !strings.Contains(prompt, "func Run") || !strings.Contains(prompt, "TARGET_SOURCE (the only source content supplied)") || !strings.Contains(prompt, "target_path copied exactly") || !strings.Contains(prompt, "target_symbol copied exactly") || !strings.Contains(prompt, "target_signature copied exactly") || !strings.Contains(prompt, "Do not use a symbol field") {
 		t.Fatalf("semantic prompt was not one-file scoped: %s", prompt)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".mini-orca", "file-analysis")); err != nil {
@@ -104,7 +104,7 @@ func TestAnalyzeFileValidatesAndCachesOneExactBugTaskWithoutAnotherModelCall(t *
 	}
 }
 
-func TestSemanticBugTaskRejectsUntrustedTargetsAndDropsInvalidOptionalTests(t *testing.T) {
+func TestSemanticBugTaskDropsUntrustedTargetsAndInvalidOptionalTests(t *testing.T) {
 	target := project.IndexFile{Path: "main.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "exact", AtomicTarget: true}}}
 	valid := func(task string) string {
 		return `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"high","summary":"Risk.","task_spec":` + task + `}],"suggestions":[],"symbol_explanations":{}}`
@@ -116,26 +116,31 @@ func TestSemanticBugTaskRejectsUntrustedTargetsAndDropsInvalidOptionalTests(t *t
 		valid(spec("other.go", "Run")),
 		valid(spec("main.go", "Unknown")),
 		valid(`{"schema_version":"1","target_path":"main.go","target_symbol":"Run","acceptance_criteria":["` + strings.Repeat("x", project.MaxBugTaskItemBytes+1) + `"],"non_goals":[]}`),
+		valid(`{"schema_version":"1","symbol":"Run","acceptance_criteria":["Handle the error."],"non_goals":[]}`),
 	} {
-		if _, err := parseSemanticAnalysis(output, target, "package main\nfunc Run() {}"); err == nil {
-			t.Fatalf("untrusted task was accepted: %s", output)
+		parsed, err := parseSemanticAnalysis(output, target, "package main\nfunc Run() {}")
+		if err != nil || parsed.Risks[0].TaskSpec != nil {
+			t.Fatalf("untrusted task was retained: %+v, %v", parsed, err)
 		}
 	}
 	approximate := target
 	approximate.Symbols = []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "approximate", AtomicTarget: true}}
-	if _, err := parseSemanticAnalysis(valid(spec("main.go", "Run")), approximate, "package main\nfunc Run() {}"); err == nil {
-		t.Fatal("approximate target was accepted")
+	parsed, err := parseSemanticAnalysis(valid(spec("main.go", "Run")), approximate, "package main\nfunc Run() {}")
+	if err != nil || parsed.Risks[0].TaskSpec != nil {
+		t.Fatalf("approximate target was retained: %+v, %v", parsed, err)
 	}
 	nonAtomic := target
 	nonAtomic.Symbols = append([]project.SymbolInfo(nil), target.Symbols...)
 	nonAtomic.Symbols[0].AtomicTarget = false
-	if _, err := parseSemanticAnalysis(valid(spec("main.go", "Run")), nonAtomic, "package main\nfunc Run() {}"); err == nil {
-		t.Fatal("non-atomic target was accepted")
+	parsed, err = parseSemanticAnalysis(valid(spec("main.go", "Run")), nonAtomic, "package main\nfunc Run() {}")
+	if err != nil || parsed.Risks[0].TaskSpec != nil {
+		t.Fatalf("non-atomic target was retained: %+v, %v", parsed, err)
 	}
 	duplicate := target
 	duplicate.Symbols = append(duplicate.Symbols, duplicate.Symbols[0])
-	if _, err := parseSemanticAnalysis(valid(spec("main.go", "Run")), duplicate, "package main\nfunc Run() {}"); err == nil {
-		t.Fatal("duplicate target was accepted")
+	parsed, err = parseSemanticAnalysis(valid(spec("main.go", "Run")), duplicate, "package main\nfunc Run() {}")
+	if err != nil || parsed.Risks[0].TaskSpec != nil {
+		t.Fatalf("duplicate target was retained: %+v, %v", parsed, err)
 	}
 
 	for _, candidate := range []string{
@@ -229,6 +234,26 @@ func TestAnalyzeFileHonorsTimeout(t *testing.T) {
 	waitForTestSignal(t, handlerCanceled, "analysis provider cancellation")
 }
 
+func TestAnalyzeAllDoesNotRetryTimedOutFile(t *testing.T) {
+	providerCanceled := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		<-r.Context().Done()
+		providerCanceled <- struct{}{}
+	}))
+	defer server.Close()
+
+	service, _ := newSemanticAnalysisService(t, server.URL, 1)
+	if _, err := service.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{MaxFiles: 1, MaxRetries: 3}, false); err != nil {
+		t.Fatal(err)
+	}
+	job := waitForAnalyzeAll(t, service, analysisAllStateCompleted)
+	if len(job.Files) != 1 || job.Files[0].Status != analysisAllFileFailed || job.Files[0].Attempts != 1 || job.Files[0].Error != analysisAllTimeoutError {
+		t.Fatalf("timeout job = %+v", job)
+	}
+	waitForTestSignal(t, providerCanceled, "timed-out analysis provider cancellation")
+}
+
 func TestAnalyzeAllProcessesEligibleFilesSequentially(t *testing.T) {
 	var mu sync.Mutex
 	var paths []string
@@ -276,6 +301,31 @@ func TestAnalyzeAllProcessesEligibleFilesSequentially(t *testing.T) {
 		t.Fatalf("request order = %v, want %v", got, want)
 	}
 	assertNoTestHandlerError(t, handlerErrors)
+}
+
+func TestAnalyzeAllSkipsPlainTextAndMarkdownFiles(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
+	}))
+	defer server.Close()
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# Project\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "NOTICE"), []byte("Notice\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	index, err := service.Reindex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidates, err := service.analysisAllCandidates(index, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].Path != "main.go" {
+		t.Fatalf("analysis candidates = %+v", candidates)
+	}
 }
 
 func TestAnalyzeAllCancelRetainsCompletedEntries(t *testing.T) {
