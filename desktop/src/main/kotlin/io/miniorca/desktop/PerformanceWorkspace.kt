@@ -48,14 +48,10 @@ internal fun PerformanceWorkspacePane(
     item {
       WorkspacePaneHeader("Performance")
       Text("Source-based review · Not measured", color = Warning, fontSize = 12.sp)
-      Text(
-          modelDestinationLabel(ModelScope.Analyze, state.model),
-          color = SecondaryText,
-          fontSize = 11.sp)
       Spacer(Modifier.height(8.dp))
       MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
-            SectionLabel("Review controls")
+            SectionLabel("Review")
             Text(
                 performanceStatusLabel(job),
                 color = PrimaryText,
@@ -71,21 +67,25 @@ internal fun PerformanceWorkspacePane(
                   modifier = Modifier.padding(top = 6.dp))
             }
             when (job?.status) {
-              "running" ->
-                  ResponsiveActionGroup(Modifier.padding(top = 8.dp)) {
-                    MiniOrcaButton(
-                        actions.pause,
-                        tone = ActionTone.Attention,
-                        density = ButtonDensity.Toolbar) {
-                          Text("Pause", fontSize = 11.sp)
-                        }
-                    MiniOrcaButton(
-                        actions.cancel,
-                        tone = ActionTone.Destructive,
-                        density = ButtonDensity.Toolbar) {
-                          Text("Cancel", fontSize = 11.sp)
-                        }
-                  }
+              "running" -> {
+                Text(
+                    modelDestinationLabel(ModelScope.Analyze, state.model),
+                    color = SecondaryText,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 8.dp))
+                ResponsiveActionGroup(Modifier.padding(top = 8.dp)) {
+                  MiniOrcaButton(
+                      actions.pause, tone = ActionTone.Attention, density = ButtonDensity.Toolbar) {
+                        Text("Pause", fontSize = 11.sp)
+                      }
+                  MiniOrcaButton(
+                      actions.cancel,
+                      tone = ActionTone.Destructive,
+                      density = ButtonDensity.Toolbar) {
+                        Text("Cancel", fontSize = 11.sp)
+                      }
+                }
+              }
               "paused" -> {
                 RemoteProviderConfirmation(
                     ModelScope.Analyze,
@@ -135,7 +135,7 @@ internal fun PerformanceWorkspacePane(
       Spacer(Modifier.height(8.dp))
       MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
-            SectionLabel("Filter opportunities")
+            SectionLabel("Filters")
             ResponsiveFieldPair(
                 modifier = Modifier.padding(top = 6.dp),
                 first = { modifier ->
@@ -157,14 +157,14 @@ internal fun PerformanceWorkspacePane(
         item {
           SystemStateMessage(
               "No performance review",
-              "Preview a bounded queue, then explicitly start a source-based review. No project performance claim is made.",
+              "Preview limits, then start a bounded source review.",
               modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
         }
     else if (findings.isEmpty())
         item {
           SystemStateMessage(
-              "No opportunities identified in the reviewed files",
-              "Coverage and skipped files remain shown above; this is not a measured performance verdict.",
+              "No opportunities in reviewed files",
+              "Coverage and skipped files are shown above.",
               modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
         }
     else
@@ -245,14 +245,14 @@ internal data class PerformanceWorkspaceActions(
     val prepareOptimization: (String, PerformanceFinding) -> Unit,
 )
 
-private fun performanceStatusLabel(job: PerformanceJob?): String =
+internal fun performanceStatusLabel(job: PerformanceJob?): String =
     when (job?.status) {
-      "running" -> "Current run: running · ${job.elapsed / 1_000_000_000}s execution budget used"
-      "paused" -> "Current run: paused · resume is explicit"
-      "canceled" -> "Last run: canceled; completed reviews remain available"
-      "stale" -> "Last run: outdated — source or policy changed"
-      "completed" -> "Last run: completed source-based queue"
-      else -> "No review has started"
+      "running" -> "Running · ${job.elapsed / 1_000_000_000}s budget used"
+      "paused" -> "Paused · resume explicitly"
+      "canceled" -> "Canceled · completed reviews remain available"
+      "stale" -> "Stale · source or policy changed"
+      "completed" -> "Completed · source-based queue"
+      else -> "No review yet"
     }
 
 private fun performanceImpactOrder(value: String): Int =

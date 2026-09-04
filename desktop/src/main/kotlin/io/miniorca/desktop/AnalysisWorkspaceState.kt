@@ -98,13 +98,13 @@ internal data class AnalyzeAllPresentation(
     get() = run.statusLabel
 
   val statusDetail: String
-    get() = "Coverage: ${coverageSummary(coverage)}. ${run.statusDetail}"
+    get() = run.statusDetail
 
   val controls: String
     get() = run.controls
 
   val noErrorsMessage: String
-    get() = "No analysis errors in this run."
+    get() = "No failures recorded."
 }
 
 internal fun analyzeAllPresentation(
@@ -185,17 +185,15 @@ private fun AnalyzeAllJob?.statusLabel() =
 
 private fun AnalyzeAllJob?.statusDetail() =
     when (this?.status.normalizedAnalyzeAllStatus()) {
-      null ->
-          "No Analyze-all job is available (204 No Content). Import and reindex never start one automatically."
-      "running" ->
-          "Analyze-all is processing candidates. Run counts and analysis errors update as work completes."
-      "pausing" -> "Analyze-all is pausing; the run summary and analysis errors remain visible."
-      "canceling" -> "Analyze-all is canceling; the run summary and analysis errors remain visible."
-      "paused" -> "Analyze-all is paused. Resume explicitly to process the remaining candidates."
+      null -> "No Analyze-all run. Importing or reindexing never starts one automatically."
+      "running" -> "Processing candidates; counts and failures update as files finish."
+      "pausing" -> "Pausing; the summary and failures remain visible."
+      "canceling" -> "Canceling; the summary and failures remain visible."
+      "paused" -> "Paused. Resume to process remaining candidates."
       "completed" -> "Analyze-all completed. Start a new run to refresh coverage."
       "canceled" ->
-          "Analyze-all was canceled. Its run summary and recorded analysis errors remain visible; start a new explicit run to continue."
-      "failed" -> "Analyze-all failed. Inspect the analysis errors and retry explicitly."
+          "Canceled. Completed reviews and failures remain available; start a new run to continue."
+      "failed" -> "Failed. Inspect failures and retry explicitly."
       "stale" -> "Analyze-all is out of date and cannot resume. Start a new run."
       else ->
           "Analyze-all is ${this?.status.orEmpty().ifBlank { "in an unknown state" }}; start a new run for the current project."
@@ -216,6 +214,3 @@ private fun AnalyzeAllJob?.controls() =
 
 private fun String?.normalizedAnalyzeAllStatus(): String? =
     this?.trim()?.lowercase()?.ifBlank { null }
-
-private fun coverageSummary(coverage: AnalysisCoveragePresentation): String =
-    "${coverage.fresh} fresh · ${coverage.stale} stale · ${coverage.missing} missing · ${coverage.running} running · ${coverage.failed} failed"
