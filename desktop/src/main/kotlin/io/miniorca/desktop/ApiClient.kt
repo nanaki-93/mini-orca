@@ -62,6 +62,17 @@ private data class AnalyzeAllResumeRequest(
 )
 
 @Serializable
+private data class PerformanceJobRequest(
+    @SerialName("project_revision") val projectRevision: String,
+    @SerialName("max_files") val maxFiles: Int = 0,
+    @SerialName("run_budget_seconds") val runBudgetSeconds: Int = 0,
+    @SerialName("queue_id") val queueId: String = "",
+    @SerialName("policy_fingerprint") val policyFingerprint: String = "",
+    @SerialName("expected_job_id") val expectedJobId: String = "",
+    @SerialName("confirm_remote_provider") val confirmRemoteProvider: Boolean = false,
+)
+
+@Serializable
 private data class ChatSessionRequest(
     @SerialName("project_id") val projectId: String,
     @SerialName("project_revision") val projectRevision: String,
@@ -266,6 +277,75 @@ class ApiClient(
           send(
               "POST",
               "/api/projects/current/analysis-job/cancel?project_revision=${encode(revision)}"))
+
+  // Source-based Performance review routes. These only use the configured Analysis model.
+  fun performanceReport(revision: String): PerformanceReport? =
+      decodeOptional(
+          sendResponse(
+              "GET", "/api/projects/current/performance?project_revision=${encode(revision)}"))
+
+  fun performanceContext(
+      revision: String,
+      maxFiles: Int = 0,
+      runBudgetSeconds: Int = 0
+  ): PerformanceQueuePreview =
+      decode(
+          send(
+              "GET",
+              "/api/projects/current/performance/context?project_revision=${encode(revision)}&max_files=$maxFiles&run_budget_seconds=$runBudgetSeconds"))
+
+  fun performanceJob(revision: String): PerformanceJob? =
+      decodeOptional(
+          sendResponse(
+              "GET", "/api/projects/current/performance-job?project_revision=${encode(revision)}"))
+
+  fun startPerformanceJob(
+      revision: String,
+      maxFiles: Int = 0,
+      runBudgetSeconds: Int = 0,
+      queueId: String = "",
+      policyFingerprint: String = "",
+      confirmRemoteProvider: Boolean = false,
+  ): PerformanceJob =
+      decode(
+          send(
+              "POST",
+              "/api/projects/current/performance-job",
+              requestBody(
+                  PerformanceJobRequest(
+                      revision,
+                      maxFiles,
+                      runBudgetSeconds,
+                      queueId,
+                      policyFingerprint,
+                      confirmRemoteProvider = confirmRemoteProvider))))
+
+  fun pausePerformanceJob(revision: String, expectedJobId: String): PerformanceJob =
+      decode(
+          send(
+              "POST",
+              "/api/projects/current/performance-job/pause?project_revision=${encode(revision)}&expected_job_id=${encode(expectedJobId)}"))
+
+  fun resumePerformanceJob(
+      revision: String,
+      expectedJobId: String,
+      confirmRemoteProvider: Boolean = false
+  ): PerformanceJob =
+      decode(
+          send(
+              "POST",
+              "/api/projects/current/performance-job/resume",
+              requestBody(
+                  PerformanceJobRequest(
+                      revision,
+                      expectedJobId = expectedJobId,
+                      confirmRemoteProvider = confirmRemoteProvider))))
+
+  fun cancelPerformanceJob(revision: String, expectedJobId: String): PerformanceJob =
+      decode(
+          send(
+              "POST",
+              "/api/projects/current/performance-job/cancel?project_revision=${encode(revision)}&expected_job_id=${encode(expectedJobId)}"))
 
   // File-scoped chat routes.
   fun openChatSession(

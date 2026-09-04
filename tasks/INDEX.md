@@ -88,7 +88,7 @@ the preview-first Apply/Undo boundary.
 | 134 | [Generate and transport contextual engineering insights](completed/134_engineering_insight_generation.md) | 133 | Complete |
 | 135 | [Add the collapsible in-page engineering insight panel](completed/135_inline_engineering_insight_panel.md) | 134 | Complete |
 | 136 | [Implement bounded source-based performance file review](completed/136_performance_file_review.md) | 135 | Complete |
-| 137 | [Add bounded project performance jobs and API](137_project_performance_job.md) | 136 | Pending |
+| 137 | [Add bounded project performance jobs and API](completed/137_project_performance_job.md) | 136 | Complete |
 | 138 | [Add the Performance workspace and optimization handoff](138_performance_workspace.md) | 137 | Pending |
 | 139 | [Complete insights and performance acceptance](139_insights_performance_acceptance.md) | 133–138 | Pending |
 

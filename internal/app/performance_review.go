@@ -26,6 +26,10 @@ func (s *Service) CachedPerformanceFileReview(path string) (*project.Performance
 // ReviewPerformanceFile explicitly reviews one eligible file's supplied source.
 // It never executes project code and has no route until the bounded job API ships.
 func (s *Service) ReviewPerformanceFile(ctx context.Context, path string, confirmRemoteProvider bool) (*project.PerformanceFileReport, error) {
+	return s.reviewPerformanceFile(ctx, path, confirmRemoteProvider, nil)
+}
+
+func (s *Service) reviewPerformanceFile(ctx context.Context, path string, confirmRemoteProvider bool, authorizePublication func() error) (*project.PerformanceFileReport, error) {
 	if err := s.RequireRemoteConfirmation(config.AnalyzeModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
@@ -82,6 +86,11 @@ func (s *Service) ReviewPerformanceFile(ctx context.Context, path string, confir
 	report := project.PerformanceFileReport{SchemaVersion: "1", ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: file.ContentHash, Status: "completed", Findings: findings, Warning: warning, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, ReasoningEffort: runtime.effective.ReasoningEffort, PromptVersion: project.PerformancePromptVersion, ContextPolicyVersion: policy.Version(), GeneratedAt: time.Now().UTC()}
 	if result.Model != "" {
 		report.Model = result.Model
+	}
+	if authorizePublication != nil {
+		if err := authorizePublication(); err != nil {
+			return nil, err
+		}
 	}
 	if err := project.StorePerformanceFileReport(s.manager.Root(), report); err != nil {
 		return nil, err

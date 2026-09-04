@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
@@ -48,6 +50,16 @@ type analyzeAllRequest struct {
 	ProjectRevision       string `json:"project_revision"`
 	MaxFiles              int    `json:"max_files,omitempty"`
 	MaxRetries            int    `json:"max_retries,omitempty"`
+	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
+}
+
+type performanceJobRequest struct {
+	ProjectRevision       string `json:"project_revision"`
+	MaxFiles              int    `json:"max_files,omitempty"`
+	RunBudgetSeconds      int    `json:"run_budget_seconds,omitempty"`
+	QueueID               string `json:"queue_id,omitempty"`
+	PolicyFingerprint     string `json:"policy_fingerprint,omitempty"`
+	ExpectedJobID         string `json:"expected_job_id,omitempty"`
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }
 
@@ -373,6 +385,118 @@ func (h *ProjectHandler) CancelAnalyzeAll(w http.ResponseWriter, r *http.Request
 	api.WriteJSON(w, http.StatusOK, job)
 }
 
+// PerformanceReport returns only cached source-based review results.
+func (h *ProjectHandler) PerformanceReport(w http.ResponseWriter, r *http.Request) {
+	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	report, err := h.service.PerformanceProjectReport()
+	if err != nil {
+		writeProjectError(w, "performance report lookup failed", err)
+		return
+	}
+	if report == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, report)
+}
+
+// PerformanceContext previews a bounded policy-filtered queue without provider work.
+func (h *ProjectHandler) PerformanceContext(w http.ResponseWriter, r *http.Request) {
+	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	preview, err := h.service.PreviewPerformanceQueue(app.PerformanceJobOptions{MaxFiles: queryPositiveInt(r, "max_files"), RunBudget: time.Duration(queryPositiveInt(r, "run_budget_seconds")) * time.Second})
+	if err != nil {
+		writeProjectError(w, "performance context preview failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, preview)
+}
+
+// PerformanceJob returns source-free progress for the active project revision.
+func (h *ProjectHandler) PerformanceJob(w http.ResponseWriter, r *http.Request) {
+	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	job, err := h.service.PerformanceJob()
+	if err != nil {
+		writeProjectError(w, "performance job lookup failed", err)
+		return
+	}
+	if job == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, job)
+}
+
+// StartPerformanceJob explicitly starts a queue bound to the current revision.
+func (h *ProjectHandler) StartPerformanceJob(w http.ResponseWriter, r *http.Request) {
+	request, ok := h.decodePerformanceJobRequest(w, r)
+	if !ok || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
+		return
+	}
+	job, err := h.service.StartPerformanceJob(r.Context(), performanceOptions(request), request.ConfirmRemoteProvider)
+	if err != nil {
+		writeProjectError(w, "start performance job failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusAccepted, job)
+}
+
+func (h *ProjectHandler) PausePerformanceJob(w http.ResponseWriter, r *http.Request) {
+	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	job, err := h.service.PerformanceJob()
+	if err != nil || job == nil || r.URL.Query().Get("expected_job_id") == "" || r.URL.Query().Get("expected_job_id") != job.ID {
+		writeProjectError(w, "pause performance job failed", project.ErrRevisionConflict)
+		return
+	}
+	job, err = h.service.PausePerformanceJob()
+	if err != nil {
+		writeProjectError(w, "pause performance job failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, job)
+}
+
+func (h *ProjectHandler) ResumePerformanceJob(w http.ResponseWriter, r *http.Request) {
+	request, ok := h.decodePerformanceJobRequest(w, r)
+	if !ok || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
+		return
+	}
+	if request.ExpectedJobID == "" {
+		api.WriteRequestError(w, errors.New("expected_job_id is required"), "invalid performance resume request", "Provide the paused job ID.")
+		return
+	}
+	job, err := h.service.ResumePerformanceJob(r.Context(), request.ExpectedJobID, request.ConfirmRemoteProvider)
+	if err != nil {
+		writeProjectError(w, "resume performance job failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusAccepted, job)
+}
+
+func (h *ProjectHandler) CancelPerformanceJob(w http.ResponseWriter, r *http.Request) {
+	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	job, err := h.service.PerformanceJob()
+	if err != nil || job == nil || r.URL.Query().Get("expected_job_id") == "" || r.URL.Query().Get("expected_job_id") != job.ID {
+		writeProjectError(w, "cancel performance job failed", project.ErrRevisionConflict)
+		return
+	}
+	job, err = h.service.CancelPerformanceJob()
+	if err != nil {
+		writeProjectError(w, "cancel performance job failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, job)
+}
+
 // FileAnalysis returns cached semantic state only; source is never returned.
 func (h *ProjectHandler) FileAnalysis(w http.ResponseWriter, r *http.Request) {
 	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
@@ -435,6 +559,24 @@ func (h *ProjectHandler) decodeAnalyzeAllRequest(w http.ResponseWriter, r *http.
 		return request, false
 	}
 	return request, true
+}
+
+func (h *ProjectHandler) decodePerformanceJobRequest(w http.ResponseWriter, r *http.Request) (performanceJobRequest, bool) {
+	var request performanceJobRequest
+	if !decodeStrictJSON(w, r, &request, "invalid performance job request", "Provide project_revision and optional bounded review settings.") {
+		return request, false
+	}
+	return request, true
+}
+
+func performanceOptions(request performanceJobRequest) app.PerformanceJobOptions {
+	return app.PerformanceJobOptions{MaxFiles: request.MaxFiles, RunBudget: time.Duration(request.RunBudgetSeconds) * time.Second, QueueID: request.QueueID, PolicyFingerprint: request.PolicyFingerprint}
+}
+
+func queryPositiveInt(r *http.Request, name string) int {
+	var value int
+	_, _ = fmt.Sscan(r.URL.Query().Get(name), &value)
+	return value
 }
 
 func writeProjectError(w http.ResponseWriter, action string, err error) {

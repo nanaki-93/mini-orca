@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -104,3 +104,17 @@ feat(performance): add bounded project review jobs
 ```
 
 Do not amend, squash, tag, or push. Verify no Task 137 work remains uncommitted.
+
+## Completion evidence
+
+- Added persisted, source-free bounded Performance jobs with queue identity, policy and
+  revision guards, cumulative request-time budget accounting, pause/resume/cancel,
+  stale-run protection, and symmetric Analyze-all exclusion.
+- Added the seven documented loopback routes, OpenAPI/API-contract/route inventory,
+  and Kotlin wire models/client methods. Performance uses the existing `analyze`
+  model scope only.
+- Added deterministic lifecycle coverage for queue conflicts, pause/resume, cached
+  report derivation, persistence, and Analyze-all exclusion.
+- Passed `make fmt-check`, `go test ./...`, `make test-race`, `make vet`,
+  `./desktop/gradlew -p desktop spotlessCheck detekt test`, `make check`,
+  `make quality`, and `git diff --check`.
