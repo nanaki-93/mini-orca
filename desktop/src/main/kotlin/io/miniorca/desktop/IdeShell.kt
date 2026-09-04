@@ -167,21 +167,20 @@ internal fun DockedToolWindow(
 
 @Composable
 private fun ToolWindowHeader(title: String, onClose: (() -> Unit)?) {
-  Row(
-      Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 8.dp),
-      verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            title,
-            color = PrimaryText,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f))
+  IdePaneHeader(
+      title = title,
+      actions = {
         onClose?.let { close ->
-          ChromeButton(onClick = close, contentPadding = PaddingValues(4.dp)) {
+          ChromeButton(
+              onClick = close,
+              contentPadding = PaddingValues(4.dp),
+              accessibleName = "Close $title drawer",
+          ) {
             DesktopLineIcon(DesktopIcon.Close, "Close $title drawer", iconSize = 16.dp)
           }
         }
-      }
+      },
+  )
 }
 
 @Composable
@@ -449,7 +448,7 @@ internal fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
       },
       contentAlignment = Alignment.Center,
   ) {
-    Box(Modifier.fillMaxHeight().width(1.dp).background(Border))
+    IdeVerticalSeparator()
   }
 }
 
@@ -470,6 +469,6 @@ internal fun HorizontalResizableDivider(onDelta: (Float) -> Unit, onCommit: () -
       },
       contentAlignment = Alignment.Center,
   ) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Border))
+    IdeHorizontalSeparator()
   }
 }

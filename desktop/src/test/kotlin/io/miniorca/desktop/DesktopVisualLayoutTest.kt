@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
@@ -605,6 +606,82 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun sharedChromeKeepsNamedActionsAndDisclosureActivationIndependent() {
+    var actionCalls = 0
+    var expanded by mutableStateOf(false)
+    ComposeVisualFixture(520, 220, 1.5f) {
+          Column(Modifier.fillMaxSize().background(AppBackground)) {
+            IdeDisclosureHeader(
+                title = "Details",
+                expanded = expanded,
+                onToggle = { expanded = !expanded },
+                actions = {
+                  ChromeButton(
+                      onClick = { actionCalls++ },
+                      accessibleName = "Refresh details",
+                  ) {
+                    Text("Refresh")
+                  }
+                })
+            ChromeButton(onClick = { actionCalls++ }, accessibleName = "Run check") {
+              Text("Run check")
+            }
+            ChromeButton(
+                onClick = { actionCalls++ },
+                enabled = false,
+                accessibleName = "Unavailable check",
+            ) {
+              Text("Unavailable check")
+            }
+          }
+        }
+        .use { fixture ->
+          fixture.render("shared-chrome-actions-150")
+          assertTrue(fixture.hasDescription("Run check"))
+          fixture.assertTextFits("Refresh")
+          assertTrue(fixture.requestFocus("Run check"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, actionCalls)
+          assertFalse(fixture.tryClick("Unavailable check"))
+          assertEquals(1, actionCalls)
+          fixture.clickText("Refresh")
+          assertEquals(2, actionCalls)
+          assertFalse(expanded)
+          fixture.clickText("Details")
+          fixture.render("shared-chrome-actions-expanded-150")
+          assertTrue(expanded)
+          assertEquals("Expanded", fixture.stateDescription("Details"))
+          assertTrue(fixture.requestFocus("Details"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertFalse(expanded)
+          assertEquals("Collapsed", fixture.stateDescription("Details"))
+          assertTrue(fixture.isFocused("Details"))
+        }
+  }
+
+  @Test
+  fun sharedChromeFixtureShowsInteractionStatesAndKeepsTextLegibleAtOneHundredFiftyPercent() {
+    ComposeVisualFixture(720, 320, 1.5f) { SharedChromeStatesVisualFixture() }
+        .use { fixture ->
+          fixture.render("shared-chrome-states-150")
+          listOf(
+                  "Default",
+                  "Hovered",
+                  "Pressed",
+                  "Selected tab",
+                  "Disabled",
+                  "Focused",
+                  "Collapsed section",
+                  "Expanded section")
+              .forEach(fixture::assertTextFits)
+          assertEquals("Collapsed", fixture.stateDescription("Collapsed section"))
+          assertEquals("Expanded", fixture.stateDescription("Expanded section"))
+          assertTrue(fixture.isDisabled("Disabled"))
+        }
+  }
+
+  @Test
   fun baselineCapturesSummaryAndExercisesOpenProjectAndPreviewMenus() {
     ComposeVisualFixture(1440, 900) {
           ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
@@ -1027,6 +1104,18 @@ private class ComposeVisualFixture(
         label)
   }
 
+  fun tryClick(label: String): Boolean =
+      nodes()
+          .filter {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true ||
+                it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == label } ==
+                    true
+          }
+          .flatMap { node -> generateSequence(node) { it.parent } }
+          .mapNotNull { node -> node.config.getOrNull(SemanticsActions.OnClick)?.action }
+          .firstOrNull()
+          ?.invoke() ?: false
+
   private fun clickNode(start: SemanticsNode?, label: String) {
     var node = start
     while (node != null) {
@@ -1291,6 +1380,47 @@ private fun SharedControlsVisualFixture() {
         label = "Search files",
         showLabel = false,
         modifier = Modifier.fillMaxWidth())
+  }
+}
+
+@Composable
+private fun SharedChromeStatesVisualFixture() {
+  Column(
+      Modifier.fillMaxSize().background(AppBackground).padding(8.dp),
+      verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+  ) {
+    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+      ChromeButton(onClick = {}, accessibleName = "Default") { Text("Default") }
+      ChromeButton(
+          onClick = {},
+          interactionOverride = IdeActionInteraction(hovered = true),
+          accessibleName = "Hovered") {
+            Text("Hovered")
+          }
+      ChromeButton(
+          onClick = {},
+          interactionOverride = IdeActionInteraction(pressed = true),
+          accessibleName = "Pressed") {
+            Text("Pressed")
+          }
+      ChromeTab(onClick = {}, selected = true, accessibleName = "Selected tab") {
+        Text("Selected tab")
+      }
+    }
+    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+      ChromeButton(onClick = {}, enabled = false, accessibleName = "Disabled") { Text("Disabled") }
+      ChromeButton(onClick = {}, focusHighlight = true, accessibleName = "Focused") {
+        Text("Focused")
+      }
+    }
+    IdeDisclosureHeader("Collapsed section", expanded = false, onToggle = {})
+    IdeDisclosureHeader("Expanded section", expanded = true, onToggle = {})
+    IdeHorizontalSeparator()
+    Row(Modifier.height(20.dp)) {
+      Text("Vertical separator", style = IdeTypography.section)
+      Spacer(Modifier.width(8.dp))
+      IdeVerticalSeparator()
+    }
   }
 }
 

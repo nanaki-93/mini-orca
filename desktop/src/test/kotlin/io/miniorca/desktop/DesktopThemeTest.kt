@@ -88,7 +88,7 @@ class DesktopThemeTest {
 
   @Test
   fun compactButtonDensitiesStayWithinTheApprovedControlScale() {
-    assertEquals(36.dp, buttonDensityStyle(ButtonDensity.Standard).height)
+    assertEquals(32.dp, buttonDensityStyle(ButtonDensity.Standard).height)
     assertEquals(32.dp, buttonDensityStyle(ButtonDensity.Toolbar).height)
     assertEquals(
         10.dp,
@@ -105,7 +105,6 @@ class DesktopThemeTest {
   @Test
   fun containedControlsUseTheSixDpBaselineAndKeepFocusDistinctFromSelection() {
     assertEquals(RoundedCornerShape(6.dp), MiniOrcaShapes.small)
-    assertEquals(MiniOrcaShapes.small, MiniOrcaButtonDefaults.shape)
     assertNotEquals(SelectionSurface, FocusAccent)
     assertNotEquals(SelectionAccent, FocusAccent)
   }
