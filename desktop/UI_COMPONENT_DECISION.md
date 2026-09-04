@@ -5,10 +5,10 @@
 Mini-Orca will adopt standalone Jewel as its desktop component foundation. The
 validated coordinate is
 `org.jetbrains.jewel:jewel-int-ui-standalone:0.40.0-262.10315.125`; it will enter
-production in Task 162, not before. The temporary Task 161 spike compiled and
-rendered the theme, action, tab, tree/disclosure, popup menu, and text-input APIs
-under JBR 25. The complete evidence, resolved graph, runtime details, and test
-boundary are in [UI_PRECISION_BASELINE.md](UI_PRECISION_BASELINE.md).
+production in Task 162. The temporary Task 161 spike compiled and rendered the
+theme, action, tab, tree/disclosure, popup menu, and text-input APIs under JBR 25.
+The complete evidence, resolved graph, runtime details, and test boundary are in
+[UI_PRECISION_BASELINE.md](UI_PRECISION_BASELINE.md).
 
 | Concern | Adopted decision |
 | --- | --- |
@@ -17,7 +17,7 @@ boundary are in [UI_PRECISION_BASELINE.md](UI_PRECISION_BASELINE.md).
 | Bytecode and analysis | JBR 25 runs the toolchain/application; source targets JVM 22 solely because stable Detekt 1.23.8 cannot run on JDK 25 or analyze target 25. Remove this workaround when stable Detekt supports it. |
 | Application policy | Use Jewel for standard controls and theme roles. Keep Mini-Orca-owned source/diff rendering, state, accessibility labels, callbacks, and preview-first safety behavior. |
 | Windows and popups | Retain normal desktop window decoration. No custom titlebar and no experimental popup flag are required. Offscreen popup evidence does not replace Task 170 native keyboard/window checks. |
-| Packaging | Package with the matching JBR 25 distribution for each supported target; validate the actual artifact in Task 171. No local JBR path is committed. |
+| Packaging | Compose's JBR 25 runtime image explicitly includes `java.net.http` for the daemon client and `jdk.unsupported` for Jewel's macOS bridge. Task 162 built and launched the macOS arm64 app; Task 171 validates the final per-platform artifacts. No local JBR path is committed. |
 
 ## Migration ownership
 

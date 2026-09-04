@@ -31,6 +31,7 @@ java {
 
 dependencies {
   implementation(compose.desktop.currentOs)
+  implementation("org.jetbrains.jewel:jewel-int-ui-standalone:0.40.0-262.10315.125")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
   testImplementation(kotlin("test"))
@@ -40,6 +41,7 @@ compose.desktop {
   application {
     mainClass = "io.miniorca.desktop.MainKt"
     nativeDistributions {
+      modules("java.net.http", "jdk.unsupported")
       packageName = "Mini-Orca"
       packageVersion = project.version.toString()
     }

@@ -13,13 +13,32 @@ The Editor workflow is Go-first: exact replace/create declaration drafts receive
 
 ## Build compatibility
 
-The checked-in wrapper uses Gradle 8.6 with Kotlin 2.0.21 and Compose
-Multiplatform 1.7.0. Kotlin's [Gradle compatibility table](https://kotlinlang.org/docs/gradle-configure-project.html#apply-the-plugin)
-lists Gradle 8.6 as fully supported for Kotlin 2.0.20–2.0.21; the
-[Compose Multiplatform 1.7.0 release](https://blog.jetbrains.com/kotlin/2024/10/compose-multiplatform-1-7-0-released/)
-documents its Kotlin 2.0.20 pairing. Keep the wrapper and plugins aligned, and
-use `./desktop/gradlew -p desktop test --warning-mode all` to check the desktop
-build without a globally installed Gradle.
+The checked-in wrapper uses Gradle 9.1.0 with Kotlin JVM/serialization/Compose
+compiler plugin 2.3.20 and Compose Multiplatform 1.11.0. The production UI uses
+standalone Jewel `0.40.0-262.10315.125`, which requires JetBrains Runtime (JBR)
+25. Use a matching unpacked JBR SDK/JDK for application launch and packaging; do
+not commit a machine-specific path or install a system JDK for this project.
+
+```bash
+JAVA_HOME=/path/to/jbrsdk-25.0.4-<platform>-b508.27/Contents/Home \
+  ./desktop/gradlew -p desktop test createDistributable
+```
+
+Until stable Detekt supports JDK 25, run its target-22 analysis from a JDK 21
+Gradle launcher while explicitly exposing the JBR toolchain:
+
+```bash
+JAVA_HOME=/path/to/jdk-21 \
+  ./desktop/gradlew -p desktop spotlessCheck detekt test \
+  -Porg.gradle.java.installations.paths=/path/to/jbrsdk-25.0.4-<platform>-b508.27/Contents/Home
+```
+
+The distribution runtime includes `java.net.http` for the loopback daemon client
+and `jdk.unsupported` for Jewel's native bridge. The host macOS arm64 package was
+built and given an isolated startup smoke test in Task 162; this is not native
+visual or accessibility acceptance. See [UI_PRECISION_BASELINE.md](UI_PRECISION_BASELINE.md)
+for the pinned-artifact provenance and [UI_COMPONENT_DECISION.md](UI_COMPONENT_DECISION.md)
+for migration ownership.
 
 ## Opening a project
 
@@ -55,11 +74,9 @@ editing, multi-file tabs, terminal execution, or VCS operations.
 
 Future UI changes follow [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md): shared
 IDE tokens, dense typography, quiet component hierarchy, and visual verification
-against the supplied mock. The active [UI precision plan](../Plan.md) prioritizes
-Jewel adoption, layered divider-separated panes, and compact header action bars.
-Its compatibility task includes the necessary desktop toolchain/runtime migration;
-the current build versions above remain unchanged until implementation. Custom
-titlebar migration is not part of this plan.
+against the supplied mock. The active [UI precision plan](../Plan.md) has adopted
+Jewel and now continues with layered divider-separated panes and compact header
+action bars. Custom titlebar migration is not part of this plan.
 The current token roles and measured contrast pairs are recorded in
 [UI_CONTRAST.md](UI_CONTRAST.md).
 

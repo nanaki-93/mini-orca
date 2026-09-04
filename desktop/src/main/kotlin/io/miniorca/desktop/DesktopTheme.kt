@@ -46,15 +46,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.pow
+import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 
 /** Every desktop color is derived from this single dark semantic palette. */
 internal object MiniOrcaPalette {
-  val appBackground = Color(0xFF1E1F22)
-  val chromeSurface = Color(0xFF18191B)
-  val surface = Color(0xFF1E1F22)
-  val raisedSurface = Color(0xFF2B2D30)
-  val strongSurface = Color(0xFF323438)
-  val border = Color(0xFF323438)
+  val activityRail = Color(0xFF18191B)
+  val toolWindow = Color(0xFF1E1F22)
+  val editorCanvas = Color(0xFF2B2D30)
+  val overlay = Color(0xFF26282C)
+  val paneSeparator = Color(0xFF323438)
   val primaryText = Color(0xFFF2F2F2)
   val secondaryText = Color(0xFFC4C7C5)
   val faintText = Color(0xFF9FA2A6)
@@ -146,21 +146,28 @@ internal val MiniOrcaShapes =
         large = RoundedCornerShape(8.dp),
     )
 
+internal object IdeTypography {
+  val body = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, lineHeight = 20.sp)
+  val compactBody = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 18.sp)
+  val section =
+      androidx.compose.ui.text.TextStyle(
+          fontWeight = FontWeight.SemiBold, fontSize = 11.sp, lineHeight = 16.sp)
+  val action =
+      androidx.compose.ui.text.TextStyle(
+          fontWeight = FontWeight.Normal,
+          fontSize = 12.sp,
+          lineHeight = 16.sp,
+          letterSpacing = 0.15.sp)
+}
+
 internal val MiniOrcaTypography =
     Typography(
         defaultFontFamily = FontFamily.Default,
-        h6 =
-            androidx.compose.ui.text.TextStyle(
-                fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 20.sp),
-        body1 = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-        body2 = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
-        button =
-            androidx.compose.ui.text.TextStyle(
-                fontWeight = FontWeight.Normal,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-                letterSpacing = 0.15.sp),
-        caption = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, lineHeight = 16.sp),
+        h6 = IdeTypography.body.copy(fontWeight = FontWeight.SemiBold),
+        body1 = IdeTypography.body,
+        body2 = IdeTypography.compactBody,
+        button = IdeTypography.action,
+        caption = IdeTypography.section,
     )
 
 internal enum class ActionTone {
@@ -290,7 +297,7 @@ internal fun CompactSingleLineField(
     enabled: Boolean = true,
     showLabel: Boolean = true,
     placeholder: String? = null,
-    textStyle: TextStyle = TextStyle(fontSize = 12.sp),
+    textStyle: TextStyle = IdeTypography.compactBody,
 ) {
   val interactions = remember { MutableInteractionSource() }
   val focused by interactions.collectIsFocusedAsState()
@@ -299,7 +306,7 @@ internal fun CompactSingleLineField(
         Text(
             label,
             color = SecondaryText,
-            fontSize = 11.sp,
+            style = IdeTypography.section,
             modifier = Modifier.padding(bottom = 5.dp))
     BasicTextField(
         value = value,
@@ -324,7 +331,7 @@ internal fun CompactSingleLineField(
                     Text(
                         placeholder ?: if (showLabel) "" else label,
                         color = FaintText,
-                        fontSize = 12.sp,
+                        style = IdeTypography.compactBody,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
                 input()
@@ -367,31 +374,40 @@ internal fun MiniOrcaButton(
 
 @Composable
 internal fun MiniOrcaTheme(content: @Composable () -> Unit) {
-  MaterialTheme(
-      colors =
-          darkColors(
-              primary = MiniOrcaPalette.actionFill,
-              secondary = MiniOrcaPalette.selectionAccent,
-              background = MiniOrcaPalette.appBackground,
-              surface = MiniOrcaPalette.surface,
-              error = MiniOrcaPalette.error,
-              onPrimary = MiniOrcaPalette.onActionFill,
-              onBackground = MiniOrcaPalette.primaryText,
-              onSurface = MiniOrcaPalette.primaryText,
-              onError = MiniOrcaPalette.appBackground,
-          ),
-      typography = MiniOrcaTypography,
-      shapes = MiniOrcaShapes,
-      content = content,
-  )
+  IntUiTheme(isDark = true) {
+    MaterialTheme(
+        colors =
+            darkColors(
+                primary = MiniOrcaPalette.actionFill,
+                secondary = MiniOrcaPalette.selectionAccent,
+                background = MiniOrcaPalette.toolWindow,
+                surface = MiniOrcaPalette.toolWindow,
+                error = MiniOrcaPalette.error,
+                onPrimary = MiniOrcaPalette.onActionFill,
+                onBackground = MiniOrcaPalette.primaryText,
+                onSurface = MiniOrcaPalette.primaryText,
+                onError = MiniOrcaPalette.toolWindow,
+            ),
+        typography = MiniOrcaTypography,
+        shapes = MiniOrcaShapes,
+        content = content,
+    )
+  }
 }
 
-internal val AppBackground = MiniOrcaPalette.appBackground
-internal val Chrome = MiniOrcaPalette.chromeSurface
-internal val Panel = MiniOrcaPalette.surface
-internal val Card = MiniOrcaPalette.raisedSurface
-internal val StrongSurface = MiniOrcaPalette.strongSurface
-internal val Border = MiniOrcaPalette.border
+internal val ActivityRail = MiniOrcaPalette.activityRail
+internal val ToolWindowSurface = MiniOrcaPalette.toolWindow
+internal val EditorCanvas = MiniOrcaPalette.editorCanvas
+internal val OverlaySurface = MiniOrcaPalette.overlay
+internal val PaneSeparator = MiniOrcaPalette.paneSeparator
+
+// These aliases keep unmigrated Material call sites on the single semantic palette.
+internal val AppBackground = ToolWindowSurface
+internal val Chrome = ActivityRail
+internal val Panel = ToolWindowSurface
+internal val Card = OverlaySurface
+internal val StrongSurface = EditorCanvas
+internal val Border = PaneSeparator
 internal val PrimaryText = MiniOrcaPalette.primaryText
 internal val SecondaryText = MiniOrcaPalette.secondaryText
 internal val FaintText = MiniOrcaPalette.faintText
@@ -441,12 +457,7 @@ internal fun MiniOrcaPanel(
 
 @Composable
 internal fun SectionLabel(label: String, modifier: Modifier = Modifier) {
-  Text(
-      label,
-      color = SecondaryText,
-      fontSize = 12.sp,
-      fontWeight = FontWeight.Bold,
-      modifier = modifier)
+  Text(label, color = SecondaryText, style = IdeTypography.section, modifier = modifier)
 }
 
 @Composable
@@ -454,8 +465,7 @@ internal fun WorkspacePaneHeader(title: String, modifier: Modifier = Modifier) {
   Text(
       title,
       color = PrimaryText,
-      fontSize = 14.sp,
-      fontWeight = FontWeight.SemiBold,
+      style = IdeTypography.body.copy(fontWeight = FontWeight.SemiBold),
       modifier = modifier)
 }
 
@@ -472,13 +482,13 @@ internal fun CompactKeyValueRow(
     Text(
         label,
         color = SecondaryText,
-        fontSize = 12.sp,
+        style = IdeTypography.compactBody,
         modifier = Modifier.width(96.dp),
     )
     Text(
         value,
         color = PrimaryText,
-        fontSize = 12.sp,
+        style = IdeTypography.compactBody,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.weight(1f),
@@ -505,8 +515,7 @@ internal fun StatusBadge(status: String, modifier: Modifier = Modifier) {
   Text(
       style.label,
       color = style.color,
-      fontSize = 12.sp,
-      fontWeight = FontWeight.SemiBold,
+      style = IdeTypography.compactBody.copy(fontWeight = FontWeight.SemiBold),
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
       modifier =
@@ -528,7 +537,7 @@ internal fun SystemStateMessage(
   MiniOrcaPanel(modifier = modifier, raised = true) {
     Text(title, color = PrimaryText, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(MiniOrcaSpacing.standard))
-    Text(message, color = accent, fontSize = 13.sp)
+    Text(message, color = accent, style = IdeTypography.body)
   }
 }
 

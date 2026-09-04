@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -14,8 +15,8 @@ class DesktopThemeTest {
     assertEquals(Color(0xFF1E1F22), AppBackground)
     assertEquals(Color(0xFF18191B), Chrome)
     assertEquals(Color(0xFF1E1F22), Panel)
-    assertEquals(Color(0xFF2B2D30), Card)
-    assertEquals(Color(0xFF323438), StrongSurface)
+    assertEquals(Color(0xFF26282C), Card)
+    assertEquals(Color(0xFF2B2D30), StrongSurface)
     assertEquals(Color(0xFF323438), Border)
     assertEquals(Color(0xFFF2F2F2), PrimaryText)
     assertEquals(Color(0xFFC4C7C5), SecondaryText)
@@ -31,6 +32,31 @@ class DesktopThemeTest {
     assertEquals(Color(0xFF18352C), DiffAddedBackground)
     assertEquals(Color(0xFF3A232B), DiffRemovedBackground)
     assertNotEquals(ActionFill, OnActionFill)
+  }
+
+  @Test
+  fun semanticSurfaceRolesKeepRailPaneCanvasOverlayAndSeparatorDistinct() {
+    assertEquals(Color(0xFF18191B), ActivityRail)
+    assertEquals(Color(0xFF1E1F22), ToolWindowSurface)
+    assertEquals(Color(0xFF2B2D30), EditorCanvas)
+    assertEquals(Color(0xFF26282C), OverlaySurface)
+    assertEquals(Color(0xFF323438), PaneSeparator)
+    assertEquals(ActivityRail, Chrome)
+    assertEquals(ToolWindowSurface, Panel)
+    assertEquals(OverlaySurface, Card)
+    assertEquals(PaneSeparator, Border)
+    assertEquals(
+        5, setOf(ActivityRail, ToolWindowSurface, EditorCanvas, OverlaySurface, PaneSeparator).size)
+  }
+
+  @Test
+  fun semanticTypographyRolesUseDenseBodyAndSectionMetrics() {
+    assertEquals(13.sp, IdeTypography.body.fontSize)
+    assertEquals(20.sp, IdeTypography.body.lineHeight)
+    assertEquals(12.sp, IdeTypography.compactBody.fontSize)
+    assertEquals(18.sp, IdeTypography.compactBody.lineHeight)
+    assertEquals(11.sp, IdeTypography.section.fontSize)
+    assertEquals(16.sp, IdeTypography.section.lineHeight)
   }
 
   @Test
@@ -109,9 +135,12 @@ class DesktopThemeTest {
   fun essentialTextActionAndFocusColorsMeetTheIdeContrastTargetsOnResolvedSurfaces() {
     assertTrue(contrastRatio(PrimaryText, AppBackground) >= 4.5)
     assertTrue(contrastRatio(SecondaryText, Panel) >= 4.5)
+    assertTrue(contrastRatio(PrimaryText, EditorCanvas) >= 4.5)
+    assertTrue(contrastRatio(PrimaryText, OverlaySurface) >= 4.5)
     assertTrue(contrastRatio(OnActionFill, ActionFill) >= 4.5)
     assertTrue(contrastRatio(SelectionText, SelectionSurface) >= 4.5)
     assertTrue(contrastRatio(FocusAccent, Panel) >= 3.0)
+    assertTrue(contrastRatio(FocusAccent, OverlaySurface) >= 3.0)
     assertTrue(contrastRatio(FocusAccent, SelectionSurface) >= 3.0)
     assertTrue(
         contrastRatio(
