@@ -221,7 +221,7 @@ internal fun SourceEditorPane(
     Column(Modifier.fillMaxSize().padding(vertical = 10.dp)) {
       if (focusedLine > 0) {
         Text(
-            "Editor context · ${selectedSymbol?.name ?: "line $focusedLine"} · line $focusedLine",
+            "${selectedSymbol?.name ?: "line $focusedLine"} · line $focusedLine",
             color = SecondaryText,
             fontSize = 11.sp,
             modifier = Modifier.padding(start = 18.dp, bottom = 8.dp),

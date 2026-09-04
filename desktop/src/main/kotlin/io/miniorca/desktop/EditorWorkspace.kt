@@ -59,9 +59,7 @@ internal fun candidateSummaryPresentation(
               .filter(String::isNotBlank)
               .joinToString(" · "),
       stage = chrome.stageLabel,
-      changedLines =
-          if (changed > 0) "$changed changed lines in the current draft"
-          else "Validate the current draft to compose a diff.",
+      changedLines = if (changed > 0) "$changed changed lines" else "Validate to compose a diff.",
       reviewAvailable = chrome.reviewAvailable,
   )
 }
@@ -137,11 +135,7 @@ private fun CandidateSummary(summary: CandidateSummaryPresentation, onReview: ()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
       DesktopLineIcon(DesktopIcon.Editor, "Candidate", tint = SelectionText, iconSize = 16.dp)
       Spacer(Modifier.width(8.dp))
-      Text(
-          "Mini-Orca suggestion",
-          color = PrimaryText,
-          fontSize = 12.sp,
-          modifier = Modifier.weight(1f))
+      Text("Candidate", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.weight(1f))
       MiniOrcaButton(
           onClick = onReview,
           enabled = summary.reviewAvailable,

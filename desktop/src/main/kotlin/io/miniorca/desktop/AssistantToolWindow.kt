@@ -37,15 +37,15 @@ internal fun AssistantToolWindow(
             .padding(horizontal = 12.dp)
             .padding(bottom = 12.dp)) {
           MiniOrcaPanel(Modifier.fillMaxWidth()) {
-            SectionLabel("BOUND CONVERSATION")
+            SectionLabel("Conversation")
             Text(
-                state.selected?.path ?: "Open one Go file before drafting.",
+                state.selected?.path ?: "Open a file to draft.",
                 color = PrimaryText,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp)
             Text(
                 state.target?.let { "${it.mode.label} · ${it.symbol}" }
-                    ?: "Select an eligible declaration or enter a new declaration name.",
+                    ?: "Select a declaration or enter a new name.",
                 color = if (state.target == null) Warning else SecondaryText,
                 fontSize = 11.sp)
             if (bound && state.session != null) {
@@ -130,7 +130,7 @@ private fun AssistantDraftEditorCard(
     val canValidate =
         editor.status in
             setOf(DraftEditorStatus.Generated, DraftEditorStatus.Dirty, DraftEditorStatus.Invalid)
-    SectionLabel("EDITABLE DECLARATION DRAFT · ${editor.status.name.lowercase()}")
+    SectionLabel("Editable draft · ${editor.status.name.lowercase()}")
     Text(
         draft.targetSymbol,
         color = SecondaryText,
@@ -216,14 +216,12 @@ internal fun parseRequiredImports(value: String): List<String> =
 
 internal fun draftEditorStatusMessage(status: DraftEditorStatus): String =
     when (status) {
-      DraftEditorStatus.Generated -> "Validate this generated draft before review."
-      DraftEditorStatus.Dirty -> "Manual edits cleared prior validation and checks."
-      DraftEditorStatus.Validating -> "Validation is running."
-      DraftEditorStatus.Valid ->
-          "Validated declaration. Review evidence and focused checks are current context."
+      DraftEditorStatus.Generated -> "Validate before review."
+      DraftEditorStatus.Dirty -> "Edits need validation and focused checks."
+      DraftEditorStatus.Validating -> "Validating."
+      DraftEditorStatus.Valid -> "Validated. Review evidence and checks are current."
       DraftEditorStatus.Invalid -> "Fix validation diagnostics before continuing."
-      DraftEditorStatus.Stale ->
-          "This draft no longer matches the open file. Start a new conversation."
+      DraftEditorStatus.Stale -> "Draft is stale. Start a new conversation."
     }
 
 internal fun draftEditorStatusColor(status: DraftEditorStatus) =

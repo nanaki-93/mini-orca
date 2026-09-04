@@ -135,8 +135,11 @@ class EditorWorkspaceTest {
 
     assertEquals("internal/runner/run.go", ready.target)
     assertEquals("REVIEW READY", ready.stage)
-    assertEquals("1 changed lines in the current draft", ready.changedLines)
+    assertEquals("1 changed lines", ready.changedLines)
     assertTrue(ready.reviewAvailable)
+    assertEquals(
+        "Validate to compose a diff.",
+        candidateSummaryPresentation(draft.copy(validation = null), chrome)!!.changedLines)
     assertEquals(null, candidateSummaryPresentation(null, readyChrome()))
   }
 

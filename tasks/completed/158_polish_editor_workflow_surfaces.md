@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -100,5 +100,18 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+Passed `./desktop/gradlew -p desktop spotlessCheck detekt test
+-PvisualOutput="$PWD/desktop/build/reports/ui-refinement/task-158"` and `git diff
+--check` on 2026-09-04. Removed redundant Editor/Review labels and routine helper
+sentences, shortened candidate, palette, Preview, Output, Checks, Assistant, and
+draft-state copy, and standardized the remaining workflow section labels. Exact
+candidate diffs, source selection, check commands/output, scope identity, remote
+destination/consent, stale-draft recovery, Apply eligibility, receipt, and Undo
+eligibility remain visible at their decision points. The display-only fixtures prove
+that opening details does not invoke review actions or mutations; candidate review
+remains an explicit navigation callback. Visual review passed for
+`editor-candidate-800-1.3.png`, `review-failed-800-1.3.png`,
+`review-receipt-800-1.3.png`, `context-consent-800-1.3.png`,
+`assistant-stale-800-1.3.png`, and `checks-failed-800-1.3.png` under
+`desktop/build/reports/ui-refinement/task-158/`. Native window and screen-reader
+acceptance remain deferred to Tasks 159/160.

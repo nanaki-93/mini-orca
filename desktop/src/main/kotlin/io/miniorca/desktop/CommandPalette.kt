@@ -59,8 +59,7 @@ internal fun commandSearchTitle(mode: PaletteMode): String =
       PaletteMode.Actions -> "Focused action · ⌘K"
     }
 
-internal fun commandSearchHint(mode: PaletteMode): String =
-    "${commandSearchTitle(mode)} · ↑↓ select · Enter activate · Esc close"
+internal fun commandSearchHint(mode: PaletteMode): String = "↑↓ select · Enter activate · Esc close"
 
 internal fun commandSearchResults(
     mode: PaletteMode,
