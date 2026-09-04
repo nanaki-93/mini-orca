@@ -62,6 +62,7 @@ class DesktopVisualLayoutTest {
   fun analysisChromeFitsWideNarrowAndEnlargedTextViewports() {
     listOf(
             Triple(1440, 900, 1f),
+            Triple(1920, 1080, 1f),
             Triple(1000, 760, 1f),
             Triple(999, 760, 1f),
             Triple(800, 650, 1f),
@@ -70,10 +71,48 @@ class DesktopVisualLayoutTest {
           ComposeVisualFixture(width, height, scale) { AnalysisVisualFixture(width.toFloat()) }
               .use { fixture ->
                 fixture.render("analysis-$width-$scale")
-                listOf(if (scale > 1.15f) "Perf." else "Performance", "Preview").forEach { label ->
-                  fixture.assertTextFits(label)
-                }
+                listOf(if (scale > 1.15f) "Perf." else "Performance", "Preview", "Pause", "Cancel")
+                    .forEach { label -> fixture.assertTextFits(label) }
               }
+        }
+  }
+
+  @Test
+  fun analysisLifecycleControlsRenderAtNarrowEnlargedTextScale() {
+    val cases =
+        listOf(
+            Triple("empty", null, "Start Analyze-all"),
+            Triple("paused", visualFixtureJob.copy(status = "paused"), "Resume"),
+            Triple("failed", visualFixtureJob.copy(status = "failed"), "Failed"),
+        )
+
+    cases.forEach { (name, job, expectedControl) ->
+      ComposeVisualFixture(800, 650, 1.3f) { AnalysisPaneVisualFixture(job) }
+          .use { fixture ->
+            fixture.render("analysis-$name-800-1.3")
+            fixture.assertTextFits(expectedControl)
+          }
+    }
+  }
+
+  @Test
+  fun analysisWrapsLongRemoteDestinationWithoutHidingActiveControls() {
+    val model =
+        ScopedModel(
+            scope = ModelScope.Bug.wireValue,
+            profile = "local-workstation-with-a-descriptive-profile-name",
+            model = "provider/model-with-a-long-qualified-destination-name",
+            remoteProvider = true,
+            reasoningEffort = "high",
+        )
+    val destination = modelDestinationLabel(ModelScope.Bug, model)
+
+    ComposeVisualFixture(1000, 800, 1.3f) { AnalysisVisualFixture(1000f, model = model) }
+        .use { fixture ->
+          fixture.render("analysis-long-destination-1000-1.3")
+          fixture.assertTextFits("Pause")
+          fixture.assertTextFits("Cancel")
+          fixture.assertTextWrapsWithoutClipping(destination)
         }
   }
 
@@ -286,6 +325,14 @@ private class ComposeVisualFixture(
   }
 
   fun assertTextFits(label: String) {
+    assertTextLayout(label, mustWrap = false)
+  }
+
+  fun assertTextWrapsWithoutClipping(label: String) {
+    assertTextLayout(label, mustWrap = true)
+  }
+
+  private fun assertTextLayout(label: String, mustWrap: Boolean) {
     val matches = textNodes(label)
     assertTrue(matches.isNotEmpty(), "$label must be visible at $width")
     matches.forEach { node ->
@@ -300,7 +347,8 @@ private class ComposeVisualFixture(
         assertTrue(
             layout.multiParagraph.height <= layout.size.height + 1f,
             "$label clips vertically at $width")
-        assertTrue(layout.lineCount == 1, "$label must fit on one line at $width")
+        if (mustWrap) assertTrue(layout.lineCount > 1, "$label must wrap at $width")
+        else assertTrue(layout.lineCount == 1, "$label must fit on one line at $width")
       }
       assertTrue(node.boundsInRoot.right <= width && node.boundsInRoot.bottom <= height)
     }
@@ -326,6 +374,8 @@ private class ComposeVisualFixture(
 private fun AnalysisVisualFixture(
     width: Float,
     actions: AnalysisWorkspaceActions = AnalysisWorkspaceActions({}, {}, {}, {}, {}),
+    job: AnalyzeAllJob? = visualFixtureJob,
+    model: ScopedModel = ScopedModel(),
 ) {
   val summaries =
       mapOf(BottomToolWindow.Problems to BottomToolWindowSummary("No actionable problems"))
@@ -347,7 +397,7 @@ private fun AnalysisVisualFixture(
         Box(Modifier.weight(1f)) {
           AnalysisWorkspacePane(
               AnalysisWorkspacePaneState(
-                  visualFixtureJob, AnalysisCoverage(total = 23, stale = 23), ScopedModel(), false),
+                  job, AnalysisCoverage(total = 23, stale = 23), model, false),
               actions)
         }
         if (useNarrowLayout(width)) {
@@ -371,6 +421,16 @@ private fun AnalysisVisualFixture(
             )),
         width,
         {})
+  }
+}
+
+@Composable
+private fun AnalysisPaneVisualFixture(job: AnalyzeAllJob?) {
+  Column(Modifier.fillMaxSize().background(AppBackground)) {
+    AnalysisWorkspacePane(
+        AnalysisWorkspacePaneState(
+            job, AnalysisCoverage(total = 23, stale = 23), ScopedModel(), false),
+        AnalysisWorkspaceActions({}, {}, {}, {}, {}))
   }
 }
 

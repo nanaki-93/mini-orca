@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Checkbox
@@ -28,11 +27,52 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+private val workspaceWideGutterMinimum = 900.dp
+private val analysisControlColumnMinimum = 280.dp
+private val analysisControlColumnLargeTextMinimum = 320.dp
+private val analysisControlColumnMaximum = 360.dp
+private val analysisRunMinimumWidth = 420.dp
+private val analysisRunLargeTextMinimumWidth = 440.dp
+private val analysisRunControlGap = 20.dp
+
+internal fun workspacePageHorizontalGutter(availableWidth: Dp): Dp =
+    if (availableWidth >= workspaceWideGutterMinimum) 24.dp else 16.dp
+
+internal fun workspacePagePadding(availableWidth: Dp, vertical: Dp): PaddingValues =
+    PaddingValues(horizontal = workspacePageHorizontalGutter(availableWidth), vertical = vertical)
+
+internal data class AnalysisRunControlLayout(val stacked: Boolean, val controlsWidth: Dp)
+
+internal fun analysisRunControlLayout(
+    availableWidth: Dp,
+    fontScale: Float = 1f,
+): AnalysisRunControlLayout {
+  val enlargedText = fontScale > 1.15f
+  val controlsMinimum =
+      if (enlargedText) analysisControlColumnLargeTextMinimum else analysisControlColumnMinimum
+  val runMinimum = if (enlargedText) analysisRunLargeTextMinimumWidth else analysisRunMinimumWidth
+  val controlsWidth =
+      (availableWidth * 0.3f).coerceIn(controlsMinimum, analysisControlColumnMaximum)
+  return AnalysisRunControlLayout(
+      stacked = availableWidth < runMinimum + analysisRunControlGap + controlsWidth,
+      controlsWidth = controlsWidth,
+  )
+}
+
+internal fun analysisMetricColumnCount(availableWidth: Dp): Int =
+    when {
+      availableWidth >= 780.dp -> 6
+      availableWidth >= 520.dp -> 3
+      else -> 2
+    }
 
 @Composable
 internal fun AnalysisWorkspacePane(
@@ -49,10 +89,10 @@ internal fun AnalysisWorkspacePane(
           )
           .bounded()
   val presentation = analyzeAllPresentation(state.job, state.coverage)
-  Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+  BoxWithConstraints(Modifier.fillMaxSize()) {
     LazyColumn(
-        Modifier.widthIn(max = 1160.dp).fillMaxSize(),
-        contentPadding = PaddingValues(28.dp),
+        Modifier.fillMaxSize(),
+        contentPadding = workspacePagePadding(maxWidth, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
       item {
@@ -73,6 +113,7 @@ internal fun AnalysisWorkspacePane(
       item { AnalysisCoverageMetrics(presentation.coverage, available = state.coverage != null) }
       item {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
+          val layout = analysisRunControlLayout(maxWidth, LocalDensity.current.fontScale)
           val runContent: @Composable (Modifier) -> Unit = { modifier ->
             AnalysisRunCard(presentation.run, state.job, modifier)
           }
@@ -109,10 +150,11 @@ internal fun AnalysisWorkspacePane(
               }
             }
           }
-          if (maxWidth >= 820.dp) {
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-              runContent(Modifier.weight(1.7f))
-              controlsContent(Modifier.weight(1f))
+          if (!layout.stacked) {
+            Row(Modifier.fillMaxWidth()) {
+              runContent(Modifier.weight(1f))
+              Spacer(Modifier.width(analysisRunControlGap))
+              controlsContent(Modifier.width(layout.controlsWidth))
             }
           } else {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -248,7 +290,7 @@ private fun AnalysisCoverageMetrics(coverage: AnalysisCoveragePresentation, avai
             Triple("Failed", coverage.failed, Error),
         )
     BoxWithConstraints {
-      val columns = if (maxWidth >= 780.dp) 6 else 3
+      val columns = analysisMetricColumnCount(maxWidth)
       Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         metrics.chunked(columns).forEach { row ->
           Row(Modifier.fillMaxWidth()) {
