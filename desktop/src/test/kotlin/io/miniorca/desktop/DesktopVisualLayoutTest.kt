@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -274,6 +275,263 @@ class DesktopVisualLayoutTest {
             if (width >= 1_000) fixture.assertTextFits("Files")
           }
     }
+  }
+
+  @Test
+  fun candidateAndReviewSurfacesKeepEvidenceAndMutationGuardsExplicit() {
+    val project =
+        ProjectAnalysis(
+            projectId = "fixture-project",
+            projectRevision = "fixture-revision",
+            name = "fixture",
+            path = "/fixture",
+            type = "Go",
+            fileCount = 1,
+            sourceFileCount = 1,
+            totalLines = 12,
+            summary = "Fixture project",
+            aiStatus = "fresh",
+            analyzedAt = "")
+    val file =
+        ProjectFileInfo(
+            path = "internal/api/server.go",
+            contentHash = "base-hash",
+            name = "server.go",
+            language = "Go",
+            sizeBytes = 256,
+            lineCount = 12,
+            modifiedAt = "",
+            binary = false,
+            content = "package api\n\nfunc Serve() {}")
+    val symbol =
+        SymbolInfo(
+            "Serve",
+            "function",
+            startLine = 3,
+            endLine = 3,
+            confidence = "exact",
+            atomicTarget = true)
+    val draft =
+        DeclarationDraft(
+            id = "fixture-draft",
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            baseFileHash = file.contentHash,
+            targetPath = file.path,
+            mode = "replace_symbol",
+            targetSymbol = symbol.name,
+            declaration = "func Serve() {\\n  handle()\\n}",
+            revision = 1,
+            hash = "draft-hash",
+            validation =
+                DeclarationValidation(
+                    applicable = true,
+                    scopeMode = "replace_symbol",
+                    diff =
+                        UnifiedDiff(
+                            file.path,
+                            file.path,
+                            listOf(
+                                DiffLine("removed", oldLine = 3, text = "func Serve() {}"),
+                                DiffLine("added", newLine = 3, text = "func Serve() {"),
+                                DiffLine("added", newLine = 4, text = "  handle()"),
+                                DiffLine("added", newLine = 5, text = "}"))),
+                ))
+    val chrome =
+        editorChromeUiState(
+            file,
+            symbol,
+            EditorSurface.Source,
+            EditorProgressUiState(EditorProgress.Review, ""),
+            draft)
+    val selectedSurfaces = mutableListOf<EditorSurface>()
+    ComposeVisualFixture(800, 480, 1.3f) {
+          EditorWorkspace(
+              chrome, draft, { selectedSurfaces += it }, canvas = { Text("Read-only source") })
+        }
+        .use { fixture ->
+          fixture.render("editor-candidate-800-1.3")
+          assertTrue(fixture.hasText("Candidate"))
+          assertTrue(fixture.hasText("REVIEW READY · 4 changed lines"))
+          fixture.clickText("Review candidate")
+          kotlin.test.assertEquals(listOf(EditorSurface.Review), selectedSurfaces)
+        }
+
+    val failedChecks =
+        DraftCheckReport(
+            targetPath = file.path,
+            applicable = true,
+            checks =
+                listOf(
+                    DraftCheck(
+                        name = "go test",
+                        required = true,
+                        state = "failed",
+                        command = listOf("go", "test", "./..."),
+                        output = "expected failure evidence")),
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash)
+    var reviewActions = 0
+    var mutations = 0
+    val reviewState =
+        ReviewToolWindowState(
+            project,
+            file,
+            symbol,
+            null,
+            editableDraft(draft),
+            draft,
+            failedChecks,
+            null,
+            null,
+            null,
+            false)
+    ComposeVisualFixture(800, 700, 1.3f) {
+          ReviewToolWindow(
+              reviewState,
+              ReviewToolWindowActions(
+                  { reviewActions++ }, { reviewActions++ }, { reviewActions++ }),
+              DraftApplicationActions({ mutations++ }, { mutations++ }))
+        }
+        .use { fixture ->
+          fixture.render("review-failed-800-1.3")
+          assertTrue(fixture.hasText("Validation"))
+          assertTrue(fixture.hasText("Apply unavailable"))
+          fixture.clickText("Show command output (1)")
+          fixture.render()
+          assertTrue(fixture.hasText("expected failure evidence"))
+          kotlin.test.assertEquals(0, reviewActions)
+          kotlin.test.assertEquals(0, mutations)
+        }
+
+    ComposeVisualFixture(800, 360, 1.3f) {
+          ReviewToolWindow(
+              reviewState.copy(
+                  checks = null,
+                  applied =
+                      ApplyResult(
+                          "next",
+                          "post-hash",
+                          true,
+                          AuditEntry("apply", file.path, "applied", ""))),
+              ReviewToolWindowActions({}, {}, {}),
+              DraftApplicationActions({ mutations++ }, { mutations++ }))
+        }
+        .use { fixture ->
+          fixture.render("review-receipt-800-1.3")
+          assertTrue(fixture.hasText("Change applied"))
+          assertTrue(fixture.hasText("Undo available."))
+          assertTrue(fixture.hasText("Undo this change"))
+          kotlin.test.assertEquals(0, mutations)
+        }
+
+    var contextActions = 0
+    val inspector =
+        requireNotNull(
+            symbolInspectorUiState(
+                selectedFile = file,
+                symbols = listOf(symbol),
+                selectedSymbol = symbol,
+                analysis = FileAnalysis(file.path, "stale", purpose = "Routes incoming requests."),
+                analysisInProgress = false,
+                provider =
+                    InspectorProviderState(remoteProvider = true, remoteProviderConfirmed = false),
+                currentEditIdentity = null))
+    ComposeVisualFixture(800, 900, 1.3f) {
+          ContextToolWindow(
+              ContextToolWindowState(
+                  inspector,
+                  ScopedModel(
+                      scope = ModelScope.Bug.wireValue,
+                      profile = "review-profile",
+                      model = "provider/analyzer",
+                      remoteProvider = true),
+                  false,
+                  null,
+                  null,
+                  FileAnalysis(file.path, "stale", purpose = "Routes incoming requests."),
+                  project,
+                  null),
+              ContextToolWindowActions(
+                  { contextActions++ },
+                  { contextActions++ },
+                  { contextActions++ },
+                  { contextActions++ },
+                  { contextActions++ }),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render("context-consent-800-1.3")
+          assertTrue(fixture.hasText("Actions"))
+          assertTrue(fixture.hasText("Confirm remote destination"))
+          assertTrue(
+              fixture.hasText("Preview only · Complexity and readability scores unavailable."))
+          kotlin.test.assertEquals(0, contextActions)
+        }
+
+    var assistantActions = 0
+    val session =
+        ChatSession(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            baseFileHash = file.contentHash,
+            openPath = file.path,
+            mode = draft.mode,
+            targetSymbol = draft.targetSymbol,
+            state = "active",
+            latestDraftId = draft.id)
+    ComposeVisualFixture(800, 900, 1.3f) {
+          AssistantToolWindow(
+              AssistantToolWindowState(
+                  project,
+                  file,
+                  session,
+                  draft,
+                  EditableDraftState(draft, status = DraftEditorStatus.Stale),
+                  ChatTarget(ChatEditMode.ReplaceSymbol, symbol.name),
+                  ChatEditMode.ReplaceSymbol,
+                  "",
+                  "Check this declaration.",
+                  false,
+                  ScopedModel(
+                      scope = ModelScope.Function.wireValue,
+                      profile = "edit-profile",
+                      model = "provider/editor",
+                      remoteProvider = true),
+                  false,
+                  FocusRequester(),
+                  FocusRequester()),
+              AssistantConversationActions(
+                  { assistantActions++ },
+                  { assistantActions++ },
+                  { assistantActions++ },
+                  { assistantActions++ },
+                  { assistantActions++ },
+                  { assistantActions++ }),
+              DraftEditorActions(
+                  { assistantActions++ }, { assistantActions++ }, { assistantActions++ }),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render("assistant-stale-800-1.3")
+          assertTrue(fixture.hasText("Conversation"))
+          assertTrue(fixture.hasText("Editable draft · stale"))
+          assertTrue(fixture.hasText("Draft is stale. Start a new conversation."))
+          assertTrue(fixture.hasText("Confirm remote destination"))
+          kotlin.test.assertEquals(0, assistantActions)
+        }
+
+    val checksPresentation =
+        checksToolWindowPresentation(
+            ChecksToolWindowState(project, file, editableDraft(draft), draft, failedChecks, false))
+    ComposeVisualFixture(800, 500, 1.3f) { ChecksToolWindow(checksPresentation) }
+        .use { fixture ->
+          fixture.render("checks-failed-800-1.3")
+          assertTrue(fixture.hasText("Evidence only; run checks and Apply stay in Review."))
+          assertTrue(fixture.hasText("go test · Failed · required"))
+          assertTrue(fixture.hasText("expected failure evidence"))
+        }
   }
 
   @Test

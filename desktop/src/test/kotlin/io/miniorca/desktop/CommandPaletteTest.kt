@@ -72,7 +72,7 @@ class CommandPaletteTest {
     assertEquals(2, nextCommandSearchSelection(0, 3, -1))
     assertEquals(0, nextCommandSearchSelection(2, 3, 1))
     assertEquals(-1, nextCommandSearchSelection(0, 0, 1))
-    assertTrue(commandSearchHint(PaletteMode.Files).contains("Enter activate"))
+    assertEquals("↑↓ select · Enter activate · Esc close", commandSearchHint(PaletteMode.Files))
     assertEquals("No focused action is available", commandSearchEmptyTitle(PaletteMode.Actions))
   }
 

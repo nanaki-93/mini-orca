@@ -275,11 +275,7 @@ internal fun applyDecisionUiState(
 @Composable
 internal fun ReviewDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Modifier) {
   Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
-    Text(
-        "Review the candidate",
-        color = PrimaryText,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp)
+    Text("Candidate diff", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
     Spacer(Modifier.height(12.dp))
     DiffViewer(draft?.validation?.diff, Modifier.fillMaxWidth())
   }
@@ -322,7 +318,7 @@ internal fun ReviewToolWindow(
             .padding(bottom = 12.dp)) {
           if (decision.receiptTitle != null && state.applied != null) {
             MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
-              SectionLabel("APPLIED RECEIPT")
+              SectionLabel("Receipt")
               Text(
                   decision.receiptTitle,
                   color = PrimaryText,
@@ -336,8 +332,7 @@ internal fun ReviewToolWindow(
                   fontSize = 11.sp,
                   modifier = Modifier.padding(top = 6.dp))
               Text(
-                  if (state.applied.undoAvailable) "Undo is available for this applied change."
-                  else "Undo is no longer available for this applied change.",
+                  if (state.applied.undoAvailable) "Undo available." else "Undo unavailable.",
                   color = SecondaryText,
                   fontSize = 12.sp,
                   modifier = Modifier.padding(top = 6.dp))
@@ -352,14 +347,8 @@ internal fun ReviewToolWindow(
             return@Column
           }
           MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
-            SectionLabel("REVIEW")
-            Text(
-                "Current scope and validation",
-                color = PrimaryText,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 17.sp,
-                modifier = Modifier.padding(top = 4.dp))
-            Spacer(Modifier.height(10.dp))
+            SectionLabel("Validation")
+            Spacer(Modifier.height(8.dp))
             EvidenceRow(evidence.identity)
             Spacer(Modifier.height(8.dp))
             EvidenceRow(evidence.validation)
@@ -473,12 +462,9 @@ internal fun ReviewToolWindow(
           Spacer(Modifier.height(12.dp))
           MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
             if (decision.eligible) {
+              Text("Ready to apply", color = PrimaryText, fontWeight = FontWeight.SemiBold)
               Text(
-                  "Ready for the one guarded write",
-                  color = PrimaryText,
-                  fontWeight = FontWeight.SemiBold)
-              Text(
-                  "Nothing has changed yet. This action applies only the named declaration in the named file.",
+                  "Only the named declaration in the named file will change.",
                   color = SecondaryText,
                   fontSize = 12.sp,
                   modifier = Modifier.padding(top = 4.dp))
@@ -489,7 +475,7 @@ internal fun ReviewToolWindow(
                     Text(decision.actionLabel)
                   }
             } else {
-              Text("Apply remains locked", color = PrimaryText, fontWeight = FontWeight.SemiBold)
+              Text("Apply unavailable", color = PrimaryText, fontWeight = FontWeight.SemiBold)
               Text(
                   decision.reason,
                   color = Warning,

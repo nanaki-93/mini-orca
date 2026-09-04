@@ -172,7 +172,7 @@ internal fun ContextToolWindow(
               stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
               scopeLabel = "File")
         }
-        ContextSection("Quick actions", DesktopIcon.Run, FocusAccent) {
+        ContextSection("Actions", DesktopIcon.Run, FocusAccent) {
           if (inspector.analysisAction != InspectorAnalysisAction.None) {
             val onAnalysisAction =
                 when (inspector.analysisAction) {
@@ -225,7 +225,7 @@ internal fun ContextToolWindow(
               modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
               density = ButtonDensity.Standard)
           Text(
-              "Complexity — · Readability — · Preview",
+              "Preview only · Complexity and readability scores unavailable.",
               color = FaintText,
               fontSize = 11.sp,
               modifier = Modifier.padding(top = 12.dp))

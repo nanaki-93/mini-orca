@@ -88,9 +88,9 @@ internal fun ChecksToolWindow(
 ) {
   Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
     MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
-      SectionLabel("CHECKS · EVIDENCE ONLY")
+      SectionLabel("Checks")
       Text(
-          "This tab shows current evidence. Run checks and guarded Apply remain in Review.",
+          "Evidence only; run checks and Apply stay in Review.",
           color = SecondaryText,
           fontSize = 11.sp,
           modifier = Modifier.padding(top = 5.dp))
@@ -244,9 +244,9 @@ internal fun OutputToolWindow(
     modifier: Modifier = Modifier,
 ) {
   Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-    Text("OUTPUT", color = PrimaryText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    SectionLabel("Output")
     Text(
-        "Current and last presenter-held operation details. Opening this tab does not start work.",
+        "Recorded operation details. Opening this tab does not start work.",
         color = SecondaryText,
         fontSize = 11.sp,
         modifier = Modifier.padding(top = 5.dp))
