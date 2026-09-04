@@ -124,3 +124,32 @@ abbreviation `Perf.` at larger scales while retaining its full accessible name.
 
 The production-component render matrix and interaction checks are recorded in
 [VISUAL_REVIEW.md](VISUAL_REVIEW.md). Native window and screen-reader checks remain separate.
+
+## Task 159 refined UI release check
+
+Task 159 added production-component evidence for the refined Summary, Analysis,
+Editor/Review, Performance, Problems, Assistant, menus, disclosures, drawers,
+bottom overlay, and command palette. It exercised the `1440x900`, `1920x1080`,
+`1000x760`, `999x760`, and `800x650` responsive matrix plus affected surfaces at
+130% text scale. The Compose scene also sends real arrow/Enter events through the
+rail and command palette, and Enter/Space/Escape through disclosure and menu paths.
+
+The same native limitation remains: this environment has no running Mini-Orca
+window or screen-reader surface. Do not mark the following operator checks as
+passed until they are performed in a native build:
+
+- Repeat the viewport and 130% text-scale matrix with long project, file, model,
+  diagnostic, and command-output values. Include the open project and Preview
+  menus, command palette, Preview dialog, files/context drawers, and bottom overlay.
+- Tab through each retained rail workspace, toolbar, explorer, editor tabs,
+  source/review, right and bottom tabs, and status. Use arrows then Enter/Space;
+  test Escape one surface at a time and verify focus returns to its trigger.
+- Resize across exactly `1000dp` and `999dp`, switch workspaces with a drawer
+  open, resize docked panes, restart, and confirm saved pane dimensions and the
+  current valid navigation selection recover.
+- With the supported screen reader, confirm tool-window, menu, disclosure,
+  disabled action, stale/error, source, and diff names and textual state. Confirm
+  focus and selected state are visible without relying on color alone.
+
+See [UI_REFINEMENT_ACCEPTANCE.md](UI_REFINEMENT_ACCEPTANCE.md) for the evidence
+matrix and release follow-ups. These are native-release checks, not fixture passes.
