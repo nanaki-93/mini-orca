@@ -530,10 +530,11 @@ internal fun DesktopShell(
                             modifier.focusRequester(focusRequesters.drawer),
                             ::closeDrawerAndRestoreFocus)
                       },
-                      modifier = Modifier.fillMaxHeight().width(320.dp))
+                      modifier = Modifier.fillMaxHeight().width(320.dp),
+                      onClose = ::closeDrawerAndRestoreFocus)
                 } else {
                   DockedToolWindow(
-                      "Tool windows",
+                      "Context",
                       content = { modifier ->
                         RightToolWindowContainer(
                             layout.activeRightToolWindow,
@@ -542,7 +543,8 @@ internal fun DesktopShell(
                             panes.rightToolWindowBadges,
                             modifier.focusRequester(focusRequesters.drawer))
                       },
-                      modifier = Modifier.fillMaxHeight().width(360.dp))
+                      modifier = Modifier.fillMaxHeight().width(360.dp),
+                      onClose = ::closeDrawerAndRestoreFocus)
                 }
               }
             },

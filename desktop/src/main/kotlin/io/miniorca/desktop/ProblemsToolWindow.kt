@@ -42,58 +42,58 @@ internal fun ProblemsToolWindow(
   val presentation = findingsPresentation(state.findings, filters.filters, state.loading)
   var selectedKey by remember { mutableStateOf<String?>(null) }
   val findings = presentation.priorityGroups.flatMap { it.findings }
-  Column(modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
-    FindingsFilterControls(filters, presentation, Modifier.fillMaxWidth())
-    Spacer(Modifier.height(8.dp))
-    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp)) {
-      ProblemTableCells(
-          "Severity",
-          "File / line",
-          "Description / source",
-          "Status",
-          severityColor = SecondaryText,
-          contentColor = SecondaryText)
-    }
-    Divider(color = Border)
-    LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-      if (findings.isEmpty()) {
-        item {
-          Text(
-              presentation.emptyMessage,
-              color = SecondaryText,
-              fontSize = 12.sp,
-              modifier = Modifier.padding(vertical = 12.dp))
-        }
+  LazyColumn(modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
+    item {
+      FindingsFilterControls(filters, presentation, Modifier.fillMaxWidth())
+      Spacer(Modifier.height(8.dp))
+      Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp)) {
+        ProblemTableCells(
+            "Severity",
+            "File / line",
+            "Description / source",
+            "Status",
+            severityColor = SecondaryText,
+            contentColor = SecondaryText)
       }
-      findings.forEach { finding ->
-        val key = findingDisplayKey(finding)
-        item(key = key) {
-          ChromeButton(
-              onClick = { selectedKey = if (selectedKey == key) null else key },
-              selected = selectedKey == key,
-              contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-              modifier =
-                  Modifier.fillMaxWidth().semantics {
-                    contentDescription =
-                        compactProblemRowDescription(finding) + ". Select to show or hide details."
-                  }) {
-                ProblemTableCells(
-                    finding.severity.ifBlank { "Unknown" }.replaceFirstChar { it.uppercase() },
-                    findingLocationLabel(finding),
-                    finding.title.ifBlank { finding.message.ifBlank { "Untitled finding" } },
-                    findingStatusLabel(finding),
-                    provenance = findingProvenanceLabel(finding),
-                    severityColor =
-                        when (findingPriority(finding)) {
-                          FindingPriority.High -> Error
-                          FindingPriority.Medium -> Warning
-                          FindingPriority.Low -> SelectionText
-                          FindingPriority.Other -> SecondaryText
-                        })
-              }
-          Divider(color = Border.copy(alpha = 0.35f))
-          if (selectedKey == key) CompactProblemRow(finding, actions)
-        }
+      Divider(color = Border)
+    }
+    if (findings.isEmpty()) {
+      item {
+        Text(
+            presentation.emptyMessage,
+            color = SecondaryText,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(vertical = 12.dp))
+      }
+    }
+    findings.forEach { finding ->
+      val key = findingDisplayKey(finding)
+      item(key = key) {
+        ChromeButton(
+            onClick = { selectedKey = if (selectedKey == key) null else key },
+            selected = selectedKey == key,
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+            modifier =
+                Modifier.fillMaxWidth().semantics {
+                  contentDescription =
+                      compactProblemRowDescription(finding) + ". Select to show or hide details."
+                }) {
+              ProblemTableCells(
+                  finding.severity.ifBlank { "Unknown" }.replaceFirstChar { it.uppercase() },
+                  findingLocationLabel(finding),
+                  finding.title.ifBlank { finding.message.ifBlank { "Untitled finding" } },
+                  findingStatusLabel(finding),
+                  provenance = findingProvenanceLabel(finding),
+                  severityColor =
+                      when (findingPriority(finding)) {
+                        FindingPriority.High -> Error
+                        FindingPriority.Medium -> Warning
+                        FindingPriority.Low -> SelectionText
+                        FindingPriority.Other -> SecondaryText
+                      })
+            }
+        Divider(color = Border.copy(alpha = 0.35f))
+        if (selectedKey == key) CompactProblemRow(finding, actions)
       }
     }
   }

@@ -98,4 +98,11 @@ class ProblemsToolWindowTest {
     assertTrue(DesktopLayoutState().bottomToolWindowVisible)
     assertTrue(DesktopLayoutState().bottomCollapsed)
   }
+
+  @Test
+  fun filterDisclosureReportsActiveFilterCountWithoutRepeatingFieldValues() {
+    assertEquals(null, findingsFilterStateLabel(emptyList()))
+    assertEquals("1 active", findingsFilterStateLabel(listOf("Search")))
+    assertEquals("3 active", findingsFilterStateLabel(listOf("Search", "Source: vet", "Fresh")))
+  }
 }

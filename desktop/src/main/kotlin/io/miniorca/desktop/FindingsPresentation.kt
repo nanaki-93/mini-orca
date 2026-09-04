@@ -56,29 +56,22 @@ internal fun FindingsFilterControls(
     modifier: Modifier = Modifier,
 ) {
   Column(modifier) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      CompactSingleLineField(
-          state.query,
-          { state.query = it },
-          label = "Search findings",
-          showLabel = false,
-          modifier = Modifier.weight(1f))
-      ChromeButton(
-          onClick = { state.advancedFiltersVisible = !state.advancedFiltersVisible },
-          selected = state.advancedFiltersVisible,
-          modifier = Modifier.padding(start = 8.dp)) {
-            Text(if (state.advancedFiltersVisible) "Hide filters" else "Filters", fontSize = 12.sp)
-          }
-    }
-    if (presentation.activeFilters.isNotEmpty())
-        Text(
-            "Filters active: ${presentation.activeFilters.joinToString(" · ")}",
-            color = SecondaryText,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 5.dp))
+    CompactSingleLineField(
+        state.query,
+        { state.query = it },
+        label = "Search findings",
+        showLabel = false,
+        modifier = Modifier.fillMaxWidth())
+    IdeDisclosureHeader(
+        title = "Filters",
+        expanded = state.advancedFiltersVisible,
+        onToggle = { state.advancedFiltersVisible = !state.advancedFiltersVisible },
+        stateLabel = findingsFilterStateLabel(presentation.activeFilters),
+        modifier = Modifier.padding(top = 6.dp))
     if (state.advancedFiltersVisible) {
       ResponsiveFieldPair(
           modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+          minimumHorizontalWidth = 520.dp,
           first = { fieldModifier ->
             CompactSingleLineField(
                 state.source, { state.source = it }, label = "Source", modifier = fieldModifier)
@@ -93,6 +86,7 @@ internal fun FindingsFilterControls(
       )
       ResponsiveFieldPair(
           modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+          minimumHorizontalWidth = 520.dp,
           first = { fieldModifier ->
             CompactSingleLineField(
                 state.freshness,
@@ -111,6 +105,9 @@ internal fun FindingsFilterControls(
     }
   }
 }
+
+internal fun findingsFilterStateLabel(activeFilters: List<String>): String? =
+    activeFilters.size.takeIf { it > 0 }?.let { "$it active" }
 
 @Composable
 internal fun CompactProblemRow(
