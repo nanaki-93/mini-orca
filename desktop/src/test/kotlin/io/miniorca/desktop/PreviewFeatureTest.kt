@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -34,5 +35,15 @@ class PreviewFeatureTest {
     assertTrue(
         previewFeatureDescription(feature)
             .contains("no project, provider, or workflow state changes"))
+  }
+
+  @Test
+  fun previewMenuUsesSharedBoundedRowsAndFeatureIcons() {
+    assertEquals(196.dp, IdePopupMenuDefaults.minWidth)
+    assertEquals(360.dp, IdePopupMenuDefaults.maxWidth)
+    assertEquals(360.dp, IdePopupMenuDefaults.maxHeight)
+    assertEquals(36.dp, IdePopupMenuDefaults.rowMinimumHeight)
+    assertEquals(DesktopIcon.Search, previewFeatureIcon(PreviewFeature("Content search", "")))
+    assertEquals(DesktopIcon.Run, previewFeatureIcon(PreviewFeature("Run / Debug", "")))
   }
 }

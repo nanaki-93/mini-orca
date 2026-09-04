@@ -19,6 +19,9 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.scene.CanvasLayersComposeScene
 import androidx.compose.ui.scene.ComposeSceneContext
@@ -194,6 +197,111 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun popupMenusUseProductionRowsForDisabledLiveAndPreviewFlows() {
+    var imports = 0
+    var reindexes = 0
+    var reconnects = 0
+    val actions =
+        ToolbarActions(
+            onImport = { imports++ },
+            onReanalyze = { reindexes++ },
+            onReconnect = { reconnects++ },
+            onPalette = {},
+            onOpenExplorer = {},
+            onOpenContext = {},
+        )
+    ComposeVisualFixture(800, 220, 1.3f) {
+          ToolbarVisualFixture(
+              width = 800f,
+              project = null,
+              connection = ConnectionState(label = "Disconnected"),
+              actions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("No project open")
+          fixture.render()
+          assertTrue(fixture.hasText("Open project"))
+          assertTrue(fixture.isDisabled("Re-index project"))
+          assertTrue(fixture.hasText("Reconnect"))
+          fixture.clickText("Open project")
+          kotlin.test.assertEquals(1, imports)
+          kotlin.test.assertEquals(0, reindexes)
+          kotlin.test.assertEquals(0, reconnects)
+        }
+
+    ComposeVisualFixture(1440, 220) {
+          ToolbarVisualFixture(
+              width = 1440f,
+              project = visualFixtureProject,
+              connection = ConnectionState(label = "Disconnected"),
+              actions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("go-shop · fixture")
+          fixture.render()
+          fixture.clickText("Re-index project")
+          fixture.render()
+          fixture.clickText("go-shop · fixture")
+          fixture.render()
+          fixture.clickText("Reconnect")
+          kotlin.test.assertEquals(1, imports)
+          kotlin.test.assertEquals(1, reindexes)
+          kotlin.test.assertEquals(1, reconnects)
+        }
+  }
+
+  @Test
+  fun popupSurfaceWrapsLongRowsAndPreviewEscapeRestoresTheTriggerFocus() {
+    val longLabel =
+        "A long preview menu action remains readable instead of being shortened at narrow widths"
+    ComposeVisualFixture(320, 200, 1.3f) { PopupMenuVisualFixture(longLabel) }
+        .use { fixture ->
+          fixture.render("popup-surface-320-1.3")
+          fixture.assertTextWrapsWithoutClipping(longLabel)
+          fixture.assertTextFits("Unavailable action")
+          assertTrue(fixture.isDisabled("Unavailable action"))
+        }
+
+    ComposeVisualFixture(800, 220, 1.3f) { ToolbarVisualFixture(800f) }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Preview")
+          fixture.render()
+          assertTrue(fixture.hasText("New file"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          assertTrue(fixture.dismissPopup())
+          fixture.render()
+          fixture.render()
+          assertFalse(fixture.hasText("New file"))
+          assertTrue(fixture.isFocused("Preview"))
+        }
+  }
+
+  @Test
+  fun previewPopupKeepsLongContentInTheProductionScrollableMenu() {
+    val features =
+        (1..16).map { index ->
+          PreviewFeature(
+              "Preview action $index with a long but local-only description",
+              "This action has no implementation.")
+        }
+    ComposeVisualFixture(360, 520, 1.3f) {
+          Box(Modifier.fillMaxSize().background(AppBackground).padding(12.dp)) {
+            PreviewFeatureMenu(features)
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Preview")
+          fixture.render()
+          assertTrue(fixture.hasText(features.last().label))
+          assertTrue(fixture.hasScrollableContent())
+        }
+  }
+
+  @Test
   fun baselineCapturesTheOpenEngineeringInsightDisclosure() {
     ComposeVisualFixture(720, 420) {
           EngineeringInsightPanel(
@@ -323,6 +431,30 @@ private class ComposeVisualFixture(
     }
     error("No clickable control for $label")
   }
+
+  fun isDisabled(label: String): Boolean =
+      textNodes(label).any { node ->
+        generateSequence(node) { it.parent }
+            .any { it.config.getOrNull(SemanticsProperties.Disabled) != null }
+      }
+
+  fun isFocused(label: String): Boolean =
+      textNodes(label).any { node ->
+        generateSequence(node) { it.parent }
+            .any { it.config.getOrNull(SemanticsProperties.Focused) == true }
+      }
+
+  fun hasScrollableContent(): Boolean =
+      nodes().any { it.config.getOrNull(SemanticsActions.ScrollBy) != null }
+
+  fun pressKey(key: Key): Boolean = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyDown))
+
+  fun dismissPopup(): Boolean =
+      nodes()
+          .asSequence()
+          .mapNotNull { it.config.getOrNull(SemanticsActions.Dismiss)?.action }
+          .firstOrNull()
+          ?.invoke() ?: false
 
   fun assertTextFits(label: String) {
     assertTextLayout(label, mustWrap = false)
@@ -474,18 +606,43 @@ private val visualFixtureOverview =
         findingCounts = FindingCounts(verified = 2, aiSuggestions = 4))
 
 @Composable
-private fun ToolbarVisualFixture(width: Float) {
+private fun ToolbarVisualFixture(
+    width: Float,
+    project: ProjectAnalysis? = visualFixtureProject,
+    connection: ConnectionState = ConnectionState(connected = true),
+    actions: ToolbarActions = ToolbarActions({}, {}, {}, {}, {}, {}),
+) {
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
         ToolbarState(
             width,
-            visualFixtureProject,
+            project,
             false,
             "",
-            ConnectionState(connected = true),
+            connection,
             GitStatus(available = true, branch = "main"),
             false),
-        ToolbarActions({}, {}, {}, {}, {}, {}))
+        actions)
+  }
+}
+
+@Composable
+private fun PopupMenuVisualFixture(longLabel: String) {
+  Box(Modifier.fillMaxSize().background(AppBackground).padding(12.dp)) {
+    IdePopupMenuSurface(
+        modifier = Modifier.width(280.dp),
+        content = {
+          IdeDropdownMenuItem(
+              label = longLabel,
+              onClick = {},
+              icon = DesktopIcon.Settings,
+              status = { PreviewBadge() })
+          IdeDropdownMenuItem(
+              label = "Unavailable action",
+              onClick = {},
+              enabled = false,
+              icon = DesktopIcon.Refresh)
+        })
   }
 }
 
