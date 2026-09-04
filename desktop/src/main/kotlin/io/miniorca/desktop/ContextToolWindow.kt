@@ -12,12 +12,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Divider
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -123,117 +123,143 @@ internal fun ContextToolWindow(
     SystemStateMessage("Context", "Open a file to inspect its declarations.", modifier = modifier)
     return
   }
+  var projectContextExpanded by rememberSaveable { mutableStateOf(true) }
+  var focusedAnalysisExpanded by rememberSaveable { mutableStateOf(true) }
+  var actionsExpanded by rememberSaveable { mutableStateOf(true) }
+  var fileContextExpanded by rememberSaveable { mutableStateOf(false) }
   Column(
       modifier
           .background(Panel)
           .verticalScroll(rememberScrollState())
-          .padding(horizontal = 18.dp)
+          .padding(horizontal = 8.dp)
           .semantics { contentDescription = contextToolWindowDescription(inspector) }) {
-        ContextSection("Project summary", DesktopIcon.Summary, SelectionText) {
-          val project = projectSummaryPresentation(state.overview, state.project)
-          Text(
-              project.purpose ?: project.analysisMessage,
-              color = PrimaryText,
-              fontSize = 13.sp,
-              lineHeight = 20.sp)
-          if (project.purpose != null) {
-            Text(
-                "${statusBadgeStyle(project.analysisStatus).label} · advisory interpretation",
-                color = if (project.analysisStatus == "stale") Warning else SecondaryText,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 6.dp))
-          }
-          if (project.hasProject) {
-            Text(
-                listOf(project.projectType, project.languages, project.buildMetadata)
-                    .filter(String::isNotBlank)
-                    .joinToString(" · "),
-                color = SecondaryText,
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(top = 10.dp))
-          }
-        }
-        ContextSection("Focused analysis", DesktopIcon.Editor, CodeKeyword) {
-          ContextFileDetails(inspector)
-          if (inspector.mode == SymbolInspectorMode.SelectedSymbol)
-              ContextDeclarationDetails(inspector)
-          else
+        ContextSection(
+            title = "Project context",
+            icon = DesktopIcon.Summary,
+            expanded = projectContextExpanded,
+            onToggle = { projectContextExpanded = !projectContextExpanded }) {
+              val project = projectSummaryPresentation(state.overview, state.project)
               Text(
-                  inspector.selectionPrompt,
-                  color = SecondaryText,
-                  fontSize = 12.sp,
-                  modifier = Modifier.padding(top = 12.dp))
-          contextStateBadge(inspector)?.let {
-            Text(it, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp))
-          }
-          EngineeringInsightPanel(
-              state.fileAnalysis?.engineeringInsight,
-              stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
-              scopeLabel = "File")
-        }
-        ContextSection("Actions", DesktopIcon.Run, FocusAccent) {
-          if (inspector.analysisAction != InspectorAnalysisAction.None) {
-            val onAnalysisAction =
-                when (inspector.analysisAction) {
-                  InspectorAnalysisAction.AnalyzeFile -> actions.analyze
-                  InspectorAnalysisAction.RefreshAnalysis -> actions.refresh
-                  InspectorAnalysisAction.CancelAnalysis,
-                  InspectorAnalysisAction.None -> actions.cancel
+                  project.purpose ?: project.analysisMessage,
+                  color = PrimaryText,
+                  fontSize = 13.sp,
+                  lineHeight = 20.sp)
+              if (project.purpose != null) {
+                Text(
+                    "${statusBadgeStyle(project.analysisStatus).label} · advisory interpretation",
+                    color = if (project.analysisStatus == "stale") Warning else SecondaryText,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 6.dp))
+              }
+              if (project.hasProject) {
+                Text(
+                    listOf(project.projectType, project.languages, project.buildMetadata)
+                        .filter(String::isNotBlank)
+                        .joinToString(" · "),
+                    color = SecondaryText,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(top = 6.dp))
+              }
+            }
+        ContextSection(
+            title = "Focused analysis",
+            icon = DesktopIcon.Editor,
+            expanded = focusedAnalysisExpanded,
+            onToggle = { focusedAnalysisExpanded = !focusedAnalysisExpanded }) {
+              ContextFileDetails(inspector)
+              if (inspector.mode == SymbolInspectorMode.SelectedSymbol)
+                  ContextDeclarationDetails(inspector)
+              else
+                  Text(
+                      inspector.selectionPrompt,
+                      color = SecondaryText,
+                      fontSize = 12.sp,
+                      modifier = Modifier.padding(top = 12.dp))
+              contextStateBadge(inspector)?.let {
+                Text(
+                    it, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp))
+              }
+              EngineeringInsightPanel(
+                  state.fileAnalysis?.engineeringInsight,
+                  stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
+                  scopeLabel = "File")
+            }
+        ContextSection(
+            title = "Actions",
+            icon = DesktopIcon.Run,
+            expanded = actionsExpanded,
+            onToggle = { actionsExpanded = !actionsExpanded }) {
+              if (inspector.analysisAction != InspectorAnalysisAction.None) {
+                val onAnalysisAction =
+                    when (inspector.analysisAction) {
+                      InspectorAnalysisAction.AnalyzeFile -> actions.analyze
+                      InspectorAnalysisAction.RefreshAnalysis -> actions.refresh
+                      InspectorAnalysisAction.CancelAnalysis,
+                      InspectorAnalysisAction.None -> actions.cancel
+                    }
+                if (inspector.remoteProviderConfirmationRequired) {
+                  RemoteProviderConfirmation(
+                      ModelScope.Bug,
+                      state.bugModel,
+                      state.remoteProviderConfirmed,
+                      actions.confirmRemoteProvider)
                 }
-            if (inspector.remoteProviderConfirmationRequired) {
-              RemoteProviderConfirmation(
-                  ModelScope.Bug,
-                  state.bugModel,
-                  state.remoteProviderConfirmed,
-                  actions.confirmRemoteProvider)
-            }
-            MiniOrcaButton(
-                onClick = onAnalysisAction,
-                enabled =
-                    !inspector.remoteProviderConfirmationRequired || state.remoteProviderConfirmed,
-                tone =
-                    if (inspector.analysisAction == InspectorAnalysisAction.CancelAnalysis)
-                        ActionTone.Destructive
-                    else ActionTone.Neutral,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-              DesktopLineIcon(DesktopIcon.Search, "File analysis", iconSize = 16.dp)
-              Spacer(Modifier.width(8.dp))
-              Text(inspector.analysisAction.label, fontSize = 12.sp, modifier = Modifier.weight(1f))
-            }
-          }
-          inspector.selectedSymbol
-              ?.takeIf { it.editEligibility.eligible }
-              ?.let { symbol ->
                 MiniOrcaButton(
-                    onClick = { actions.editSelected(symbol) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    onClick = onAnalysisAction,
+                    enabled =
+                        !inspector.remoteProviderConfirmationRequired ||
+                            state.remoteProviderConfirmed,
+                    tone =
+                        if (inspector.analysisAction == InspectorAnalysisAction.CancelAnalysis)
+                            ActionTone.Destructive
+                        else ActionTone.Neutral,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                  DesktopLineIcon(DesktopIcon.Editor, "Refactor declaration", iconSize = 16.dp)
+                  DesktopLineIcon(DesktopIcon.Search, "File analysis", iconSize = 16.dp)
                   Spacer(Modifier.width(8.dp))
                   Text(
-                      "Refactor ${symbol.symbol.name}",
+                      inspector.analysisAction.label,
                       fontSize = 12.sp,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
                       modifier = Modifier.weight(1f))
                 }
               }
-          PreviewFeatureButton(
-              PreviewFeature("Generate unit test", "Dedicated test generation is not available."),
-              modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-              density = ButtonDensity.Standard)
-          Text(
-              "Preview only · Complexity and readability scores unavailable.",
-              color = FaintText,
-              fontSize = 11.sp,
-              modifier = Modifier.padding(top = 12.dp))
-        }
+              inspector.selectedSymbol
+                  ?.takeIf { it.editEligibility.eligible }
+                  ?.let { symbol ->
+                    MiniOrcaButton(
+                        onClick = { actions.editSelected(symbol) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                      DesktopLineIcon(DesktopIcon.Editor, "Refactor declaration", iconSize = 16.dp)
+                      Spacer(Modifier.width(8.dp))
+                      Text(
+                          "Refactor ${symbol.symbol.name}",
+                          fontSize = 12.sp,
+                          maxLines = 1,
+                          overflow = TextOverflow.Ellipsis,
+                          modifier = Modifier.weight(1f))
+                    }
+                  }
+              PreviewFeatureButton(
+                  PreviewFeature(
+                      "Generate unit test", "Dedicated test generation is not available."),
+                  modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                  density = ButtonDensity.Standard)
+              Text(
+                  "Preview only · Complexity and readability scores unavailable.",
+                  color = FaintText,
+                  fontSize = 11.sp,
+                  modifier = Modifier.padding(top = 12.dp))
+            }
         if (state.impact != null || state.gitStatus != null) {
-          ContextSection("File context", DesktopIcon.Branch, SecondaryText) {
-            ContextReadOnlySummaries(state.impact, state.gitStatus)
-          }
+          ContextSection(
+              title = "File context",
+              icon = DesktopIcon.Branch,
+              expanded = fileContextExpanded,
+              onToggle = { fileContextExpanded = !fileContextExpanded }) {
+                ContextReadOnlySummaries(state.impact, state.gitStatus)
+              }
         }
       }
 }
@@ -242,19 +268,22 @@ internal fun ContextToolWindow(
 private fun ContextSection(
     title: String,
     icon: DesktopIcon,
-    tint: androidx.compose.ui.graphics.Color,
+    expanded: Boolean,
+    onToggle: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-  Column(Modifier.fillMaxWidth().padding(vertical = 20.dp)) {
-    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-      DesktopLineIcon(icon, title, tint = tint, iconSize = 19.dp)
-      Spacer(Modifier.width(10.dp))
-      Text(title, color = PrimaryText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+  Column(Modifier.fillMaxWidth()) {
+    IdePaneHeader(
+        title = title,
+        icon = icon,
+        expanded = expanded,
+        onToggle = onToggle,
+    )
+    if (expanded) {
+      Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) { content() }
     }
-    Spacer(Modifier.height(14.dp))
-    content()
+    IdeHorizontalSeparator()
   }
-  Divider(color = Border)
 }
 
 /** Context content is read-only until an explicit file-analysis or edit intent is chosen. */

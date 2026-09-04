@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -309,6 +310,52 @@ internal fun CompactSingleLineField(
                         overflow = TextOverflow.Ellipsis)
                 input()
               }
+        },
+    )
+  }
+}
+
+/** A contained, selectable multiline input that shares the compact dark field treatment. */
+@Composable
+internal fun CompactMultilineField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    placeholder: String = "",
+    minLines: Int = 3,
+    textStyle: TextStyle = IdeTypography.compactBody,
+) {
+  val interactions = remember { MutableInteractionSource() }
+  val focused by interactions.collectIsFocusedAsState()
+  Column(modifier) {
+    Text(
+        label,
+        color = SecondaryText,
+        style = IdeTypography.section,
+        modifier = Modifier.padding(bottom = 5.dp))
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        enabled = enabled,
+        singleLine = false,
+        interactionSource = interactions,
+        textStyle = textStyle.copy(color = if (enabled) PrimaryText else FaintText),
+        cursorBrush = SolidColor(FocusAccent),
+        modifier =
+            Modifier.fillMaxWidth()
+                .heightIn(min = (minLines * 20).dp)
+                .background(Panel, MiniOrcaShapes.small)
+                .border(
+                    BorderStroke(1.dp, if (focused) FocusAccent else Border), MiniOrcaShapes.small)
+                .semantics { contentDescription = label },
+        decorationBox = { input ->
+          Box(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            if (value.text.isEmpty() && placeholder.isNotBlank())
+                Text(placeholder, color = FaintText, style = textStyle)
+            input()
+          }
         },
     )
   }

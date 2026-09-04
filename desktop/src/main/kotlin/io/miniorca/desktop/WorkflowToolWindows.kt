@@ -1,12 +1,12 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -82,18 +82,14 @@ internal fun ToolWindowScopeHeader(
     scope: ToolWindowScope,
     modifier: Modifier = Modifier,
 ) {
-  MiniOrcaPanel(modifier.fillMaxWidth(), raised = true) {
-    Text(label, color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+  Column(modifier.fillMaxWidth()) {
+    IdePaneHeader(title = label, stateLabel = scope.target)
     Text(
         scope.path,
         color = PrimaryText,
         fontFamily = FontFamily.Monospace,
         fontSize = 11.sp,
-        modifier = Modifier.padding(top = 4.dp))
-    Text(
-        scope.target,
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 3.dp))
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+    IdeHorizontalSeparator()
   }
 }
