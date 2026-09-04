@@ -1,47 +1,41 @@
 # Desktop component decision
 
-## Active direction — UI precision planning
+## Active decision — standalone Jewel adoption (2026-09-04)
 
-[Plan.md](../Plan.md) supersedes the old Task 154 migration-scope restriction.
-Tasks 161–162 must verify and adopt standalone Jewel with a supported aligned
-toolchain/runtime; the current Kotlin/Compose build has not yet changed. Treat the
-version examples below as historical evidence, not current dependency recommendations.
-Task 161 will replace this note with verified coordinates, compatibility results,
-and runtime/package requirements before Task 162 changes production dependencies.
-The active plan requires evidence and user direction before a token-only fallback.
+Mini-Orca will adopt standalone Jewel as its desktop component foundation. The
+validated coordinate is
+`org.jetbrains.jewel:jewel-int-ui-standalone:0.40.0-262.10315.125`; it will enter
+production in Task 162, not before. The temporary Task 161 spike compiled and
+rendered the theme, action, tab, tree/disclosure, popup menu, and text-input APIs
+under JBR 25. The complete evidence, resolved graph, runtime details, and test
+boundary are in [UI_PRECISION_BASELINE.md](UI_PRECISION_BASELINE.md).
 
-## Jewel evaluation — 2026-09-04
+| Concern | Adopted decision |
+| --- | --- |
+| Component library | Jewel standalone, not IntelliJ Platform integration and not a second custom control framework. |
+| Pinned platform | Jewel `0.40.0-262.10315.125`; Kotlin JVM/serialization/Compose compiler `2.3.20`; Compose Multiplatform `1.11.0`; Gradle wrapper `9.1.0`; JBR `25.0.4+1-b508.27`. |
+| Bytecode and analysis | JBR 25 runs the toolchain/application; source targets JVM 22 solely because stable Detekt 1.23.8 cannot run on JDK 25 or analyze target 25. Remove this workaround when stable Detekt supports it. |
+| Application policy | Use Jewel for standard controls and theme roles. Keep Mini-Orca-owned source/diff rendering, state, accessibility labels, callbacks, and preview-first safety behavior. |
+| Windows and popups | Retain normal desktop window decoration. No custom titlebar and no experimental popup flag are required. Offscreen popup evidence does not replace Task 170 native keyboard/window checks. |
+| Packaging | Package with the matching JBR 25 distribution for each supported target; validate the actual artifact in Task 171. No local JBR path is committed. |
 
-Mini-Orca is a standalone Compose Desktop application pinned to Kotlin 2.0.21,
-Compose Multiplatform 1.7.0, and Gradle 8.6. It does not run inside the IntelliJ
-Platform.
+## Migration ownership
 
-JetBrains documents standalone Jewel use through
-`org.jetbrains.jewel:jewel-int-ui-standalone:<version>` in the
-[Jewel README](https://github.com/JetBrains/jewel). The current official
-[Jewel release notes](https://github.com/JetBrains/intellij-community/blob/master/platform/jewel/RELEASE%20NOTES.md)
-list Jewel 0.40 against Compose Multiplatform 1.11.0 and Jewel 0.29 against 1.8.2;
-both are newer than Mini-Orca's pinned Compose 1.7.0. The same notes record that
-the standalone artifacts use their own dependency setup and that experimental native
-popups can require JetBrains Runtime or extra configuration, fall back to Compose,
-and affect UI tests. They also contain accessibility fixes, but do not establish
-end-to-end accessibility coverage for this application's popup workflow.
+| Task | Jewel/migration ownership |
+| --- | --- |
+| 162 | Add the production dependency and semantic IDE theme. |
+| 163 | Shared dense headers, toolbars, tabs, disclosures, dividers, and control states. |
+| 164 | Shell surface ownership and continuous pane dividers. |
+| 165 | Analysis header controls and flat rows. |
+| 166 | Summary and Performance dense flat sections. |
+| 167 | Explorer, editor tabs, breadcrumbs, source, and diff chrome. |
+| 168 | Context, Assistant, Review, and workflow evidence panes. |
+| 169 | Bottom panes, menus/dialogs, and Material bridge removal. |
+| 170 | Native/responsive/accessibility validation, including Escape and focus routing. |
+| 171 | Package/acceptance ledger and final runtime documentation. |
 
-## Decision
+## Historical note
 
-Do not add Jewel for Task 154. No supported current Jewel release is compatible
-with the pinned Compose 1.7.0 toolchain, and adopting it would require a dependency
-and theme migration larger than popup styling. Mini-Orca keeps Compose Material's
-mature Desktop `DropdownMenu` placement, keyboard traversal, Escape/outside dismissal,
-and scrolling behavior, then applies the existing token system through a narrow shared
-menu-surface and menu-row layer. No Kotlin, Compose, Gradle, repository, or runtime
-configuration changes are made by this task.
-
-## Verification boundary
-
-The pinned Compose raster scene exposes real detached popup semantics but does not
-composite their window layer into its PNG. The desktop visual test adapter therefore
-opens the actual Project and Preview menus for callbacks, disabled state, scrolling,
-dismissal, and focus restoration, and renders the same production `IdePopupMenuSurface`
-inline for pixel review. Native popup layering and OS keyboard traversal remain release
-operator checks for Tasks 159 and 160.
+Task 154 correctly deferred Jewel within its narrower Compose 1.7.0 scope. That
+decision is superseded by this approved, tested toolchain migration; the old
+Material-only path is not retained as a competing implementation.

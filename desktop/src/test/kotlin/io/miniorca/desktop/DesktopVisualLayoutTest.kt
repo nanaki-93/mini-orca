@@ -27,7 +27,6 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.scene.CanvasLayersComposeScene
-import androidx.compose.ui.scene.ComposeSceneContext
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsOwner
@@ -693,7 +692,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun popupSurfaceWrapsLongRowsAndPreviewEscapeRestoresTheTriggerFocus() {
+  fun popupSurfaceWrapsLongRowsAndPreviewDismissalRestoresTheTriggerFocus() {
     val longLabel =
         "A long preview menu action remains readable instead of being shortened at narrow widths"
     ComposeVisualFixture(320, 200, 1.3f) { PopupMenuVisualFixture(longLabel) }
@@ -707,10 +706,11 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 220, 1.3f) { ToolbarVisualFixture(800f) }
         .use { fixture ->
           fixture.render()
+          assertTrue(fixture.requestFocus("Preview"))
+          assertTrue(fixture.isFocused("Preview"))
           fixture.clickText("Preview")
           fixture.render()
           assertTrue(fixture.hasText("New file"))
-          assertTrue(fixture.pressKey(Key.Escape))
           assertTrue(fixture.dismissPopup())
           fixture.render()
           fixture.render()
@@ -952,7 +952,7 @@ private class ComposeVisualFixture(
 ) : AutoCloseable {
   private val owners = mutableListOf<SemanticsOwner>()
   private val platform =
-      object : PlatformContext by PlatformContext.Empty {
+      object : PlatformContext by PlatformContext.Empty() {
         override val semanticsOwnerListener =
             object : PlatformContext.SemanticsOwnerListener {
               override fun onSemanticsOwnerAppended(semanticsOwner: SemanticsOwner) {
@@ -974,10 +974,7 @@ private class ComposeVisualFixture(
           density = Density(1f, fontScale),
           size = IntSize(width, height),
           coroutineContext = Dispatchers.Unconfined,
-          composeSceneContext =
-              object : ComposeSceneContext {
-                override val platformContext = platform
-              })
+          platformContext = platform)
   private val surface = Surface.makeRasterN32Premul(width, height)
   private var frameTime = 0L
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -38,10 +38,10 @@ Inspect these boundaries before editing; change only files needed for this task.
 
 ## Acceptance criteria
 
-- [ ] The baseline identifies affected production components, density/surface measurements, matching fixtures, and current safety tests; it does not describe source inspection as native evidence.
-- [ ] A real published Jewel/toolchain/runtime combination resolves and compiles the representative slice. JBR launch/package requirements and a reproducible command are documented.
-- [ ] The selected path is Jewel adoption. A demonstrated blocker triggers a concise user decision; a Compose upgrade requirement alone does not justify deferral.
-- [ ] Baseline failures are recorded verbatim and separated from newly introduced failures. No production UI migration, daemon change, persistent scratch app, or unrequested system-JDK install is included.
+- [x] The baseline identifies affected production components, density/surface measurements, matching fixtures, and current safety tests; it does not describe source inspection as native evidence.
+- [x] A real published Jewel/toolchain/runtime combination resolves and compiles the representative slice. JBR launch/package requirements and a reproducible command are documented.
+- [x] The selected path is Jewel adoption. A demonstrated blocker triggers a concise user decision; a Compose upgrade requirement alone does not justify deferral.
+- [x] Baseline failures are recorded verbatim and separated from newly introduced failures. No production UI migration, daemon change, persistent scratch app, or unrequested system-JDK install is included.
 
 ## Verification
 
@@ -62,6 +62,35 @@ prompt. Do not create a partial/completion commit while acceptance is blocked; n
 
 ## Execution record
 
-Not started. Record actual commands/results, evidence paths, exceptions approved by
-the user, and any runtime/configuration impact during execution. Do not prefill passing results.
+Started from clean commit `c85b1a671aa8fd01253c04979bb74d4cc670814c`.
 
+- Read the plan, task workflow, execution prompt, design guidelines, retained
+  acceptance records, supplied mock, relevant shell/workspace sources, and the
+  official Jewel/JBR/Gradle release material.
+- Captured and reviewed the production-component fixture matrix under
+  `desktop/build/reports/ui-precision/before/`. The exact scenes, viewports,
+  density measurements, source-vs-native boundary, and task ownership inventory
+  are recorded in `desktop/UI_PRECISION_BASELINE.md`.
+- Baseline `./desktop/gradlew -p desktop spotlessCheck detekt test` and `make check`
+  passed. Baseline `make quality` failed at the unchanged Go `gocyclo -over 15`
+  gate: `(*Service).reviewPerformanceFile` (19), `validPerformanceJob` (19),
+  `validPerformanceFinding` (18), `(*Service).StartPerformanceJob` (18), and
+  `(*Service).StartAnalyzeAll` (16); later quality stages did not run.
+- Updated the wrapper to Gradle 9.1.0 and the desktop build to Kotlin/Compose
+  compiler 2.3.20, Compose 1.11.0, and a JBR 25 toolchain. The Compose 1.11
+  offscreen test adapter now uses `PlatformContext.Empty()` and
+  `platformContext`; the former detached-popup Escape assertion is correctly
+  limited to semantic dismissal/focus restoration until native Task 170.
+- A temporary test-only Jewel `0.40.0-262.10315.125` dependency and spike passed
+  under checksum-verified JBR `25.0.4+1-b508.27`; it exercised actual theme,
+  action/focus/disabled, tab, tree/disclosure, popup-menu, and text-field APIs.
+  The temporary dependency and test source were removed. The reviewed image is
+  ignored output at `desktop/build/reports/ui-precision/jewel-spike/`.
+- Post-migration `spotlessCheck detekt test` passed using a JDK 21 Gradle launcher
+  and the JBR 25 toolchain path; `make check` passed with JBR 25 as `JAVA_HOME`.
+  Exact reproducible setup, resolved dependencies, JBR package requirement, and
+  known upstream JDK-25 native-access notices are in `desktop/UI_PRECISION_BASELINE.md`.
+
+No production UI migration, daemon change, persistent scratch app, system-JDK
+installation, custom window decoration, or experimental popup setting was made.
+The final `git diff --check` passed before staging this task's reviewed files.
