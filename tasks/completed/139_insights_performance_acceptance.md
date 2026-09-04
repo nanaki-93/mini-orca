@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -104,3 +104,15 @@ chore: complete insights and performance acceptance
 Do not amend, squash, tag, or push. After committing, verify all seven task-owned
 changes are committed, unrelated work remains preserved, and no extra commit is
 needed. Report the seven exact hashes and final acceptance/limitations.
+
+## Completion evidence
+
+- Audited the six prior task commits and verified their exact ordered subjects before
+  staging this acceptance record.
+- Recorded automated, contract/privacy, and manual-release-operator evidence in
+  `docs/insights-performance/ACCEPTANCE.md`; updated plan, README, desktop usage,
+  keyboard checklist, API schema, and task ledger status.
+- Passed `make fmt-check`, `go test ./...`, `make test-race`, `make vet`,
+  `./desktop/gradlew -p desktop spotlessCheck detekt test`, `make check`, and
+  `git diff --check`. The user-authorized `make quality` deferral is documented in
+  the acceptance record; its remaining failure is repository-wide complexity output.
