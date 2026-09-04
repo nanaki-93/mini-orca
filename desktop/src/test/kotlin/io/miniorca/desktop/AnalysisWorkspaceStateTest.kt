@@ -136,8 +136,8 @@ class AnalysisWorkspaceStateTest {
     assertEquals("sanitized failure", presentation.failures[0].error)
     assertEquals(2, presentation.failures[0].attempts)
     assertEquals("Analysis failed", presentation.failures[2].error)
-    assertTrue(presentation.statusDetail.contains("8 fresh"))
-    assertTrue(presentation.run.statusDetail.contains("Run counts and analysis errors"))
+    assertFalse(presentation.statusDetail.contains("Coverage:"))
+    assertTrue(presentation.run.statusDetail.contains("counts and failures"))
     assertFalse(presentation.run.statusDetail.contains("revision"))
   }
 
@@ -145,13 +145,14 @@ class AnalysisWorkspaceStateTest {
   fun analysisPresentationUsesStableLifecycleTextForEveryJobState() {
     val cases =
         listOf(
-            null to Triple("Not started", "Start", "never start one automatically"),
-            "running" to Triple("Running", "Pause or cancel", "processing candidates"),
-            "paused" to Triple("Paused", "Resume or cancel", "Resume explicitly"),
+            null to Triple("Not started", "Start", "never starts one automatically"),
+            "running" to Triple("Running", "Pause or cancel", "Processing candidates"),
+            "paused" to Triple("Paused", "Resume or cancel", "Resume to process"),
             "completed" to Triple("Completed", "Start a new run", "refresh coverage"),
-            "canceled" to Triple("Canceled", "Start a new run", "recorded analysis errors"),
+            "canceled" to
+                Triple("Canceled", "Start a new run", "reviews and failures remain available"),
             "stale" to Triple("Stale", "Start a new run", "cannot resume"),
-            "failed" to Triple("Failed", "Retry", "Inspect the analysis errors"),
+            "failed" to Triple("Failed", "Retry", "Inspect failures"),
         )
 
     cases.forEach { (status, expected) ->
@@ -186,12 +187,12 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
-  fun emptyFailureListUsesAnExplicitNoErrorsMessage() {
+  fun emptyFailureListUsesACompactExplicitMessage() {
     val presentation =
         analyzeAllPresentation(job("completed", files = listOf(file("main.go", "completed"))), null)
 
     assertTrue(presentation.failures.isEmpty())
-    assertEquals("No analysis errors in this run.", presentation.noErrorsMessage)
+    assertEquals("No failures recorded.", presentation.noErrorsMessage)
   }
 
   @Test
@@ -199,7 +200,7 @@ class AnalysisWorkspaceStateTest {
     val presentation = analyzeAllPresentation(null, null)
 
     assertEquals("Not started", presentation.statusLabel)
-    assertTrue(presentation.statusDetail.contains("never start one automatically"))
+    assertTrue(presentation.statusDetail.contains("never starts one automatically"))
     assertEquals("Start", presentation.controls)
   }
 

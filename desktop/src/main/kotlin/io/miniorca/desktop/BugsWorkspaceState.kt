@@ -92,8 +92,8 @@ internal fun findingsPresentation(
       emptyMessage =
           when {
             loading && findings.isEmpty() -> "Loading findings…"
-            activeFilters.isNotEmpty() -> "No findings match the active filters."
-            else -> "No findings are available for this project."
+            activeFilters.isNotEmpty() -> "No findings match these filters."
+            else -> "No findings yet."
           },
   )
 }
@@ -184,17 +184,17 @@ fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress =
     when {
       scan == null ->
           VerifiedScanProgress(
-              "No verified scan has run. Import and reindex never start one automatically.",
+              "No verified scan. Importing or reindexing never starts one automatically.",
               false,
               emptyList())
       shouldPollVerifiedScan(scan) ->
           VerifiedScanProgress(
-              "Verified scan ${scan.status.lowercase()} in an isolated copy; imported source remains unchanged.",
+              "Verified scan ${scan.status.lowercase()} in an isolated copy; source remains unchanged.",
               true,
               scanWarnings(scan))
       else ->
           VerifiedScanProgress(
-              "Verified scan ${scan.status.lowercase()}; completed phase results remain available.",
+              "Verified scan ${scan.status.lowercase()}; results remain available.",
               false,
               scanWarnings(scan))
     }

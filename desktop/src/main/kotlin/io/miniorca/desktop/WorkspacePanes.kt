@@ -102,11 +102,6 @@ internal fun AnalysisWorkspacePane(
           Column(Modifier.weight(1f)) {
             Text(
                 "Analysis", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-            Text(
-                "Project coverage and file analysis",
-                color = SecondaryText,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 4.dp))
           }
         }
       }
@@ -166,7 +161,7 @@ internal fun AnalysisWorkspacePane(
       }
       item {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-          SectionLabel("Analysis errors")
+          SectionLabel("Failures")
           Spacer(Modifier.width(8.dp))
           Text(presentation.failures.size.toString(), color = FaintText, fontSize = 12.sp)
         }
@@ -179,13 +174,13 @@ internal fun AnalysisWorkspacePane(
                 Modifier.size(36.dp).background(Success.copy(alpha = 0.08f), MiniOrcaShapes.large),
                 contentAlignment = Alignment.Center) {
                   DesktopLineIcon(
-                      DesktopIcon.Check, "No analysis errors", tint = Success, iconSize = 20.dp)
+                      DesktopIcon.Check, "No failures", tint = Success, iconSize = 20.dp)
                 }
             Spacer(Modifier.width(12.dp))
             Column {
-              Text("No analysis errors", color = PrimaryText, fontSize = 13.sp)
+              Text("No failures", color = PrimaryText, fontSize = 13.sp)
               Text(
-                  if (state.job == null) "Errors from your next run will appear here."
+                  if (state.job == null) "Run failures appear here."
                   else presentation.noErrorsMessage,
                   color = SecondaryText,
                   fontSize = 12.sp,
@@ -274,10 +269,7 @@ private fun AnalysisCoverageMetrics(coverage: AnalysisCoveragePresentation, avai
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
       SectionLabel("Coverage")
       Spacer(Modifier.weight(1f))
-      Text(
-          if (available) "Current project index" else "Coverage unavailable",
-          color = FaintText,
-          fontSize = 12.sp)
+      Text(if (available) "Indexed files" else "Unavailable", color = FaintText, fontSize = 12.sp)
     }
     Spacer(Modifier.height(20.dp))
     val metrics =
@@ -515,7 +507,7 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
       Spacer(Modifier.height(8.dp))
       MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
-            SectionLabel("Search and filter")
+            SectionLabel("Filters")
             FindingsFilterControls(
                 filters,
                 presentation,

@@ -99,6 +99,127 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun workspaceStatesKeepCompactCopyAndEvidenceReachableAcrossWideAndNarrowViews() {
+    var performanceActions = 0
+    val model =
+        ScopedModel(
+            scope = ModelScope.Analyze.wireValue,
+            profile = "review-profile",
+            model = "provider/reviewer",
+            remoteProvider = true,
+        )
+    val destination = modelDestinationLabel(ModelScope.Analyze, model)
+    val performanceActionsFixture =
+        PerformanceWorkspaceActions(
+            confirmRemoteProvider = { performanceActions++ },
+            preview = { performanceActions++ },
+            start = { _, _ -> performanceActions++ },
+            pause = { performanceActions++ },
+            resume = { performanceActions++ },
+            cancel = { performanceActions++ },
+            openInEditor = { _, _ -> performanceActions++ },
+            prepareOptimization = { _, _ -> performanceActions++ },
+        )
+    val performanceFinding =
+        PerformanceFinding(
+            id = "performance-1",
+            category = "allocation",
+            potentialImpact = "high",
+            confidence = "medium",
+            title = "Avoid repeated buffer allocation",
+            observedPattern = "A buffer is allocated for every request.",
+            workloadConditions = "High request volume.",
+            recommendation = "Reuse a bounded buffer.",
+            tradeoff = "Retained buffers increase memory pressure.",
+            verificationPlan = "Benchmark representative traffic.",
+            startLine = 24,
+            symbol = "Serve",
+        )
+    ComposeVisualFixture(1440, 900) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(
+                  job = PerformanceJob(status = "running", elapsed = 8_000_000_000),
+                  report =
+                      PerformanceReport(
+                          status = "completed",
+                          paths = mapOf(performanceFinding.id to "internal/api/server.go"),
+                          findings = listOf(performanceFinding)),
+                  context =
+                      PerformanceQueuePreview(
+                          files = listOf(PerformanceJobFile(path = "internal/api/server.go")),
+                          excluded = 2,
+                          oversized = 1,
+                          outsideLimit = 3),
+                  model = model,
+                  remoteProviderConfirmed = false),
+              performanceActionsFixture)
+        }
+        .use { fixture ->
+          fixture.render("performance-populated-1440")
+          assertTrue(fixture.hasText("Source-based review · Not measured"))
+          assertTrue(fixture.hasText(destination))
+          assertTrue(fixture.hasText("Running · 8s budget used"))
+          kotlin.test.assertEquals(0, performanceActions)
+          fixture.clickText(
+              "ALLOCATION · high · internal/api/server.go:24 · Avoid repeated buffer allocation")
+          fixture.render()
+          assertTrue(fixture.hasText("Observed pattern: A buffer is allocated for every request."))
+          assertTrue(
+              fixture.hasText(
+                  "When it matters: High request volume.\nRecommendation: Reuse a bounded buffer.\nTrade-off: Retained buffers increase memory pressure.\nVerify: Benchmark representative traffic."))
+          kotlin.test.assertEquals(0, performanceActions)
+        }
+
+    ComposeVisualFixture(800, 900, 1.3f) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(
+                  job = null,
+                  report = null,
+                  context =
+                      PerformanceQueuePreview(
+                          files = listOf(PerformanceJobFile(path = "internal/api/server.go"))),
+                  model = model,
+                  remoteProviderConfirmed = false),
+              performanceActionsFixture)
+        }
+        .use { fixture ->
+          fixture.render("performance-empty-800-1.3")
+          assertTrue(fixture.hasText("No performance review"))
+          assertTrue(fixture.hasText("Confirm remote destination"))
+          kotlin.test.assertEquals(0, performanceActions)
+          fixture.clickText("Preview limits")
+          kotlin.test.assertEquals(1, performanceActions)
+        }
+
+    ComposeVisualFixture(800, 650, 1.3f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(
+                  findings = emptyList(),
+                  scan =
+                      GoScanReport(
+                          status = "failed",
+                          phases = listOf(GoScanPhase("go vet", "failed", output = "vet failed"))),
+                  loading = false),
+              BugsWorkspaceActions(FindingActions({}, {}, { _, _ -> }), {}, {}))
+        }
+        .use { fixture ->
+          fixture.render("bugs-failed-800-1.3")
+          assertTrue(fixture.hasText("Verified scan failed; results remain available."))
+          assertTrue(fixture.hasText("Warning: go vet: failed: vet failed"))
+          assertTrue(fixture.hasText("No findings yet."))
+        }
+
+    ComposeVisualFixture(800, 280, 1.3f) {
+          ProblemsToolWindow(
+              ProblemsToolWindowState(emptyList(), false), FindingActions({}, {}, { _, _ -> }))
+        }
+        .use { fixture ->
+          fixture.render("problems-empty-800-1.3")
+          assertTrue(fixture.hasText("No findings yet."))
+        }
+  }
+
+  @Test
   fun analysisWrapsLongRemoteDestinationWithoutHidingActiveControls() {
     val model =
         ScopedModel(

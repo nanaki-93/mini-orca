@@ -118,6 +118,19 @@ class BugsWorkspaceStateTest {
   }
 
   @Test
+  fun compactEmptyMessagesRetainFilterContextAndVerifiedScanBoundary() {
+    assertEquals("No findings yet.", findingsPresentation(emptyList(), BugsFilters()).emptyMessage)
+    assertEquals(
+        "No findings match these filters.",
+        findingsPresentation(emptyList(), BugsFilters(source = "vet")).emptyMessage)
+    assertTrue(verifiedScanProgress(null).summary.contains("never starts one automatically"))
+    assertTrue(
+        verifiedScanProgress(GoScanReport(status = "running"))
+            .summary
+            .contains("isolated copy; source remains unchanged"))
+  }
+
+  @Test
   fun triageAndPrepareFixRemainRevisionAndLocationSafe() {
     assertEquals(
         listOf(
@@ -169,7 +182,7 @@ class BugsWorkspaceStateTest {
                 status = "failed",
                 phases = listOf(GoScanPhase("go vet", "failed", output = "vet output"))))
     assertFalse(progress.canCancel)
-    assertTrue(progress.summary.contains("completed phase results"))
+    assertTrue(progress.summary.contains("results remain available"))
     assertEquals(listOf("go vet: failed: vet output"), progress.warnings)
   }
 }

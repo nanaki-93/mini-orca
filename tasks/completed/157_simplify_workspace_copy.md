@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -98,5 +98,20 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+Passed `./desktop/gradlew -p desktop spotlessCheck detekt test
+-PvisualOutput="$PWD/desktop/build/reports/ui-refinement/task-157"` and `git diff
+--check` on 2026-09-04. Removed duplicate Analysis coverage narration and the
+retired coverage summary helper; shortened Analyze-all lifecycle, failure, verified
+scan, Findings/Problems, and Performance state copy; and standardized the affected
+section labels. Performance now presents its destination once in the Review panel:
+next to active controls while running, and through its existing approval control
+when a review can be started or resumed. The source-based/unmeasured distinction,
+limits, counts, scan isolation boundary, warnings, stale states, provider consent,
+filtering, lifecycle controls, and full finding/performance evidence remain intact.
+Focused state and visual tests prove no display callback occurs before interaction,
+Preview remains an explicit local action, and detail evidence remains reachable.
+Visual review passed for `performance-populated-1440.png`,
+`performance-empty-800-1.3.png`, `bugs-failed-800-1.3.png`,
+`problems-empty-800-1.3.png`, and the retained Analysis lifecycle captures under
+`desktop/build/reports/ui-refinement/task-157/`. Native window and screen-reader
+acceptance remain deferred to Tasks 159/160.
