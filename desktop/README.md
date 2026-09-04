@@ -66,6 +66,12 @@ requires the existing discard decision. Draft edits invalidate prior validation 
 Only the guarded Apply and Undo operations can mutate source; source and composed diffs are
 selectable and read-only throughout.
 
+Where an existing result includes an optional Engineering insight, its compact in-page panel is
+collapsed by default and labelled **AI interpretation**. Opening or closing it is local display
+only, and its disclosure preference is shared across result pages. Missing insights have no
+placeholder. Stale file/project owners are labelled **Outdated — source changed**; an edited
+draft clears the prior proposal insight for the current candidate.
+
 ## Keyboard and accessibility
 
 - `Cmd/Ctrl+P` opens indexed files, `Cmd/Ctrl+Shift+O` opens symbols in the active file, and
@@ -77,6 +83,8 @@ selectable and read-only throughout.
 - `Cmd/Ctrl+Shift+F` opens Bugs. Arrow keys move within the Project tree and tool-window tab
   groups; `Enter` or `Space` activates the focused tab. `Escape` closes only the topmost dialog,
   drawer, or bottom overlay, or cancels the active cancellable operation.
+- Tab to **Engineering insight** where shown and press Enter or Space to disclose it; **Close
+  insight** returns keyboard focus to the opener without triggering a model request.
 
 All actions retain text labels or accessible names, state remains textual in addition to color,
 and cyan indicates keyboard focus. The full release-operator matrix, including screen-reader,

@@ -267,6 +267,7 @@ internal fun MiniOrcaApp(
                 remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
                 impact = appState.impact,
                 gitStatus = appState.gitStatus,
+                fileAnalysis = appState.analysis,
             ),
         actions =
             ContextToolWindowActions(

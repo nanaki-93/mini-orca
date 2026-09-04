@@ -129,6 +129,10 @@ internal fun ContextToolWindow(
               modifier = Modifier.padding(top = 3.dp))
         }
         ContextFileDetails(inspector)
+        EngineeringInsightPanel(
+            state.fileAnalysis?.engineeringInsight,
+            stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
+            scopeLabel = "File")
         if (inspector.mode == SymbolInspectorMode.SelectedSymbol)
             ContextDeclarationDetails(inspector, actions.editSelected)
         else
@@ -184,6 +188,7 @@ internal data class ContextToolWindowState(
     val remoteProviderConfirmed: Boolean,
     val impact: ImpactPreview?,
     val gitStatus: GitStatus?,
+    val fileAnalysis: FileAnalysis? = null,
 )
 
 /** File analysis and direct-edit intents available from Context. */

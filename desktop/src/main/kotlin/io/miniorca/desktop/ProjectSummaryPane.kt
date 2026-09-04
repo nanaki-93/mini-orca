@@ -172,6 +172,10 @@ private fun ProjectInterpretation(analysis: StructuredProjectAnalysis?) {
   projectList(
       "Risks (AI suggestions)", analysis.risks.map { "${it.severity.uppercase()} · ${it.summary}" })
   projectList("Next steps", analysis.nextSteps)
+  EngineeringInsightPanel(
+      analysis.engineeringInsight,
+      stale = analysis.status.equals("stale", ignoreCase = true),
+      scopeLabel = "Project")
 }
 
 @Composable

@@ -38,6 +38,12 @@ replace these layout details while retaining the safety and keyboard behavior be
 
 13. At supported text scaling, verify long relative paths, symbol names, diagnostics, command output, compact buttons, and fields remain readable through scrolling or ellipsis without horizontal clipping. Confirm primary, navigation, positive, attention, destructive, and neutral actions retain text labels and readable state in addition to their color.
 
+14. Where a current project/file/finding/proposal includes **Engineering insight**, Tab to its
+opener and use Enter or Space. Confirm it expands only already-returned AI interpretation, the
+scope label and any **Outdated — source changed** label are textual, and **Close insight**
+returns focus to the opener. Repeat at exactly `1000dp`, below `1000dp`, and at supported text
+scaling; confirm no drawer, modal, provider request, check, or source mutation occurs.
+
 ## Task 130 responsive and accessibility verification
 
 The interactive Desktop application remains unavailable in this execution environment, so the
