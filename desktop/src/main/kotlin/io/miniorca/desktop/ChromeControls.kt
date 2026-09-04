@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -44,10 +45,13 @@ internal fun ChromeButton(
 ) {
   val interactions = remember { MutableInteractionSource() }
   val hovered by interactions.collectIsHoveredAsState()
+  val pressed by interactions.collectIsPressedAsState()
   val focused by interactions.collectIsFocusedAsState()
   val fill =
       when {
-        selected -> SelectionAccent.copy(alpha = 0.10f)
+        !enabled -> background
+        selected -> SelectionSurface
+        pressed -> StrongSurface
         hovered -> StrongSurface
         else -> background
       }

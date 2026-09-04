@@ -91,7 +91,7 @@ internal fun RightToolWindowContainer(
                 badge?.let {
                   Text(
                       it.label,
-                      color = SelectionAccent,
+                      color = SelectionText,
                       fontSize = 11.sp,
                       maxLines = 1,
                       overflow = TextOverflow.Ellipsis)
@@ -129,7 +129,7 @@ internal fun ContextToolWindow(
           .verticalScroll(rememberScrollState())
           .padding(horizontal = 18.dp)
           .semantics { contentDescription = contextToolWindowDescription(inspector) }) {
-        ContextSection("Project summary", DesktopIcon.Summary, SelectionAccent) {
+        ContextSection("Project summary", DesktopIcon.Summary, SelectionText) {
           val project = projectSummaryPresentation(state.overview, state.project)
           val analysis = state.overview?.analysis
           val purpose =

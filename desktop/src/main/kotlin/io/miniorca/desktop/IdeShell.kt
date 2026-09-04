@@ -116,11 +116,11 @@ internal fun ToolWindowBar(
                 leftToolWindowIcon(toolWindow),
                 label,
                 iconSize = 24.dp,
-                tint = if (selected) SelectionAccent else SecondaryText)
+                tint = if (selected) SelectionText else SecondaryText)
             Spacer(Modifier.height(6.dp))
             Text(
                 if (toolWindow == LeftToolWindow.Performance && enlargedText) "Perf." else label,
-                color = if (selected) SelectionAccent else SecondaryText,
+                color = if (selected) SelectionText else SecondaryText,
                 fontSize = 11.sp,
                 lineHeight = 15.sp,
                 textAlign = TextAlign.Center,

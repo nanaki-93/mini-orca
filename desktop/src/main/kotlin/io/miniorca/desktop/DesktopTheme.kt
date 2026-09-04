@@ -49,19 +49,21 @@ import kotlin.math.pow
 
 /** Every desktop color is derived from this single dark semantic palette. */
 internal object MiniOrcaPalette {
-  val appBackground = Color(0xFF171B20)
-  val chromeSurface = Color(0xFF12161B)
-  val surface = Color(0xFF1C2229)
-  val raisedSurface = Color(0xFF242B33)
-  val strongSurface = Color(0xFF2B333D)
-  val border = Color(0xFF343D48)
-  val primaryText = Color(0xFFE6EDF3)
-  val secondaryText = Color(0xFFAAB6C3)
-  val faintText = Color(0xFF95A2B2)
-  val selectionAccent = Color(0xFF79B3FF)
-  val actionFill = Color(0xFF285FCB)
-  val onActionFill = Color.White
-  val focusAccent = Color(0xFF65D2EC)
+  val appBackground = Color(0xFF1E1F22)
+  val chromeSurface = Color(0xFF18191B)
+  val surface = Color(0xFF1E1F22)
+  val raisedSurface = Color(0xFF2B2D30)
+  val strongSurface = Color(0xFF323438)
+  val border = Color(0xFF323438)
+  val primaryText = Color(0xFFF2F2F2)
+  val secondaryText = Color(0xFFC4C7C5)
+  val faintText = Color(0xFF9FA2A6)
+  val selectionAccent = Color(0xFF3574F0)
+  val selectionSurface = Color(0xFF2E436E)
+  val selectionText = Color(0xFFA8C7FA)
+  val actionFill = Color(0xFF3574F0)
+  val onActionFill = Color(0xFF0B0D10)
+  val focusAccent = Color(0xFFA8C7FA)
   val success = Color(0xFF65D6A3)
   val warning = Color(0xFFF2BE66)
   val error = Color(0xFFFF8F98)
@@ -139,7 +141,7 @@ internal fun ResponsiveFieldPair(
 
 internal val MiniOrcaShapes =
     Shapes(
-        small = RoundedCornerShape(4.dp),
+        small = RoundedCornerShape(6.dp),
         medium = RoundedCornerShape(6.dp),
         large = RoundedCornerShape(8.dp),
     )
@@ -147,13 +149,18 @@ internal val MiniOrcaShapes =
 internal val MiniOrcaTypography =
     Typography(
         defaultFontFamily = FontFamily.Default,
-        h6 = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
-        body1 = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
-        body2 = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+        h6 =
+            androidx.compose.ui.text.TextStyle(
+                fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 20.sp),
+        body1 = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+        body2 = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
         button =
             androidx.compose.ui.text.TextStyle(
-                fontWeight = FontWeight.Normal, fontSize = 13.sp, letterSpacing = 0.15.sp),
-        caption = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                fontWeight = FontWeight.Normal,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                letterSpacing = 0.15.sp),
+        caption = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, lineHeight = 16.sp),
     )
 
 internal enum class ActionTone {
@@ -195,8 +202,8 @@ internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
           ActionToneStyle(
               Card,
               SelectionAccent.copy(alpha = 0.25f),
-              SelectionAccent.copy(alpha = 0.26f),
-              SelectionAccent,
+              SelectionSurface,
+              SelectionText,
               Panel,
               FaintText,
               Border)
@@ -252,7 +259,7 @@ internal fun buttonDensityStyle(density: ButtonDensity): ButtonDensityStyle =
     }
 
 internal object MiniOrcaButtonDefaults {
-  val shape = RoundedCornerShape(4.dp)
+  val shape = MiniOrcaShapes.small
 
   @Composable
   fun colors(tone: ActionTone, selected: Boolean, pressed: Boolean): ButtonColors {
@@ -344,7 +351,7 @@ internal fun MiniOrcaButton(
   val densityStyle = buttonDensityStyle(density)
   Button(
       onClick = onClick,
-      modifier = modifier.height(densityStyle.height),
+      modifier = modifier.heightIn(min = densityStyle.height),
       enabled = enabled,
       interactionSource = interactionSource,
       elevation =
@@ -389,6 +396,8 @@ internal val PrimaryText = MiniOrcaPalette.primaryText
 internal val SecondaryText = MiniOrcaPalette.secondaryText
 internal val FaintText = MiniOrcaPalette.faintText
 internal val SelectionAccent = MiniOrcaPalette.selectionAccent
+internal val SelectionSurface = MiniOrcaPalette.selectionSurface
+internal val SelectionText = MiniOrcaPalette.selectionText
 internal val ActionFill = MiniOrcaPalette.actionFill
 internal val OnActionFill = MiniOrcaPalette.onActionFill
 internal val FocusAccent = MiniOrcaPalette.focusAccent
@@ -530,6 +539,18 @@ internal fun formatBytes(bytes: Long): String =
       else -> "${bytes / (1024 * 1024)} MB"
     }
 
+internal fun blendOver(foreground: Color, background: Color): Color {
+  val alpha = foreground.alpha + background.alpha * (1f - foreground.alpha)
+  if (alpha == 0f) return Color.Transparent
+  fun channel(source: Float, backdrop: Float): Float =
+      (source * foreground.alpha + backdrop * background.alpha * (1f - foreground.alpha)) / alpha
+  return Color(
+      red = channel(foreground.red, background.red),
+      green = channel(foreground.green, background.green),
+      blue = channel(foreground.blue, background.blue),
+      alpha = alpha)
+}
+
 internal fun contrastRatio(foreground: Color, background: Color): Double {
   fun linear(component: Float): Double =
       component.toDouble().let {
@@ -537,7 +558,8 @@ internal fun contrastRatio(foreground: Color, background: Color): Double {
       }
   fun luminance(color: Color): Double =
       0.2126 * linear(color.red) + 0.7152 * linear(color.green) + 0.0722 * linear(color.blue)
-  val lighter = maxOf(luminance(foreground), luminance(background))
-  val darker = minOf(luminance(foreground), luminance(background))
+  val resolvedForeground = blendOver(foreground, background)
+  val lighter = maxOf(luminance(resolvedForeground), luminance(background))
+  val darker = minOf(luminance(resolvedForeground), luminance(background))
   return (lighter + 0.05) / (darker + 0.05)
 }

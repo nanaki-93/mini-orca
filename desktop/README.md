@@ -57,6 +57,8 @@ Future UI changes follow [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md): sha
 IDE tokens, dense typography, quiet component hierarchy, and visual verification
 against the supplied mock. The guidelines distinguish target design decisions from
 the current implementation and require evaluation before a Jewel or titlebar migration.
+The current token roles and measured contrast pairs are recorded in
+[UI_CONTRAST.md](UI_CONTRAST.md).
 
 The next requested improvements are sequenced in
 [UI_REFINEMENT_PLAN.md](UI_REFINEMENT_PLAN.md): remove duplicate Project navigation,
