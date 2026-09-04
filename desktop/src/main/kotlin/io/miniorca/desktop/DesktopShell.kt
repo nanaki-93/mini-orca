@@ -524,7 +524,7 @@ internal fun DesktopShell(
               if (showsEditorChrome) {
                 if (narrowDrawer == NarrowDrawer.Files) {
                   DockedToolWindow(
-                      "Project",
+                      "Files",
                       content = { modifier ->
                         panes.explorer(
                             modifier.focusRequester(focusRequesters.drawer),
@@ -592,7 +592,7 @@ internal fun DesktopShell(
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                   if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
                     DockedToolWindow(
-                        "Project",
+                        "Files",
                         content = { modifier -> panes.explorer(modifier) {} },
                         modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight())
                     ResizableDivider(

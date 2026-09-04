@@ -386,7 +386,6 @@ internal fun bottomToolWindowSummary(
 
 internal fun leftToolWindowIcon(toolWindow: LeftToolWindow): DesktopIcon =
     when (toolWindow) {
-      LeftToolWindow.Project -> DesktopIcon.Project
       LeftToolWindow.Summary -> DesktopIcon.Summary
       LeftToolWindow.Analysis -> DesktopIcon.Analysis
       LeftToolWindow.Performance -> DesktopIcon.Performance

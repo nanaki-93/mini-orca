@@ -3,7 +3,6 @@ package io.miniorca.desktop
 import java.util.prefs.Preferences
 
 internal enum class LeftToolWindow {
-  Project,
   Summary,
   Analysis,
   Performance,
@@ -40,7 +39,6 @@ internal enum class DesktopFocusRegion {
 
 internal fun leftToolWindowLabel(toolWindow: LeftToolWindow): String =
     when (toolWindow) {
-      LeftToolWindow.Project -> "Project"
       LeftToolWindow.Summary -> "Summary"
       LeftToolWindow.Analysis -> "Analysis"
       LeftToolWindow.Performance -> "Performance"
@@ -66,7 +64,6 @@ internal fun leftToolWindowForWorkspace(workspace: Workspace): LeftToolWindow =
 
 internal fun workspaceForLeftToolWindow(toolWindow: LeftToolWindow): Workspace =
     when (toolWindow) {
-      LeftToolWindow.Project -> Workspace.Editor
       LeftToolWindow.Summary -> Workspace.Summary
       LeftToolWindow.Analysis -> Workspace.Analysis
       LeftToolWindow.Performance -> Workspace.Performance
@@ -76,7 +73,7 @@ internal fun workspaceForLeftToolWindow(toolWindow: LeftToolWindow): Workspace =
 
 /** Presentation-only preferences for the known IDE shell regions. */
 internal data class DesktopLayoutState(
-    val activeLeftToolWindow: LeftToolWindow = LeftToolWindow.Project,
+    val activeLeftToolWindow: LeftToolWindow = LeftToolWindow.Editor,
     val activeRightToolWindow: RightToolWindow = RightToolWindow.Context,
     val activeBottomToolWindow: BottomToolWindow = BottomToolWindow.Problems,
     val editorSurface: EditorSurface = EditorSurface.Source,
@@ -191,7 +188,7 @@ internal class DesktopLayoutStore(
 ) {
   fun load(): DesktopLayoutState =
       DesktopLayoutState(
-              activeLeftToolWindow = enumPreference(LEFT_TOOL_KEY, LeftToolWindow.Project),
+              activeLeftToolWindow = enumPreference(LEFT_TOOL_KEY, LeftToolWindow.Editor),
               activeRightToolWindow = enumPreference(RIGHT_TOOL_KEY, RightToolWindow.Context),
               activeBottomToolWindow = enumPreference(BOTTOM_TOOL_KEY, BottomToolWindow.Problems),
               editorSurface = enumPreference(EDITOR_SURFACE_KEY, EditorSurface.Source),

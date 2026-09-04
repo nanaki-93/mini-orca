@@ -44,6 +44,22 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun activityRailCyclesOnlyTheFiveRetainedWorkspaces() {
+    val entries = LeftToolWindow.entries.toList()
+
+    assertEquals(
+        LeftToolWindow.Analysis,
+        tabGroupInteraction(entries, LeftToolWindow.Summary, TabGroupKey.Next)?.focused)
+    assertEquals(
+        LeftToolWindow.Editor,
+        tabGroupInteraction(entries, LeftToolWindow.Summary, TabGroupKey.Previous)?.focused)
+    assertEquals(
+        TabGroupInteraction(LeftToolWindow.Editor, LeftToolWindow.Editor),
+        tabGroupInteraction(entries, LeftToolWindow.Editor, TabGroupKey.Activate),
+    )
+  }
+
+  @Test
   fun escapeSelectsOnlyTheTopmostTransientSurface() {
     assertEquals(
         TransientSurface.Context,

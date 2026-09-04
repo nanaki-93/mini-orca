@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Depends on
 
@@ -95,5 +95,12 @@ full hash only after the commit succeeds; do not place its own hash in this file
 
 ## Verification evidence
 
-Not run — task is Pending. Replace this paragraph during execution with actual
-checks, outcomes, legacy code removed, evidence paths, and remaining limitations.
+`./desktop/gradlew -p desktop spotlessCheck detekt test -PvisualOutput="$PWD/desktop/build/reports/ui-refinement/task-151"` passed, as did
+`git diff --check`. The verification covers the five-entry activity rail, Editor default,
+Project/unknown preference recovery to Editor, pane-preference preservation, keyboard cycling,
+and current saved values. `rg "LeftToolWindow.Project" desktop/src/main desktop/src/test` returned
+no active production or test references. The production Editor fixture at `1440x900` was rendered
+and inspected with its docked **Files** tree; existing `999dp` drawer and draft-preservation
+contracts remain in the desktop suite. The change is presentation-only: it does not introduce
+callbacks, model requests, or source mutation. Native capture remains unavailable and is deferred
+to Task 159.
