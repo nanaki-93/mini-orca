@@ -109,6 +109,57 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun baselineCapturesSummaryAndExercisesOpenProjectAndPreviewMenus() {
+    ComposeVisualFixture(1440, 900) {
+          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+        }
+        .use { fixture ->
+          fixture.render("summary-1440")
+          assertTrue(fixture.hasText("Project facts"))
+          assertTrue(fixture.hasText("Workspace coverage"))
+        }
+
+    ComposeVisualFixture(1440, 900) { ToolbarVisualFixture(1440f) }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("go-shop · fixture")
+          fixture.render("project-menu-open")
+          assertTrue(fixture.hasText("Open project"))
+          assertTrue(fixture.hasText("Re-index project"))
+        }
+
+    ComposeVisualFixture(1440, 900) { ToolbarVisualFixture(1440f) }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Preview")
+          fixture.render("preview-menu-open")
+          assertTrue(fixture.hasText("New file"))
+          assertTrue(fixture.hasText("Branch actions"))
+        }
+  }
+
+  @Test
+  fun baselineCapturesTheOpenEngineeringInsightDisclosure() {
+    ComposeVisualFixture(720, 420) {
+          EngineeringInsightPanel(
+              EngineeringInsight(
+                  mechanism = "The handler validates its identifier before the repository call.",
+                  whyItMattersHere = "The returned error remains distinguishable for the caller.",
+                  tradeoffOrFailureMode =
+                      "Malformed input otherwise reaches the persistence layer.",
+                  transferableLesson = "Keep boundary validation close to request handling."),
+              scopeLabel = "Visual fixture")
+        }
+        .use { fixture ->
+          val wasCollapsed = fixture.hasText("> Engineering insight")
+          if (wasCollapsed) fixture.clickText("> Engineering insight")
+          fixture.render("engineering-insight-open")
+          assertTrue(fixture.hasText("Close insight"))
+          if (wasCollapsed) fixture.clickText("⌄ Engineering insight")
+        }
+  }
+
+  @Test
   fun problemRowsRevealDetailsBeforeAnyWorkflowAction() {
     var sourceRequests = 0
     var mutations = 0
@@ -320,6 +371,47 @@ private val visualFixtureProject =
         summary = "Test fixture",
         aiStatus = "fresh",
         analyzedAt = "")
+
+private val visualFixtureOverview =
+    ProjectOverview(
+        projectId = "visual-fixture",
+        projectRevision = "fixture-revision",
+        metrics =
+            ProjectMetrics(
+                type = "Go",
+                buildFile = "go.mod",
+                fileCount = 23,
+                sourceFileCount = 23,
+                totalLines = 1800,
+                languages = mapOf("Go" to 21, "Markdown" to 2)),
+        analysis =
+            StructuredProjectAnalysis(
+                status = "fresh",
+                purpose = "Go service with a small HTTP API and a repository layer.",
+                architecture = "HTTP handlers delegate through services to repository adapters.",
+                components = listOf("API handlers", "Repository adapters"),
+                entryPoints = listOf("cmd/server/main.go"),
+                flows = listOf("HTTP request to handler to service to repository"),
+                risks = listOf(ProjectAnalysisRisk("medium", "Input validation is incomplete.")),
+                nextSteps = listOf("Review boundary validation.")),
+        analysisCoverage = AnalysisCoverage(total = 23, fresh = 16, stale = 4, missing = 3),
+        findingCounts = FindingCounts(verified = 2, aiSuggestions = 4))
+
+@Composable
+private fun ToolbarVisualFixture(width: Float) {
+  Column(Modifier.fillMaxSize().background(AppBackground)) {
+    MainToolbar(
+        ToolbarState(
+            width,
+            visualFixtureProject,
+            false,
+            "",
+            ConnectionState(connected = true),
+            GitStatus(available = true, branch = "main"),
+            false),
+        ToolbarActions({}, {}, {}, {}, {}, {}))
+  }
+}
 
 private val visualFixtureJob =
     AnalyzeAllJob(

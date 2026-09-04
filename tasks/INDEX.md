@@ -1,11 +1,38 @@
 # Mini-Orca implementation tasks
 
-Active feature plan: [Dark desktop redesign from the supplied mockups](../docs/dark-ui/PLAN.md).
+Active feature plan: [UI refinement](../desktop/UI_REFINEMENT_PLAN.md).
 
 Completed plans: [IDE-style desktop UI](../plan.md) and
 [Engineering insights and project performance analysis](../docs/insights-performance/PLAN.md).
 
-## Active dark desktop redesign: Tasks 140–149
+## Planned UI refinement: Tasks 150–160
+
+Execute only when requested, using
+[PROMPT_EXECUTE_UI_REFINEMENT.md](PROMPT_EXECUTE_UI_REFINEMENT.md).
+The sequence requires one implementation agent, strict numeric order, verification,
+and exactly one isolated local commit per completed task. No pushes.
+
+| Order | Task | Depends on | Status |
+| ---: | --- | --- | --- |
+| 150 | [Establish the UI refinement baseline](completed/150_ui_refinement_baseline.md) | 148 + current baseline | Complete |
+| 151 | [Remove duplicate Project navigation](151_remove_project_navigation.md) | 150 | Pending |
+| 152 | [Unify IDE design tokens and control states](152_unify_ide_design_tokens.md) | 151 | Pending |
+| 153 | [Correct Analysis and shared workspace widths](153_correct_workspace_widths.md) | 152 | Pending |
+| 154 | [Refine popup menus and menu-row controls](154_refine_popup_menus.md) | 153 | Pending |
+| 155 | [Refine disclosures, drawers, and tool-window controls](155_refine_disclosures_and_drawers.md) | 154 | Pending |
+| 156 | [Redesign Summary as a concise project dashboard](156_redesign_summary_dashboard.md) | 155 | Pending |
+| 157 | [Simplify workspace copy and information density](157_simplify_workspace_copy.md) | 156 | Pending |
+| 158 | [Polish Editor, workflow surfaces, and global UI copy](158_polish_editor_workflow_surfaces.md) | 157 | Pending |
+| 159 | [Verify responsive layout and accessible UI interactions](159_verify_refined_ui_accessibility.md) | 158 | Pending |
+| 160 | [Complete UI refinement acceptance and cleanup](160_ui_refinement_acceptance.md) | 159 | Pending |
+
+Task 150 verifies the current implementation after Tasks 140–148 and the subsequent
+visual correction. Task 149 remains a separate outstanding acceptance record, not
+a hard dependency or a task to silently complete within this new sequence.
+The execution prompt owns the exact commit subjects, bootstrap artifact list,
+staging safeguards, resume behavior, and verification policy.
+
+## Prior dark desktop redesign: Tasks 140–149
 
 | Order | Task | Depends on | Status |
 | ---: | --- | --- | --- |
@@ -20,10 +47,11 @@ Completed plans: [IDE-style desktop UI](../plan.md) and
 | 148 | [Verify responsive and accessible dark UI behavior](completed/148_dark_ui_responsive_accessibility.md) | 147 | Complete |
 | 149 | [Complete dark UI visual and regression acceptance](149_dark_ui_acceptance.md) | 140–148 | Pending |
 
-Use [PROMPT_EXECUTE_DARK_UI.md](PROMPT_EXECUTE_DARK_UI.md) when implementation is
-requested. The planning request creates this backlog; it does not execute the tasks
-or authorize commits. Tasks replace the former palette and add explicit UI previews
-while retaining the single-file review workflow and existing backend contracts.
+The earlier [PROMPT_EXECUTE_DARK_UI.md](PROMPT_EXECUTE_DARK_UI.md) applies only when
+that earlier sequence is explicitly requested and does not authorize commits.
+Tasks 150–160 are the current UI refinement backlog. They preserve the existing
+single-file review workflow and Preview isolation; they do not assert that Task 149's
+native/repository acceptance is complete.
 
 ## Historical ledger: Tasks 01–102
 
