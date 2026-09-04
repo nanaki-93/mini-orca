@@ -91,7 +91,7 @@ internal fun ProjectSummaryPane(
           modifier = Modifier.fillMaxWidth(),
       )
     } else {
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
             SectionLabel("Project facts")
             CompactKeyValueRows(
@@ -105,7 +105,7 @@ internal fun ProjectSummaryPane(
           }
 
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(),
           raised = presentation.analysisStatus in setOf("fresh", "stale", "failed"),
           contentPadding = PaddingValues(MiniOrcaSpacing.standard),
@@ -125,7 +125,7 @@ internal fun ProjectSummaryPane(
       }
 
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
             SectionLabel("Workspace coverage")
             CompactKeyValueRows(
@@ -134,13 +134,13 @@ internal fun ProjectSummaryPane(
                 modifier = Modifier.padding(top = MiniOrcaSpacing.standard),
             )
             ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
-              FocusFlowButton(
+              MiniOrcaButton(
                   onClick = { onWorkspace(Workspace.Analysis) },
                   tone = ActionTone.Navigation,
                   density = ButtonDensity.Toolbar) {
                     Text("Open Analysis", fontSize = 11.sp)
                   }
-              FocusFlowButton(
+              MiniOrcaButton(
                   onClick = { onWorkspace(Workspace.Bugs) },
                   tone = ActionTone.Navigation,
                   density = ButtonDensity.Toolbar) {

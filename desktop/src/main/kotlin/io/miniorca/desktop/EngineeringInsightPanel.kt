@@ -32,8 +32,8 @@ internal fun EngineeringInsightPanel(
     expanded = !expanded
     EngineeringInsightPreference.save(expanded)
   }
-  FocusFlowPanel(modifier.fillMaxWidth().padding(top = 8.dp), raised = expanded) {
-    FocusFlowButton(
+  MiniOrcaPanel(modifier.fillMaxWidth().padding(top = 8.dp), raised = expanded) {
+    MiniOrcaButton(
         onClick = ::toggle,
         tone = ActionTone.Navigation,
         density = ButtonDensity.Toolbar,
@@ -65,7 +65,7 @@ internal fun EngineeringInsightPanel(
               .filter(String::isNotBlank)
               .joinToString(" ")
       Text(prose, color = PrimaryText, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-      FocusFlowButton(
+      MiniOrcaButton(
           onClick = {
             toggle()
             opener.requestFocus()

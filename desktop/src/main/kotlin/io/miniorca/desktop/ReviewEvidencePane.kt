@@ -321,7 +321,7 @@ internal fun ReviewToolWindow(
             .padding(horizontal = 12.dp)
             .padding(bottom = 12.dp)) {
           if (decision.receiptTitle != null && state.applied != null) {
-            FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+            MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
               SectionLabel("APPLIED RECEIPT")
               Text(
                   decision.receiptTitle,
@@ -341,7 +341,7 @@ internal fun ReviewToolWindow(
                   color = SecondaryText,
                   fontSize = 12.sp,
                   modifier = Modifier.padding(top = 6.dp))
-              FocusFlowButton(
+              MiniOrcaButton(
                   onClick = applicationActions.undo,
                   enabled = state.applied.undoAvailable,
                   tone = ActionTone.Attention,
@@ -351,7 +351,7 @@ internal fun ReviewToolWindow(
             }
             return@Column
           }
-          FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+          MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
             SectionLabel("REVIEW")
             Text(
                 "Current scope and validation",
@@ -365,7 +365,7 @@ internal fun ReviewToolWindow(
             EvidenceRow(evidence.validation)
             val diagnostics = state.editor?.diagnostics.orEmpty().take(8)
             if (diagnostics.isNotEmpty()) {
-              FocusFlowButton(
+              MiniOrcaButton(
                   onClick = { showDiagnostics = !showDiagnostics },
                   tone = ActionTone.Neutral,
                   modifier = Modifier.padding(top = 8.dp)) {
@@ -387,7 +387,7 @@ internal fun ReviewToolWindow(
                   }
             }
             if (state.editor != null && state.draft != null)
-                FocusFlowButton(
+                MiniOrcaButton(
                     onClick = evidenceActions.editDraft,
                     tone = ActionTone.Neutral,
                     modifier = Modifier.padding(top = 8.dp)) {
@@ -395,10 +395,10 @@ internal fun ReviewToolWindow(
                     }
           }
           Spacer(Modifier.height(10.dp))
-          FocusFlowPanel(Modifier.fillMaxWidth()) {
+          MiniOrcaPanel(Modifier.fillMaxWidth()) {
             EvidenceRow(evidence.checks)
             if (evidence.canRunChecks)
-                FocusFlowButton(
+                MiniOrcaButton(
                     onClick = evidenceActions.runChecks,
                     tone = ActionTone.Primary,
                     modifier = Modifier.padding(top = 8.dp)) {
@@ -407,7 +407,7 @@ internal fun ReviewToolWindow(
             val repairMessage = repairMessageForChecks(state.session, state.draft, state.checks)
             if (repairMessage != null ||
                 repairLimitReached(state.session, state.draft, state.checks)) {
-              FocusFlowButton(
+              MiniOrcaButton(
                   onClick = evidenceActions.reviseWithCheckOutput,
                   enabled = repairMessage != null && !state.checksRunning,
                   tone = ActionTone.Attention,
@@ -429,7 +429,7 @@ internal fun ReviewToolWindow(
                   it.command.isNotEmpty() || it.output.isNotBlank()
                 }
             if (checksWithOutput.isNotEmpty()) {
-              FocusFlowButton(
+              MiniOrcaButton(
                   onClick = { showCommandOutput = !showCommandOutput },
                   tone = ActionTone.Neutral,
                   modifier = Modifier.padding(top = 8.dp)) {
@@ -471,7 +471,7 @@ internal fun ReviewToolWindow(
               stale = state.draft?.state.equals("stale", ignoreCase = true),
               scopeLabel = "Current candidate")
           Spacer(Modifier.height(12.dp))
-          FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+          MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
             if (decision.eligible) {
               Text(
                   "Ready for the one guarded write",
@@ -482,7 +482,7 @@ internal fun ReviewToolWindow(
                   color = SecondaryText,
                   fontSize = 12.sp,
                   modifier = Modifier.padding(top = 4.dp))
-              FocusFlowButton(
+              MiniOrcaButton(
                   onClick = applicationActions.apply,
                   tone = ActionTone.Positive,
                   modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -541,7 +541,7 @@ private fun EvidenceRow(row: ReviewEvidenceRow) {
 
 @Composable
 private fun ReadOnlyImpactPane(impact: ImpactPreview?, gitStatus: GitStatus?) {
-  FocusFlowPanel(Modifier.fillMaxWidth()) {
+  MiniOrcaPanel(Modifier.fillMaxWidth()) {
     SectionLabel("ADVISORY IMPACT · READ-ONLY")
     if (impact?.references.isNullOrEmpty()) {
       Text(

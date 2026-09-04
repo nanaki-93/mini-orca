@@ -82,7 +82,7 @@ internal fun ToolWindowScopeHeader(
     scope: ToolWindowScope,
     modifier: Modifier = Modifier,
 ) {
-  FocusFlowPanel(modifier.fillMaxWidth(), raised = true) {
+  MiniOrcaPanel(modifier.fillMaxWidth(), raised = true) {
     Text(label, color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     Text(
         scope.path,

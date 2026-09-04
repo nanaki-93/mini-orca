@@ -90,9 +90,9 @@ class ProblemsToolWindowTest {
   fun collapsedTabTextAndSelectionRemainKeyboardDiscoverable() {
     val summary = problemsCollapsedSummary(listOf(highOpen)).text
 
-    assertEquals("Problems", bottomToolWindowLabel(BottomToolWindow.Problems))
+    assertEquals("Bugs & Problems", bottomToolWindowLabel(BottomToolWindow.Problems))
     assertEquals(
-        "Problems tool window tab, $summary, selected",
+        "Bugs & Problems tool window tab, $summary, selected",
         bottomToolWindowTabDescription(
             BottomToolWindow.Problems, selected = true, summary = summary))
     assertTrue(DesktopLayoutState().bottomToolWindowVisible)

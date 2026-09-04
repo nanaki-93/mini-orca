@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.graphics.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -20,5 +21,12 @@ class DiffViewerTest {
     assertEquals("func Run() {}", rows[1].before?.text)
     assertEquals("func Run() error { return nil }", rows[1].proposed?.text)
     assertEquals("added", rows[2].proposed?.change)
+  }
+
+  @Test
+  fun diffBackgroundsKeepAddedAndRemovedLinesDistinct() {
+    assertEquals(DiffAddedBackground, diffLineBackground("added"))
+    assertEquals(DiffRemovedBackground, diffLineBackground("removed"))
+    assertEquals(Color.Transparent, diffLineBackground("context"))
   }
 }

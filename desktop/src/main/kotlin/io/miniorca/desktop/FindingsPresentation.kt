@@ -61,7 +61,7 @@ internal fun FindingsFilterControls(
         { state.query = it },
         label = { Text("Search findings") },
         modifier = Modifier.fillMaxWidth())
-    FocusFlowButton(
+    MiniOrcaButton(
         onClick = { state.advancedFiltersVisible = !state.advancedFiltersVisible },
         tone = ActionTone.Neutral,
         selected = state.advancedFiltersVisible,
@@ -119,7 +119,7 @@ internal fun CompactProblemRow(
     actions: FindingActions,
     onShowDetails: (() -> Unit)? = null,
 ) {
-  FocusFlowPanel(
+  MiniOrcaPanel(
       Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact).semantics {
         contentDescription = compactProblemRowDescription(finding)
       },
@@ -166,19 +166,19 @@ private fun FindingActionButtons(
 ) {
   ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact)) {
     onShowDetails?.let { onDetails ->
-      FocusFlowButton(
+      MiniOrcaButton(
           onClick = onDetails, tone = ActionTone.Neutral, density = ButtonDensity.Toolbar) {
             Text("Details", fontSize = 11.sp)
           }
     }
-    FocusFlowButton(
+    MiniOrcaButton(
         onClick = { actions.select(finding) },
         enabled = finding.location.path.isNotBlank(),
         tone = ActionTone.Navigation,
         density = ButtonDensity.Toolbar) {
           Text("Open source", fontSize = 11.sp)
         }
-    FocusFlowButton(
+    MiniOrcaButton(
         onClick = { actions.prepareFix(finding) },
         enabled = findingCanPrepareFix(finding),
         tone = ActionTone.Navigation,
@@ -186,7 +186,7 @@ private fun FindingActionButtons(
           Text("Prepare fix", fontSize = 11.sp)
         }
     findingLifecycleActions(finding).forEach { action ->
-      FocusFlowButton(
+      MiniOrcaButton(
           onClick = { actions.triage(finding, action) },
           tone = if (action.status == "dismissed") ActionTone.Destructive else ActionTone.Neutral,
           density = ButtonDensity.Toolbar) {

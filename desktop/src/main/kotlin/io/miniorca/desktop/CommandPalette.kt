@@ -222,7 +222,7 @@ internal fun CommandPaletteDialog(
         }
       },
       confirmButton = {
-        FocusFlowButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
+        MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
       },
   )
   LaunchedEffect(Unit) { filterFocusRequester.requestFocus() }
@@ -268,7 +268,7 @@ private fun CommandSearchEntry(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-  FocusFlowButton(
+  MiniOrcaButton(
       onClick = onClick,
       modifier =
           Modifier.fillMaxWidth().padding(top = 3.dp).semantics {

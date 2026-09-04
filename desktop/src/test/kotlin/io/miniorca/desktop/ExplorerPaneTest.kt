@@ -65,4 +65,10 @@ class ExplorerPaneTest {
     assertEquals(listOf("examples", "examples/Main.kt", "src", "src/Main.kt"), rows.map { it.path })
     assertTrue(rows.filterNot { it.directory }.all { it.path.endsWith("Main.kt") })
   }
+
+  @Test
+  fun explorerUsesTheSharedFileIconWithoutChangingItsIndexedIdentity() {
+    assertEquals(DesktopIcon.File, explorerFileIcon("Go"))
+    assertEquals(DesktopIcon.File, explorerFileIcon(""))
+  }
 }

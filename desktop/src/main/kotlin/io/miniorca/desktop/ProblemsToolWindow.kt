@@ -30,7 +30,7 @@ internal fun ProblemsToolWindow(
   val filters = rememberFindingsFilterState()
   val presentation = findingsPresentation(state.findings, filters.filters, state.loading)
   Column(modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
-    FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+    MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
       Text("PROBLEMS", color = PrimaryText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
       FindingsFilterControls(
           filters, presentation, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))

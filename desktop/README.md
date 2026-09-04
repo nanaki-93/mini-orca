@@ -51,6 +51,20 @@ indicator. The editor has one active file, breadcrumbs, a read-only Source/Revie
 dedicated gutter, and selectable source or diff text. Mini-Orca does not imply general source
 editing, multi-file tabs, terminal execution, or VCS operations.
 
+## Dark desktop presentation and previews
+
+The desktop uses charcoal surfaces, blue selection and action states, a labeled 88dp line-icon
+rail, compact editor chrome, structured AI Context, a current-draft candidate summary, and a
+persistent status strip. At 1000dp and above, temporary pane clamping preserves a 360dp editor
+without overwriting stored Explorer or AI Context widths; below that boundary the existing
+Files/AI Context drawers and bounded bottom overlay remain in use.
+
+Some reference-style controls are deliberately **Preview** only: new file, branch actions,
+content search, extra tabs/split/minimap, Run/Debug, assessment scores, unit-test generation,
+feedback, Terminal, and settings/help. Their dialogs state the limitation, are local-only, and
+cannot call a provider/API, execute a process, write source, alter workflow evidence, or enable
+Apply. The Terminal tab is inert and has no command input.
+
 ## Focused workflow and safety
 
 Summary provides compact deterministic facts and advisory interpretation. Analysis starts,

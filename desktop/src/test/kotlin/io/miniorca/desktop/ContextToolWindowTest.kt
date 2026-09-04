@@ -46,7 +46,7 @@ class ContextToolWindowTest {
   fun rightToolWindowTabsAreTextualAndOnlyExplicitSelectionChangesTheirLayoutState() {
     val contextLayout = DesktopLayoutState(rightToolWindowVisible = false)
 
-    assertEquals("Context", rightToolWindowLabel(RightToolWindow.Context))
+    assertEquals("AI Context", rightToolWindowLabel(RightToolWindow.Context))
     assertEquals(
         "Assistant tool window tab, not selected",
         rightToolWindowTabDescription(RightToolWindow.Assistant, selected = false))

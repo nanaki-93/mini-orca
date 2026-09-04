@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -51,11 +54,12 @@ internal fun ToolWindowBar(
   var tabGroupHasFocus by remember { mutableStateOf(false) }
   Column(
       modifier
-          .width(52.dp)
+          .width(TOOL_WINDOW_BAR_WIDTH.dp)
           .fillMaxHeight()
-          .background(Panel)
+          .background(Chrome)
           .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
           .padding(vertical = 6.dp)
+          .verticalScroll(rememberScrollState())
           .onFocusChanged { tabGroupHasFocus = it.hasFocus }
           .focusable()
           .onPreviewKeyEvent { event ->
@@ -74,10 +78,10 @@ internal fun ToolWindowBar(
       val label = leftToolWindowLabel(toolWindow)
       val selected = toolWindow == activeToolWindow
       TooltipArea(tooltip = { ToolWindowTooltip(label) }) {
-        FocusFlowButton(
+        MiniOrcaButton(
             onClick = { onSelect(toolWindow) },
             modifier =
-                Modifier.padding(horizontal = 5.dp, vertical = 2.dp).semantics {
+                Modifier.padding(horizontal = 8.dp, vertical = 2.dp).semantics {
                   contentDescription =
                       toolWindowSemanticsLabel(
                           toolWindow,
@@ -86,11 +90,22 @@ internal fun ToolWindowBar(
                   this.selected = selected
                 },
             tone = ActionTone.Navigation,
-            density = ButtonDensity.Toolbar,
+            density = ButtonDensity.Rail,
             selected = selected,
             focusHighlight = tabGroupHasFocus && toolWindow == focusedToolWindow,
         ) {
-          Text(toolWindowGlyph(toolWindow), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            DesktopLineIcon(
+                leftToolWindowIcon(toolWindow),
+                label,
+                tint = if (selected) SelectionAccent else SecondaryText)
+            Text(
+                label,
+                color = if (selected) PrimaryText else SecondaryText,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            )
+          }
         }
       }
     }
@@ -118,7 +133,7 @@ internal fun DockedToolWindow(
   Column(
       modifier
           .fillMaxHeight()
-          .background(Panel)
+          .background(Chrome)
           .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
           .semantics { contentDescription = "$title tool window" },
   ) {
@@ -128,7 +143,7 @@ internal fun DockedToolWindow(
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
         modifier =
-            Modifier.fillMaxWidth().height(32.dp).padding(horizontal = 10.dp, vertical = 9.dp))
+            Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 10.dp, vertical = 10.dp))
     content(Modifier.fillMaxWidth().weight(1f))
   }
 }
@@ -166,7 +181,7 @@ internal fun BottomToolWindowRegion(
       modifier
           .fillMaxWidth()
           .height(if (collapsed) 38.dp else layout.bottomHeight.dp)
-          .background(Panel)
+          .background(Chrome)
           .border(androidx.compose.foundation.BorderStroke(1.dp, Border)),
   ) {
     if (!collapsed) HorizontalResizableDivider(onHeightDelta, onHeightCommit)
@@ -181,7 +196,7 @@ internal fun BottomToolWindowRegion(
               fontSize = 11.sp,
               maxLines = 1,
               modifier = Modifier.weight(1f).padding(start = 8.dp))
-          FocusFlowButton(
+          MiniOrcaButton(
               onClick = if (collapsed) ({ onSelect(activeToolWindow) }) else onCollapse,
               tone = ActionTone.Neutral,
               density = ButtonDensity.Toolbar) {
@@ -209,7 +224,7 @@ internal fun NarrowBottomToolWindowSummary(
       modifier
           .fillMaxWidth()
           .height(38.dp)
-          .background(Panel)
+          .background(Chrome)
           .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
           .padding(horizontal = 8.dp)
           .semantics {
@@ -226,7 +241,7 @@ internal fun NarrowBottomToolWindowSummary(
         maxLines = 1,
         modifier = Modifier.weight(1f).padding(start = 8.dp),
     )
-    FocusFlowButton(
+    MiniOrcaButton(
         onClick = onOpen, tone = ActionTone.Navigation, density = ButtonDensity.Toolbar) {
           Text("Open", fontSize = 11.sp)
         }
@@ -260,7 +275,7 @@ internal fun BottomToolWindowOverlay(
         }
       },
       confirmButton = {
-        FocusFlowButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Close") }
+        MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Close") }
       },
   )
 }
@@ -290,7 +305,7 @@ private fun BottomToolWindowTabs(
           }) {
         availableToolWindows.forEach { toolWindow ->
           val selected = toolWindow == activeToolWindow
-          FocusFlowButton(
+          MiniOrcaButton(
               onClick = { onSelect(toolWindow) },
               tone = ActionTone.Navigation,
               density = ButtonDensity.Toolbar,
@@ -306,7 +321,12 @@ private fun BottomToolWindowTabs(
                             focused = tabGroupHasFocus && toolWindow == focusedToolWindow)
                   },
           ) {
-            Text(bottomToolWindowLabel(toolWindow), fontSize = 11.sp)
+            DesktopLineIcon(
+                bottomToolWindowIcon(toolWindow),
+                bottomToolWindowLabel(toolWindow),
+                iconSize = 16.dp)
+            Spacer(Modifier.width(4.dp))
+            Text(bottomToolWindowLabel(toolWindow), fontSize = 12.sp)
           }
         }
       }
@@ -314,9 +334,18 @@ private fun BottomToolWindowTabs(
 
 internal fun bottomToolWindowLabel(toolWindow: BottomToolWindow): String =
     when (toolWindow) {
-      BottomToolWindow.Problems -> "Problems"
+      BottomToolWindow.Problems -> "Bugs & Problems"
       BottomToolWindow.Checks -> "Checks"
       BottomToolWindow.Output -> "Output"
+      BottomToolWindow.Terminal -> "Terminal · Preview"
+    }
+
+internal fun bottomToolWindowIcon(toolWindow: BottomToolWindow): DesktopIcon =
+    when (toolWindow) {
+      BottomToolWindow.Problems -> DesktopIcon.Problems
+      BottomToolWindow.Checks -> DesktopIcon.Summary
+      BottomToolWindow.Output -> DesktopIcon.Editor
+      BottomToolWindow.Terminal -> DesktopIcon.Terminal
     }
 
 internal fun bottomToolWindowTabDescription(
@@ -336,14 +365,14 @@ internal fun bottomToolWindowSummary(
 ): BottomToolWindowSummary? =
     summaries.values.firstOrNull { it.attention } ?: summaries[activeToolWindow]
 
-internal fun toolWindowGlyph(toolWindow: LeftToolWindow): String =
+internal fun leftToolWindowIcon(toolWindow: LeftToolWindow): DesktopIcon =
     when (toolWindow) {
-      LeftToolWindow.Project -> "P"
-      LeftToolWindow.Summary -> "S"
-      LeftToolWindow.Analysis -> "A"
-      LeftToolWindow.Performance -> "P"
-      LeftToolWindow.Problems -> "!"
-      LeftToolWindow.Editor -> "E"
+      LeftToolWindow.Project -> DesktopIcon.Project
+      LeftToolWindow.Summary -> DesktopIcon.Summary
+      LeftToolWindow.Analysis -> DesktopIcon.Analysis
+      LeftToolWindow.Performance -> DesktopIcon.Performance
+      LeftToolWindow.Problems -> DesktopIcon.Problems
+      LeftToolWindow.Editor -> DesktopIcon.Editor
     }
 
 internal fun toolWindowSemanticsLabel(

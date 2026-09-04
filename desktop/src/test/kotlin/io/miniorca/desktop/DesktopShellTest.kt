@@ -148,12 +148,13 @@ class DesktopShellTest {
     assertEquals("Project", leftToolWindowLabel(LeftToolWindow.Project))
     assertEquals("Summary", leftToolWindowLabel(LeftToolWindow.Summary))
     assertEquals("Analysis", leftToolWindowLabel(LeftToolWindow.Analysis))
-    assertEquals("Problems", leftToolWindowLabel(LeftToolWindow.Problems))
+    assertEquals("Bugs & Problems", leftToolWindowLabel(LeftToolWindow.Problems))
     assertEquals("Editor", leftToolWindowLabel(LeftToolWindow.Editor))
     assertEquals(Workspace.Editor, workspaceForLeftToolWindow(LeftToolWindow.Project))
     assertEquals(Workspace.Bugs, workspaceForLeftToolWindow(LeftToolWindow.Problems))
     assertEquals(LeftToolWindow.Editor, leftToolWindowForWorkspace(Workspace.Editor))
-    assertEquals("!", toolWindowGlyph(LeftToolWindow.Problems))
+    assertEquals(DesktopIcon.Problems, leftToolWindowIcon(LeftToolWindow.Problems))
+    assertEquals(DesktopIcon.Performance, leftToolWindowIcon(LeftToolWindow.Performance))
   }
 
   @Test
@@ -174,7 +175,7 @@ class DesktopShellTest {
 
     assertEquals("Long project name", projectBreadcrumbLabel(project))
     assertEquals(
-        "Connected",
+        "Daemon connected",
         connectionPresentation(
                 ConnectionState(
                     connected = true,
@@ -183,18 +184,18 @@ class DesktopShellTest {
                     latency = "12ms"))
             .label)
     assertEquals(
-        "Disconnected",
+        "Daemon disconnected",
         connectionPresentation(
                 ConnectionState(label = "Daemon unavailable", locality = "Remote endpoint"))
             .label)
     assertEquals(
-        ConnectionPresentation("Connected", Success, false),
+        ConnectionPresentation("Daemon connected", Success, false),
         connectionPresentation(ConnectionState(connected = true)))
     assertEquals(
-        ConnectionPresentation("Connecting", Warning, false),
+        ConnectionPresentation("Daemon connecting", Warning, false),
         connectionPresentation(ConnectionState(label = "Connecting")))
     assertEquals(
-        ConnectionPresentation("Disconnected", Error, true),
+        ConnectionPresentation("Daemon disconnected", Error, true),
         connectionPresentation(ConnectionState(label = "Daemon unavailable")))
   }
 
@@ -214,10 +215,30 @@ class DesktopShellTest {
   }
 
   @Test
-  fun toolbarMovesProjectOperationsIntoALabeledMenuBeforeTheCompactWidth() {
-    assertEquals(ToolbarPresentation(true, true), toolbarPresentation(1_220f))
-    assertEquals(ToolbarPresentation(true, false), toolbarPresentation(1_000f))
-    assertEquals(ToolbarPresentation(false, false), toolbarPresentation(999f))
+  fun toolbarKeepsTheBranchAndSearchDetailAtTheSupportedWidths() {
+    assertEquals(ToolbarPresentation(true, true, true), toolbarPresentation(1_220f))
+    assertEquals(ToolbarPresentation(true, false, true), toolbarPresentation(1_000f))
+    assertEquals(ToolbarPresentation(false, false, false), toolbarPresentation(999f))
+  }
+
+  @Test
+  fun branchContextUsesOnlyActualGitEvidence() {
+    assertEquals(
+        BranchPresentation("main", "Current Git branch: main"),
+        branchPresentation(GitStatus(available = true, branch = "main")),
+    )
+    assertEquals(
+        BranchPresentation("Unavailable", "Git branch is unavailable for the selected file."),
+        branchPresentation(GitStatus(available = false, branch = "main")),
+    )
+    assertEquals("Unavailable", branchPresentation(null).label)
+  }
+
+  @Test
+  fun bottomToolTabsUseLabeledIconsWithoutChangingTheirStableIdentity() {
+    assertEquals("Bugs & Problems", bottomToolWindowLabel(BottomToolWindow.Problems))
+    assertEquals(DesktopIcon.Problems, bottomToolWindowIcon(BottomToolWindow.Problems))
+    assertEquals(DesktopIcon.Summary, bottomToolWindowIcon(BottomToolWindow.Checks))
   }
 
   @Test

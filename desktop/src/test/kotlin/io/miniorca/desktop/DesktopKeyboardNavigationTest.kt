@@ -90,7 +90,7 @@ class DesktopKeyboardNavigationTest {
         toolWindowSemanticsLabel(LeftToolWindow.Editor, selected = true, focused = true),
     )
     assertEquals(
-        "Context tool window tab, not selected, focused",
+        "AI Context tool window tab, not selected, focused",
         rightToolWindowTabDescription(
             RightToolWindow.Context,
             selected = false,
@@ -110,8 +110,8 @@ class DesktopKeyboardNavigationTest {
 
   @Test
   fun compactToolbarAndBreadcrumbPoliciesKeepLongTextBounded() {
-    assertEquals(ToolbarPresentation(false, false), toolbarPresentation(999f))
-    assertEquals(ToolbarPresentation(true, false), toolbarPresentation(1_000f))
+    assertEquals(ToolbarPresentation(false, false, false), toolbarPresentation(999f))
+    assertEquals(ToolbarPresentation(true, false, true), toolbarPresentation(1_000f))
     assertEquals(
         "very / … / main.go / Run",
         editorBreadcrumbLabel("very/long/project/path/main.go", "Run"),

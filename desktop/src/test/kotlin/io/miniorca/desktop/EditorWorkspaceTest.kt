@@ -109,6 +109,41 @@ class EditorWorkspaceTest {
     assertTrue(chrome.accessibleDescription.contains("Read-only source surface"))
   }
 
+  @Test
+  fun candidateSummaryUsesOnlyTheCurrentDraftAndValidationStage() {
+    val draft =
+        validatedDraft()
+            .copy(
+                validation =
+                    DeclarationValidation(
+                        applicable = true,
+                        scopeMode = "replace_symbol",
+                        diff =
+                            UnifiedDiff(
+                                "internal/runner/run.go",
+                                "internal/runner/run.go",
+                                listOf(DiffLine("added", newLine = 1, text = "func Run() {}"))),
+                    ))
+    val chrome =
+        editorChromeUiState(
+            testFile("internal/runner/run.go"),
+            symbol(),
+            EditorSurface.Source,
+            progress(EditorProgress.Review),
+            draft)
+    val ready = candidateSummaryPresentation(draft, chrome)!!
+
+    assertEquals("internal/runner/run.go", ready.target)
+    assertEquals("REVIEW READY", ready.stage)
+    assertEquals("1 changed lines in the current draft", ready.changedLines)
+    assertTrue(ready.reviewAvailable)
+    assertEquals(null, candidateSummaryPresentation(null, readyChrome()))
+  }
+
+  private fun readyChrome() =
+      editorChromeUiState(
+          testFile("main.go"), null, EditorSurface.Source, progress(EditorProgress.Inspect), null)
+
   private fun progress(value: EditorProgress) = EditorProgressUiState(value, "")
 
   private fun symbol() = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)

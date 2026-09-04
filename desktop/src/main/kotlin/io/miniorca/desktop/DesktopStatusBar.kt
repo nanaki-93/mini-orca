@@ -217,7 +217,7 @@ internal fun PersistentStatusBar(
       modifier
           .fillMaxWidth()
           .height(30.dp)
-          .background(Panel)
+          .background(Chrome)
           .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
           .padding(horizontal = 10.dp)
           .semantics { contentDescription = desktopStatusBarDescription(segments) },
@@ -243,7 +243,7 @@ private fun StatusBarSegment(
 ) {
   TooltipArea(tooltip = { StatusBarTooltip(segment.detail) }) {
     if (segment.actionable) {
-      FocusFlowButton(
+      MiniOrcaButton(
           onClick = onOpenDetails,
           tone = if (segment.attention) ActionTone.Attention else ActionTone.Neutral,
           density = ButtonDensity.Toolbar,
@@ -298,7 +298,7 @@ internal fun DesktopStatusDetailsDialog(
         }
       },
       confirmButton = {
-        FocusFlowButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Close") }
+        MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Close") }
       },
   )
 }
@@ -346,11 +346,12 @@ private fun providerStatusSegment(provider: DesktopStatusProvider): DesktopStatu
 
 private fun daemonStatusSegment(connection: ConnectionState): DesktopStatusSegment {
   val presentation = connectionPresentation(connection)
+  val stateLabel = presentation.label.removePrefix("Daemon ").replaceFirstChar { it.uppercase() }
   val locality = connection.locality.trim().takeIf(String::isNotBlank)
-  val detail = "Daemon: ${presentation.label}${locality?.let { " · $it" }.orEmpty()}"
+  val detail = "Daemon: $stateLabel${locality?.let { " · $it" }.orEmpty()}"
   return DesktopStatusSegment(
       DesktopStatusSegmentType.Daemon,
-      "Daemon: ${presentation.label}",
+      "Daemon: $stateLabel",
       detail,
       priority = DAEMON_PRIORITY,
       attention = !connection.connected,

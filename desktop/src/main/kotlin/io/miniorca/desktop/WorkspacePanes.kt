@@ -39,7 +39,7 @@ internal fun AnalysisWorkspacePane(
     item {
       WorkspacePaneHeader("Analysis")
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
             SectionLabel("Coverage")
             CompactKeyValueRows(
@@ -55,7 +55,7 @@ internal fun AnalysisWorkspacePane(
             )
           }
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(),
           raised = presentation.run.statusLabel in setOf("Running", "Paused", "Failed"),
           contentPadding = PaddingValues(MiniOrcaSpacing.standard),
@@ -83,20 +83,20 @@ internal fun AnalysisWorkspacePane(
             modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
       }
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
             SectionLabel("Run controls")
             when (presentation.run.statusLabel) {
               "Running" -> {
                 ResponsiveActionGroup(
                     Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
-                      FocusFlowButton(
+                      MiniOrcaButton(
                           onClick = actions.pause,
                           tone = ActionTone.Attention,
                           density = ButtonDensity.Toolbar) {
                             Text("Pause", fontSize = 11.sp)
                           }
-                      FocusFlowButton(
+                      MiniOrcaButton(
                           onClick = actions.cancel,
                           tone = ActionTone.Destructive,
                           density = ButtonDensity.Toolbar) {
@@ -111,7 +111,7 @@ internal fun AnalysisWorkspacePane(
                     color = Warning,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
-                FocusFlowButton(
+                MiniOrcaButton(
                     onClick = actions.cancel,
                     enabled = presentation.run.statusLabel == "Pausing",
                     tone = ActionTone.Destructive,
@@ -128,14 +128,14 @@ internal fun AnalysisWorkspacePane(
                     actions.confirmRemoteProvider)
                 ResponsiveActionGroup(
                     Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard)) {
-                      FocusFlowButton(
+                      MiniOrcaButton(
                           onClick = { actions.resume(state.remoteProviderConfirmed) },
                           enabled = !state.model.remoteProvider || state.remoteProviderConfirmed,
                           tone = ActionTone.Primary,
                           density = ButtonDensity.Toolbar) {
                             Text("Resume", fontSize = 11.sp)
                           }
-                      FocusFlowButton(
+                      MiniOrcaButton(
                           onClick = actions.cancel,
                           tone = ActionTone.Destructive,
                           density = ButtonDensity.Toolbar) {
@@ -182,7 +182,7 @@ internal fun AnalysisWorkspacePane(
 
 @Composable
 private fun AnalysisFailureRow(failure: AnalysisFailurePresentation) {
-  FocusFlowPanel(
+  MiniOrcaPanel(
       Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact),
       raised = true,
       contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
@@ -222,7 +222,7 @@ private fun AnalyzeAllStartControls(
   )
   RemoteProviderConfirmation(
       ModelScope.Bug, state.model, state.remoteConfirmed, actions.confirmRemoteProvider)
-  FocusFlowButton(
+  MiniOrcaButton(
       onClick = { actions.start(state.options) },
       enabled = !state.model.remoteProvider || state.remoteConfirmed,
       tone = ActionTone.Primary,
@@ -300,7 +300,7 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
     item {
       WorkspacePaneHeader("Bugs")
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
             SectionLabel("Search and filter")
             FindingsFilterControls(
@@ -309,7 +309,7 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                 modifier = Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.standard))
           }
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(),
           raised = progress.warnings.isNotEmpty(),
           contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
@@ -327,7 +327,7 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                   modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
             }
             if (progress.canCancel) {
-              FocusFlowButton(
+              MiniOrcaButton(
                   onClick = actions.cancelScan,
                   enabled = state.scan?.status?.lowercase() == "running",
                   tone = ActionTone.Destructive,
@@ -339,7 +339,7 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                         fontSize = 11.sp)
                   }
             } else {
-              FocusFlowButton(
+              MiniOrcaButton(
                   onClick = actions.startScan,
                   tone = ActionTone.Primary,
                   density = ButtonDensity.Toolbar,
@@ -382,13 +382,13 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
 
 @Composable
 private fun FindingDetailsRegion(finding: UnifiedFinding, onDismiss: () -> Unit) {
-  FocusFlowPanel(
+  MiniOrcaPanel(
       Modifier.fillMaxWidth(),
       raised = true,
       contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
         Row(Modifier.fillMaxWidth()) {
           SectionLabel("Finding details", Modifier.weight(1f))
-          FocusFlowButton(
+          MiniOrcaButton(
               onClick = onDismiss, tone = ActionTone.Neutral, density = ButtonDensity.Toolbar) {
                 Text("Clear", fontSize = 11.sp)
               }

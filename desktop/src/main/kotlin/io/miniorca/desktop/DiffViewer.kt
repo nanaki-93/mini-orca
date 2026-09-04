@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -24,6 +25,13 @@ import androidx.compose.ui.unit.sp
 data class DiffCell(val lineNumber: Int?, val text: String, val change: String)
 
 data class DiffRow(val before: DiffCell?, val proposed: DiffCell?)
+
+internal fun diffLineBackground(change: String?): Color =
+    when (change) {
+      "added" -> DiffAddedBackground
+      "removed" -> DiffRemovedBackground
+      else -> Color.Transparent
+    }
 
 fun sideBySideDiffRows(diff: UnifiedDiff): List<DiffRow> {
   val rows = mutableListOf<DiffRow>()
@@ -81,7 +89,7 @@ internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
                 color = SecondaryText,
                 fontSize = 10.sp,
                 modifier = Modifier.weight(1f))
-            FocusFlowButton(
+            MiniOrcaButton(
                 onClick = { sideBySide = true },
                 enabled = !sideBySide,
                 tone = ActionTone.Navigation,
@@ -89,7 +97,7 @@ internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
                 density = ButtonDensity.Toolbar) {
                   Text("Side-by-side", fontSize = 10.sp)
                 }
-            FocusFlowButton(
+            MiniOrcaButton(
                 onClick = { sideBySide = false },
                 enabled = sideBySide,
                 tone = ActionTone.Navigation,
@@ -113,9 +121,9 @@ internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
                         if (line.kind == "added") Success
                         else if (line.kind == "removed") Error else PrimaryText,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     modifier =
-                        Modifier.semantics {
+                        Modifier.background(diffLineBackground(line.kind)).semantics {
                           contentDescription =
                               "${line.kind} diff line ${line.oldLine.takeIf { it > 0 } ?: line.newLine}"
                         },
@@ -137,9 +145,9 @@ private fun DiffCellText(cell: DiffCell?, side: String, modifier: Modifier) {
             else -> PrimaryText
           },
       fontFamily = FontFamily.Monospace,
-      fontSize = 10.sp,
+      fontSize = 12.sp,
       modifier =
-          modifier.semantics {
+          modifier.background(diffLineBackground(cell?.change)).semantics {
             contentDescription =
                 cell?.let { "$side ${it.change} line ${it.lineNumber ?: "unknown"}" }
                     ?: "$side unchanged"

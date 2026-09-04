@@ -63,7 +63,7 @@ internal fun RightToolWindowContainer(
           RightToolWindow.entries.forEach { toolWindow ->
             val selected = toolWindow == activeToolWindow
             val badge = badges[toolWindow]
-            FocusFlowButton(
+            MiniOrcaButton(
                 onClick = { onSelect(toolWindow) },
                 tone = ActionTone.Navigation,
                 density = ButtonDensity.Toolbar,
@@ -113,7 +113,7 @@ internal fun ContextToolWindow(
       modifier.verticalScroll(rememberScrollState()).padding(12.dp).semantics {
         contentDescription = contextToolWindowDescription(inspector)
       }) {
-        Text("CONTEXT", color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text("AI CONTEXT", color = SecondaryText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Text(
             contextHeaderLabel(inspector),
             color = PrimaryText,
@@ -128,11 +128,13 @@ internal fun ContextToolWindow(
               fontWeight = FontWeight.SemiBold,
               modifier = Modifier.padding(top = 3.dp))
         }
+        SectionLabel("PROJECT SUMMARY", Modifier.padding(top = MiniOrcaSpacing.roomy))
         ContextFileDetails(inspector)
         EngineeringInsightPanel(
             state.fileAnalysis?.engineeringInsight,
             stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
             scopeLabel = "File")
+        SectionLabel("FOCUSED ANALYSIS", Modifier.padding(top = MiniOrcaSpacing.roomy))
         if (inspector.mode == SymbolInspectorMode.SelectedSymbol)
             ContextDeclarationDetails(inspector, actions.editSelected)
         else
@@ -141,6 +143,11 @@ internal fun ContextToolWindow(
                 color = SecondaryText,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 10.dp))
+        Text(
+            "Complexity — · Preview · Readability — · Preview", color = FaintText, fontSize = 12.sp)
+        PreviewFeatureButton(
+            PreviewFeature("Generate unit test", "Dedicated test generation is not available."),
+            modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
         if (state.impact != null || state.gitStatus != null) {
           Spacer(Modifier.height(10.dp))
           ContextReadOnlySummaries(state.impact, state.gitStatus)
@@ -154,7 +161,9 @@ internal fun ContextToolWindow(
                 InspectorAnalysisAction.None -> actions.cancel
               }
           Spacer(Modifier.height(10.dp))
-          FocusFlowPanel(Modifier.fillMaxWidth()) {
+          SectionLabel("QUICK ACTIONS")
+          Spacer(Modifier.height(MiniOrcaSpacing.compact))
+          MiniOrcaPanel(Modifier.fillMaxWidth()) {
             Text(inspector.analysisStatus.label, color = SecondaryText, fontSize = 11.sp)
             if (inspector.remoteProviderConfirmationRequired) {
               RemoteProviderConfirmation(
@@ -163,7 +172,7 @@ internal fun ContextToolWindow(
                   state.remoteProviderConfirmed,
                   actions.confirmRemoteProvider)
             }
-            FocusFlowButton(
+            MiniOrcaButton(
                 onClick = onAnalysisAction,
                 enabled =
                     !inspector.remoteProviderConfirmationRequired || state.remoteProviderConfirmed,
@@ -174,7 +183,7 @@ internal fun ContextToolWindow(
                     },
                 modifier = Modifier.padding(top = 8.dp),
             ) {
-              Text(inspector.analysisAction.label)
+              Text("${inspector.analysisAction.label} · explicit request")
             }
           }
         }
@@ -218,7 +227,7 @@ internal fun contextStateBadge(inspector: SymbolInspectorUiState): String? =
 
 @Composable
 private fun ContextFileDetails(inspector: SymbolInspectorUiState) {
-  FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+  MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
     SectionLabel("FILE METADATA")
     Text(
         inspector.file.path,
@@ -247,13 +256,13 @@ private fun ContextDeclarationDetails(
     onEditSelected: (SymbolInspectorSymbolState) -> Unit,
 ) {
   val symbol = requireNotNull(inspector.selectedSymbol)
-  FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 10.dp), raised = true) {
+  MiniOrcaPanel(Modifier.fillMaxWidth().padding(top = 10.dp), raised = true) {
     SectionLabel("DECLARATION")
     Text(
         "${symbol.symbol.kind} · ${symbol.symbol.name}",
         color = PrimaryText,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 16.sp,
+        fontSize = 14.sp,
         modifier = Modifier.padding(top = 6.dp))
     if (symbol.signature.isNotBlank()) {
       Text(
@@ -274,12 +283,12 @@ private fun ContextDeclarationDetails(
         fontSize = 12.sp,
         modifier = Modifier.padding(top = 10.dp))
     if (symbol.editEligibility.eligible) {
-      FocusFlowButton(
+      MiniOrcaButton(
           onClick = { onEditSelected(symbol) },
           tone = ActionTone.Primary,
           modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
       ) {
-        Text("Edit ${symbol.symbol.name}")
+        Text("Refactor ${symbol.symbol.name}")
       }
     } else {
       Text(
@@ -293,7 +302,7 @@ private fun ContextDeclarationDetails(
 
 @Composable
 private fun ContextReadOnlySummaries(impact: ImpactPreview?, gitStatus: GitStatus?) {
-  FocusFlowPanel(Modifier.fillMaxWidth()) {
+  MiniOrcaPanel(Modifier.fillMaxWidth()) {
     if (impact != null) {
       SectionLabel("IMPACT · READ-ONLY")
       Text(

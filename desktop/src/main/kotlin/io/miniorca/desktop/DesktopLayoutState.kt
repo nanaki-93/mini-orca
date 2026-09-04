@@ -21,6 +21,7 @@ internal enum class BottomToolWindow {
   Problems,
   Checks,
   Output,
+  Terminal,
 }
 
 internal enum class EditorSurface {
@@ -43,13 +44,13 @@ internal fun leftToolWindowLabel(toolWindow: LeftToolWindow): String =
       LeftToolWindow.Summary -> "Summary"
       LeftToolWindow.Analysis -> "Analysis"
       LeftToolWindow.Performance -> "Performance"
-      LeftToolWindow.Problems -> "Problems"
+      LeftToolWindow.Problems -> "Bugs & Problems"
       LeftToolWindow.Editor -> "Editor"
     }
 
 internal fun rightToolWindowLabel(toolWindow: RightToolWindow): String =
     when (toolWindow) {
-      RightToolWindow.Context -> "Context"
+      RightToolWindow.Context -> "AI Context"
       RightToolWindow.Assistant -> "Assistant"
       RightToolWindow.Review -> "Review"
     }
@@ -129,9 +130,9 @@ internal data class DesktopLayoutState(
       )
 
   companion object {
-    const val DEFAULT_EXPLORER_WIDTH = 270f
-    const val DEFAULT_ACTION_WIDTH = 390f
-    const val DEFAULT_BOTTOM_HEIGHT = 240f
+    const val DEFAULT_EXPLORER_WIDTH = 256f
+    const val DEFAULT_ACTION_WIDTH = 344f
+    const val DEFAULT_BOTTOM_HEIGHT = 220f
 
     const val MIN_EXPLORER_WIDTH = 180f
     const val MAX_EXPLORER_WIDTH = 520f
@@ -147,6 +148,41 @@ internal data class DesktopLayoutState(
     fun clampBottomHeight(value: Float) = value.coerceIn(MIN_BOTTOM_HEIGHT, MAX_BOTTOM_HEIGHT)
   }
 }
+
+internal data class DockedPaneWidths(
+    val explorer: Float,
+    val action: Float,
+    val editor: Float,
+)
+
+/**
+ * Clamps only the rendered widths when a docked window becomes short. Stored preferences remain
+ * untouched, so their full values return when the viewport grows again.
+ */
+internal fun dockedPaneWidths(
+    availableWidthDp: Float,
+    preferredExplorerWidth: Float,
+    preferredActionWidth: Float,
+): DockedPaneWidths {
+  val availableForPanes =
+      (availableWidthDp - TOOL_WINDOW_BAR_WIDTH - RESIZE_DIVIDER_WIDTH * 2).coerceAtLeast(0f)
+  val availableForDocks = (availableForPanes - MIN_EDITOR_WIDTH).coerceAtLeast(0f)
+  var explorer = DesktopLayoutState.clampExplorerWidth(preferredExplorerWidth)
+  var action = DesktopLayoutState.clampActionWidth(preferredActionWidth)
+  val overflow = (explorer + action - availableForDocks).coerceAtLeast(0f)
+  val explorerReduction = minOf(overflow, explorer - DesktopLayoutState.MIN_EXPLORER_WIDTH)
+  explorer -= explorerReduction
+  action -= minOf(overflow - explorerReduction, action - DesktopLayoutState.MIN_ACTION_WIDTH)
+  return DockedPaneWidths(
+      explorer = explorer,
+      action = action,
+      editor = (availableForPanes - explorer - action).coerceAtLeast(0f),
+  )
+}
+
+internal const val TOOL_WINDOW_BAR_WIDTH = 88f
+internal const val RESIZE_DIVIDER_WIDTH = 8f
+internal const val MIN_EDITOR_WIDTH = 360f
 
 /** Persists visual preferences only; it never stores workflow or authorization state. */
 internal class DesktopLayoutStore(

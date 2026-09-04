@@ -295,7 +295,7 @@ private fun SourceGutter(
       ) {
         Text(
             row.line.toString().padStart(4),
-            color = if (declarationSymbol != null) CyanAccent else SecondaryText,
+            color = if (declarationSymbol != null) FocusAccent else SecondaryText,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
             lineHeight = 20.sp,
@@ -330,8 +330,8 @@ private fun GutterMarkerTooltip(description: String) {
 
 private fun gutterMarkerColor(kind: SourceGutterMarkerKind): Color =
     when (kind) {
-      SourceGutterMarkerKind.FocusedLine -> Accent
-      SourceGutterMarkerKind.SelectedDeclaration -> CyanAccent
+      SourceGutterMarkerKind.FocusedLine -> SelectionAccent
+      SourceGutterMarkerKind.SelectedDeclaration -> FocusAccent
       SourceGutterMarkerKind.Finding -> Warning
     }
 
@@ -353,10 +353,11 @@ internal fun EditorPane(
 
 private fun sourceLineBackground(emphasis: SourceLineEmphasis, selectable: Boolean): Color =
     when (emphasis) {
-      SourceLineEmphasis.FocusedSelectedSymbol -> Accent.copy(alpha = 0.30f)
+      SourceLineEmphasis.FocusedSelectedSymbol -> SelectionAccent.copy(alpha = 0.30f)
       SourceLineEmphasis.SelectedSymbol -> Card
-      SourceLineEmphasis.FocusedLocation -> Accent.copy(alpha = 0.18f)
-      SourceLineEmphasis.None -> if (selectable) Accent.copy(alpha = 0.08f) else Color.Transparent
+      SourceLineEmphasis.FocusedLocation -> SelectionAccent.copy(alpha = 0.18f)
+      SourceLineEmphasis.None ->
+          if (selectable) SelectionAccent.copy(alpha = 0.08f) else Color.Transparent
     }
 
 internal fun sourceTapSelectsContext(dragged: Boolean): Boolean = !dragged

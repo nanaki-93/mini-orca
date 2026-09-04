@@ -1,14 +1,17 @@
 # Mini-Orca task workflow
 
-This directory contains the active backlog for
-[engineering insights and project performance analysis](../docs/insights-performance/PLAN.md)
-and the completed records for the [IDE UI plan](../plan.md) and earlier work.
+This directory contains the active backlog for the
+[dark desktop redesign](../docs/dark-ui/PLAN.md), plus completed records for
+[engineering insights and project performance analysis](../docs/insights-performance/PLAN.md),
+the [IDE UI plan](../plan.md), and earlier work.
 
 ## Layout
 
 - Pending tasks live in this directory as `NN_snake_case.md`.
 - Completed tasks move to `completed/` without changing their identifier.
 - [`INDEX.md`](INDEX.md) is the authoritative dependency order and status list.
+- [`PROMPT_EXECUTE_DARK_UI.md`](PROMPT_EXECUTE_DARK_UI.md) describes implementation
+  of pending Tasks 140–149 when requested. It does not authorize commits.
 - [`PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md`](PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md)
   is the completed execution record for Tasks 133–139, with one verified local commit per task.
 - [`PROMPT_EXECUTE_IDE_UI.md`](PROMPT_EXECUTE_IDE_UI.md) is the completed execution record for
@@ -19,6 +22,19 @@ and the completed records for the [IDE UI plan](../plan.md) and earlier work.
 - [`INDEX.md`](INDEX.md) contains the concise historical ledger for Tasks 01–102. Git
   history is the full archive.
 
+## Planned dark desktop redesign
+
+Tasks 140–149 use the two supplied images to replace the purple/navy palette with
+charcoal-and-blue graphics, clearer icons and panel grouping, and visible Preview
+controls for missing features. The existing Compose architecture, Performance
+workspace, and preview-first Apply/Undo workflow remain in place.
+
+The new user direction supersedes historical palette-preservation requirements and
+the ban on displaying unsupported controls, but only to allow the plan's explicitly
+local UI previews. It does not add backend functionality. Creating the plan/backlog
+does not execute it, create Codex tasks, or authorize commits. Begin implementation
+only when requested; do not run a historical prompt because it is linked here.
+
 ## Completed insights and performance sequence
 
 Tasks 133–139 are complete after the completed IDE sequence.
@@ -27,10 +43,10 @@ pages and an independent, explicitly unmeasured Performance review section.
 There are no quizzes, games, learning profiles, runtime profilers, or new automatic
 source writes. The feature plan defines the complete scope and safety contract.
 
-Creating this backlog does not execute it or create commits. When the user invokes
-the execution prompt, one agent completes/verifies/commits each numbered task before
-starting the next. Task 133 owns the initial uncommitted feature-plan/task/prompt
-artifacts together with its baseline tests; do not make a separate planning commit.
+That completed sequence used an explicitly invoked prompt requiring one verified
+commit per numbered task. Task 133 owned its initial feature-plan/task/prompt
+artifacts together with baseline tests. Those historical instructions do not apply
+commit authorization to new planning or implementation requests.
 
 ## Completed IDE redesign
 
@@ -48,16 +64,15 @@ Each task has exactly one status: `Pending`, `In Progress`, or `Complete`.
 
 1. Select the first Pending task whose dependencies are Complete.
 2. One implementation agent owns that task and its writes until verification finishes.
-3. Follow the selected prompt's agent policy. Tasks 133–139 use one implementation
+3. Follow the selected prompt's agent policy. Tasks 140–149 use one implementation
    agent without delegation or parallel task implementation.
 4. Run the task's focused checks and `git diff --check`.
 5. Only after every acceptance criterion passes, set the task to Complete, move it
    under `completed/`, and update `INDEX.md`.
-6. Stage only that task's owned implementation, tests, documentation, task move, and
-   index update. Inspect the full staged diff.
-7. Create exactly one commit using the task's required subject. Do not begin the next
-   task until the commit succeeds and no task-owned change remains uncommitted.
-8. Post the required completion commentary and continue to the next ready task without
+6. Inspect the full task-owned diff. Preserve unrelated user work.
+7. Do not stage or commit unless the user explicitly requests commits. A historical
+   per-task commit requirement applies only to its expressly invoked sequence.
+8. Post completion commentary and continue to the next ready authorized task without
    waiting for a separate “continue” message.
 
 Do not skip a blocked dependency, duplicate its intended behavior in a later task, or
@@ -66,8 +81,8 @@ mark a task Complete based on partial implementation.
 ## Shared implementation rules
 
 - Read `AGENTS.md`, the active feature plan, this file, `INDEX.md`, the selected
-  execution prompt, and the selected task before acting. For Tasks 133–139, also
-  inspect the completed root `plan.md` and Task 132's recorded IDE acceptance.
+  execution prompt, and the selected task before implementation. Completed plans and
+  prompts supply historical context, not automatic instructions for new work.
 - Preserve the one-project, one-open-file, one-symbol, preview-first workflow.
 - Keep source and diff selectable/read-only; only the isolated declaration/import
   draft is editable.
@@ -75,12 +90,15 @@ mark a task Complete based on partial implementation.
   source. Apply and Undo remain the only explicit guarded source mutations.
 - Keep remote-provider destination and confirmation visible in text before sending
   project context.
-- Preserve existing palette values, keyboard navigation, state labels, and the exact
-  `1000dp` responsive boundary.
+- Preserve keyboard navigation, state labels, and the exact `1000dp` responsive
+  boundary. Tasks 140–149 intentionally replace the old palette with the active plan's
+  charcoal theme; palette preservation applies only to the completed sequences.
 - Fit changes into the existing presenter and feature-state boundaries. Do not
   add a UI framework, generic docking engine, event bus, or duplicate workflow state.
 - Do not add general source editing, multi-file tabs/changes, terminal, run/debug,
   filesystem mutation, automatic fixes, automatic commits, or VCS write features.
+  Tasks 140–149 may display the active plan's Preview controls for missing features,
+  without implementing those capabilities or connecting the previews to backend work.
 - Add deterministic behavior-focused tests with every changed interaction or state.
 - Remove obsolete UI branches, helpers, call sites, and tests when their replacement
   becomes authoritative; do not preserve parallel shells.
@@ -89,10 +107,9 @@ mark a task Complete based on partial implementation.
   progress updates during work lasting more than 60 seconds.
 - The task commentary requirements are conversation updates, not instructions to add
   source-code comments.
-- Executing a user-invoked sequence authorizes exactly one commit per completed task
-  in that sequence. It does not authorize pushes, rebases, tags, amendments, squashes,
-  combined commits, or commits containing unrelated work. This is an implementation
-  workflow, not permission to add automatic commits to the Mini-Orca product.
+- Commit authorization comes from the user's explicit request, including an expressly
+  invoked historical prompt that requires commits. The dark UI execution prompt does
+  not request commits. No sequence authorizes pushes or unrelated history changes.
 
 ## Verification baseline
 
@@ -107,6 +124,6 @@ mark a task Complete based on partial implementation.
 - Every task: `git diff --check`
 
 The final report must state each task's status in the executed sequence, behavior
-changed, files changed, acceptance criteria verified, commands run, any blocker or
-intentionally unavailable manual check, and the exact commit hash for every
-completed task.
+changed, files changed, acceptance criteria verified, commands run, configuration or
+migration needs, and any blocker or unavailable manual check. Report commit hashes
+only when commits were explicitly requested and actually created.

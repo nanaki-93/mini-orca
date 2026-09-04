@@ -95,3 +95,21 @@ provider-backed fixture is available here:
   provider destination, workflow states, source, and diff read-only labels.
 - Exercise local and remote provider flows, disconnect/reconnect behavior, and a real
   provider-backed draft/validation/check/Apply/Undo fixture.
+
+## Task 148 dark UI responsive and accessibility matrix
+
+The historical `176dp` rail and transient footer are superseded by the dark shell: the rail is
+`88dp`, the default Explorer/AI widths are `256dp`/`344dp`, the initial bottom height is `220dp`,
+and the persistent status bar is `30dp`. The exact `1000dp` boundary remains unchanged.
+
+| Viewport | Required operator check | Automated source evidence |
+| --- | --- | --- |
+| `1440x900`, `1280x800`, `1100x760` | Labeled rail, three-region editor, current-draft candidate summary, full-height AI Context, and Problems/Checks/Output/Terminal-preview tabs remain reachable. | `dockedPaneWidths` keeps preferred dimensions at wide widths. |
+| Exactly `1000dp` | Explorer shrinks before AI Context and the source retains at least `360dp`; stored widths must not be rewritten. | `DesktopLayoutStateTest` covers clamping and restoration. |
+| `999dp`, `800x650`, short windows | Files/AI Context drawers and bounded bottom overlay remain labeled; no Preview or candidate panel hides review evidence. | `DesktopKeyboardNavigationTest` retains the boundary/drawer contract. |
+| Enlarged text and screen reader | Paths, targets, daemon/provider labels, Preview badges, selected state, source/diff read-only state, and finding provenance remain intelligible. | Unit tests cover textual semantics only; native assistive-technology verification remains unavailable. |
+
+Preview dialogs close with Escape or Close and return focus to their trigger. They are local-only:
+verify no provider request, process launch, source write, selection change, evidence update, or
+Apply eligibility change follows activation. Native screenshots and screen-reader observations
+remain outstanding in this environment.
