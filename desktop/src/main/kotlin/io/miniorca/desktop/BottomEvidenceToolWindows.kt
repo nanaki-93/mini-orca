@@ -87,7 +87,7 @@ internal fun ChecksToolWindow(
     modifier: Modifier = Modifier,
 ) {
   Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-    FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+    MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
       SectionLabel("CHECKS · EVIDENCE ONLY")
       Text(
           "This tab shows current evidence. Run checks and guarded Apply remain in Review.",
@@ -100,7 +100,7 @@ internal fun ChecksToolWindow(
     }
     if (presentation.diagnostics.isNotEmpty()) {
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(Modifier.fillMaxWidth()) {
+      MiniOrcaPanel(Modifier.fillMaxWidth()) {
         SectionLabel("VALIDATION DIAGNOSTICS")
         SelectionContainer {
           Column(Modifier.padding(top = 5.dp)) {
@@ -117,7 +117,7 @@ internal fun ChecksToolWindow(
       }
     }
     Spacer(Modifier.height(8.dp))
-    FocusFlowPanel(Modifier.fillMaxWidth()) {
+    MiniOrcaPanel(Modifier.fillMaxWidth()) {
       SectionLabel("FOCUSED CHECKS")
       if (presentation.checks.isEmpty())
           Text(
@@ -251,7 +251,7 @@ internal fun OutputToolWindow(
         fontSize = 11.sp,
         modifier = Modifier.padding(top = 5.dp))
     presentation.entries.forEach { entry ->
-      FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+      MiniOrcaPanel(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Text(entry.title, color = PrimaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Text(
             entry.status,

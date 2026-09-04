@@ -53,7 +53,7 @@ internal fun PerformanceWorkspacePane(
           color = SecondaryText,
           fontSize = 11.sp)
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
             SectionLabel("Review controls")
             Text(
@@ -73,13 +73,13 @@ internal fun PerformanceWorkspacePane(
             when (job?.status) {
               "running" ->
                   ResponsiveActionGroup(Modifier.padding(top = 8.dp)) {
-                    FocusFlowButton(
+                    MiniOrcaButton(
                         actions.pause,
                         tone = ActionTone.Attention,
                         density = ButtonDensity.Toolbar) {
                           Text("Pause", fontSize = 11.sp)
                         }
-                    FocusFlowButton(
+                    MiniOrcaButton(
                         actions.cancel,
                         tone = ActionTone.Destructive,
                         density = ButtonDensity.Toolbar) {
@@ -93,14 +93,14 @@ internal fun PerformanceWorkspacePane(
                     state.remoteProviderConfirmed,
                     actions.confirmRemoteProvider)
                 ResponsiveActionGroup(Modifier.padding(top = 8.dp)) {
-                  FocusFlowButton(
+                  MiniOrcaButton(
                       { actions.resume(state.remoteProviderConfirmed) },
                       enabled = !state.model.remoteProvider || state.remoteProviderConfirmed,
                       tone = ActionTone.Primary,
                       density = ButtonDensity.Toolbar) {
                         Text("Resume", fontSize = 11.sp)
                       }
-                  FocusFlowButton(
+                  MiniOrcaButton(
                       actions.cancel,
                       tone = ActionTone.Destructive,
                       density = ButtonDensity.Toolbar) {
@@ -115,11 +115,11 @@ internal fun PerformanceWorkspacePane(
                     state.remoteProviderConfirmed,
                     actions.confirmRemoteProvider)
                 ResponsiveActionGroup(Modifier.padding(top = 8.dp)) {
-                  FocusFlowButton(
+                  MiniOrcaButton(
                       actions.preview, tone = ActionTone.Neutral, density = ButtonDensity.Toolbar) {
                         Text("Preview limits", fontSize = 11.sp)
                       }
-                  FocusFlowButton(
+                  MiniOrcaButton(
                       { state.context?.let { actions.start(it, state.remoteProviderConfirmed) } },
                       enabled =
                           state.context != null &&
@@ -133,7 +133,7 @@ internal fun PerformanceWorkspacePane(
             }
           }
       Spacer(Modifier.height(8.dp))
-      FocusFlowPanel(
+      MiniOrcaPanel(
           Modifier.fillMaxWidth(), contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
             SectionLabel("Filter opportunities")
             ResponsiveFieldPair(
@@ -171,7 +171,7 @@ internal fun PerformanceWorkspacePane(
         }
     else
         items(findings, key = { it.id }) { finding ->
-          FocusFlowButton(
+          MiniOrcaButton(
               onClick = { selectedID = finding.id },
               tone = ActionTone.Neutral,
               density = ButtonDensity.Toolbar,
@@ -190,7 +190,7 @@ private fun PerformanceFindingDetails(
     path: String,
     actions: PerformanceWorkspaceActions
 ) {
-  FocusFlowPanel(
+  MiniOrcaPanel(
       Modifier.fillMaxWidth(),
       raised = true,
       contentPadding = PaddingValues(MiniOrcaSpacing.standard)) {
@@ -211,13 +211,13 @@ private fun PerformanceFindingDetails(
         EngineeringInsightPanel(
             finding.engineeringInsight, scopeLabel = "Selected performance opportunity")
         ResponsiveActionGroup(Modifier.padding(top = 8.dp)) {
-          FocusFlowButton(
+          MiniOrcaButton(
               { actions.openInEditor(path, finding) },
               tone = ActionTone.Neutral,
               density = ButtonDensity.Toolbar) {
                 Text("Open in Editor", fontSize = 11.sp)
               }
-          FocusFlowButton(
+          MiniOrcaButton(
               { actions.prepareOptimization(path, finding) },
               enabled = finding.symbol.isNotBlank(),
               tone = ActionTone.Primary,

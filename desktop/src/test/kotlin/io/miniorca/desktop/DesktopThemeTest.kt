@@ -9,20 +9,24 @@ import kotlin.test.assertTrue
 
 class DesktopThemeTest {
   @Test
-  fun focusFlowPaletteUsesTheApprovedSemanticColors() {
-    assertEquals(Color(0xFF080917), AppBackground)
-    assertEquals(Color(0xFF101225), Panel)
-    assertEquals(Color(0xFF171A31), Card)
-    assertEquals(Color(0xFF222640), StrongSurface)
-    assertEquals(Color(0xFF292D49), Border)
-    assertEquals(Color(0xFFF2F2FB), PrimaryText)
-    assertEquals(Color(0xFF9297B6), SecondaryText)
-    assertEquals(Color(0xFF9B8CFF), Accent)
-    assertEquals(Color(0xFF62D8EF), CyanAccent)
-    assertEquals(Color(0xFF55DDB0), Success)
-    assertEquals(Color(0xFFFFC86E), Warning)
-    assertEquals(Color(0xFFFF7F9F), Error)
-    assertNotEquals(Accent, OnAccent)
+  fun charcoalPaletteUsesTheApprovedSemanticColors() {
+    assertEquals(Color(0xFF171B20), AppBackground)
+    assertEquals(Color(0xFF12161B), Chrome)
+    assertEquals(Color(0xFF1C2229), Panel)
+    assertEquals(Color(0xFF242B33), Card)
+    assertEquals(Color(0xFF2B333D), StrongSurface)
+    assertEquals(Color(0xFF343D48), Border)
+    assertEquals(Color(0xFFE6EDF3), PrimaryText)
+    assertEquals(Color(0xFFAAB6C3), SecondaryText)
+    assertEquals(Color(0xFF79B3FF), SelectionAccent)
+    assertEquals(Color(0xFF285FCB), ActionFill)
+    assertEquals(Color(0xFF65D2EC), FocusAccent)
+    assertEquals(Color(0xFF65D6A3), Success)
+    assertEquals(Color(0xFFF2BE66), Warning)
+    assertEquals(Color(0xFFFF8F98), Error)
+    assertEquals(Color(0xFF18352C), DiffAddedBackground)
+    assertEquals(Color(0xFF3A232B), DiffRemovedBackground)
+    assertNotEquals(ActionFill, OnActionFill)
   }
 
   @Test
@@ -36,8 +40,8 @@ class DesktopThemeTest {
 
   @Test
   fun actionTonesUseSharedPaletteTokensForEverySemanticRole() {
-    assertEquals(Accent, actionToneStyle(ActionTone.Primary).background)
-    assertEquals(CyanAccent, actionToneStyle(ActionTone.Navigation).content)
+    assertEquals(ActionFill, actionToneStyle(ActionTone.Primary).background)
+    assertEquals(SelectionAccent, actionToneStyle(ActionTone.Navigation).content)
     assertEquals(Success, actionToneStyle(ActionTone.Positive).content)
     assertEquals(Warning, actionToneStyle(ActionTone.Attention).content)
     assertEquals(Error, actionToneStyle(ActionTone.Destructive).content)
@@ -53,8 +57,8 @@ class DesktopThemeTest {
 
   @Test
   fun compactButtonDensitiesStayWithinTheApprovedControlScale() {
-    assertEquals(35.dp, buttonDensityStyle(ButtonDensity.Standard).height)
-    assertEquals(31.dp, buttonDensityStyle(ButtonDensity.Toolbar).height)
+    assertEquals(36.dp, buttonDensityStyle(ButtonDensity.Standard).height)
+    assertEquals(32.dp, buttonDensityStyle(ButtonDensity.Toolbar).height)
     assertEquals(
         10.dp,
         buttonDensityStyle(ButtonDensity.Standard)
@@ -86,5 +90,15 @@ class DesktopThemeTest {
     assertTrue(highlighted.spanStyles.any { it.item.color == CodeComment })
     assertTrue(highlighted.spanStyles.any { it.item.color == CodeString })
     assertTrue(highlighted.spanStyles.any { it.item.color == CodeKeyword })
+  }
+
+  @Test
+  fun essentialTextActionAndFocusColorsMeetTheDarkThemeContrastTargets() {
+    assertTrue(contrastRatio(PrimaryText, AppBackground) >= 4.5)
+    assertTrue(contrastRatio(SecondaryText, Panel) >= 4.5)
+    assertTrue(contrastRatio(OnActionFill, ActionFill) >= 4.5)
+    assertTrue(contrastRatio(FocusAccent, Panel) >= 3.0)
+    assertTrue(contrastRatio(Success, DiffAddedBackground) >= 4.5)
+    assertTrue(contrastRatio(Error, DiffRemovedBackground) >= 4.5)
   }
 }

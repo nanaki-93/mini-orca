@@ -412,6 +412,12 @@ internal fun MiniOrcaApp(
               )
           BottomToolWindow.Checks -> ChecksToolWindow(checksPresentation, modifier)
           BottomToolWindow.Output -> OutputToolWindow(outputPresentation, modifier)
+          BottomToolWindow.Terminal ->
+              SystemStateMessage(
+                  "Terminal preview",
+                  "Command execution is not available. This local preview has no command input.",
+                  modifier = modifier,
+              )
         }
       }
   val bottomToolWindowSummaries =
@@ -421,6 +427,8 @@ internal fun MiniOrcaApp(
                   problemsCollapsedSummary(appState.findings.findings, appState.loading).text),
           BottomToolWindow.Checks to checksPresentation.summary,
           BottomToolWindow.Output to outputPresentation.summary,
+          BottomToolWindow.Terminal to
+              BottomToolWindowSummary("Terminal preview · command execution is not available"),
       )
   val contextualActions =
       editorContextualActions(
@@ -634,12 +642,12 @@ private fun ProjectImportConfirmationDialog(
         }
       },
       confirmButton = {
-        FocusFlowButton(onClick = onImport, enabled = confirmed, tone = ActionTone.Primary) {
+        MiniOrcaButton(onClick = onImport, enabled = confirmed, tone = ActionTone.Primary) {
           Text("Import project")
         }
       },
       dismissButton = {
-        FocusFlowButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel") }
+        MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel") }
       },
   )
 }
@@ -658,12 +666,10 @@ private fun DraftDiscardDialog(
             "Discard the draft for ${pending.currentDraft.targetSymbol} and ${pending.nextLabel}? This only clears the in-memory conversation, draft, and focused checks.")
       },
       confirmButton = {
-        FocusFlowButton(onClick = onDiscard, tone = ActionTone.Destructive) {
-          Text("Discard draft")
-        }
+        MiniOrcaButton(onClick = onDiscard, tone = ActionTone.Destructive) { Text("Discard draft") }
       },
       dismissButton = {
-        FocusFlowButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Keep draft") }
+        MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Keep draft") }
       },
   )
 }

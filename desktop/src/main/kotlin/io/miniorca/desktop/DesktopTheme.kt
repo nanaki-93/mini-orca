@@ -44,28 +44,33 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.pow
 
-/** The approved Focus Flow palette. Every desktop color is derived from these semantic roles. */
+/** Every desktop color is derived from this single dark semantic palette. */
 internal object MiniOrcaPalette {
-  val appBackground = Color(0xFF080917)
-  val surface = Color(0xFF101225)
-  val raisedSurface = Color(0xFF171A31)
-  val strongSurface = Color(0xFF222640)
-  val border = Color(0xFF292D49)
-  val primaryText = Color(0xFFF2F2FB)
-  val secondaryText = Color(0xFF9297B6)
-  val faintText = Color(0xFF5F6485)
-  val primaryAccent = Color(0xFF9B8CFF)
-  val onPrimaryAccent = Color(0xFF110D31)
-  val secondaryAccent = Color(0xFF62D8EF)
-  val success = Color(0xFF55DDB0)
-  val warning = Color(0xFFFFC86E)
-  val error = Color(0xFFFF7F9F)
-  val codeKeyword = Color(0xFFC89FFF)
-  val codeFunction = Color(0xFF7EDCF2)
-  val codeString = Color(0xFFF0CA7D)
-  val codeComment = Color(0xFF697093)
-  val codeType = Color(0xFF7FE0BD)
+  val appBackground = Color(0xFF171B20)
+  val chromeSurface = Color(0xFF12161B)
+  val surface = Color(0xFF1C2229)
+  val raisedSurface = Color(0xFF242B33)
+  val strongSurface = Color(0xFF2B333D)
+  val border = Color(0xFF343D48)
+  val primaryText = Color(0xFFE6EDF3)
+  val secondaryText = Color(0xFFAAB6C3)
+  val faintText = Color(0xFF95A2B2)
+  val selectionAccent = Color(0xFF79B3FF)
+  val actionFill = Color(0xFF285FCB)
+  val onActionFill = Color.White
+  val focusAccent = Color(0xFF65D2EC)
+  val success = Color(0xFF65D6A3)
+  val warning = Color(0xFFF2BE66)
+  val error = Color(0xFFFF8F98)
+  val diffAddedBackground = Color(0xFF18352C)
+  val diffRemovedBackground = Color(0xFF3A232B)
+  val codeKeyword = Color(0xFFD7A4D8)
+  val codeFunction = Color(0xFFE8C987)
+  val codeString = Color(0xFFA8D59D)
+  val codeComment = Color(0xFF93A38F)
+  val codeType = Color(0xFF71D7CA)
 }
 
 internal object MiniOrcaSpacing {
@@ -133,21 +138,21 @@ internal fun ResponsiveFieldPair(
 
 internal val MiniOrcaShapes =
     Shapes(
-        small = RoundedCornerShape(8.dp),
-        medium = RoundedCornerShape(10.dp),
-        large = RoundedCornerShape(14.dp),
+        small = RoundedCornerShape(4.dp),
+        medium = RoundedCornerShape(6.dp),
+        large = RoundedCornerShape(8.dp),
     )
 
 internal val MiniOrcaTypography =
     Typography(
         defaultFontFamily = FontFamily.Default,
-        h6 = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 18.sp),
-        body1 = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+        h6 = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+        body1 = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
         body2 = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
         button =
             androidx.compose.ui.text.TextStyle(
-                fontWeight = FontWeight.Normal, fontSize = 12.sp, letterSpacing = 0.25.sp),
-        caption = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                fontWeight = FontWeight.Normal, fontSize = 13.sp, letterSpacing = 0.15.sp),
+        caption = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
     )
 
 internal enum class ActionTone {
@@ -162,6 +167,7 @@ internal enum class ActionTone {
 internal enum class ButtonDensity {
   Standard,
   Toolbar,
+  Rail,
 }
 
 internal data class ActionToneStyle(
@@ -178,22 +184,22 @@ internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
     when (tone) {
       ActionTone.Primary ->
           ActionToneStyle(
-              Accent,
-              Accent.copy(alpha = 0.82f),
-              Accent.copy(alpha = 0.92f),
-              OnAccent,
-              Accent.copy(alpha = 0.18f),
+              ActionFill,
+              ActionFill.copy(alpha = 0.84f),
+              ActionFill.copy(alpha = 0.92f),
+              OnActionFill,
+              ActionFill.copy(alpha = 0.18f),
               FaintText,
-              Accent.copy(alpha = 0.72f))
+              ActionFill.copy(alpha = 0.72f))
       ActionTone.Navigation ->
           ActionToneStyle(
               Card,
-              CyanAccent.copy(alpha = 0.25f),
-              CyanAccent.copy(alpha = 0.26f),
-              CyanAccent,
+              SelectionAccent.copy(alpha = 0.25f),
+              SelectionAccent.copy(alpha = 0.26f),
+              SelectionAccent,
               Panel,
               FaintText,
-              CyanAccent.copy(alpha = 0.72f))
+              SelectionAccent.copy(alpha = 0.72f))
       ActionTone.Positive ->
           ActionToneStyle(
               Card,
@@ -240,13 +246,15 @@ internal data class ButtonDensityStyle(
 internal fun buttonDensityStyle(density: ButtonDensity): ButtonDensityStyle =
     when (density) {
       ButtonDensity.Standard ->
-          ButtonDensityStyle(35.dp, PaddingValues(horizontal = 10.dp, vertical = 4.dp))
+          ButtonDensityStyle(36.dp, PaddingValues(horizontal = 10.dp, vertical = 4.dp))
       ButtonDensity.Toolbar ->
-          ButtonDensityStyle(31.dp, PaddingValues(horizontal = 8.dp, vertical = 4.dp))
+          ButtonDensityStyle(32.dp, PaddingValues(horizontal = 8.dp, vertical = 4.dp))
+      ButtonDensity.Rail ->
+          ButtonDensityStyle(64.dp, PaddingValues(horizontal = 6.dp, vertical = 6.dp))
     }
 
 internal object MiniOrcaButtonDefaults {
-  val shape = RoundedCornerShape(8.dp)
+  val shape = RoundedCornerShape(4.dp)
 
   @Composable
   fun colors(tone: ActionTone, selected: Boolean, pressed: Boolean): ButtonColors {
@@ -264,7 +272,8 @@ internal object MiniOrcaButtonDefaults {
     )
   }
 
-  fun border(tone: ActionTone): BorderStroke = BorderStroke(1.dp, actionToneStyle(tone).border)
+  fun border(tone: ActionTone, focused: Boolean): BorderStroke =
+      BorderStroke(1.dp, if (focused) FocusAccent else actionToneStyle(tone).border)
 }
 
 @Composable
@@ -277,7 +286,7 @@ internal fun CompactSingleLineField(
     placeholder: @Composable (() -> Unit)? = null,
     textStyle: TextStyle = TextStyle(fontSize = 12.sp),
 ) {
-  androidx.compose.foundation.layout.Box(modifier.heightIn(min = 44.dp, max = 46.dp)) {
+  androidx.compose.foundation.layout.Box(modifier.heightIn(min = 36.dp, max = 40.dp)) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -296,16 +305,16 @@ internal fun CompactSingleLineField(
 private fun compactTextFieldColors(): TextFieldColors =
     TextFieldDefaults.outlinedTextFieldColors(
         textColor = PrimaryText,
-        focusedBorderColor = CyanAccent,
+        focusedBorderColor = FocusAccent,
         unfocusedBorderColor = Border,
         disabledBorderColor = Border.copy(alpha = 0.55f),
-        focusedLabelColor = CyanAccent,
+        focusedLabelColor = FocusAccent,
         unfocusedLabelColor = SecondaryText,
-        cursorColor = CyanAccent,
+        cursorColor = FocusAccent,
     )
 
 @Composable
-internal fun FocusFlowButton(
+internal fun MiniOrcaButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -327,7 +336,7 @@ internal fun FocusFlowButton(
           ButtonDefaults.elevation(
               defaultElevation = 0.dp, pressedElevation = 1.dp, disabledElevation = 0.dp),
       shape = MiniOrcaButtonDefaults.shape,
-      border = MiniOrcaButtonDefaults.border(tone),
+      border = MiniOrcaButtonDefaults.border(tone, focusHighlight),
       colors = MiniOrcaButtonDefaults.colors(tone, selected || focusHighlight, pressed),
       contentPadding = densityStyle.contentPadding,
       content = content,
@@ -339,12 +348,12 @@ internal fun MiniOrcaTheme(content: @Composable () -> Unit) {
   MaterialTheme(
       colors =
           darkColors(
-              primary = MiniOrcaPalette.primaryAccent,
-              secondary = MiniOrcaPalette.secondaryAccent,
+              primary = MiniOrcaPalette.actionFill,
+              secondary = MiniOrcaPalette.selectionAccent,
               background = MiniOrcaPalette.appBackground,
               surface = MiniOrcaPalette.surface,
               error = MiniOrcaPalette.error,
-              onPrimary = MiniOrcaPalette.onPrimaryAccent,
+              onPrimary = MiniOrcaPalette.onActionFill,
               onBackground = MiniOrcaPalette.primaryText,
               onSurface = MiniOrcaPalette.primaryText,
               onError = MiniOrcaPalette.appBackground,
@@ -356,6 +365,7 @@ internal fun MiniOrcaTheme(content: @Composable () -> Unit) {
 }
 
 internal val AppBackground = MiniOrcaPalette.appBackground
+internal val Chrome = MiniOrcaPalette.chromeSurface
 internal val Panel = MiniOrcaPalette.surface
 internal val Card = MiniOrcaPalette.raisedSurface
 internal val StrongSurface = MiniOrcaPalette.strongSurface
@@ -363,12 +373,15 @@ internal val Border = MiniOrcaPalette.border
 internal val PrimaryText = MiniOrcaPalette.primaryText
 internal val SecondaryText = MiniOrcaPalette.secondaryText
 internal val FaintText = MiniOrcaPalette.faintText
-internal val Accent = MiniOrcaPalette.primaryAccent
-internal val OnAccent = MiniOrcaPalette.onPrimaryAccent
-internal val CyanAccent = MiniOrcaPalette.secondaryAccent
+internal val SelectionAccent = MiniOrcaPalette.selectionAccent
+internal val ActionFill = MiniOrcaPalette.actionFill
+internal val OnActionFill = MiniOrcaPalette.onActionFill
+internal val FocusAccent = MiniOrcaPalette.focusAccent
 internal val Success = MiniOrcaPalette.success
 internal val Warning = MiniOrcaPalette.warning
 internal val Error = MiniOrcaPalette.error
+internal val DiffAddedBackground = MiniOrcaPalette.diffAddedBackground
+internal val DiffRemovedBackground = MiniOrcaPalette.diffRemovedBackground
 internal val CodeKeyword = MiniOrcaPalette.codeKeyword
 internal val CodeFunction = MiniOrcaPalette.codeFunction
 internal val CodeString = MiniOrcaPalette.codeString
@@ -387,7 +400,7 @@ internal fun statusBadgeStyle(status: String): StatusBadgeStyle =
     }
 
 @Composable
-internal fun FocusFlowPanel(
+internal fun MiniOrcaPanel(
     modifier: Modifier = Modifier,
     raised: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(MiniOrcaSpacing.roomy),
@@ -407,7 +420,7 @@ internal fun SectionLabel(label: String, modifier: Modifier = Modifier) {
   Text(
       label,
       color = SecondaryText,
-      fontSize = 10.sp,
+      fontSize = 12.sp,
       fontWeight = FontWeight.Bold,
       modifier = modifier)
 }
@@ -417,7 +430,7 @@ internal fun WorkspacePaneHeader(title: String, modifier: Modifier = Modifier) {
   Text(
       title,
       color = PrimaryText,
-      fontSize = 16.sp,
+      fontSize = 14.sp,
       fontWeight = FontWeight.SemiBold,
       modifier = modifier)
 }
@@ -434,14 +447,14 @@ internal fun CompactKeyValueRow(
   ) {
     Text(
         label,
-        color = FaintText,
-        fontSize = 11.sp,
+        color = SecondaryText,
+        fontSize = 12.sp,
         modifier = Modifier.width(96.dp),
     )
     Text(
         value,
         color = PrimaryText,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.weight(1f),
@@ -468,7 +481,7 @@ internal fun StatusBadge(status: String, modifier: Modifier = Modifier) {
   Text(
       style.label,
       color = style.color,
-      fontSize = 10.sp,
+      fontSize = 12.sp,
       fontWeight = FontWeight.SemiBold,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
@@ -488,7 +501,7 @@ internal fun SystemStateMessage(
     accent: Color = SecondaryText,
     modifier: Modifier = Modifier,
 ) {
-  FocusFlowPanel(modifier = modifier, raised = true) {
+  MiniOrcaPanel(modifier = modifier, raised = true) {
     Text(title, color = PrimaryText, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(MiniOrcaSpacing.standard))
     Text(message, color = accent, fontSize = 13.sp)
@@ -501,3 +514,15 @@ internal fun formatBytes(bytes: Long): String =
       bytes < 1024 * 1024 -> "${bytes / 1024} KB"
       else -> "${bytes / (1024 * 1024)} MB"
     }
+
+internal fun contrastRatio(foreground: Color, background: Color): Double {
+  fun linear(component: Float): Double =
+      component.toDouble().let {
+        if (it <= 0.03928) it / 12.92 else ((it + 0.055) / 1.055).pow(2.4)
+      }
+  fun luminance(color: Color): Double =
+      0.2126 * linear(color.red) + 0.7152 * linear(color.green) + 0.0722 * linear(color.blue)
+  val lighter = maxOf(luminance(foreground), luminance(background))
+  val darker = minOf(luminance(foreground), luminance(background))
+  return (lighter + 0.05) / (darker + 0.05)
+}

@@ -40,6 +40,33 @@ internal data class EditorChromeUiState(
     val stageLabel: String,
 )
 
+internal data class CandidateSummaryPresentation(
+    val target: String,
+    val stage: String,
+    val changedLines: String,
+    val reviewAvailable: Boolean,
+)
+
+internal fun candidateSummaryPresentation(
+    draft: DeclarationDraft?,
+    chrome: EditorChromeUiState,
+): CandidateSummaryPresentation? {
+  val currentDraft = draft ?: return null
+  val changed =
+      currentDraft.validation?.diff?.lines.orEmpty().count { it.kind in setOf("added", "removed") }
+  return CandidateSummaryPresentation(
+      target =
+          listOf(currentDraft.targetPath, currentDraft.targetSymbol)
+              .filter(String::isNotBlank)
+              .joinToString(" · "),
+      stage = chrome.stageLabel,
+      changedLines =
+          if (changed > 0) "$changed changed lines in the current draft"
+          else "Validate the current draft to compose a diff.",
+      reviewAvailable = chrome.reviewAvailable,
+  )
+}
+
 internal fun editorChromeUiState(
     file: ProjectFileInfo?,
     selectedSymbol: SymbolInfo?,
@@ -88,6 +115,7 @@ internal fun editorBreadcrumbLabel(path: String, symbol: String? = null): String
 @Composable
 internal fun EditorWorkspace(
     chrome: EditorChromeUiState,
+    draft: DeclarationDraft?,
     onSelectSurface: (EditorSurface) -> Unit,
     canvas: @Composable () -> Unit,
     modifier: Modifier = Modifier,
@@ -95,7 +123,40 @@ internal fun EditorWorkspace(
   Column(modifier.fillMaxSize().background(AppBackground)) {
     ActiveFileEditorChrome(chrome, onSelectSurface)
     Box(Modifier.fillMaxWidth().weight(1f)) { canvas() }
+    candidateSummaryPresentation(draft, chrome)?.let { summary ->
+      CandidateSummary(summary, onReview = { onSelectSurface(EditorSurface.Review) })
+    }
   }
+}
+
+@Composable
+private fun CandidateSummary(summary: CandidateSummaryPresentation, onReview: () -> Unit) {
+  MiniOrcaPanel(
+      Modifier.fillMaxWidth()
+          .padding(horizontal = MiniOrcaSpacing.standard, vertical = MiniOrcaSpacing.compact),
+      raised = true,
+      contentPadding = androidx.compose.foundation.layout.PaddingValues(MiniOrcaSpacing.standard)) {
+        SectionLabel("CANDIDATE SUMMARY · CURRENT DRAFT")
+        Text(
+            summary.target.ifBlank { "Current declaration draft" },
+            color = PrimaryText,
+            fontSize = 12.sp)
+        Text(
+            summary.stage,
+            color = if (summary.reviewAvailable) Success else Warning,
+            fontSize = 12.sp)
+        Text(summary.changedLines, color = SecondaryText, fontSize = 12.sp)
+        MiniOrcaButton(
+            onClick = onReview,
+            enabled = summary.reviewAvailable,
+            tone = ActionTone.Primary,
+            modifier = Modifier.padding(top = MiniOrcaSpacing.standard)) {
+              Text(if (summary.reviewAvailable) "Review candidate" else "Review unavailable")
+            }
+        PreviewFeatureButton(
+            PreviewFeature("Feedback", "Suggestion feedback is not submitted."),
+            modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
+      }
 }
 
 @Composable
@@ -113,7 +174,7 @@ private fun ActiveFileEditorChrome(
   Column(
       Modifier.fillMaxWidth()
           .background(Panel)
-          .padding(horizontal = 12.dp, vertical = 7.dp)
+          .padding(horizontal = 12.dp, vertical = 4.dp)
           .onFocusChanged { tabGroupHasFocus = it.hasFocus }
           .focusable()
           .onPreviewKeyEvent { event ->
@@ -136,39 +197,45 @@ private fun ActiveFileEditorChrome(
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
           modifier = Modifier.weight(1f))
-      Text("READ-ONLY", color = SecondaryText, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+      Text("READ-ONLY", color = SecondaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
       Spacer(Modifier.width(8.dp))
-      FocusFlowButton(
+      MiniOrcaButton(
           onClick = { onSelectSurface(EditorSurface.Source) },
           tone = ActionTone.Navigation,
           density = ButtonDensity.Toolbar,
           selected = state.activeSurface == EditorSurface.Source,
           focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source) {
-            Text("Source", fontSize = 10.sp)
+            Text("Source", fontSize = 12.sp)
           }
+      Spacer(Modifier.width(4.dp))
+      PreviewFeatureButton(
+          PreviewFeature("Tabs", "Additional tabs, split editor, and minimap are not available."))
+      Spacer(Modifier.width(4.dp))
+      PreviewFeatureButton(
+          PreviewFeature("Run / Debug", "Process execution and debugging are not available."))
       if (state.reviewAvailable) {
         Spacer(Modifier.width(4.dp))
-        FocusFlowButton(
+        MiniOrcaButton(
             onClick = { onSelectSurface(EditorSurface.Review) },
             tone = ActionTone.Navigation,
             density = ButtonDensity.Toolbar,
             selected = state.activeSurface == EditorSurface.Review,
             focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
-              Text("Review candidate", fontSize = 10.sp)
+              Text("Review candidate", fontSize = 12.sp)
             }
       }
     }
     Text(
         state.breadcrumbs,
         color = SecondaryText,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.padding(top = 4.dp))
     Text(
         state.stageLabel,
         color = if (state.reviewAvailable) Success else FaintText,
-        fontSize = 10.sp,
+        fontSize = 12.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 3.dp))
   }

@@ -1,8 +1,29 @@
 # Mini-Orca implementation tasks
 
-Active feature plan: [Engineering insights and project performance analysis](../docs/insights-performance/PLAN.md).
+Active feature plan: [Dark desktop redesign from the supplied mockups](../docs/dark-ui/PLAN.md).
 
-Completed UI plan: [IDE-style desktop UI](../plan.md).
+Completed plans: [IDE-style desktop UI](../plan.md) and
+[Engineering insights and project performance analysis](../docs/insights-performance/PLAN.md).
+
+## Active dark desktop redesign: Tasks 140–149
+
+| Order | Task | Depends on | Status |
+| ---: | --- | --- | --- |
+| 140 | [Record the dark UI reference and behavior baseline](completed/140_dark_ui_reference_baseline.md) | 139 | Complete |
+| 141 | [Implement the charcoal theme and icon system](completed/141_dark_theme_and_icons.md) | 140 | Complete |
+| 142 | [Restyle the shell, toolbar, and navigation](completed/142_dark_shell_and_navigation.md) | 141 | Complete |
+| 143 | [Restyle the project tree and source editor](completed/143_dark_explorer_and_editor.md) | 142 | Complete |
+| 144 | [Reorganize AI Context and restyle project workspaces](completed/144_dark_context_and_workspaces.md) | 143 | Complete |
+| 145 | [Restyle the Assistant and candidate review](completed/145_dark_assistant_and_candidate_review.md) | 144 | Complete |
+| 146 | [Restyle bottom tools and persistent status](completed/146_dark_bottom_tools_and_status.md) | 145 | Complete |
+| 147 | [Add unsupported-feature UI previews](completed/147_ui_preview_features.md) | 146 | Complete |
+| 148 | [Verify responsive and accessible dark UI behavior](completed/148_dark_ui_responsive_accessibility.md) | 147 | Complete |
+| 149 | [Complete dark UI visual and regression acceptance](149_dark_ui_acceptance.md) | 140–148 | Pending |
+
+Use [PROMPT_EXECUTE_DARK_UI.md](PROMPT_EXECUTE_DARK_UI.md) when implementation is
+requested. The planning request creates this backlog; it does not execute the tasks
+or authorize commits. Tasks replace the former palette and add explicit UI previews
+while retaining the single-file review workflow and existing backend contracts.
 
 ## Historical ledger: Tasks 01–102
 
@@ -80,7 +101,7 @@ implementation writer, required user-facing start/completion commentary, focused
 verification, and exactly one isolated commit. No task authorizes a push or weakens
 the preview-first Apply/Undo boundary.
 
-## Active insights and performance sequence: Tasks 133–139
+## Completed insights and performance sequence: Tasks 133–139
 
 | Order | Task | Depends on | Status |
 | ---: | --- | --- | --- |

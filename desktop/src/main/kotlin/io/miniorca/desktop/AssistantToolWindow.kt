@@ -36,7 +36,7 @@ internal fun AssistantToolWindow(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp)
             .padding(bottom = 12.dp)) {
-          FocusFlowPanel(Modifier.fillMaxWidth()) {
+          MiniOrcaPanel(Modifier.fillMaxWidth()) {
             SectionLabel("BOUND CONVERSATION")
             Text(
                 state.selected?.path ?: "Open one Go file before drafting.",
@@ -80,7 +80,7 @@ internal fun AssistantToolWindow(
                 state.functionModel,
                 state.remoteConfirmed,
                 conversationActions.confirmRemoteProvider)
-            FocusFlowButton(
+            MiniOrcaButton(
                 onClick = conversationActions.inspectContext,
                 enabled = state.selected != null && !state.sending,
                 tone = ActionTone.Neutral,
@@ -88,14 +88,14 @@ internal fun AssistantToolWindow(
                   Text("Inspect context")
                 }
             if (state.sending)
-                FocusFlowButton(
+                MiniOrcaButton(
                     onClick = conversationActions.cancel,
                     tone = ActionTone.Destructive,
                     modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
                       Text("Cancel request")
                     }
             else
-                FocusFlowButton(
+                MiniOrcaButton(
                     onClick = conversationActions.send,
                     enabled =
                         state.target != null &&
@@ -125,7 +125,7 @@ private fun AssistantDraftEditorCard(
     draftFocus: FocusRequester,
     actions: DraftEditorActions
 ) {
-  FocusFlowPanel(Modifier.fillMaxWidth().padding(top = 10.dp), raised = true) {
+  MiniOrcaPanel(Modifier.fillMaxWidth().padding(top = 10.dp), raised = true) {
     val draft = editor.serverDraft
     val canValidate =
         editor.status in
@@ -161,7 +161,7 @@ private fun AssistantDraftEditorCard(
         color = draftEditorStatusColor(editor.status),
         fontSize = 10.sp,
         modifier = Modifier.padding(top = 5.dp))
-    FocusFlowButton(
+    MiniOrcaButton(
         onClick = actions.validate,
         enabled = canValidate,
         tone = ActionTone.Primary,

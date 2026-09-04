@@ -556,6 +556,7 @@ internal fun DesktopShell(
                         busy = appState.loading,
                         operationStatus = appState.status,
                         connection = appState.connection,
+                        gitStatus = appState.gitStatus,
                         showEditorDrawerActions = showEditorDrawers,
                     ),
                 actions =
@@ -586,35 +587,72 @@ internal fun DesktopShell(
                   ::selectToolWindow,
                   Modifier.focusRequester(focusRequesters.leftToolWindow),
               )
-              if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
-                DockedToolWindow(
-                    "Project",
-                    content = { modifier -> panes.explorer(modifier) {} },
-                    modifier = Modifier.width(layout.explorerWidth.dp).fillMaxHeight())
-                ResizableDivider(
-                    onDelta = {
-                      layoutActions.updateLayout(
-                          layout.withExplorerWidth(layout.explorerWidth + it))
-                    },
-                    onCommit = { layoutActions.saveLayout(layout) })
+              val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
+              Column(Modifier.weight(1f).fillMaxHeight()) {
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                  if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
+                    DockedToolWindow(
+                        "Project",
+                        content = { modifier -> panes.explorer(modifier) {} },
+                        modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight())
+                    ResizableDivider(
+                        onDelta = {
+                          layoutActions.updateLayout(
+                              layout.withExplorerWidth(layout.explorerWidth + it))
+                        },
+                        onCommit = { layoutActions.saveLayout(layout) })
+                  }
+                  DesktopCanvas(
+                      appState = appState,
+                      layout = layout,
+                      editor = editor,
+                      context = context,
+                      widthDp = widthDp,
+                      editorActions = editorActions,
+                      analysisActions = analysisActions,
+                      findingActions = findingActions,
+                      onWorkspaceSelected = ::selectWorkspace,
+                      onOpenNarrowDrawer = ::openDrawer,
+                      modifier =
+                          Modifier.weight(1f)
+                              .fillMaxHeight()
+                              .focusRequester(focusRequesters.editor)
+                              .focusable(),
+                  )
+                }
+                if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
+                  BottomToolWindowRegion(
+                      layout = layout,
+                      availableToolWindows = availableBottomToolWindows,
+                      summaries = panes.bottomToolWindowSummaries,
+                      onSelect = ::selectBottomToolWindow,
+                      onCollapse = ::collapseBottomToolWindow,
+                      onHeightDelta = {
+                        layoutActions.updateLayout(
+                            layout.withBottomHeight(layout.bottomHeight + it))
+                      },
+                      onHeightCommit = { layoutActions.saveLayout(layout) },
+                      content = panes.bottomToolWindows,
+                      tabModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
+                  )
+                } else {
+                  NarrowBottomToolWindowSummary(
+                      layout = layout,
+                      availableToolWindows = availableBottomToolWindows,
+                      summaries = panes.bottomToolWindowSummaries,
+                      onOpen = {
+                        val activeToolWindow =
+                            layout.activeBottomToolWindow.takeIf {
+                              it in availableBottomToolWindows
+                            } ?: availableBottomToolWindows.firstOrNull()
+                        activeToolWindow?.let(::selectBottomToolWindow)
+                        bottomToolWindowOverlayVisible = activeToolWindow != null
+                      },
+                      modifier =
+                          Modifier.focusRequester(focusRequesters.bottomToolWindow).focusable(),
+                  )
+                }
               }
-              DesktopCanvas(
-                  appState = appState,
-                  layout = layout,
-                  editor = editor,
-                  context = context,
-                  widthDp = widthDp,
-                  editorActions = editorActions,
-                  analysisActions = analysisActions,
-                  findingActions = findingActions,
-                  onWorkspaceSelected = ::selectWorkspace,
-                  onOpenNarrowDrawer = ::openDrawer,
-                  modifier =
-                      Modifier.weight(1f)
-                          .fillMaxHeight()
-                          .focusRequester(focusRequesters.editor)
-                          .focusable(),
-              )
               if (!narrow && showsEditorChrome && layout.rightToolWindowVisible) {
                 ResizableDivider(
                     onDelta = {
@@ -631,37 +669,8 @@ internal fun DesktopShell(
                           panes.rightToolWindowBadges,
                           modifier.focusRequester(focusRequesters.rightToolWindow))
                     },
-                    modifier = Modifier.width(layout.actionWidth.dp).fillMaxHeight())
+                    modifier = Modifier.width(dockedWidths.action.dp).fillMaxHeight())
               }
-            }
-            if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
-              BottomToolWindowRegion(
-                  layout = layout,
-                  availableToolWindows = availableBottomToolWindows,
-                  summaries = panes.bottomToolWindowSummaries,
-                  onSelect = ::selectBottomToolWindow,
-                  onCollapse = ::collapseBottomToolWindow,
-                  onHeightDelta = {
-                    layoutActions.updateLayout(layout.withBottomHeight(layout.bottomHeight + it))
-                  },
-                  onHeightCommit = { layoutActions.saveLayout(layout) },
-                  content = panes.bottomToolWindows,
-                  tabModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
-              )
-            } else {
-              NarrowBottomToolWindowSummary(
-                  layout = layout,
-                  availableToolWindows = availableBottomToolWindows,
-                  summaries = panes.bottomToolWindowSummaries,
-                  onOpen = {
-                    val activeToolWindow =
-                        layout.activeBottomToolWindow.takeIf { it in availableBottomToolWindows }
-                            ?: availableBottomToolWindows.firstOrNull()
-                    activeToolWindow?.let(::selectBottomToolWindow)
-                    bottomToolWindowOverlayVisible = activeToolWindow != null
-                  },
-                  modifier = Modifier.focusRequester(focusRequesters.bottomToolWindow).focusable(),
-              )
             }
             if (desktopStatusBarVisible(appState.project)) {
               PersistentStatusBar(
@@ -833,7 +842,7 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
       MiniOrcaMark()
       Spacer(Modifier.height(12.dp))
       Text("Mini-Orca", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-      FocusFlowButton(
+      MiniOrcaButton(
           onClick = onOpenProject,
           enabled = !appState.loading,
           tone = ActionTone.Primary,
@@ -844,7 +853,7 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
       when {
         appState.loading -> {
           Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(Modifier.size(16.dp), color = CyanAccent, strokeWidth = 2.dp)
+            CircularProgressIndicator(Modifier.size(16.dp), color = FocusAccent, strokeWidth = 2.dp)
             Spacer(Modifier.width(8.dp))
             Text("Opening project…", color = SecondaryText, fontSize = 12.sp)
           }
@@ -964,6 +973,7 @@ private fun ContentPane(
       Workspace.Editor ->
           EditorWorkspace(
               chrome = state.editorChrome,
+              draft = state.draft,
               onSelectSurface = navigation.selectEditorSurface,
               canvas = {
                 if (state.editorChrome.activeSurface == EditorSurface.Review) {
@@ -1037,7 +1047,7 @@ private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> U
       title = { Text("Context inspector · read-only") },
       text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-          FocusFlowPanel(Modifier.fillMaxWidth(), raised = true) {
+          MiniOrcaPanel(Modifier.fillMaxWidth(), raised = true) {
             SectionLabel("DESTINATION")
             val scope =
                 ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label
@@ -1097,6 +1107,6 @@ private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> U
         }
       },
       confirmButton = {
-        FocusFlowButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
+        MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
       })
 }

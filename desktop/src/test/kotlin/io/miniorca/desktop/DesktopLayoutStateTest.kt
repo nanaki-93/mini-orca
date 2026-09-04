@@ -16,9 +16,9 @@ class DesktopLayoutStateTest {
     assertEquals(RightToolWindow.Context, layout.activeRightToolWindow)
     assertEquals(BottomToolWindow.Problems, layout.activeBottomToolWindow)
     assertEquals(EditorSurface.Source, layout.editorSurface)
-    assertEquals(270f, layout.explorerWidth)
-    assertEquals(390f, layout.actionWidth)
-    assertEquals(240f, layout.bottomHeight)
+    assertEquals(256f, layout.explorerWidth)
+    assertEquals(344f, layout.actionWidth)
+    assertEquals(220f, layout.bottomHeight)
     assertTrue(layout.bottomToolWindowVisible)
     assertTrue(layout.bottomCollapsed)
   }
@@ -123,6 +123,40 @@ class DesktopLayoutStateTest {
   fun wideLayoutBoundaryStaysAtExactlyOneThousandDp() {
     assertFalse(useNarrowLayout(1_000f))
     assertTrue(useNarrowLayout(999f))
+  }
+
+  @Test
+  fun dockedPaneWidthsProtectTheEditorWithoutChangingStoredPreferences() {
+    val constrained =
+        dockedPaneWidths(1_000f, preferredExplorerWidth = 520f, preferredActionWidth = 560f)
+
+    assertEquals(DesktopLayoutState.MIN_EXPLORER_WIDTH, constrained.explorer)
+    assertEquals(356f, constrained.action)
+    assertEquals(MIN_EDITOR_WIDTH, constrained.editor)
+    assertEquals(520f, DesktopLayoutState().withExplorerWidth(520f).explorerWidth)
+    assertEquals(560f, DesktopLayoutState().withActionWidth(560f).actionWidth)
+  }
+
+  @Test
+  fun dockedPaneWidthsRestorePreferredDimensionsWhenTheViewportGrows() {
+    val preferred =
+        dockedPaneWidths(1_440f, preferredExplorerWidth = 256f, preferredActionWidth = 344f)
+
+    assertEquals(256f, preferred.explorer)
+    assertEquals(344f, preferred.action)
+    assertEquals(736f, preferred.editor)
+  }
+
+  @Test
+  fun newTerminalPreviewTabDoesNotInvalidateOlderBottomPreferences() {
+    withPreferences { preferences ->
+      preferences.put("ide-bottom-tool", "Output")
+      assertEquals(
+          BottomToolWindow.Output, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
+      preferences.put("ide-bottom-tool", "Terminal")
+      assertEquals(
+          BottomToolWindow.Terminal, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
+    }
   }
 
   private fun withPreferences(test: (Preferences) -> Unit) {

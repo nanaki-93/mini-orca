@@ -2,6 +2,11 @@
 
 **Status:** Complete — automated implementation and acceptance are complete through Task 132.
 
+**Successor plan:** [Dark desktop redesign](docs/dark-ui/PLAN.md), Tasks 140–149,
+uses the new supplied mockups. It supersedes this completed plan's palette-preservation
+rule and allows explicitly labeled UI previews for unsupported controls. The workflow
+and source-mutation constraints below remain relevant.
+
 **Release-operator limitation:** This environment has no interactive Mini-Orca window or
 provider-backed fixture. The remaining live viewport, screen-reader, text-scaling, and
 provider-flow checks are recorded in `desktop/KEYBOARD_SMOKE_CHECKLIST.md`; they are not claimed
