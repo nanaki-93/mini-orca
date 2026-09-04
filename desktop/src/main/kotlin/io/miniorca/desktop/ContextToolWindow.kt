@@ -131,17 +131,12 @@ internal fun ContextToolWindow(
           .semantics { contentDescription = contextToolWindowDescription(inspector) }) {
         ContextSection("Project summary", DesktopIcon.Summary, SelectionText) {
           val project = projectSummaryPresentation(state.overview, state.project)
-          val analysis = state.overview?.analysis
-          val purpose =
-              analysis?.purpose?.takeIf {
-                it.isNotBlank() && project.analysisStatus in setOf("fresh", "stale")
-              }
           Text(
-              purpose ?: project.analysisMessage,
+              project.purpose ?: project.analysisMessage,
               color = PrimaryText,
               fontSize = 13.sp,
               lineHeight = 20.sp)
-          if (purpose != null) {
+          if (project.purpose != null) {
             Text(
                 "${statusBadgeStyle(project.analysisStatus).label} · advisory interpretation",
                 color = if (project.analysisStatus == "stale") Warning else SecondaryText,

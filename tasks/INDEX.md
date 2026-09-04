@@ -20,7 +20,7 @@ and exactly one isolated local commit per completed task. No pushes.
 | 153 | [Correct Analysis and shared workspace widths](completed/153_correct_workspace_widths.md) | 152 | Complete |
 | 154 | [Refine popup menus and menu-row controls](completed/154_refine_popup_menus.md) | 153 | Complete |
 | 155 | [Refine disclosures, drawers, and tool-window controls](completed/155_refine_disclosures_and_drawers.md) | 154 | Complete |
-| 156 | [Redesign Summary as a concise project dashboard](156_redesign_summary_dashboard.md) | 155 | Pending |
+| 156 | [Redesign Summary as a concise project dashboard](completed/156_redesign_summary_dashboard.md) | 155 | Complete |
 | 157 | [Simplify workspace copy and information density](157_simplify_workspace_copy.md) | 156 | Pending |
 | 158 | [Polish Editor, workflow surfaces, and global UI copy](158_polish_editor_workflow_surfaces.md) | 157 | Pending |
 | 159 | [Verify responsive layout and accessible UI interactions](159_verify_refined_ui_accessibility.md) | 158 | Pending |

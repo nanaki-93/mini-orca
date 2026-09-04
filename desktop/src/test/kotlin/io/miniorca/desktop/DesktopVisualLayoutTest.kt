@@ -174,7 +174,8 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("summary-1440")
           assertTrue(fixture.hasText("Project facts"))
-          assertTrue(fixture.hasText("Workspace coverage"))
+          assertTrue(fixture.hasText("Analysis coverage"))
+          assertTrue(fixture.hasText("AI interpretation"))
         }
 
     ComposeVisualFixture(1440, 900) { ToolbarVisualFixture(1440f) }
@@ -298,6 +299,55 @@ class DesktopVisualLayoutTest {
           fixture.render()
           assertTrue(fixture.hasText(features.last().label))
           assertTrue(fixture.hasScrollableContent())
+        }
+  }
+
+  @Test
+  fun summaryDashboardKeepsLongInterpretationExpandableAndNavigationLocal() {
+    val longPurpose =
+        "This returned purpose stays intact when the compact dashboard only previews it. ".repeat(8)
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                visualFixtureOverview.analysis.copy(
+                    purpose = longPurpose,
+                    architecture = "Handlers delegate to services and repository adapters.",
+                    components = listOf("HTTP handlers", "Repository adapters"),
+                    risks = listOf(ProjectAnalysisRisk("medium", "Validate boundary input."))))
+    val destinations = mutableListOf<Workspace>()
+    ComposeVisualFixture(1440, 900) {
+          ProjectSummaryPane(overview, visualFixtureProject) { destinations += it }
+        }
+        .use { fixture ->
+          fixture.render("summary-dashboard-1440")
+          assertTrue(fixture.hasText("23"))
+          assertTrue(fixture.hasText("Verified findings"))
+          assertFalse(fixture.hasText("Handlers delegate to services and repository adapters."))
+          fixture.clickText("Analysis")
+          fixture.clickText("Bugs")
+          kotlin.test.assertEquals(listOf(Workspace.Analysis, Workspace.Bugs), destinations)
+          fixture.clickText("Show full purpose")
+          fixture.render("summary-purpose-expanded-1440")
+          assertTrue(fixture.hasText(longPurpose))
+          fixture.clickText("Interpretation details")
+          fixture.render("summary-details-expanded-1440")
+          assertTrue(fixture.hasText("Architecture"))
+          assertTrue(fixture.hasText("MEDIUM · Validate boundary input."))
+        }
+
+    ComposeVisualFixture(800, 650, 1.3f) {
+          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+        }
+        .use { fixture ->
+          fixture.render("summary-dashboard-800-1.3")
+          fixture.assertTextFits("Project facts")
+          fixture.assertTextFits("Analysis coverage")
+        }
+
+    ComposeVisualFixture(800, 300) { ProjectSummaryPane(null, null, {}) }
+        .use { fixture ->
+          fixture.render("summary-dashboard-empty-800")
+          assertTrue(fixture.hasText("No project selected"))
         }
   }
 

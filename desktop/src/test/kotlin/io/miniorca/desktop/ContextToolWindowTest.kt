@@ -77,6 +77,21 @@ class ContextToolWindowTest {
         contextStateBadge(inspector(file(), current = draftIdentity)).orEmpty().contains("Apply"))
   }
 
+  @Test
+  fun contextProjectSummaryUsesTheSharedPurposeAndFreshnessPresentation() {
+    val overview =
+        ProjectOverview(
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "stale", purpose = "Keep request boundaries explicit."))
+
+    val summary = projectSummaryPresentation(overview, null)
+
+    assertEquals("Keep request boundaries explicit.", summary.purpose)
+    assertEquals("stale", summary.analysisStatus)
+    assertTrue(summary.analysisMessage.contains("source may have changed"))
+  }
+
   private fun inspector(
       file: ProjectFileInfo,
       selectedSymbol: SymbolInfo? = null,
