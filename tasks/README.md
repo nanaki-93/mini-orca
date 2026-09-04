@@ -27,19 +27,19 @@ the [IDE UI plan](../plan.md), and earlier work.
 - [`INDEX.md`](INDEX.md) contains the concise historical ledger for Tasks 01–102. Git
   history is the full archive.
 
-## Planned UI refinement
+## Completed UI refinement
 
-Tasks 150–160 implement `desktop/UI_REFINEMENT_PLAN.md`: remove duplicate Project
+Tasks 150–160 implemented `desktop/UI_REFINEMENT_PLAN.md`: remove duplicate Project
 navigation, unify IDE tokens, correct Analysis width, replace inconsistent menus
 and disclosures, rebuild Summary, reduce global interface prose, and verify the
 complete replacement. Preserve the real Files tree/project operations, Analysis's
 accepted visual hierarchy, and all existing workflow safety boundaries.
 
-The new execution prompt requires exactly one reviewed local commit per task after
-its tests and acceptance pass. Task 150 owns the explicitly listed initial planning
+The execution prompt required exactly one reviewed local commit per task after its
+tests and acceptance passed. Task 150 owned the explicitly listed initial planning
 artifacts together with baseline/characterization work; there is no extra planning
-commit. Stage only task-owned files/hunks, preserve unrelated work, and do not push.
-Use its resume and failed-commit rules rather than duplicating completed work.
+commit. The completed ledger and native release follow-ups are recorded in
+`desktop/UI_REFINEMENT_ACCEPTANCE.md`.
 
 Task 149 is not a hard dependency of this sequence. It retains its outstanding
 native/repository acceptance status and is not automatically completed by the new
