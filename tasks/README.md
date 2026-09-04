@@ -1,12 +1,16 @@
 # Mini-Orca task workflow
 
-This directory contains the implementation backlog for [`../plan.md`](../plan.md).
+This directory contains the active backlog for
+[engineering insights and project performance analysis](../docs/insights-performance/PLAN.md)
+and the completed records for the [IDE UI plan](../plan.md) and earlier work.
 
 ## Layout
 
 - Pending tasks live in this directory as `NN_snake_case.md`.
 - Completed tasks move to `completed/` without changing their identifier.
 - [`INDEX.md`](INDEX.md) is the authoritative dependency order and status list.
+- [`PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md`](PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md)
+  executes pending Tasks 133–139 sequentially with one verified local commit per task.
 - [`PROMPT_EXECUTE_IDE_UI.md`](PROMPT_EXECUTE_IDE_UI.md) is the completed execution record for
   Tasks 118–132. It required strict sequencing, one implementation writer, and one verified
   commit per task.
@@ -14,6 +18,19 @@ This directory contains the implementation backlog for [`../plan.md`](../plan.md
   Tasks 103–117 remain as the audit record for the previous cleanup sequence.
 - [`INDEX.md`](INDEX.md) contains the concise historical ledger for Tasks 01–102. Git
   history is the full archive.
+
+## Active insights and performance backlog
+
+Tasks 133–139 are prepared for implementation after the completed IDE sequence.
+They add a small closeable/reopenable Engineering insight panel to existing result
+pages and an independent, explicitly unmeasured Performance review section.
+There are no quizzes, games, learning profiles, runtime profilers, or new automatic
+source writes. The feature plan defines the complete scope and safety contract.
+
+Creating this backlog does not execute it or create commits. When the user invokes
+the execution prompt, one agent completes/verifies/commits each numbered task before
+starting the next. Task 133 owns the initial uncommitted feature-plan/task/prompt
+artifacts together with its baseline tests; do not make a separate planning commit.
 
 ## Completed IDE redesign
 
@@ -31,8 +48,8 @@ Each task has exactly one status: `Pending`, `In Progress`, or `Complete`.
 
 1. Select the first Pending task whose dependencies are Complete.
 2. One implementation agent owns that task and its writes until verification finishes.
-3. Read-only research/review may run concurrently only when it cannot edit overlapping
-   files or mutate shared state.
+3. Follow the selected prompt's agent policy. Tasks 133–139 use one implementation
+   agent without delegation or parallel task implementation.
 4. Run the task's focused checks and `git diff --check`.
 5. Only after every acceptance criterion passes, set the task to Complete, move it
    under `completed/`, and update `INDEX.md`.
@@ -48,8 +65,9 @@ mark a task Complete based on partial implementation.
 
 ## Shared implementation rules
 
-- Read `AGENTS.md`, `plan.md`, this file, `INDEX.md`, the execution prompt, and the
-  selected task before acting.
+- Read `AGENTS.md`, the active feature plan, this file, `INDEX.md`, the selected
+  execution prompt, and the selected task before acting. For Tasks 133–139, also
+  inspect the completed root `plan.md` and Task 132's recorded IDE acceptance.
 - Preserve the one-project, one-open-file, one-symbol, preview-first workflow.
 - Keep source and diff selectable/read-only; only the isolated declaration/import
   draft is editable.
@@ -59,7 +77,7 @@ mark a task Complete based on partial implementation.
   project context.
 - Preserve existing palette values, keyboard navigation, state labels, and the exact
   `1000dp` responsive boundary.
-- Fit the redesign into the existing presenter and feature-state boundaries. Do not
+- Fit changes into the existing presenter and feature-state boundaries. Do not
   add a UI framework, generic docking engine, event bus, or duplicate workflow state.
 - Do not add general source editing, multi-file tabs/changes, terminal, run/debug,
   filesystem mutation, automatic fixes, automatic commits, or VCS write features.
@@ -71,9 +89,10 @@ mark a task Complete based on partial implementation.
   progress updates during work lasting more than 60 seconds.
 - The task commentary requirements are conversation updates, not instructions to add
   source-code comments.
-- The user's request authorizes exactly one commit per completed Task 118–132. It does
-  not authorize pushes, rebases, tags, amendments, squashes, combined commits, or
-  commits containing unrelated work.
+- Executing a user-invoked sequence authorizes exactly one commit per completed task
+  in that sequence. It does not authorize pushes, rebases, tags, amendments, squashes,
+  combined commits, or commits containing unrelated work. This is an implementation
+  workflow, not permission to add automatic commits to the Mini-Orca product.
 
 ## Verification baseline
 
@@ -87,6 +106,7 @@ mark a task Complete based on partial implementation.
 - Project quality gate: `make quality`
 - Every task: `git diff --check`
 
-The final report must state each Task 118–132 status, behavior changed, files changed,
-acceptance criteria verified, commands run, any blocker or intentionally unavailable
-manual check, and the exact commit hash for every completed task.
+The final report must state each task's status in the executed sequence, behavior
+changed, files changed, acceptance criteria verified, commands run, any blocker or
+intentionally unavailable manual check, and the exact commit hash for every
+completed task.

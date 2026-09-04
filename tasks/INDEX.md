@@ -1,6 +1,8 @@
 # Mini-Orca implementation tasks
 
-Current UI plan: [`../plan.md`](../plan.md)
+Active feature plan: [Engineering insights and project performance analysis](../docs/insights-performance/PLAN.md).
+
+Completed UI plan: [IDE-style desktop UI](../plan.md).
 
 ## Historical ledger: Tasks 01–102
 
@@ -39,7 +41,7 @@ obsolete execution prompts, and retired UI-mock material were consolidated in Ta
 The previous sequence remains reproducible through
 [`PROMPT_EXECUTE_LEGACY_CLEANUP.md`](PROMPT_EXECUTE_LEGACY_CLEANUP.md).
 
-## Active IDE-style UI sequence: Tasks 118–132
+## Completed IDE-style UI sequence: Tasks 118–132
 
 | Order | Task | Depends on | Status |
 | ---: | --- | --- | --- |
@@ -77,3 +79,33 @@ Tasks 118–132 execute strictly in numeric order through
 implementation writer, required user-facing start/completion commentary, focused
 verification, and exactly one isolated commit. No task authorizes a push or weakens
 the preview-first Apply/Undo boundary.
+
+## Pending insights and performance sequence: Tasks 133–139
+
+| Order | Task | Depends on | Status |
+| ---: | --- | --- | --- |
+| 133 | [Establish the insights and performance contract baseline](133_insights_performance_contract_baseline.md) | 132 | Pending |
+| 134 | [Generate and transport contextual engineering insights](134_engineering_insight_generation.md) | 133 | Pending |
+| 135 | [Add the collapsible in-page engineering insight panel](135_inline_engineering_insight_panel.md) | 134 | Pending |
+| 136 | [Implement bounded source-based performance file review](136_performance_file_review.md) | 135 | Pending |
+| 137 | [Add bounded project performance jobs and API](137_project_performance_job.md) | 136 | Pending |
+| 138 | [Add the Performance workspace and optimization handoff](138_performance_workspace.md) | 137 | Pending |
+| 139 | [Complete insights and performance acceptance](139_insights_performance_acceptance.md) | 133–138 | Pending |
+
+Execute through
+[PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md](PROMPT_EXECUTE_INSIGHTS_PERFORMANCE.md).
+These task files are prepared only; no implementation or task commit has started.
+Execution is strictly sequential with one implementation agent and one verified
+local commit per task. No push is authorized.
+
+### Feature plan coverage
+
+| Feature-plan area | Implementation tasks |
+| --- | --- |
+| Completed-IDE baseline, contracts, fixtures, and initial planning artifacts | 133 |
+| Optional expert insight generation, owner identity, transport, and storage | 134 |
+| Compact close/reopen panel in existing pages and tool windows | 135 |
+| Source-based performance finding model, file review, policy, and cache | 136 |
+| Explicit project job, coverage, cancellation/restart, budgets, and API | 137 |
+| Separate Performance page, navigation, details, and safe optimization preparation | 138 |
+| Full acceptance, privacy/regressions, cleanup, documentation, and commit ledger | 139 |
