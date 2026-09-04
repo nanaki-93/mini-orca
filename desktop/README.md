@@ -53,11 +53,22 @@ editing, multi-file tabs, terminal execution, or VCS operations.
 
 ## Dark desktop presentation and previews
 
+Future UI changes follow [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md): shared
+IDE tokens, dense typography, quiet component hierarchy, and visual verification
+against the supplied mock. The guidelines distinguish target design decisions from
+the current implementation and require evaluation before a Jewel or titlebar migration.
+
 The desktop uses charcoal surfaces, blue selection and action states, a labeled 88dp line-icon
 rail, compact editor chrome, structured AI Context, a current-draft candidate summary, and a
 persistent status strip. At 1000dp and above, temporary pane clamping preserves a 360dp editor
 without overwriting stored Explorer or AI Context widths; below that boundary the existing
 Files/AI Context drawers and bounded bottom overlay remain in use.
+
+Navigation and tabs use quiet hover states and a single blue selection edge. Unsupported
+toolbar and editor utilities are grouped in the **Preview** menus. Analysis presents coverage
+metrics beside run progress and controls; the bottom Problems table opens the existing finding
+details and actions on selection. AI Context separates the real project overview from the
+selected file/declaration and its quick actions.
 
 Some reference-style controls are deliberately **Preview** only: new file, branch actions,
 content search, extra tabs/split/minimap, Run/Debug, assessment scores, unit-test generation,
@@ -73,7 +84,7 @@ lists only sanitized failures. Bugs reuses the shared compact Problems rows, fil
 actions, and a selected-details region; selecting or filtering a finding never changes source.
 
 Editor remains scoped to one project, one indexed file, and one selected symbol or new
-declaration. Context exposes file/declaration facts and the explicit **Edit `<symbol>`** route.
+declaration. Context exposes file/declaration facts and the explicit **Refactor `<symbol>`** route.
 Assistant owns the bound request and editable draft; Review contains validation, current focused
 checks, exact Apply wording, the receipt, and Undo. Changing a target while a draft is active
 requires the existing discard decision. Draft edits invalidate prior validation and check evidence.
@@ -110,7 +121,8 @@ text-scaling, and viewport checks, is maintained in
 
 The automated desktop and repository suites cover layout breakpoint behavior, source/diff
 read-only safety, selection scope, stale responses, provider confirmation, validation/check
-identity, Apply/Undo, command navigation, status state, and compact findings presentation. This
-environment has no interactive Mini-Orca window or configured provider fixture, so live
-screenshots, assistive-technology checks, and provider-backed end-to-end runs remain explicit
-release-operator checks rather than claimed passes.
+identity, Apply/Undo, command navigation, status state, and compact findings presentation.
+`DesktopVisualLayoutTest` also renders the production Compose components with explicit test
+data and checks layout and interactions. See [VISUAL_REVIEW.md](VISUAL_REVIEW.md) for the
+render command and reviewed viewports. Native window appearance, screen-reader checks, and
+provider-backed end-to-end runs remain separate release-operator checks.

@@ -63,7 +63,7 @@ internal fun AssistantToolWindow(
               CompactSingleLineField(
                   state.newSymbol,
                   conversationActions.updateNewSymbol,
-                  label = { Text("New Go function or type name") },
+                  label = "New Go function or type name",
                   modifier = Modifier.fillMaxWidth().padding(top = 9.dp))
             }
             OutlinedTextField(
@@ -150,7 +150,7 @@ private fun AssistantDraftEditorCard(
           editor.imports.joinToString(", "),
           { value -> actions.updateImports(parseRequiredImports(value)) },
           enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale),
-          label = { Text("Required imports") },
+          label = "Required imports",
           modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
     }
     editor.diagnostics.forEach {

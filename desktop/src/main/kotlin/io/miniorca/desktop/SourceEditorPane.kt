@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -217,13 +218,13 @@ internal fun SourceEditorPane(
     if (focusLine != null) focusLineRequester.bringIntoView()
   }
   SelectionContainer {
-    Column(Modifier.fillMaxSize().padding(18.dp)) {
+    Column(Modifier.fillMaxSize().padding(vertical = 10.dp)) {
       if (focusedLine > 0) {
         Text(
             "Editor context · ${selectedSymbol?.name ?: "line $focusedLine"} · line $focusedLine",
             color = SecondaryText,
             fontSize = 11.sp,
-            modifier = Modifier.padding(bottom = 10.dp),
+            modifier = Modifier.padding(start = 18.dp, bottom = 8.dp),
         )
       }
       Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -235,37 +236,39 @@ internal fun SourceEditorPane(
             onSourceLineSelected = onSourceLineSelected,
             modifier = Modifier.width(62.dp),
         )
-        Column(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
-          rows.forEach { row ->
-            val emphasis = sourceLineEmphasis(row.line, selectedSymbol, focusedLine)
-            val declarationSymbol = row.selection?.symbol
-            Box(
-                Modifier.fillMaxWidth()
-                    .height(20.dp)
-                    .background(sourceLineBackground(emphasis, declarationSymbol != null))
-                    .semantics {
-                      contentDescription =
-                          sourceLineContentDescription(row.line, emphasis, declarationSymbol)
-                    }
-                    .sourceLineSelectionTap(row.selection) {
-                      onSourceLineSelected(requireNotNull(row.selection))
-                    }
-                    .then(
-                        if (row.line == focusLine)
-                            Modifier.bringIntoViewRequester(focusLineRequester)
-                        else Modifier),
-            ) {
-              Text(
-                  text = row.highlightedText,
-                  color = PrimaryText,
-                  fontFamily = if (selected != null) FontFamily.Monospace else FontFamily.Default,
-                  fontSize = 13.sp,
-                  lineHeight = 20.sp,
-                  softWrap = false,
-              )
+        Column(
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()).width(IntrinsicSize.Max)) {
+              rows.forEach { row ->
+                val emphasis = sourceLineEmphasis(row.line, selectedSymbol, focusedLine)
+                val declarationSymbol = row.selection?.symbol
+                Box(
+                    Modifier.fillMaxWidth()
+                        .height(20.dp)
+                        .background(sourceLineBackground(emphasis))
+                        .semantics {
+                          contentDescription =
+                              sourceLineContentDescription(row.line, emphasis, declarationSymbol)
+                        }
+                        .sourceLineSelectionTap(row.selection) {
+                          onSourceLineSelected(requireNotNull(row.selection))
+                        }
+                        .then(
+                            if (row.line == focusLine)
+                                Modifier.bringIntoViewRequester(focusLineRequester)
+                            else Modifier),
+                ) {
+                  Text(
+                      text = row.highlightedText,
+                      color = PrimaryText,
+                      fontFamily =
+                          if (selected != null) FontFamily.Monospace else FontFamily.Default,
+                      fontSize = 13.sp,
+                      lineHeight = 20.sp,
+                      softWrap = false,
+                  )
+                }
+              }
             }
-          }
-        }
       }
     }
   }
@@ -281,21 +284,20 @@ private fun SourceGutter(
     onSourceLineSelected: (SourceLineSelection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-  Column(modifier.background(Panel)) {
+  Column(modifier.background(AppBackground)) {
     rows.forEach { row ->
       val emphasis = sourceLineEmphasis(row.line, selectedSymbol, focusedLine)
-      val declarationSymbol = row.selection?.symbol
       Row(
           Modifier.fillMaxWidth()
               .height(20.dp)
-              .background(sourceLineBackground(emphasis, declarationSymbol != null))
+              .background(sourceLineBackground(emphasis))
               .sourceLineSelectionTap(row.selection) {
                 onSourceLineSelected(requireNotNull(row.selection))
               },
       ) {
         Text(
             row.line.toString().padStart(4),
-            color = if (declarationSymbol != null) FocusAccent else SecondaryText,
+            color = if (row.line == focusedLine) SelectionAccent else FaintText,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
             lineHeight = 20.sp,
@@ -351,13 +353,12 @@ internal fun EditorPane(
   }
 }
 
-private fun sourceLineBackground(emphasis: SourceLineEmphasis, selectable: Boolean): Color =
+private fun sourceLineBackground(emphasis: SourceLineEmphasis): Color =
     when (emphasis) {
-      SourceLineEmphasis.FocusedSelectedSymbol -> SelectionAccent.copy(alpha = 0.30f)
-      SourceLineEmphasis.SelectedSymbol -> Card
-      SourceLineEmphasis.FocusedLocation -> SelectionAccent.copy(alpha = 0.18f)
-      SourceLineEmphasis.None ->
-          if (selectable) SelectionAccent.copy(alpha = 0.08f) else Color.Transparent
+      SourceLineEmphasis.FocusedSelectedSymbol -> SelectionAccent.copy(alpha = 0.14f)
+      SourceLineEmphasis.FocusedLocation -> SelectionAccent.copy(alpha = 0.10f)
+      SourceLineEmphasis.SelectedSymbol,
+      SourceLineEmphasis.None -> Color.Transparent
     }
 
 internal fun sourceTapSelectsContext(dragged: Boolean): Boolean = !dragged

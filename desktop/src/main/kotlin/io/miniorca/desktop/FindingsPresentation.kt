@@ -56,18 +56,20 @@ internal fun FindingsFilterControls(
     modifier: Modifier = Modifier,
 ) {
   Column(modifier) {
-    CompactSingleLineField(
-        state.query,
-        { state.query = it },
-        label = { Text("Search findings") },
-        modifier = Modifier.fillMaxWidth())
-    MiniOrcaButton(
-        onClick = { state.advancedFiltersVisible = !state.advancedFiltersVisible },
-        tone = ActionTone.Neutral,
-        selected = state.advancedFiltersVisible,
-        modifier = Modifier.padding(top = 6.dp)) {
-          Text(if (state.advancedFiltersVisible) "Hide filters" else "Filters")
-        }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      CompactSingleLineField(
+          state.query,
+          { state.query = it },
+          label = "Search findings",
+          showLabel = false,
+          modifier = Modifier.weight(1f))
+      ChromeButton(
+          onClick = { state.advancedFiltersVisible = !state.advancedFiltersVisible },
+          selected = state.advancedFiltersVisible,
+          modifier = Modifier.padding(start = 8.dp)) {
+            Text(if (state.advancedFiltersVisible) "Hide filters" else "Filters", fontSize = 12.sp)
+          }
+    }
     if (presentation.activeFilters.isNotEmpty())
         Text(
             "Filters active: ${presentation.activeFilters.joinToString(" · ")}",
@@ -79,16 +81,13 @@ internal fun FindingsFilterControls(
           modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
           first = { fieldModifier ->
             CompactSingleLineField(
-                state.source,
-                { state.source = it },
-                label = { Text("Source") },
-                modifier = fieldModifier)
+                state.source, { state.source = it }, label = "Source", modifier = fieldModifier)
           },
           second = { fieldModifier ->
             CompactSingleLineField(
                 state.severity,
                 { state.severity = it },
-                label = { Text("Severity") },
+                label = "Severity",
                 modifier = fieldModifier)
           },
       )
@@ -98,14 +97,14 @@ internal fun FindingsFilterControls(
             CompactSingleLineField(
                 state.freshness,
                 { state.freshness = it },
-                label = { Text("Freshness") },
+                label = "Freshness",
                 modifier = fieldModifier)
           },
           second = { fieldModifier ->
             CompactSingleLineField(
                 state.lifecycle,
                 { state.lifecycle = it },
-                label = { Text("Lifecycle") },
+                label = "Lifecycle",
                 modifier = fieldModifier)
           },
       )

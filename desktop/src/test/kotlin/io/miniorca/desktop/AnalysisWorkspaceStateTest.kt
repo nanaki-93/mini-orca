@@ -8,6 +8,26 @@ import kotlin.test.assertTrue
 
 class AnalysisWorkspaceStateTest {
   @Test
+  fun progressCountsFailuresAsProcessedAndKeepsEmptyQueuesAtZero() {
+    val empty = analyzeAllPresentation(null, null).run
+    assertEquals(0f, analysisRunProgress(empty))
+    val run =
+        analyzeAllPresentation(
+                job(
+                    "running",
+                    files =
+                        listOf(
+                            file("one.go", "completed"),
+                            file("two.go", "failed"),
+                            file("three.go", "running"),
+                            file("four.go", "pending"))),
+                null)
+            .run
+    assertEquals(0.5f, analysisRunProgress(run))
+    assertEquals(1f, analysisRunProgress(run.copy(completed = 8)))
+  }
+
+  @Test
   fun pollingLifecycleStopsForPauseCancelAndNoContent() {
     val controller = AnalyzeAllPollingController()
     controller.activate("revision")

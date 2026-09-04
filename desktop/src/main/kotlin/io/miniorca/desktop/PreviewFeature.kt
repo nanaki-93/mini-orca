@@ -1,13 +1,15 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.AlertDialog
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,18 +37,68 @@ internal fun previewFeatureDescription(feature: PreviewFeature): String =
 internal fun PreviewBadge(modifier: Modifier = Modifier) {
   Text(
       "Preview",
-      color = FocusAccent,
-      fontSize = 12.sp,
-      fontWeight = FontWeight.SemiBold,
+      color = SecondaryText,
+      fontSize = 11.sp,
       modifier =
           modifier
-              .background(FocusAccent.copy(alpha = 0.12f), MiniOrcaShapes.small)
-              .border(
-                  androidx.compose.foundation.BorderStroke(1.dp, FocusAccent.copy(alpha = 0.55f)),
-                  MiniOrcaShapes.small)
+              .background(StrongSurface, MiniOrcaShapes.small)
               .semantics { contentDescription = "Preview; local only" }
               .padding(horizontal = 6.dp, vertical = 2.dp),
   )
+}
+
+/** Keeps unsupported utilities discoverable without giving them primary toolbar space. */
+@Composable
+internal fun PreviewFeatureMenu(
+    features: List<PreviewFeature>,
+    modifier: Modifier = Modifier,
+) {
+  val triggerFocus = remember { FocusRequester() }
+  var expanded by remember { mutableStateOf(false) }
+  var activeFeature by remember { mutableStateOf<PreviewFeature?>(null) }
+  var restoreFocus by remember { mutableStateOf(false) }
+  Box(modifier) {
+    ChromeButton(
+        onClick = { expanded = true },
+        modifier =
+            Modifier.focusRequester(triggerFocus).semantics {
+              contentDescription = "Preview tools menu; local only"
+            }) {
+          DesktopLineIcon(DesktopIcon.More, "Preview tools", iconSize = 18.dp)
+          Spacer(Modifier.width(4.dp))
+          Text("Preview", fontSize = 11.sp)
+        }
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = {
+          expanded = false
+          restoreFocus = true
+        }) {
+          features.forEach { feature ->
+            DropdownMenuItem(
+                onClick = {
+                  expanded = false
+                  activeFeature = feature
+                }) {
+                  Text(feature.label, modifier = Modifier.weight(1f))
+                  Spacer(Modifier.width(16.dp))
+                  PreviewBadge()
+                }
+          }
+        }
+  }
+  activeFeature?.let { feature ->
+    PreviewFeatureDialog(feature) {
+      activeFeature = null
+      restoreFocus = true
+    }
+  }
+  LaunchedEffect(restoreFocus) {
+    if (restoreFocus) {
+      triggerFocus.requestFocus()
+      restoreFocus = false
+    }
+  }
 }
 
 /**

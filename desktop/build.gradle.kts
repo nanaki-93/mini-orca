@@ -34,7 +34,12 @@ compose.desktop {
   }
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+  useJUnitPlatform()
+  providers.gradleProperty("visualOutput").orNull?.let {
+    systemProperty("miniOrca.visualOutput", it)
+  }
+}
 
 detekt {
   buildUponDefaultConfig = false

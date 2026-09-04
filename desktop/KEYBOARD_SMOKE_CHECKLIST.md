@@ -113,3 +113,14 @@ Preview dialogs close with Escape or Close and return focus to their trigger. Th
 verify no provider request, process launch, source write, selection change, evidence update, or
 Apply eligibility change follows activation. Native screenshots and screen-reader observations
 remain outstanding in this environment.
+
+## Follow-up visual correction
+
+The toolbar and editor group unsupported controls in a **Preview** menu. Check opening it,
+choosing a preview, closing the dialog with Escape/Close, and returning focus to the menu trigger.
+The Problems table first expands details; Open source, Prepare fix, and lifecycle actions remain
+separate explicit controls. Rail items grow with enlarged text; Performance uses the visible
+abbreviation `Perf.` at larger scales while retaining its full accessible name.
+
+The production-component render matrix and interaction checks are recorded in
+[VISUAL_REVIEW.md](VISUAL_REVIEW.md). Native window and screen-reader checks remain separate.

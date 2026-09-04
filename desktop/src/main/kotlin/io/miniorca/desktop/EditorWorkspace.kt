@@ -25,7 +25,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -132,31 +131,42 @@ internal fun EditorWorkspace(
 @Composable
 private fun CandidateSummary(summary: CandidateSummaryPresentation, onReview: () -> Unit) {
   MiniOrcaPanel(
-      Modifier.fillMaxWidth()
-          .padding(horizontal = MiniOrcaSpacing.standard, vertical = MiniOrcaSpacing.compact),
-      raised = true,
-      contentPadding = androidx.compose.foundation.layout.PaddingValues(MiniOrcaSpacing.standard)) {
-        SectionLabel("CANDIDATE SUMMARY · CURRENT DRAFT")
-        Text(
-            summary.target.ifBlank { "Current declaration draft" },
-            color = PrimaryText,
-            fontSize = 12.sp)
-        Text(
-            summary.stage,
-            color = if (summary.reviewAvailable) Success else Warning,
-            fontSize = 12.sp)
-        Text(summary.changedLines, color = SecondaryText, fontSize = 12.sp)
-        MiniOrcaButton(
-            onClick = onReview,
-            enabled = summary.reviewAvailable,
-            tone = ActionTone.Primary,
-            modifier = Modifier.padding(top = MiniOrcaSpacing.standard)) {
-              Text(if (summary.reviewAvailable) "Review candidate" else "Review unavailable")
-            }
-        PreviewFeatureButton(
-            PreviewFeature("Feedback", "Suggestion feedback is not submitted."),
-            modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
-      }
+      Modifier.fillMaxWidth().padding(12.dp),
+      contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+  ) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      DesktopLineIcon(DesktopIcon.Editor, "Candidate", tint = SelectionAccent, iconSize = 16.dp)
+      Spacer(Modifier.width(8.dp))
+      Text(
+          "Mini-Orca suggestion",
+          color = PrimaryText,
+          fontSize = 12.sp,
+          modifier = Modifier.weight(1f))
+      MiniOrcaButton(
+          onClick = onReview,
+          enabled = summary.reviewAvailable,
+          tone = ActionTone.Primary,
+          density = ButtonDensity.Toolbar) {
+            Text(
+                if (summary.reviewAvailable) "Review candidate" else "Review unavailable",
+                fontSize = 12.sp)
+          }
+      PreviewFeatureMenu(
+          listOf(PreviewFeature("Feedback", "Suggestion feedback is not submitted.")))
+    }
+    Text(
+        summary.target.ifBlank { "Current declaration draft" },
+        color = PrimaryText,
+        fontSize = 12.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 8.dp))
+    Text(
+        "${summary.stage} · ${summary.changedLines}",
+        color = if (summary.reviewAvailable) Success else SecondaryText,
+        fontSize = 12.sp,
+        modifier = Modifier.padding(top = 4.dp))
+  }
 }
 
 @Composable
@@ -174,7 +184,6 @@ private fun ActiveFileEditorChrome(
   Column(
       Modifier.fillMaxWidth()
           .background(Panel)
-          .padding(horizontal = 12.dp, vertical = 4.dp)
           .onFocusChanged { tabGroupHasFocus = it.hasFocus }
           .focusable()
           .onPreviewKeyEvent { event ->
@@ -188,55 +197,59 @@ private fun ActiveFileEditorChrome(
           }
           .semantics { contentDescription = state.accessibleDescription },
   ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+        ChromeTab(
+            onClick = { onSelectSurface(EditorSurface.Source) },
+            selected = state.activeSurface == EditorSurface.Source,
+            focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source,
+            modifier =
+                Modifier.weight(1f, fill = false).semantics {
+                  contentDescription = "Source · ${state.title}"
+                },
+        ) {
+          DesktopLineIcon(DesktopIcon.File, "Source file", tint = SelectionAccent, iconSize = 16.dp)
+          Spacer(Modifier.width(8.dp))
+          Text(state.title, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (state.reviewAvailable) {
+          ChromeTab(
+              onClick = { onSelectSurface(EditorSurface.Review) },
+              selected = state.activeSurface == EditorSurface.Review,
+              focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
+                Text("Review candidate", fontSize = 12.sp)
+              }
+        }
+      }
+      PreviewFeatureMenu(editorPreviewFeatures)
+    }
+    Row(
+        Modifier.fillMaxWidth()
+            .background(AppBackground)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
       Text(
-          state.title,
-          color = PrimaryText,
-          fontSize = 13.sp,
-          fontWeight = FontWeight.SemiBold,
+          state.breadcrumbs,
+          color = SecondaryText,
+          fontSize = 12.sp,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
           modifier = Modifier.weight(1f))
-      Text("READ-ONLY", color = SecondaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
       Spacer(Modifier.width(8.dp))
-      MiniOrcaButton(
-          onClick = { onSelectSurface(EditorSurface.Source) },
-          tone = ActionTone.Navigation,
-          density = ButtonDensity.Toolbar,
-          selected = state.activeSurface == EditorSurface.Source,
-          focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source) {
-            Text("Source", fontSize = 12.sp)
-          }
-      Spacer(Modifier.width(4.dp))
-      PreviewFeatureButton(
-          PreviewFeature("Tabs", "Additional tabs, split editor, and minimap are not available."))
-      Spacer(Modifier.width(4.dp))
-      PreviewFeatureButton(
-          PreviewFeature("Run / Debug", "Process execution and debugging are not available."))
-      if (state.reviewAvailable) {
-        Spacer(Modifier.width(4.dp))
-        MiniOrcaButton(
-            onClick = { onSelectSurface(EditorSurface.Review) },
-            tone = ActionTone.Navigation,
-            density = ButtonDensity.Toolbar,
-            selected = state.activeSurface == EditorSurface.Review,
-            focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
-              Text("Review candidate", fontSize = 12.sp)
-            }
-      }
+      Text(
+          if (state.reviewAvailable) state.stageLabel.replace('_', ' ') else "Read-only",
+          color = if (state.reviewAvailable) Success else FaintText,
+          fontSize = 11.sp)
     }
-    Text(
-        state.breadcrumbs,
-        color = SecondaryText,
-        fontSize = 12.sp,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(top = 4.dp))
-    Text(
-        state.stageLabel,
-        color = if (state.reviewAvailable) Success else FaintText,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 3.dp))
   }
 }
+
+private val editorPreviewFeatures =
+    listOf(
+        PreviewFeature(
+            "Additional tabs / split editor",
+            "Additional tabs and split editor are not available."),
+        PreviewFeature("Minimap", "Minimap navigation is not available."),
+        PreviewFeature("Run / Debug", "Process execution and debugging are not available."),
+    )
