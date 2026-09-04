@@ -34,7 +34,7 @@ workspace, file, symbol, draft, palette, and project-management shortcuts are un
 
 After import, Mini-Orca uses one stable source-first shell:
 
-- At widths of at least `1000dp`, Project is docked left; Context, Assistant, and Review
+- At widths of at least `1000dp`, the indexed **Files** tree is docked left; Context, Assistant, and Review
   are docked right; Problems, Checks, and Output are docked below the editor; and a
   persistent status bar reports the trusted current project, file, analysis, provider, and
   daemon state.
@@ -45,7 +45,7 @@ After import, Mini-Orca uses one stable source-first shell:
   drawer actions visible. Infrequent project operations live under the labeled **Project**
   menu before essential state is hidden.
 
-The Project tool window contains only indexed, project-relative navigation. Its file-analysis
+The Files tree contains only indexed, project-relative navigation. Its file-analysis
 state is always textual (for example, **Fresh**, **Stale**, or **Failed**), not a color-only
 indicator. The editor has one active file, breadcrumbs, a read-only Source/Review surface, a
 dedicated gutter, and selectable source or diff text. Mini-Orca does not imply general source
@@ -114,7 +114,7 @@ draft clears the prior proposal insight for the current candidate.
 - `Cmd/Ctrl+K` focuses the eligible Assistant request, `Cmd/Ctrl+Shift+D` focuses the current
   draft, `Cmd/Ctrl+Enter` generates or cancels generation, `Cmd/Ctrl+Shift+V` validates, and
   `Cmd/Ctrl+Shift+C` runs focused checks when the guarded action is available.
-- `Cmd/Ctrl+Shift+F` opens Bugs. Arrow keys move within the Project tree and tool-window tab
+- `Cmd/Ctrl+Shift+F` opens Bugs. Arrow keys move within the Files tree and tool-window tab
   groups; `Enter` or `Space` activates the focused tab. `Escape` closes only the topmost dialog,
   drawer, or bottom overlay, or cancels the active cancellable operation.
 - Tab to **Engineering insight** where shown and press Enter or Space to disclose it; **Close

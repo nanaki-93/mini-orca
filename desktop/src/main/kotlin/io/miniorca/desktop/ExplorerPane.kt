@@ -76,7 +76,7 @@ internal fun ExplorerPane(
               }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Text(
-              "Project",
+              "Files",
               color = PrimaryText,
               fontSize = 12.sp,
               fontWeight = FontWeight.SemiBold,

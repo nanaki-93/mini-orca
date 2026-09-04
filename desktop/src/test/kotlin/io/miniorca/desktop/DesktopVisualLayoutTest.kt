@@ -104,6 +104,7 @@ class DesktopVisualLayoutTest {
             fixture.render("editor-$width")
             fixture.assertTextFits("Preview")
             fixture.assertTextFits("Performance")
+            if (width >= 1_000) fixture.assertTextFits("Files")
           }
     }
   }

@@ -144,13 +144,19 @@ class DesktopShellTest {
   }
 
   @Test
-  fun toolWindowBarMapsStableNavigationDestinations() {
-    assertEquals("Project", leftToolWindowLabel(LeftToolWindow.Project))
+  fun toolWindowBarMapsTheFiveRetainedNavigationDestinations() {
+    assertEquals(
+        listOf(
+            LeftToolWindow.Summary,
+            LeftToolWindow.Analysis,
+            LeftToolWindow.Performance,
+            LeftToolWindow.Problems,
+            LeftToolWindow.Editor),
+        LeftToolWindow.entries.toList())
     assertEquals("Summary", leftToolWindowLabel(LeftToolWindow.Summary))
     assertEquals("Analysis", leftToolWindowLabel(LeftToolWindow.Analysis))
     assertEquals("Bugs & Problems", leftToolWindowLabel(LeftToolWindow.Problems))
     assertEquals("Editor", leftToolWindowLabel(LeftToolWindow.Editor))
-    assertEquals(Workspace.Editor, workspaceForLeftToolWindow(LeftToolWindow.Project))
     assertEquals(Workspace.Bugs, workspaceForLeftToolWindow(LeftToolWindow.Problems))
     assertEquals(LeftToolWindow.Editor, leftToolWindowForWorkspace(Workspace.Editor))
     assertEquals(DesktopIcon.Problems, leftToolWindowIcon(LeftToolWindow.Problems))

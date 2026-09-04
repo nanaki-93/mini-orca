@@ -12,7 +12,7 @@ class DesktopLayoutStateTest {
   fun defaultsKeepDockedPaneDimensionsAndACollapsedBottomSummary() {
     val layout = DesktopLayoutState()
 
-    assertEquals(LeftToolWindow.Project, layout.activeLeftToolWindow)
+    assertEquals(LeftToolWindow.Editor, layout.activeLeftToolWindow)
     assertEquals(RightToolWindow.Context, layout.activeRightToolWindow)
     assertEquals(BottomToolWindow.Problems, layout.activeBottomToolWindow)
     assertEquals(EditorSurface.Source, layout.editorSurface)
@@ -58,7 +58,7 @@ class DesktopLayoutStateTest {
   }
 
   @Test
-  fun storeReadsLegacyWidthsAndUsesDefaultsForMissingIdePreferences() {
+  fun storeKeepsExistingPanePreferencesAndDefaultsMissingNavigationToEditor() {
     withPreferences { preferences ->
       preferences.putFloat("explorer-width", 320f)
       preferences.putFloat("action-width", 440f)
@@ -68,18 +68,18 @@ class DesktopLayoutStateTest {
       assertEquals(320f, layout.explorerWidth)
       assertEquals(440f, layout.actionWidth)
       assertEquals(DesktopLayoutState.DEFAULT_BOTTOM_HEIGHT, layout.bottomHeight)
-      assertEquals(LeftToolWindow.Project, layout.activeLeftToolWindow)
+      assertEquals(LeftToolWindow.Editor, layout.activeLeftToolWindow)
       assertTrue(layout.bottomCollapsed)
     }
   }
 
   @Test
-  fun storeNormalizesCorruptValuesAndRoundTripsKnownLayoutPreferences() {
+  fun storeRecoversRetiredAndCorruptNavigationValuesWithoutLosingPanePreferences() {
     withPreferences { preferences ->
       preferences.put("explorer-width", "invalid")
       preferences.putFloat("action-width", 9_999f)
       preferences.put("ide-bottom-height", "invalid")
-      preferences.put("ide-left-tool", "Unknown")
+      preferences.put("ide-left-tool", "Project")
       preferences.put("ide-focus-region", "Unknown")
 
       val recovered = DesktopLayoutStore(preferences).load()
@@ -87,8 +87,11 @@ class DesktopLayoutStateTest {
       assertEquals(DesktopLayoutState.DEFAULT_EXPLORER_WIDTH, recovered.explorerWidth)
       assertEquals(DesktopLayoutState.MAX_ACTION_WIDTH, recovered.actionWidth)
       assertEquals(DesktopLayoutState.DEFAULT_BOTTOM_HEIGHT, recovered.bottomHeight)
-      assertEquals(LeftToolWindow.Project, recovered.activeLeftToolWindow)
+      assertEquals(LeftToolWindow.Editor, recovered.activeLeftToolWindow)
       assertEquals(DesktopFocusRegion.Editor, recovered.lastFocusedRegion)
+
+      DesktopLayoutStore(preferences).save(recovered)
+      assertEquals("Editor", preferences.get("ide-left-tool", ""))
 
       val saved =
           recovered
@@ -100,6 +103,10 @@ class DesktopLayoutStateTest {
       DesktopLayoutStore(preferences).save(saved)
 
       assertEquals(saved, DesktopLayoutStore(preferences).load())
+
+      preferences.put("ide-left-tool", "Unknown")
+      assertEquals(
+          LeftToolWindow.Editor, DesktopLayoutStore(preferences).load().activeLeftToolWindow)
     }
   }
 
