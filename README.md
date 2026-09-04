@@ -4,7 +4,7 @@ Mini-Orca is a local-first, Go-first desktop coding assistant for one deliberate
 change: one active project, one open file, one selected or new declaration, one
 editable AI draft, validation, focused checks, and explicit Apply.
 
-The Compose Desktop client has four workspaces—Summary, Analysis, Bugs, and
+The Compose Desktop client has five workspaces—Summary, Analysis, Performance, Bugs, and
 Editor. Source and composed diff views remain selectable and read-only. Only the
 isolated declaration draft is editable.
 

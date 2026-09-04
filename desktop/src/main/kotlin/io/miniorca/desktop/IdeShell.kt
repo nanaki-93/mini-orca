@@ -341,6 +341,7 @@ internal fun toolWindowGlyph(toolWindow: LeftToolWindow): String =
       LeftToolWindow.Project -> "P"
       LeftToolWindow.Summary -> "S"
       LeftToolWindow.Analysis -> "A"
+      LeftToolWindow.Performance -> "P"
       LeftToolWindow.Problems -> "!"
       LeftToolWindow.Editor -> "E"
     }

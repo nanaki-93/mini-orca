@@ -72,7 +72,7 @@ func TestPerformanceJobPausesResumesAndDerivesCachedReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if completed.Elapsed <= 0 || report == nil || report.Counts[performanceFileCompleted] != 2 || len(report.Findings) != 1 {
+	if completed.Elapsed <= 0 || report == nil || report.Counts[performanceFileCompleted] != 2 || len(report.Findings) != 1 || report.Paths[report.Findings[0].ID] != "main.go" {
 		t.Fatalf("job = %+v, report = %+v", completed, report)
 	}
 }

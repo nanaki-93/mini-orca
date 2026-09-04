@@ -450,6 +450,8 @@ internal fun MiniOrcaApp(
                       manifest = workflow.contextManifest,
                       bugModel = bugModel,
                       bugProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
+                      analyzeModel = analyzeModel,
+                      analyzeProviderConfirmed = workflow.providerConfirmed(ModelScope.Analyze),
                   ),
               palette = DesktopShellPaletteState(paletteMode, paletteQuery, showPalette),
               statusProviders =
@@ -501,6 +503,32 @@ internal fun MiniOrcaApp(
               cancelAnalyzeAll = presenter::cancelAnalyzeAll,
               startScan = presenter::runVerifiedScan,
               cancelScan = presenter::cancelVerifiedScan,
+              confirmPerformanceProvider = {
+                presenter.setProviderConfirmation(ModelScope.Analyze, it)
+              },
+              previewPerformance = presenter::previewPerformance,
+              startPerformance = presenter::startPerformance,
+              pausePerformance = presenter::pausePerformance,
+              resumePerformance = presenter::resumePerformance,
+              cancelPerformance = presenter::cancelPerformance,
+              openPerformanceFinding = { path, finding ->
+                presenter.openFileInEditor(
+                    path, EditorNavigationTarget(path, finding.symbol, finding.startLine))
+              },
+              preparePerformanceFinding = { path, finding ->
+                val indexed = appState.index?.files?.firstOrNull { it.path == path }
+                val exact =
+                    indexed?.symbols?.singleOrNull { it.name == finding.symbol && it.atomicTarget }
+                if (indexed?.language == "Go" && exact != null) {
+                  presenter.openFileInEditor(
+                      path,
+                      EditorNavigationTarget(path, exact.name, finding.startLine),
+                      "Optimize ${exact.name} without changing behavior. Observed pattern: ${finding.observedPattern} Trade-off: ${finding.tradeoff}")
+                } else
+                    presenter.dispatch(
+                        DesktopEvent.Failed(
+                            "This opportunity is analysis-only; it is not one exact eligible Go declaration."))
+              },
           ),
       findingActions = findingActions,
       paletteActions =
@@ -524,6 +552,8 @@ internal fun MiniOrcaApp(
                 when (it) {
                   "refresh_file_analysis" -> presenter.analyzeSelected(true)
                   "create_declaration" -> requestCreateDeclaration()
+                  "open_performance" ->
+                      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Performance))
                   else -> contextAction = it
                 }
               },

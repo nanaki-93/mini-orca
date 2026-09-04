@@ -506,6 +506,7 @@ data class PerformanceReport(
     val status: String = "",
     val counts: Map<String, Int> = emptyMap(),
     val categories: Map<String, Int> = emptyMap(),
+    val paths: Map<String, String> = emptyMap(),
     val findings: List<PerformanceFinding> = emptyList(),
 )
 

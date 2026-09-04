@@ -75,8 +75,9 @@ draft clears the prior proposal insight for the current candidate.
 ## Keyboard and accessibility
 
 - `Cmd/Ctrl+P` opens indexed files, `Cmd/Ctrl+Shift+O` opens symbols in the active file, and
-  `Cmd/Ctrl+1` through `4` select Summary, Analysis, Bugs, and Editor. `Cmd/Ctrl+Tab` cycles
-  those workspaces.
+  `Cmd/Ctrl+1` through `4` continue to select Summary, Analysis, Bugs, and Editor. The
+  Performance workspace is available beside Analysis and from `Cmd/Ctrl+K`; `Cmd/Ctrl+Tab`
+  includes it in workspace cycling.
 - `Cmd/Ctrl+K` focuses the eligible Assistant request, `Cmd/Ctrl+Shift+D` focuses the current
   draft, `Cmd/Ctrl+Enter` generates or cancels generation, `Cmd/Ctrl+Shift+V` validates, and
   `Cmd/Ctrl+Shift+C` runs focused checks when the guarded action is available.

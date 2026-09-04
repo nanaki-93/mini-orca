@@ -931,7 +931,7 @@ components:
         provider: {$ref: '#/components/schemas/ScopedModel'}
     PerformanceReport:
       type: object
-      required: [project_id, project_revision, queue_id, status, counts, categories, findings]
+      required: [project_id, project_revision, queue_id, status, counts, categories, paths, findings]
       properties:
         project_id: {type: string}
         project_revision: {type: string}
@@ -939,6 +939,7 @@ components:
         status: {type: string, enum: [running, paused, canceled, completed, stale]}
         counts: {type: object, additionalProperties: {type: integer}}
         categories: {type: object, additionalProperties: {type: integer}}
+        paths: {type: object, additionalProperties: {type: string}, description: Source-free finding ID to project-relative path mapping.}
         findings: {type: array, items: {$ref: '#/components/schemas/PerformanceFinding'}}
     PerformanceFinding:
       type: object

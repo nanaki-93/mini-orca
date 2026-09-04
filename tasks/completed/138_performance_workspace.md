@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Complete
 
 ## Goal
 
@@ -96,3 +96,19 @@ feat(desktop): add Performance workspace
 ```
 
 Do not amend, squash, tag, or push. Verify no Task 138 work remains uncommitted.
+
+## Completion evidence
+
+- Added a separate, command-search-discoverable Performance workspace with explicit
+  queue preview, Analysis-model confirmation, read-only progress polling, honest
+  source-based coverage, filters, selected rationale, and insight disclosure.
+- Preserved `Cmd/Ctrl+1`–`4`; Performance participates only in explicit workspace
+  cycling and command navigation. The handoff opens the existing Editor/composer and
+  remains limited to one exact Go declaration.
+- Added finding-ID-to-path report metadata so an opportunity can open its validated
+  project-relative location without exposing source text in the project report.
+- Passed `./desktop/gradlew -p desktop spotlessCheck detekt test`, `make check`, and
+  `git diff --check`. Interactive wide/narrow/scale smoke checks remain recorded in
+  the keyboard checklist for final acceptance. `make quality` still exits nonzero on
+  the repository-wide existing complexity threshold; the Task 136 quality deferral
+  remains in effect.

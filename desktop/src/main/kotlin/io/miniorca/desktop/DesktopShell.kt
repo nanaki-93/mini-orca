@@ -176,6 +176,7 @@ internal fun statusProviderForWorkspace(
 ): DesktopStatusProvider =
     when (workspace) {
       Workspace.Summary -> DesktopStatusProvider(ModelScope.Analyze, providers.analyze)
+      Workspace.Performance -> DesktopStatusProvider(ModelScope.Analyze, providers.analyze)
       Workspace.Analysis,
       Workspace.Bugs -> DesktopStatusProvider(ModelScope.Bug, providers.bugs)
       Workspace.Editor -> DesktopStatusProvider(ModelScope.Function, providers.functionEdits)
@@ -193,6 +194,8 @@ internal data class DesktopShellContextState(
     val manifest: ContextManifest?,
     val bugModel: ScopedModel,
     val bugProviderConfirmed: Boolean,
+    val analyzeModel: ScopedModel,
+    val analyzeProviderConfirmed: Boolean,
 )
 
 internal data class DesktopShellPaletteState(
@@ -234,6 +237,14 @@ internal data class DesktopShellAnalysisActions(
     val cancelAnalyzeAll: () -> Unit,
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
+    val confirmPerformanceProvider: (Boolean) -> Unit,
+    val previewPerformance: () -> Unit,
+    val startPerformance: (PerformanceQueuePreview, Boolean) -> Unit,
+    val pausePerformance: () -> Unit,
+    val resumePerformance: (Boolean) -> Unit,
+    val cancelPerformance: () -> Unit,
+    val openPerformanceFinding: (String, PerformanceFinding) -> Unit,
+    val preparePerformanceFinding: (String, PerformanceFinding) -> Unit,
 )
 
 internal data class DesktopShellPaletteActions(
@@ -896,6 +907,13 @@ private fun DesktopCanvas(
                     bugs =
                         BugsWorkspacePaneState(
                             appState.findings.findings, appState.findings.scan, appState.loading),
+                    performance =
+                        PerformanceWorkspacePaneState(
+                            job = appState.findings.performanceJob,
+                            report = appState.findings.performanceReport,
+                            context = appState.findings.performanceContext,
+                            model = context.analyzeModel,
+                            remoteProviderConfirmed = context.analyzeProviderConfirmed),
                 ),
             navigation =
                 ContentPaneNavigationActions(
@@ -913,6 +931,16 @@ private fun DesktopCanvas(
                     startScan = analysisActions.startScan,
                     cancelScan = analysisActions.cancelScan,
                 ),
+            performanceActions =
+                PerformanceWorkspaceActions(
+                    confirmRemoteProvider = analysisActions.confirmPerformanceProvider,
+                    preview = analysisActions.previewPerformance,
+                    start = analysisActions.startPerformance,
+                    pause = analysisActions.pausePerformance,
+                    resume = analysisActions.resumePerformance,
+                    cancel = analysisActions.cancelPerformance,
+                    openInEditor = analysisActions.openPerformanceFinding,
+                    prepareOptimization = analysisActions.preparePerformanceFinding),
             modifier = Modifier.fillMaxSize(),
         )
       },
@@ -926,6 +954,7 @@ private fun ContentPane(
     navigation: ContentPaneNavigationActions,
     analysisActions: AnalysisWorkspaceActions,
     bugsActions: BugsWorkspaceActions,
+    performanceActions: PerformanceWorkspaceActions,
     modifier: Modifier,
 ) {
   Column(modifier.background(AppBackground)) {
@@ -951,6 +980,7 @@ private fun ContentPane(
                 }
               })
       Workspace.Analysis -> AnalysisWorkspacePane(state.analysis, analysisActions)
+      Workspace.Performance -> PerformanceWorkspacePane(state.performance, performanceActions)
       Workspace.Bugs -> BugsWorkspacePane(state.bugs, bugsActions)
     }
   }
@@ -969,6 +999,7 @@ private data class ContentPaneState(
     val findings: List<UnifiedFinding>,
     val analysis: AnalysisWorkspacePaneState,
     val bugs: BugsWorkspacePaneState,
+    val performance: PerformanceWorkspacePaneState,
 )
 
 private data class ContentPaneNavigationActions(
