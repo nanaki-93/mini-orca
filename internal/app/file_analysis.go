@@ -18,37 +18,48 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v3"
+	semanticAnalysisPromptVersion = "file-analysis-v4"
 	maxSemanticAnalysisBytes      = 64 * 1024
 )
 
 type semanticAnalysisResponse struct {
-	Purpose            string               `json:"purpose"`
-	Responsibilities   []string             `json:"responsibilities"`
-	Dependencies       []string             `json:"dependencies"`
-	SideEffects        []string             `json:"side_effects"`
-	Risks              []project.Finding    `json:"risks"`
-	Suggestions        []project.Suggestion `json:"suggestions"`
-	SymbolExplanations map[string]string    `json:"symbol_explanations"`
+	Purpose            string                      `json:"purpose"`
+	Responsibilities   []string                    `json:"responsibilities"`
+	Dependencies       []string                    `json:"dependencies"`
+	SideEffects        []string                    `json:"side_effects"`
+	Risks              []project.Finding           `json:"risks"`
+	Suggestions        []project.Suggestion        `json:"suggestions"`
+	SymbolExplanations map[string]string           `json:"symbol_explanations"`
+	EngineeringInsight *project.EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
 // semanticAnalysisWireResponse keeps the optional task_spec untrusted until its
 // target has been checked against the indexed file. A malformed suggestion must
 // not discard the rest of an otherwise usable file summary.
 type semanticAnalysisWireResponse struct {
-	Purpose            string                    `json:"purpose"`
-	Responsibilities   []string                  `json:"responsibilities"`
-	Dependencies       []string                  `json:"dependencies"`
-	SideEffects        []string                  `json:"side_effects"`
-	Risks              []semanticAnalysisFinding `json:"risks"`
-	Suggestions        []project.Suggestion      `json:"suggestions"`
-	SymbolExplanations map[string]string         `json:"symbol_explanations"`
+	Purpose            string                       `json:"purpose"`
+	Responsibilities   []string                     `json:"responsibilities"`
+	Dependencies       []string                     `json:"dependencies"`
+	SideEffects        []string                     `json:"side_effects"`
+	Risks              []semanticAnalysisFinding    `json:"risks"`
+	Suggestions        []semanticAnalysisSuggestion `json:"suggestions"`
+	SymbolExplanations map[string]string            `json:"symbol_explanations"`
+	EngineeringInsight json.RawMessage              `json:"engineering_insight"`
 }
 
 type semanticAnalysisFinding struct {
 	Severity string          `json:"severity"`
 	Summary  string          `json:"summary"`
 	TaskSpec json.RawMessage `json:"task_spec"`
+	Insight  json.RawMessage `json:"engineering_insight"`
+}
+
+type semanticAnalysisSuggestion struct {
+	Title        string          `json:"title"`
+	Summary      string          `json:"summary"`
+	TargetSymbol string          `json:"target_symbol"`
+	Action       string          `json:"action"`
+	Insight      json.RawMessage `json:"engineering_insight"`
 }
 
 type preparedFileAnalysis struct {
@@ -159,7 +170,7 @@ func newFileAnalysis(prepared preparedFileAnalysis, parsed semanticAnalysisRespo
 		Path: input.Path, ContentHash: input.ContentHash, Language: input.Language,
 		Purpose: parsed.Purpose, Responsibilities: parsed.Responsibilities, Symbols: append([]project.SymbolInfo(nil), indexedFile.Symbols...),
 		Imports: append([]string(nil), indexedFile.Imports...), Dependencies: parsed.Dependencies,
-		SideEffects: parsed.SideEffects, Risks: parsed.Risks, Suggestions: parsed.Suggestions,
+		SideEffects: parsed.SideEffects, Risks: parsed.Risks, Suggestions: parsed.Suggestions, EngineeringInsight: project.CloneEngineeringInsight(parsed.EngineeringInsight),
 		SymbolExplanations: parsed.SymbolExplanations, Status: project.AnalysisStatusFresh,
 		Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
 		GeneratedAt: time.Now().UTC(),
@@ -254,7 +265,7 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 		return "", err
 	}
 	return "You summarize exactly one selected source file. Return one JSON object only; do not use Markdown or code fences. " +
-		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary,task_spec?} array), suggestions ({title,summary,target_symbol?,action?} array), symbol_explanations (object keyed only by supplied symbol names). Keep each array to at most three concise items. " +
+		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? ({mechanism,why_it_matters_here,tradeoff_or_failure_mode?,transferable_lesson?}). Keep each array to at most three concise items. Engineering insights are optional, 50-90 word advisory explanations grounded in supplied evidence; omit generic commentary. " +
 		"Usually omit task_spec. If you include one, it must have only these fields: schema_version \"1\", target_path copied exactly from TARGET_FACTS.path, target_symbol copied exactly from one exact atomic TARGET_FACTS.symbols name, target_signature copied exactly from that symbol's TARGET_FACTS signature, acceptance_criteria (array), non_goals (array), and optional go_test_candidate {name,content}. Do not use a symbol field. Never target another file. " +
 		"Treat all interpretations as suggestions. Do not quote source wholesale, invent files, or include source from another file.\n\n" +
 		"PROJECT_FACTS:\n" + string(facts) + "\n\nCONTEXT_MANIFEST:\n" + string(manifestJSON) + "\n\nTARGET_FACTS:\n" + string(targetJSON) + "\n\nTARGET_SOURCE (the only source content supplied):\n```\n" + source + "\n```\n", nil
@@ -300,14 +311,18 @@ func parseSemanticAnalysis(output string, target project.IndexFile, source strin
 	if err != nil {
 		return semanticAnalysisResponse{}, err
 	}
+	suggestions := parseSemanticSuggestions(wire.Suggestions)
+	insight, _ := project.ParseOptionalEngineeringInsight(wire.EngineeringInsight)
+	limitFileAnalysisInsights(&insight, risks, suggestions)
 	return semanticAnalysisResponse{
 		Purpose:            wire.Purpose,
 		Responsibilities:   wire.Responsibilities,
 		Dependencies:       wire.Dependencies,
 		SideEffects:        wire.SideEffects,
 		Risks:              risks,
-		Suggestions:        wire.Suggestions,
+		Suggestions:        suggestions,
 		SymbolExplanations: explanations,
+		EngineeringInsight: insight,
 	}, nil
 }
 
@@ -373,9 +388,40 @@ func parseSemanticRisks(risks []semanticAnalysisFinding, target project.IndexFil
 			return nil, fmt.Errorf("semantic analysis contains an invalid risk")
 		}
 		finding.TaskSpec = parseOptionalBugTaskSpec(risk.TaskSpec, target, source)
+		finding.EngineeringInsight, _ = project.ParseOptionalEngineeringInsight(risk.Insight)
 		parsed = append(parsed, finding)
 	}
 	return parsed, nil
+}
+
+func parseSemanticSuggestions(suggestions []semanticAnalysisSuggestion) []project.Suggestion {
+	parsed := make([]project.Suggestion, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		insight, _ := project.ParseOptionalEngineeringInsight(suggestion.Insight)
+		parsed = append(parsed, project.Suggestion{Title: suggestion.Title, Summary: suggestion.Summary, TargetSymbol: suggestion.TargetSymbol, Action: suggestion.Action, EngineeringInsight: insight})
+	}
+	return parsed
+}
+
+func limitFileAnalysisInsights(report **project.EngineeringInsight, risks []project.Finding, suggestions []project.Suggestion) {
+	remaining := 3
+	keep := func(insight **project.EngineeringInsight) {
+		if *insight == nil {
+			return
+		}
+		if remaining == 0 {
+			*insight = nil
+			return
+		}
+		remaining--
+	}
+	keep(report)
+	for index := range risks {
+		keep(&risks[index].EngineeringInsight)
+	}
+	for index := range suggestions {
+		keep(&suggestions[index].EngineeringInsight)
+	}
 }
 
 func parseOptionalBugTaskSpec(raw json.RawMessage, target project.IndexFile, source string) *project.BugTaskSpec {

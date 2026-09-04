@@ -31,7 +31,7 @@ func declarationDraftMessages(userPrompt, conversation, projectContext, targetFi
 		input.WriteString("## Earlier file-scoped conversation\n" + conversation + "\n\n")
 	}
 	input.WriteString("## One-file context\n" + projectContext + "\n\n")
-	input.WriteString("## Output contract\nReturn exactly one JSON object and no Markdown. Its fields must be version (\"v1\"), declaration, imports (an optional array of import specs), and explanation (a concise assistant explanation). Do not include target paths, symbols, complete file content, patches, or extra fields.\n")
+	input.WriteString("## Output contract\nReturn exactly one JSON object and no Markdown. Its fields must be version (\"v1\"), declaration, imports (an optional array of import specs), explanation (a concise assistant explanation), and optional engineering_insight ({mechanism,why_it_matters_here,tradeoff_or_failure_mode?,transferable_lesson?}). An insight is advisory 50-90 word prose grounded in the supplied context; omit it when there is no non-obvious mechanism or trade-off. Do not include target paths, symbols, complete file content, patches, or extra fields.\n")
 	return functionRequestMessages(input.String()), nil
 }
 

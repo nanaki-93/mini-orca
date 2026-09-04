@@ -15,7 +15,7 @@ import (
 
 const (
 	projectAnalysisSchemaVersion = "1"
-	projectAnalysisPromptVersion = "project-analysis-v1"
+	projectAnalysisPromptVersion = "project-analysis-v2"
 	projectAnalysisReportPath    = ".mini-orca/project-analysis.json"
 	maxProjectAnalysisBytes      = 64 * 1024
 	maxProjectAnalysisItems      = 32
@@ -29,33 +29,35 @@ const (
 
 // ProjectAnalysisRisk is a bounded model interpretation, not a verified issue.
 type ProjectAnalysisRisk struct {
-	Severity string `json:"severity"`
-	Summary  string `json:"summary"`
+	Severity           string              `json:"severity"`
+	Summary            string              `json:"summary"`
+	EngineeringInsight *EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
 // ProjectAnalysisReport is the authoritative, persisted interpretation of one
 // project revision.
 type ProjectAnalysisReport struct {
-	SchemaVersion   string                `json:"schema_version"`
-	ProjectID       string                `json:"project_id"`
-	ProjectRevision string                `json:"project_revision"`
-	Purpose         string                `json:"purpose,omitempty"`
-	Architecture    string                `json:"architecture,omitempty"`
-	Components      []string              `json:"components"`
-	EntryPoints     []string              `json:"entry_points"`
-	Flows           []string              `json:"flows"`
-	Risks           []ProjectAnalysisRisk `json:"risks"`
-	NextSteps       []string              `json:"next_steps"`
-	Status          string                `json:"status"`
-	Failure         string                `json:"failure,omitempty"`
-	Model           string                `json:"model"`
-	ConfiguredModel string                `json:"configured_model,omitempty"`
-	Profile         string                `json:"profile"`
-	Scope           string                `json:"scope,omitempty"`
-	ProviderOrigin  string                `json:"provider_origin,omitempty"`
-	ReasoningEffort string                `json:"reasoning_effort,omitempty"`
-	PromptVersion   string                `json:"prompt_version"`
-	GeneratedAt     time.Time             `json:"generated_at"`
+	SchemaVersion      string                `json:"schema_version"`
+	ProjectID          string                `json:"project_id"`
+	ProjectRevision    string                `json:"project_revision"`
+	Purpose            string                `json:"purpose,omitempty"`
+	Architecture       string                `json:"architecture,omitempty"`
+	Components         []string              `json:"components"`
+	EntryPoints        []string              `json:"entry_points"`
+	Flows              []string              `json:"flows"`
+	Risks              []ProjectAnalysisRisk `json:"risks"`
+	NextSteps          []string              `json:"next_steps"`
+	EngineeringInsight *EngineeringInsight   `json:"engineering_insight,omitempty"`
+	Status             string                `json:"status"`
+	Failure            string                `json:"failure,omitempty"`
+	Model              string                `json:"model"`
+	ConfiguredModel    string                `json:"configured_model,omitempty"`
+	Profile            string                `json:"profile"`
+	Scope              string                `json:"scope,omitempty"`
+	ProviderOrigin     string                `json:"provider_origin,omitempty"`
+	ReasoningEffort    string                `json:"reasoning_effort,omitempty"`
+	PromptVersion      string                `json:"prompt_version"`
+	GeneratedAt        time.Time             `json:"generated_at"`
 }
 
 // ProjectAnalysisInput identifies the model and project state a persisted
@@ -72,13 +74,31 @@ type ProjectAnalysisInput struct {
 }
 
 type projectAnalysisResponse struct {
-	Purpose      string                `json:"purpose"`
-	Architecture string                `json:"architecture"`
-	Components   []string              `json:"components"`
-	EntryPoints  []string              `json:"entry_points"`
-	Flows        []string              `json:"flows"`
-	Risks        []ProjectAnalysisRisk `json:"risks"`
-	NextSteps    []string              `json:"next_steps"`
+	Purpose            string                `json:"purpose"`
+	Architecture       string                `json:"architecture"`
+	Components         []string              `json:"components"`
+	EntryPoints        []string              `json:"entry_points"`
+	Flows              []string              `json:"flows"`
+	Risks              []ProjectAnalysisRisk `json:"risks"`
+	NextSteps          []string              `json:"next_steps"`
+	EngineeringInsight *EngineeringInsight   `json:"engineering_insight,omitempty"`
+}
+
+type projectAnalysisWireResponse struct {
+	Purpose      string                    `json:"purpose"`
+	Architecture string                    `json:"architecture"`
+	Components   []string                  `json:"components"`
+	EntryPoints  []string                  `json:"entry_points"`
+	Flows        []string                  `json:"flows"`
+	Risks        []projectAnalysisRiskWire `json:"risks"`
+	NextSteps    []string                  `json:"next_steps"`
+	Insight      json.RawMessage           `json:"engineering_insight"`
+}
+
+type projectAnalysisRiskWire struct {
+	Severity string          `json:"severity"`
+	Summary  string          `json:"summary"`
+	Insight  json.RawMessage `json:"engineering_insight"`
 }
 
 func newProjectAnalysisReportWithProvenance(projectID, revision, model, profile, scope, providerOrigin, reasoningEffort string) ProjectAnalysisReport {
@@ -93,7 +113,7 @@ func newProjectAnalysisReportWithProvenance(projectID, revision, model, profile,
 
 func projectAnalysisMessages(contextText string) []llm.ChatMessage {
 	return []llm.ChatMessage{
-		{Role: "system", Content: "You are a software architect. Analyze only the supplied project facts and context. Return exactly one JSON object with these fields and no Markdown or prose: purpose (non-empty string), architecture (non-empty string), components (string array), entry_points (string array), flows (string array), risks ({severity,summary} array), next_steps (string array). Do not invent files or dependencies. Risks are suggestions, not verified findings."},
+		{Role: "system", Content: "You are a software architect. Analyze only the supplied project facts and context. Return exactly one JSON object with these fields and no Markdown or prose: purpose (non-empty string), architecture (non-empty string), components (string array), entry_points (string array), flows (string array), risks ({severity,summary,engineering_insight?} array), next_steps (string array), engineering_insight? ({mechanism,why_it_matters_here,tradeoff_or_failure_mode?,transferable_lesson?}). Insights are optional 50-90 word advisory explanations grounded in supplied evidence; omit generic commentary. Do not invent files or dependencies. Risks are suggestions, not verified findings."},
 		{Role: "user", Content: contextText},
 	}
 }
@@ -116,14 +136,21 @@ func parseProjectAnalysisResponse(output string) (projectAnalysisResponse, error
 }
 
 func decodeProjectAnalysisResponse(output string) (projectAnalysisResponse, error) {
-	var response projectAnalysisResponse
+	var wire projectAnalysisWireResponse
 	decoder := json.NewDecoder(strings.NewReader(output))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&response); err != nil {
-		return response, fmt.Errorf("parse project analysis JSON: %w", err)
+	if err := decoder.Decode(&wire); err != nil {
+		return projectAnalysisResponse{}, fmt.Errorf("parse project analysis JSON: %w", err)
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return response, fmt.Errorf("project analysis JSON must contain one object")
+		return projectAnalysisResponse{}, fmt.Errorf("project analysis JSON must contain one object")
+	}
+	response := projectAnalysisResponse{Purpose: wire.Purpose, Architecture: wire.Architecture, Components: wire.Components, EntryPoints: wire.EntryPoints, Flows: wire.Flows, NextSteps: wire.NextSteps}
+	response.EngineeringInsight, _ = ParseOptionalEngineeringInsight(wire.Insight)
+	response.Risks = make([]ProjectAnalysisRisk, 0, len(wire.Risks))
+	for _, risk := range wire.Risks {
+		insight, _ := ParseOptionalEngineeringInsight(risk.Insight)
+		response.Risks = append(response.Risks, ProjectAnalysisRisk{Severity: risk.Severity, Summary: risk.Summary, EngineeringInsight: insight})
 	}
 	return response, nil
 }
@@ -251,6 +278,10 @@ func cloneProjectAnalysisReport(source *ProjectAnalysisReport) *ProjectAnalysisR
 	copy.EntryPoints = append([]string(nil), source.EntryPoints...)
 	copy.Flows = append([]string(nil), source.Flows...)
 	copy.Risks = append([]ProjectAnalysisRisk(nil), source.Risks...)
+	for index := range copy.Risks {
+		copy.Risks[index].EngineeringInsight = CloneEngineeringInsight(source.Risks[index].EngineeringInsight)
+	}
+	copy.EngineeringInsight = CloneEngineeringInsight(source.EngineeringInsight)
 	copy.NextSteps = append([]string(nil), source.NextSteps...)
 	return &copy
 }

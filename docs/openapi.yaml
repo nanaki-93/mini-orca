@@ -565,6 +565,7 @@ components:
         flows: {type: array, items: {type: string}}
         risks: {type: array, items: {$ref: '#/components/schemas/Finding'}}
         next_steps: {type: array, items: {type: string}}
+        engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}
         status: {type: string, enum: [fresh, stale, failed, unavailable]}
         failure: {type: string}
         model: {type: string}
@@ -614,6 +615,16 @@ components:
         freshness: {type: string, enum: [fresh, stale]}
         detected_at: {type: string, format: date-time}
         originating_analysis: {type: string, enum: [project, file]}
+        engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}
+    EngineeringInsight:
+      type: object
+      required: [mechanism, why_it_matters_here]
+      description: Optional AI interpretation attached to its parent result; it carries no navigation or mutation authority.
+      properties:
+        mechanism: {type: string, maxLength: 1000}
+        why_it_matters_here: {type: string, maxLength: 1000}
+        tradeoff_or_failure_mode: {type: string, maxLength: 1000}
+        transferable_lesson: {type: string, maxLength: 1000}
     FindingLocation:
       type: object
       properties:
@@ -749,6 +760,7 @@ components:
         risks: {type: array, items: {$ref: '#/components/schemas/Finding'}}
         suggestions: {type: array, items: {$ref: '#/components/schemas/Suggestion'}}
         symbol_explanations: {type: object, additionalProperties: {type: string}}
+        engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}
         status: {type: string, enum: [fresh, missing, stale, failed, running]}
         failure: {type: string}
         model: {type: string}
@@ -792,6 +804,7 @@ components:
         severity: {type: string}
         summary: {type: string}
         task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
+        engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}
     BugTaskSpec:
       type: object
       required: [schema_version, target_path, target_symbol, target_signature, acceptance_criteria, non_goals]
@@ -811,7 +824,7 @@ components:
         content: {type: string, description: Reviewed test source used only in an isolated check copy.}
     Suggestion:
       type: object
-      properties: {title: {type: string}, summary: {type: string}, target_symbol: {type: string}, action: {type: string}}
+      properties: {title: {type: string}, summary: {type: string}, target_symbol: {type: string}, action: {type: string}, engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}}
     ContextManifest:
       type: object
       properties:
@@ -850,6 +863,7 @@ components:
         mode: {type: string, enum: [replace_symbol, create_symbol]}
         target_symbol: {type: string, description: Exact existing symbol for replacement or absent top-level identifier for creation.}
         task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
+        engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}
     ChatMessageRequest:
       type: object
       required: [message]

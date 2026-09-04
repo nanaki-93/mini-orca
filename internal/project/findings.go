@@ -50,23 +50,24 @@ type FindingLocation struct {
 // UnifiedFinding keeps model suggestions structurally distinct from verified
 // tool output while sharing one deterministic persistence and triage contract.
 type UnifiedFinding struct {
-	ID                  string          `json:"id"`
-	Source              string          `json:"source"`
-	Confidence          string          `json:"confidence"`
-	Severity            string          `json:"severity"`
-	Title               string          `json:"title"`
-	Message             string          `json:"message"`
-	Rule                string          `json:"rule,omitempty"`
-	ProjectID           string          `json:"project_id"`
-	ProjectRevision     string          `json:"project_revision"`
-	FileHash            string          `json:"file_hash,omitempty"`
-	Location            FindingLocation `json:"location"`
-	Evidence            string          `json:"evidence,omitempty"`
-	Status              string          `json:"status"`
-	Freshness           string          `json:"freshness"`
-	DetectedAt          time.Time       `json:"detected_at"`
-	OriginatingAnalysis string          `json:"originating_analysis,omitempty"`
-	TaskSpec            *BugTaskSpec    `json:"task_spec,omitempty"`
+	ID                  string              `json:"id"`
+	Source              string              `json:"source"`
+	Confidence          string              `json:"confidence"`
+	Severity            string              `json:"severity"`
+	Title               string              `json:"title"`
+	Message             string              `json:"message"`
+	Rule                string              `json:"rule,omitempty"`
+	ProjectID           string              `json:"project_id"`
+	ProjectRevision     string              `json:"project_revision"`
+	FileHash            string              `json:"file_hash,omitempty"`
+	Location            FindingLocation     `json:"location"`
+	Evidence            string              `json:"evidence,omitempty"`
+	Status              string              `json:"status"`
+	Freshness           string              `json:"freshness"`
+	DetectedAt          time.Time           `json:"detected_at"`
+	OriginatingAnalysis string              `json:"originating_analysis,omitempty"`
+	TaskSpec            *BugTaskSpec        `json:"task_spec,omitempty"`
+	EngineeringInsight  *EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
 // FindingInput is the active deterministic state used to assess freshness.
@@ -334,6 +335,7 @@ func cloneFindings(source []UnifiedFinding) []UnifiedFinding {
 	result := append([]UnifiedFinding(nil), source...)
 	for index := range result {
 		result[index].TaskSpec = cloneBugTaskSpec(source[index].TaskSpec)
+		result[index].EngineeringInsight = CloneEngineeringInsight(source[index].EngineeringInsight)
 	}
 	return result
 }
@@ -346,7 +348,7 @@ func SuggestedFindingsForProject(report ProjectAnalysisReport) []UnifiedFinding 
 	}
 	findings := make([]UnifiedFinding, 0, len(report.Risks))
 	for _, risk := range report.Risks {
-		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "Project analysis suggestion", Message: risk.Summary, OriginatingAnalysis: "project"})
+		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "Project analysis suggestion", Message: risk.Summary, OriginatingAnalysis: "project", EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
 	}
 	return findings
 }
@@ -370,7 +372,7 @@ func SuggestedFindingsForFile(analysis FileAnalysis) []UnifiedFinding {
 				}
 			}
 		}
-		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "File analysis suggestion", Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: cloneBugTaskSpec(risk.TaskSpec)})
+		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "File analysis suggestion", Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: cloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
 	}
 	return findings
 }

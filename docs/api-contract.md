@@ -72,6 +72,13 @@ expected revision. Any edit clears earlier validation and checks. Validate and
 checks each pin the revision (and checks also pin its hash), so stale or changed
 drafts cannot be applied.
 
+Project/file analyses, their AI findings and suggestions, and generated drafts
+may include an optional `engineering_insight`. It is concise advisory model
+prose bound to the parent result's normal freshness identity; it cannot carry a
+path, action, or Apply authority. Missing or malformed optional insight text is
+omitted without discarding otherwise valid analysis or a draft. Editing a draft
+clears its insight for the current candidate revision.
+
 An optional `task_spec` may open only a matching `replace_symbol` session. The
 daemon validates its exact indexed target against the current revision and file
 hash, then carries it through that session and its drafts. Its optional Go test
