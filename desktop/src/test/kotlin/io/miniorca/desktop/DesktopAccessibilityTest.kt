@@ -85,6 +85,18 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun technicalReviewIdentityHashesAreLabeledForTheDisclosure() {
+    assertEquals(
+        listOf(
+            ReviewIdentityHashDetail("Candidate hash", "draft-hash"),
+            ReviewIdentityHashDetail("Check identity hash", "check-hash"),
+        ),
+        reviewIdentityHashDetails("draft-hash", "check-hash"),
+    )
+    assertEquals(emptyList(), reviewIdentityHashDetails("", null))
+  }
+
+  @Test
   fun landingModeAcceptsOnlyTheOpenProjectShortcut() {
     DesktopShortcut.entries.forEach { shortcut ->
       assertEquals(

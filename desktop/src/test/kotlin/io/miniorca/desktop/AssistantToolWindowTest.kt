@@ -12,7 +12,7 @@ class AssistantToolWindowTest {
         draftEditorStatusMessage(DraftEditorStatus.Dirty))
     assertEquals("Validating.", draftEditorStatusMessage(DraftEditorStatus.Validating))
     assertEquals(
-        "Validated. Review evidence and checks are current.",
+        "Validated. Run focused checks before review.",
         draftEditorStatusMessage(DraftEditorStatus.Valid))
     assertEquals(
         "Fix validation diagnostics before continuing.",

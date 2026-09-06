@@ -97,8 +97,8 @@ internal fun editorChromeUiState(
   val title = file?.name ?: "No file open"
   val stageLabel =
       when {
-        reviewAvailable && activeSurface == EditorSurface.Source -> "REVIEW READY"
-        activeSurface == EditorSurface.Review -> "CURRENT REVIEW"
+        reviewAvailable && activeSurface == EditorSurface.Source -> "VALIDATED DRAFT"
+        activeSurface == EditorSurface.Review -> "REVIEW CANDIDATE"
         draft != null && progress.progress == EditorProgress.Edit -> "DRAFT EDITED"
         else -> "SOURCE"
       }
@@ -176,10 +176,10 @@ private fun CandidateSummary(summary: CandidateSummaryPresentation, onReview: ()
       MiniOrcaButton(
           onClick = onReview,
           enabled = summary.reviewAvailable,
-          tone = ActionTone.Primary,
+          tone = ActionTone.Neutral,
           density = ButtonDensity.Toolbar) {
             Text(
-                if (summary.reviewAvailable) "Review candidate" else "Review unavailable",
+                if (summary.reviewAvailable) "Open review" else "Review unavailable",
                 fontSize = 12.sp)
           }
     }
@@ -191,7 +191,7 @@ private fun CandidateSummary(summary: CandidateSummaryPresentation, onReview: ()
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.padding(top = 8.dp))
     Text(
-        "${summary.stage} · ${summary.changedLines}",
+        "${summary.stage} · ${summary.changedLines} · focused checks pending",
         color = if (summary.reviewAvailable) Success else SecondaryText,
         fontSize = 12.sp,
         modifier = Modifier.padding(top = 4.dp))

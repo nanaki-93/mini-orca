@@ -229,7 +229,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | AUTO-01 | Reproducible validation entry point and CI | FND-02, FND-03, FND-04, FND-05 | M / medium | Complete |
 | UI-01 | Remove unsupported product previews | FND-01 | M / medium | Complete |
 | UI-02 | Correct source-first layout against captures | UI-01 | M / medium | Complete |
-| UI-03 | Make draft/review progression explicit | UI-02 | M / high | Pending |
+| UI-03 | Make draft/review progression explicit | UI-02 | M / high | Complete |
 | UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Pending |
 | FLOW-01 | Short function-scoped change requests | UI-03 | M / medium | Pending |
 | FLOW-02 | Read-only declaration explanation | FLOW-01, SEC-02, FND-06 | M / high | Pending |
@@ -466,6 +466,14 @@ the full quality gate green. No inherited quality exception applies to final rel
   exact identity guards and no new automatic step occurs.
 - Verify: draft/review integration and keyboard tests, D and V. No separate UI
   eligibility formula or shortcut around daemon validation.
+- Completed 2026-09-07. The Review and Assistant surfaces now present Request,
+  Draft, Validation, Focused checks and Review in order from existing authoritative
+  state. A single named action remains primary only when its existing guard allows
+  it; technical disclosures expose labeled candidate/check hashes, commands and
+  full diagnostics without obscuring failure evidence. Fresh review accepted stale,
+  failed and ready states, including the bound-request happy-path fixture. Focused
+  visual/accessibility/keyboard tests and the full Desktop suite passed. Native
+  window, popup, OS-focus and screen-reader acceptance remains with UI-04.
 
 ### UI-04 — Close inherited native and accessibility checks
 

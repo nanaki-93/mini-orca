@@ -681,7 +681,7 @@ private fun DraftDiscardDialog(
       title = { Text("Discard current draft?") },
       content = {
         Text(
-            "Discard the draft for ${pending.currentDraft.targetSymbol} and ${pending.nextLabel}? This only clears the in-memory conversation, draft, and focused checks.")
+            "Discard the draft for ${pending.currentDraft.targetSymbol} in ${pending.currentDraft.targetPath} before you ${pending.nextLabel} in ${pending.currentDraft.targetPath}? This only clears the in-memory conversation, draft, and focused checks.")
       },
       actions = {
         MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Keep draft") }
