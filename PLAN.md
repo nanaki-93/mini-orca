@@ -237,7 +237,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | LEARN-01 | Concise, grounded engineering insights | FLOW-02 | S / medium | Pending |
 | LEARN-02 | Evaluate usefulness and model reliability | LEARN-01, FLOW-03 | M / medium | Pending |
 | SEC-01 | Harden daemon and container network boundary | FND-01 | M / high | Complete |
-| SEC-02 | Bind provider delivery to consent and context | FND-01 | M / high | Pending |
+| SEC-02 | Bind provider delivery to consent and context | FND-01 | M / high | Complete |
 | SEC-03 | Bound subprocess output and workspace resources | FND-01 | M / high | Pending |
 | SEC-04 | Explicit project-execution trust and environment | SEC-03 | M / high | Pending |
 | SEC-05 | Define strict Security report contracts | FND-05 | S / medium | Pending |
@@ -623,6 +623,15 @@ the full quality gate green. No inherited quality exception applies to final rel
   errors/logs expose no provider body/key; model output cannot broaden the mutation.
 - Verify: two-server `httptest` redirect fixtures including 307/308, request counters,
   exclusion/provenance tests and G. Document redirect behavior as a deliberate change.
+- Completed 2026-09-07. Prompt-bearing requests now perform one provider exchange
+  and reject every 3xx response, including malformed or missing redirect locations,
+  with a status-only error and no retry, second-destination request or credential/body
+  forwarding. Remote consent still gates each request. Context targets must pass the
+  project policy; bounded inventory and snippets keep exact inclusion, exclusion and
+  truncation provenance while retaining the selected target. Injection fixtures prove
+  source instructions cannot retarget a draft or mutate source. Fresh review accepted
+  the repaired implementation; formatting, full Go tests, race tests, vet and diff
+  checks passed. The documented redirect behavior requires no configuration migration.
 
 ### SEC-03 — Bound command output and copied-workspace resources
 

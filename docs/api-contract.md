@@ -168,3 +168,9 @@ credential-vault features are outside this API. An optional scope
 `reasoning_effort` is safe metadata and is included in a Chat Completions
 request only when configured. Keys belong only in ignored local config and are
 neither logged nor returned.
+
+Prompt-bearing provider requests never follow HTTP redirects. Mini-Orca rejects
+every 3xx response at the configured provider origin and returns a status-only
+error; it does not send the prompt, request body, or authorization header to a
+redirect target, and it does not retry a rejected redirect. Update the configured
+provider URL explicitly when its endpoint changes.

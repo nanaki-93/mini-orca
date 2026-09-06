@@ -11,10 +11,12 @@ import (
 )
 
 const (
-	maxContextBytes  = 512 * 1024
-	maxSnippetBytes  = 24 * 1024
-	maxTargetBytes   = 192 * 1024
-	maxContextTokens = 12000
+	maxContextBytes           = 512 * 1024
+	maxSnippetBytes           = 24 * 1024
+	maxTargetBytes            = 192 * 1024
+	maxContextTokens          = 12000
+	maxContextInventoryBytes  = maxContextBytes / 4
+	maxContextInventoryTokens = maxContextTokens / 4
 )
 
 // ContextBuilder creates bounded project-wide context for analysis and generation.
@@ -57,14 +59,19 @@ func (b *ContextBuilder) BuildWithManifest(root, target string) (string, Context
 		return "", manifest, err
 	}
 	manifest.Excluded = excluded
-	var includedIndex map[string]int
-	manifest.Included, includedIndex = contextManifestFiles(canonical, files)
-	if err := validateContextTarget(canonical, target); err != nil {
+	target, err = validateContextTarget(canonical, target, files)
+	if err != nil {
 		return "", manifest, err
 	}
 	var result strings.Builder
-	writeContextInventory(&result, files)
-	b.appendContextSnippets(&result, canonical, target, files, includedIndex, &manifest)
+	emitted, omitted := writeContextInventory(&result, prioritize(files, target))
+	if len(omitted) > 0 {
+		manifest.Truncated = true
+		manifest.Excluded = appendContextBudgetExclusions(manifest.Excluded, omitted)
+	}
+	var includedIndex map[string]int
+	manifest.Included, includedIndex = contextManifestFiles(canonical, emitted)
+	b.appendContextSnippets(&result, canonical, target, emitted, includedIndex, &manifest)
 	manifest.EstimatedTokens = estimateTokens(result.String())
 	return result.String(), manifest, nil
 }
@@ -113,26 +120,61 @@ func contextManifestFile(root, file string) ContextFile {
 	return entry
 }
 
-func validateContextTarget(root, target string) error {
+func validateContextTarget(root, target string, eligibleFiles []string) (string, error) {
 	if target == "" {
-		return nil
+		return "", nil
 	}
-	if _, err := ResolveFile(root, target); err != nil {
-		return fmt.Errorf("invalid target file: %w", err)
+	canonicalTarget := filepath.ToSlash(filepath.Clean(target))
+	if _, err := ResolveFile(root, canonicalTarget); err != nil {
+		return "", fmt.Errorf("invalid target file: %w", err)
 	}
-	return nil
+	for _, file := range eligibleFiles {
+		if file == canonicalTarget {
+			return canonicalTarget, nil
+		}
+	}
+	return "", fmt.Errorf("target file is not eligible for model context")
 }
 
-func writeContextInventory(result *strings.Builder, files []string) {
-	result.WriteString("## Complete project file inventory\n")
-	for _, file := range files {
-		result.WriteString("- " + file + "\n")
+// writeContextInventory reserves a bounded portion of the prompt for names,
+// so a selected target still has room for source context. It returns only
+// paths whose names were actually emitted, plus eligible paths omitted by the
+// inventory budget.
+func writeContextInventory(result *strings.Builder, files []string) (emitted, omitted []string) {
+	usedBytes, usedTokens := 0, 0
+	if !appendBoundedInventoryText(result, "## Bounded project file inventory\n", &usedBytes, &usedTokens) {
+		return nil, append([]string(nil), files...)
 	}
-	result.WriteString("\n")
+	for index, file := range files {
+		if !appendBoundedInventoryText(result, "- "+file+"\n", &usedBytes, &usedTokens) {
+			return emitted, append([]string(nil), files[index:]...)
+		}
+		emitted = append(emitted, file)
+	}
+	_ = appendBoundedInventoryText(result, "\n", &usedBytes, &usedTokens)
+	return emitted, nil
+}
+
+func appendBoundedInventoryText(result *strings.Builder, value string, usedBytes, usedTokens *int) bool {
+	valueTokens := estimateTokens(value)
+	if *usedBytes+len(value) > maxContextInventoryBytes || *usedTokens+valueTokens > maxContextInventoryTokens {
+		return false
+	}
+	result.WriteString(value)
+	*usedBytes += len(value)
+	*usedTokens += valueTokens
+	return true
+}
+
+func appendContextBudgetExclusions(excluded []ContextDecision, paths []string) []ContextDecision {
+	for _, path := range paths {
+		excluded = append(excluded, ContextDecision{Path: path, Reason: "omitted because the bounded context inventory reached its limit"})
+	}
+	return excluded
 }
 
 func (b *ContextBuilder) appendContextSnippets(result *strings.Builder, root, target string, files []string, includedIndex map[string]int, manifest *ContextManifest) {
-	for _, relative := range prioritize(files, filepath.ToSlash(target)) {
+	for _, relative := range files {
 		if result.Len() >= maxContextBytes {
 			manifest.Truncated = true
 			return
@@ -149,7 +191,10 @@ func (b *ContextBuilder) appendContextSnippet(result *strings.Builder, root, tar
 	if !ok {
 		return false
 	}
-	remaining, availableTokens := maxContextBytes-result.Len(), maxContextTokens-estimateTokens(result.String())
+	prefix := "## File: " + relative + "\n```\n"
+	suffix := "\n```\n\n"
+	remaining := maxContextBytes - result.Len() - len(prefix) - len(suffix)
+	availableTokens := maxContextTokens - estimateTokens(result.String()) - estimateTokens(prefix+suffix)
 	if remaining <= 0 || availableTokens <= 0 {
 		manifest.Truncated = true
 		return true
@@ -158,9 +203,9 @@ func (b *ContextBuilder) appendContextSnippet(result *strings.Builder, root, tar
 	if len(data) < originalSize {
 		manifest.Truncated = true
 	}
-	result.WriteString("## File: " + relative + "\n```\n")
+	result.WriteString(prefix)
 	result.Write(data)
-	result.WriteString("\n```\n\n")
+	result.WriteString(suffix)
 	b.updateManifestFile(relative, data, originalSize, includedIndex, manifest)
 	return false
 }
@@ -178,7 +223,11 @@ func contextSnippet(root, target, relative string) ([]byte, int, bool) {
 	if err != nil || isBinary(data) {
 		return nil, 0, false
 	}
-	return data, len(data), true
+	originalSize := len(data)
+	if originalSize > int(limit) {
+		data = data[:limit]
+	}
+	return data, originalSize, true
 }
 
 func boundedContextData(data []byte, remaining, availableTokens int) []byte {
@@ -216,9 +265,13 @@ func min(left, right int) int {
 
 func prioritize(files []string, target string) []string {
 	ordered := make([]string, 0, len(files)+1)
+	available := make(map[string]bool, len(files))
+	for _, file := range files {
+		available[file] = true
+	}
 	seen := make(map[string]bool, len(files))
 	for _, file := range []string{target, "README.md", "go.mod", "build.gradle.kts", "build.gradle", "package.json", "Cargo.toml", "pyproject.toml"} {
-		if file != "" && !seen[file] {
+		if file != "" && available[file] && !seen[file] {
 			ordered = append(ordered, file)
 			seen[file] = true
 		}
