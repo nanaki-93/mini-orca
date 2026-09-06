@@ -46,10 +46,6 @@ it invalidates validation/check evidence. Review owns the guarded Apply, receipt
 and Undo. Findings and insights show freshness; daemon connectivity never proves
 that a provider is connected. Non-loopback scopes require their own confirmation.
 
-Some current utility controls are labeled Preview and do no backend work, including
-Terminal, Run/Debug and additional editor tabs. UI-01 will remove these distractions;
-they have not been removed by the documentation cleanup.
-
 ## Keys
 
 | Shortcut | Context/action |

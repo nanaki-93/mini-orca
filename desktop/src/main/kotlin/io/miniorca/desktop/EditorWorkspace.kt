@@ -182,8 +182,6 @@ private fun CandidateSummary(summary: CandidateSummaryPresentation, onReview: ()
                 if (summary.reviewAvailable) "Review candidate" else "Review unavailable",
                 fontSize = 12.sp)
           }
-      PreviewFeatureMenu(
-          listOf(PreviewFeature("Feedback", "Suggestion feedback is not submitted.")))
     }
     Text(
         summary.target.ifBlank { "Current declaration draft" },
@@ -258,7 +256,6 @@ private fun ActiveFileEditorChrome(
               }
         }
       }
-      PreviewFeatureMenu(editorPreviewFeatures)
     }
     Row(
         Modifier.fillMaxWidth()
@@ -321,12 +318,3 @@ private fun EditorBreadcrumbs(
         }
       }
 }
-
-private val editorPreviewFeatures =
-    listOf(
-        PreviewFeature(
-            "Additional tabs / split editor",
-            "Additional tabs and split editor are not available."),
-        PreviewFeature("Minimap", "Minimap navigation is not available."),
-        PreviewFeature("Run / Debug", "Process execution and debugging are not available."),
-    )

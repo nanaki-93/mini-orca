@@ -101,8 +101,6 @@ internal fun MainToolbar(
         Spacer(Modifier.width(10.dp))
       }
       ConnectionChip(connectionPresentation, compact = !presentation.showProductName)
-      Spacer(Modifier.width(12.dp))
-      PreviewFeatureMenu(toolbarPreviewFeatures)
     }
     IdeHorizontalSeparator()
   }
@@ -313,15 +311,6 @@ private fun ConnectionChip(presentation: ConnectionPresentation, compact: Boolea
         maxLines = 1)
   }
 }
-
-private val toolbarPreviewFeatures =
-    listOf(
-        PreviewFeature("New file", "Filesystem mutation is not available from this control."),
-        PreviewFeature("Branch actions", "Branch switching and sync are not available."),
-        PreviewFeature("Content search", "Global file-content search is not available."),
-        PreviewFeature(
-            "Settings & Help", "Account, notifications, settings, and help are not available."),
-    )
 
 private const val COMPACT_TOOLBAR_WIDTH = 1_000f
 private const val EXPANDED_TOOLBAR_WIDTH = 1_220f

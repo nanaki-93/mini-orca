@@ -440,12 +440,6 @@ internal fun MiniOrcaApp(
               )
           BottomToolWindow.Checks -> ChecksToolWindow(checksPresentation, modifier)
           BottomToolWindow.Output -> OutputToolWindow(outputPresentation, modifier)
-          BottomToolWindow.Terminal ->
-              SystemStateMessage(
-                  "Terminal preview",
-                  "Command execution is not available. This local preview has no command input.",
-                  modifier = modifier,
-              )
         }
       }
   val bottomToolWindowSummaries =
@@ -455,8 +449,6 @@ internal fun MiniOrcaApp(
                   problemsCollapsedSummary(appState.findings.findings, appState.loading).text),
           BottomToolWindow.Checks to checksPresentation.summary,
           BottomToolWindow.Output to outputPresentation.summary,
-          BottomToolWindow.Terminal to
-              BottomToolWindowSummary("Terminal preview · command execution is not available"),
       )
   val contextualActions =
       editorContextualActions(

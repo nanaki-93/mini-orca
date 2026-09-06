@@ -241,16 +241,6 @@ internal fun ContextToolWindow(
                           modifier = Modifier.weight(1f))
                     }
                   }
-              PreviewFeatureButton(
-                  PreviewFeature(
-                      "Generate unit test", "Dedicated test generation is not available."),
-                  modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                  density = ButtonDensity.Standard)
-              Text(
-                  "Preview only · Complexity and readability scores unavailable.",
-                  color = FaintText,
-                  fontSize = 11.sp,
-                  modifier = Modifier.padding(top = 12.dp))
             }
         if (state.impact != null || state.gitStatus != null) {
           ContextSection(

@@ -174,14 +174,14 @@ class DesktopLayoutStateTest {
   }
 
   @Test
-  fun newTerminalPreviewTabDoesNotInvalidateOlderBottomPreferences() {
+  fun storeRecoversTheRetiredTerminalTabAsTheDefaultEvidenceDestination() {
     withPreferences { preferences ->
       preferences.put("ide-bottom-tool", "Output")
       assertEquals(
           BottomToolWindow.Output, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
       preferences.put("ide-bottom-tool", "Terminal")
       assertEquals(
-          BottomToolWindow.Terminal, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
+          BottomToolWindow.Problems, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
     }
   }
 

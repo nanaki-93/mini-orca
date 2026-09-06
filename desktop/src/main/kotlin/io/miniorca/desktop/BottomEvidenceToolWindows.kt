@@ -251,7 +251,7 @@ internal fun OutputToolWindow(
   Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
     IdePaneHeader(
         title = "Output",
-        icon = DesktopIcon.Terminal,
+        icon = DesktopIcon.Document,
         stateLabel = "${presentation.entries.size} entries")
     Text(
         "Recorded operation details. Opening this tab does not start work.",
