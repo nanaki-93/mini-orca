@@ -221,7 +221,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | --- | --- | --- | --- | --- |
 | AUTO-00 | Bootstrap unattended plan execution | — | S / low | Complete |
 | FND-01 | Reconcile baseline and preserve working evidence | AUTO-00 | S / low | Complete |
-| FND-02 | Simplify Performance review/validation | FND-01 | S / medium | Pending |
+| FND-02 | Simplify Performance review/validation | FND-01 | S / medium | Blocked — repair cap reached |
 | FND-03 | Simplify Performance job admission/validation | FND-02 | M / high | Pending |
 | FND-04 | Simplify Analyze-all admission | FND-01 | S / high | Pending |
 | FND-05 | Remove proven contract and code redundancy | FND-01 | M / medium | Pending |
@@ -317,6 +317,12 @@ the full quality gate green. No inherited quality exception applies to final rel
 - Accept: changed source/policy, cancellation and invalid anchors cannot publish a
   current report; mixed-valid results retain their warning; complexity ≤15.
 - Verify: focused Performance tests, G and the Go quality stages. No API/schema change.
+- Blocked 2026-09-06 after two repair/review cycles. The final review found that a
+  post-publication source or policy change suppresses stale findings but leaves the
+  durable job's completed count/status unchanged, so the desktop can still present
+  stale coverage as complete. The reviewed work is preserved in the local Git stash
+  `autopilot FND-02 blocked after 2 review cycles`; resume only with a fresh repair
+  allowance. FND-03 and AUTO-01 remain blocked; independent ready tasks may proceed.
 
 ### FND-03 — Simplify Performance job admission and persisted validation
 
