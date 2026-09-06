@@ -222,7 +222,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | AUTO-00 | Bootstrap unattended plan execution | — | S / low | Complete |
 | FND-01 | Reconcile baseline and preserve working evidence | AUTO-00 | S / low | Complete |
 | FND-02 | Simplify Performance review/validation | FND-01 | S / medium | Complete |
-| FND-03 | Simplify Performance job admission/validation | FND-02 | M / high | Pending |
+| FND-03 | Simplify Performance job admission/validation | FND-02 | M / high | Complete |
 | FND-04 | Simplify Analyze-all admission | FND-01 | S / high | Complete |
 | FND-05 | Remove proven contract and code redundancy | FND-01 | M / medium | Complete |
 | FND-06 | Isolate desktop job coordination | FND-03, FND-04 | M / high | Pending |
@@ -338,6 +338,14 @@ the full quality gate green. No inherited quality exception applies to final rel
   switched project; both named complexity failures are removed. Keep the current
   job API and distinct Performance cache namespace.
 - Verify: focused lifecycle tests, G, Go quality stages. No generic job engine.
+- Completed 2026-09-06. Queue preparation, identity validation and final admission
+  are separate and revalidated under lifecycle locking. Performance workers and
+  persistence are bound to the full captured job identity and canonical project
+  root; project replacement detaches and stales old active work without exposing it
+  to the next project. Restart recovery returns interrupted files to pending while
+  retaining attempts and charging elapsed time once. Fresh review accepted the
+  lifecycle, delayed-write, cross-root-session and restart regressions. `make check`,
+  `make test-race`, `make vet`, `make quality` and diff check passed.
 
 ### FND-04 — Simplify Analyze-all admission
 
