@@ -21,41 +21,6 @@ data class AnalyzeAllRunOptions(
 fun shouldPollAnalyzeAll(job: AnalyzeAllJob?): Boolean =
     job?.status?.lowercase() in setOf("running", "pausing", "canceling")
 
-/**
- * Owns the tiny polling state machine so asynchronous status results cannot revive a job belonging
- * to an earlier project revision or a disposed UI.
- */
-class AnalyzeAllPollingController {
-  private var activeRevision: String? = null
-  private var polling = false
-
-  fun activate(revision: String) {
-    activeRevision = revision
-    polling = false
-  }
-
-  fun receive(revision: String, job: AnalyzeAllJob?): AnalyzeAllJob? {
-    if (revision != activeRevision ||
-        job?.projectRevision?.takeIf { it.isNotBlank() }?.let { it != revision } == true) {
-      polling = false
-      return null
-    }
-    polling = shouldPollAnalyzeAll(job)
-    return job
-  }
-
-  fun shouldPoll(revision: String): Boolean = polling && revision == activeRevision
-
-  fun stop() {
-    polling = false
-  }
-
-  fun dispose() {
-    activeRevision = null
-    polling = false
-  }
-}
-
 internal data class AnalysisCoveragePresentation(
     val total: Int,
     val fresh: Int,

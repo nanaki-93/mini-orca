@@ -225,7 +225,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | FND-03 | Simplify Performance job admission/validation | FND-02 | M / high | Complete |
 | FND-04 | Simplify Analyze-all admission | FND-01 | S / high | Complete |
 | FND-05 | Remove proven contract and code redundancy | FND-01 | M / medium | Complete |
-| FND-06 | Isolate desktop job coordination | FND-03, FND-04 | M / high | Pending |
+| FND-06 | Isolate desktop job coordination | FND-03, FND-04 | M / high | Complete |
 | AUTO-01 | Reproducible validation entry point and CI | FND-02, FND-03, FND-04, FND-05 | M / medium | Pending |
 | UI-01 | Remove unsupported product previews | FND-01 | M / medium | Pending |
 | UI-02 | Correct source-first layout against captures | UI-01 | M / medium | Pending |
@@ -399,6 +399,14 @@ the full quality gate green. No inherited quality exception applies to final rel
   close cancel work; late responses cannot replace new state; dispatcher remains
   injectable. Preserve different Analysis/Performance lifecycle rules.
 - Verify: deterministic fake-API presenter tests, cancellation/order cases and D.
+- Completed 2026-09-07. `DesktopJobCoordinator` owns polling and cancellation for
+  Analyze-all, Performance and verified scans while the presenter remains the
+  single authority for workflow publication. Immutable project/job action targets
+  and generation guards prevent stale requests, polls, workspace refreshes,
+  reports and findings from changing newer state. Fresh reviews covered replacement,
+  cancellation, failure recovery, project-close and delayed-response ordering; the
+  final review accepted the task. Repeated presenter tests, the JDK 21/JBR 25
+  Spotless/Detekt/full-test gate and `git diff --check` passed.
 
 ## UI task instructions
 
