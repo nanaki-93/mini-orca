@@ -236,7 +236,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | FLOW-03 | Reusable temporary behavioral proof | FLOW-01, SEC-03, SEC-04 | M / high | Pending |
 | LEARN-01 | Concise, grounded engineering insights | FLOW-02 | S / medium | Pending |
 | LEARN-02 | Evaluate usefulness and model reliability | LEARN-01, FLOW-03 | M / medium | Pending |
-| SEC-01 | Harden daemon and container network boundary | FND-01 | M / high | Pending |
+| SEC-01 | Harden daemon and container network boundary | FND-01 | M / high | Complete |
 | SEC-02 | Bind provider delivery to consent and context | FND-01 | M / high | Pending |
 | SEC-03 | Bound subprocess output and workspace resources | FND-01 | M / high | Pending |
 | SEC-04 | Explicit project-execution trust and environment | SEC-03 | M / high | Pending |
@@ -582,6 +582,14 @@ the full quality gate green. No inherited quality exception applies to final rel
   deployment remains explicit and documented, never described as authenticated.
 - Verify: G/C, container config checks and disposable health smoke when available.
   Document exact new request/deployment requirements; no credential committed.
+- Completed 2026-09-07. The daemon now applies a single outer local-API policy:
+  loopback Host validation by default, browser Origin/preflight rejection, and JSON
+  media-type checks for known or streamed mutation bodies. Documented bodyless job
+  controls remain compatible. Maintained Docker/Compose publications bind to host
+  loopback; explicit external binding is documented as unauthenticated. Fresh review
+  accepted hostile-host/origin, bodyless native, non-JSON and chunked-body behavior.
+  Full validation, race, vet, formatting and diff checks passed. Docker image/health
+  smoke remains unavailable because this host has no usable Compose-capable daemon.
 
 ### SEC-02 — Bind provider delivery to consent and safe context
 

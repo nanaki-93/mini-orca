@@ -109,7 +109,7 @@ docker-run: ## Run container in detached mode
 	@$(DOCKER) run -d \
 		--name $(APP_NAME) \
 		--restart unless-stopped \
-		-p 9090:9090 \
+		-p 127.0.0.1:9090:9090 \
 		-v $$(pwd)/config.yaml:/app/config.yaml:ro \
 		-v $$(pwd)/projects:/app/projects:rw \
 		-v $$(pwd)/logs:/app/logs:rw \

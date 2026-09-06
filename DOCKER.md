@@ -1,9 +1,9 @@
 # Docker deployment
 
-The container runs only the Mini-Orca loopback daemon for the Compose Desktop
-client. It is not a browser IDE or a multi-user service. The daemon is
-loopback-only by default; the container examples make a published port an
-explicit deployment choice with `MINI_ORCA_BIND_ADDRESS=0.0.0.0:9090`.
+The container runs only the Mini-Orca daemon for the Compose Desktop client. It
+is not a browser IDE or a multi-user service. The daemon is loopback-only by
+default. The container binds inside its network namespace so Docker can forward
+the port, while every maintained host mapping is restricted to host loopback.
 
 ## Build and run
 
@@ -22,7 +22,7 @@ the daemon may inspect:
 
 ```bash
 docker run --rm --name mini-orca \
-  -p 9090:9090 \
+  -p 127.0.0.1:9090:9090 \
   -v "$(pwd)/config.yaml:/app/config.yaml:ro" \
   -v "$(pwd)/projects:/app/projects:rw" \
   -e MINI_ORCA_CONFIG=/app/config.yaml \
@@ -35,6 +35,12 @@ project receives local `.mini-orca/` metadata and, after an explicit Apply,
 the one reviewed source-file change. Keep `config.yaml` and its credentials
 outside Git.
 
+To publish beyond the host deliberately, change the port mapping yourself, for
+example `-p 0.0.0.0:9090:9090`, and set `MINI_ORCA_BIND_ADDRESS` to a
+non-loopback address if it is not already set by the container command. This
+is an unauthenticated API: provide network isolation and access controls
+outside Mini-Orca. Do not use a public or untrusted network for this service.
+
 ## Compose
 
 `docker compose up --build` uses the same configuration and project mounts.
@@ -45,8 +51,9 @@ docker compose --profile with-llm up --build
 ```
 
 Set each scope's `api_base_url` to `http://lm-studio:1234/v1` before using that
-profile. The Compose file uses the current Compose Specification and therefore
-has no legacy top-level `version` declaration.
+profile. Both published ports are loopback-only by default. The Compose file
+uses the current Compose Specification and therefore has no legacy top-level
+`version` declaration.
 
 ## Health and release verification
 

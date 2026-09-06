@@ -20,6 +20,30 @@ Each request body is one size-limited JSON object. Unknown fields, trailing
 values, invalid enum values, and missing required revision guards are rejected
 with the structured error response described below.
 
+## Local request boundary
+
+The daemon trusts the local Compose Desktop process to call its loopback API;
+it does not provide browser sessions, CORS access, or request authentication.
+With the default loopback bind, requests must use a `Host` of `localhost`,
+`127.0.0.1`, or `::1` (with an optional port). Requests carrying an `Origin`
+header are rejected, and CORS preflight requests receive `403 Forbidden` with
+no CORS response headers. This prevents a web page from treating the daemon as
+a browser API while preserving native desktop requests, which send no
+`Origin` header.
+
+`POST` and `PATCH` requests with a body must send `Content-Type:
+application/json` (a charset parameter is permitted); other media types and a
+missing content type receive `415 Unsupported Media Type` before a route
+handler runs. The documented pause and cancel actions carry their guards in
+the query string and remain bodyless. `GET /health` remains available to
+loopback health checks with no request body.
+
+`MINI_ORCA_BIND_ADDRESS` can deliberately bind the daemon beyond loopback. In
+that mode the Host restriction is relaxed so a configured native client can
+reach it, but the API remains unauthenticated and continues to reject browser
+origins. Restrict it with network controls; it is not suitable for public or
+untrusted networks.
+
 ## Live routes
 
 | Method | Path | Purpose |

@@ -7,7 +7,7 @@ services:
     container_name: mini-orca
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./projects:/app/projects:rw
@@ -37,7 +37,7 @@ services:
     container_name: lm-studio
     restart: unless-stopped
     ports:
-      - "1234:1234"
+      - "127.0.0.1:1234:1234"
     volumes:
       - lm-studio-data:/root/.cache/lm-studio
     networks:
