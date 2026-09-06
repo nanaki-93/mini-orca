@@ -18,7 +18,7 @@ class EditorWorkspaceTest {
 
     assertEquals(EditorSurface.Source, chrome.activeSurface)
     assertTrue(chrome.reviewAvailable)
-    assertEquals("REVIEW READY", chrome.stageLabel)
+    assertEquals("VALIDATED DRAFT", chrome.stageLabel)
     assertTrue(chrome.accessibleDescription.contains("Read-only source surface"))
   }
 
@@ -42,7 +42,7 @@ class EditorWorkspaceTest {
         )
 
     assertEquals(EditorSurface.Review, review.activeSurface)
-    assertEquals("CURRENT REVIEW", review.stageLabel)
+    assertEquals("REVIEW CANDIDATE", review.stageLabel)
     assertEquals(EditorSurface.Source, stale.activeSurface)
     assertTrue(!stale.reviewAvailable)
   }
@@ -161,7 +161,7 @@ class EditorWorkspaceTest {
     val ready = candidateSummaryPresentation(draft, chrome)!!
 
     assertEquals("internal/runner/run.go", ready.target)
-    assertEquals("REVIEW READY", ready.stage)
+    assertEquals("VALIDATED DRAFT", ready.stage)
     assertEquals("1 changed lines", ready.changedLines)
     assertTrue(ready.reviewAvailable)
     assertEquals(

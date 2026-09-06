@@ -4,9 +4,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -26,6 +31,10 @@ internal fun AssistantToolWindow(
   val bound =
       state.target != null &&
           chatSessionMatches(state.session, state.selected, state.project, state.target)
+  val draftVisible =
+      state.draft != null &&
+          state.editor != null &&
+          chatDraftMatchesSession(state.draft, state.session)
   Column(modifier) {
     ToolWindowScopeHeader(
         "ASSISTANT",
@@ -106,16 +115,14 @@ internal fun AssistantToolWindow(
                           state.target != null &&
                               state.message.isNotBlank() &&
                               (!state.functionModel.remoteProvider || state.remoteConfirmed),
-                      tone = ActionTone.Primary,
+                      tone = if (draftVisible) ActionTone.Neutral else ActionTone.Primary,
                       modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
                         Text("Send message")
                       }
             }
             IdeHorizontalSeparator()
           }
-          if (state.draft != null &&
-              state.editor != null &&
-              chatDraftMatchesSession(state.draft, state.session)) {
+          if (draftVisible) {
             AssistantDraftEditorSection(
                 state.editor,
                 state.draftInput ?: TextFieldValue(state.editor.declaration),
@@ -149,7 +156,7 @@ private fun AssistantDraftEditorSection(
         stateTint = draftEditorStatusColor(editor.status))
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
       Text(
-          draft.targetSymbol,
+          "Next: validate ${draft.targetSymbol} in ${draft.targetPath}.",
           color = SecondaryText,
           fontFamily = FontFamily.Monospace,
           fontSize = 10.sp)
@@ -172,9 +179,7 @@ private fun AssistantDraftEditorSection(
             label = "Required imports",
             modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
       }
-      editor.diagnostics.forEach {
-        Text("${it.code}: ${it.message}", color = Error, fontSize = 10.sp)
-      }
+      AssistantValidationDiagnostics(editor.diagnostics, draft)
       Text(
           draftEditorStatusMessage(editor.status),
           color = draftEditorStatusColor(editor.status),
@@ -187,12 +192,44 @@ private fun AssistantDraftEditorSection(
           modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
             Text(
                 if (editor.status == DraftEditorStatus.Validating) "Validating declaration…"
-                else "Validate draft")
+                else "Validate draft for ${draft.targetSymbol}")
           }
       EngineeringInsightPanel(insight, stale = stale, scopeLabel = "Current proposal")
     }
     IdeHorizontalSeparator()
   }
+}
+
+@Composable
+private fun AssistantValidationDiagnostics(
+    diagnostics: List<DeclarationFinding>,
+    draft: DeclarationDraft,
+) {
+  if (diagnostics.isEmpty()) return
+  var expanded by rememberSaveable(draft.id, draft.revision, draft.hash) { mutableStateOf(false) }
+  Text(
+      "${diagnostics.size} validation ${if (diagnostics.size == 1) "diagnostic" else "diagnostics"} require attention.",
+      color = Error,
+      fontSize = 10.sp,
+      modifier = Modifier.padding(top = 5.dp))
+  IdeDisclosureHeader(
+      title = "Validation diagnostics",
+      expanded = expanded,
+      onToggle = { expanded = !expanded },
+      stateLabel = if (expanded) "Expanded" else "Collapsed",
+      stateTint = Error)
+  if (expanded)
+      SelectionContainer {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+          diagnostics.forEach { diagnostic ->
+            Text(
+                "${diagnostic.code}: ${diagnostic.message}",
+                color = Error,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = 3.dp))
+          }
+        }
+      }
 }
 
 /** File-scoped drafting data rendered by the Assistant tool window. */
@@ -247,7 +284,7 @@ internal fun draftEditorStatusMessage(status: DraftEditorStatus): String =
       DraftEditorStatus.Generated -> "Validate before review."
       DraftEditorStatus.Dirty -> "Edits need validation and focused checks."
       DraftEditorStatus.Validating -> "Validating."
-      DraftEditorStatus.Valid -> "Validated. Review evidence and checks are current."
+      DraftEditorStatus.Valid -> "Validated. Run focused checks before review."
       DraftEditorStatus.Invalid -> "Fix validation diagnostics before continuing."
       DraftEditorStatus.Stale -> "Draft is stale. Start a new conversation."
     }

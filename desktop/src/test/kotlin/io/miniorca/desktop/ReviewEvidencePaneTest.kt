@@ -8,12 +8,82 @@ import kotlin.test.assertTrue
 class ReviewEvidencePaneTest {
   @Test
   fun validatedButUncheckedDraftStaysInReviewWithAnExplicitCheckAction() {
-    val state =
+    val evidence =
         reviewEvidenceUiState(project(), file(), editableDraft(draft()), draft(), checks = null)
+    val decision =
+        applyDecisionUiState(project(), file(), editableDraft(draft()), draft(), null, null)
+    val next =
+        reviewNextActionUiState(evidence, decision, draft(), null, null, checksRunning = false)
 
-    assertEquals(ReviewEvidenceStatus.Passed, state.validation.status)
-    assertEquals(ReviewEvidenceStatus.Missing, state.checks.status)
-    assertTrue(state.canRunChecks)
+    assertEquals(ReviewEvidenceStatus.Passed, evidence.validation.status)
+    assertEquals(ReviewEvidenceStatus.Missing, evidence.checks.status)
+    assertTrue(evidence.canRunChecks)
+    assertEquals(ReviewNextActionKind.RunChecks, next.kind)
+    assertEquals("Run", next.scope.substringBefore(" in "))
+  }
+
+  @Test
+  fun readyApplyIsTheOnlyPrimaryProgressActionAndFailedChecksKeepAQuickErrorPreview() {
+    val current = draft()
+    val passed =
+        DraftCheckReport(
+            "main.go",
+            true,
+            draftId = current.id,
+            draftRevision = current.revision,
+            draftHash = current.hash)
+    val readyEvidence =
+        reviewEvidenceUiState(project(), file(), editableDraft(current), current, passed)
+    val readyDecision =
+        applyDecisionUiState(project(), file(), editableDraft(current), current, passed, null)
+
+    assertEquals(
+        ReviewNextActionKind.Apply,
+        reviewNextActionUiState(readyEvidence, readyDecision, current, passed, null, false).kind)
+
+    val failed =
+        passed.copy(
+            checks =
+                listOf(
+                    DraftCheck(
+                        "go test",
+                        required = true,
+                        state = "failed",
+                        command = listOf("go", "test", "./..."),
+                        output = "--- FAIL: TestRun expected 200")))
+    assertEquals("go test: --- FAIL: TestRun expected 200", checkFailurePreview(failed))
+  }
+
+  @Test
+  fun progressionKeepsTheRequestToReviewOrderAndUsesTheGuardedDecisionForReview() {
+    val current = draft()
+    val checks =
+        DraftCheckReport(
+            "main.go",
+            true,
+            draftId = current.id,
+            draftRevision = current.revision,
+            draftHash = current.hash)
+    val evidence = reviewEvidenceUiState(project(), file(), editableDraft(current), current, checks)
+    val decision =
+        applyDecisionUiState(project(), file(), editableDraft(current), current, checks, null)
+    val session =
+        ChatSession(
+            "session",
+            current.projectId,
+            current.projectRevision,
+            current.baseFileHash,
+            current.targetPath,
+            current.mode,
+            current.targetSymbol,
+            latestDraftId = current.id)
+
+    val progression = reviewProgressionRows(session, current, evidence, decision)
+
+    assertEquals(
+        listOf("Request", "Draft", "Validation", "Focused checks", "Review"),
+        progression.map { it.label })
+    assertEquals(ReviewEvidenceStatus.Passed, progression.last().status)
   }
 
   @Test

@@ -38,6 +38,24 @@ internal data class ReviewEvidenceRow(
     val status: ReviewEvidenceStatus,
 )
 
+/** Non-secret draft/check identity values shown only inside the technical disclosure. */
+internal data class ReviewIdentityHashDetail(
+    val label: String,
+    val hash: String,
+)
+
+internal fun reviewIdentityHashDetails(
+    candidateHash: String?,
+    checkHash: String?,
+): List<ReviewIdentityHashDetail> = buildList {
+  candidateHash?.takeIf(String::isNotBlank)?.let {
+    add(ReviewIdentityHashDetail("Candidate hash", it))
+  }
+  checkHash?.takeIf(String::isNotBlank)?.let {
+    add(ReviewIdentityHashDetail("Check identity hash", it))
+  }
+}
+
 internal data class ReviewEvidenceUiState(
     val validation: ReviewEvidenceRow,
     val checks: ReviewEvidenceRow,
@@ -45,6 +63,154 @@ internal data class ReviewEvidenceUiState(
     val canRunChecks: Boolean,
     val runChecksLabel: String,
 )
+
+internal enum class ReviewNextActionKind {
+  EditDraft,
+  RunChecks,
+  ReviseWithCheckOutput,
+  Apply,
+  Undo,
+  Waiting,
+}
+
+/**
+ * One visible next step for Review. This only arranges the existing daemon-backed evidence and
+ * eligibility result; it does not calculate an alternate Apply or check policy.
+ */
+internal data class ReviewNextActionUiState(
+    val kind: ReviewNextActionKind,
+    val label: String,
+    val scope: String,
+    val detail: String,
+    val enabled: Boolean,
+)
+
+internal fun reviewNextActionUiState(
+    evidence: ReviewEvidenceUiState,
+    decision: ApplyDecisionUiState,
+    draft: DeclarationDraft?,
+    checks: DraftCheckReport?,
+    session: ChatSession?,
+    checksRunning: Boolean,
+): ReviewNextActionUiState {
+  val scope = draft?.let { "${it.targetSymbol} in ${it.targetPath}" } ?: "the selected declaration"
+  if (decision.receiptTitle != null) {
+    val undoAvailable = decision.undoLabel == "Undo this change"
+    return ReviewNextActionUiState(
+        ReviewNextActionKind.Undo,
+        decision.undoLabel,
+        scope,
+        decision.receiptDetail,
+        undoAvailable,
+    )
+  }
+  if (decision.eligible)
+      return ReviewNextActionUiState(
+          ReviewNextActionKind.Apply,
+          decision.actionLabel,
+          scope,
+          "Apply changes only this declaration in this file.",
+          true,
+      )
+  if (evidence.validation.status == ReviewEvidenceStatus.Running)
+      return ReviewNextActionUiState(
+          ReviewNextActionKind.Waiting,
+          "Validation is running",
+          scope,
+          "Wait for validation before focused checks or Apply.",
+          false,
+      )
+  if (evidence.validation.status != ReviewEvidenceStatus.Passed)
+      return ReviewNextActionUiState(
+          ReviewNextActionKind.EditDraft,
+          "Edit draft",
+          scope,
+          decision.reason,
+          true,
+      )
+  if (checksRunning || evidence.checks.status == ReviewEvidenceStatus.Running)
+      return ReviewNextActionUiState(
+          ReviewNextActionKind.Waiting,
+          "Focused checks are running",
+          scope,
+          "Wait for current focused check evidence before reviewing Apply.",
+          false,
+      )
+  if (evidence.canRunChecks && evidence.checks.status != ReviewEvidenceStatus.Failed)
+      return ReviewNextActionUiState(
+          ReviewNextActionKind.RunChecks,
+          evidence.runChecksLabel,
+          scope,
+          "Run focused checks for the validated declaration.",
+          true,
+      )
+  if (evidence.checks.status == ReviewEvidenceStatus.Failed) {
+    val repair = repairMessageForChecks(session, draft, checks)
+    return ReviewNextActionUiState(
+        if (repair != null) ReviewNextActionKind.ReviseWithCheckOutput
+        else ReviewNextActionKind.EditDraft,
+        if (repair != null) "Revise with check output" else "Edit draft",
+        scope,
+        if (repair != null) "Use the failed focused check evidence to revise this declaration."
+        else "Edit this declaration before validating and checking it again.",
+        true,
+    )
+  }
+  return ReviewNextActionUiState(
+      ReviewNextActionKind.EditDraft,
+      "Edit draft",
+      scope,
+      decision.reason,
+      true,
+  )
+}
+
+/** Renders the workflow in order without inventing a second set of mutation guards. */
+internal fun reviewProgressionRows(
+    session: ChatSession?,
+    draft: DeclarationDraft?,
+    evidence: ReviewEvidenceUiState,
+    decision: ApplyDecisionUiState,
+): List<ReviewEvidenceRow> {
+  val request =
+      when {
+        session == null ->
+            ReviewEvidenceRow(
+                "Request", "No bound request is loaded.", ReviewEvidenceStatus.Missing)
+        draft != null && chatDraftMatchesSession(draft, session) ->
+            ReviewEvidenceRow(
+                "Request", "The request is bound to this candidate.", ReviewEvidenceStatus.Passed)
+        else ->
+            ReviewEvidenceRow(
+                "Request",
+                "The bound request no longer matches this candidate.",
+                ReviewEvidenceStatus.Stale)
+      }
+  val draftRow =
+      ReviewEvidenceRow(
+          "Draft",
+          evidence.identity.detail,
+          evidence.identity.status,
+      )
+  val review =
+      ReviewEvidenceRow(
+          "Review",
+          if (decision.eligible) "Guarded Apply is available for this candidate."
+          else decision.reason,
+          when {
+            decision.eligible -> ReviewEvidenceStatus.Passed
+            evidence.validation.status == ReviewEvidenceStatus.Stale ||
+                evidence.checks.status == ReviewEvidenceStatus.Stale -> ReviewEvidenceStatus.Stale
+            evidence.validation.status == ReviewEvidenceStatus.Failed ||
+                evidence.checks.status == ReviewEvidenceStatus.Failed -> ReviewEvidenceStatus.Failed
+            evidence.validation.status == ReviewEvidenceStatus.Running ||
+                evidence.checks.status == ReviewEvidenceStatus.Running ->
+                ReviewEvidenceStatus.Running
+            else -> ReviewEvidenceStatus.Missing
+          },
+      )
+  return listOf(request, draftRow, evidence.validation, evidence.checks, review)
+}
 
 /** Presentation-only review evidence; daemon-owned draft and check guards remain authoritative. */
 internal fun reviewEvidenceUiState(
@@ -300,6 +466,10 @@ internal fun ReviewToolWindow(
   val decision =
       applyDecisionUiState(
           state.project, state.selected, state.editor, state.draft, state.checks, state.applied)
+  val nextAction =
+      reviewNextActionUiState(
+          evidence, decision, state.draft, state.checks, state.session, state.checksRunning)
+  val progression = reviewProgressionRows(state.session, state.draft, evidence, decision)
   var diagnosticsExpanded by
       rememberSaveable(state.draft?.id, state.draft?.revision, state.draft?.hash) {
         mutableStateOf(false)
@@ -339,26 +509,15 @@ internal fun ReviewToolWindow(
                       fontFamily = FontFamily.Monospace,
                       fontSize = 11.sp,
                       modifier = Modifier.padding(top = 6.dp))
-                  Text(
-                      if (state.applied.undoAvailable) "Undo available." else "Undo unavailable.",
-                      color = SecondaryText,
-                      fontSize = 12.sp,
-                      modifier = Modifier.padding(top = 6.dp))
-                  MiniOrcaButton(
-                      onClick = applicationActions.undo,
-                      enabled = state.applied.undoAvailable,
-                      tone = ActionTone.Attention,
-                      modifier = Modifier.padding(top = 10.dp)) {
-                        Text(decision.undoLabel)
-                      }
+                  ReviewNextAction(nextAction, evidenceActions, applicationActions)
                 }
             return@Column
           }
           ReviewSection(
-              title = "Review evidence",
+              title = "Progress",
               icon = DesktopIcon.Check,
-              stateLabel = evidence.validation.status.label,
-              stateTint = evidenceColor(evidence.validation.status),
+              stateLabel = "Request → Draft → Validate → Checks → Review",
+              stateTint = SecondaryText,
               actions = {
                 if (state.editor != null && state.draft != null)
                     ChromeButton(
@@ -366,55 +525,63 @@ internal fun ReviewToolWindow(
                           Text("Edit draft", fontSize = 11.sp)
                         }
               }) {
-                EvidenceRow(evidence.identity)
-                IdeHorizontalSeparator(Modifier.padding(vertical = 6.dp))
-                EvidenceRow(evidence.validation)
-                val diagnostics = state.editor?.diagnostics.orEmpty().take(8)
+                progression.forEachIndexed { index, row ->
+                  if (index > 0) IdeHorizontalSeparator(Modifier.padding(vertical = 6.dp))
+                  EvidenceRow(row)
+                }
+                checkFailurePreview(state.checks)?.let { preview ->
+                  Text(
+                      preview,
+                      color = Error,
+                      fontFamily = FontFamily.Monospace,
+                      fontSize = 10.sp,
+                      modifier = Modifier.padding(top = 5.dp))
+                }
+                val diagnostics = state.editor?.diagnostics.orEmpty()
                 if (diagnostics.isNotEmpty())
                     ReviewEvidenceDetails(
                         title = "Validation diagnostics",
                         diagnostics = diagnostics,
                         checks = emptyList(),
+                        candidateHash = state.draft?.hash,
                         expanded = diagnosticsExpanded,
                         onToggle = { diagnosticsExpanded = !diagnosticsExpanded })
               }
+          val checksWithDetails =
+              state.checks?.checks.orEmpty().isNotEmpty() ||
+                  !state.draft?.hash.isNullOrBlank() ||
+                  !state.checks?.draftHash.isNullOrBlank()
+          if (checksWithDetails)
+              ReviewEvidenceDetails(
+                  title =
+                      if (evidence.checks.status == ReviewEvidenceStatus.Failed)
+                          "Failed check details"
+                      else "Focused check details",
+                  diagnostics = emptyList(),
+                  checks = state.checks?.checks.orEmpty(),
+                  candidateHash = state.draft?.hash,
+                  checkHash = state.checks?.draftHash,
+                  expanded = checksEvidenceExpanded,
+                  onToggle = { checksEvidenceExpanded = !checksEvidenceExpanded })
           ReviewSection(
-              title = "Focused checks",
+              title = "Next action",
               icon = DesktopIcon.Run,
-              stateLabel = evidence.checks.status.label,
-              stateTint = evidenceColor(evidence.checks.status)) {
-                EvidenceRow(evidence.checks)
-                if (evidence.canRunChecks)
-                    MiniOrcaButton(
+              stateLabel = nextAction.scope,
+              stateTint = if (nextAction.enabled) SelectionText else Warning) {
+                ReviewNextAction(nextAction, evidenceActions, applicationActions)
+                if (nextAction.kind == ReviewNextActionKind.Apply && evidence.canRunChecks)
+                    ChromeButton(
                         onClick = evidenceActions.runChecks,
-                        tone = ActionTone.Primary,
-                        modifier = Modifier.padding(top = 8.dp)) {
-                          Text(evidence.runChecksLabel)
+                        accessibleName = "Rerun focused checks") {
+                          Text("Rerun focused checks", fontSize = 11.sp)
                         }
-                val repairMessage = repairMessageForChecks(state.session, state.draft, state.checks)
-                if (repairMessage != null ||
-                    repairLimitReached(state.session, state.draft, state.checks)) {
-                  MiniOrcaButton(
-                      onClick = evidenceActions.reviseWithCheckOutput,
-                      enabled = repairMessage != null && !state.checksRunning,
-                      tone = ActionTone.Attention,
-                      modifier = Modifier.padding(top = 8.dp)) {
-                        Text(
-                            if (repairMessage != null) "Revise with check output"
-                            else "Repair limit reached")
-                      }
-                }
-                val checksWithOutput =
-                    state.checks?.checks.orEmpty().filter {
-                      it.command.isNotEmpty() || it.output.isNotBlank()
-                    }
-                if (state.checks?.checks.orEmpty().isNotEmpty() || checksWithOutput.isNotEmpty())
-                    ReviewEvidenceDetails(
-                        title = "Detailed evidence",
-                        diagnostics = emptyList(),
-                        checks = state.checks?.checks.orEmpty(),
-                        expanded = checksEvidenceExpanded,
-                        onToggle = { checksEvidenceExpanded = !checksEvidenceExpanded })
+                if (nextAction.kind == ReviewNextActionKind.EditDraft &&
+                    repairLimitReached(state.session, state.draft, state.checks))
+                    Text(
+                        "The repair limit is reached. Edit the draft manually.",
+                        color = Warning,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 5.dp))
               }
           ReadOnlyImpactPane(state.impact, state.gitStatus)
           state.draft?.engineeringInsight?.let { insight ->
@@ -424,33 +591,6 @@ internal fun ReviewToolWindow(
                 scopeLabel = "Current candidate")
             IdeHorizontalSeparator()
           }
-          ReviewSection(
-              title = "Apply",
-              icon = DesktopIcon.Check,
-              stateLabel = if (decision.eligible) "Ready to apply" else "Unavailable",
-              stateTint = if (decision.eligible) Success else Warning) {
-                if (decision.eligible) {
-                  Text("Ready to apply", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-                  Text(
-                      "Only the named declaration in the named file will change.",
-                      color = SecondaryText,
-                      fontSize = 12.sp,
-                      modifier = Modifier.padding(top = 4.dp))
-                  MiniOrcaButton(
-                      onClick = applicationActions.apply,
-                      tone = ActionTone.Positive,
-                      modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Text(decision.actionLabel)
-                      }
-                } else {
-                  Text("Apply unavailable", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-                  Text(
-                      decision.reason,
-                      color = Warning,
-                      fontSize = 11.sp,
-                      modifier = Modifier.padding(top = 5.dp))
-                }
-              }
         }
   }
 }
@@ -482,6 +622,48 @@ internal data class DraftApplicationActions(
     val apply: () -> Unit,
     val undo: () -> Unit,
 )
+
+@Composable
+private fun ReviewNextAction(
+    action: ReviewNextActionUiState,
+    evidenceActions: ReviewToolWindowActions,
+    applicationActions: DraftApplicationActions,
+) {
+  Text(
+      action.detail,
+      color = SecondaryText,
+      fontSize = 12.sp,
+      modifier = Modifier.padding(top = 4.dp))
+  if (action.kind == ReviewNextActionKind.Waiting) return
+  val onClick =
+      when (action.kind) {
+        ReviewNextActionKind.EditDraft -> evidenceActions.editDraft
+        ReviewNextActionKind.RunChecks -> evidenceActions.runChecks
+        ReviewNextActionKind.ReviseWithCheckOutput -> evidenceActions.reviseWithCheckOutput
+        ReviewNextActionKind.Apply -> applicationActions.apply
+        ReviewNextActionKind.Undo -> applicationActions.undo
+        ReviewNextActionKind.Waiting -> return
+      }
+  MiniOrcaButton(
+      onClick = onClick,
+      enabled = action.enabled,
+      tone =
+          if (action.kind == ReviewNextActionKind.Apply) ActionTone.Positive
+          else ActionTone.Primary,
+      modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(action.label)
+      }
+}
+
+internal fun checkFailurePreview(checks: DraftCheckReport?, limit: Int = 240): String? {
+  val failed =
+      checks?.checks?.firstOrNull {
+        it.state.lowercase() in setOf("failed", "error", "canceled", "cancelled")
+      } ?: return null
+  val output = failed.output.replace(Regex("\\s+"), " ").trim()
+  val summary = if (output.isBlank()) failed.name else "${failed.name}: $output"
+  return summary.take(limit).let { if (summary.length > limit) "$it…" else it }
+}
 
 @Composable
 private fun ReviewSection(
@@ -533,10 +715,13 @@ private fun ReviewEvidenceDetails(
     title: String,
     diagnostics: List<DeclarationFinding>,
     checks: List<DraftCheck>,
+    candidateHash: String? = null,
+    checkHash: String? = null,
     expanded: Boolean,
     onToggle: () -> Unit,
 ) {
-  val detailCount = diagnostics.size + checks.size
+  val identityHashes = reviewIdentityHashDetails(candidateHash, checkHash)
+  val detailCount = diagnostics.size + checks.size + identityHashes.size
   IdeDisclosureHeader(
       title = title,
       expanded = expanded,
@@ -545,6 +730,14 @@ private fun ReviewEvidenceDetails(
   if (expanded)
       SelectionContainer {
         Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+          identityHashes.forEachIndexed { index, identity ->
+            Text(
+                "${identity.label}: ${identity.hash}",
+                color = SecondaryText,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = if (index == 0) 0.dp else 3.dp))
+          }
           diagnostics.forEach { diagnostic ->
             Text(
                 "${diagnostic.code}: ${diagnostic.message}",

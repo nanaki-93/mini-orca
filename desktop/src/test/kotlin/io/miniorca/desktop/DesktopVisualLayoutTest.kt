@@ -521,8 +521,8 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("editor-candidate-800-1.3")
           assertTrue(fixture.hasText("Candidate"))
-          assertTrue(fixture.hasText("REVIEW READY · 4 changed lines"))
-          fixture.clickText("Review candidate")
+          assertTrue(fixture.hasText("VALIDATED DRAFT · 4 changed lines · focused checks pending"))
+          fixture.clickText("Open review")
           kotlin.test.assertEquals(listOf(EditorSurface.Review), selectedSurfaces)
         }
 
@@ -573,9 +573,9 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("review-invalid-draft-800-1.3")
-          assertTrue(fixture.hasText("Review evidence"))
-          assertTrue(fixture.hasText("Apply unavailable"))
-          fixture.clickText("Detailed evidence")
+          assertTrue(fixture.hasText("Progress"))
+          assertTrue(fixture.hasText("Next action"))
+          fixture.clickText("Failed check details")
           fixture.render("review-invalid-draft-details-800-1.3")
           assertTrue(fixture.hasText("expected failure evidence"))
           kotlin.test.assertEquals(0, reviewActions)
@@ -584,19 +584,39 @@ class DesktopVisualLayoutTest {
 
     val readyChecks =
         failedChecks.copy(checks = listOf(DraftCheck("go test", required = true, state = "passed")))
+    val boundSession =
+        ChatSession(
+            id = "fixture-session",
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            openPath = draft.targetPath,
+            mode = draft.mode,
+            targetSymbol = draft.targetSymbol,
+            state = "active",
+            latestDraftId = draft.id,
+        )
     listOf(1440 to 900, 999 to 760, 800 to 700).forEach { (width, height) ->
       val scale = if (width == 800) 1.3f else 1f
       ComposeVisualFixture(width, height, scale) {
             ReviewToolWindow(
                 invalidReviewState.copy(
-                    editor = editableDraft(draft), draft = draft, checks = readyChecks),
+                    session = boundSession,
+                    editor = editableDraft(draft),
+                    draft = draft,
+                    checks = readyChecks),
                 ReviewToolWindowActions({}, {}, {}),
                 DraftApplicationActions({ mutations++ }, { mutations++ }))
           }
           .use { fixture ->
             fixture.render("review-ready-$width-${height}-$scale")
-            assertTrue(fixture.hasText("Ready to apply"))
+            assertTrue(fixture.hasText("Passed · The request is bound to this candidate."))
+            assertTrue(fixture.hasText("Next action"))
             assertTrue(fixture.hasText("Apply Serve to internal/api/server.go"))
+            fixture.clickText("Focused check details")
+            fixture.render("review-ready-details-$width-${height}-$scale")
+            assertTrue(fixture.hasText("Candidate hash: draft-hash"))
+            assertTrue(fixture.hasText("Check identity hash: draft-hash"))
             kotlin.test.assertEquals(0, mutations)
           }
     }
@@ -617,7 +637,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("review-receipt-800-1.3")
           assertTrue(fixture.hasText("Change applied"))
-          assertTrue(fixture.hasText("Undo available."))
+          assertTrue(fixture.hasText("Undo available"))
           assertTrue(fixture.hasText("Undo this change"))
           kotlin.test.assertEquals(0, mutations)
         }
