@@ -98,16 +98,7 @@ class DesktopIntegrationCoverageTest {
   }
 
   @Test
-  fun stalePollingAndFindingNavigationRemainRevisionAndFileBound() {
-    val polling = AnalyzeAllPollingController()
-    polling.activate("revision")
-    assertTrue(
-        polling.receive(
-            "revision", AnalyzeAllJob(projectRevision = "revision", status = "running")) != null)
-    assertTrue(polling.shouldPoll("revision"))
-    assertNull(polling.receive("next", AnalyzeAllJob(projectRevision = "next", status = "running")))
-    assertFalse(polling.shouldPoll("revision"))
-
+  fun findingNavigationRemainsRevisionAndFileBound() {
     val index =
         ProjectIndex(
             "project", "revision", files = listOf(IndexedFile("main.go", "base", "Go", false)))

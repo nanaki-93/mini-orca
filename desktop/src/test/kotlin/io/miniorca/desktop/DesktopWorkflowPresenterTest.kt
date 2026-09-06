@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
@@ -10,6 +11,9 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class DesktopWorkflowPresenterTest {
   @Test
@@ -147,6 +151,949 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun analyzeAllPollsOnceAndStopsAfterItsTerminalResponse() {
+    val polls = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/analysis-job" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+        "GET" to "/api/projects/current/analysis-job?project_revision=revision" -> {
+          polls.incrementAndGet()
+          response(
+              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
+        }
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
+      eventually { presenter.snapshot.value.state.findings.analyzeAll?.status == "completed" }
+      Thread.sleep(25)
+
+      assertEquals(1, polls.get())
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun performancePollsOnlyWhileRunningAndStopsWhenPaused() {
+    val polls = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/performance-job" ->
+            response(
+                "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
+        "GET" to "/api/projects/current/performance-job?project_revision=revision" -> {
+          polls.incrementAndGet()
+          response(
+              "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
+        }
+        "GET" to "/api/projects/current/performance?project_revision=revision" ->
+            TransportResponse(204, "")
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.startPerformance(
+          PerformanceQueuePreview(
+              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
+          confirmRemoteProvider = false)
+      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "paused" }
+      Thread.sleep(25)
+
+      assertEquals(1, polls.get())
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun closeCancelsAnInFlightAnalyzeAllPollBeforeItCanPublish() {
+    val pollStarted = CountDownLatch(1)
+    val releasePoll = CountDownLatch(1)
+    val presenter = presenter { _, path, _ ->
+      when (path) {
+        "/api/projects/current/analysis-job" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\",\"files\":[]}")
+        "/api/projects/current/analysis-job?project_revision=revision" -> {
+          pollStarted.countDown()
+          releasePoll.await(2, TimeUnit.SECONDS)
+          response(
+              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\",\"files\":[]}")
+        }
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
+      assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
+      presenter.close()
+      releasePoll.countDown()
+      Thread.sleep(25)
+
+      assertEquals("running", presenter.snapshot.value.state.findings.analyzeAll?.status)
+    } finally {
+      releasePoll.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun lateAnalyzeAllActionCannotReplaceTheLatestActionForTheSameProject() {
+    val firstStarted = CountDownLatch(1)
+    val releaseFirst = CountDownLatch(1)
+    val starts = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/analysis-job" ->
+            if (starts.incrementAndGet() == 1) {
+              firstStarted.countDown()
+              releaseFirst.await(2, TimeUnit.SECONDS)
+              response(
+                  "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
+            } else
+                response(
+                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+        "GET" to "/api/projects/current/analysis-job?project_revision=revision" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
+      assertTrue(firstStarted.await(1, TimeUnit.SECONDS))
+      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
+      eventually { presenter.snapshot.value.state.findings.analyzeAll?.status == "completed" }
+      releaseFirst.countDown()
+      Thread.sleep(25)
+
+      assertEquals("completed", presenter.snapshot.value.state.findings.analyzeAll?.status)
+    } finally {
+      releaseFirst.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun delayedVerifiedScanStartCannotReplaceACancelResponse() {
+    val startRequested = CountDownLatch(1)
+    val releaseStart = CountDownLatch(1)
+    val findingsRefreshes = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/scan" -> {
+          startRequested.countDown()
+          releaseStart.await(2, TimeUnit.SECONDS)
+          response(
+              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+        }
+        "DELETE" to "/api/projects/current/scan?project_revision=revision" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+        "GET" to "/api/projects/current/findings?project_revision=revision" -> {
+          findingsRefreshes.incrementAndGet()
+          response("{}")
+        }
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.runVerifiedScan()
+      assertTrue(startRequested.await(1, TimeUnit.SECONDS))
+      presenter.cancelVerifiedScan()
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+      eventually { findingsRefreshes.get() == 1 }
+      releaseStart.countDown()
+      Thread.sleep(25)
+
+      assertEquals("canceled", presenter.snapshot.value.state.findings.scan?.status)
+      assertEquals(1, findingsRefreshes.get())
+    } finally {
+      releaseStart.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun delayedOlderVerifiedScanStartCannotReplaceANewerStart() {
+    val firstStartRequested = CountDownLatch(1)
+    val releaseFirstStart = CountDownLatch(1)
+    val starts = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/scan" ->
+            if (starts.incrementAndGet() == 1) {
+              firstStartRequested.countDown()
+              releaseFirstStart.await(2, TimeUnit.SECONDS)
+              response(
+                  "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+            } else
+                response(
+                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+        "GET" to "/api/projects/current/scan?project_revision=revision" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.runVerifiedScan()
+      assertTrue(firstStartRequested.await(1, TimeUnit.SECONDS))
+      presenter.runVerifiedScan()
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "completed" }
+      releaseFirstStart.countDown()
+      Thread.sleep(25)
+
+      assertEquals("completed", presenter.snapshot.value.state.findings.scan?.status)
+    } finally {
+      releaseFirstStart.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun cancelingVerifiedScanPollsToTerminalStateAndRefreshesFindingsOnce() {
+    val polls = AtomicInteger()
+    val findingsRefreshes = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "DELETE" to "/api/projects/current/scan?project_revision=revision" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceling\"}")
+        "GET" to "/api/projects/current/scan?project_revision=revision" -> {
+          polls.incrementAndGet()
+          response(
+              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+        }
+        "GET" to "/api/projects/current/findings?project_revision=revision" -> {
+          findingsRefreshes.incrementAndGet()
+          response("{}")
+        }
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.GoScanLoaded(
+              GoScanReport(
+                  projectId = "project", projectRevision = "revision", status = "running")))
+      presenter.cancelVerifiedScan()
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+      eventually { findingsRefreshes.get() == 1 }
+
+      assertEquals(1, polls.get())
+      assertEquals(1, findingsRefreshes.get())
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun terminalPollThatOverlapsDelayedCancelCannotPublishOrRefreshTwice() {
+    val pollStarted = CountDownLatch(1)
+    val releasePoll = CountDownLatch(1)
+    val cancelStarted = CountDownLatch(1)
+    val releaseCancel = CountDownLatch(1)
+    val findingsRefreshes = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/scan" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+        "GET" to "/api/projects/current/scan?project_revision=revision" -> {
+          pollStarted.countDown()
+          releasePoll.await(2, TimeUnit.SECONDS)
+          response(
+              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+        }
+        "DELETE" to "/api/projects/current/scan?project_revision=revision" -> {
+          cancelStarted.countDown()
+          releaseCancel.await(2, TimeUnit.SECONDS)
+          response(
+              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+        }
+        "GET" to "/api/projects/current/findings?project_revision=revision" -> {
+          findingsRefreshes.incrementAndGet()
+          response("{}")
+        }
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.runVerifiedScan()
+      assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
+      presenter.cancelVerifiedScan()
+      assertTrue(cancelStarted.await(1, TimeUnit.SECONDS))
+      releasePoll.countDown()
+      Thread.sleep(25)
+
+      assertEquals("running", presenter.snapshot.value.state.findings.scan?.status)
+      assertEquals(0, findingsRefreshes.get())
+
+      releaseCancel.countDown()
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+      eventually { findingsRefreshes.get() == 1 }
+
+      assertEquals(1, findingsRefreshes.get())
+    } finally {
+      releasePoll.countDown()
+      releaseCancel.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun failedAnalyzeAllActionRestoresOnePollForTheActiveJob() {
+    val initialPollStarted = CountDownLatch(1)
+    val releaseInitialPoll = CountDownLatch(1)
+    val polls = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/analysis-job" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+        "POST" to "/api/projects/current/analysis-job/pause?project_revision=revision" ->
+            TransportResponse(500, "pause failed")
+        "GET" to "/api/projects/current/analysis-job?project_revision=revision" ->
+            if (polls.incrementAndGet() == 1) {
+              initialPollStarted.countDown()
+              releaseInitialPoll.await(2, TimeUnit.SECONDS)
+              response(
+                  "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+            } else
+                response(
+                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
+      assertTrue(initialPollStarted.await(1, TimeUnit.SECONDS))
+      presenter.pauseAnalyzeAll()
+      eventually { presenter.snapshot.value.state.findings.analyzeAll?.status == "completed" }
+      Thread.sleep(25)
+
+      assertEquals(2, polls.get())
+      assertTrue(presenter.snapshot.value.state.jobs.error != null)
+    } finally {
+      releaseInitialPoll.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun failedPerformanceActionRestoresOnePollForTheActiveJob() {
+    val initialPollStarted = CountDownLatch(1)
+    val releaseInitialPoll = CountDownLatch(1)
+    val polls = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/performance-job" ->
+            response(
+                "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
+        "POST" to
+            "/api/projects/current/performance-job/pause?project_revision=revision&expected_job_id=job" ->
+            TransportResponse(500, "pause failed")
+        "GET" to "/api/projects/current/performance-job?project_revision=revision" ->
+            if (polls.incrementAndGet() == 1) {
+              initialPollStarted.countDown()
+              releaseInitialPoll.await(2, TimeUnit.SECONDS)
+              response(
+                  "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
+            } else
+                response(
+                    "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
+        "GET" to "/api/projects/current/performance?project_revision=revision" ->
+            TransportResponse(204, "")
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.startPerformance(
+          PerformanceQueuePreview(
+              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
+          confirmRemoteProvider = false)
+      assertTrue(initialPollStarted.await(1, TimeUnit.SECONDS))
+      presenter.pausePerformance()
+      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "paused" }
+      Thread.sleep(25)
+
+      assertEquals(2, polls.get())
+      assertTrue(presenter.snapshot.value.state.jobs.error != null)
+    } finally {
+      releaseInitialPoll.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun failedVerifiedScanStartRestoresOnePollForARunningScan() {
+    val initialPollStarted = CountDownLatch(1)
+    val releaseInitialPoll = CountDownLatch(1)
+    val starts = AtomicInteger()
+    val polls = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/scan" ->
+            if (starts.incrementAndGet() == 1)
+                response(
+                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+            else TransportResponse(500, "start failed")
+        "GET" to "/api/projects/current/scan?project_revision=revision" ->
+            if (polls.incrementAndGet() == 1) {
+              initialPollStarted.countDown()
+              releaseInitialPoll.await(2, TimeUnit.SECONDS)
+              response(
+                  "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+            } else
+                response(
+                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.runVerifiedScan()
+      assertTrue(initialPollStarted.await(1, TimeUnit.SECONDS))
+      presenter.runVerifiedScan()
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+      Thread.sleep(25)
+
+      assertEquals(2, polls.get())
+      assertTrue(presenter.snapshot.value.state.jobs.error != null)
+    } finally {
+      releaseInitialPoll.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun failedVerifiedScanCancelRestoresOnePollForACancelingScan() {
+    val initialPollStarted = CountDownLatch(1)
+    val releaseInitialPoll = CountDownLatch(1)
+    val polls = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/scan" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceling\"}")
+        "DELETE" to "/api/projects/current/scan?project_revision=revision" ->
+            TransportResponse(500, "cancel failed")
+        "GET" to "/api/projects/current/scan?project_revision=revision" ->
+            if (polls.incrementAndGet() == 1) {
+              initialPollStarted.countDown()
+              releaseInitialPoll.await(2, TimeUnit.SECONDS)
+              response(
+                  "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceling\"}")
+            } else
+                response(
+                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.runVerifiedScan()
+      assertTrue(initialPollStarted.await(1, TimeUnit.SECONDS))
+      presenter.cancelVerifiedScan()
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+      Thread.sleep(25)
+
+      assertEquals(2, polls.get())
+      assertTrue(presenter.snapshot.value.state.jobs.error != null)
+    } finally {
+      releaseInitialPoll.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun queuedOlderAnalyzeAllPauseCannotReachTheDaemonAfterANewerStart() {
+    val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val blockerStarted = CountDownLatch(1)
+    val releaseBlocker = CountDownLatch(1)
+    val pauses = AtomicInteger()
+    val starts = AtomicInteger()
+    scope.launch {
+      blockerStarted.countDown()
+      releaseBlocker.await(2, TimeUnit.SECONDS)
+    }
+    val presenter =
+        presenter(
+            responder = { method, path, _ ->
+              when (method to path) {
+                "POST" to "/api/projects/current/analysis-job/pause?project_revision=revision" -> {
+                  pauses.incrementAndGet()
+                  response(
+                      "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
+                }
+                "POST" to "/api/projects/current/analysis-job" -> {
+                  starts.incrementAndGet()
+                  response(
+                      "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
+                }
+                else -> error("unexpected request $method $path")
+              }
+            },
+            parentScope = scope)
+    try {
+      assertTrue(blockerStarted.await(1, TimeUnit.SECONDS))
+      loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.AnalyzeAllLoaded(
+              AnalyzeAllJob(
+                  projectId = "project", projectRevision = "revision", status = "running")))
+
+      presenter.pauseAnalyzeAll()
+      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
+      releaseBlocker.countDown()
+
+      eventually { starts.get() == 1 }
+      assertEquals(0, pauses.get())
+      assertEquals("completed", presenter.snapshot.value.state.findings.analyzeAll?.status)
+    } finally {
+      releaseBlocker.countDown()
+      presenter.close()
+      scope.cancel()
+      dispatcher.close()
+    }
+  }
+
+  @Test
+  fun queuedOlderPerformancePauseCannotTargetAReplacementJob() {
+    val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val blockerStarted = CountDownLatch(1)
+    val releaseBlocker = CountDownLatch(1)
+    val pauses = AtomicInteger()
+    val starts = AtomicInteger()
+    scope.launch {
+      blockerStarted.countDown()
+      releaseBlocker.await(2, TimeUnit.SECONDS)
+    }
+    val presenter =
+        presenter(
+            responder = { method, path, _ ->
+              when (method to path) {
+                "POST" to
+                    "/api/projects/current/performance-job/pause?project_revision=revision&expected_job_id=old" -> {
+                  pauses.incrementAndGet()
+                  response(
+                      "{\"id\":\"old\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
+                }
+                "POST" to "/api/projects/current/performance-job" -> {
+                  starts.incrementAndGet()
+                  response(
+                      "{\"id\":\"replacement\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
+                }
+                "GET" to "/api/projects/current/performance?project_revision=revision" ->
+                    TransportResponse(204, "")
+                else -> error("unexpected request $method $path")
+              }
+            },
+            parentScope = scope)
+    try {
+      assertTrue(blockerStarted.await(1, TimeUnit.SECONDS))
+      loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.PerformanceLoaded(
+              PerformanceJob(
+                  id = "old",
+                  projectId = "project",
+                  projectRevision = "revision",
+                  status = "running"),
+              null))
+
+      presenter.pausePerformance()
+      presenter.startPerformance(
+          PerformanceQueuePreview(
+              projectId = "project", projectRevision = "revision", queueId = "new", maxFiles = 1),
+          confirmRemoteProvider = false)
+      releaseBlocker.countDown()
+
+      eventually { starts.get() == 1 }
+      eventually {
+        presenter.snapshot.value.state.findings.performanceJob?.let { job ->
+          job.id == "replacement" && job.status == "paused"
+        } == true
+      }
+      assertEquals(0, pauses.get())
+      assertEquals("replacement", presenter.snapshot.value.state.findings.performanceJob?.id)
+      assertEquals("paused", presenter.snapshot.value.state.findings.performanceJob?.status)
+    } finally {
+      releaseBlocker.countDown()
+      presenter.close()
+      scope.cancel()
+      dispatcher.close()
+    }
+  }
+
+  @Test
+  fun queuedOlderVerifiedScanStartCannotReachTheDaemonAfterCancel() {
+    val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val blockerStarted = CountDownLatch(1)
+    val releaseBlocker = CountDownLatch(1)
+    val starts = AtomicInteger()
+    val cancels = AtomicInteger()
+    scope.launch {
+      blockerStarted.countDown()
+      releaseBlocker.await(2, TimeUnit.SECONDS)
+    }
+    val presenter =
+        presenter(
+            responder = { method, path, _ ->
+              when (method to path) {
+                "POST" to "/api/projects/current/scan" -> {
+                  starts.incrementAndGet()
+                  response(
+                      "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+                }
+                "DELETE" to "/api/projects/current/scan?project_revision=revision" -> {
+                  cancels.incrementAndGet()
+                  response(
+                      "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+                }
+                "GET" to "/api/projects/current/findings?project_revision=revision" ->
+                    response("{}")
+                else -> error("unexpected request $method $path")
+              }
+            },
+            parentScope = scope)
+    try {
+      assertTrue(blockerStarted.await(1, TimeUnit.SECONDS))
+      loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.GoScanLoaded(
+              GoScanReport(
+                  projectId = "project", projectRevision = "revision", status = "running")))
+
+      presenter.runVerifiedScan()
+      presenter.cancelVerifiedScan()
+      releaseBlocker.countDown()
+
+      eventually { cancels.get() == 1 }
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+      assertEquals(0, starts.get())
+      assertEquals("canceled", presenter.snapshot.value.state.findings.scan?.status)
+    } finally {
+      releaseBlocker.countDown()
+      presenter.close()
+      scope.cancel()
+      dispatcher.close()
+    }
+  }
+
+  @Test
+  fun delayedWorkspaceRefreshCannotReplaceANewerAnalyzeAllAction() {
+    val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val overviewStarted = CountDownLatch(1)
+    val releaseOverview = CountDownLatch(1)
+    val staleJobFetched = CountDownLatch(1)
+    val jobRequests = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope) { method, path, _ ->
+          when (method to path) {
+            "POST" to "/api/projects/import" -> response(projectJson())
+            "GET" to "/api/projects/current/index" -> response(indexJson())
+            "GET" to "/api/projects/current/overview?project_revision=revision" -> {
+              overviewStarted.countDown()
+              releaseOverview.await(2, TimeUnit.SECONDS)
+              response("{}")
+            }
+            "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
+            "GET" to "/api/projects/current/analysis-job?project_revision=revision" ->
+                if (jobRequests.incrementAndGet() == 1)
+                    response(
+                        "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
+                else {
+                  staleJobFetched.countDown()
+                  response(
+                      "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
+                }
+            "GET" to "/api/projects/current/scan?project_revision=revision" ->
+                TransportResponse(204, "")
+            "GET" to "/api/projects/current/performance-job?project_revision=revision",
+            "GET" to "/api/projects/current/performance?project_revision=revision" ->
+                TransportResponse(204, "")
+            "POST" to "/api/projects/current/analysis-job" ->
+                response(
+                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+            else -> error("unexpected request $method $path")
+          }
+        }
+    try {
+      presenter.loadProject("/tmp/project", restore = false)
+      assertTrue(overviewStarted.await(1, TimeUnit.SECONDS))
+      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
+      eventually { presenter.snapshot.value.state.findings.analyzeAll?.status == "completed" }
+      releaseOverview.countDown()
+      assertTrue(staleJobFetched.await(1, TimeUnit.SECONDS))
+      Thread.sleep(25)
+
+      assertEquals("completed", presenter.snapshot.value.state.findings.analyzeAll?.status)
+    } finally {
+      releaseOverview.countDown()
+      presenter.close()
+      scope.cancel()
+      dispatcher.close()
+    }
+  }
+
+  @Test
+  fun delayedWorkspaceRefreshCannotReplaceANewerPerformanceAction() {
+    val overviewStarted = CountDownLatch(1)
+    val releaseOverview = CountDownLatch(1)
+    val staleJobFetched = CountDownLatch(1)
+    val jobRequests = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/import" -> response(projectJson())
+        "GET" to "/api/projects/current/index" -> response(indexJson())
+        "GET" to "/api/projects/current/overview?project_revision=revision" -> {
+          overviewStarted.countDown()
+          releaseOverview.await(2, TimeUnit.SECONDS)
+          response("{}")
+        }
+        "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
+        "GET" to "/api/projects/current/analysis-job?project_revision=revision",
+        "GET" to "/api/projects/current/scan?project_revision=revision" ->
+            TransportResponse(204, "")
+        "GET" to "/api/projects/current/performance-job?project_revision=revision" ->
+            if (jobRequests.incrementAndGet() == 1)
+                response(
+                    "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
+            else {
+              staleJobFetched.countDown()
+              response(
+                  "{\"id\":\"stale\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"old\",\"status\":\"canceled\"}")
+            }
+        "GET" to "/api/projects/current/performance?project_revision=revision" ->
+            TransportResponse(204, "")
+        "POST" to "/api/projects/current/performance-job" ->
+            response(
+                "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      presenter.loadProject("/tmp/project", restore = false)
+      assertTrue(overviewStarted.await(1, TimeUnit.SECONDS))
+      presenter.startPerformance(
+          PerformanceQueuePreview(
+              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
+          confirmRemoteProvider = false)
+      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "paused" }
+      releaseOverview.countDown()
+      assertTrue(staleJobFetched.await(1, TimeUnit.SECONDS))
+      Thread.sleep(25)
+
+      assertEquals("paused", presenter.snapshot.value.state.findings.performanceJob?.status)
+      assertEquals("job", presenter.snapshot.value.state.findings.performanceJob?.id)
+    } finally {
+      releaseOverview.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun performanceReportFailureAfterAStartedJobKeepsItsPollActive() {
+    val pollStarted = CountDownLatch(1)
+    val releasePoll = CountDownLatch(1)
+    val polls = AtomicInteger()
+    val reports = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/performance-job" ->
+            response(
+                "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
+        "GET" to "/api/projects/current/performance?project_revision=revision" ->
+            if (reports.incrementAndGet() == 1) TransportResponse(500, "report failed")
+            else TransportResponse(204, "")
+        "GET" to "/api/projects/current/performance-job?project_revision=revision" -> {
+          polls.incrementAndGet()
+          pollStarted.countDown()
+          releasePoll.await(2, TimeUnit.SECONDS)
+          response(
+              "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
+        }
+        else -> response("{}")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.startPerformance(
+          PerformanceQueuePreview(
+              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
+          confirmRemoteProvider = false)
+      assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
+      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "running" }
+      eventually { presenter.snapshot.value.state.jobs.error != null }
+      releasePoll.countDown()
+      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "paused" }
+      Thread.sleep(25)
+
+      assertEquals(1, polls.get())
+    } finally {
+      releasePoll.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun delayedInitialPerformanceReportCannotOverwriteANewerPollReport() {
+    val initialReportStarted = CountDownLatch(1)
+    val releaseInitialReport = CountDownLatch(1)
+    val pollJobStarted = CountDownLatch(1)
+    val releasePollJob = CountDownLatch(1)
+    val reports = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/performance-job" ->
+            response(
+                "{\"id\":\"job\",\"generation\":\"one\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
+        "GET" to "/api/projects/current/performance-job?project_revision=revision" -> {
+          pollJobStarted.countDown()
+          releasePollJob.await(2, TimeUnit.SECONDS)
+          response(
+              "{\"id\":\"job\",\"generation\":\"one\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
+        }
+        "GET" to "/api/projects/current/performance?project_revision=revision" ->
+            if (reports.incrementAndGet() == 1) {
+              initialReportStarted.countDown()
+              releaseInitialReport.await(2, TimeUnit.SECONDS)
+              response("{\"status\":\"old\"}")
+            } else response("{\"status\":\"new\"}")
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.startPerformance(
+          PerformanceQueuePreview(
+              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
+          confirmRemoteProvider = false)
+      assertTrue(initialReportStarted.await(1, TimeUnit.SECONDS))
+      assertTrue(pollJobStarted.await(1, TimeUnit.SECONDS))
+      releasePollJob.countDown()
+      eventually { presenter.snapshot.value.state.findings.performanceReport?.status == "new" }
+      releaseInitialReport.countDown()
+      Thread.sleep(25)
+
+      assertEquals("new", presenter.snapshot.value.state.findings.performanceReport?.status)
+      assertEquals("paused", presenter.snapshot.value.state.findings.performanceJob?.status)
+    } finally {
+      releasePollJob.countDown()
+      releaseInitialReport.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun delayedTerminalScanFindingsCannotReplaceFindingsFromANewerScan() {
+    val firstRefreshStarted = CountDownLatch(1)
+    val releaseFirstRefresh = CountDownLatch(1)
+    val starts = AtomicInteger()
+    val findingsRefreshes = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/scan" ->
+            if (starts.incrementAndGet() == 1)
+                response(
+                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+            else
+                response(
+                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
+        "GET" to "/api/projects/current/scan?project_revision=revision" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
+        "GET" to "/api/projects/current/findings?project_revision=revision" ->
+            if (findingsRefreshes.incrementAndGet() == 1) {
+              firstRefreshStarted.countDown()
+              releaseFirstRefresh.await(2, TimeUnit.SECONDS)
+              response("{\"findings\":[{\"id\":\"old\"}]}")
+            } else response("{\"findings\":[{\"id\":\"new\"}]}")
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.runVerifiedScan()
+      assertTrue(firstRefreshStarted.await(1, TimeUnit.SECONDS))
+      presenter.runVerifiedScan()
+      eventually {
+        presenter.snapshot.value.state.findings.scan?.status == "completed" &&
+            presenter.snapshot.value.state.findings.findings.singleOrNull()?.id == "new"
+      }
+      releaseFirstRefresh.countDown()
+      Thread.sleep(25)
+
+      assertEquals("new", presenter.snapshot.value.state.findings.findings.singleOrNull()?.id)
+    } finally {
+      releaseFirstRefresh.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun delayedWorkspaceFindingsCannotReplaceANewerTerminalScanRefresh() {
+    val workspaceFindingsStarted = CountDownLatch(1)
+    val releaseWorkspaceFindings = CountDownLatch(1)
+    val findingsRequests = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/import" -> response(projectJson())
+        "GET" to "/api/projects/current/index" -> response(indexJson())
+        "GET" to "/api/projects/current/overview?project_revision=revision" -> response("{}")
+        "GET" to "/api/projects/current/findings?project_revision=revision" ->
+            if (findingsRequests.incrementAndGet() == 1) {
+              workspaceFindingsStarted.countDown()
+              releaseWorkspaceFindings.await(2, TimeUnit.SECONDS)
+              response("{\"findings\":[{\"id\":\"stale\"}]}")
+            } else response("{\"findings\":[{\"id\":\"fresh\"}]}")
+        "POST" to "/api/projects/current/scan" ->
+            response(
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+        "GET" to "/api/projects/current/analysis-job?project_revision=revision",
+        "GET" to "/api/projects/current/scan?project_revision=revision",
+        "GET" to "/api/projects/current/performance-job?project_revision=revision",
+        "GET" to "/api/projects/current/performance?project_revision=revision" ->
+            TransportResponse(204, "")
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      presenter.loadProject("/tmp/project", restore = false)
+      assertTrue(workspaceFindingsStarted.await(1, TimeUnit.SECONDS))
+      presenter.runVerifiedScan()
+      eventually { presenter.snapshot.value.state.findings.findings.singleOrNull()?.id == "fresh" }
+      releaseWorkspaceFindings.countDown()
+      Thread.sleep(25)
+
+      assertEquals("fresh", presenter.snapshot.value.state.findings.findings.singleOrNull()?.id)
+    } finally {
+      releaseWorkspaceFindings.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
   fun chatProposalReplacesOnlyTheActiveTaskDraft() {
     val presenter = presenter { _, path, _ ->
       when {
@@ -218,13 +1165,13 @@ class DesktopWorkflowPresenterTest {
   }
 
   private fun presenter(
-      responder: (String, String, String?) -> TransportResponse
+      parentScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+      responder: (String, String, String?) -> TransportResponse,
   ): DesktopWorkflowPresenter {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     return DesktopWorkflowPresenter(
         ApiClient(transport = DaemonTransport(responder)),
         LastProjectStore(),
-        scope,
+        parentScope,
         Dispatchers.Default,
         5)
   }
@@ -288,6 +1235,11 @@ class DesktopWorkflowPresenterTest {
       )
 
   private fun response(body: String) = TransportResponse(200, body)
+
+  private fun projectJson() =
+      "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"name\":\"project\",\"path\":\"/tmp/project\",\"type\":\"go\",\"file_count\":0,\"source_file_count\":0,\"total_lines\":0,\"summary\":\"\",\"ai_status\":\"missing\",\"analyzed_at\":\"\"}"
+
+  private fun indexJson() = "{\"project_id\":\"project\",\"project_revision\":\"revision\"}"
 
   private fun fileJson(path: String, hash: String) =
       "{\"path\":\"$path\",\"content_hash\":\"$hash\",\"name\":\"$path\",\"language\":\"Go\",\"size_bytes\":1,\"line_count\":1,\"modified_at\":\"\",\"binary\":false,\"content\":\"package main\"}"
