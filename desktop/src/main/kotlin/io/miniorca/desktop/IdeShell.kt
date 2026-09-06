@@ -256,6 +256,7 @@ internal fun NarrowBottomToolWindowSummary(
     summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    openButtonModifier: Modifier = Modifier,
 ) {
   if (availableToolWindows.isEmpty()) return
   val activeToolWindow =
@@ -279,7 +280,7 @@ internal fun NarrowBottomToolWindowSummary(
           maxLines = 1,
           modifier = Modifier.weight(1f).padding(start = 8.dp),
       )
-      ChromeButton(onClick = onOpen) {
+      ChromeButton(onClick = onOpen, modifier = openButtonModifier) {
         DesktopLineIcon(DesktopIcon.ChevronRight, "Open tools", iconSize = 16.dp)
         Spacer(Modifier.width(4.dp))
         Text("Open tools", fontSize = 11.sp)

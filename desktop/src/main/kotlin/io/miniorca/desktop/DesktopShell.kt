@@ -271,6 +271,7 @@ private data class ShellFocusRequesters(
     val rightToolWindow: FocusRequester,
     val bottomToolWindow: FocusRequester,
     val statusBar: FocusRequester,
+    val paletteTrigger: FocusRequester,
 )
 
 internal fun paletteFocusRestorationRegion(
@@ -295,6 +296,13 @@ private fun ShellFocusRequesters.forRegion(region: DesktopFocusRegion): FocusReq
       DesktopFocusRegion.BottomToolWindow -> bottomToolWindow
       DesktopFocusRegion.StatusBar -> statusBar
     }
+
+private fun ShellFocusRequesters.paletteRestorationRequester(
+    openedFromToolbar: Boolean,
+    region: DesktopFocusRegion,
+): FocusRequester =
+    if (openedFromToolbar && region == DesktopFocusRegion.Toolbar) paletteTrigger
+    else forRegion(region)
 
 @Composable
 internal fun DesktopShell(
@@ -329,12 +337,14 @@ internal fun DesktopShell(
         rightToolWindow = FocusRequester(),
         bottomToolWindow = FocusRequester(),
         statusBar = FocusRequester(),
+        paletteTrigger = FocusRequester(),
     )
   }
   val drawerState = rememberDrawerState(DrawerValue.Closed)
   var narrowDrawer by remember { mutableStateOf(NarrowDrawer.Files) }
   var drawerFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var paletteFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
+  var paletteOpenedFromToolbar by remember { mutableStateOf(false) }
   var statusDetailsVisible by remember { mutableStateOf(false) }
   var statusDetailsFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var contextFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
@@ -512,8 +522,11 @@ internal fun DesktopShell(
             )
         LaunchedEffect(palette.visible, paletteFocusRestoreTarget, restoredFocusRegion) {
           if (!palette.visible && paletteFocusRestoreTarget != null) {
-            focusRequesters.forRegion(restoredFocusRegion).requestFocus()
+            focusRequesters
+                .paletteRestorationRequester(paletteOpenedFromToolbar, restoredFocusRegion)
+                .requestFocus()
             paletteFocusRestoreTarget = null
+            paletteOpenedFromToolbar = false
           }
         }
         ModalDrawer(
@@ -573,6 +586,7 @@ internal fun DesktopShell(
                         onReconnect = projectActions.reconnect,
                         onPalette = {
                           layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
+                          paletteOpenedFromToolbar = true
                           paletteActions.open(PaletteMode.Actions)
                         },
                         onOpenExplorer = {
@@ -587,10 +601,11 @@ internal fun DesktopShell(
                         },
                     ),
                 modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
+                paletteFocusRequester = focusRequesters.paletteTrigger,
             )
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
               ToolWindowBar(
-                  layout.activeLeftToolWindow,
+                  leftToolWindowForWorkspace(workspace),
                   ::selectToolWindow,
                   Modifier.focusRequester(focusRequesters.leftToolWindow),
               )
@@ -658,8 +673,8 @@ internal fun DesktopShell(
                         activeToolWindow?.let(::selectBottomToolWindow)
                         bottomToolWindowOverlayVisible = activeToolWindow != null
                       },
-                      modifier =
-                          Modifier.focusRequester(focusRequesters.bottomToolWindow).focusable(),
+                      openButtonModifier =
+                          Modifier.focusRequester(focusRequesters.bottomToolWindow),
                   )
                 }
               }
