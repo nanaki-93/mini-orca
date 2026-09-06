@@ -339,6 +339,8 @@ class DesktopVisualLayoutTest {
             fixture.assertTextFits("user.go")
             if (width >= 1_000) {
               fixture.assertTextFits("Files")
+              assertEquals(1, fixture.textCount("Files"))
+              assertEquals(0, fixture.textCount("Tool windows"))
             } else {
               fixture.assertTextFits("Files")
               fixture.assertTextFits("Context")
@@ -1240,6 +1242,8 @@ private class ComposeVisualFixture(
       textNodes(label).isNotEmpty() ||
           nodes().any { it.config.getOrNull(SemanticsProperties.EditableText)?.text == label }
 
+  fun textCount(label: String): Int = textNodes(label).size
+
   fun hasDescription(label: String): Boolean =
       nodes().any {
         it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
@@ -1689,7 +1693,8 @@ private fun EditorVisualFixture(width: Float) {
                       ExplorerPaneActions({}, {}, {}, {}, {}),
                       modifier)
                 },
-                modifier = Modifier.width(panes.explorer.dp))
+                modifier = Modifier.width(panes.explorer.dp),
+                showHeader = false)
             ResizableDivider({}, {})
           }
           EditorArea(
@@ -1765,7 +1770,8 @@ private fun EditorVisualFixture(width: Float) {
                   },
                   modifier = modifier)
             },
-            modifier = Modifier.width(panes.action.dp))
+            modifier = Modifier.width(panes.action.dp),
+            showHeader = false)
       }
     }
     PersistentStatusBar(

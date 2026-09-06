@@ -16,8 +16,8 @@ class DesktopLayoutStateTest {
     assertEquals(RightToolWindow.Context, layout.activeRightToolWindow)
     assertEquals(BottomToolWindow.Problems, layout.activeBottomToolWindow)
     assertEquals(EditorSurface.Source, layout.editorSurface)
-    assertEquals(256f, layout.explorerWidth)
-    assertEquals(344f, layout.actionWidth)
+    assertEquals(220f, layout.explorerWidth)
+    assertEquals(300f, layout.actionWidth)
     assertEquals(220f, layout.bottomHeight)
     assertTrue(layout.bottomToolWindowVisible)
     assertTrue(layout.bottomCollapsed)
@@ -138,7 +138,7 @@ class DesktopLayoutStateTest {
         dockedPaneWidths(1_000f, preferredExplorerWidth = 520f, preferredActionWidth = 560f)
 
     assertEquals(DesktopLayoutState.MIN_EXPLORER_WIDTH, constrained.explorer)
-    assertEquals(355f, constrained.action)
+    assertEquals(315f, constrained.action)
     assertEquals(MIN_EDITOR_WIDTH, constrained.editor)
     assertEquals(520f, DesktopLayoutState().withExplorerWidth(520f).explorerWidth)
     assertEquals(560f, DesktopLayoutState().withActionWidth(560f).actionWidth)
@@ -147,11 +147,21 @@ class DesktopLayoutStateTest {
   @Test
   fun dockedPaneWidthsRestorePreferredDimensionsWhenTheViewportGrows() {
     val preferred =
-        dockedPaneWidths(1_440f, preferredExplorerWidth = 256f, preferredActionWidth = 344f)
+        dockedPaneWidths(1_440f, preferredExplorerWidth = 220f, preferredActionWidth = 300f)
 
-    assertEquals(256f, preferred.explorer)
-    assertEquals(344f, preferred.action)
-    assertEquals(735f, preferred.editor)
+    assertEquals(220f, preferred.explorer)
+    assertEquals(300f, preferred.action)
+    assertEquals(815f, preferred.editor)
+  }
+
+  @Test
+  fun defaultDocksKeepSourceUsefulAtTheDockedBreakpoint() {
+    val defaults = DesktopLayoutState()
+    val constrained = dockedPaneWidths(1_000f, defaults.explorerWidth, defaults.actionWidth)
+
+    assertEquals(MIN_EDITOR_WIDTH, constrained.editor)
+    assertEquals(195f, constrained.explorer)
+    assertEquals(300f, constrained.action)
   }
 
   @Test

@@ -228,7 +228,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | FND-06 | Isolate desktop job coordination | FND-03, FND-04 | M / high | Complete |
 | AUTO-01 | Reproducible validation entry point and CI | FND-02, FND-03, FND-04, FND-05 | M / medium | Complete |
 | UI-01 | Remove unsupported product previews | FND-01 | M / medium | Complete |
-| UI-02 | Correct source-first layout against captures | UI-01 | M / medium | Pending |
+| UI-02 | Correct source-first layout against captures | UI-01 | M / medium | Complete |
 | UI-03 | Make draft/review progression explicit | UI-02 | M / high | Pending |
 | UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Pending |
 | FLOW-01 | Short function-scoped change requests | UI-03 | M / medium | Pending |
@@ -446,6 +446,10 @@ the full quality gate green. No inherited quality exception applies to final rel
   wider layout restores preferences; long paths remain discoverable; short windows
   retain the next action without overlapping source. Record deliberate adaptations.
 - Verify: layout, shell, explorer and visual tests; D and V. No new theme/toolkit.
+- Adaptation: preserve the 999dp drawer boundary and saved pane widths; reduce only the default
+  dock preferences and raise the rendered source minimum to 400dp at the 1000dp docked boundary.
+  The Explorer owns its wide Files header, the right tabs own their content identity, and narrow
+  pane headers move trailing actions below their title when inline space is insufficient.
 
 ### UI-03 — Make draft and review progression explicit
 

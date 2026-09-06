@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -246,6 +247,14 @@ internal fun ChromeTab(
   )
 }
 
+internal enum class PaneHeaderActionLayout {
+  Inline,
+  Below,
+}
+
+internal fun paneHeaderActionLayout(availableWidthDp: Float): PaneHeaderActionLayout =
+    if (availableWidthDp >= 480f) PaneHeaderActionLayout.Inline else PaneHeaderActionLayout.Below
+
 /** One flat pane-header composition keeps disclosure targets separate from trailing actions. */
 @Composable
 internal fun IdePaneHeader(
@@ -264,42 +273,79 @@ internal fun IdePaneHeader(
   require((expanded == null) == (onToggle == null)) {
     "A pane header must provide both disclosure state and toggle callback, or neither."
   }
-  Row(
-      modifier =
-          modifier.fillMaxWidth().heightIn(min = 32.dp).padding(horizontal = 8.dp, vertical = 4.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(4.dp),
-  ) {
-    if (onToggle != null) {
-      val disclosureLabel = if (expanded == true) "Collapse $title" else "Expand $title"
-      ChromeButton(
-          onClick = onToggle,
-          modifier =
-              disclosureModifier.weight(1f).semantics {
-                stateDescription = if (expanded == true) "Expanded" else "Collapsed"
-              },
-          contentPadding = PaddingValues(0.dp),
-          accessibleName = disclosureLabel,
-          tooltip = null,
+  BoxWithConstraints(modifier.fillMaxWidth()) {
+    val actionLayout = paneHeaderActionLayout(maxWidth.value)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+      Row(
+          Modifier.fillMaxWidth().heightIn(min = 24.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(4.dp),
       ) {
-        DesktopLineIcon(
-            if (expanded == true) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
-            description = disclosureLabel,
-            iconSize = 16.dp)
-        icon?.let {
-          Spacer(Modifier.width(4.dp))
-          DesktopLineIcon(it, title, iconSize = 16.dp)
+        PaneHeaderLead(
+            title = title,
+            icon = icon,
+            stateLabel = stateLabel,
+            stateTint = stateTint,
+            expanded = expanded,
+            onToggle = onToggle,
+            disclosureModifier = disclosureModifier,
+            modifier = Modifier.weight(1f),
+        )
+        if (actionLayout == PaneHeaderActionLayout.Inline) {
+          Row(horizontalArrangement = Arrangement.spacedBy(4.dp), content = actions)
+          overflow?.invoke()
+          collapse?.invoke()
         }
-        Spacer(Modifier.width(4.dp))
-        HeaderTitle(title, stateLabel, stateTint)
       }
-    } else {
-      icon?.let { DesktopLineIcon(it, title, iconSize = 16.dp) }
-      HeaderTitle(title, stateLabel, stateTint, Modifier.weight(1f))
+      if (actionLayout == PaneHeaderActionLayout.Below) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            content = actions)
+        overflow?.invoke()
+        collapse?.invoke()
+      }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), content = actions)
-    overflow?.invoke()
-    collapse?.invoke()
+  }
+}
+
+@Composable
+private fun RowScope.PaneHeaderLead(
+    title: String,
+    icon: DesktopIcon?,
+    stateLabel: String?,
+    stateTint: Color,
+    expanded: Boolean?,
+    onToggle: (() -> Unit)?,
+    disclosureModifier: Modifier,
+    modifier: Modifier,
+) {
+  if (onToggle != null) {
+    val disclosureLabel = if (expanded == true) "Collapse $title" else "Expand $title"
+    ChromeButton(
+        onClick = onToggle,
+        modifier =
+            modifier.then(disclosureModifier).semantics {
+              stateDescription = if (expanded == true) "Expanded" else "Collapsed"
+            },
+        contentPadding = PaddingValues(0.dp),
+        accessibleName = disclosureLabel,
+        tooltip = null,
+    ) {
+      DesktopLineIcon(
+          if (expanded == true) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
+          description = disclosureLabel,
+          iconSize = 16.dp)
+      icon?.let {
+        Spacer(Modifier.width(4.dp))
+        DesktopLineIcon(it, title, iconSize = 16.dp)
+      }
+      Spacer(Modifier.width(4.dp))
+      HeaderTitle(title, stateLabel, stateTint)
+    }
+  } else {
+    icon?.let { DesktopLineIcon(it, title, iconSize = 16.dp) }
+    HeaderTitle(title, stateLabel, stateTint, modifier)
   }
 }
 

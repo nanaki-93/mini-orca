@@ -60,7 +60,7 @@ internal fun ExplorerPane(
       modifier =
           modifier
               .background(Panel)
-              .padding(horizontal = 8.dp, vertical = 6.dp)
+              .padding(horizontal = 8.dp, vertical = 4.dp)
               .focusable()
               .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

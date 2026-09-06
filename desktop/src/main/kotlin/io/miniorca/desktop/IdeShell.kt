@@ -156,13 +156,14 @@ internal fun DockedToolWindow(
     content: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null,
+    showHeader: Boolean = true,
 ) {
   Column(
       modifier.fillMaxHeight().background(ToolWindowSurface).semantics {
         contentDescription = "$title tool window"
       },
   ) {
-    ToolWindowHeader(title, onClose)
+    if (showHeader) ToolWindowHeader(title, onClose)
     content(Modifier.fillMaxWidth().weight(1f))
   }
 }
