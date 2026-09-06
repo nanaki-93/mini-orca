@@ -9,7 +9,7 @@ Every prompt-bearing operation has one fixed model scope:
 
 | Scope | Used for |
 | --- | --- |
-| `analyze` | Project import and architectural summaries |
+| `analyze` | Project import, architectural summaries and source-based Performance review |
 | `bug` | Selected-file analysis and Analyze-all suggestions |
 | `function` | Declaration proposals and explicit repairs |
 
@@ -79,33 +79,18 @@ The operation timeouts bound the request contexts; retries only cover explicit
 prompt requests. Restore, navigation, validation, checks, Apply, and Undo do
 not make a model call.
 
-## Migration from legacy configuration
+## Configuration changes
 
-Retired keys are errors, not fallbacks. Migrate each legacy key before restart:
-
-| Removed key | Replacement |
-| --- | --- |
-| `llm.base_url` | Copy to each `model_scopes.<scope>.api_base_url` (include the compatible API prefix such as `/v1`) |
-| `llm.api_key` | Copy to each `model_scopes.<scope>.api_key` that uses the key |
-| `llm.model` | Set each `model_scopes.<scope>.model` explicitly |
-| `llm.temperature` | Set each `model_scopes.<scope>.temperature`, or omit for the default |
-| `llm.max_tokens` | Set each `model_scopes.<scope>.max_tokens`, or omit for the default |
-| `agents.coder.model` | `model_scopes.function.model` |
-| `agents.coder.timeout_seconds` | `timeouts.generation_seconds` |
-| `agents.coder.skills`, `agents.tester.*`, `agents.reviewer.*` | Removed; there are no role profiles or role skills |
-| `skills.knowledge`, `skills.tools` | Removed |
-| JSON loading/saving | Removed; use YAML only |
-
-`MINI_ORCA_CONFIG` may select the YAML file path (default `config.yaml`); it
-does not interpolate values inside that file. Restart the daemon after editing
-configuration.
+Only the current YAML schema is supported. For retired configurations, create a
+fresh local file from `config.example.yaml`; unknown keys fail startup instead
+of invoking compatibility fallbacks. `MINI_ORCA_CONFIG` selects the file path
+(default `config.yaml`). Restart the daemon after changes.
 
 ## Local metadata and manual cleanup
 
 Configuration stays separate from project metadata. Mini-Orca stores its local
 index, analysis, findings, Analyze-all state, Apply audit, and Undo backup data
 under the imported project's `.mini-orca/` directory; see
-[README.md](README.md#project-intelligence) for the current paths. These files
-do not contain source edits and are not a configuration fallback. Retired
-`.mini-orca/analysis.md` and activity files are never read or written; remove
-them manually only when they are no longer needed.
+[README.md](README.md#project-intelligence) for the current paths. These files are
+application metadata, separate from configuration.
+Do not delete Apply receipts or Undo backups as a routine cache reset.

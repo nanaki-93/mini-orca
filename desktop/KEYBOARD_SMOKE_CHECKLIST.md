@@ -151,5 +151,19 @@ passed until they are performed in a native build:
   disabled action, stale/error, source, and diff names and textual state. Confirm
   focus and selected state are visible without relying on color alone.
 
-See [UI_REFINEMENT_ACCEPTANCE.md](UI_REFINEMENT_ACCEPTANCE.md) for the evidence
+See [release acceptance](../docs/RELEASE_ACCEPTANCE.md) for the evidence
 matrix and release follow-ups. These are native-release checks, not fixture passes.
+
+## Task 170 native operator matrix
+
+The deterministic keyboard/semantics suite covers the retained navigation shortcuts, responsive
+1000dp breakpoint, rail/tab selection state, command palette arrows, popup dismissal/focus return,
+disclosures, provider-confirmation state, and topmost transient-surface policy. It cannot prove
+native window focus order, platform popup positioning, or screen-reader speech.
+
+Before marking Task 170 complete, run the numbered checklist above with the pinned JBR 25 build
+and a disposable fixture at `1440x900`, `1920x1080`, `1000x760`, `999x760`, `800x650`, and
+`1280x600`; repeat the short view at supported 125% and 150% text scales. Record the native
+screenshots, focus order, Escape/dismissal result, and VoiceOver (or other supported reader)
+names/states in [UI_PRECISION_ACCEPTANCE.md](UI_PRECISION_ACCEPTANCE.md). Do not infer any of
+those results from the offscreen component renders.

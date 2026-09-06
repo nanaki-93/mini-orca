@@ -1,62 +1,119 @@
-# Mini-Orca task workflow
+# Implementing the plan with agents
 
-The active backlog is [UI precision](../Plan.md): Tasks **161–171**.
-Start with the [task index](INDEX.md) and
-[sequential execution prompt](PROMPT_EXECUTE_UI_PRECISION.md).
+[PLAN.md](../PLAN.md) is the only backlog/status ledger. Each task card includes
+entry points, dependencies, acceptance and tests. Do not create one file per task.
+The retained [Task 170 note](170_ui_precision_accessibility.md) is working evidence,
+not a second execution queue; old execution prompts are superseded.
 
-Writing, reading, or reviewing documents does not execute implementation. Explicit
-invocation of the new prompt requires one verified local commit per task, never a push.
+## Recommended workflow
 
-## Active sequence
+Use **GPT-5.6 Terra** for bounded implementation, initially at high reasoning effort
+for stateful changes. Its official positioning balances intelligence and cost.
+Effort and review policy here are engineering recommendations, not guarantees.
+Confirm the exact model is available on the runner; do not silently substitute it.
+[Official model reference](https://developers.openai.com/api/docs/models/gpt-5.6-terra)
 
-The priorities are Jewel adoption with a supported toolchain/runtime, flat panes
-with thin dividers, and compact header-owned actions. Task files define bounded
-implementation steps, affected files, tests, acceptance, and exact commit subjects.
+1. Select one ready task. Give the worker its card, shared rules, relevant code and
+   tests, instead of every historical document.
+2. Start in a clean isolated worktree based on reviewed integration state. Resolve
+   existing user work explicitly before including it in a base; never stash/reset
+   it or absorb it into a task automatically.
+3. One implementation agent changes code and runs focused checks, then returns a
+   reviewable result at **Review**, not self-approved Complete.
+4. A fresh reviewer inspects the exact diff, criteria, callers and tests. Prioritize
+   scope, stale state, concurrency, consent, source writes and visible interaction.
+5. The coordinator independently runs the required gates. Fixes invalidate the
+   prior review. Limit repair/review retries to two, then stop with a diagnosis.
+6. Integrate only under explicit standing authorization for local task commits and
+   integration. Otherwise leave a patch/worktree for review. This document does
+   not grant commit permission. Pushes and releases require separate authorization.
+7. Update the ledger after acceptance, then select the next ready task. Missing
+   native evidence blocks its release gate, not independent backend work.
 
-- Task files stay at stable paths here, including after completion.
-- Each has one status: Pending, In Progress, or Complete.
-- `INDEX.md` is the authoritative order/status list and must agree with task files.
-- Execute 161–171 strictly in order with one writer; no delegation or parallel tasks.
-- Post start/completion updates with real verification and commit evidence.
-- Complete means acceptance passed and the isolated task commit succeeded.
-- Preserve user changes. No broad staging, history rewriting, or unrelated commits.
-- Required failures or missing native evidence block their task; never skip ahead.
+The commit boundary comes from [AGENTS.md](../AGENTS.md): “Do not create commits
+unless explicitly requested.” Finish the code, tests and review before requesting
+any still-missing integration authorization. Reuse permission already granted.
 
-## Verification and safety
+Start sequentially: presenter, shell, models and API files are shared hotspots.
+Allow at most two implementation lanes only after explicit parallel-work
+permission and verified disjoint ownership; integrate serially. The reviewer can
+also use Terra. Escalate difficult architecture, concurrency or security findings
+if desired; a fresh context matters even when using the same model.
 
-Read `AGENTS.md`, [UI design guidelines](../desktop/UI_DESIGN_GUIDELINES.md),
-[Plan.md](../Plan.md), this file, the index, the execution prompt, and the selected
-task. Preserve one project/file/symbol, selectable read-only source/diff, remote
-consent, guarded Review/Apply/Undo, and local-only Preview controls.
-
-Use the Gradle wrapper. Every implementation task runs:
+## Copyable single-task instruction
 
 ```text
-./desktop/gradlew -p desktop spotlessCheck detekt test
-git diff --check
+Implement task <ID> from PLAN.md. Read AGENTS.md and the shared definition of done.
+Read desktop/UI_DESIGN_GUIDELINES.md before UI changes. Verify dependencies are
+accepted in your base and identify existing user work before editing.
+
+Inspect the task's code/tests. Deliver its smallest complete behavior and negative
+cases. Preserve one-file preview/review/Apply/Undo, identity guards, provider consent
+and explicit execution trust. Remove replaced code. Do not implement adjacent tasks.
+
+Run focused tests and the task gates. Review the diff. Report behavior, files,
+actual results, remaining acceptance and migration needs. Leave status at Review
+for independent acceptance. Do not commit, push or integrate unless separately
+authorized. Do not spawn agents unless requested.
 ```
 
-Task checks add focused tests, visual inspection, packaging, or native verification.
-Tasks 161 and 171 also run `make check` and `make quality`. An unchanged historical
-Go quality failure is not a pass or automatic waiver; follow the plan's explicit
-baseline/acceptance policy. Never run destructive targets.
+Reviewer instruction: “Review task `<ID>` against its criteria and exact diff.
+Inspect callers and tests; focus on correctness, stale state, consent, resource
+limits and user interaction. Do not edit. Return actionable findings with file/line
+evidence, or no findings with explicit verification limits.”
 
-## Retained historical acceptance
+## Making it automatic
 
-[Task 149](149_dark_ui_acceptance.md) remains Pending. Its
-[dark-UI plan](../docs/dark-ui/PLAN.md),
-[acceptance record](../docs/dark-ui/ACCEPTANCE.md), and
-[separate prompt](PROMPT_EXECUTE_DARK_UI.md) are retained for unresolved acceptance,
-not the active visual direction. Do not execute it during 161–171 or silently
-mark it complete.
+Implement AUTO-01, pilot two small tasks, then implement AUTO-02. Use a small
+external dispatcher around `codex exec`; do not build an agent platform inside
+Mini-Orca. Automation develops the IDE; the IDE still requires explicit Apply.
 
-Completed task/plan/prompt files were removed at the user's request. Git is the full
-archive. Design guidelines and baseline/acceptance evidence remain because they
-document contracts or limitations, including
-[the preceding UI acceptance](../desktop/UI_REFINEMENT_ACCEPTANCE.md).
+`codex exec` supports scripted runs, JSON events and schema-constrained final
+results. The installed CLI help was checked during planning. From the isolated
+worktree, this starts one worker:
 
-## Handoff
+```sh
+codex exec --model gpt-5.6-terra --sandbox workspace-write \
+  "Implement FND-02 from PLAN.md. Follow tasks/README.md. Do not commit or push."
+```
 
-Report actual task statuses, visible changes, tests/native checks run and not run,
-runtime setup, and verified local commit hashes. Do not claim adoption, quality,
-or native acceptance from intention alone.
+It does not supply the coordinator, validation or review gate.
+[Official non-interactive documentation](https://learn.chatgpt.com/docs/non-interactive-mode)
+
+AUTO-02 must persist a task lease, base identity, diff digest, worker/reviewer
+results, validator results and integration state. Use an atomic lock and resumable
+local record; keep generated logs ignored. One coordinator owns plan status.
+Stop on missing prerequisites, changed base, unavailable model, failed checks,
+two failed repairs or exhausted budget. Start with one task per run and configurable
+wall-time/token limits. Budget exhaustion is incomplete work, never success.
+Do not place credentials or full project prompts in run logs.
+
+Before unattended integration, establish one explicit policy: allow local task
+commits and fast-forward integration after tests/review, or retain patches for
+manual acceptance. No-commit workers cannot promise automatic integration of
+dependent tasks across fresh worktrees. Never derive this permission from the plan.
+
+## Active autopilot policy
+
+The user's 2026-09-06 request established standing authorization for the Mini-Orca
+autopilot to create local task commits on `codex/autopilot` after independent
+review and coordinator-run validation. The authorization covers plan tasks only.
+It excludes push, merge to another branch, release, deployment, destructive host
+cleanup and repository-external changes. Those actions still require the user.
+
+One Codex heartbeat coordinates the queue. On each run it resumes the sole
+Running/Review task or selects the first ready Pending task. It uses one GPT-5.6
+Terra writer, waits for completion, uses a fresh reviewer, runs the task's gates,
+allows at most two repair/review cycles, updates the ledger and commits an accepted
+task. It performs at most one task per run and never overlaps writers. A task that
+needs native/provider evidence may remain Blocked while unrelated ready work
+continues. The heartbeat reports only actionable blockers and release readiness.
+
+The desktop scheduled heartbeat wakes the coordinator. Local scheduled work
+requires the computer on and app running. Scheduling does not replace dependency
+checks, locking, budgets or review.
+[Official scheduled-task documentation](https://learn.chatgpt.com/docs/automations?surface=app)
+
+AUTO-00 records the installed schedule. AUTO-02 later replaces this bootstrap with
+a repository-tested dispatcher; the single-task prompt remains useful for manual
+recovery.

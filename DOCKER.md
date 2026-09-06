@@ -63,4 +63,4 @@ Before release, build the image without cleanup commands and confirm the health
 check is `healthy`. Do not claim container verification when Docker is
 unavailable. The daemon API is documented in
 [docs/api-contract.md](docs/api-contract.md); scoped provider configuration and
-the migration from retired fields are in [CONFIG.md](CONFIG.md).
+supported fields are in [CONFIG.md](CONFIG.md).

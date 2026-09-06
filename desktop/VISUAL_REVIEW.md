@@ -69,9 +69,35 @@ Reviewed outputs include `summary-dashboard-1440.png`,
 `popup-surface-320-1.3.png`, `findings-filters-expanded-480-1.3.png`,
 `tool-window-controls-360-1.3.png`, and `rail-keyboard-arrow-120-1.3.png`.
 
-`DropdownMenu` and `AlertDialog` use a Desktop window layer that the offscreen
+`DropdownMenu` and bounded dialogs use a Desktop scene layer that the offscreen
 scene cannot paint. Their trigger, dismiss, focus, and local-only behavior are
 tested through production Compose semantics, but native popup/dialog placement is
 not inferred from a blank offscreen layer. It remains an explicit release check in
 [KEYBOARD_SMOKE_CHECKLIST.md](KEYBOARD_SMOKE_CHECKLIST.md) and
-[UI_REFINEMENT_ACCEPTANCE.md](UI_REFINEMENT_ACCEPTANCE.md).
+[release acceptance](../docs/RELEASE_ACCEPTANCE.md).
+
+## Task 170 UI precision component matrix
+
+Task 170 regenerated deterministic production-component captures with the pinned JBR 25 runtime:
+
+```sh
+JAVA_HOME=/path/to/jbrsdk-25.0.4-<platform>-b508.27/Contents/Home \
+  ./desktop/gradlew -p desktop test \
+  --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' \
+  --tests 'io.miniorca.desktop.DesktopAccessibilityTest' \
+  --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' \
+  -PvisualOutput="$PWD/desktop/build/reports/ui-precision/task-170" \
+  -Porg.gradle.java.installations.paths=/path/to/jbrsdk-25.0.4-<platform>-b508.27/Contents/Home
+```
+
+The matrix includes the retained `1440x900`, `1920x1080`, `1000x760`, `999x760`, and
+`800x650` production shell cases; error/empty/stale/populated Context, Assistant, Review,
+Problems, Checks, Output, and Performance cases; and a new `1280x600` compact shell at 100%,
+125%, and 150% text plus 1×/2× density. Reviewed new images are
+`analysis-1280-600-100-1x.png`, `analysis-1280-600-125-1x.png`,
+`analysis-1280-600-150-1x.png`, and `analysis-1280-600-100-2x.png`.
+
+All fixture data is local and labeled; no capture includes a user project, credential, or live
+provider value. This remains component evidence only. Native window, popup placement, and
+screen-reader evidence are tracked separately in
+[UI_PRECISION_ACCEPTANCE.md](UI_PRECISION_ACCEPTANCE.md).

@@ -1,163 +1,82 @@
 # Mini-Orca Desktop
 
-Start the Go daemon from the repository root, then launch the desktop client:
+The client uses `http://localhost:9090` by default; `MINI_ORCA_URL` overrides it.
+Start the Go daemon using the root [README](../README.md). All provider keys stay
+in the ignored daemon configuration, not desktop preferences.
 
-```bash
-go run ./cmd/daemon
-./desktop/gradlew -p desktop run
+## Runtime and build
+
+The checked-in build uses Gradle 9.1.0, Kotlin/Compose compiler 2.3.20, Compose
+Multiplatform 1.11.0 and Jewel standalone `0.40.0-262.10315.125`. Use JBR
+`25.0.4+1-b508.27` SDK for app launch and packaging. Supply your local path; do not
+commit it or replace a system JDK as part of a task.
+
+```sh
+JAVA_HOME=/path/to/jbr-sdk-home ./desktop/gradlew -p desktop run
+JAVA_HOME=/path/to/jbr-sdk-home ./desktop/gradlew -p desktop test createDistributable
 ```
 
-The client uses `http://localhost:9090` by default. Set `MINI_ORCA_URL` to point it at another daemon URL. The daemon is loopback-only by default. The Desktop labels the effective `analyze`, `bug`, and `function` destinations independently; each non-loopback scope needs confirmation before its own prompt-bearing request. Keep provider credentials in the ignored local `config.yaml`.
+Detekt 1.23.8 needs a JDK 21 Gradle launcher; the app still uses JBR 25. JVM 22
+bytecode is the current analysis compatibility boundary, not a second runtime:
 
-The Editor workflow is Go-first: exact replace/create declaration drafts receive composition and focused validation. Other language views remain analysis-only until equivalent validators are available.
-
-## Build compatibility
-
-The checked-in wrapper uses Gradle 9.1.0 with Kotlin JVM/serialization/Compose
-compiler plugin 2.3.20 and Compose Multiplatform 1.11.0. The production UI uses
-standalone Jewel `0.40.0-262.10315.125`, which requires JetBrains Runtime (JBR)
-25. Use a matching unpacked JBR SDK/JDK for application launch and packaging; do
-not commit a machine-specific path or install a system JDK for this project.
-
-```bash
-JAVA_HOME=/path/to/jbrsdk-25.0.4-<platform>-b508.27/Contents/Home \
-  ./desktop/gradlew -p desktop test createDistributable
+```sh
+JAVA_HOME=/path/to/jdk-21 ./desktop/gradlew -p desktop spotlessCheck detekt test \
+  -Porg.gradle.java.installations.paths=/path/to/jbr-sdk-home
 ```
 
-Until stable Detekt supports JDK 25, run its target-22 analysis from a JDK 21
-Gradle launcher while explicitly exposing the JBR toolchain:
+Packaged images include `java.net.http` for the daemon client and `jdk.unsupported`
+for Jewel's native bridge. Package with the JBR launcher, not the Detekt launcher.
+The earlier macOS arm64 startup smoke passed; native UI/accessibility and final
+package acceptance remain separate checks in [acceptance](../docs/RELEASE_ACCEPTANCE.md).
 
-```bash
-JAVA_HOME=/path/to/jdk-21 \
-  ./desktop/gradlew -p desktop spotlessCheck detekt test \
-  -Porg.gradle.java.installations.paths=/path/to/jbrsdk-25.0.4-<platform>-b508.27/Contents/Home
-```
+Pinned dependency provenance from the completed migration:
+[Jewel POM](https://repo1.maven.org/maven2/org/jetbrains/jewel/jewel-int-ui-standalone/0.40.0-262.10315.125/jewel-int-ui-standalone-0.40.0-262.10315.125.pom),
+[JBR release](https://github.com/JetBrains/JetBrainsRuntime/releases/tag/jbr-release-25.0.4b508.27).
+The migration recorded Skiko 0.144.6, JNA 5.17.0 and transitive Kotlin stdlib 2.4.0.
+Recheck the resolved graph before an upgrade; no upgrade is needed for the new plan.
 
-The distribution runtime includes `java.net.http` for the loopback daemon client
-and `jdk.unsupported` for Jewel's native bridge. The host macOS arm64 package was
-built and given an isolated startup smoke test in Task 162; this is not native
-visual or accessibility acceptance. See [UI_PRECISION_BASELINE.md](UI_PRECISION_BASELINE.md)
-for the pinned-artifact provenance and [UI_COMPONENT_DECISION.md](UI_COMPONENT_DECISION.md)
-for migration ownership.
+## Working in the app
 
-## Opening a project
+The last successfully opened project is restored from local metadata without
+contacting a model. If restore fails, the landing screen offers Open project/retry.
+Summary describes the project, Analysis owns explicit runs, Bugs owns triage,
+Performance shows source hypotheses, and Editor owns one declaration change.
 
-After the first successful project open, Mini-Orca remembers the canonical local path.
-Later launches automatically restore that project from its persisted local analysis and
-refresh deterministic facts without contacting the model. If restoration is unavailable,
-Mini-Orca falls back to its dedicated landing state with concise retry feedback. Press
-`Cmd/Ctrl+O` to open the project chooser from the keyboard. Until a project opens,
-workspace, file, symbol, draft, palette, and project-management shortcuts are unavailable.
+Editor has docked Files and Context/Assistant/Review panes at widths ≥1000dp.
+Below that width they become labeled drawers; bottom tools use a bounded overlay.
+Resizing clamps visible widths without overwriting saved preferences. Source and
+composed diffs are selectable/read-only; only the isolated draft is editable.
 
-## IDE shell
+A current draft must be discarded explicitly before changing its target. Editing
+it invalidates validation/check evidence. Review owns the guarded Apply, receipt
+and Undo. Findings and insights show freshness; daemon connectivity never proves
+that a provider is connected. Non-loopback scopes require their own confirmation.
 
-After import, Mini-Orca uses one stable source-first shell:
+Some current utility controls are labeled Preview and do no backend work, including
+Terminal, Run/Debug and additional editor tabs. UI-01 will remove these distractions;
+they have not been removed by the documentation cleanup.
 
-- At widths of at least `1000dp`, the indexed **Files** tree is docked left; Context, Assistant, and Review
-  are docked right; Problems, Checks, and Output are docked below the editor; and a
-  persistent status bar reports the trusted current project, file, analysis, provider, and
-  daemon state.
-- Below `1000dp`, **Files** and **Context** open labeled modal drawers, while the bottom
-  area becomes a compact summary that opens a bounded overlay. Leaving Editor closes an
-  incompatible drawer without changing the selected file, declaration, draft, or evidence.
-- The toolbar keeps the project identity, connection state, Command entry point, and narrow
-  drawer actions visible. Infrequent project operations live under the labeled **Project**
-  menu before essential state is hidden.
+## Keys
 
-The Files tree contains only indexed, project-relative navigation. Its file-analysis
-state is always textual (for example, **Fresh**, **Stale**, or **Failed**), not a color-only
-indicator. The editor has one active file, breadcrumbs, a read-only Source/Review surface, a
-dedicated gutter, and selectable source or diff text. Mini-Orca does not imply general source
-editing, multi-file tabs, terminal execution, or VCS operations.
+| Shortcut | Context/action |
+| --- | --- |
+| Cmd/Ctrl+O | Open project |
+| Cmd/Ctrl+1–4 | Summary, Analysis, Bugs, Editor |
+| Cmd/Ctrl+Tab | Cycle workspaces, including Performance |
+| Cmd/Ctrl+P | Indexed file search |
+| Cmd/Ctrl+Shift+O | Symbols in the current file |
+| Cmd/Ctrl+K | Contextual command palette or eligible Assistant composer |
+| Cmd/Ctrl+Shift+F | Bugs |
+| Cmd/Ctrl+Shift+D | Current draft |
+| Cmd/Ctrl+Enter | Generate/cancel when available |
+| Cmd/Ctrl+Shift+V / Shift+C | Validate / focused checks when eligible |
+| Escape | Dismiss the top transient surface or cancel the active operation |
 
-## Dark desktop presentation and previews
+Use arrows and Enter/Space for tree/tab/disclosure navigation. The supported native
+keyboard and reader checks remain in the retained
+[keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md); its dated baseline sections are
+history, not current dimensions. [Visual reproduction](VISUAL_REVIEW.md) describes
+fixture captures; these are not native-window evidence.
 
-Future UI changes follow [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md): shared
-IDE tokens, dense typography, quiet component hierarchy, and visual verification
-against the supplied mock. The active [UI precision plan](../Plan.md) has adopted
-Jewel and now continues with layered divider-separated panes and compact header
-action bars. Custom titlebar migration is not part of this plan.
-The current token roles and measured contrast pairs are recorded in
-[UI_CONTRAST.md](UI_CONTRAST.md).
-
-The previous UI refinement removed the duplicate
-Project rail destination, reduced routine narration, redesigned Summary, corrected
-Analysis width, unified menus/disclosures, and removed replaced desktop UI paths.
-The [UI_REFINEMENT_ACCEPTANCE.md](UI_REFINEMENT_ACCEPTANCE.md) record distinguishes
-passing automated/component evidence from native release follow-ups. The detailed
-records for Tasks 150–160 and their completed plan/prompt were retired from the working tree;
-Git and the acceptance record preserve their history. The [task index](../tasks/INDEX.md)
-now lists planned Tasks 161–171; Task 149 remains Pending historical acceptance.
-
-The desktop uses charcoal surfaces, blue selection and action states, a labeled 88dp line-icon
-rail, compact editor chrome, structured AI Context, a current-draft candidate summary, and a
-persistent status strip. At 1000dp and above, temporary pane clamping preserves a 360dp editor
-without overwriting stored Explorer or AI Context widths; below that boundary the existing
-Files/AI Context drawers and bounded bottom overlay remain in use.
-
-Navigation and tabs use quiet hover states and a single blue selection edge. Unsupported
-toolbar and editor utilities are grouped in the **Preview** menus. Analysis presents coverage
-metrics beside run progress and controls; the bottom Problems table opens the existing finding
-details and actions on selection. AI Context separates the real project overview from the
-selected file/declaration and its quick actions.
-
-Some reference-style controls are deliberately **Preview** only: new file, branch actions,
-content search, extra tabs/split/minimap, Run/Debug, assessment scores, unit-test generation,
-feedback, Terminal, and settings/help. Their dialogs state the limitation, are local-only, and
-cannot call a provider/API, execute a process, write source, alter workflow evidence, or enable
-Apply. The Terminal tab is inert and has no command input.
-
-## Focused workflow and safety
-
-Summary provides compact deterministic facts and advisory interpretation. Analysis starts,
-pauses, resumes, or cancels bounded sequential Analyze-all only after an explicit request and
-lists only sanitized failures. Bugs reuses the shared compact Problems rows, filters, lifecycle
-actions, and a selected-details region; selecting or filtering a finding never changes source.
-
-Editor remains scoped to one project, one indexed file, and one selected symbol or new
-declaration. Context exposes file/declaration facts and the explicit **Refactor `<symbol>`** route.
-Assistant owns the bound request and editable draft; Review contains validation, current focused
-checks, exact Apply wording, the receipt, and Undo. Changing a target while a draft is active
-requires the existing discard decision. Draft edits invalidate prior validation and check evidence.
-Only the guarded Apply and Undo operations can mutate source; source and composed diffs are
-selectable and read-only throughout.
-
-Where an existing result includes an optional Engineering insight, its compact in-page panel is
-collapsed by default and labelled **AI interpretation**. Opening or closing it is local display
-only, and its disclosure preference is shared across result pages. Missing insights have no
-placeholder. Stale file/project owners are labelled **Outdated — source changed**; an edited
-draft clears the prior proposal insight for the current candidate.
-
-## Keyboard and accessibility
-
-- `Cmd/Ctrl+P` opens indexed files, `Cmd/Ctrl+Shift+O` opens symbols in the active file, and
-  `Cmd/Ctrl+1` through `4` continue to select Summary, Analysis, Bugs, and Editor. The
-  Performance workspace is available beside Analysis and from `Cmd/Ctrl+K`; `Cmd/Ctrl+Tab`
-  includes it in workspace cycling.
-- `Cmd/Ctrl+K` focuses the eligible Assistant request, `Cmd/Ctrl+Shift+D` focuses the current
-  draft, `Cmd/Ctrl+Enter` generates or cancels generation, `Cmd/Ctrl+Shift+V` validates, and
-  `Cmd/Ctrl+Shift+C` runs focused checks when the guarded action is available.
-- `Cmd/Ctrl+Shift+F` opens Bugs. Arrow keys move within the Files tree and tool-window tab
-  groups; `Enter` or `Space` activates the focused tab. `Escape` closes only the topmost dialog,
-  drawer, or bottom overlay, or cancels the active cancellable operation.
-- Tab to **Engineering insight** where shown and press Enter or Space to disclose it; **Close
-  insight** returns keyboard focus to the opener without triggering a model request.
-
-All actions retain text labels or accessible names, state remains textual in addition to color,
-and cyan indicates keyboard focus. The full release-operator matrix, including screen-reader,
-text-scaling, and viewport checks, is maintained in
-[`KEYBOARD_SMOKE_CHECKLIST.md`](KEYBOARD_SMOKE_CHECKLIST.md).
-
-## Verification status
-
-The UI refinement's desktop formatting, static analysis, tests, and `make check` passed. They
-cover layout breakpoint behavior, source/diff read-only safety, selection scope, stale responses,
-provider confirmation, validation/check identity, Apply/Undo, command navigation, status state,
-and compact findings presentation. `DesktopVisualLayoutTest` renders the production Compose
-components with explicit test data and checks layout and interactions. See
-[VISUAL_REVIEW.md](VISUAL_REVIEW.md) for the render command and reviewed viewports.
-
-`make quality` remains a failed repository gate because the unchanged baseline Go complexity
-findings stop it before clone analysis; see [UI_REFINEMENT_ACCEPTANCE.md](UI_REFINEMENT_ACCEPTANCE.md)
-for the exact list. Native window appearance, screen-reader checks, popup/dialog placement, and
-provider-backed end-to-end runs remain separate release-operator checks.
+UI work follows [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and the
+[single plan](../PLAN.md). No API/config migration is caused by this doc cleanup.
