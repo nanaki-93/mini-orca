@@ -126,8 +126,10 @@ internal data class DesktopLayoutState(
       )
 
   companion object {
-    const val DEFAULT_EXPLORER_WIDTH = 256f
-    const val DEFAULT_ACTION_WIDTH = 344f
+    // Keep the source canvas useful at the 1000dp docked breakpoint. Users can still widen either
+    // tool window, and those saved preferences return after a temporary narrow-width clamp.
+    const val DEFAULT_EXPLORER_WIDTH = 220f
+    const val DEFAULT_ACTION_WIDTH = 300f
     const val DEFAULT_BOTTOM_HEIGHT = 220f
 
     const val MIN_EXPLORER_WIDTH = 180f
@@ -180,7 +182,7 @@ internal fun dockedPaneWidths(
 internal const val TOOL_WINDOW_BAR_WIDTH = 88f
 internal const val PANE_SEPARATOR_WIDTH = 1f
 internal const val RESIZE_DIVIDER_WIDTH = 8f
-internal const val MIN_EDITOR_WIDTH = 360f
+internal const val MIN_EDITOR_WIDTH = 400f
 
 /** Persists visual preferences only; it never stores workflow or authorization state. */
 internal class DesktopLayoutStore(

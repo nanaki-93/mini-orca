@@ -602,7 +602,9 @@ internal fun DesktopShell(
                     DockedToolWindow(
                         "Files",
                         content = { modifier -> panes.explorer(modifier) {} },
-                        modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight())
+                        modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight(),
+                        // Explorer owns its Files heading and actions in a docked layout.
+                        showHeader = false)
                     ResizableDivider(
                         onDelta = {
                           layoutActions.updateLayout(
@@ -677,7 +679,9 @@ internal fun DesktopShell(
                           panes.rightToolWindowBadges,
                           modifier.focusRequester(focusRequesters.rightToolWindow))
                     },
-                    modifier = Modifier.width(dockedWidths.action.dp).fillMaxHeight())
+                    modifier = Modifier.width(dockedWidths.action.dp).fillMaxHeight(),
+                    // The right-window tabs identify their own active content.
+                    showHeader = false)
               }
             }
             if (desktopStatusBarVisible(appState.project)) {

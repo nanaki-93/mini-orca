@@ -309,9 +309,7 @@ private fun AnalysisAdvancedOptions(
     onMaxRetriesChanged: (String) -> Unit,
     onRemoteProviderConfirmed: (Boolean) -> Unit,
 ) {
-  val stateLabel =
-      if (requiresRemoteConfirmation) "Remote confirmation required"
-      else "$maxFiles files · $maxRetries retries"
+  val stateLabel = if (requiresRemoteConfirmation) "Remote confirmation required" else null
   IdeDisclosureHeader(
       title = "Advanced options",
       expanded = expanded,

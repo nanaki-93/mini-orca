@@ -221,13 +221,13 @@ internal fun SourceEditorPane(
     if (focusLine != null) focusLineRequester.bringIntoView()
   }
   SelectionContainer {
-    Column(Modifier.fillMaxSize().padding(vertical = 10.dp)) {
+    Column(Modifier.fillMaxSize().padding(vertical = 8.dp)) {
       if (focusedLine > 0) {
         Text(
             "${selectedSymbol?.name ?: "line $focusedLine"} · line $focusedLine",
             color = SecondaryText,
             fontSize = 11.sp,
-            modifier = Modifier.padding(start = 18.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 12.dp, bottom = 4.dp),
         )
       }
       Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
