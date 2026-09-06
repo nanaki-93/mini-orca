@@ -1,6 +1,6 @@
 # Task 170 — retained working evidence
 
-Historical status: In Progress. This note preserves the existing uncommitted
+Historical status: In Progress. This note preserves the historical
 execution record. [PLAN.md](../PLAN.md) replaces the old task sequence; UI-04 owns
 native/accessibility follow-up and REL-01 owns final acceptance. This file does
 not authorize execution or a commit and is not a second backlog.
@@ -10,6 +10,12 @@ and screen-reader checks remain incomplete. The detailed operator requirements
 remain in [UI_PRECISION_ACCEPTANCE.md](../desktop/UI_PRECISION_ACCEPTANCE.md)
 and the canonical [release acceptance](../docs/RELEASE_ACCEPTANCE.md).
 REL-02 may retire this note after consolidating its evidence and outstanding checks.
+
+FND-01 reconciled this retained record with the current baseline and regenerated a
+minimal four-view component fixture set. Its exact runtime, artifact names, and
+remaining native limitation are recorded in
+[UI_PRECISION_ACCEPTANCE.md](../desktop/UI_PRECISION_ACCEPTANCE.md); this historical
+record does not convert offscreen output into native acceptance.
 
 ## Execution record
 

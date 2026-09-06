@@ -13,7 +13,8 @@ source; this document owns release evidence and open validation obligations.
 | Post-cleanup daemon/config tests (`-count=1`) | Passed, including maintained documentation/version contracts | Foundation |
 | Fresh `make quality` | Staticcheck/deadcode passed; gocyclo failed on five functions; later clone/Desktop static stages not run | FND-02–04, AUTO-01 |
 | Earlier deterministic UI and workflow tests | Recorded passes in completed work; not rerun as a full matrix by this docs change | UI-04, REL-01 |
-| Task 170 production render additions | Existing uncommitted component/test evidence preserved | UI-04 |
+| Task 170 production render additions | Historical component/test evidence is tracked; generated images remain ignored build output | UI-04 |
+| FND-01 production fixture baseline | Current 1440×900 and 999×760 Editor, Analysis, populated Review, and populated Performance component captures; JBR 25.0.4.1 rerun, not native acceptance | UI-04 |
 | Saved fixture inspection during planning | Editor at 1000dp, Analysis at 150% text and ready Review inspected; concrete UI corrections recorded in PLAN | UI-01–03 |
 | Native window/edge popup/OS focus/reader | Missing; observing an app process did not exercise the UI | UI-04 |
 | Real local/remote/mixed model scopes | Manual compatibility and end-to-end checks not recorded as passed | REL-01 |
@@ -35,6 +36,18 @@ Retained working evidence, including pre-existing user edits:
 These files are temporarily retained to preserve ongoing work. Their dated
 baseline sections describe history. REL-02 consolidates current reproduction and
 remaining checks here before retiring redundant history.
+
+## FND-01 reconciliation
+
+FND-01 started at `d0a7cc9`. The only pre-existing worktree edit was the coordinator's
+`PLAN.md` status transition for FND-01; it is not part of the evidence change. The preserved Task
+170 source/test record was already tracked in that baseline, while all rendered PNGs are ignored.
+The current eight-fixture matrix, command, runtime identity, scale, artifact names, and native
+limitation are recorded in [UI precision evidence](../desktop/UI_PRECISION_ACCEPTANCE.md).
+
+The inherited release items remain assigned: UI-04 owns native window, edge popup, operating-system
+focus, and screen-reader inspection; REL-01 owns provider, lifecycle, package, and distribution
+acceptance; LEARN-02 owns insight usefulness; FND-02–04 and AUTO-01 own the quality findings.
 
 ## Reproduce acceptance
 

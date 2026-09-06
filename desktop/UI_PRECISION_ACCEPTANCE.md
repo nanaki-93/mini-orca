@@ -14,6 +14,42 @@ evidence for native menu, dialog, window-edge, or screen-reader behavior.
   backend`) was rendered; no fixture capture includes a daemon, provider, user project,
   credential, or live provider data. The native launch could not be inspected or captured.
 
+## FND-01 baseline reconciliation — 2026-09-06
+
+The starting repository identity was `d0a7cc9` (`docs: establish Mini-Orca improvement
+autopilot`). Before this task began, the coordinator had changed only the FND-01 status in
+`PLAN.md` from Pending to Running. That status edit is not FND-01 evidence. The Task 170 test
+source and retained execution record are tracked at that baseline; its generated PNGs are ignored
+build output. This task adds no product or configuration behavior.
+
+The current reproduction used the existing `DesktopVisualLayoutTest` production-component
+renderer with local fixture data. It ran with JBR `25.0.4.1+1-583.48-jcef`, which is JBR 25 but
+not the exact historical Task 170 `25.0.4+1-b508.27-nomod` SDK. The runtime difference is
+recorded here rather than treated as equivalent native acceptance.
+
+| View | 1440×900, font/density scale 1.0 | 999×760, font/density scale 1.0 | Source and classification |
+| --- | --- | --- | --- |
+| Editor | `editor-1440.png` | `editor-999.png` | `EditorVisualFixture`; offscreen production-component render |
+| Analysis | `analysis-1440-1.0.png` | `analysis-999-1.0.png` | `AnalysisVisualFixture`; offscreen production-component render |
+| Review, ready to apply | `review-ready-1440-900-1.0.png` | `review-ready-999-760-1.0.png` | `ReviewToolWindow` with a current passed required check; offscreen production-component render |
+| Performance, populated | `performance-populated-1440-900-1.0.png` | `performance-populated-999-760-1.0.png` | `PerformanceWorkspacePane` with a populated source hypothesis; offscreen production-component render |
+
+All eight artifacts were written to the ignored
+`desktop/build/reports/ui-precision/fnd-01/` directory by:
+
+```sh
+./desktop/gradlew -p desktop test \
+  --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' \
+  --tests 'io.miniorca.desktop.DesktopAccessibilityTest' \
+  --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' \
+  -PvisualOutput="$PWD/desktop/build/reports/ui-precision/fnd-01"
+```
+
+The run passed: 22 visual-layout, 7 accessibility, and 7 keyboard-navigation tests. PNG
+dimensions were checked with `sips`; representative Editor, Analysis, Review, and Performance
+renders were visually inspected. The renderer does not open a native window, so this reproduction
+does not update native, popup-placement, operating-system focus, or screen-reader evidence.
+
 ## Deterministic component evidence
 
 `DesktopVisualLayoutTest`, `DesktopAccessibilityTest`, and
@@ -27,6 +63,10 @@ evidence for native menu, dialog, window-edge, or screen-reader behavior.
 | Errors, stale/empty/populated evidence | Problems, Checks, Output, Analysis, Context, Assistant, Review, Performance fixtures | Offscreen production-component render and semantics assertions |
 | Keyboard / state semantics | Rail, tabs, command palette, popup dismissal/focus return, disclosures, responsive drawer boundary, provider confirmation | Deterministic Compose keyboard and semantics tests |
 | Contrast | Primary, secondary, selected, focus, disabled, diff success, and diff error pairs | `DesktopThemeTest` and `DiffViewerTest` token assertions |
+
+The FND-01 table above is the current minimum baseline for the four principal populated views.
+The broader Task 170 matrix remains historical component evidence, with its native limitations
+unchanged.
 
 Reviewed Task 170 captures include
 `analysis-1280-600-100-1x.png`, `analysis-1280-600-125-1x.png`,
@@ -62,3 +102,6 @@ On supported macOS/JBR 25 hardware with a disposable fixture, capture and record
    selected/expanded/disabled states, and focus order.
 
 Task 170 remains incomplete until that material native and assistive evidence is attached here.
+UI-04 owns native-window, popup, operating-system focus, and reader evidence; REL-01 owns the
+release-level provider, lifecycle, package, and distribution checks in the canonical
+[release acceptance](../docs/RELEASE_ACCEPTANCE.md).
