@@ -84,6 +84,31 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun analysisChromeRemainsReadableAtSupportedTextAndDensityScales() {
+    listOf(
+            Triple("100-1x", 1f, 1f),
+            Triple("125-1x", 1.25f, 1f),
+            Triple("150-1x", 1.5f, 1f),
+            Triple("100-2x", 1f, 2f),
+        )
+        .forEach { (label, fontScale, densityScale) ->
+          val logicalWidth = 1_280f / densityScale
+          ComposeVisualFixture(
+                  width = 1_280,
+                  height = 600,
+                  fontScale = fontScale,
+                  densityScale = densityScale,
+              ) {
+                AnalysisVisualFixture(logicalWidth)
+              }
+              .use { fixture ->
+                fixture.render("analysis-1280-600-$label")
+                listOf("Preview", "Pause", "Cancel").forEach(fixture::assertTextFits)
+              }
+        }
+  }
+
+  @Test
   fun analysisLifecycleControlsRenderAtNarrowEnlargedTextScale() {
     val cases =
         listOf(
@@ -1176,6 +1201,7 @@ private class ComposeVisualFixture(
     private val width: Int,
     private val height: Int,
     fontScale: Float = 1f,
+    densityScale: Float = 1f,
     content: @Composable () -> Unit,
 ) : AutoCloseable {
   private val owners = mutableListOf<SemanticsOwner>()
@@ -1199,7 +1225,7 @@ private class ComposeVisualFixture(
       }
   private val scene =
       CanvasLayersComposeScene(
-          density = Density(1f, fontScale),
+          density = Density(densityScale, fontScale),
           size = IntSize(width, height),
           coroutineContext = Dispatchers.Unconfined,
           platformContext = platform)

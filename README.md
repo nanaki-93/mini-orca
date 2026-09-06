@@ -1,118 +1,71 @@
-# mini-orca
+# Mini-Orca
 
-Mini-Orca is a local-first, Go-first desktop coding assistant for one deliberate
-change: one active project, one open file, one selected or new declaration, one
-editable AI draft, validation, focused checks, and explicit Apply.
+A local-first, Go-first coding assistant for one deliberate change: one project,
+one file, one declaration, an editable AI draft, checks and explicit Apply.
+The Kotlin/Compose Desktop client talks to a Go daemon on loopback.
 
-The Compose Desktop client has five workspaces—Summary, Analysis, Performance, Bugs, and
-Editor. Source and composed diff views remain selectable and read-only. Only the
-isolated declaration draft is editable.
+## Use it
 
-## Safe workflow
+1. Open a local project and inspect its summary, files and symbols.
+2. Review a bug suggestion or select a declaration to change. New declarations
+   must belong to the current file and have an absent valid name.
+3. Send a short request in the file-bound Assistant. Edit only the returned
+   declaration/import draft; source and composed diffs stay selectable/read-only.
+4. Validate, run focused checks and inspect Review. Apply names the exact file
+   and declaration. Undo restores only the immediately preceding unchanged Apply.
 
-1. Import one local project to build deterministic facts and a structured
-   project analysis.
-2. In Bugs, review a fresh suggested task and use **Prepare fix**, or in Editor
-   select an exact declaration to replace, or name a new top-level declaration
-   to create.
-3. Open a file-scoped chat session and request a proposal. Its project, file,
-   base hash, mode, and target cannot change in later messages.
-4. Edit only the returned declaration/import draft. Validate the displayed
-   revision, run focused checks, and review the read-only diff. A reviewed Go
-   task test runs only in a temporary copy; a failed task check can offer up to
-   three explicit **Revise with check output** requests in the same session.
-5. Confirm Apply for that named file and declaration. Undo can restore only the
-   immediately preceding unchanged apply.
+Analysis/scans and source-based Performance review are explicit actions. Findings
+retain provenance and freshness. Engineering insights explain concrete mechanisms
+and trade-offs; Performance does not yet measure runtime improvements.
 
-Mini-Orca never creates multi-file changes, edits source directly, runs scans
-automatically, writes drafts or tests automatically, commits, or pushes.
+Mini-Orca does not automatically edit source, run scans, write tests to your
+project, commit or push. Exact declaration editing is currently Go-first; other
+languages have conservative analysis and symbol information. The Security section,
+read-only explanation and measured benchmarks in [PLAN.md](PLAN.md) are planned.
 
-## Model scopes and provider compatibility
+## Run
 
-`analyze`, `bug`, and `function` are three fixed independently configured
-scopes. Project import and explicit source-based Performance reviews use
-`analyze`; selected-file analysis and Analyze-all use `bug`; file-scoped declaration proposals and explicit repairs use
-`function`. All three `model_scopes` profiles are required at startup; there is
-no flat `llm` fallback or agent-model override.
+Use Go 1.22+ and the desktop's pinned JBR 25 toolchain. Read
+[desktop setup](desktop/README.md#runtime-and-build) before the first launch.
+Configure all three model scopes using [CONFIG.md](CONFIG.md).
 
-Each explicit scope uses the OpenAI Chat Completions-compatible API base and a
-model ID. An optional per-scope `reasoning_effort` is passed unchanged through
-the Chat Completions request when the selected provider/model supports it. This
-represents OpenAI, Claude-compatible, Gemini-compatible, Ollama, LM Studio, and
-compatible gateways without native vendor SDKs, streaming, tool calls, or
-provider account management. See [CONFIG.md](CONFIG.md) for safe placeholder
-examples and migration rules.
-
-The daemon loads configuration at startup; restart it after changing
-`config.yaml`. A non-loopback scope requires an explicit confirmation for its
-own prompt request. That confirmation never authorizes another scope. Model
-metadata, caches, and the Desktop display expose no API keys; changing a scope
-model, provider, or reasoning effort makes old AI interpretations stale.
-
-## Project intelligence
-
-Import and reindex are deterministic. Verified Go parser, vet, and test scans,
-one-file semantic analysis, and Analyze-all are explicit user actions. Bugs
-keeps verified tool findings distinct from AI suggestions, including provenance,
-confidence, lifecycle state, and freshness.
-
-Project-local metadata is persisted under `.mini-orca/`: `index.json`,
-`project-analysis.json`, `file-analysis/`, `findings.json`, the persisted
-Analyze-all job at `sessions/analyze-all.json`, Performance review reports at
-`performance/files/` and its source-free job state at `sessions/performance-job.json`, guarded Apply state and audit
-at `sessions/apply-state.json` and `sessions/audit.json`, and one-file Undo
-backups under `backups/`. These files are application metadata, not source
-edits. Mini-Orca no longer reads or writes the retired `.mini-orca/analysis.md`
-projection or activity files. Existing legacy files are left untouched and may
-be removed manually from a project's `.mini-orca` directory when no longer
-needed.
-
-Exact declaration editing, composition, and required parsing/formatting are
-currently Go-first. Other languages can have conservative analysis and symbol
-information, but not equivalent exact editing or validators.
-
-## Run locally
-
-Prerequisites: Go 1.22+ and a configured OpenAI-compatible or local LLM endpoint.
-
-```bash
+```sh
 cp config.example.yaml config.yaml
 go run ./cmd/daemon
+# In a second terminal, with the documented desktop runtime:
 ./desktop/gradlew -p desktop run
 ```
 
-The daemon binds to `http://localhost:9090` on loopback by default. The desktop
-uses that URL unless `MINI_ORCA_URL` is set. A non-loopback provider must be
-explicitly confirmed in each request that can send prompt content—project
-analysis, file analysis, Analyze-all, a chat message, or an explicit repair—after
-the user reviews that scope’s destination. Keep `config.yaml` local; it is
-ignored by Git.
+The daemon defaults to `127.0.0.1:9090`; the desktop uses
+`http://localhost:9090` unless `MINI_ORCA_URL` is set. Keep `config.yaml` local.
+Each prompt-bearing request to a non-loopback model needs scope-specific
+confirmation. Provider keys are not part of API metadata.
 
-## Loopback API contract
+## Project intelligence
 
-Integrations open a file-scoped session, send its messages, then edit the
-returned declaration draft before validation, checks, review, and an explicit
-Apply. The supported routes are documented once in the
-[canonical API guide](docs/api-contract.md), with schemas in
-[OpenAPI](docs/openapi.yaml).
+The daemon owns indexing, context exclusions, model requests and guarded source
+mutation. The desktop renders state and rejects stale asynchronous results.
+Three configured scopes serve project/Performance analysis (`analyze`), file/bug
+analysis (`bug`) and declaration proposals/repairs (`function`).
 
-## Documentation
+Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`,
+`file-analysis/`, `findings.json`, `performance/files/`, job state under `sessions/`,
+Apply receipts/audit under `sessions/`, and Undo data under `backups/`. These are
+application metadata. Restore uses local persisted analysis without a model call.
+See the [API guide](docs/api-contract.md) for current contracts and boundaries.
 
-- [Desktop usage](desktop/README.md), including keyboard and responsive smoke checks
-- [UI precision plan](Plan.md) and [implementation tasks](tasks/INDEX.md)
-- [Canonical API guide](docs/api-contract.md) and [OpenAPI contract](docs/openapi.yaml)
-- [Configuration reference](CONFIG.md)
-- [Docker deployment](DOCKER.md)
-- [Release notes](RELEASE_NOTES.md)
+## Development and documentation
 
-## Development checks
+Follow [AGENTS.md](AGENTS.md). Run focused tests while editing; `make check` runs
+Go formatting, tests, race, vet and desktop tests. `make quality` adds pinned
+static/reachability/complexity/clone tools and desktop static checks. It currently
+fails on five known Go complexity findings; [PLAN.md](PLAN.md) assigns their fixes.
 
-```bash
-go test ./...
-./desktop/gradlew -p desktop test
-make check
-```
+- [Plan and task ledger](PLAN.md) · [agent execution workflow](tasks/README.md)
+- [Desktop runtime, usage and keys](desktop/README.md) · [UI guidelines](desktop/UI_DESIGN_GUIDELINES.md)
+- [API guide](docs/api-contract.md) · [OpenAPI](docs/openapi.yaml) · [configuration](CONFIG.md)
+- [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md) · [acceptance evidence](docs/RELEASE_ACCEPTANCE.md)
 
-## License
-
-MIT
+Completed plans and task history live in Git. New documentation should describe
+current use, a real contract or an unresolved decision, with one owner per fact.
+MIT licensed; see [LICENSE](LICENSE).

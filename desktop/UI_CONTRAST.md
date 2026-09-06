@@ -1,8 +1,9 @@
 # IDE token contrast
 
 Task 162 centralizes the desktop palette in `DesktopTheme.kt` and makes Jewel's
-standalone `IntUiTheme` the production outer theme. The temporary Material bridge
-receives only these mapped semantic values until its owning controls migrate.
+standalone `IntUiTheme` the production outer theme. Task 169 removed the temporary
+Material theme bridge; remaining text primitives receive these explicit semantic
+content roles directly.
 
 | Pair | Tokens | Contrast |
 | --- | --- | ---: |
