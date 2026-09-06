@@ -94,8 +94,7 @@ func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
 		api.WriteAppError(w, api.BadRequest("project import failed", "The selected project could not be imported.", err))
 		return
 	}
-	h.service.ProjectChanged()
-	if err := h.manager.Set(analysis.Path, analysis); err != nil {
+	if err := h.service.ActivateProject(analysis.Path, analysis); err != nil {
 		api.WriteAppError(w, api.Internal("project activation failed", "The analysis was created but the project could not be activated.", err))
 		return
 	}
@@ -113,8 +112,7 @@ func (h *ProjectHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		api.WriteAppError(w, api.BadRequest("project restore failed", "The selected project could not be restored.", err))
 		return
 	}
-	h.service.ProjectChanged()
-	if err := h.manager.Restore(analysis.Path, analysis); err != nil {
+	if err := h.service.RestoreActiveProject(analysis.Path, analysis); err != nil {
 		api.WriteAppError(w, api.Internal("project restoration failed", "The stored analysis was loaded but the project could not be activated.", err))
 		return
 	}

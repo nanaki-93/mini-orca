@@ -124,7 +124,13 @@ func TestDraftStalesOnFileChangeAndProjectSwitchClearsSource(t *testing.T) {
 		t.Fatalf("file change did not stale draft: %+v", stale)
 	}
 
-	service.ProjectChanged()
+	newRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(newRoot, "next.go"), []byte("package next\nfunc Next() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ActivateProject(newRoot, &project.Analysis{Name: "next", Path: newRoot}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.Draft(draft.ID); err == nil {
 		t.Fatal("project switch retained editable draft source")
 	}
