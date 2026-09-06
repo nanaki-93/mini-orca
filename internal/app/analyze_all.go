@@ -50,6 +50,7 @@ type AnalyzeAllJob struct {
 	Files           []AnalyzeAllFileJob `json:"files"`
 	CreatedAt       time.Time           `json:"created_at"`
 	UpdatedAt       time.Time           `json:"updated_at"`
+	root            string
 }
 
 // AnalyzeAllFileJob records one eligible file without source or prompt content.
@@ -61,10 +62,18 @@ type AnalyzeAllFileJob struct {
 }
 
 type analysisAllController struct {
-	mu        sync.Mutex
-	job       *AnalyzeAllJob
-	cancel    context.CancelFunc
-	persisted chan struct{}
+	mu         sync.Mutex
+	job        *AnalyzeAllJob
+	cancel     context.CancelFunc
+	workerDone chan struct{}
+	persisted  chan struct{}
+}
+
+type analyzeAllStartInput struct {
+	analysis *project.Analysis
+	index    *project.ProjectIndex
+	options  AnalyzeAllOptions
+	root     string
 }
 
 func newAnalysisAllController() *analysisAllController { return &analysisAllController{} }
@@ -106,45 +115,93 @@ func (c *analysisAllController) waitForPersists() {
 // StartAnalyzeAll explicitly starts a bounded, sequential cache-warming job.
 // Importing a project never calls this method.
 func (s *Service) StartAnalyzeAll(_ context.Context, options AnalyzeAllOptions, confirmRemoteProvider bool) (*AnalyzeAllJob, error) {
-	if err := s.RequireRemoteConfirmation(config.BugModelScope, confirmRemoteProvider); err != nil {
+	input, err := s.prepareAnalyzeAllStart(options, confirmRemoteProvider)
+	if err != nil {
 		return nil, err
 	}
+	files, err := s.selectAnalyzeAllCandidates(input.analysis, input.index, input.options.MaxFiles)
+	if err != nil {
+		return nil, err
+	}
+	return s.activateAnalyzeAll(input, files)
+}
+
+func (s *Service) prepareAnalyzeAllStart(options AnalyzeAllOptions, confirmRemoteProvider bool) (analyzeAllStartInput, error) {
+	if err := s.RequireRemoteConfirmation(config.BugModelScope, confirmRemoteProvider); err != nil {
+		return analyzeAllStartInput{}, err
+	}
 	if active, _ := s.PerformanceJob(); active != nil && (active.Status == performanceJobRunning || active.Status == performanceJobPaused) {
-		return nil, fmt.Errorf("performance review is already active")
+		return analyzeAllStartInput{}, fmt.Errorf("performance review is already active")
 	}
 	analysis, err := s.manager.Analysis()
 	if err != nil {
-		return nil, err
+		return analyzeAllStartInput{}, err
 	}
 	index, err := s.manager.Index()
 	if err != nil {
-		return nil, err
+		return analyzeAllStartInput{}, err
 	}
 	if index.ProjectID != analysis.ProjectID || index.ProjectRevision != analysis.ProjectRevision {
-		return nil, project.ErrRevisionConflict
+		return analyzeAllStartInput{}, project.ErrRevisionConflict
 	}
-	options = normalizeAnalyzeAllOptions(options)
-	files, err := s.analysisAllCandidates(index, options.MaxFiles)
-	if err != nil {
+	return analyzeAllStartInput{analysis: analysis, index: index, options: normalizeAnalyzeAllOptions(options), root: s.manager.Root()}, nil
+}
+
+func (s *Service) activateAnalyzeAll(input analyzeAllStartInput, files []AnalyzeAllFileJob) (*AnalyzeAllJob, error) {
+	s.jobLifecycleMu.Lock()
+	now := time.Now().UTC()
+	job := &AnalyzeAllJob{ProjectID: input.analysis.ProjectID, ProjectRevision: input.analysis.ProjectRevision, Status: analysisAllStateRunning, MaxFiles: input.options.MaxFiles, MaxRetries: input.options.MaxRetries, Files: files, CreatedAt: now, UpdatedAt: now, root: input.root}
+	s.analysisAll.mu.Lock()
+	if err := s.verifyAnalyzeAllStart(input); err != nil {
+		s.analysisAll.mu.Unlock()
+		s.jobLifecycleMu.Unlock()
 		return nil, err
 	}
-	now := time.Now().UTC()
-	job := &AnalyzeAllJob{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Status: analysisAllStateRunning, MaxFiles: options.MaxFiles, MaxRetries: options.MaxRetries, Files: files, CreatedAt: now, UpdatedAt: now}
-	s.analysisAll.mu.Lock()
-	if current := s.analysisAll.job; current != nil && current.ProjectID == analysis.ProjectID && current.ProjectRevision == analysis.ProjectRevision && (current.Status == analysisAllStateRunning || current.Status == analysisAllStatePaused) {
+	if current := s.analysisAll.job; current != nil && current.ProjectID == job.ProjectID && current.ProjectRevision == job.ProjectRevision && (current.Status == analysisAllStateRunning || current.Status == analysisAllStatePaused) {
 		existing := cloneAnalyzeAllJob(current)
 		s.analysisAll.mu.Unlock()
+		s.jobLifecycleMu.Unlock()
 		return existing, nil
 	}
+	s.performance.mu.Lock()
+	if activePerformanceJob(s.performance.job) {
+		s.performance.mu.Unlock()
+		s.analysisAll.mu.Unlock()
+		s.jobLifecycleMu.Unlock()
+		return nil, fmt.Errorf("performance review is already active")
+	}
+	oldCancel := s.analysisAll.cancel
+	s.analysisAll.cancel = nil
 	s.analysisAll.job = job
+	s.performance.mu.Unlock()
 	s.analysisAll.mu.Unlock()
+	if oldCancel != nil {
+		oldCancel()
+	}
 	if err := s.persistAnalyzeAllJob(job); err != nil {
 		s.clearAnalyzeAllJob(job)
+		s.jobLifecycleMu.Unlock()
 		return nil, err
 	}
 	published := cloneAnalyzeAllJob(job)
+	s.jobLifecycleMu.Unlock()
 	s.startAnalyzeAllWorker()
 	return published, nil
+}
+
+func (s *Service) verifyAnalyzeAllStart(input analyzeAllStartInput) error {
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		return err
+	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return err
+	}
+	if s.manager.Root() != input.root || analysis.ProjectID != input.analysis.ProjectID || analysis.ProjectRevision != input.analysis.ProjectRevision || index.ProjectID != input.index.ProjectID || index.ProjectRevision != input.index.ProjectRevision {
+		return project.ErrRevisionConflict
+	}
+	return nil
 }
 
 // AnalyzeAllJob returns durable progress for the active project, if any.
@@ -253,6 +310,12 @@ func (s *Service) ResumeAnalyzeAll(_ context.Context, confirmRemoteProvider bool
 
 // Reindex invalidates an active job before deterministic facts are refreshed.
 func (s *Service) Reindex() (*project.ProjectIndex, error) {
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	return s.reindexActiveProject()
+}
+
+func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
 	s.invalidateAnalyzeAll()
 	s.invalidatePerformanceJob()
 	s.cancelGoScan()
@@ -263,8 +326,24 @@ func (s *Service) Reindex() (*project.ProjectIndex, error) {
 	return index, err
 }
 
-// ProjectChanged stops a job before an imported project replaces the active project.
-func (s *Service) ProjectChanged() {
+// ActivateProject replaces the active project after model analysis has completed.
+func (s *Service) ActivateProject(root string, analysis *project.Analysis) error {
+	return s.replaceActiveProject(func() error { return s.manager.Set(root, analysis) })
+}
+
+// RestoreActiveProject replaces the active project from persisted local analysis.
+func (s *Service) RestoreActiveProject(root string, analysis *project.Analysis) error {
+	return s.replaceActiveProject(func() error { return s.manager.Restore(root, analysis) })
+}
+
+func (s *Service) replaceActiveProject(activate func() error) error {
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	s.invalidateJobsForProjectChange()
+	return activate()
+}
+
+func (s *Service) invalidateJobsForProjectChange() {
 	s.invalidateAnalyzeAll()
 	s.invalidatePerformanceJob()
 	s.cancelGoScan()
@@ -370,11 +449,7 @@ func (s *Service) markAnalyzeAllStale(job *AnalyzeAllJob) (*AnalyzeAllJob, error
 	return published, nil
 }
 
-func (s *Service) analysisAllCandidates(index *project.ProjectIndex, limit int) ([]AnalyzeAllFileJob, error) {
-	analysis, err := s.manager.Analysis()
-	if err != nil {
-		return nil, err
-	}
+func (s *Service) selectAnalyzeAllCandidates(analysis *project.Analysis, index *project.ProjectIndex, limit int) ([]AnalyzeAllFileJob, error) {
 	files := make([]AnalyzeAllFileJob, 0, limit)
 	for _, file := range index.Files {
 		if len(files) == limit {
@@ -411,10 +486,13 @@ func (s *Service) startAnalyzeAllWorker() {
 		s.analysisAll.mu.Unlock()
 		return
 	}
+	job := s.analysisAll.job
 	worker, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 	s.analysisAll.cancel = cancel
+	s.analysisAll.workerDone = done
 	s.analysisAll.mu.Unlock()
-	go s.runAnalyzeAll(worker)
+	go s.runAnalyzeAll(worker, job, done)
 }
 
 func (s *Service) clearAnalyzeAllJob(job *AnalyzeAllJob) {
@@ -423,6 +501,7 @@ func (s *Service) clearAnalyzeAllJob(job *AnalyzeAllJob) {
 		cancel := s.analysisAll.cancel
 		s.analysisAll.job = nil
 		s.analysisAll.cancel = nil
+		s.analysisAll.workerDone = nil
 		s.analysisAll.mu.Unlock()
 		if cancel != nil {
 			cancel()
@@ -432,14 +511,20 @@ func (s *Service) clearAnalyzeAllJob(job *AnalyzeAllJob) {
 	s.analysisAll.mu.Unlock()
 }
 
-func (s *Service) runAnalyzeAll(ctx context.Context) {
+func (s *Service) runAnalyzeAll(ctx context.Context, job *AnalyzeAllJob, done chan struct{}) {
 	defer func() {
 		s.analysisAll.mu.Lock()
-		s.analysisAll.cancel = nil
+		if s.analysisAll.job == job {
+			s.analysisAll.cancel = nil
+			if s.analysisAll.workerDone == done {
+				s.analysisAll.workerDone = nil
+			}
+		}
 		s.analysisAll.mu.Unlock()
+		close(done)
 	}()
 	for {
-		file, ok := s.nextAnalyzeAllFile()
+		file, ok := s.nextAnalyzeAllFile(job)
 		if !ok {
 			return
 		}
@@ -447,7 +532,7 @@ func (s *Service) runAnalyzeAll(ctx context.Context) {
 		if err == nil && result.Status == project.AnalysisStatusFailed {
 			err = fmt.Errorf("semantic analysis failed")
 		}
-		s.recordAnalyzeAllResult(file, err)
+		s.recordAnalyzeAllResult(job, file, err)
 		if ctx.Err() != nil {
 			return
 		}
@@ -455,20 +540,24 @@ func (s *Service) runAnalyzeAll(ctx context.Context) {
 	}
 }
 
-func (s *Service) nextAnalyzeAllFile() (string, bool) {
+func (s *Service) nextAnalyzeAllFile(expected *AnalyzeAllJob) (string, bool) {
 	s.analysisAll.mu.Lock()
-	job := cloneAnalyzeAllJob(s.analysisAll.job)
+	if s.analysisAll.job != expected {
+		s.analysisAll.mu.Unlock()
+		return "", false
+	}
+	job := cloneAnalyzeAllJob(expected)
 	s.analysisAll.mu.Unlock()
 	if job == nil || job.Status != analysisAllStateRunning {
 		return "", false
 	}
 	if err := s.verifyAnalyzeAllRevision(job); err != nil {
-		_, _ = s.markAnalyzeAllStale(job)
+		_, _ = s.markAnalyzeAllWorkerStale(expected)
 		return "", false
 	}
 	s.analysisAll.mu.Lock()
 	current := s.analysisAll.job
-	if current == nil || current.ProjectID != job.ProjectID || current.ProjectRevision != job.ProjectRevision || current.Status != analysisAllStateRunning {
+	if current != expected || current.Status != analysisAllStateRunning {
 		s.analysisAll.mu.Unlock()
 		return "", false
 	}
@@ -497,10 +586,10 @@ func shouldRetryAnalyzeAllFile(file AnalyzeAllFileJob, maxRetries int) bool {
 	return file.Status == analysisAllFileFailed && file.Error != analysisAllTimeoutError && file.Attempts <= maxRetries
 }
 
-func (s *Service) recordAnalyzeAllResult(path string, cause error) {
+func (s *Service) recordAnalyzeAllResult(expected *AnalyzeAllJob, path string, cause error) {
 	s.analysisAll.mu.Lock()
 	job := s.analysisAll.job
-	if job == nil || job.Status == analysisAllStateCanceled || job.Status == analysisAllStateStale {
+	if job != expected || job.Status == analysisAllStateCanceled || job.Status == analysisAllStateStale {
 		s.analysisAll.mu.Unlock()
 		return
 	}
@@ -529,6 +618,26 @@ func (s *Service) recordAnalyzeAllResult(path string, cause error) {
 	s.analysisAll.mu.Unlock()
 }
 
+func (s *Service) markAnalyzeAllWorkerStale(expected *AnalyzeAllJob) (*AnalyzeAllJob, error) {
+	s.analysisAll.mu.Lock()
+	if s.analysisAll.job != expected || expected.Status != analysisAllStateRunning {
+		s.analysisAll.mu.Unlock()
+		return nil, project.ErrRevisionConflict
+	}
+	expected.Status = analysisAllStateStale
+	expected.UpdatedAt = time.Now().UTC()
+	cancel := s.analysisAll.cancel
+	published := cloneAnalyzeAllJob(expected)
+	s.analysisAll.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if err := s.persistAnalyzeAllJob(published); err != nil {
+		return nil, err
+	}
+	return published, nil
+}
+
 func (s *Service) verifyAnalyzeAllRevision(job *AnalyzeAllJob) error {
 	index, err := s.manager.Index()
 	if err != nil {
@@ -541,7 +650,7 @@ func (s *Service) verifyAnalyzeAllRevision(job *AnalyzeAllJob) error {
 }
 
 func (s *Service) storeAnalyzeAllJob(job *AnalyzeAllJob) error {
-	path := filepath.Join(s.manager.Root(), ".mini-orca", "sessions", "analyze-all.json")
+	path := filepath.Join(job.root, ".mini-orca", "sessions", "analyze-all.json")
 	data, err := json.MarshalIndent(job, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode analyze-all job: %w", err)
@@ -553,9 +662,32 @@ func (s *Service) storeAnalyzeAllJob(job *AnalyzeAllJob) error {
 }
 
 func (s *Service) persistAnalyzeAllJob(job *AnalyzeAllJob) error {
+	if job == nil {
+		return fmt.Errorf("analyze-all job is required")
+	}
 	finished := s.analysisAll.beginPersist()
 	defer finished()
+
+	job = s.currentAnalyzeAllJobForPersistence(job)
+	if job == nil {
+		return nil
+	}
 	return s.storeAnalyzeAllJob(job)
+}
+
+// currentAnalyzeAllJobForPersistence makes the controller's newest state
+// authoritative after a caller has waited for the persistence writer. A result
+// from a stale worker must never overwrite an invalidated or replacement job.
+func (s *Service) currentAnalyzeAllJobForPersistence(requested *AnalyzeAllJob) *AnalyzeAllJob {
+	s.analysisAll.mu.Lock()
+	defer s.analysisAll.mu.Unlock()
+	if s.analysisAll.job == nil {
+		return cloneAnalyzeAllJob(requested)
+	}
+	if s.analysisAll.job.root != requested.root {
+		return nil
+	}
+	return cloneAnalyzeAllJob(s.analysisAll.job)
 }
 
 func loadAnalyzeAllJob(root string) (*AnalyzeAllJob, error) {
@@ -574,6 +706,7 @@ func loadAnalyzeAllJob(root string) (*AnalyzeAllJob, error) {
 	if job.ProjectID == "" || job.ProjectRevision == "" || !validAnalyzeAllState(job.Status) {
 		return nil, fmt.Errorf("analyze-all job is invalid")
 	}
+	job.root = root
 	return &job, nil
 }
 

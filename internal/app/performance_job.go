@@ -134,7 +134,7 @@ func (s *Service) StartPerformanceJob(ctx context.Context, options PerformanceJo
 	if err := s.RequireRemoteConfirmation(config.AnalyzeModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
-	if active, _ := s.AnalyzeAllJob(); active != nil && (active.Status == analysisAllStateRunning || active.Status == analysisAllStatePaused) {
+	if s.analyzeAllActive() {
 		return nil, fmt.Errorf("analyze-all is already active")
 	}
 	if active, err := s.PerformanceJob(); err != nil {
@@ -160,21 +160,46 @@ func (s *Service) StartPerformanceJob(ctx context.Context, options PerformanceJo
 		MaxFiles: preview.MaxFiles, RunBudget: normalizePerformanceOptions(options).RunBudget,
 		Files: preview.Files, CreatedAt: now, UpdatedAt: now,
 	}
+	s.jobLifecycleMu.Lock()
+	s.analysisAll.mu.Lock()
+	if activeAnalyzeAllJob(s.analysisAll.job) {
+		s.analysisAll.mu.Unlock()
+		s.jobLifecycleMu.Unlock()
+		return nil, fmt.Errorf("analyze-all is already active")
+	}
 	s.performance.mu.Lock()
 	if current := s.performance.job; current != nil && (current.Status == performanceJobRunning || current.Status == performanceJobPaused) {
 		copy := clonePerformanceJob(current)
 		s.performance.mu.Unlock()
+		s.analysisAll.mu.Unlock()
+		s.jobLifecycleMu.Unlock()
 		return copy, nil
 	}
 	s.performance.job = job
 	s.performance.mu.Unlock()
+	s.analysisAll.mu.Unlock()
 	if err := s.persistPerformanceJob(job); err != nil {
 		s.clearPerformanceJob(job)
+		s.jobLifecycleMu.Unlock()
 		return nil, err
 	}
 	published := clonePerformanceJob(job)
+	s.jobLifecycleMu.Unlock()
 	s.startPerformanceWorker(ctx)
 	return published, nil
+}
+
+func (s *Service) analyzeAllActive() bool {
+	active, _ := s.AnalyzeAllJob()
+	return activeAnalyzeAllJob(active)
+}
+
+func activeAnalyzeAllJob(job *AnalyzeAllJob) bool {
+	return job != nil && (job.Status == analysisAllStateRunning || job.Status == analysisAllStatePaused)
+}
+
+func activePerformanceJob(job *PerformanceJob) bool {
+	return job != nil && (job.Status == performanceJobRunning || job.Status == performanceJobPaused)
 }
 
 // PerformanceJob returns the current or persisted job for the active project revision.

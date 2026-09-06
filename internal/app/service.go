@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
@@ -54,6 +55,7 @@ type Service struct {
 	focusedCheckTimeout time.Duration
 	retryBase           time.Duration
 	retryMax            time.Duration
+	jobLifecycleMu      sync.Mutex
 	analysisAll         *analysisAllController
 	goScan              *goScanController
 	drafts              *draftStore

@@ -223,7 +223,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | FND-01 | Reconcile baseline and preserve working evidence | AUTO-00 | S / low | Complete |
 | FND-02 | Simplify Performance review/validation | FND-01 | S / medium | Complete |
 | FND-03 | Simplify Performance job admission/validation | FND-02 | M / high | Pending |
-| FND-04 | Simplify Analyze-all admission | FND-01 | S / high | Blocked — repair cap reached |
+| FND-04 | Simplify Analyze-all admission | FND-01 | S / high | Complete |
 | FND-05 | Remove proven contract and code redundancy | FND-01 | M / medium | Complete |
 | FND-06 | Isolate desktop job coordination | FND-03, FND-04 | M / high | Pending |
 | AUTO-01 | Reproducible validation entry point and CI | FND-02, FND-03, FND-04, FND-05 | M / medium | Pending |
@@ -347,13 +347,15 @@ the full quality gate green. No inherited quality exception applies to final rel
   retry budget and canceled results preserve current behavior; complexity ≤15.
 - Verify: Analyze-all/file-analysis tests, G, Go quality stages. Do not unify it
   with Performance simply because both process queues.
-- Blocked 2026-09-06 after two repair/review cycles. Lifecycle admission is
-  serialized, but an older running Analyze-all snapshot can still be persisted
-  after a newer stale snapshot because the persistence gate orders writers rather
-  than state versions. A restart could resurrect stale work as running. The
-  reviewed work is preserved in the local Git stash
-  `autopilot FND-04 blocked after 2 review cycles`; resume only with a fresh repair
-  allowance. FND-06 and AUTO-01 remain blocked; independent tasks may proceed.
+- Completed 2026-09-06. Analyze-all separates start preparation, candidate
+  selection and lifecycle admission; activation and reindex/project replacement
+  serialize reciprocal Analyze-all and Performance admission. The persistence writer
+  snapshots the current controller state after acquiring its turn, so an older
+  snapshot cannot resurrect stale work. Workers are bound to their job instance,
+  preventing an old worker from changing or clearing a replacement job. Fresh
+  review accepted deterministic stale-snapshot and replacement-worker regressions.
+  Formatting, full Go/race/vet and diff checks passed; global quality now reports
+  only complexity owned by FND-03.
 
 ### FND-05 — Remove proven contract and code redundancy
 
