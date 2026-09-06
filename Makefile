@@ -11,7 +11,7 @@ BUILD_DIR := build
 # Go settings
 GO := go
 CGO_ENABLED := 0
-GRADLE := ./desktop/gradlew -p desktop
+GRADLE := ./scripts/desktop-gradle.sh
 
 # Docker settings
 DOCKER := docker
@@ -73,7 +73,6 @@ fmt-check: ## Verify Go formatting without modifying files
 
 quality: ## Run Go and Desktop static, reachability, complexity, clone, and format checks
 	@./scripts/quality.sh
-	@$(GRADLE) spotlessCheck detekt
 
 desktop-test: ## Run desktop unit tests through the Gradle wrapper
 	@$(GRADLE) test

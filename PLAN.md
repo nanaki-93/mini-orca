@@ -226,7 +226,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | FND-04 | Simplify Analyze-all admission | FND-01 | S / high | Complete |
 | FND-05 | Remove proven contract and code redundancy | FND-01 | M / medium | Complete |
 | FND-06 | Isolate desktop job coordination | FND-03, FND-04 | M / high | Complete |
-| AUTO-01 | Reproducible validation entry point and CI | FND-02, FND-03, FND-04, FND-05 | M / medium | Pending |
+| AUTO-01 | Reproducible validation entry point and CI | FND-02, FND-03, FND-04, FND-05 | M / medium | Complete |
 | UI-01 | Remove unsupported product previews | FND-01 | M / medium | Pending |
 | UI-02 | Correct source-first layout against captures | UI-01 | M / medium | Pending |
 | UI-03 | Make draft/review progression explicit | UI-02 | M / high | Pending |
@@ -745,6 +745,17 @@ the full quality gate green. No inherited quality exception applies to final rel
   failures retain diagnostics and cannot appear as a green skipped stage.
 - Verify: run the script locally, exercise failure reporting, Q. Creating local
   workflow files is the deliverable; enabling hosted services is not implied.
+- Completed 2026-09-07. `scripts/validate.sh` runs the maintained Go, documented
+  route/API-contract, quality and Desktop gates independently and reports all failed
+  stages. `scripts/desktop-gradle.sh` applies Java 21 only for the launcher and Java
+  25 only for JBR/JDK toolchains to every Desktop Make or script gate. It verifies
+  both `java` and `javac`, rejects non-SDK and wrong-version locations, and accepts a
+  Java 21 `JAVA_HOME`/`PATH` fallback only after verifying it rather than deferring to
+  Gradle. The workflow invokes that same entry point with immutable action revisions,
+  fixed Go/JDK versions, a checksum-verified JBR 25.0.4 download, and the Gradle
+  wrapper checksum. Explicit-toolchain local validation, `make check`, `make quality`,
+  `git diff --check`, Java 8/21/25 negative toolchain checks, valid `JAVA_HOME`
+  fallback, and forced validation/quality failure paths passed with expected statuses.
 
 ### AUTO-02 — Bounded agent dispatcher with an independent review gate
 

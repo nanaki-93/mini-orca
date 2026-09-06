@@ -8,20 +8,14 @@ in the ignored daemon configuration, not desktop preferences.
 
 The checked-in build uses Gradle 9.1.0, Kotlin/Compose compiler 2.3.20, Compose
 Multiplatform 1.11.0 and Jewel standalone `0.40.0-262.10315.125`. Use JBR
-`25.0.4+1-b508.27` SDK for app launch and packaging. Supply your local path; do not
-commit it or replace a system JDK as part of a task.
+`25.0.4+1-b508.27` SDK for app launch and packaging. The root
+[development guide](../README.md#development-and-documentation) owns clean-checkout
+toolchain setup and full validation, including explicit JDK/JBR locations. Do not
+commit a local runtime path or replace a system JDK as part of a task.
 
 ```sh
-JAVA_HOME=/path/to/jbr-sdk-home ./desktop/gradlew -p desktop run
-JAVA_HOME=/path/to/jbr-sdk-home ./desktop/gradlew -p desktop test createDistributable
-```
-
-Detekt 1.23.8 needs a JDK 21 Gradle launcher; the app still uses JBR 25. JVM 22
-bytecode is the current analysis compatibility boundary, not a second runtime:
-
-```sh
-JAVA_HOME=/path/to/jdk-21 ./desktop/gradlew -p desktop spotlessCheck detekt test \
-  -Porg.gradle.java.installations.paths=/path/to/jbr-sdk-home
+JAVA_HOME="$MINI_ORCA_JBR25_HOME" ./desktop/gradlew -p desktop run
+JAVA_HOME="$MINI_ORCA_JBR25_HOME" ./desktop/gradlew -p desktop test createDistributable
 ```
 
 Packaged images include `java.net.http` for the daemon client and `jdk.unsupported`
