@@ -70,67 +70,10 @@ type documentedRoute struct {
 	path   string
 }
 
-const routeRetained = "retained"
-
-type routeSpec struct {
-	Method      string `json:"method"`
-	Path        string `json:"path"`
-	Disposition string `json:"disposition"`
-	Consumer    string `json:"consumer,omitempty"`
-}
-
-func registeredRoutes() []routeSpec {
-	return []routeSpec{
-		{http.MethodGet, "/health", routeRetained, "container health check"},
-		{http.MethodGet, "/status", routeRetained, "Desktop ApiClient.status"},
-		{http.MethodPost, "/api/projects/current/chat/sessions", routeRetained, "Desktop ApiClient.openChatSession"},
-		{http.MethodPost, "/api/projects/current/chat/sessions/{sessionID}/messages", routeRetained, "Desktop ApiClient.sendChatMessage"},
-		{http.MethodGet, "/api/models/current", routeRetained, "Desktop ApiClient.modelCatalog"},
-		{http.MethodGet, "/api/projects/current/context", routeRetained, "Desktop ApiClient.context"},
-		{http.MethodPost, "/api/projects/import", routeRetained, "Desktop ApiClient.importProject"},
-		{http.MethodPost, "/api/projects/restore", routeRetained, "Desktop ApiClient.restoreProject"},
-		{http.MethodGet, "/api/projects/current/overview", routeRetained, "Desktop ApiClient.overview"},
-		{http.MethodGet, "/api/projects/current/findings", routeRetained, "Desktop ApiClient.findings"},
-		{http.MethodPatch, "/api/projects/current/findings/{findingID}", routeRetained, "Desktop ApiClient.updateFindingStatus"},
-		{http.MethodGet, "/api/projects/current/scan", routeRetained, "Desktop ApiClient.goScan"},
-		{http.MethodPost, "/api/projects/current/scan", routeRetained, "Desktop ApiClient.startGoScan"},
-		{http.MethodDelete, "/api/projects/current/scan", routeRetained, "Desktop ApiClient.cancelGoScan"},
-		{http.MethodGet, "/api/projects/current/index", routeRetained, "Desktop ApiClient.index"},
-		{http.MethodGet, "/api/projects/current/files/info", routeRetained, "Desktop ApiClient.fileInfo"},
-		{http.MethodGet, "/api/projects/current/files/symbols", routeRetained, "Desktop ApiClient.symbols"},
-		{http.MethodGet, "/api/projects/current/impact", routeRetained, "Desktop ApiClient.impact"},
-		{http.MethodGet, "/api/projects/current/git", routeRetained, "Desktop ApiClient.gitStatus"},
-		{http.MethodGet, "/api/projects/current/files/analysis", routeRetained, "Desktop ApiClient.analysis"},
-		{http.MethodPost, "/api/projects/current/files/analysis", routeRetained, "Desktop ApiClient.analyze"},
-		{http.MethodGet, "/api/projects/current/analysis-job", routeRetained, "Desktop ApiClient.analyzeAllJob"},
-		{http.MethodPost, "/api/projects/current/analysis-job", routeRetained, "Desktop ApiClient.startAnalyzeAll"},
-		{http.MethodPost, "/api/projects/current/analysis-job/pause", routeRetained, "Desktop ApiClient.pauseAnalyzeAll"},
-		{http.MethodPost, "/api/projects/current/analysis-job/resume", routeRetained, "Desktop ApiClient.resumeAnalyzeAll"},
-		{http.MethodPost, "/api/projects/current/analysis-job/cancel", routeRetained, "Desktop ApiClient.cancelAnalyzeAll"},
-		{http.MethodGet, "/api/projects/current/performance", routeRetained, "Desktop ApiClient.performanceReport"},
-		{http.MethodGet, "/api/projects/current/performance/context", routeRetained, "Desktop ApiClient.performanceContext"},
-		{http.MethodGet, "/api/projects/current/performance-job", routeRetained, "Desktop ApiClient.performanceJob"},
-		{http.MethodPost, "/api/projects/current/performance-job", routeRetained, "Desktop ApiClient.startPerformanceJob"},
-		{http.MethodPost, "/api/projects/current/performance-job/pause", routeRetained, "Desktop ApiClient.pausePerformanceJob"},
-		{http.MethodPost, "/api/projects/current/performance-job/resume", routeRetained, "Desktop ApiClient.resumePerformanceJob"},
-		{http.MethodPost, "/api/projects/current/performance-job/cancel", routeRetained, "Desktop ApiClient.cancelPerformanceJob"},
-		{http.MethodPost, "/api/projects/current/reindex", routeRetained, "Desktop ApiClient.reindex"},
-		{http.MethodPatch, "/api/projects/current/drafts/{draftID}", routeRetained, "Desktop ApiClient.updateDraft"},
-		{http.MethodPost, "/api/projects/current/drafts/{draftID}/validate", routeRetained, "Desktop ApiClient.validateDraft"},
-		{http.MethodPost, "/api/projects/current/drafts/{draftID}/checks", routeRetained, "Desktop ApiClient.checkDraft"},
-		{http.MethodPost, "/api/projects/current/apply", routeRetained, "Desktop ApiClient.applyDraft"},
-		{http.MethodPost, "/api/projects/current/undo", routeRetained, "Desktop ApiClient.undo"},
-	}
-}
-
-func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
-	routes := documentedRegisteredRoutes()
-
-	if got := openAPIRoutes(t); !sameRoutes(got, routes) {
-		t.Fatalf("OpenAPI routes = %v, want %v", got, routes)
-	}
+func TestDocumentedRoutesAreHandledByDaemon(t *testing.T) {
+	routes := openAPIRoutes(t)
 	if got := apiContractRoutes(t); !sameRoutes(got, routes) {
-		t.Fatalf("API contract routes = %v, want %v", got, routes)
+		t.Fatalf("API contract routes = %v, want OpenAPI routes %v", got, routes)
 	}
 
 	root := t.TempDir()
@@ -148,14 +91,7 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 	mux := newHTTPMux(service, manager)
 	for _, route := range routes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
-			path := route.path
-			if path == "/api/projects/current/files/info" || path == "/api/projects/current/files/symbols" || path == "/api/projects/current/files/analysis" || path == "/api/projects/current/context" {
-				path += "?path=missing.go"
-			}
-			if route.path == "/api/projects/current/overview" || route.path == "/api/projects/current/findings" || route.path == "/api/projects/current/scan" {
-				path += "?project_revision=sha256:missing"
-			}
-			req := httptest.NewRequest(route.method, path, nil)
+			req := httptest.NewRequest(route.method, requestPathForDocumentedRoute(route.path), nil)
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, req)
 			if response.Code == http.StatusNotFound || response.Code == http.StatusMethodNotAllowed {
@@ -165,89 +101,15 @@ func TestOpenAPIRoutesMatchRegisteredDesktopAPI(t *testing.T) {
 	}
 }
 
-func TestCleanupRouteInventoryMatchesDaemonRegistration(t *testing.T) {
-	inventory := cleanupRouteInventory(t)
-	registered := registeredRoutes()
-	if len(inventory) != len(registered) {
-		t.Fatalf("cleanup inventory routes = %d, registered routes = %d", len(inventory), len(registered))
+func requestPathForDocumentedRoute(path string) string {
+	switch path {
+	case "/api/projects/current/files/info", "/api/projects/current/files/symbols", "/api/projects/current/files/analysis", "/api/projects/current/context":
+		return path + "?path=missing.go"
+	case "/api/projects/current/overview", "/api/projects/current/findings", "/api/projects/current/scan":
+		return path + "?project_revision=sha256:missing"
+	default:
+		return path
 	}
-	for _, route := range registered {
-		if route.Disposition != routeRetained {
-			t.Fatalf("%s %s has invalid disposition %q", route.Method, route.Path, route.Disposition)
-		}
-		if route.Consumer == "" {
-			t.Fatalf("registered route %s %s has no maintained consumer", route.Method, route.Path)
-		}
-		if !containsRouteSpec(inventory, route) {
-			t.Fatalf("registered route missing from cleanup inventory: %+v", route)
-		}
-	}
-	for _, route := range inventory {
-		if !containsRouteSpec(registered, route) {
-			t.Fatalf("cleanup inventory route is not registered: %+v", route)
-		}
-	}
-}
-
-func TestMaintainedDesktopClientPathsHaveRegisteredRoutes(t *testing.T) {
-	wantConsumers := []string{
-		"Desktop ApiClient.status", "Desktop ApiClient.openChatSession", "Desktop ApiClient.sendChatMessage",
-		"Desktop ApiClient.modelCatalog", "Desktop ApiClient.context", "Desktop ApiClient.importProject",
-		"Desktop ApiClient.restoreProject", "Desktop ApiClient.overview", "Desktop ApiClient.findings",
-		"Desktop ApiClient.updateFindingStatus", "Desktop ApiClient.goScan", "Desktop ApiClient.startGoScan",
-		"Desktop ApiClient.cancelGoScan", "Desktop ApiClient.index", "Desktop ApiClient.fileInfo",
-		"Desktop ApiClient.symbols", "Desktop ApiClient.impact", "Desktop ApiClient.gitStatus",
-		"Desktop ApiClient.analysis", "Desktop ApiClient.analyze", "Desktop ApiClient.analyzeAllJob",
-		"Desktop ApiClient.startAnalyzeAll", "Desktop ApiClient.pauseAnalyzeAll", "Desktop ApiClient.resumeAnalyzeAll",
-		"Desktop ApiClient.cancelAnalyzeAll", "Desktop ApiClient.reindex", "Desktop ApiClient.updateDraft",
-		"Desktop ApiClient.performanceReport", "Desktop ApiClient.performanceContext", "Desktop ApiClient.performanceJob",
-		"Desktop ApiClient.startPerformanceJob", "Desktop ApiClient.pausePerformanceJob", "Desktop ApiClient.resumePerformanceJob", "Desktop ApiClient.cancelPerformanceJob",
-		"Desktop ApiClient.validateDraft", "Desktop ApiClient.checkDraft", "Desktop ApiClient.applyDraft",
-		"Desktop ApiClient.undo",
-	}
-	for _, consumer := range wantConsumers {
-		var found bool
-		for _, route := range registeredRoutes() {
-			if route.Consumer == consumer && route.Disposition == routeRetained {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("maintained desktop client consumer %q has no registered route", consumer)
-		}
-	}
-}
-
-func documentedRegisteredRoutes() []documentedRoute {
-	routes := registeredRoutes()
-	result := make([]documentedRoute, 0, len(routes))
-	for _, route := range routes {
-		result = append(result, documentedRoute{method: route.Method, path: route.Path})
-	}
-	return result
-}
-
-func cleanupRouteInventory(t *testing.T) []routeSpec {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "cleanup-baseline-routes.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var inventory []routeSpec
-	if err := json.Unmarshal(data, &inventory); err != nil {
-		t.Fatalf("parse cleanup route inventory: %v", err)
-	}
-	return inventory
-}
-
-func containsRouteSpec(routes []routeSpec, want routeSpec) bool {
-	for _, route := range routes {
-		if route == want {
-			return true
-		}
-	}
-	return false
 }
 
 func TestDaemonDoesNotRegisterBrowserUIRoutes(t *testing.T) {

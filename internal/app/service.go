@@ -14,23 +14,8 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-// EffectiveModel is the actual generation profile used by the daemon.
+// EffectiveModel is the non-secret metadata for one configured generation scope.
 type EffectiveModel struct {
-	Scope            string  `json:"scope"`
-	Profile          string  `json:"profile"`
-	Model            string  `json:"model"`
-	ReasoningEffort  string  `json:"reasoning_effort,omitempty"`
-	ProviderOrigin   string  `json:"provider_origin"`
-	RemoteProvider   bool    `json:"remote_provider"`
-	Temperature      float32 `json:"temperature"`
-	MaxTokens        int     `json:"max_tokens"`
-	ContextMaxTokens int     `json:"context_max_tokens"`
-	Timeout          string  `json:"timeout"`
-	MaxRetries       int     `json:"max_retries"`
-}
-
-// ScopedModel is the non-secret API representation of one effective runtime.
-type ScopedModel struct {
 	Scope            string  `json:"scope"`
 	Profile          string  `json:"profile"`
 	Model            string  `json:"model"`
@@ -46,7 +31,7 @@ type ScopedModel struct {
 
 // ModelCatalog exposes the configured model metadata for each fixed scope.
 type ModelCatalog struct {
-	Scopes map[string]ScopedModel `json:"scopes"`
+	Scopes map[string]EffectiveModel `json:"scopes"`
 }
 
 type modelRuntime struct {
@@ -181,15 +166,11 @@ func (s *Service) EffectiveModels() []EffectiveModel {
 // CurrentModelCatalog returns only the safe effective metadata needed for
 // model destination display and remote-confirmation decisions.
 func (s *Service) CurrentModelCatalog() ModelCatalog {
-	catalog := ModelCatalog{Scopes: make(map[string]ScopedModel, 3)}
+	catalog := ModelCatalog{Scopes: make(map[string]EffectiveModel, 3)}
 	for _, profile := range s.EffectiveModels() {
-		catalog.Scopes[profile.Scope] = scopedModel(profile)
+		catalog.Scopes[profile.Scope] = profile
 	}
 	return catalog
-}
-
-func scopedModel(profile EffectiveModel) ScopedModel {
-	return ScopedModel(profile)
 }
 
 // RequireRemoteConfirmation prevents accidental prompt delivery to the actual

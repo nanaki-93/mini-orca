@@ -79,6 +79,38 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 	}
 }
 
+func TestEffectiveModelKeepsCatalogDraftAndPreviewMetadataShapes(t *testing.T) {
+	metadata := EffectiveModel{
+		Scope: "function", Profile: "function", Model: "fixture-model", ReasoningEffort: "high",
+		ProviderOrigin: "https://provider.example", RemoteProvider: true,
+		Temperature: 0.2, MaxTokens: 4096, ContextMaxTokens: 8192, Timeout: "5m0s", MaxRetries: 3,
+	}
+	wantMetadata := `{"scope":"function","profile":"function","model":"fixture-model","reasoning_effort":"high","provider_origin":"https://provider.example","remote_provider":true,"temperature":0.2,"max_tokens":4096,"context_max_tokens":8192,"timeout":"5m0s","max_retries":3}`
+	encodedMetadata, err := json.Marshal(metadata)
+	if err != nil || string(encodedMetadata) != wantMetadata {
+		t.Fatalf("effective model JSON = %s, %v", encodedMetadata, err)
+	}
+
+	for name, value := range map[string]any{
+		"catalog": ModelCatalog{Scopes: map[string]EffectiveModel{"function": metadata}},
+		"draft":   Draft{EffectiveModel: metadata},
+		"preview": PerformanceQueuePreview{Provider: metadata},
+	} {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", name, err)
+		}
+		if !strings.Contains(string(encoded), wantMetadata) {
+			t.Fatalf("%s does not preserve model metadata: %s", name, encoded)
+		}
+	}
+
+	audit, err := json.Marshal(AuditEntry{Model: metadata.Model, Profile: metadata.Profile})
+	if err != nil || !strings.Contains(string(audit), `"model":"fixture-model"`) || !strings.Contains(string(audit), `"profile":"function"`) {
+		t.Fatalf("audit model metadata = %s, %v", audit, err)
+	}
+}
+
 func TestScopedModelLocalMixedAndRemoteConfirmationMatrixUsesNoProvider(t *testing.T) {
 	tests := []struct {
 		name   string

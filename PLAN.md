@@ -224,7 +224,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | FND-02 | Simplify Performance review/validation | FND-01 | S / medium | Blocked — repair cap reached |
 | FND-03 | Simplify Performance job admission/validation | FND-02 | M / high | Pending |
 | FND-04 | Simplify Analyze-all admission | FND-01 | S / high | Blocked — repair cap reached |
-| FND-05 | Remove proven contract and code redundancy | FND-01 | M / medium | Pending |
+| FND-05 | Remove proven contract and code redundancy | FND-01 | M / medium | Complete |
 | FND-06 | Isolate desktop job coordination | FND-03, FND-04 | M / high | Pending |
 | AUTO-01 | Reproducible validation entry point and CI | FND-02, FND-03, FND-04, FND-05 | M / medium | Pending |
 | UI-01 | Remove unsupported product previews | FND-01 | M / medium | Pending |
@@ -368,6 +368,13 @@ the full quality gate green. No inherited quality exception applies to final rel
   live consumer loses a route, and malformed provider bodies never appear in errors.
 - Verify: C, staticcheck/deadcode, `go mod tidy -diff`, links. Record a short
   removal ledger in the task result, not a new permanent baseline document.
+- Completed 2026-09-06. Removed the duplicate Go `ScopedModel` type and conversion,
+  the unused provider-error body decode, the hand-maintained route/consumer lists
+  and `docs/cleanup-baseline-routes.json`. The maintained OpenAPI and API contract
+  now agree and every documented route is exercised through the daemon mux. A fresh
+  review found no issues. The coordinator passed C, full Desktop tests,
+  staticcheck, deadcode, `go mod tidy -diff`, link validation and `git diff --check`.
+  The existing complexity failures remain owned by FND-02, FND-03 and FND-04.
 
 ### FND-06 — Isolate desktop job coordination
 
