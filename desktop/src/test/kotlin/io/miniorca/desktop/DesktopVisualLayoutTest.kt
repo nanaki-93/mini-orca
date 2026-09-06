@@ -163,40 +163,43 @@ class DesktopVisualLayoutTest {
             startLine = 24,
             symbol = "Serve",
         )
-    ComposeVisualFixture(1440, 900) {
-          PerformanceWorkspacePane(
-              PerformanceWorkspacePaneState(
-                  job = PerformanceJob(status = "running", elapsed = 8_000_000_000),
-                  report =
-                      PerformanceReport(
-                          status = "completed",
-                          paths = mapOf(performanceFinding.id to "internal/api/server.go"),
-                          findings = listOf(performanceFinding)),
-                  context =
-                      PerformanceQueuePreview(
-                          files = listOf(PerformanceJobFile(path = "internal/api/server.go")),
-                          excluded = 2,
-                          oversized = 1,
-                          outsideLimit = 3),
-                  model = model,
-                  remoteProviderConfirmed = false),
-              performanceActionsFixture)
-        }
-        .use { fixture ->
-          fixture.render("performance-populated-1440")
-          assertTrue(fixture.hasText("Source-based review · Not measured"))
-          assertTrue(fixture.hasText(destination))
-          assertTrue(fixture.hasText("Running · 8s budget used"))
-          kotlin.test.assertEquals(0, performanceActions)
-          fixture.clickText(
-              "ALLOCATION · high · internal/api/server.go:24 · Avoid repeated buffer allocation")
-          fixture.render()
-          assertTrue(fixture.hasText("Observed pattern: A buffer is allocated for every request."))
-          assertTrue(
-              fixture.hasText(
-                  "When it matters: High request volume.\nRecommendation: Reuse a bounded buffer.\nTrade-off: Retained buffers increase memory pressure.\nVerify: Benchmark representative traffic."))
-          kotlin.test.assertEquals(0, performanceActions)
-        }
+    listOf(1440 to 900, 999 to 760).forEach { (width, height) ->
+      ComposeVisualFixture(width, height) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    job = PerformanceJob(status = "running", elapsed = 8_000_000_000),
+                    report =
+                        PerformanceReport(
+                            status = "completed",
+                            paths = mapOf(performanceFinding.id to "internal/api/server.go"),
+                            findings = listOf(performanceFinding)),
+                    context =
+                        PerformanceQueuePreview(
+                            files = listOf(PerformanceJobFile(path = "internal/api/server.go")),
+                            excluded = 2,
+                            oversized = 1,
+                            outsideLimit = 3),
+                    model = model,
+                    remoteProviderConfirmed = false),
+                performanceActionsFixture)
+          }
+          .use { fixture ->
+            fixture.render("performance-populated-$width-${height}-1.0")
+            assertTrue(fixture.hasText("Source-based review · Not measured"))
+            assertTrue(fixture.hasText(destination))
+            assertTrue(fixture.hasText("Running · 8s budget used"))
+            kotlin.test.assertEquals(0, performanceActions)
+            fixture.clickText(
+                "ALLOCATION · high · internal/api/server.go:24 · Avoid repeated buffer allocation")
+            fixture.render()
+            assertTrue(
+                fixture.hasText("Observed pattern: A buffer is allocated for every request."))
+            assertTrue(
+                fixture.hasText(
+                    "When it matters: High request volume.\nRecommendation: Reuse a bounded buffer.\nTrade-off: Retained buffers increase memory pressure.\nVerify: Benchmark representative traffic."))
+            kotlin.test.assertEquals(0, performanceActions)
+          }
+    }
 
     ComposeVisualFixture(800, 900, 1.3f) {
           PerformanceWorkspacePane(
@@ -574,19 +577,22 @@ class DesktopVisualLayoutTest {
 
     val readyChecks =
         failedChecks.copy(checks = listOf(DraftCheck("go test", required = true, state = "passed")))
-    ComposeVisualFixture(800, 700, 1.3f) {
-          ReviewToolWindow(
-              invalidReviewState.copy(
-                  editor = editableDraft(draft), draft = draft, checks = readyChecks),
-              ReviewToolWindowActions({}, {}, {}),
-              DraftApplicationActions({ mutations++ }, { mutations++ }))
-        }
-        .use { fixture ->
-          fixture.render("review-ready-800-1.3")
-          assertTrue(fixture.hasText("Ready to apply"))
-          assertTrue(fixture.hasText("Apply Serve to internal/api/server.go"))
-          kotlin.test.assertEquals(0, mutations)
-        }
+    listOf(1440 to 900, 999 to 760, 800 to 700).forEach { (width, height) ->
+      val scale = if (width == 800) 1.3f else 1f
+      ComposeVisualFixture(width, height, scale) {
+            ReviewToolWindow(
+                invalidReviewState.copy(
+                    editor = editableDraft(draft), draft = draft, checks = readyChecks),
+                ReviewToolWindowActions({}, {}, {}),
+                DraftApplicationActions({ mutations++ }, { mutations++ }))
+          }
+          .use { fixture ->
+            fixture.render("review-ready-$width-${height}-$scale")
+            assertTrue(fixture.hasText("Ready to apply"))
+            assertTrue(fixture.hasText("Apply Serve to internal/api/server.go"))
+            kotlin.test.assertEquals(0, mutations)
+          }
+    }
 
     ComposeVisualFixture(800, 360, 1.3f) {
           ReviewToolWindow(

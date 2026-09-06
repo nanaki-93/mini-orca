@@ -220,7 +220,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | ID | Deliverable | Dependencies | Effort / risk | Status |
 | --- | --- | --- | --- | --- |
 | AUTO-00 | Bootstrap unattended plan execution | — | S / low | Complete |
-| FND-01 | Reconcile baseline and preserve working evidence | AUTO-00 | S / low | Pending |
+| FND-01 | Reconcile baseline and preserve working evidence | AUTO-00 | S / low | Complete |
 | FND-02 | Simplify Performance review/validation | FND-01 | S / medium | Pending |
 | FND-03 | Simplify Performance job admission/validation | FND-02 | M / high | Pending |
 | FND-04 | Simplify Analyze-all admission | FND-01 | S / high | Pending |
@@ -300,6 +300,12 @@ the full quality gate green. No inherited quality exception applies to final rel
   are reproducible, links resolve, and every inherited open item has an owner.
 - Verify: relevant existing visual tests, documentation links, `git diff --check`.
   No production behavior or configuration change expected.
+- Completed 2026-09-06 from baseline `d0a7cc9`: eight offscreen production-component
+  fixtures cover Editor, Analysis, populated Review and populated Performance at
+  1440×900 and 999×760. A fresh review found no issues. The coordinator passed
+  Spotless, Detekt, the full Desktop tests, a forced 36-test visual/accessibility/
+  keyboard run, link validation and `git diff --check`. UI-04 retains the explicitly
+  unavailable native-window, popup, OS-focus and screen-reader evidence.
 
 ### FND-02 — Simplify Performance review and finding validation
 
