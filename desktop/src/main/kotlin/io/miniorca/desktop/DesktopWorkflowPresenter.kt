@@ -133,6 +133,10 @@ class DesktopWorkflowPresenter(
     publish()
   }
 
+  fun clearPreparedSuggestion() {
+    dispatch(DesktopEvent.SuggestionCleared)
+  }
+
   fun setProviderConfirmation(scope: ModelScope, confirmed: Boolean) {
     mutableSnapshot.value =
         mutableSnapshot.value.copy(
@@ -448,8 +452,11 @@ class DesktopWorkflowPresenter(
       return
     }
     val content = message.trim()
-    if (content.isBlank()) {
-      dispatch(DesktopEvent.Failed("Write a message before sending."))
+    if (!hasFunctionChangeIntent(content)) {
+      val guidance =
+          if (content.isBlank()) "Write a concise intent before sending."
+          else "Add a concise intent after the selected preset before sending."
+      dispatch(DesktopEvent.Failed(guidance))
       return
     }
     if (snapshot.value.model(ModelScope.Function).remoteProvider &&

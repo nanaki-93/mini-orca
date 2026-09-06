@@ -231,7 +231,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | UI-02 | Correct source-first layout against captures | UI-01 | M / medium | Complete |
 | UI-03 | Make draft/review progression explicit | UI-02 | M / high | Complete |
 | UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Blocked — native/reader matrix incomplete |
-| FLOW-01 | Short function-scoped change requests | UI-03 | M / medium | Pending |
+| FLOW-01 | Short function-scoped change requests | UI-03 | M / medium | Complete |
 | FLOW-02 | Read-only declaration explanation | FLOW-01, SEC-02, FND-06 | M / high | Pending |
 | FLOW-03 | Reusable temporary behavioral proof | FLOW-01, SEC-03, SEC-04 | M / high | Pending |
 | LEARN-01 | Concise, grounded engineering insights | FLOW-02 | S / medium | Pending |
@@ -515,6 +515,15 @@ the full quality gate green. No inherited quality exception applies to final rel
   absent valid name; unsupported/multi-function scope gives an actionable boundary.
 - Verify: preset/no-call tests, target/discard/stale cases, D; G/C only if a daemon
   contract changes. Prefer the current chat API over new intent endpoints.
+- Completed 2026-09-07. Exact Go function and method targets now offer compact bug,
+  performance and behavior presets. A preset prepares and focuses the existing
+  composer without a provider call; optional constraints stay in a collapsed
+  disclosure, and explicit Send uses the existing chat request and Function consent.
+  Target changes and new ad hoc flows synchronously clear stale prepared text and
+  hidden task metadata, while genuine prepared findings retain their bound task.
+  Create validation and actionable invalid-target boundaries remain intact. A fresh
+  review accepted the final repair; the forced Desktop gate passed 279 tests with
+  zero failures and Detekt reported zero findings. No daemon contract changed.
 
 ### FLOW-02 — Explain a declaration without producing a draft
 
