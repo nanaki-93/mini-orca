@@ -31,6 +31,8 @@ internal fun PerformanceWorkspacePane(
   var reviewOptionsExpanded by remember { mutableStateOf(true) }
   var filtersExpanded by remember { mutableStateOf(true) }
   val job = state.job
+  val presentation = performanceReviewPresentation(job, state.report)
+  val report = presentation.report
   val toolbarActions =
       performanceToolbarActions(
           job = job,
@@ -38,21 +40,7 @@ internal fun PerformanceWorkspacePane(
           model = state.model,
           remoteProviderConfirmed = state.remoteProviderConfirmed,
       )
-  val findings =
-      state.report
-          ?.findings
-          .orEmpty()
-          .filter {
-            (category.isBlank() || it.category.equals(category, true)) &&
-                (impact.isBlank() || it.potentialImpact.equals(impact, true)) &&
-                (path.isBlank() || state.report?.paths?.get(it.id).orEmpty().contains(path, true))
-          }
-          .sortedWith(
-              compareByDescending<PerformanceFinding> { performanceImpactOrder(it.potentialImpact) }
-                  .thenByDescending { performanceConfidenceOrder(it.confidence) }
-                  .thenBy { state.report?.paths?.get(it.id).orEmpty() }
-                  .thenBy { it.startLine }
-                  .thenBy { it.id })
+  val findings = presentation.findings(category, impact, path)
   val selected = findings.firstOrNull { it.id == selectedID }
   fun requestToolbarAction(action: PerformanceToolbarAction) {
     when (action) {
@@ -70,10 +58,11 @@ internal fun PerformanceWorkspacePane(
         contentPadding = workspacePagePadding(maxWidth, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      item { PerformanceReviewHeader(job, toolbarActions, ::requestToolbarAction) }
+      item { PerformanceReviewHeader(job, report, toolbarActions, ::requestToolbarAction) }
       item {
         PerformanceReviewScope(
             state = state,
+            report = report,
             expanded = reviewOptionsExpanded,
             onToggle = { reviewOptionsExpanded = !reviewOptionsExpanded },
             onRemoteProviderConfirmed = actions.confirmRemoteProvider,
@@ -102,16 +91,13 @@ internal fun PerformanceWorkspacePane(
         }
       }
       selected?.let { finding ->
-        item {
-          PerformanceFindingDetails(
-              finding, state.report?.paths?.get(finding.id).orEmpty(), actions)
-        }
+        item { PerformanceFindingDetails(finding, presentation.pathFor(finding), actions) }
       }
       item {
         SectionLabel("Opportunities")
         IdeHorizontalSeparator(Modifier.padding(top = 4.dp))
       }
-      if (state.report == null)
+      if (!presentation.hasReport)
           item {
             SystemStateMessage(
                 "No performance review",
@@ -132,7 +118,7 @@ internal fun PerformanceWorkspacePane(
                 selected = finding.id == selectedID,
                 modifier = Modifier.fillMaxWidth()) {
                   Text(
-                      "${finding.category.uppercase()} · ${finding.potentialImpact} · ${state.report.paths[finding.id].orEmpty()}:${finding.startLine} · ${finding.title}",
+                      "${finding.category.uppercase()} · ${finding.potentialImpact} · ${presentation.pathFor(finding)}:${finding.startLine} · ${finding.title}",
                       fontSize = 11.sp,
                       modifier = Modifier.weight(1f))
                 }
@@ -144,14 +130,15 @@ internal fun PerformanceWorkspacePane(
 @Composable
 private fun PerformanceReviewHeader(
     job: PerformanceJob?,
+    report: PerformanceReport?,
     toolbarActions: List<PerformanceToolbarActionPresentation>,
     onToolbarAction: (PerformanceToolbarAction) -> Unit,
 ) {
   IdePaneHeader(
       title = "Performance",
       icon = DesktopIcon.Performance,
-      stateLabel = performanceStatusLabel(job),
-      stateTint = performanceStatusTint(job),
+      stateLabel = performanceStatusLabel(job, report),
+      stateTint = performanceStatusTint(job, report),
       actions = {
         toolbarActions.forEach { toolbarAction ->
           MiniOrcaButton(
@@ -174,12 +161,13 @@ private fun PerformanceReviewHeader(
 @Composable
 private fun PerformanceReviewScope(
     state: PerformanceWorkspacePaneState,
+    report: PerformanceReport?,
     expanded: Boolean,
     onToggle: () -> Unit,
     onRemoteProviderConfirmed: (Boolean) -> Unit,
 ) {
   val context = state.context
-  val coverage = performanceCoveragePresentation(state.job, state.report)
+  val coverage = performanceCoveragePresentation(state.job, report)
   IdeDisclosureHeader(
       title = "Review scope",
       expanded = expanded,
@@ -320,16 +308,59 @@ internal data class PerformanceCoveragePresentation(
     val rows: List<Pair<String, String>>,
 )
 
+internal class PerformanceReviewPresentation
+private constructor(
+    val report: PerformanceReport?,
+) {
+  val hasReport: Boolean
+    get() = report != null
+
+  fun findings(category: String, impact: String, path: String): List<PerformanceFinding> =
+      report
+          ?.findings
+          .orEmpty()
+          .filter {
+            (category.isBlank() || it.category.equals(category, true)) &&
+                (impact.isBlank() || it.potentialImpact.equals(impact, true)) &&
+                (path.isBlank() || pathFor(it).contains(path, true))
+          }
+          .sortedWith(
+              compareByDescending<PerformanceFinding> { performanceImpactOrder(it.potentialImpact) }
+                  .thenByDescending { performanceConfidenceOrder(it.confidence) }
+                  .thenBy { pathFor(it) }
+                  .thenBy { it.startLine }
+                  .thenBy { it.id })
+
+  fun pathFor(finding: PerformanceFinding): String = report?.paths?.get(finding.id).orEmpty()
+
+  companion object {
+    fun forJob(job: PerformanceJob?, report: PerformanceReport?): PerformanceReviewPresentation =
+        PerformanceReviewPresentation(
+            report?.takeIf { candidate ->
+              job?.let { performanceReportMatchesJob(candidate, it) } == true
+            })
+  }
+}
+
+internal fun performanceReviewPresentation(
+    job: PerformanceJob?,
+    report: PerformanceReport?,
+): PerformanceReviewPresentation = PerformanceReviewPresentation.forJob(job, report)
+
 internal fun performanceCoveragePresentation(
     job: PerformanceJob?,
     report: PerformanceReport?,
 ): PerformanceCoveragePresentation {
   if (job == null) return PerformanceCoveragePresentation("Unknown", emptyList())
 
+  val effectiveReport = performanceReviewPresentation(job, report).report
+  val status = effectiveReport?.status?.ifBlank { job.status } ?: job.status
   val counts =
-      report?.counts?.takeIf { it.isNotEmpty() } ?: job.files.groupingBy { it.status }.eachCount()
+      effectiveReport?.counts?.takeIf { it.isNotEmpty() }
+          ?: job.files.groupingBy { it.status }.eachCount()
   val completed = counts["completed"].orZero()
   val cached = counts["cached"].orZero()
+  val stale = counts["stale"].orZero()
   val skipped = counts["skipped"].orZero()
   val failed = counts["failed"].orZero()
   val pending = counts["pending"].orZero()
@@ -339,19 +370,21 @@ internal fun performanceCoveragePresentation(
       remaining > 0 ||
           skipped > 0 ||
           failed > 0 ||
-          job.status in setOf("running", "paused", "canceled", "stale")
+          stale > 0 ||
+          status in setOf("running", "paused", "canceled", "stale")
   val budgetLimited =
       job.runBudget > 0 &&
-          (job.elapsed >= job.runBudget || (job.status == "completed" && remaining > 0))
+          (job.elapsed >= job.runBudget || (status == "completed" && remaining > 0))
   val coverageState =
       when {
-        job.status == "canceled" -> "Partial · canceled review retains completed files"
-        job.status == "stale" -> "Partial · source or policy changed"
+        status == "canceled" -> "Partial · canceled review retains completed files"
+        status == "stale" || stale > 0 -> "Partial · source or policy changed"
         partial -> "Partial"
         else -> "Complete"
       }
   val rows = buildList {
     add("Reviewed" to "$completed completed · $cached cached")
+    if (stale > 0) add("Stale" to stale.toString())
     add("Skipped" to skipped.toString())
     add("Failed" to failed.toString())
     add("Remaining" to "$pending pending · $running running")
@@ -411,8 +444,8 @@ private fun performanceToolbarActionTone(action: PerformanceToolbarAction) =
       PerformanceToolbarAction.Cancel -> ActionTone.Destructive
     }
 
-private fun performanceStatusTint(job: PerformanceJob?) =
-    when (job?.status) {
+private fun performanceStatusTint(job: PerformanceJob?, report: PerformanceReport?) =
+    when (performanceReviewStatus(job, report)) {
       "running" -> SelectionText
       "paused",
       "stale" -> Warning
@@ -427,15 +460,30 @@ private fun performanceFindingTint(impact: String) =
       else -> SecondaryText
     }
 
-internal fun performanceStatusLabel(job: PerformanceJob?): String =
-    when (job?.status) {
-      "running" -> "Running · ${job.elapsed / 1_000_000_000}s budget used"
+internal fun performanceStatusLabel(
+    job: PerformanceJob?,
+    report: PerformanceReport? = null
+): String =
+    when (performanceReviewStatus(job, report)) {
+      "running" -> "Running · ${(job?.elapsed ?: 0) / 1_000_000_000}s budget used"
       "paused" -> "Paused · resume explicitly"
       "canceled" -> "Canceled · completed reviews remain available"
       "stale" -> "Stale · source or policy changed"
       "completed" -> "Completed · source-based queue"
       else -> "No review yet"
     }
+
+private fun performanceReviewStatus(job: PerformanceJob?, report: PerformanceReport?): String? =
+    performanceReviewPresentation(job, report).report?.status?.ifBlank { job?.status.orEmpty() }
+        ?: job?.status
+
+private fun performanceReportMatchesJob(report: PerformanceReport, job: PerformanceJob): Boolean =
+    job.projectId.isNotBlank() &&
+        job.projectRevision.isNotBlank() &&
+        job.queueId.isNotBlank() &&
+        report.projectId == job.projectId &&
+        report.projectRevision == job.projectRevision &&
+        report.queueId == job.queueId
 
 private fun performanceImpactOrder(value: String): Int =
     when (value) {
