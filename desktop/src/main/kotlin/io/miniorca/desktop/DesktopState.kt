@@ -151,6 +151,7 @@ data class DesktopState(
     val chat: ChatState = ChatState(),
     val review: DraftReviewState = DraftReviewState(),
     val connection: ConnectionState = ConnectionState(),
+    val preparedRequestGeneration: Long = 0,
 ) {
   val project
     get() = projectState.project
@@ -242,6 +243,8 @@ sealed interface DesktopEvent {
       val taskSpec: BugTaskSpec? = null
   ) : DesktopEvent
 
+  data object SuggestionCleared : DesktopEvent
+
   data class AnalysisLoaded(val analysis: FileAnalysis) : DesktopEvent
 
   data class ImpactLoaded(val impact: ImpactPreview) : DesktopEvent
@@ -332,23 +335,10 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
               review = DraftReviewState(applied = review.applied),
               jobs = jobs.copy(loading = false, status = event.file.path, error = null),
           )
-      is DesktopEvent.SymbolSelected ->
-          copy(
-              selection =
-                  selection.copy(
-                      selectedSymbol = event.symbol, focusedLine = event.symbol.startLine),
-              jobs = jobs.copy(error = null))
-      is DesktopEvent.EditorContextSelected ->
-          copy(
-              selection = selection.copy(selectedSymbol = event.symbol, focusedLine = event.line),
-              jobs = jobs.copy(error = null))
+      is DesktopEvent.SymbolSelected -> selectEditorTarget(event.symbol, event.symbol.startLine)
+      is DesktopEvent.EditorContextSelected -> selectEditorTarget(event.symbol, event.line)
       is DesktopEvent.SourceLineSelected ->
-          copy(
-              selection =
-                  selection.copy(
-                      selectedSymbol = event.selection.symbol, focusedLine = event.selection.line),
-              jobs = jobs.copy(error = null),
-          )
+          selectEditorTarget(event.selection.symbol, event.selection.line)
       is DesktopEvent.SuggestionPrepared ->
           copy(
               selection =
@@ -357,7 +347,9 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                       preparedAction = event.action,
                       preparedRequest = event.request,
                       preparedTaskSpec = event.taskSpec),
+              preparedRequestGeneration = preparedRequestGeneration + 1,
               jobs = jobs.copy(error = null))
+      DesktopEvent.SuggestionCleared -> clearPreparedSuggestion()
       is DesktopEvent.AnalysisLoaded ->
           copy(
               selection = selection.copy(analysis = event.analysis),
@@ -654,6 +646,35 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
 
   private fun nextId(): Long = ++nextRequestId
 }
+
+private fun DesktopState.selectEditorTarget(symbol: SymbolInfo?, line: Int): DesktopState {
+  val targetChanged = selectedSymbol?.name != symbol?.name
+  return copy(
+      selection =
+          selection.copy(selectedSymbol = symbol, focusedLine = line).let {
+            if (targetChanged) it.withoutPreparedSuggestion() else it
+          },
+      preparedRequestGeneration = preparedRequestGeneration + if (targetChanged) 1 else 0,
+      jobs = jobs.copy(error = null),
+  )
+}
+
+private fun DesktopState.clearPreparedSuggestion(): DesktopState =
+    copy(
+        selection = selection.withoutPreparedSuggestion(),
+        preparedRequestGeneration = preparedRequestGeneration + 1,
+    )
+
+private fun FileSelectionState.withoutPreparedSuggestion(): FileSelectionState =
+    copy(preparedAction = "", preparedRequest = "", preparedTaskSpec = null)
+
+internal fun unconsumedPreparedRequest(
+    state: DesktopState,
+    consumedGeneration: Long,
+): String? =
+    state.preparedRequest.takeIf {
+      state.preparedRequestGeneration > consumedGeneration && it.isNotBlank()
+    }
 
 data class ApplyEligibility(val eligible: Boolean, val reason: String)
 

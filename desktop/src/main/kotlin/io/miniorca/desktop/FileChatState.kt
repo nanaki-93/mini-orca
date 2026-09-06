@@ -29,16 +29,26 @@ fun validateChatTarget(
   return when (mode) {
     ChatEditMode.ReplaceSymbol -> {
       val symbol = selectedSymbol
-      if (symbol == null ||
-          symbol !in symbols ||
-          symbol.confidence.lowercase() != "exact" ||
-          !symbol.atomicTarget ||
-          symbol.kind.lowercase() !in
-              setOf("function", "method", "type", "struct", "interface", "var")) {
-        ChatTargetValidation(
-            message =
-                "Replace requires an exact selected Go function, method, type, or single top-level variable.")
-      } else ChatTargetValidation(ChatTarget(mode, symbol.name))
+      when {
+        symbol == null ->
+            ChatTargetValidation(
+                message = "Select one Go declaration in the editor before replacing it.")
+        symbol !in symbols ->
+            ChatTargetValidation(
+                message = "The selected declaration is stale. Select it again in the editor.")
+        symbol.confidence.lowercase() != "exact" ->
+            ChatTargetValidation(message = "Select an exact Go declaration before replacing it.")
+        !symbol.atomicTarget ->
+            ChatTargetValidation(
+                message =
+                    "Select one declaration. Multi-function or grouped declaration changes are not supported.")
+        symbol.kind.lowercase() !in
+            setOf("function", "method", "type", "struct", "interface", "var") ->
+            ChatTargetValidation(
+                message =
+                    "Select a Go function, method, type, or single top-level variable to replace.")
+        else -> ChatTargetValidation(ChatTarget(mode, symbol.name))
+      }
     }
     ChatEditMode.CreateSymbol -> {
       val name = requestedSymbol.trim()
@@ -52,6 +62,18 @@ fun validateChatTarget(
       }
     }
   }
+}
+
+fun functionChangePresetBoundary(
+    mode: ChatEditMode,
+    selectedSymbol: SymbolInfo?,
+    targetValidation: ChatTargetValidation,
+): String? {
+  if (mode != ChatEditMode.ReplaceSymbol) return null
+  if (!targetValidation.valid) return targetValidation.message
+  if (selectedSymbol?.kind?.lowercase() !in setOf("function", "method"))
+      return "Quick changes require one Go function or method. Select one to use a preset."
+  return null
 }
 
 fun chatSessionMatches(

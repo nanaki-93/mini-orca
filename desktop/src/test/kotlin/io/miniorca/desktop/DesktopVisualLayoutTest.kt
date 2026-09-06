@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -812,6 +813,96 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun functionPresetPreparesAndFocusesTheBoundComposerWithoutSending() {
+    val file =
+        ProjectFileInfo(
+            path = "internal/users.go",
+            contentHash = "fixture-hash",
+            name = "users.go",
+            language = "Go",
+            sizeBytes = 120,
+            lineCount = 12,
+            modifiedAt = "",
+            binary = false)
+    val symbol =
+        SymbolInfo(
+            "deduplicateUsers",
+            "function",
+            "func deduplicateUsers(users []User) []User",
+            3,
+            10,
+            "exact",
+            true)
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, symbol.name)
+    val focusRequester = FocusRequester()
+    var message by mutableStateOf(TextFieldValue())
+    var presetCalls = 0
+    var sendCalls = 0
+    var otherCalls = 0
+    ComposeVisualFixture(480, 640, 1.3f) {
+          AssistantToolWindow(
+              state =
+                  AssistantToolWindowState(
+                      project = visualFixtureProject,
+                      selected = file,
+                      session = null,
+                      draft = null,
+                      editor = null,
+                      target = target,
+                      mode = ChatEditMode.ReplaceSymbol,
+                      newSymbol = "",
+                      message = message.text,
+                      sending = false,
+                      functionModel = ScopedModel(scope = ModelScope.Function.wireValue),
+                      remoteConfirmed = false,
+                      chatFocus = focusRequester,
+                      draftFocus = FocusRequester(),
+                      messageInput = message,
+                      selectedSymbol = symbol,
+                      targetValidation = ChatTargetValidation(target)),
+              conversationActions =
+                  AssistantConversationActions(
+                      updateMessage = { message = TextFieldValue(it) },
+                      updateNewSymbol = { otherCalls++ },
+                      confirmRemoteProvider = { otherCalls++ },
+                      inspectContext = { otherCalls++ },
+                      send = { sendCalls++ },
+                      cancel = { otherCalls++ },
+                      updateMessageValue = { message = it },
+                      preparePreset = { preset ->
+                        presetCalls++
+                        message = preparedFunctionChangeMessage(preset)
+                        focusRequester.requestFocus()
+                      }),
+              editorActions = DraftEditorActions({}, {}, {}),
+              modifier = Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render("assistant-function-presets-480-1.3")
+          assertTrue(fixture.hasText("Ready for the selected declaration"))
+          fixture.clickText("Fix bug")
+          fixture.render("assistant-function-preset-prepared-480-1.3")
+
+          assertEquals(1, presetCalls)
+          assertEquals(0, sendCalls)
+          assertEquals(0, otherCalls)
+          assertTrue(fixture.hasText("Fix a bug: "))
+          assertTrue(fixture.isDescriptionFocused("Intent"))
+          assertTrue(fixture.isDisabled("Send message"))
+
+          fixture.setText("Fix a bug: preserve order while deduplicating")
+          fixture.render()
+          fixture.clickText("Send message")
+          assertEquals(1, sendCalls)
+
+          fixture.clickText("Advanced constraints")
+          fixture.render("assistant-function-constraints-480-1.3")
+          assertEquals("Expanded", fixture.stateDescription("Advanced constraints"))
+          assertTrue(fixture.hasText("Constraints"))
+        }
+  }
+
+  @Test
   fun sharedChromeKeepsNamedActionsAndDisclosureActivationIndependent() {
     var actionCalls = 0
     var expanded by mutableStateOf(false)
@@ -1354,6 +1445,12 @@ private class ComposeVisualFixture(
       textNodes(label).any { node ->
         generateSequence(node) { it.parent }
             .any { it.config.getOrNull(SemanticsProperties.Focused) == true }
+      }
+
+  fun isDescriptionFocused(label: String): Boolean =
+      nodes().any { node ->
+        node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+            node.config.getOrNull(SemanticsProperties.Focused) == true
       }
 
   fun stateDescription(label: String): String? =

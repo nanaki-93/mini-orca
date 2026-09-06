@@ -1,6 +1,8 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -15,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -35,6 +38,18 @@ internal fun AssistantToolWindow(
       state.draft != null &&
           state.editor != null &&
           chatDraftMatchesSession(state.draft, state.session)
+  val presetBoundary =
+      functionChangePresetBoundary(state.mode, state.selectedSymbol, state.targetValidation)
+  val presetsAvailable = state.mode == ChatEditMode.ReplaceSymbol && presetBoundary == null
+  var constraintsExpanded by
+      rememberSaveable(
+          state.selected?.path,
+          state.selected?.contentHash,
+          state.mode,
+          state.target?.symbol,
+      ) {
+        mutableStateOf(false)
+      }
   Column(modifier) {
     ToolWindowScopeHeader(
         "ASSISTANT",
@@ -50,7 +65,11 @@ internal fun AssistantToolWindow(
                 title = "Conversation",
                 icon = DesktopIcon.Editor,
                 stateLabel =
-                    if (bound) "Bound to the focused declaration" else "Select a declaration")
+                    when {
+                      bound -> "Bound to the focused declaration"
+                      state.target != null -> "Ready for the selected declaration"
+                      else -> "Select a declaration"
+                    })
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
               Text(
                   state.selected?.path ?: "Open a file to draft.",
@@ -59,7 +78,9 @@ internal fun AssistantToolWindow(
                   fontSize = 12.sp)
               Text(
                   state.target?.let { "${it.mode.label} · ${it.symbol}" }
-                      ?: "Select a declaration or enter a new name.",
+                      ?: state.targetValidation.message.ifBlank {
+                        "Select a declaration or enter a new name."
+                      },
                   color = if (state.target == null) Warning else SecondaryText,
                   fontSize = 11.sp)
               if (bound && state.session != null) {
@@ -80,15 +101,55 @@ internal fun AssistantToolWindow(
                     label = "New Go function or type name",
                     modifier = Modifier.fillMaxWidth().padding(top = 9.dp))
               }
+              if (presetsAvailable) {
+                Text(
+                    "Quick change",
+                    color = SecondaryText,
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(top = 9.dp, bottom = 5.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                  FunctionChangePreset.entries.forEach { preset ->
+                    MiniOrcaButton(
+                        onClick = { conversationActions.preparePreset(preset) },
+                        enabled = !state.sending,
+                        density = ButtonDensity.Toolbar,
+                        modifier = Modifier.weight(1f)) {
+                          Text(preset.label)
+                        }
+                  }
+                }
+              } else if (presetBoundary != null && state.targetValidation.valid) {
+                Text(
+                    presetBoundary,
+                    color = Warning,
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(top = 9.dp))
+              }
               CompactMultilineField(
                   value = state.messageInput,
                   onValueChange = conversationActions.updateMessageValue,
-                  label = "Message",
+                  label = "Intent",
                   enabled = !state.sending && state.target != null,
-                  placeholder = "Describe one declaration change",
+                  placeholder = "For example: preserve order while deduplicating",
                   minLines = 3,
                   modifier =
                       Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(state.chatFocus))
+              IdeDisclosureHeader(
+                  title = "Advanced constraints",
+                  expanded = constraintsExpanded,
+                  onToggle = { constraintsExpanded = !constraintsExpanded },
+                  stateLabel = if (constraintsExpanded) "Expanded" else "Collapsed",
+                  modifier = Modifier.padding(top = 5.dp))
+              if (constraintsExpanded) {
+                CompactMultilineField(
+                    value = state.advancedConstraintsInput,
+                    onValueChange = conversationActions.updateAdvancedConstraintsValue,
+                    label = "Constraints",
+                    enabled = !state.sending && state.target != null,
+                    placeholder = "Optional compatibility, allocation, or error-handling limits",
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth().padding(top = 5.dp))
+              }
               RemoteProviderConfirmation(
                   ModelScope.Function,
                   state.functionModel,
@@ -113,7 +174,7 @@ internal fun AssistantToolWindow(
                       onClick = conversationActions.send,
                       enabled =
                           state.target != null &&
-                              state.message.isNotBlank() &&
+                              hasFunctionChangeIntent(state.message) &&
                               (!state.functionModel.remoteProvider || state.remoteConfirmed),
                       tone = if (draftVisible) ActionTone.Neutral else ActionTone.Primary,
                       modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
@@ -250,6 +311,9 @@ internal data class AssistantToolWindowState(
     val draftFocus: FocusRequester,
     val messageInput: TextFieldValue = TextFieldValue(message),
     val draftInput: TextFieldValue? = null,
+    val selectedSymbol: SymbolInfo? = null,
+    val targetValidation: ChatTargetValidation = ChatTargetValidation(target),
+    val advancedConstraintsInput: TextFieldValue = TextFieldValue(),
 )
 
 /** Conversation intents that do not mutate the editable declaration. */
@@ -261,7 +325,14 @@ internal data class AssistantConversationActions(
     val send: () -> Unit,
     val cancel: () -> Unit,
     val updateMessageValue: (TextFieldValue) -> Unit = { value -> updateMessage(value.text) },
+    val preparePreset: (FunctionChangePreset) -> Unit = {},
+    val updateAdvancedConstraintsValue: (TextFieldValue) -> Unit = {},
 )
+
+internal fun preparedFunctionChangeMessage(preset: FunctionChangePreset): TextFieldValue {
+  val message = preset.preparedMessage()
+  return TextFieldValue(message, TextRange(message.length))
+}
 
 /** Editable declaration intents, separate from the chat conversation. */
 internal data class DraftEditorActions(

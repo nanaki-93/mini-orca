@@ -21,4 +21,13 @@ class AssistantToolWindowTest {
         "Draft is stale. Start a new conversation.",
         draftEditorStatusMessage(DraftEditorStatus.Stale))
   }
+
+  @Test
+  fun preparedPresetTextPlacesTheCaretAfterTheRequestLead() {
+    val prepared = preparedFunctionChangeMessage(FunctionChangePreset.Behavior)
+
+    assertEquals("Change behavior: ", prepared.text)
+    assertEquals(prepared.text.length, prepared.selection.start)
+    assertEquals(prepared.text.length, prepared.selection.end)
+  }
 }

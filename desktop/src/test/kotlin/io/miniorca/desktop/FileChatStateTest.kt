@@ -50,9 +50,61 @@ class FileChatStateTest {
             ?.symbol)
     assertFalse(
         validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, "Run").valid)
-    assertFalse(
+    assertEquals(
+        "Run already exists in this file; select it to replace instead.",
+        validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, "Run")
+            .message)
+    assertEquals(
+        "Enter a valid new Go function or type name.",
         validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, "not valid")
-            .valid)
+            .message)
+    assertNull(
+        functionChangePresetBoundary(
+            ChatEditMode.CreateSymbol,
+            null,
+            validateChatTarget(
+                file(), listOf(existing), null, ChatEditMode.CreateSymbol, "NewRun")))
+  }
+
+  @Test
+  fun changePresetsPrepareOnlyAShortIntentAndKeepConstraintsOptional() {
+    assertEquals("Fix a bug: ", FunctionChangePreset.BugFix.preparedMessage())
+    assertEquals("Improve performance: ", FunctionChangePreset.Performance.preparedMessage())
+    assertEquals("Change behavior: ", FunctionChangePreset.Behavior.preparedMessage())
+    assertFalse(hasFunctionChangeIntent(FunctionChangePreset.BugFix.preparedMessage()))
+    assertTrue(hasFunctionChangeIntent("Fix a bug: preserve order while deduplicating"))
+    assertEquals(
+        "Fix a bug: preserve order while deduplicating\n\nConstraints:\nDo not allocate a second map.",
+        functionChangeRequest(
+            " Fix a bug: preserve order while deduplicating ", " Do not allocate a second map. "))
+  }
+
+  @Test
+  fun unsupportedAndMultiDeclarationSelectionsGiveActionableBoundaries() {
+    val grouped = symbol("Run").copy(atomicTarget = false)
+    val groupedValidation =
+        validateChatTarget(file(), listOf(grouped), grouped, ChatEditMode.ReplaceSymbol, "")
+    assertEquals(
+        "Select one declaration. Multi-function or grouped declaration changes are not supported.",
+        groupedValidation.message)
+    assertEquals(
+        groupedValidation.message,
+        functionChangePresetBoundary(ChatEditMode.ReplaceSymbol, grouped, groupedValidation))
+
+    val type = symbol("Options").copy(kind = "type")
+    val typeValidation =
+        validateChatTarget(file(), listOf(type), type, ChatEditMode.ReplaceSymbol, "")
+    assertTrue(typeValidation.valid)
+    assertEquals(
+        "Quick changes require one Go function or method. Select one to use a preset.",
+        functionChangePresetBoundary(ChatEditMode.ReplaceSymbol, type, typeValidation))
+
+    val stale = symbol("OldRun")
+    val staleValidation =
+        validateChatTarget(file(), listOf(symbol("NewRun")), stale, ChatEditMode.ReplaceSymbol, "")
+    assertEquals(
+        "The selected declaration is stale. Select it again in the editor.",
+        functionChangePresetBoundary(ChatEditMode.ReplaceSymbol, stale, staleValidation))
   }
 
   @Test

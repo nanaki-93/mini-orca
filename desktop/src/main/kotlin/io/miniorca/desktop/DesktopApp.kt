@@ -79,6 +79,8 @@ internal fun MiniOrcaApp(
   var chatMode by remember { mutableStateOf(ChatEditMode.ReplaceSymbol) }
   var newChatSymbol by remember { mutableStateOf("") }
   var chatMessage by remember { mutableStateOf(TextFieldValue()) }
+  var advancedConstraints by remember { mutableStateOf(TextFieldValue()) }
+  var consumedPreparedRequestGeneration by remember { mutableStateOf(0L) }
   var draftFieldKey by remember { mutableStateOf<DraftFieldIdentity?>(null) }
   var draftFieldValue by remember { mutableStateOf(TextFieldValue()) }
   var pendingImportPath by remember { mutableStateOf<String?>(null) }
@@ -118,13 +120,15 @@ internal fun MiniOrcaApp(
     if (editorProgress.progress in setOf(EditorProgress.Review, EditorProgress.Receipt))
         composerRequested = false
   }
-  LaunchedEffect(appState.preparedAction, appState.preparedRequest, appState.selectedSymbol) {
+  LaunchedEffect(appState.preparedRequestGeneration) {
+    val preparedRequest =
+        unconsumedPreparedRequest(appState, consumedPreparedRequestGeneration)
+            ?: return@LaunchedEffect
+    consumedPreparedRequestGeneration = appState.preparedRequestGeneration
     if (appState.preparedAction.isNotBlank()) contextAction = appState.preparedAction
-    if (appState.preparedRequest.isNotBlank()) {
-      if (appState.preparedTaskSpec != null) chatMode = ChatEditMode.ReplaceSymbol
-      chatMessage = TextFieldValue(appState.preparedRequest)
-      composerRequested = true
-    }
+    if (appState.preparedTaskSpec != null) chatMode = ChatEditMode.ReplaceSymbol
+    chatMessage = TextFieldValue(preparedRequest)
+    composerRequested = true
   }
   LaunchedEffect(appState.project?.projectId, appState.project?.projectRevision) {
     appState.index?.let { collapsedDirectories = explorerDirectories(it.files) }
@@ -138,6 +142,7 @@ internal fun MiniOrcaApp(
   LaunchedEffect(appState.review.draft?.id, appState.review.draft?.revision) {
     if (appState.review.draft != null) {
       chatMessage = TextFieldValue()
+      advancedConstraints = TextFieldValue()
       layout = layout.withEditorSurface(EditorSurface.Source)
     }
   }
@@ -166,11 +171,18 @@ internal fun MiniOrcaApp(
     focusComposerControl(target)
   }
 
+  fun clearComposerInput() {
+    chatMessage = TextFieldValue()
+    advancedConstraints = TextFieldValue()
+  }
+
   fun startReplaceEdit(request: DirectEditRequest) {
+    presenter.clearPreparedSuggestion()
     if (appState.selectedSymbol != request.selectedSymbol)
         presenter.dispatch(DesktopEvent.SymbolSelected(request.selectedSymbol))
     chatMode = ChatEditMode.ReplaceSymbol
     newChatSymbol = ""
+    clearComposerInput()
     focusComposerControl(ComposerFocusTarget.Chat)
   }
 
@@ -186,8 +198,10 @@ internal fun MiniOrcaApp(
   }
 
   fun startCreateDeclaration() {
+    presenter.clearPreparedSuggestion()
     chatMode = ChatEditMode.CreateSymbol
     newChatSymbol = ""
+    clearComposerInput()
     focusComposerControl(ComposerFocusTarget.Chat)
   }
 
@@ -201,13 +215,11 @@ internal fun MiniOrcaApp(
     when (val pending = pendingDraftDiscard) {
       is PendingDraftDiscard.Replace -> {
         presenter.discardDraft()
-        chatMessage = TextFieldValue()
         pendingDraftDiscard = null
         startReplaceEdit(pending.request)
       }
       is PendingDraftDiscard.Create -> {
         presenter.discardDraft()
-        chatMessage = TextFieldValue()
         pendingDraftDiscard = null
         startCreateDeclaration()
       }
@@ -258,6 +270,7 @@ internal fun MiniOrcaApp(
                   }
                 },
                 selectFile = { path ->
+                  clearComposerInput()
                   presenter.openFileInEditor(path)
                   onSelected()
                 },
@@ -303,14 +316,14 @@ internal fun MiniOrcaApp(
   }
   val assistantPane: @Composable (Modifier) -> Unit = { modifier ->
     if (composerRequested || editorProgress.progress == EditorProgress.Edit) {
-      val target =
+      val targetValidation =
           validateChatTarget(
-                  appState.selectedFile,
-                  appState.symbols,
-                  appState.selectedSymbol,
-                  chatMode,
-                  newChatSymbol)
-              .target
+              appState.selectedFile,
+              appState.symbols,
+              appState.selectedSymbol,
+              chatMode,
+              newChatSymbol)
+      val target = targetValidation.target
       val draft = appState.review.draft
       val draftEditorVisible =
           draft != null &&
@@ -344,6 +357,9 @@ internal fun MiniOrcaApp(
                   draftFocus = draftFocusRequester,
                   messageInput = chatMessage,
                   draftInput = activeDraftFieldValue,
+                  selectedSymbol = appState.selectedSymbol,
+                  targetValidation = targetValidation,
+                  advancedConstraintsInput = advancedConstraints,
               ),
           conversationActions =
               AssistantConversationActions(
@@ -353,9 +369,20 @@ internal fun MiniOrcaApp(
                     presenter.setProviderConfirmation(ModelScope.Function, it)
                   },
                   inspectContext = { presenter.inspectContext(contextAction) },
-                  send = { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage.text) },
+                  send = {
+                    presenter.sendChatMessage(
+                        chatMode,
+                        newChatSymbol,
+                        functionChangeRequest(chatMessage.text, advancedConstraints.text))
+                  },
                   cancel = presenter::cancelGeneration,
                   updateMessageValue = { chatMessage = it },
+                  preparePreset = { preset ->
+                    presenter.clearPreparedSuggestion()
+                    chatMessage = preparedFunctionChangeMessage(preset)
+                    focusComposerControl(ComposerFocusTarget.Chat)
+                  },
+                  updateAdvancedConstraintsValue = { advancedConstraints = it },
               ),
           editorActions =
               DraftEditorActions(
@@ -401,8 +428,14 @@ internal fun MiniOrcaApp(
   }
   val findingActions =
       FindingActions(
-          openFinding = presenter::openFinding,
-          prepareFinding = presenter::prepareFinding,
+          openFinding = {
+            clearComposerInput()
+            presenter.openFinding(it)
+          },
+          prepareFinding = {
+            clearComposerInput()
+            presenter.prepareFinding(it)
+          },
           triageFinding = presenter::triageFinding,
       )
   val checksPresentation =
@@ -511,11 +544,17 @@ internal fun MiniOrcaApp(
               cancelAnalysis = presenter::cancelAnalysis,
               sourceLineSelected = { selection ->
                 presenter.dispatch(DesktopEvent.SourceLineSelected(selection))
+                if (selection.symbol != appState.selectedSymbol) clearComposerInput()
                 composerRequested = false
               },
               validateDraft = presenter::validateEditableDraft,
               runDraftChecks = presenter::runDraftChecks,
-              generate = { presenter.sendChatMessage(chatMode, newChatSymbol, chatMessage.text) },
+              generate = {
+                presenter.sendChatMessage(
+                    chatMode,
+                    newChatSymbol,
+                    functionChangeRequest(chatMessage.text, advancedConstraints.text))
+              },
               cancelGeneration = presenter::cancelGeneration,
               dismissContext = {
                 showContext = false
@@ -540,6 +579,7 @@ internal fun MiniOrcaApp(
               resumePerformance = presenter::resumePerformance,
               cancelPerformance = presenter::cancelPerformance,
               openPerformanceFinding = { path, finding ->
+                clearComposerInput()
                 presenter.openFileInEditor(
                     path, EditorNavigationTarget(path, finding.symbol, finding.startLine))
               },
@@ -548,6 +588,7 @@ internal fun MiniOrcaApp(
                 val exact =
                     indexed?.symbols?.singleOrNull { it.name == finding.symbol && it.atomicTarget }
                 if (indexed?.language == "Go" && exact != null) {
+                  clearComposerInput()
                   presenter.openFileInEditor(
                       path,
                       EditorNavigationTarget(path, exact.name, finding.startLine),
@@ -566,12 +607,14 @@ internal fun MiniOrcaApp(
               open = ::openPalette,
               selectFile = {
                 showPalette = false
+                clearComposerInput()
                 presenter.openFileInEditor(it)
               },
               selectSymbol = {
                 showPalette = false
                 presenter.dispatch(DesktopEvent.SymbolSelected(it))
                 presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
+                if (it != appState.selectedSymbol) clearComposerInput()
                 composerRequested = false
               },
               selectAction = {

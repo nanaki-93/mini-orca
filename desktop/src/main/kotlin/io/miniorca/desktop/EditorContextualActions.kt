@@ -56,7 +56,7 @@ internal fun editorContextualActions(
       canFocusDraft = draftCurrent,
       canGenerate =
           target.valid &&
-              message.isNotBlank() &&
+              hasFunctionChangeIntent(message) &&
               !sending &&
               (!functionModel.remoteProvider || remoteProviderConfirmed),
       canValidateDraft = canValidate,

@@ -140,6 +140,50 @@ class DesktopStateTest {
   }
 
   @Test
+  fun consumedPreparedRequestDoesNotReplayWhenTheTargetChanges() {
+    val first = SymbolInfo("First", "function", confidence = "exact", atomicTarget = true)
+    val second = SymbolInfo("Second", "function", confidence = "exact", atomicTarget = true)
+    val task = BugTaskSpec("1", "main.go", "First", "func First()", listOf("Handle empty input."))
+    val oldGeneration = DesktopState().preparedRequestGeneration
+    val prepared =
+        DesktopState()
+            .reduce(DesktopEvent.SuggestionPrepared("fix", "Handle empty input", first, task))
+
+    val changedTargets =
+        listOf(
+            prepared.reduce(DesktopEvent.SymbolSelected(second)),
+            prepared.reduce(DesktopEvent.EditorContextSelected(second, second.startLine)),
+            prepared.reduce(
+                DesktopEvent.SourceLineSelected(SourceLineSelection(second.startLine, second))))
+    changedTargets.forEach { changedTarget ->
+      assertEquals("", changedTarget.preparedAction)
+      assertEquals("", changedTarget.preparedRequest)
+      assertNull(changedTarget.preparedTaskSpec)
+      assertTrue(changedTarget.preparedRequestGeneration > prepared.preparedRequestGeneration)
+      assertNull(unconsumedPreparedRequest(changedTarget, oldGeneration))
+    }
+
+    val sameTarget =
+        prepared.reduce(
+            DesktopEvent.SourceLineSelected(
+                SourceLineSelection(9, first.copy(signature = "func First() error"))))
+    assertEquals(task, sameTarget.preparedTaskSpec)
+    assertEquals(prepared.preparedRequestGeneration, sameTarget.preparedRequestGeneration)
+
+    val cleared = prepared.reduce(DesktopEvent.SuggestionCleared)
+    assertEquals("", cleared.preparedRequest)
+    assertNull(cleared.preparedTaskSpec)
+    assertNull(unconsumedPreparedRequest(cleared, oldGeneration))
+
+    val changedTarget = changedTargets.first()
+    val preparedAgain =
+        changedTarget.reduce(DesktopEvent.SuggestionPrepared("fix", "Handle empty input", second))
+    assertEquals(
+        "Handle empty input",
+        unconsumedPreparedRequest(preparedAgain, changedTarget.preparedRequestGeneration))
+  }
+
+  @Test
   fun explainSymbolRemainsAReadOnlyPreparedAction() {
     val symbol = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
 

@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -1123,6 +1124,139 @@ class DesktopWorkflowPresenterTest {
 
       assertEquals("Run", presenter.snapshot.value.state.review.draft?.targetSymbol)
       assertEquals("session", presenter.snapshot.value.state.chat.session?.id)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun explicitSendMakesOneChatRequestAndPreservesFunctionRemoteConsent() {
+    val sessionRequests = AtomicInteger()
+    val messageRequests = AtomicInteger()
+    var messageBody = ""
+    val presenter = presenter { method, path, body ->
+      when (method to path) {
+        "GET" to "/status" -> response("{\"status\":\"ok\",\"version\":\"v1\"}")
+        "GET" to "/api/models/current" ->
+            response(
+                """{"scopes":{"function":{"scope":"function","profile":"remote","model":"provider/editor","remote_provider":true}}}""")
+        "GET" to "/api/projects/current/files/info?path=main.go" ->
+            response(fileJson("main.go", "base"))
+        "GET" to "/api/projects/current/files/symbols?path=main.go" ->
+            response(symbolsJson("main.go", "Run"))
+        "GET" to "/api/projects/current/files/analysis?path=main.go&refresh=false" ->
+            response("{\"path\":\"main.go\",\"status\":\"missing\"}")
+        "GET" to "/api/projects/current/impact?path=main.go" ->
+            response("{\"target_path\":\"main.go\"}")
+        "GET" to "/api/projects/current/git?path=main.go" -> response("{\"available\":false}")
+        "POST" to "/api/projects/current/chat/sessions" -> {
+          sessionRequests.incrementAndGet()
+          response(
+              "{\"id\":\"session\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"open_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"state\":\"active\",\"messages\":[]}")
+        }
+        "POST" to "/api/projects/current/chat/sessions/session/messages" -> {
+          messageRequests.incrementAndGet()
+          messageBody = body.orEmpty()
+          response(
+              "{\"session_id\":\"session\",\"draft\":{\"id\":\"draft\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"target_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"declaration\":\"func Run() {}\",\"revision\":1,\"hash\":\"draft-hash\",\"state\":\"generated\"},\"assistant_message\":{\"role\":\"assistant\",\"content\":\"Ready\"}}")
+        }
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      presenter.refreshConnection()
+      eventually { presenter.snapshot.value.model(ModelScope.Function).remoteProvider }
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      eventually { presenter.snapshot.value.state.selectedFile?.path == "main.go" }
+      presenter.dispatch(
+          DesktopEvent.SymbolSelected(
+              SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)))
+
+      presenter.sendChatMessage(
+          ChatEditMode.ReplaceSymbol, "", FunctionChangePreset.BugFix.preparedMessage())
+      assertEquals(0, sessionRequests.get())
+      assertEquals(0, messageRequests.get())
+      assertEquals(
+          "Add a concise intent after the selected preset before sending.",
+          presenter.snapshot.value.state.error)
+
+      presenter.sendChatMessage(
+          ChatEditMode.ReplaceSymbol, "", "Fix a bug: return a typed error for a missing user")
+      assertEquals(0, sessionRequests.get())
+      assertEquals(0, messageRequests.get())
+      assertEquals(
+          "Confirm the Function edits model destination before sending context.",
+          presenter.snapshot.value.state.error)
+
+      presenter.setProviderConfirmation(ModelScope.Function, true)
+      presenter.sendChatMessage(
+          ChatEditMode.ReplaceSymbol, "", "Fix a bug: return a typed error for a missing user")
+      eventually { presenter.snapshot.value.state.review.draft?.id == "draft" }
+
+      assertEquals(1, sessionRequests.get())
+      assertEquals(1, messageRequests.get())
+      assertTrue(messageBody.contains("\"confirm_remote_provider\":true"))
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun newLocalChangeDoesNotAttachAnOldPreparedBugTask() {
+    val sessionBodies = Collections.synchronizedList(mutableListOf<String>())
+    val messageRequests = AtomicInteger()
+    val presenter = presenter { method, path, body ->
+      when (method to path) {
+        "GET" to "/api/projects/current/files/info?path=main.go" ->
+            response(fileJson("main.go", "base"))
+        "GET" to "/api/projects/current/files/symbols?path=main.go" ->
+            response(symbolsJson("main.go", "Run"))
+        "GET" to "/api/projects/current/files/analysis?path=main.go&refresh=false" ->
+            response("{\"path\":\"main.go\",\"status\":\"missing\"}")
+        "GET" to "/api/projects/current/impact?path=main.go" ->
+            response("{\"target_path\":\"main.go\"}")
+        "GET" to "/api/projects/current/git?path=main.go" -> response("{\"available\":false}")
+        "POST" to "/api/projects/current/chat/sessions" -> {
+          sessionBodies += body.orEmpty()
+          response(
+              "{\"id\":\"session\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"open_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"state\":\"active\",\"messages\":[]}")
+        }
+        "POST" to "/api/projects/current/chat/sessions/session/messages" -> {
+          messageRequests.incrementAndGet()
+          error("stop after observing the request")
+        }
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      eventually { presenter.snapshot.value.state.selectedFile?.path == "main.go" }
+      val symbol = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
+      presenter.dispatch(DesktopEvent.SymbolSelected(symbol))
+      val task =
+          BugTaskSpec(
+              "1", "main.go", "Run", "func Run()", listOf("Return an error for empty input."))
+
+      presenter.dispatch(
+          DesktopEvent.SuggestionPrepared(
+              "fix", "Fix a bug: return an error for empty input", symbol, task))
+      presenter.sendChatMessage(
+          ChatEditMode.ReplaceSymbol, "", "Fix a bug: return an error for empty input")
+      eventually { messageRequests.get() == 1 && !presenter.snapshot.value.generating }
+      assertTrue(sessionBodies.single().contains("\"task_spec\""))
+
+      presenter.dispatch(
+          DesktopEvent.SuggestionPrepared(
+              "fix", "Fix a bug: return an error for empty input", symbol, task))
+      presenter.clearPreparedSuggestion()
+      presenter.sendChatMessage(
+          ChatEditMode.ReplaceSymbol, "", "Change behavior: preserve insertion order")
+      eventually { messageRequests.get() == 2 && !presenter.snapshot.value.generating }
+
+      assertEquals(2, sessionBodies.size)
+      assertFalse(sessionBodies.last().contains("\"task_spec\""))
     } finally {
       presenter.close()
     }
