@@ -41,6 +41,7 @@ internal fun MainToolbar(
     state: ToolbarState,
     actions: ToolbarActions,
     modifier: Modifier = Modifier,
+    paletteFocusRequester: FocusRequester? = null,
 ) {
   val connectionPresentation = connectionPresentation(state.connection)
   val presentation = toolbarPresentation(state.widthDp)
@@ -74,9 +75,10 @@ internal fun MainToolbar(
             onClick = actions.onPalette,
             background = ToolWindowSurface,
             modifier =
-                Modifier.widthIn(max = 340.dp).fillMaxWidth().semantics {
-                  contentDescription = "Search files, symbols, commands"
-                }) {
+                Modifier.widthIn(max = 340.dp)
+                    .fillMaxWidth()
+                    .then(paletteFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+                    .semantics { contentDescription = "Search files, symbols, commands" }) {
               DesktopLineIcon(DesktopIcon.Search, "Search", iconSize = 16.dp)
               Spacer(Modifier.width(8.dp))
               Text(

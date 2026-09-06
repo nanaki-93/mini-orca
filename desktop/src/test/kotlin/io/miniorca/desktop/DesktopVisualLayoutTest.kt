@@ -1000,6 +1000,37 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun transientOpenersCanReceiveKeyboardFocus() {
+    val paletteFocus = FocusRequester()
+    ComposeVisualFixture(1000, 220) {
+          ToolbarVisualFixture(1000f, paletteFocusRequester = paletteFocus)
+        }
+        .use { fixture ->
+          fixture.render()
+          paletteFocus.requestFocus()
+          fixture.render()
+          assertTrue(fixture.isFocused("Search"))
+        }
+
+    val bottomToolsFocus = FocusRequester()
+    ComposeVisualFixture(800, 120) {
+          NarrowBottomToolWindowSummary(
+              DesktopLayoutState(),
+              listOf(BottomToolWindow.Problems),
+              mapOf(BottomToolWindow.Problems to BottomToolWindowSummary("No problems")),
+              onOpen = {},
+              openButtonModifier = Modifier.focusRequester(bottomToolsFocus),
+          )
+        }
+        .use { fixture ->
+          fixture.render()
+          bottomToolsFocus.requestFocus()
+          fixture.render()
+          assertTrue(fixture.isFocused("Open tools"))
+        }
+  }
+
+  @Test
   fun summaryDashboardKeepsLongInterpretationExpandableAndNavigationLocal() {
     val longPurpose =
         "This returned purpose stays intact when the compact dashboard only previews it. ".repeat(8)
@@ -1514,6 +1545,7 @@ private fun ToolbarVisualFixture(
     project: ProjectAnalysis? = visualFixtureProject,
     connection: ConnectionState = ConnectionState(connected = true),
     actions: ToolbarActions = ToolbarActions({}, {}, {}, {}, {}, {}),
+    paletteFocusRequester: FocusRequester? = null,
 ) {
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
@@ -1525,7 +1557,8 @@ private fun ToolbarVisualFixture(
             connection,
             GitStatus(available = true, branch = "main"),
             false),
-        actions)
+        actions,
+        paletteFocusRequester = paletteFocusRequester)
   }
 }
 

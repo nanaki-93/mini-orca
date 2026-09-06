@@ -12,7 +12,8 @@ evidence for native menu, dialog, window-edge, or screen-reader behavior.
 - Desktop runtime: JBR 25.0.4+1-b508.27-nomod.
 - Deterministic UI data: only the production test fixture (`go-shop · fixture`, `Visual fixture · no
   backend`) was rendered; no fixture capture includes a daemon, provider, user project,
-  credential, or live provider data. The native launch could not be inspected or captured.
+  credential, or live provider data. The resumed UI-04 run below used a separate disposable native
+  fixture and loopback daemon.
 
 ## FND-01 baseline reconciliation — 2026-09-06
 
@@ -105,7 +106,92 @@ recovery result is claimed. VoiceOver was not running, and the blocked accessibi
 not expose another reader, so no reader name/state observation is claimed. The temporary app and
 daemon were stopped after the attempt.
 
-UI-04 remains blocked on the complete native and assistive-technology operator matrix below.
+That attempt remained blocked on the complete native and assistive-technology operator matrix
+below.
+
+## UI-04 resumed native execution — 2026-09-07
+
+The resumed starting identity was `df426547dd6f35888658d203c4914e8cef7f1630`. The only
+pre-existing worktree change was the coordinator's UI-04 status update in `PLAN.md` to
+`Running — native permissions restored`; it is not UI evidence. The same exact ignored JBR,
+disposable fixture, loopback daemon, and unreachable local fixture-model destinations from the
+attempt above were reused. No real provider, credential, or user project was used. A small
+ignored `java.util.prefs` test harness stored application preferences only in
+`desktop/build/ui-04/prefs/ui-04.properties`; it did not alter macOS preferences.
+
+Accessibility and Screen Recording access worked through the computer-use surface. It exposed
+the running `Mini-Orca` window, its accessibility tree, keyboard and pointer input, and
+window-only JPEG captures. Capture dimensions were parsed directly from those buffers. The
+surface did not provide a file-export API. A targeted `screencapture -l 2615` attempt from the
+terminal returned `could not create image from window`, so no native screenshot file is claimed.
+The directly observed facts are also summarized in the ignored
+`desktop/build/ui-04/logs/native-observations.json` execution artifact.
+
+| Requested native window | Direct result |
+| --- | --- |
+| 1000×760 | Exact capture; populated/error Summary and docked Editor were readable with no observed clipping. |
+| 999×760 | Exact capture; populated/error Summary and compact Editor drawer/bottom-overlay arrangement were readable with no observed clipping. |
+| 800×650 | Exact Summary capture; the compact Summary remained readable with the failed-AI state and bottom-tools opener visible. |
+| 1280×600 | Exact capture; Summary and docked bottom tabs remained readable with no observed clipping. |
+| 1440×900 | Unsupported by the available host work area; the direct resize attempt was clamped to 1361×768. |
+| 1920×1080 | Unsupported by the available host work area; the direct resize attempt was clamped to 1383×768. |
+
+The native fixture exposed a populated factual inventory of 10 indexed files and 45 lines plus an
+explicit failed AI-analysis state with 10 missing analyses. In Editor, selecting `main.go`
+displayed its full read-only source and accessibility descriptions for the file, relative path,
+and each source line. A pointer drag visibly selected `Run` source text without selecting a
+declaration or changing the file. At compact width, longer fixture names were visually ellipsized
+while their complete relative paths remained present in the accessibility names.
+
+The project menu, command palette, macOS project chooser, Files drawer, Context drawer, and
+bottom-tools overlay were opened in the native app. Their labels and available/selected states
+were present in the accessibility tree and the visible surfaces stayed within the window. Escape
+closed one of those transient layers at a time without changing the workspace or selected file.
+Tab visibly focused the Project and Search controls, and Return activated the focused control.
+Project-menu and Files-drawer dismissal returned activation to their openers.
+
+Direct native inspection found three defects. The Summary dashboard initially exposed Editor as
+the selected rail destination; the rail now derives selection from the rendered workspace. The
+command palette and compact bottom-tools overlay initially returned focus only to their broad
+regions; their actual opener controls now receive focus. In the rebuilt JBR application, Escape
+followed by Return reopened each corrected trigger. Deterministic assertions cover the complete
+workspace-to-rail mapping and prove that the exact Search and Open tools triggers can receive
+focus. The dismissal and trigger-restoration sequence is direct native evidence only.
+
+After the final fixes, the full Desktop gate passed 272 tests with zero Detekt findings:
+
+```sh
+MINI_ORCA_JDK21_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem \
+MINI_ORCA_JBR25_HOME="$PWD/desktop/build/ui-04/toolchains/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home" \
+  ./scripts/desktop-gradle.sh spotlessCheck detekt test
+```
+
+The forced focused run passed 23 visual-layout, 8 accessibility, and 7 keyboard-navigation tests
+with no skipped, failed, or errored cases. It generated 66 PNGs under the ignored
+`desktop/build/reports/ui-precision/ui-04-after-fix/` directory:
+
+```sh
+MINI_ORCA_JDK21_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem \
+MINI_ORCA_JBR25_HOME="$PWD/desktop/build/ui-04/toolchains/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home" \
+  ./scripts/desktop-gradle.sh test --rerun-tasks \
+  --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' \
+  --tests 'io.miniorca.desktop.DesktopAccessibilityTest' \
+  --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' \
+  -PvisualOutput="$PWD/desktop/build/reports/ui-precision/ui-04-after-fix"
+```
+
+The native restart restored only the disposable project. It did not restore the saved Editor rail
+selection: the stored layout named Editor, while the restarted workspace correctly opened and
+announced Summary. Splitter dimensions were not changed and therefore are not claimed as native
+recovery evidence.
+
+VoiceOver was not running. Only `AccessibilityUIServer` was present, which is not a screen
+reader, so no reader speech, order, or version is claimed. The host's text scale and density were
+not changed; 125%, 150%, and alternate-density coverage remains deterministic component evidence
+only. Empty, loading, and stale states remain native evidence gaps. Generated-diff,
+consent/discard, provider-confirmation, and guarded Review states were not produced by this native
+disposable fixture and are not claimed. UI-04 remains incomplete for those unsupported and
+unobserved native/reader matrix items.
 
 ## Deterministic component evidence
 
@@ -118,7 +204,7 @@ UI-04 remains blocked on the complete native and assistive-technology operator m
 | Shell and Analysis hierarchy | 1440×900, 1920×1080, 1000×760, 999×760, 800×650 | Offscreen production-component render |
 | Compact short window | 1280×600 at 100%, 125%, 150% text; 100% at 1× and 2× density | Offscreen production-component render |
 | Errors, stale/empty/populated evidence | Problems, Checks, Output, Analysis, Context, Assistant, Review, Performance fixtures | Offscreen production-component render and semantics assertions |
-| Keyboard / state semantics | Rail, tabs, command palette, popup dismissal/focus return, disclosures, responsive drawer boundary, provider confirmation | Deterministic Compose keyboard and semantics tests |
+| Keyboard / state semantics | Rail/tab navigation and selected state, command-palette arrow/Enter interaction, disclosure state, responsive region policy, provider confirmation, and Search/Open tools opener focusability | Deterministic Compose keyboard and semantics tests; exact dismissal/restoration is native evidence above |
 | Contrast | Primary, secondary, selected, focus, disabled, diff success, and diff error pairs | `DesktopThemeTest` and `DiffViewerTest` token assertions |
 
 The FND-01 table above is the current minimum baseline for the four principal populated views.
@@ -149,8 +235,8 @@ On supported macOS/JBR 25 hardware with a disposable fixture, capture and record
 
 1. Native screenshots at 1440×900, 1920×1080, 1000×760, 999×760, 800×650, and 1280×600;
    repeat the short-window view at 100%, 125%, and 150% text where supported.
-2. Window-edge placement and dismissal for Project/Preview menus, command palette, Preview and
-   consent/discard dialogs, Files/Context drawers, status details, and bottom-tools overlay.
+2. Window-edge placement and dismissal for the Project menu, command palette, consent/discard
+   dialogs, Files/Context drawers, status details, and bottom-tools overlay.
 3. Keyboard focus traversal and restoration for rail, Files tree, editor tabs/breadcrumbs,
    header actions, disclosures, splitters, drawers, menus, palette, dialogs, provider consent,
    and guarded Review. Exercise Escape one transient surface at a time.
