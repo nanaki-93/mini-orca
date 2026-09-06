@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -32,7 +34,9 @@ func TestDaemonStatusReportsCanonicalVersion(t *testing.T) {
 	}
 
 	response := httptest.NewRecorder()
-	newHTTPMux(service, manager).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/status", nil))
+	request := httptest.NewRequest(http.MethodGet, "/status", nil)
+	request.Host = "localhost:9090"
+	newHTTPMux(service, manager).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status response = %d: %s", response.Code, response.Body.String())
 	}
@@ -45,6 +49,127 @@ func TestDaemonStatusReportsCanonicalVersion(t *testing.T) {
 	if status.Version != version.Version {
 		t.Fatalf("daemon version = %q, want %q", status.Version, version.Version)
 	}
+}
+
+func TestLocalAPIPolicyRejectsBrowserAndInvalidContentBeforeRoutes(t *testing.T) {
+	t.Setenv("MINI_ORCA_BIND_ADDRESS", "")
+	mux := daemonTestMux(t)
+
+	tests := []struct {
+		name        string
+		method      string
+		path        string
+		host        string
+		origin      string
+		contentType string
+		preflight   bool
+		wantStatus  int
+	}{
+		{name: "forged host", method: http.MethodGet, path: "/health", host: "attacker.example", wantStatus: http.StatusForbidden},
+		{name: "hostile origin mutation", method: http.MethodPost, path: "/api/projects/restore", host: "localhost:9090", origin: "https://attacker.example", contentType: "application/json", wantStatus: http.StatusForbidden},
+		{name: "browser preflight", method: http.MethodOptions, path: "/api/projects/restore", host: "localhost:9090", origin: "https://attacker.example", preflight: true, wantStatus: http.StatusForbidden},
+		{name: "missing JSON content type", method: http.MethodPost, path: "/api/projects/restore", host: "localhost:9090", wantStatus: http.StatusUnsupportedMediaType},
+		{name: "non JSON mutation", method: http.MethodPost, path: "/api/projects/restore", host: "localhost:9090", contentType: "text/plain", wantStatus: http.StatusUnsupportedMediaType},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(test.method, test.path, strings.NewReader(`{"project_path":"ignored"}`))
+			request.Host = test.host
+			if test.origin != "" {
+				request.Header.Set("Origin", test.origin)
+			}
+			if test.contentType != "" {
+				request.Header.Set("Content-Type", test.contentType)
+			}
+			if test.preflight {
+				request.Header.Set("Access-Control-Request-Method", http.MethodPost)
+			}
+
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+			if response.Code != test.wantStatus {
+				t.Fatalf("response status = %d, want %d: %s", response.Code, test.wantStatus, response.Body.String())
+			}
+			if response.Header().Get("Access-Control-Allow-Origin") != "" {
+				t.Fatalf("unexpected CORS response header: %q", response.Header().Get("Access-Control-Allow-Origin"))
+			}
+		})
+	}
+}
+
+func TestLocalAPIPolicyAllowsNativeDesktopCallsAndHealth(t *testing.T) {
+	t.Setenv("MINI_ORCA_BIND_ADDRESS", "")
+	mux := daemonTestMux(t)
+	health := httptest.NewRecorder()
+	healthRequest := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthRequest.Host = "localhost:9090"
+	mux.ServeHTTP(health, healthRequest)
+	if health.Code != http.StatusOK {
+		t.Fatalf("health response = %d: %s", health.Code, health.Body.String())
+	}
+
+	for _, test := range []struct {
+		name string
+		path string
+		body io.Reader
+	}{
+		{name: "JSON request with charset", path: "/api/projects/restore", body: strings.NewReader(`{"project_path":"ignored"}`)},
+		{name: "bodyless analyze-all pause", path: "/api/projects/current/analysis-job/pause?project_revision=revision"},
+		{name: "bodyless analyze-all cancel", path: "/api/projects/current/analysis-job/cancel?project_revision=revision"},
+		{name: "bodyless performance pause", path: "/api/projects/current/performance-job/pause?project_revision=revision&expected_job_id=job"},
+		{name: "bodyless performance cancel", path: "/api/projects/current/performance-job/cancel?project_revision=revision&expected_job_id=job"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handlerCalled := false
+			nativeRequest := httptest.NewRequest(http.MethodPost, test.path, test.body)
+			nativeRequest.Host = "127.0.0.1:9090"
+			if test.body != nil {
+				nativeRequest.Header.Set("Content-Type", "application/json; charset=utf-8")
+			}
+			response := httptest.NewRecorder()
+			api.LocalOnly(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				handlerCalled = true
+				w.WriteHeader(http.StatusNoContent)
+			}), false).ServeHTTP(response, nativeRequest)
+			if response.Code != http.StatusNoContent || !handlerCalled {
+				t.Fatalf("native request status = %d, handler called = %t", response.Code, handlerCalled)
+			}
+		})
+	}
+}
+
+func TestExplicitExternalBindAllowsExternalHost(t *testing.T) {
+	for _, bindAddress := range []string{"0.0.0.0:9090", ":9090"} {
+		t.Run(bindAddress, func(t *testing.T) {
+			t.Setenv("MINI_ORCA_BIND_ADDRESS", bindAddress)
+			mux := daemonTestMux(t)
+			request := httptest.NewRequest(http.MethodGet, "/health", nil)
+			request.Host = "desktop.example:9090"
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+			if response.Code != http.StatusOK {
+				t.Fatalf("external bind response = %d: %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func daemonTestMux(t *testing.T) http.Handler {
+	t.Helper()
+	root := t.TempDir()
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(config.Default(), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newHTTPMux(service, manager)
 }
 
 func TestReleaseDocumentationUsesCanonicalVersion(t *testing.T) {
@@ -128,7 +253,9 @@ func TestDaemonDoesNotRegisterBrowserUIRoutes(t *testing.T) {
 	mux := newHTTPMux(service, manager)
 	for _, path := range []string{"/", "/static/js/chat.js", "/api/render/file-tree", "/api/tree/expand", "/api/files/view"} {
 		response := httptest.NewRecorder()
-		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Host = "localhost:9090"
+		mux.ServeHTTP(response, request)
 		if response.Code != http.StatusNotFound {
 			t.Fatalf("browser route %s returned %d, want 404", path, response.Code)
 		}

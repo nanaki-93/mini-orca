@@ -161,15 +161,19 @@ class ApiClientContractTest {
                       TransportResponse(200, jobResponse("running"))
                     }
                     "POST" to
-                        "/api/projects/current/analysis-job/pause?project_revision=revision" ->
-                        TransportResponse(200, jobResponse("paused"))
+                        "/api/projects/current/analysis-job/pause?project_revision=revision" -> {
+                      assertNull(body)
+                      TransportResponse(200, jobResponse("paused"))
+                    }
                     "POST" to "/api/projects/current/analysis-job/resume" -> {
                       assertContains(body.orEmpty(), "\"confirm_remote_provider\":true")
                       TransportResponse(200, jobResponse("running"))
                     }
                     "POST" to
-                        "/api/projects/current/analysis-job/cancel?project_revision=revision" ->
-                        TransportResponse(200, jobResponse("canceled"))
+                        "/api/projects/current/analysis-job/cancel?project_revision=revision" -> {
+                      assertNull(body)
+                      TransportResponse(200, jobResponse("canceled"))
+                    }
                     else -> error("unexpected request: $method $path")
                   }
                 })

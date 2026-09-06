@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/api/handlers"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
@@ -114,7 +117,7 @@ func daemonAddress() string {
 func newHTTPMux(
 	application *app.Service,
 	projectManager *project.Manager,
-) *http.ServeMux {
+) http.Handler {
 	mux := http.NewServeMux()
 
 	// Health check endpoint
@@ -179,7 +182,26 @@ func newHTTPMux(
 	mux.HandleFunc("POST /api/projects/current/apply", draftHandler.Apply)
 	mux.HandleFunc("POST /api/projects/current/undo", draftHandler.Undo)
 
-	return mux
+	return api.LocalOnly(mux, daemonAllowsExternalHosts())
+}
+
+func daemonAllowsExternalHosts() bool {
+	address := os.Getenv("MINI_ORCA_BIND_ADDRESS")
+	if address == "" {
+		return false
+	}
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return false
+	}
+	if host == "" {
+		return true
+	}
+	if strings.EqualFold(host, "localhost") {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip == nil || !ip.IsLoopback()
 }
 
 // waitForShutdown blocks until a SIGINT or SIGTERM signal is received.
