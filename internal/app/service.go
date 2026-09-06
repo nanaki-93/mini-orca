@@ -49,19 +49,20 @@ type modelOutput struct {
 
 // Service owns configured model access and the active project's generation path.
 type Service struct {
-	manager             *project.Manager
-	runtimes            scopedRuntimes
-	importTimeout       time.Duration
-	analysisTimeout     time.Duration
-	focusedCheckTimeout time.Duration
-	retryBase           time.Duration
-	retryMax            time.Duration
-	jobLifecycleMu      sync.Mutex
-	analysisAll         *analysisAllController
-	goScan              *goScanController
-	drafts              *draftStore
-	chatSessions        *chatSessionStore
-	performance         *performanceController
+	manager                 *project.Manager
+	runtimes                scopedRuntimes
+	importTimeout           time.Duration
+	analysisTimeout         time.Duration
+	focusedCheckTimeout     time.Duration
+	retryBase               time.Duration
+	retryMax                time.Duration
+	jobLifecycleMu          sync.Mutex
+	analysisAll             *analysisAllController
+	goScan                  *goScanController
+	drafts                  *draftStore
+	chatSessions            *chatSessionStore
+	performance             *performanceController
+	buildDeclarationContext func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
@@ -92,6 +93,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		backoffMax = 30000
 	}
 
+	contextBuilder := project.NewContextBuilder()
 	return &Service{
 		manager: manager,
 		runtimes: scopedRuntimes{
@@ -99,16 +101,17 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 			bug:      newModelRuntime(profiles.Bug, analysisTimeout, maxRetries),
 			function: newModelRuntime(profiles.Function, functionTimeout, maxRetries),
 		},
-		importTimeout:       importTimeout,
-		analysisTimeout:     analysisTimeout,
-		focusedCheckTimeout: configuredDuration(cfg.Timeouts.FocusedCheckSeconds, time.Minute),
-		retryBase:           time.Duration(backoffBase) * time.Millisecond,
-		retryMax:            time.Duration(backoffMax) * time.Millisecond,
-		analysisAll:         newAnalysisAllController(),
-		goScan:              newGoScanController(),
-		drafts:              newDraftStore(),
-		chatSessions:        newChatSessionStore(),
-		performance:         newPerformanceController(),
+		importTimeout:           importTimeout,
+		analysisTimeout:         analysisTimeout,
+		focusedCheckTimeout:     configuredDuration(cfg.Timeouts.FocusedCheckSeconds, time.Minute),
+		retryBase:               time.Duration(backoffBase) * time.Millisecond,
+		retryMax:                time.Duration(backoffMax) * time.Millisecond,
+		analysisAll:             newAnalysisAllController(),
+		goScan:                  newGoScanController(),
+		drafts:                  newDraftStore(),
+		chatSessions:            newChatSessionStore(),
+		performance:             newPerformanceController(),
+		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 	}, nil
 }
 

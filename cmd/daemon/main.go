@@ -163,6 +163,7 @@ func newHTTPMux(
 	mux.HandleFunc("GET /api/projects/current/git", projectHandler.GitStatus)
 	mux.HandleFunc("GET /api/projects/current/files/analysis", projectHandler.FileAnalysis)
 	mux.HandleFunc("POST /api/projects/current/files/analysis", projectHandler.AnalyzeFile)
+	mux.HandleFunc("POST /api/projects/current/files/explanation", projectHandler.ExplainDeclaration)
 	mux.HandleFunc("GET /api/projects/current/analysis-job", projectHandler.AnalyzeAllJob)
 	mux.HandleFunc("POST /api/projects/current/analysis-job", projectHandler.StartAnalyzeAll)
 	mux.HandleFunc("POST /api/projects/current/analysis-job/pause", projectHandler.PauseAnalyzeAll)

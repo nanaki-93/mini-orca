@@ -80,6 +80,53 @@ class ApiClientContractTest {
   }
 
   @Test
+  fun declarationExplanationSendsExactIdentityAndFunctionConsent() {
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, body ->
+                  assertEquals("POST", method)
+                  assertEquals("/api/projects/current/files/explanation", path)
+                  assertContains(body.orEmpty(), "\"project_id\":\"project\"")
+                  assertContains(body.orEmpty(), "\"project_revision\":\"revision\"")
+                  assertContains(body.orEmpty(), "\"base_file_hash\":\"hash\"")
+                  assertContains(body.orEmpty(), "\"target_path\":\"main.go\"")
+                  assertContains(body.orEmpty(), "\"target_symbol\":\"Run\"")
+                  assertContains(body.orEmpty(), "\"confirm_remote_provider\":true")
+                  TransportResponse(
+                      200,
+                      """{"version":"v1","project_id":"project","project_revision":"revision","base_file_hash":"hash","anchor":{"path":"main.go","symbol":"Run","signature":"func Run()","start_line":2,"end_line":3},"summary":"Runs.","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[],"context_manifest":{}}""")
+                })
+
+    assertEquals(
+        "Run",
+        client
+            .explainDeclaration("project", "revision", "hash", "main.go", "Run", true)
+            .anchor
+            .symbol)
+  }
+
+  @Test
+  fun declarationExplanationRequiresTheDaemonSourceSignature() {
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { _, _, _ ->
+                  TransportResponse(
+                      200,
+                      """{"version":"v1","project_id":"project","project_revision":"revision","base_file_hash":"hash","anchor":{"path":"main.go","symbol":"Run","start_line":2,"end_line":3},"summary":"Runs.","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[],"context_manifest":{}}""")
+                })
+
+    val failure =
+        runCatching {
+              client.explainDeclaration("project", "revision", "hash", "main.go", "Run", false)
+            }
+            .exceptionOrNull()
+
+    assertTrue(failure != null)
+  }
+
+  @Test
   fun workspaceResponsesDecodeToTypedModelsAndIgnoreUnknownFields() {
     val client =
         ApiClient(

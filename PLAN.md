@@ -232,7 +232,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | UI-03 | Make draft/review progression explicit | UI-02 | M / high | Complete |
 | UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Blocked — native/reader matrix incomplete |
 | FLOW-01 | Short function-scoped change requests | UI-03 | M / medium | Complete |
-| FLOW-02 | Read-only declaration explanation | FLOW-01, SEC-02, FND-06 | M / high | Pending |
+| FLOW-02 | Read-only declaration explanation | FLOW-01, SEC-02, FND-06 | M / high | Complete |
 | FLOW-03 | Reusable temporary behavioral proof | FLOW-01, SEC-03, SEC-04 | M / high | Pending |
 | LEARN-01 | Concise, grounded engineering insights | FLOW-02 | S / medium | Pending |
 | LEARN-02 | Evaluate usefulness and model reliability | LEARN-01, FLOW-03 | M / medium | Pending |
@@ -540,6 +540,17 @@ the full quality gate green. No inherited quality exception applies to final rel
 - Verify: strict contract/fake-provider no-mutation tests, C, D. Proposed route:
   `POST /api/projects/current/files/explanation`; finalize its exact schema in
   OpenAPI in this task, without adding unrelated review modes.
+- Completed 2026-09-07. The explicit explanation route binds current project,
+  file hash and one exact policy-eligible Go declaration, uses the Function model
+  with per-request remote consent, and returns bounded structured explanation,
+  source anchors, optional insight and context provenance. Pre-send and post-model
+  identity/policy checks prevent stale context delivery or publication; malformed,
+  canceled, unsupported and provider-failed requests create no session, draft,
+  check, source write or history. Context keeps cached explanations local and adds
+  labeled Explain, Refresh and Cancel states with late-result guards. Fresh review
+  accepted the final contract repair. Gates G, C and D passed with the documented
+  Java 21 launcher/JBR 25 toolchain; wide and responsive production fixtures were
+  rendered and inspected. No configuration or persistence migration is required.
 
 ### FLOW-03 — Reuse temporary behavioral proof for changes
 

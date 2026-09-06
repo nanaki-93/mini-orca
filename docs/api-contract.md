@@ -69,6 +69,7 @@ untrusted networks.
 | GET | `/api/projects/current/git` | Read target-file Git availability, branch, and status. |
 | GET | `/api/projects/current/files/analysis` | Read cached semantic analysis for one selected file and revision. |
 | POST | `/api/projects/current/files/analysis` | Explicitly analyze exactly one selected file. |
+| POST | `/api/projects/current/files/explanation` | Explicitly explain one exact indexed Go declaration using transient Function-scope context. |
 | GET | `/api/projects/current/analysis-job` | Read explicit bounded Analyze-all progress. |
 | POST | `/api/projects/current/analysis-job` | Start bounded sequential Analyze-all cache warming. |
 | POST | `/api/projects/current/analysis-job/pause` | Pause Analyze-all after its active file finishes. |
@@ -87,6 +88,10 @@ untrusted networks.
 | POST | `/api/projects/current/drafts/{draftID}/checks` | Run scoped checks for one validated draft revision and hash. |
 | POST | `/api/projects/current/apply` | Apply one validated, checked declaration draft only after `confirm: true`. |
 | POST | `/api/projects/current/undo` | Restore only the immediately preceding unchanged apply after `confirm: true`. |
+
+Declaration explanation requests bind `project_id`, `project_revision`, `base_file_hash`, `target_path`, and `target_symbol`. The target must resolve to one exact atomic declaration in an eligible indexed Go file. A non-loopback Function provider also requires `confirm_remote_provider: true` on that request. The daemon rechecks the project and file identity after provider work before returning the bounded explanation, source line anchor, optional engineering insight, and `ContextManifest` provenance.
+
+Explanation responses are transient. This route does not create chat sessions or drafts, persist chat or analysis history, run checks, or change Apply/Undo state. Cancellation, malformed provider output, and stale request identity return an error without publishing a result.
 
 ## Focused draft lifecycle
 

@@ -8,6 +8,41 @@ import kotlin.test.assertTrue
 
 class ContextToolWindowTest {
   @Test
+  fun declarationExplanationPresentationDistinguishesLifecycleAndKeepsFactsBounded() {
+    assertEquals("Explain declaration", explanationActionLabel(DeclarationExplanationState()))
+    assertEquals(
+        "Cancel explanation",
+        explanationActionLabel(
+            DeclarationExplanationState(status = DeclarationExplanationStatus.Loading)))
+    assertEquals(
+        "Refresh explanation",
+        explanationActionLabel(
+            DeclarationExplanationState(status = DeclarationExplanationStatus.Current)))
+    val facts =
+        explanationFacts(
+            DeclarationExplanation(
+                version = "v1",
+                projectId = "project",
+                projectRevision = "revision",
+                baseFileHash = "hash",
+                anchor =
+                    DeclarationSourceAnchor(
+                        "main.go", "Run", "func Run()", startLine = 2, endLine = 4),
+                summary = "Runs.",
+                behavior = listOf("dispatches work"),
+                sideEffects = listOf("writes output"),
+                contextManifest = ContextManifest()))
+
+    assertEquals("BEHAVIOR", facts.first().first)
+    assertEquals(listOf("dispatches work"), facts.first().second)
+    assertEquals(listOf("writes output"), facts[3].second)
+    assertEquals(
+        "FUNCTION · model-a · http://127.0.0.1:8080",
+        explanationProvenanceLabel(
+            ContextManifest(model = "model-a", providerOrigin = "http://127.0.0.1:8080")))
+  }
+
+  @Test
   fun contextSynchronizesBetweenFileAndExactDeclarationWithoutChangingSelectionState() {
     val file = file()
     val symbol = symbol()

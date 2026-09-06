@@ -46,6 +46,15 @@ type fileAnalysisRequest struct {
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }
 
+type declarationExplanationRequest struct {
+	ProjectID             string `json:"project_id"`
+	ProjectRevision       string `json:"project_revision"`
+	BaseFileHash          string `json:"base_file_hash"`
+	TargetPath            string `json:"target_path"`
+	TargetSymbol          string `json:"target_symbol"`
+	ConfirmRemoteProvider *bool  `json:"confirm_remote_provider"`
+}
+
 type analyzeAllRequest struct {
 	ProjectRevision       string `json:"project_revision"`
 	MaxFiles              int    `json:"max_files,omitempty"`
@@ -523,6 +532,32 @@ func (h *ProjectHandler) AnalyzeFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, analysis)
+}
+
+// ExplainDeclaration performs one transient, read-only Function-scope request.
+func (h *ProjectHandler) ExplainDeclaration(w http.ResponseWriter, r *http.Request) {
+	var request declarationExplanationRequest
+	if err := api.DecodeJSON(w, r, &request); err != nil {
+		api.WriteRequestError(w, err, "invalid declaration explanation request", "Provide the current project, file, and exact declaration identity.")
+		return
+	}
+	if request.ConfirmRemoteProvider == nil {
+		api.WriteRequestError(w, errors.New("confirm_remote_provider is required"), "invalid declaration explanation request", "Confirm whether the Function provider may receive this declaration context.")
+		return
+	}
+	result, err := h.service.ExplainDeclaration(r.Context(), app.DeclarationExplanationRequest{
+		ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision,
+		BaseFileHash: request.BaseFileHash, TargetPath: request.TargetPath,
+		TargetSymbol: request.TargetSymbol, ConfirmRemoteProvider: *request.ConfirmRemoteProvider,
+	})
+	if err != nil {
+		if writeContextError(w, "declaration explanation", err) {
+			return
+		}
+		writeProjectError(w, "declaration explanation failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *ProjectHandler) decodeFileAnalysisRequest(w http.ResponseWriter, r *http.Request) (fileAnalysisRequest, bool) {

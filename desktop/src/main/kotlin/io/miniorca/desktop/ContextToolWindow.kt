@@ -168,14 +168,16 @@ internal fun ContextToolWindow(
             expanded = focusedAnalysisExpanded,
             onToggle = { focusedAnalysisExpanded = !focusedAnalysisExpanded }) {
               ContextFileDetails(inspector)
-              if (inspector.mode == SymbolInspectorMode.SelectedSymbol)
-                  ContextDeclarationDetails(inspector)
-              else
-                  Text(
-                      inspector.selectionPrompt,
-                      color = SecondaryText,
-                      fontSize = 12.sp,
-                      modifier = Modifier.padding(top = 12.dp))
+              if (inspector.mode == SymbolInspectorMode.SelectedSymbol) {
+                ContextDeclarationDetails(inspector)
+                DeclarationExplanationDetails(state.declarationExplanation)
+              } else {
+                Text(
+                    inspector.selectionPrompt,
+                    color = SecondaryText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 12.dp))
+              }
               contextStateBadge(inspector)?.let {
                 Text(
                     it, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp))
@@ -227,6 +229,37 @@ internal fun ContextToolWindow(
               inspector.selectedSymbol
                   ?.takeIf { it.editEligibility.eligible }
                   ?.let { symbol ->
+                    if (state.functionModel.remoteProvider &&
+                        !state.functionRemoteProviderConfirmed) {
+                      RemoteProviderConfirmation(
+                          ModelScope.Function,
+                          state.functionModel,
+                          state.functionRemoteProviderConfirmed,
+                          actions.confirmFunctionRemoteProvider)
+                    }
+                    MiniOrcaButton(
+                        onClick =
+                            if (state.declarationExplanation.status ==
+                                DeclarationExplanationStatus.Loading)
+                                actions.cancelExplanation
+                            else actions.explainSelected,
+                        enabled =
+                            !state.functionModel.remoteProvider ||
+                                state.functionRemoteProviderConfirmed,
+                        tone =
+                            if (state.declarationExplanation.status ==
+                                DeclarationExplanationStatus.Loading)
+                                ActionTone.Destructive
+                            else ActionTone.Neutral,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                      DesktopLineIcon(DesktopIcon.Search, "Explain declaration", iconSize = 16.dp)
+                      Spacer(Modifier.width(8.dp))
+                      Text(
+                          explanationActionLabel(state.declarationExplanation),
+                          fontSize = 12.sp,
+                          modifier = Modifier.weight(1f))
+                    }
                     MiniOrcaButton(
                         onClick = { actions.editSelected(symbol) },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -286,6 +319,9 @@ internal data class ContextToolWindowState(
     val fileAnalysis: FileAnalysis? = null,
     val project: ProjectAnalysis? = null,
     val overview: ProjectOverview? = null,
+    val functionModel: ScopedModel = ScopedModel(scope = "function"),
+    val functionRemoteProviderConfirmed: Boolean = false,
+    val declarationExplanation: DeclarationExplanationState = DeclarationExplanationState(),
 )
 
 /** File analysis and direct-edit intents available from Context. */
@@ -295,7 +331,17 @@ internal data class ContextToolWindowActions(
     val refresh: () -> Unit,
     val cancel: () -> Unit,
     val editSelected: (SymbolInspectorSymbolState) -> Unit,
+    val confirmFunctionRemoteProvider: (Boolean) -> Unit = {},
+    val explainSelected: () -> Unit = {},
+    val cancelExplanation: () -> Unit = {},
 )
+
+internal fun explanationActionLabel(state: DeclarationExplanationState): String =
+    when (state.status) {
+      DeclarationExplanationStatus.Loading -> "Cancel explanation"
+      DeclarationExplanationStatus.Current -> "Refresh explanation"
+      else -> "Explain declaration"
+    }
 
 internal fun contextHeaderLabel(inspector: SymbolInspectorUiState): String =
     when (inspector.mode) {
@@ -376,6 +422,60 @@ private fun ContextDeclarationDetails(
     }
   }
 }
+
+@Composable
+private fun DeclarationExplanationDetails(state: DeclarationExplanationState) {
+  Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+    SectionLabel("DECLARATION EXPLANATION · ${state.status.name.uppercase()}")
+    Text(
+        state.message,
+        color =
+            if (state.status == DeclarationExplanationStatus.Current) SecondaryText else Warning,
+        fontSize = 11.sp,
+        modifier = Modifier.padding(top = 4.dp))
+    state.result
+        ?.takeIf { state.status == DeclarationExplanationStatus.Current }
+        ?.let { result ->
+          Text(
+              result.summary,
+              color = PrimaryText,
+              fontSize = 12.sp,
+              lineHeight = 18.sp,
+              modifier = Modifier.padding(top = 8.dp))
+          Text(
+              explanationProvenanceLabel(result.contextManifest),
+              color = SecondaryText,
+              fontSize = 11.sp,
+              modifier = Modifier.padding(top = 5.dp))
+          explanationFacts(result).forEach { (label, items) ->
+            if (items.isNotEmpty()) {
+              Text(
+                  "$label · ${items.joinToString(" · ")}",
+                  color = SecondaryText,
+                  fontSize = 11.sp,
+                  lineHeight = 16.sp,
+                  modifier = Modifier.padding(top = 5.dp))
+            }
+          }
+          EngineeringInsightPanel(result.engineeringInsight, scopeLabel = "Declaration")
+        }
+  }
+}
+
+internal fun explanationFacts(
+    explanation: DeclarationExplanation
+): List<Pair<String, List<String>>> =
+    listOf(
+        "BEHAVIOR" to explanation.behavior,
+        "INPUTS" to explanation.inputs,
+        "OUTPUTS" to explanation.outputs,
+        "SIDE EFFECTS" to explanation.sideEffects,
+        "ERRORS" to explanation.errorBehavior)
+
+internal fun explanationProvenanceLabel(manifest: ContextManifest): String =
+    listOf("FUNCTION", manifest.model, manifest.providerOrigin)
+        .filter(String::isNotBlank)
+        .joinToString(" · ")
 
 @Composable
 private fun ContextReadOnlySummaries(impact: ImpactPreview?, gitStatus: GitStatus?) {

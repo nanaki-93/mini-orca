@@ -42,6 +42,16 @@ private data class FileAnalysisRequest(
 )
 
 @Serializable
+private data class DeclarationExplanationRequest(
+    @SerialName("project_id") val projectId: String,
+    @SerialName("project_revision") val projectRevision: String,
+    @SerialName("base_file_hash") val baseFileHash: String,
+    @SerialName("target_path") val targetPath: String,
+    @SerialName("target_symbol") val targetSymbol: String,
+    @SerialName("confirm_remote_provider") val confirmRemoteProvider: Boolean,
+)
+
+@Serializable
 private data class FindingStatusRequest(
     @SerialName("project_revision") val projectRevision: String,
     val status: String,
@@ -186,6 +196,27 @@ class ApiClient(
               "POST",
               "/api/projects/current/files/analysis",
               requestBody(FileAnalysisRequest(path, revision, refresh, confirmRemoteProvider))))
+
+  fun explainDeclaration(
+      projectId: String,
+      projectRevision: String,
+      baseFileHash: String,
+      targetPath: String,
+      targetSymbol: String,
+      confirmRemoteProvider: Boolean = false,
+  ): DeclarationExplanation =
+      decode(
+          send(
+              "POST",
+              "/api/projects/current/files/explanation",
+              requestBody(
+                  DeclarationExplanationRequest(
+                      projectId,
+                      projectRevision,
+                      baseFileHash,
+                      targetPath,
+                      targetSymbol,
+                      confirmRemoteProvider))))
 
   fun context(path: String, action: String = "fix"): ContextManifest =
       decode(

@@ -18,6 +18,165 @@ import kotlinx.coroutines.launch
 
 class DesktopWorkflowPresenterTest {
   @Test
+  fun explanationPublishesOnlyForItsExactSelectionAndDoesNotAlterDraftState() {
+    val calls = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      if (method == "POST" && path == "/api/projects/current/files/explanation") {
+        calls.incrementAndGet()
+        response(explanationJson("Run"))
+      } else error("unexpected request $method $path")
+    }
+    try {
+      loadFile(presenter)
+      presenter.explainSelectedDeclaration()
+      eventually {
+        presenter.snapshot.value.declarationExplanation.status ==
+            DeclarationExplanationStatus.Current
+      }
+
+      assertEquals(1, calls.get())
+      assertEquals("Explains Run.", presenter.snapshot.value.declarationExplanation.result?.summary)
+      assertEquals(null, presenter.snapshot.value.state.chat.session)
+      assertEquals(null, presenter.snapshot.value.state.review.draft)
+      assertEquals(null, presenter.snapshot.value.state.review.checks)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun selectionChangeCancelsAndRejectsLateDeclarationExplanation() {
+    val started = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val presenter = presenter { method, path, _ ->
+      if (method == "POST" && path == "/api/projects/current/files/explanation") {
+        started.countDown()
+        release.await(2, TimeUnit.SECONDS)
+        response(explanationJson("Run"))
+      } else error("unexpected request $method $path")
+    }
+    try {
+      loadProject(presenter)
+      val run = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
+      val other = SymbolInfo("Other", "function", confidence = "exact", atomicTarget = true)
+      presenter.dispatch(DesktopEvent.FileLoaded(file(), listOf(run, other)))
+      presenter.dispatch(DesktopEvent.SymbolSelected(run))
+      presenter.explainSelectedDeclaration()
+      assertTrue(started.await(1, TimeUnit.SECONDS))
+      presenter.dispatch(DesktopEvent.SymbolSelected(other))
+      release.countDown()
+      eventually {
+        presenter.snapshot.value.declarationExplanation.status == DeclarationExplanationStatus.Stale
+      }
+
+      assertEquals(null, presenter.snapshot.value.declarationExplanation.result)
+      assertTrue(
+          presenter.snapshot.value.declarationExplanation.message.contains("Selection changed"))
+    } finally {
+      release.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun cachedSymbolExplanationRemainsAvailableWithoutAProviderRequest() {
+    val calls = AtomicInteger()
+    val presenter = presenter { _, _, _ -> calls.incrementAndGet().let { response("{}") } }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(
+          DesktopEvent.AnalysisLoaded(
+              FileAnalysis(
+                  path = "main.go",
+                  status = "fresh",
+                  symbolExplanations = mapOf("Run" to "Cached explanation."))))
+
+      val inspector =
+          symbolInspectorUiState(
+              presenter.snapshot.value.state.selectedFile,
+              presenter.snapshot.value.state.symbols,
+              presenter.snapshot.value.state.selectedSymbol,
+              presenter.snapshot.value.state.analysis,
+              false,
+              InspectorProviderState(false, false),
+              null)!!
+      assertEquals("Cached explanation.", inspector.selectedSymbol?.explanation)
+      assertEquals(0, calls.get())
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun remoteDeclarationExplanationRequiresCurrentFunctionConsentBeforeAnyCall() {
+    val explanationCalls = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "GET" to "/status" -> response("{\"status\":\"ok\",\"version\":\"v1\"}")
+        "GET" to "/api/models/current" ->
+            response(
+                """{"scopes":{"function":{"scope":"function","profile":"function","model":"remote","remote_provider":true}}}""")
+        "POST" to "/api/projects/current/files/explanation" -> {
+          explanationCalls.incrementAndGet()
+          response(explanationJson("Run"))
+        }
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      presenter.refreshConnection()
+      eventually { presenter.snapshot.value.model(ModelScope.Function).remoteProvider }
+      loadFile(presenter)
+      presenter.explainSelectedDeclaration()
+
+      assertEquals(0, explanationCalls.get())
+      assertEquals(
+          DeclarationExplanationStatus.Failed,
+          presenter.snapshot.value.declarationExplanation.status)
+      assertTrue(presenter.snapshot.value.declarationExplanation.message.contains("Confirm"))
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun explanationConflictPublishesStaleWhileOtherFailuresRemainFailed() {
+    val conflictPresenter = presenter { method, path, _ ->
+      if (method == "POST" && path == "/api/projects/current/files/explanation")
+          TransportResponse(
+              409, """{"type":"conflict","message":"stale","user_message":"Refresh."}""")
+      else error("unexpected request $method $path")
+    }
+    val failedPresenter = presenter { method, path, _ ->
+      if (method == "POST" && path == "/api/projects/current/files/explanation")
+          TransportResponse(
+              502,
+              """{"type":"internal","message":"provider failed","user_message":"Try again."}""")
+      else error("unexpected request $method $path")
+    }
+    try {
+      loadFile(conflictPresenter)
+      conflictPresenter.explainSelectedDeclaration()
+      eventually {
+        conflictPresenter.snapshot.value.declarationExplanation.status ==
+            DeclarationExplanationStatus.Stale
+      }
+      assertEquals(null, conflictPresenter.snapshot.value.declarationExplanation.result)
+
+      loadFile(failedPresenter)
+      failedPresenter.explainSelectedDeclaration()
+      eventually {
+        failedPresenter.snapshot.value.declarationExplanation.status ==
+            DeclarationExplanationStatus.Failed
+      }
+      assertEquals(null, failedPresenter.snapshot.value.declarationExplanation.result)
+    } finally {
+      conflictPresenter.close()
+      failedPresenter.close()
+    }
+  }
+
+  @Test
   fun lateFileResponseCannotReplaceTheLatestSelection() {
     val firstStarted = CountDownLatch(1)
     val releaseFirst = CountDownLatch(1)
@@ -1369,6 +1528,9 @@ class DesktopWorkflowPresenterTest {
       )
 
   private fun response(body: String) = TransportResponse(200, body)
+
+  private fun explanationJson(symbol: String) =
+      """{"version":"v1","project_id":"project","project_revision":"revision","base_file_hash":"base","anchor":{"path":"main.go","symbol":"$symbol","signature":"","start_line":0,"end_line":0},"summary":"Explains $symbol.","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[],"context_manifest":{"scope":"function"}}"""
 
   private fun projectJson() =
       "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"name\":\"project\",\"path\":\"/tmp/project\",\"type\":\"go\",\"file_count\":0,\"source_file_count\":0,\"total_lines\":0,\"summary\":\"\",\"ai_status\":\"missing\",\"analyzed_at\":\"\"}"

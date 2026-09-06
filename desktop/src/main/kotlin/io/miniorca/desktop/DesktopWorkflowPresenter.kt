@@ -37,6 +37,30 @@ data class WorkflowDraftIdentity(
     val hash: String,
 )
 
+data class DeclarationExplanationTarget(
+    val file: WorkflowFileIdentity,
+    val symbol: String,
+    val signature: String,
+    val startLine: Int,
+    val endLine: Int,
+)
+
+enum class DeclarationExplanationStatus {
+  Unavailable,
+  Loading,
+  Current,
+  Stale,
+  Canceled,
+  Failed,
+}
+
+data class DeclarationExplanationState(
+    val status: DeclarationExplanationStatus = DeclarationExplanationStatus.Unavailable,
+    val target: DeclarationExplanationTarget? = null,
+    val result: DeclarationExplanation? = null,
+    val message: String = "No on-demand explanation has been requested.",
+)
+
 data class DesktopWorkflowSnapshot(
     val state: DesktopState = DesktopState(),
     val modelCatalog: ModelCatalog = ModelCatalog(),
@@ -45,6 +69,7 @@ data class DesktopWorkflowSnapshot(
     val analysisInProgress: Boolean = false,
     val generating: Boolean = false,
     val draftValidationInProgress: Boolean = false,
+    val declarationExplanation: DeclarationExplanationState = DeclarationExplanationState(),
 ) {
   fun model(scope: ModelScope): ScopedModel = modelCatalog.forScope(scope)
 
@@ -106,10 +131,12 @@ class DesktopWorkflowPresenter(
   private var fileJob: Job? = null
   private var enrichmentJobs: List<Job> = emptyList()
   private var analysisJob: Job? = null
+  private var declarationExplanationJob: Job? = null
   private var chatJob: Job? = null
   private var draftValidationJob: Job? = null
   private var draftChecksJob: Job? = null
   private var analysisGeneration = 0L
+  private var declarationExplanationGeneration = 0L
   private var analyzeAllActionGeneration = 0L
   private var performanceActionGeneration = 0L
   private var performanceReportPublicationGeneration = 0L
@@ -125,11 +152,19 @@ class DesktopWorkflowPresenter(
   }
 
   fun dispatch(event: DesktopEvent) {
+    val before = selectedDeclarationTarget(controller.state)
     if (event is DesktopEvent.ProjectLoaded) {
       invalidateJobActions()
       jobCoordinator.projectOpened(event.project.identity())
     }
     controller.dispatch(event)
+    val after = selectedDeclarationTarget(controller.state)
+    if (before != after &&
+        mutableSnapshot.value.declarationExplanation.status !=
+            DeclarationExplanationStatus.Unavailable) {
+      invalidateDeclarationExplanation(
+          "Selection changed. Request a new explanation for the current declaration.")
+    }
     publish()
   }
 
@@ -251,6 +286,11 @@ class DesktopWorkflowPresenter(
       preparedFixRequest: String? = null,
       preparedTaskSpec: BugTaskSpec? = null,
   ) {
+    if (mutableSnapshot.value.declarationExplanation.status !=
+        DeclarationExplanationStatus.Unavailable) {
+      invalidateDeclarationExplanation(
+          "Selection changed. Request a new explanation for the current declaration.")
+    }
     chatJob?.cancel()
     draftValidationJob?.cancel()
     draftChecksJob?.cancel()
@@ -400,6 +440,107 @@ class DesktopWorkflowPresenter(
     analysisGeneration++
     analysisJob?.cancel()
     setOperation(analysis = false)
+  }
+
+  fun explainSelectedDeclaration() {
+    val state = snapshot.value.state
+    val project = state.project ?: return
+    val file = state.selectedFile ?: return
+    val symbol = state.selectedSymbol
+    val target = selectedDeclarationTarget(state)
+    if (symbol == null ||
+        target == null ||
+        file.language != "Go" ||
+        !symbol.atomicTarget ||
+        symbol.confidence != "exact") {
+      mutableSnapshot.value =
+          mutableSnapshot.value.copy(
+              declarationExplanation =
+                  DeclarationExplanationState(
+                      status = DeclarationExplanationStatus.Unavailable,
+                      message = "Select one exact atomic Go declaration to explain."))
+      return
+    }
+    if (snapshot.value.model(ModelScope.Function).remoteProvider &&
+        !snapshot.value.providerConfirmed(ModelScope.Function)) {
+      mutableSnapshot.value =
+          mutableSnapshot.value.copy(
+              declarationExplanation =
+                  DeclarationExplanationState(
+                      status = DeclarationExplanationStatus.Failed,
+                      target = target,
+                      message =
+                          "Confirm the Function model destination before explaining this declaration."))
+      return
+    }
+    declarationExplanationJob?.cancel()
+    val generation = ++declarationExplanationGeneration
+    mutableSnapshot.value =
+        mutableSnapshot.value.copy(
+            declarationExplanation =
+                DeclarationExplanationState(
+                    status = DeclarationExplanationStatus.Loading,
+                    target = target,
+                    message = "Explaining ${symbol.name}…"))
+    declarationExplanationJob =
+        scope.launch {
+          try {
+            val result = io {
+              api.explainDeclaration(
+                  project.projectId,
+                  project.projectRevision,
+                  file.contentHash,
+                  file.path,
+                  symbol.name,
+                  snapshot.value.providerConfirmed(ModelScope.Function))
+            }
+            if (generation != declarationExplanationGeneration ||
+                selectedDeclarationTarget(snapshot.value.state) != target)
+                return@launch
+            if (!explanationMatchesTarget(result, target)) {
+              mutableSnapshot.value =
+                  mutableSnapshot.value.copy(
+                      declarationExplanation =
+                          DeclarationExplanationState(
+                              status = DeclarationExplanationStatus.Stale,
+                              target = target,
+                              message =
+                                  "The returned explanation no longer matches the selected declaration."))
+              return@launch
+            }
+            mutableSnapshot.value =
+                mutableSnapshot.value.copy(
+                    declarationExplanation =
+                        DeclarationExplanationState(
+                            status = DeclarationExplanationStatus.Current,
+                            target = target,
+                            result = result,
+                            message =
+                                "Current explanation · lines ${result.anchor.startLine}–${result.anchor.endLine}"))
+          } catch (_: CancellationException) {
+            throw CancellationException()
+          } catch (error: Exception) {
+            if (generation == declarationExplanationGeneration &&
+                selectedDeclarationTarget(snapshot.value.state) == target) {
+              mutableSnapshot.value =
+                  mutableSnapshot.value.copy(
+                      declarationExplanation = explanationFailureState(error, target))
+            }
+          }
+        }
+  }
+
+  fun cancelDeclarationExplanation() {
+    val current = mutableSnapshot.value.declarationExplanation
+    declarationExplanationGeneration++
+    declarationExplanationJob?.cancel()
+    mutableSnapshot.value =
+        mutableSnapshot.value.copy(
+            declarationExplanation =
+                current.copy(
+                    status = DeclarationExplanationStatus.Canceled,
+                    result = null,
+                    message = "Explanation canceled."))
   }
 
   fun cancelGeneration() {
@@ -835,6 +976,13 @@ class DesktopWorkflowPresenter(
     cancelAnalysis()
     cancelGeneration()
     cancelDraftValidation()
+    if (mutableSnapshot.value.declarationExplanation.status ==
+        DeclarationExplanationStatus.Loading) {
+      cancelDeclarationExplanation()
+    } else {
+      declarationExplanationGeneration++
+      declarationExplanationJob?.cancel()
+    }
     jobCoordinator.projectClosed()
   }
 
@@ -1238,6 +1386,16 @@ class DesktopWorkflowPresenter(
     mutableSnapshot.value = mutableSnapshot.value.copy(state = controller.state)
   }
 
+  private fun invalidateDeclarationExplanation(message: String) {
+    declarationExplanationGeneration++
+    declarationExplanationJob?.cancel()
+    val current = mutableSnapshot.value.declarationExplanation
+    mutableSnapshot.value =
+        mutableSnapshot.value.copy(
+            declarationExplanation =
+                current.copy(status = DeclarationExplanationStatus.Stale, message = message))
+  }
+
   private fun setOperation(
       analysis: Boolean? = null,
       generating: Boolean? = null,
@@ -1278,6 +1436,45 @@ private fun ProjectAnalysis.identity(): WorkflowProjectIdentity =
 
 private fun ProjectFileInfo.identity(project: ProjectAnalysis): WorkflowFileIdentity =
     WorkflowFileIdentity(project.identity(), path, contentHash)
+
+private fun selectedDeclarationTarget(state: DesktopState): DeclarationExplanationTarget? {
+  val project = state.project ?: return null
+  val file = state.selectedFile ?: return null
+  val symbol = state.selectedSymbol ?: return null
+  if (file.language != "Go" || !symbol.atomicTarget || symbol.confidence != "exact") return null
+  return DeclarationExplanationTarget(
+      file.identity(project), symbol.name, symbol.signature, symbol.startLine, symbol.endLine)
+}
+
+private fun explanationMatchesTarget(
+    explanation: DeclarationExplanation,
+    target: DeclarationExplanationTarget,
+): Boolean =
+    explanation.projectId == target.file.project.id &&
+        explanation.projectRevision == target.file.project.revision &&
+        explanation.baseFileHash == target.file.contentHash &&
+        explanation.anchor.path == target.file.path &&
+        explanation.anchor.symbol == target.symbol &&
+        explanation.anchor.signature == target.signature &&
+        explanation.anchor.startLine == target.startLine &&
+        explanation.anchor.endLine == target.endLine
+
+private fun explanationFailureState(
+    error: Exception,
+    target: DeclarationExplanationTarget,
+): DeclarationExplanationState =
+    if (error is ApiException && error.status == 409)
+        DeclarationExplanationState(
+            status = DeclarationExplanationStatus.Stale,
+            target = target,
+            result = null,
+            message = "The project or declaration changed. Request a fresh explanation.")
+    else
+        DeclarationExplanationState(
+            status = DeclarationExplanationStatus.Failed,
+            target = target,
+            result = null,
+            message = error.message ?: "Declaration explanation failed")
 
 private fun AnalyzeAllJob.belongsTo(identity: WorkflowProjectIdentity): Boolean =
     projectId == identity.id && projectRevision == identity.revision

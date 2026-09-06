@@ -1914,7 +1914,40 @@ private fun EditorVisualFixture(width: Float) {
                                     ProjectMetrics(
                                         type = "Go",
                                         buildFile = "go.mod",
-                                        languages = mapOf("Go" to 7)))),
+                                        languages = mapOf("Go" to 7))),
+                            functionModel =
+                                ScopedModel(
+                                    scope = "function",
+                                    model = "local-function-model",
+                                    providerOrigin = "http://127.0.0.1:8080"),
+                            declarationExplanation =
+                                DeclarationExplanationState(
+                                    status = DeclarationExplanationStatus.Current,
+                                    result =
+                                        DeclarationExplanation(
+                                            version = "v1",
+                                            projectId = "visual-fixture",
+                                            projectRevision = "fixture-revision",
+                                            baseFileHash = file.contentHash,
+                                            anchor =
+                                                DeclarationSourceAnchor(
+                                                    file.path,
+                                                    symbol.name,
+                                                    symbol.signature,
+                                                    symbol.startLine,
+                                                    symbol.endLine),
+                                            summary =
+                                                "Validates the user identifier and delegates the lookup to the repository.",
+                                            behavior = listOf("rejects blank identifiers"),
+                                            inputs = listOf("user identifier"),
+                                            outputs = listOf("user or repository error"),
+                                            contextManifest =
+                                                ContextManifest(
+                                                    scope = "function",
+                                                    model = "local-function-model",
+                                                    providerOrigin = "http://127.0.0.1:8080")),
+                                    message =
+                                        "Current explanation · lines ${symbol.startLine}–${symbol.endLine}")),
                         ContextToolWindowActions({}, {}, {}, {}, {}),
                         contentModifier)
                   },
