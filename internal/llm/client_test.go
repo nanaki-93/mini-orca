@@ -21,9 +21,11 @@ func TestChatRejectsMalformedNonSuccessAndOversizedProviderResponses(t *testing.
 		status int
 		body   string
 		want   string
+		forbid string
 	}{
 		{name: "malformed JSON", status: http.StatusOK, body: "{", want: "decode chat response"},
-		{name: "non-success", status: http.StatusServiceUnavailable, body: `{"error":{"message":"provider detail must not be returned"}}`, want: "provider returned status 503"},
+		{name: "non-success JSON body", status: http.StatusServiceUnavailable, body: `{"error":{"message":"provider detail must not be returned"}}`, want: "provider returned status 503", forbid: "provider detail"},
+		{name: "non-success malformed body", status: http.StatusBadGateway, body: `{secret-provider-detail`, want: "provider returned status 502", forbid: "secret-provider-detail"},
 		{name: "oversized", status: http.StatusOK, body: strings.Repeat("x", maxProviderResponseBytes+1), want: "response exceeds"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -34,7 +36,7 @@ func TestChatRejectsMalformedNonSuccessAndOversizedProviderResponses(t *testing.
 			defer server.Close()
 
 			_, err := NewClient(testProfile(server.URL, "test-key")).Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}})
-			if err == nil || !strings.Contains(err.Error(), test.want) || strings.Contains(err.Error(), "provider detail") || strings.Contains(err.Error(), "test-key") {
+			if err == nil || !strings.Contains(err.Error(), test.want) || (test.forbid != "" && strings.Contains(err.Error(), test.forbid)) || strings.Contains(err.Error(), "test-key") {
 				t.Fatalf("error = %v, want %q without provider body or API key", err, test.want)
 			}
 		})

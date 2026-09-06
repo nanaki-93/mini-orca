@@ -139,7 +139,7 @@ func (c *Client) do(request *http.Request) ([]byte, error) {
 		return nil, err
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, providerStatusError(response.StatusCode, data)
+		return nil, providerStatusError(response.StatusCode)
 	}
 	return data, nil
 }
@@ -153,11 +153,7 @@ func joinAPIURL(apiBaseURL, path string) (string, error) {
 	return base.String(), nil
 }
 
-func providerStatusError(status int, body []byte) error {
-	var payload struct {
-		Error json.RawMessage `json:"error"`
-	}
-	_ = json.Unmarshal(body, &payload)
+func providerStatusError(status int) error {
 	return fmt.Errorf("llm client: provider returned status %d", status)
 }
 
