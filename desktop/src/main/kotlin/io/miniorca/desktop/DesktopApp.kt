@@ -302,6 +302,9 @@ internal fun MiniOrcaApp(
                 fileAnalysis = appState.analysis,
                 project = appState.project,
                 overview = appState.overview,
+                functionModel = workflow.model(ModelScope.Function),
+                functionRemoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Function),
+                declarationExplanation = workflow.declarationExplanation,
             ),
         actions =
             ContextToolWindowActions(
@@ -310,6 +313,11 @@ internal fun MiniOrcaApp(
                 refresh = { presenter.analyzeSelected(true) },
                 cancel = presenter::cancelAnalysis,
                 editSelected = ::requestDirectEdit,
+                confirmFunctionRemoteProvider = {
+                  presenter.setProviderConfirmation(ModelScope.Function, it)
+                },
+                explainSelected = presenter::explainSelectedDeclaration,
+                cancelExplanation = presenter::cancelDeclarationExplanation,
             ),
         modifier = modifier,
     )

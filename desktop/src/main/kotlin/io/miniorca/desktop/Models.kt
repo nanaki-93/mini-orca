@@ -160,6 +160,32 @@ data class ContextFile(
 data class ContextDecision(val path: String, val include: Boolean, val reason: String)
 
 @Serializable
+data class DeclarationExplanation(
+    val version: String,
+    @SerialName("project_id") val projectId: String,
+    @SerialName("project_revision") val projectRevision: String,
+    @SerialName("base_file_hash") val baseFileHash: String,
+    val anchor: DeclarationSourceAnchor,
+    val summary: String,
+    val behavior: List<String> = emptyList(),
+    val inputs: List<String> = emptyList(),
+    val outputs: List<String> = emptyList(),
+    @SerialName("side_effects") val sideEffects: List<String> = emptyList(),
+    @SerialName("error_behavior") val errorBehavior: List<String> = emptyList(),
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null,
+    @SerialName("context_manifest") val contextManifest: ContextManifest,
+)
+
+@Serializable
+data class DeclarationSourceAnchor(
+    val path: String,
+    val symbol: String,
+    val signature: String,
+    @SerialName("start_line") val startLine: Int,
+    @SerialName("end_line") val endLine: Int,
+)
+
+@Serializable
 data class DeclarationValidation(
     val applicable: Boolean,
     @SerialName("scope_mode") val scopeMode: String,
