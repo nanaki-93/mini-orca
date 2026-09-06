@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,11 @@ const (
 	maxProviderResponseBytes = 4 * 1024 * 1024
 	providerRequestTimeout   = 5 * time.Minute
 )
+
+// ErrRedirectRejected reports that a provider attempted to redirect a
+// prompt-bearing request. Redirects are deliberately not followed: a redirect
+// can change the destination that receives source context and credentials.
+var ErrRedirectRejected = errors.New("provider redirect rejected")
 
 // ChatMessage represents a single message in a chat conversation.
 type ChatMessage struct {
@@ -62,15 +68,15 @@ type ChatResponse struct {
 
 // Client owns the one provider-neutral Chat Completions request flow.
 type Client struct {
-	profile    config.ModelProfile
-	httpClient *http.Client
+	profile   config.ModelProfile
+	transport http.RoundTripper
 }
 
 // NewClient constructs the one LLM client from a validated fixed scope.
 func NewClient(profile config.ModelProfile) *Client {
 	return &Client{
-		profile:    profile,
-		httpClient: &http.Client{Timeout: providerRequestTimeout},
+		profile:   profile,
+		transport: http.DefaultTransport,
 	}
 }
 
@@ -128,18 +134,31 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 }
 
 func (c *Client) do(request *http.Request) ([]byte, error) {
-	response, err := c.httpClient.Do(request)
+	// RoundTrip performs exactly one exchange. http.Client.Do parses Location
+	// before CheckRedirect, which can expose an invalid redirect target in its
+	// error. A one-hop transport path makes every 3xx response safe to classify
+	// by status without inspecting or following its Location header.
+	timed, cancel := context.WithTimeout(request.Context(), providerRequestTimeout)
+	defer cancel()
+	transport := c.transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	response, err := transport.RoundTrip(request.Clone(timed))
 	if err != nil {
 		return nil, fmt.Errorf("llm client: request failed: %w", err)
 	}
 	defer response.Body.Close()
 
-	data, err := readProviderBody(response.Body)
-	if err != nil {
-		return nil, err
+	if response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < 400 {
+		return nil, providerRedirectError(response.StatusCode)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, providerStatusError(response.StatusCode)
+	}
+	data, err := readProviderBody(response.Body)
+	if err != nil {
+		return nil, err
 	}
 	return data, nil
 }
@@ -155,6 +174,10 @@ func joinAPIURL(apiBaseURL, path string) (string, error) {
 
 func providerStatusError(status int) error {
 	return fmt.Errorf("llm client: provider returned status %d", status)
+}
+
+func providerRedirectError(status int) error {
+	return fmt.Errorf("llm client: %w (status %d)", ErrRedirectRejected, status)
 }
 
 func readProviderBody(body io.Reader) ([]byte, error) {

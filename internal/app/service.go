@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -232,7 +233,7 @@ func (s *Service) retry(ctx context.Context, runtime modelRuntime, messages []ll
 			return result, nil
 		}
 		lastErr = err
-		if ctx.Err() != nil || attempt == runtime.effective.MaxRetries {
+		if ctx.Err() != nil || errors.Is(err, llm.ErrRedirectRejected) || attempt == runtime.effective.MaxRetries {
 			break
 		}
 		wait := s.retryBase << attempt

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -36,6 +37,39 @@ func TestRemoteProviderRequiresConfirmation(t *testing.T) {
 	}
 	if !service.EffectiveModel().RemoteProvider {
 		t.Fatal("effective model must disclose that the configured provider is remote")
+	}
+}
+
+func TestRetryDoesNotResendPromptAfterProviderRedirectRejection(t *testing.T) {
+	var firstRequests, secondRequests int
+	second := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		secondRequests++
+	}))
+	defer second.Close()
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		firstRequests++
+		w.Header().Set("Location", second.URL+"/redirected?destination_secret=never-expose")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}))
+	defer first.Close()
+
+	manager, err := project.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := scopedTestConfig(first.URL)
+	cfg.Retry = config.RetryConfig{MaxRetries: 3, BackoffBase: 1, BackoffMax: 1}
+	service, err := New(cfg, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.retry(context.Background(), service.runtimes.function, []llm.ChatMessage{{Role: "user", Content: "prompt must not be delivered twice"}})
+	if !errors.Is(err, llm.ErrRedirectRejected) {
+		t.Fatalf("retry error = %v", err)
+	}
+	if firstRequests != 1 || secondRequests != 0 {
+		t.Fatalf("request counts first=%d second=%d, want one first request and no second request", firstRequests, secondRequests)
 	}
 }
 

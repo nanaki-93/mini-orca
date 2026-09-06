@@ -59,6 +59,30 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 	}
 }
 
+func TestAnalyzeFileRequiresRemoteConfirmationBeforeSendingPrompt(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
+	}))
+	defer server.Close()
+
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	service.runtimes.bug.effective.RemoteProvider = true
+	if _, err := service.AnalyzeFile(context.Background(), "main.go", false, false); err == nil || !strings.Contains(err.Error(), "explicit confirmation") {
+		t.Fatalf("declined remote confirmation error = %v", err)
+	}
+	if requests != 0 {
+		t.Fatalf("declined confirmation sent %d provider requests", requests)
+	}
+	if _, err := service.AnalyzeFile(context.Background(), "main.go", false, true); err != nil {
+		t.Fatalf("confirmed analysis error = %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("confirmed request count = %d, want 1", requests)
+	}
+}
+
 func TestAnalyzeFileAcceptsUnqualifiedMethodExplanations(t *testing.T) {
 	output := `{"purpose":"Explains the service.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{"FileSystemService":"The service implementation.","PrintFiles":"Prints files.","ListFiles":"Lists files."}}`
 	parsed, err := parseSemanticAnalysis(output, project.IndexFile{Path: "service.go", Language: "Go", Symbols: []project.SymbolInfo{

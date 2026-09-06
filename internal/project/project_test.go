@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -210,4 +211,163 @@ func TestContextPolicyProjectOverrides(t *testing.T) {
 	if decision := policy.Decide("drafts/main.go"); decision.Include || decision.Reason != "project context-policy exclude" {
 		t.Fatalf("exclude override = %+v", decision)
 	}
+}
+
+func TestContextBuilderRejectsExcludedAndSymlinkTargetsBeforeReadingSource(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored.go\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "ignored.go"), []byte("package main\n// must-not-reach-context\nfunc Ignored() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.go")
+	if err := os.WriteFile(outside, []byte("package outside\n// must-not-reach-context\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, target := range []string{"ignored.go", "linked.go"} {
+		contextText, manifest, err := NewContextBuilder().BuildWithManifest(root, target)
+		if err == nil {
+			t.Fatalf("target %q was accepted", target)
+		}
+		if strings.Contains(contextText, "must-not-reach-context") {
+			t.Fatalf("target %q leaked excluded source: %s", target, contextText)
+		}
+		if len(manifest.Excluded) == 0 {
+			t.Fatalf("target %q manifest omitted excluded-path provenance: %+v", target, manifest)
+		}
+	}
+}
+
+func TestContextBuilderMarksOversizedTargetSnippetTruncated(t *testing.T) {
+	root := t.TempDir()
+	content := "package main\n\nfunc Run() {\n" + strings.Repeat("// bounded source\n", maxTargetBytes/8) + "}\n"
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	contextText, manifest, err := NewContextBuilder().BuildWithManifest(root, "main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manifest.Truncated || len(manifest.Included) != 1 || !manifest.Included[0].Truncated {
+		t.Fatalf("oversized target manifest = %+v", manifest)
+	}
+	if len(contextText) > maxContextBytes {
+		t.Fatalf("context length = %d, limit = %d", len(contextText), maxContextBytes)
+	}
+}
+
+func TestContextBuilderKeepsSnippetHeadersInsideTheContextByteLimit(t *testing.T) {
+	root := t.TempDir()
+	for index := 0; index < 30; index++ {
+		path := filepath.Join(root, fmt.Sprintf("source-%02d.go", index))
+		content := "package main\n" + strings.Repeat("// bounded context\n", maxSnippetBytes/8)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	contextText, manifest, err := NewContextBuilder().BuildWithManifest(root, "source-00.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manifest.Truncated {
+		t.Fatalf("large context was not marked truncated: %+v", manifest)
+	}
+	if len(contextText) > maxContextBytes {
+		t.Fatalf("context length = %d, limit = %d", len(contextText), maxContextBytes)
+	}
+}
+
+func TestContextBuilderBoundsAnInventoryOnlyOverflow(t *testing.T) {
+	root := t.TempDir()
+	prefix := strings.Repeat("inventory-", 8)
+	for index := 0; index < 700; index++ {
+		path := filepath.Join(root, fmt.Sprintf("%s%04d.txt", prefix, index))
+		if err := os.WriteFile(path, []byte("metadata only\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	contextText, manifest, err := NewContextBuilder().BuildWithManifest(root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manifest.Truncated {
+		t.Fatalf("inventory overflow was not marked truncated: %+v", manifest)
+	}
+	if len(contextText) > maxContextBytes || manifest.EstimatedTokens > maxContextTokens || estimateTokens(contextText) > maxContextTokens {
+		t.Fatalf("inventory bounds bytes=%d/%d tokens=%d/%d", len(contextText), maxContextBytes, manifest.EstimatedTokens, maxContextTokens)
+	}
+	if !strings.HasPrefix(contextText, "## Bounded project file inventory\n") || strings.Contains(contextText, "Complete project file inventory") {
+		t.Fatalf("inventory heading = %q", contextText[:min(len(contextText), 80)])
+	}
+	if strings.Contains(contextText, "## File:") {
+		t.Fatalf("inventory-only fixture unexpectedly emitted snippets: %q", contextText)
+	}
+	lastPath := fmt.Sprintf("%s%04d.txt", prefix, 699)
+	if contextManifestHasPath(manifest, lastPath) {
+		t.Fatalf("manifest included an inventory path not present in the prompt: %q", lastPath)
+	}
+	if !contextManifestHasExclusion(manifest, lastPath, "bounded context inventory") {
+		t.Fatalf("manifest did not explain the omitted inventory path: %+v", manifest.Excluded)
+	}
+}
+
+func TestContextBuilderKeepsTargetSourceWhenInventoryTruncates(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "target.go"), []byte("package main\n\nfunc Target() { println(\"selected\") }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prefix := strings.Repeat("inventory-", 8)
+	for index := 0; index < 200; index++ {
+		path := filepath.Join(root, fmt.Sprintf("%s%04d.txt", prefix, index))
+		if err := os.WriteFile(path, []byte("metadata only\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	contextText, manifest, err := NewContextBuilder().BuildWithManifest(root, "target.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manifest.Truncated || len(manifest.Included) == 0 || manifest.Included[0].Path != "target.go" {
+		t.Fatalf("target inventory manifest = %+v", manifest)
+	}
+	if !strings.Contains(contextText, "## File: target.go") || !strings.Contains(contextText, "func Target()") {
+		t.Fatalf("target source was not retained after inventory truncation: %q", contextText)
+	}
+	lastPath := fmt.Sprintf("%s%04d.txt", prefix, 199)
+	if contextManifestHasPath(manifest, lastPath) || !contextManifestHasExclusion(manifest, lastPath, "bounded context inventory") {
+		t.Fatalf("target overflow provenance = included:%+v excluded:%+v", manifest.Included, manifest.Excluded)
+	}
+	if len(contextText) > maxContextBytes || manifest.EstimatedTokens > maxContextTokens {
+		t.Fatalf("target context bounds bytes=%d/%d tokens=%d/%d", len(contextText), maxContextBytes, manifest.EstimatedTokens, maxContextTokens)
+	}
+}
+
+func contextManifestHasPath(manifest ContextManifest, path string) bool {
+	for _, file := range manifest.Included {
+		if file.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+func contextManifestHasExclusion(manifest ContextManifest, path, reason string) bool {
+	for _, decision := range manifest.Excluded {
+		if decision.Path == path && strings.Contains(decision.Reason, reason) {
+			return true
+		}
+	}
+	return false
 }
