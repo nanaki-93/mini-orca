@@ -230,7 +230,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | UI-01 | Remove unsupported product previews | FND-01 | M / medium | Complete |
 | UI-02 | Correct source-first layout against captures | UI-01 | M / medium | Complete |
 | UI-03 | Make draft/review progression explicit | UI-02 | M / high | Complete |
-| UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Pending |
+| UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Blocked — native permissions unavailable |
 | FLOW-01 | Short function-scoped change requests | UI-03 | M / medium | Pending |
 | FLOW-02 | Read-only declaration explanation | FLOW-01, SEC-02, FND-06 | M / high | Pending |
 | FLOW-03 | Reusable temporary behavioral proof | FLOW-01, SEC-03, SEC-04 | M / high | Pending |
@@ -489,6 +489,14 @@ the full quality gate green. No inherited quality exception applies to final rel
   combinations explicitly listed. Missing native access leaves this task Blocked.
 - Verify: D, V and the current keyboard checklist. Update the single acceptance
   ledger; identify which remaining 149/170 requirements this closes.
+- Blocked 2026-09-07. The full Desktop gate and forced 22 visual, 8 accessibility
+  and 7 keyboard component tests passed with the exact pinned JBR; 66 offscreen
+  captures cover the required size/scale matrix. The live packaged app and loopback
+  fixture daemon launched, but macOS Accessibility and Screen Recording permissions
+  were unavailable and VoiceOver was not running. Native window, edge-popup, OS
+  focus and reader evidence remains outstanding in `desktop/UI_PRECISION_ACCEPTANCE.md`.
+  A fresh review accepted this boundary without treating component output as native
+  evidence. Independent implementation tasks may continue.
 
 ## Function workflow and learning task instructions
 
