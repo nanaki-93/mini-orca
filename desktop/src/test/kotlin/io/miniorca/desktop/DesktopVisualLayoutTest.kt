@@ -77,8 +77,10 @@ class DesktopVisualLayoutTest {
           ComposeVisualFixture(width, height, scale) { AnalysisVisualFixture(width.toFloat()) }
               .use { fixture ->
                 fixture.render("analysis-$width-$scale")
-                listOf(if (scale > 1.15f) "Perf." else "Performance", "Preview", "Pause", "Cancel")
-                    .forEach { label -> fixture.assertTextFits(label) }
+                listOf(if (scale > 1.15f) "Perf." else "Performance", "Pause", "Cancel").forEach {
+                    label ->
+                  fixture.assertTextFits(label)
+                }
               }
         }
   }
@@ -103,7 +105,7 @@ class DesktopVisualLayoutTest {
               }
               .use { fixture ->
                 fixture.render("analysis-1280-600-$label")
-                listOf("Preview", "Pause", "Cancel").forEach(fixture::assertTextFits)
+                listOf("Pause", "Cancel").forEach(fixture::assertTextFits)
               }
         }
   }
@@ -283,7 +285,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun previewMenuAndDialogDoNotInvokeAnalysisActions() {
+  fun analysisFixtureExposesOnlyItsLiveLifecycleAction() {
     var requests = 0
     val actions =
         AnalysisWorkspaceActions(
@@ -293,14 +295,9 @@ class DesktopVisualLayoutTest {
           fixture.render()
           fixture.clickText("Pause")
           kotlin.test.assertEquals(1, requests)
-          fixture.clickText("Preview")
-          fixture.render()
-          fixture.clickText("New file")
-          fixture.render()
-          assertTrue(fixture.hasText("New file · Preview"))
-          fixture.clickText("Close")
-          fixture.render()
-          assertFalse(fixture.hasText("New file · Preview"))
+          assertFalse(fixture.hasText("Preview"))
+          assertFalse(fixture.hasText("New file"))
+          assertFalse(fixture.hasText("Run / Debug"))
           kotlin.test.assertEquals(1, requests)
         }
   }
@@ -338,7 +335,6 @@ class DesktopVisualLayoutTest {
       ComposeVisualFixture(width, height) { EditorVisualFixture(width.toFloat()) }
           .use { fixture ->
             fixture.render("editor-$width")
-            fixture.assertTextFits("Preview")
             fixture.assertTextFits("Performance")
             fixture.assertTextFits("user.go")
             if (width >= 1_000) {
@@ -664,11 +660,8 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("Focused analysis"))
           assertTrue(fixture.hasText("Actions"))
           assertTrue(fixture.hasText("Confirm remote destination"))
-          assertTrue(
-              fixture.hasText("Preview only · Complexity and readability scores unavailable."))
-          fixture.clickText("Generate unit test")
-          fixture.render("context-preview-isolation-800-1.3")
-          assertTrue(fixture.hasText("Generate unit test · Preview"))
+          assertFalse(fixture.hasText("Generate unit test"))
+          assertFalse(fixture.hasText("Complexity and readability scores unavailable."))
           kotlin.test.assertEquals(0, contextActions)
         }
 
@@ -873,7 +866,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun baselineCapturesSummaryAndExercisesOpenProjectAndPreviewMenus() {
+  fun baselineCapturesSummaryAndExercisesOnlyTheLiveProjectMenu() {
     ComposeVisualFixture(1440, 900) {
           ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
         }
@@ -892,19 +885,10 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("Open project"))
           assertTrue(fixture.hasText("Re-index project"))
         }
-
-    ComposeVisualFixture(1440, 900) { ToolbarVisualFixture(1440f) }
-        .use { fixture ->
-          fixture.render()
-          fixture.clickText("Preview")
-          fixture.render("preview-menu-open")
-          assertTrue(fixture.hasText("New file"))
-          assertTrue(fixture.hasText("Branch actions"))
-        }
   }
 
   @Test
-  fun popupMenusUseProductionRowsForDisabledLiveAndPreviewFlows() {
+  fun popupMenusUseProductionRowsForLiveProjectFlows() {
     var imports = 0
     var reindexes = 0
     var reconnects = 0
@@ -960,9 +944,9 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun popupSurfaceWrapsLongRowsAndPreviewDismissalRestoresTheTriggerFocus() {
+  fun popupSurfaceWrapsLongRowsWithoutClipping() {
     val longLabel =
-        "A long preview menu action remains readable instead of being shortened at narrow widths"
+        "A long available menu action remains readable instead of being shortened at narrow widths"
     ComposeVisualFixture(320, 200, 1.3f) { PopupMenuVisualFixture(longLabel) }
         .use { fixture ->
           fixture.render("popup-surface-320-1.3")
@@ -970,42 +954,26 @@ class DesktopVisualLayoutTest {
           fixture.assertTextFits("Unavailable action")
           assertTrue(fixture.isDisabled("Unavailable action"))
         }
-
-    ComposeVisualFixture(800, 220, 1.3f) { ToolbarVisualFixture(800f) }
-        .use { fixture ->
-          fixture.render()
-          assertTrue(fixture.requestFocus("Preview"))
-          assertTrue(fixture.isFocused("Preview"))
-          fixture.clickText("Preview")
-          fixture.render()
-          assertTrue(fixture.hasText("New file"))
-          assertTrue(fixture.dismissPopup())
-          fixture.render()
-          fixture.render()
-          assertFalse(fixture.hasText("New file"))
-          assertTrue(fixture.isFocused("Preview"))
-        }
   }
 
   @Test
-  fun previewPopupKeepsLongContentInTheProductionScrollableMenu() {
-    val features =
-        (1..16).map { index ->
-          PreviewFeature(
-              "Preview action $index with a long but local-only description",
-              "This action has no implementation.")
-        }
-    ComposeVisualFixture(360, 520, 1.3f) {
-          Box(Modifier.fillMaxSize().background(AppBackground).padding(12.dp)) {
-            PreviewFeatureMenu(features)
-          }
-        }
+  fun toolbarKeepsOnlyLiveProjectSearchBranchAndConnectionChrome() {
+    ComposeVisualFixture(1440, 220) { ToolbarVisualFixture(1440f) }
         .use { fixture ->
-          fixture.render()
-          fixture.clickText("Preview")
-          fixture.render()
-          assertTrue(fixture.hasText(features.last().label))
-          assertTrue(fixture.hasScrollableContent())
+          fixture.render("toolbar-live-destinations-1440")
+          assertTrue(fixture.hasText("Search files, symbols, commands"))
+          assertTrue(fixture.hasText("main"))
+          assertTrue(fixture.hasText("Daemon connected"))
+          listOf(
+                  "Preview",
+                  "New file",
+                  "Branch actions",
+                  "Content search",
+                  "Settings & Help",
+                  "Account",
+                  "Terminal",
+                  "Run / Debug")
+              .forEach { label -> assertFalse(fixture.hasText(label)) }
         }
   }
 
@@ -1543,11 +1511,7 @@ private fun PopupMenuVisualFixture(longLabel: String) {
     IdePopupMenuSurface(
         modifier = Modifier.width(280.dp),
         content = {
-          IdeDropdownMenuItem(
-              label = longLabel,
-              onClick = {},
-              icon = DesktopIcon.Settings,
-              status = { PreviewBadge() })
+          IdeDropdownMenuItem(label = longLabel, onClick = {}, icon = DesktopIcon.Document)
           IdeDropdownMenuItem(
               label = "Unavailable action",
               onClick = {},

@@ -227,7 +227,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | FND-05 | Remove proven contract and code redundancy | FND-01 | M / medium | Complete |
 | FND-06 | Isolate desktop job coordination | FND-03, FND-04 | M / high | Complete |
 | AUTO-01 | Reproducible validation entry point and CI | FND-02, FND-03, FND-04, FND-05 | M / medium | Complete |
-| UI-01 | Remove unsupported product previews | FND-01 | M / medium | Pending |
+| UI-01 | Remove unsupported product previews | FND-01 | M / medium | Complete |
 | UI-02 | Correct source-first layout against captures | UI-01 | M / medium | Pending |
 | UI-03 | Make draft/review progression explicit | UI-02 | M / high | Pending |
 | UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Pending |
@@ -422,6 +422,15 @@ the full quality gate green. No inherited quality exception applies to final rel
   workflow; no blank gaps; only live actions in the palette; no new network calls.
 - Verify: Preview/command/shell tests adjusted to real behavior, D and V. Document
   removed visible previews; no source, API or stored draft migration.
+- Completed 2026-09-07. Removed the toolbar, editor, Context and bottom-pane preview
+  controls: New file, branch actions, content search, settings/account/help, feedback,
+  extra tabs/split editor, minimap, Run/Debug, generated unit tests, fabricated scores
+  and Terminal. The real command palette, branch display, provider destinations,
+  output, checks and Performance scope preview remain. Retired Terminal preferences
+  fall back to Problems. Visual fixtures cover the retained live toolbar and the
+  removed controls; command and layout tests cover the live palette and preference
+  fallback. Independent diff review, `git diff --check`, and the pinned JDK 21/JBR 25
+  `./scripts/validate.sh` gate passed. No source, API or stored-draft migration.
 
 ### UI-02 — Correct source-first layout against captures
 

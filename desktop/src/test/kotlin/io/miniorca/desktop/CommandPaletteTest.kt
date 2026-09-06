@@ -64,6 +64,18 @@ class CommandPaletteTest {
             "Refresh file analysis"),
         freshActions.map { it.label })
     assertTrue(freshActions.any { it.label == "Open Performance workspace" })
+    assertFalse(
+        freshActions.any {
+          it.label in
+              setOf(
+                  "Terminal",
+                  "Run",
+                  "Debug",
+                  "New file",
+                  "Branch actions",
+                  "Settings & Help",
+                  "Generate unit test")
+        })
   }
 
   @Test

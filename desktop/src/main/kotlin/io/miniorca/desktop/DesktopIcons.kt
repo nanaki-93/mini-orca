@@ -35,13 +35,7 @@ internal enum class DesktopIcon(private val path: String) {
   Code("M8 6L3 12l5 6 M16 6l5 6-5 6 M14 4l-4 16"),
   Document("M5 3h9l5 5v13H5Z M14 3v6h5 M8 12h8 M8 16h6"),
   Run("M7 3l14 9-14 9Z"),
-  Debug(
-      "M8 8h8v9a4 4 0 0 1-8 0Z M9 8V6a3 3 0 0 1 6 0v2 M4 6l4 4 M20 6l-4 4 M3 13h5 M16 13h5 M4 21l4-4 M16 17l4 4"),
-  Settings(
-      "M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Z M12 8a4 4 0 1 1 0 8a4 4 0 1 1 0-8"),
-  Help("M12 2a10 10 0 1 1 0 20a10 10 0 1 1 0-20 M9 8a3 3 0 1 1 5 2c-2 1-2 2-2 3 M12 17h.01"),
   Close("M6 6l12 12 M6 18L18 6"),
-  Terminal("M3 4h18v16H3Z M6 9l4 3-4 3 M13 16h5"),
   Check("M4 12l5 5L20 6"),
   ;
 
