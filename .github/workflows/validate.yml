@@ -1,0 +1,48 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  local-gates:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go 1.22.12
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: 1.22.12
+          check-latest: false
+
+      - name: Set up JDK 21.0.11
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: 21.0.11
+          check-latest: false
+
+      - name: Remember JDK 21 location
+        run: echo "MINI_ORCA_JDK21_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Download pinned JBR 25.0.4
+        env:
+          JBR_ARCHIVE: jbrsdk-25.0.4-linux-x64-b508.27.tar.gz
+          JBR_SHA512: 380200957c181c1d97b3a2e9ba2aacc32eb179b22d1c75bfd9a1a7fafd785f229339f382345cbad4bef461ac6adcfb7ee0f846837685c2fa55abee5b6b35f9bd
+        run: |
+          curl --fail --location --retry 3 --show-error \
+            --output "$RUNNER_TEMP/$JBR_ARCHIVE" \
+            "https://cache-redirector.jetbrains.com/intellij-jbr/$JBR_ARCHIVE"
+          printf '%s  %s\n' "$JBR_SHA512" "$RUNNER_TEMP/$JBR_ARCHIVE" | sha512sum --check --strict
+          tar --extract --gzip --file "$RUNNER_TEMP/$JBR_ARCHIVE" --directory "$RUNNER_TEMP"
+          jbr_home=$(find "$RUNNER_TEMP" -maxdepth 1 -type d -name 'jbrsdk-25.0.4*' -print -quit)
+          test -x "$jbr_home/bin/java"
+          echo "MINI_ORCA_JBR25_HOME=$jbr_home" >> "$GITHUB_ENV"
+
+      - name: Run maintained local gates
+        run: ./scripts/validate.sh

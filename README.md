@@ -56,10 +56,28 @@ See the [API guide](docs/api-contract.md) for current contracts and boundaries.
 
 ## Development and documentation
 
-Follow [AGENTS.md](AGENTS.md). Run focused tests while editing; `make check` runs
-Go formatting, tests, race, vet and desktop tests. `make quality` adds pinned
-static/reachability/complexity/clone tools and desktop static checks. It currently
-fails on five known Go complexity findings; [PLAN.md](PLAN.md) assigns their fixes.
+Follow [AGENTS.md](AGENTS.md). Run focused tests while editing. For a clean checkout,
+install Go 1.22 and use the checked-in Gradle wrapper. The full local gate is:
+
+```sh
+MINI_ORCA_JDK21_HOME=/path/to/jdk-21 \
+MINI_ORCA_JBR25_HOME=/path/to/jbr-25 \
+./scripts/validate.sh
+```
+
+The JDK 21 launcher is required by Detekt; the Java 25 location supplies the desktop
+toolchain and may be a JBR or JDK. Both explicit homes must contain `java` and `javac`
+at those exact major versions. `MINI_ORCA_JAVA25_HOME` is an equivalent explicit name
+for a non-JBR toolchain. If `MINI_ORCA_JDK21_HOME` is omitted, the script accepts only
+a verified Java 21 JDK from `JAVA_HOME` or `PATH`; it does not defer launcher selection
+to Gradle. The Java 25 toolchain may be omitted only when Gradle can discover it. The
+default checks use fakes and temporary directories, do not start the daemon, and do not
+require a provider, key, or project configuration. The wrapper pins Gradle 9.1.0 and
+verifies its published SHA-256 before use.
+
+`make check` remains the supported Make gate for formatting, tests, race detection,
+vet and desktop tests. `make quality` runs the pinned static/reachability/complexity/
+clone and Desktop static stages and reports every failed stage.
 
 - [Plan and task ledger](PLAN.md) · [agent execution workflow](tasks/README.md)
 - [Desktop runtime, usage and keys](desktop/README.md) · [UI guidelines](desktop/UI_DESIGN_GUIDELINES.md)
