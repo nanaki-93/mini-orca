@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const validPerformanceReview = `{"findings":[{"category":"cpu","potential_impact":"low","confidence":"low","title":"Avoid repeated formatting","observed_pattern":"The selected function formats output on each call.","workload_conditions":"This matters only when the function is called frequently.","recommendation":"Measure before changing the formatting path.","tradeoff":"Caching may retain stale output.","verification_plan":"Benchmark representative repeated calls.","start_line":5,"end_line":5,"symbol":"Run"}]}`
@@ -210,6 +212,477 @@ func TestPerformanceReportsPreserveLifecycleStatusWithStaleCoverage(t *testing.T
 				t.Fatalf("report = %+v", report)
 			}
 		})
+	}
+}
+
+func TestRecoverPersistedPerformanceJobNormalizesInterruptedRequests(t *testing.T) {
+	analysis := &project.Analysis{ProjectID: "project", ProjectRevision: "revision"}
+	now := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name       string
+		status     string
+		wantStatus string
+	}{
+		{name: "running job", status: performanceJobRunning, wantStatus: performanceJobPaused},
+		{name: "paused job", status: performanceJobPaused, wantStatus: performanceJobPaused},
+		{name: "canceled job", status: performanceJobCanceled, wantStatus: performanceJobCanceled},
+		{name: "stale job", status: performanceJobStale, wantStatus: performanceJobStale},
+		{name: "completed job", status: performanceJobCompleted, wantStatus: performanceJobPaused},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			job := performanceJobFixture(t.TempDir(), analysis, test.name)
+			job.Status = test.status
+			job.RunBudget = time.Minute
+			job.Elapsed = 45 * time.Second
+			job.ActiveStartedAt = now.Add(-30 * time.Second)
+			job.Files[0].Status = performanceFileRunning
+			job.Files[0].Attempts = 2
+			job.Files[0].Error = "interrupted"
+
+			if !recoverPersistedPerformanceJob(job, now) {
+				t.Fatal("interrupted job was not recovered")
+			}
+			file := job.Files[0]
+			if job.Status != test.wantStatus || job.Elapsed != job.RunBudget || !job.ActiveStartedAt.IsZero() || !job.UpdatedAt.Equal(now) || file.Status != performanceFilePending || file.Attempts != 2 || file.Error != "" {
+				t.Fatalf("recovered job = %+v", job)
+			}
+		})
+	}
+}
+
+func TestPerformanceJobRecoveryResumesInterruptedFile(t *testing.T) {
+	for _, initialStatus := range []string{performanceJobRunning, performanceJobPaused} {
+		t.Run(initialStatus, func(t *testing.T) {
+			started := make(chan struct{}, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				started <- struct{}{}
+				_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validPerformanceReview}}}})
+			}))
+			defer server.Close()
+
+			service, root := newSemanticAnalysisService(t, server.URL, 0)
+			analysis, err := service.manager.Analysis()
+			if err != nil {
+				t.Fatal(err)
+			}
+			policy, err := project.NewContextPolicy(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			preview, err := service.PreviewPerformanceQueue(PerformanceJobOptions{MaxFiles: 1})
+			if err != nil || len(preview.Files) != 1 {
+				t.Fatalf("preview = %+v, %v", preview, err)
+			}
+			elapsed := 5 * time.Second
+			job := &PerformanceJob{
+				ID:                "performance-recovery-" + initialStatus,
+				Generation:        "recovery-" + initialStatus,
+				ProjectID:         analysis.ProjectID,
+				ProjectRevision:   analysis.ProjectRevision,
+				Root:              root,
+				PolicyFingerprint: policy.Version(),
+				QueueID:           preview.QueueID,
+				Status:            initialStatus,
+				MaxFiles:          1,
+				RunBudget:         time.Minute,
+				Elapsed:           elapsed,
+				ActiveStartedAt:   time.Now().UTC().Add(-time.Second),
+				Files:             append([]PerformanceJobFile(nil), preview.Files...),
+				CreatedAt:         time.Now().UTC().Add(-time.Minute),
+				UpdatedAt:         time.Now().UTC().Add(-time.Second),
+			}
+			job.Files[0].Status = performanceFileRunning
+			job.Files[0].Attempts = 2
+			if err := service.storePerformanceJob(job); err != nil {
+				t.Fatal(err)
+			}
+
+			recovered, err := service.PerformanceJob()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if recovered == nil || recovered.Status != performanceJobPaused || recovered.Elapsed <= elapsed || recovered.Elapsed >= recovered.RunBudget || !recovered.ActiveStartedAt.IsZero() || recovered.Files[0].Status != performanceFilePending || recovered.Files[0].Attempts != 2 {
+				t.Fatalf("recovered job = %+v", recovered)
+			}
+			persisted, err := loadPerformanceJob(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if persisted == nil || persisted.Status != performanceJobPaused || persisted.Elapsed != recovered.Elapsed || !persisted.ActiveStartedAt.IsZero() || persisted.Files[0].Status != performanceFilePending || persisted.Files[0].Attempts != 2 {
+				t.Fatalf("persisted recovered job = %+v", persisted)
+			}
+
+			if _, err := service.ResumePerformanceJob(context.Background(), recovered.ID, false); err != nil {
+				t.Fatal(err)
+			}
+			waitForTestSignal(t, started, "recovered performance review request")
+			completed := waitForPerformanceJob(t, service, performanceJobCompleted)
+			if completed.Files[0].Status != performanceFileCompleted || completed.Files[0].Attempts != 3 {
+				t.Fatalf("completed recovered job = %+v", completed)
+			}
+		})
+	}
+}
+
+func TestPersistPerformanceJobKeepsNewerStaleState(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	running := performanceJobFixture(root, analysis, "running")
+	service.performance.mu.Lock()
+	service.performance.job = running
+	service.performance.mu.Unlock()
+
+	delayed := clonePerformanceJob(running)
+	service.invalidatePerformanceJob()
+	if err := service.persistPerformanceJob(delayed); err != nil {
+		t.Fatal(err)
+	}
+
+	persisted, err := loadPerformanceJob(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted == nil || persisted.Status != performanceJobStale {
+		t.Fatalf("persisted job after delayed running snapshot = %+v", persisted)
+	}
+}
+
+func TestPerformanceJobRecoversMismatchedPersistedRootWithoutTouchingOtherProject(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	nextRoot, nextAnalysis := newPerformanceProject(t, "next")
+
+	nextJob := performanceJobFixture(nextRoot, nextAnalysis, "next")
+	nextJob.Status = performanceJobCompleted
+	if err := service.storePerformanceJob(nextJob); err != nil {
+		t.Fatal(err)
+	}
+	nextPath := filepath.Join(nextRoot, ".mini-orca", "sessions", "performance-job.json")
+	before, err := os.ReadFile(nextPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mismatched := clonePerformanceJob(nextJob)
+	mismatched.Status = performanceJobRunning
+	data, err := json.Marshal(mismatched)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".mini-orca", "sessions", "performance-job.json")
+	if err := storage.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	job, err := service.PerformanceJob()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job != nil {
+		t.Fatalf("mismatched persisted job was attached: %+v", job)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("mismatched session was not recovered: %v", err)
+	}
+	corrupt, err := filepath.Glob(path + ".corrupt-*")
+	if err != nil || len(corrupt) != 1 {
+		t.Fatalf("recovered mismatched session = %v, %v", corrupt, err)
+	}
+	after, err := os.ReadFile(nextPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("other project session changed:\nwant %s\ngot  %s", before, after)
+	}
+}
+
+func TestPerformanceJobSerializesProjectTransition(t *testing.T) {
+	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	nextRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(nextRoot, "main.go"), []byte("package next\n\nfunc Run() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	nextManager, err := project.NewManager(nextRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextAnalysis := &project.Analysis{Name: "next", Path: nextRoot}
+	if err := nextManager.Set(nextRoot, nextAnalysis); err != nil {
+		t.Fatal(err)
+	}
+	nextJob := performanceJobFixture(nextRoot, nextAnalysis, "next")
+	nextJob.Status = performanceJobCompleted
+	if err := service.storePerformanceJob(nextJob); err != nil {
+		t.Fatal(err)
+	}
+
+	readerReady := make(chan struct{})
+	releaseReader := make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(releaseReader) }) })
+	service.performance.mu.Lock()
+	service.performance.beforeRead = func() {
+		close(readerReady)
+		<-releaseReader
+	}
+	service.performance.mu.Unlock()
+	readerDone := make(chan error, 1)
+	go func() {
+		_, err := service.PerformanceJob()
+		readerDone <- err
+	}()
+	waitForTestSignal(t, readerReady, "performance job read")
+	if service.jobLifecycleMu.TryLock() {
+		service.jobLifecycleMu.Unlock()
+		t.Fatal("performance job read did not hold the project lifecycle lock")
+	}
+
+	transitionStarted := make(chan struct{})
+	transitionDone := make(chan error, 1)
+	go func() {
+		close(transitionStarted)
+		transitionDone <- service.ActivateProject(nextRoot, nextAnalysis)
+	}()
+	<-transitionStarted
+	releaseOnce.Do(func() { close(releaseReader) })
+	if err := <-readerDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-transitionDone; err != nil {
+		t.Fatal(err)
+	}
+	service.performance.mu.Lock()
+	service.performance.beforeRead = nil
+	service.performance.mu.Unlock()
+
+	current, err := service.PerformanceJob()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current == nil || current.ID != nextJob.ID || current.Status != performanceJobCompleted {
+		t.Fatalf("current next-project job = %+v", current)
+	}
+	persisted, err := loadPerformanceJob(nextRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted == nil || persisted.ID != nextJob.ID || persisted.Status != performanceJobCompleted {
+		t.Fatalf("persisted next-project job = %+v", persisted)
+	}
+}
+
+func TestProjectChangeDetachesPerformanceJob(t *testing.T) {
+	for _, status := range []string{performanceJobRunning, performanceJobPaused} {
+		t.Run(status, func(t *testing.T) {
+			service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+			analysis, err := service.manager.Analysis()
+			if err != nil {
+				t.Fatal(err)
+			}
+			old := performanceJobFixture(root, analysis, "old-"+status)
+			old.Status = status
+			if status == performanceJobRunning {
+				old.Files[0].Status = performanceFileRunning
+				old.ActiveStartedAt = time.Now().Add(-time.Second)
+			}
+			delayed := clonePerformanceJob(old)
+
+			nextRoot, nextAnalysis := newPerformanceProject(t, "next")
+			next := performanceJobFixture(nextRoot, nextAnalysis, "next-"+status)
+			next.Status = performanceJobCompleted
+			if err := service.storePerformanceJob(next); err != nil {
+				t.Fatal(err)
+			}
+
+			canceled := false
+			service.performance.mu.Lock()
+			service.performance.job = old
+			if status == performanceJobRunning {
+				service.performance.cancel = func() { canceled = true }
+				service.performance.workerGeneration = old.Generation
+			}
+			service.performance.mu.Unlock()
+
+			if err := service.ActivateProject(nextRoot, nextAnalysis); err != nil {
+				t.Fatal(err)
+			}
+			if err := service.persistPerformanceJob(delayed); err != nil {
+				t.Fatal(err)
+			}
+			if status == performanceJobRunning && !canceled {
+				t.Fatal("running performance worker was not canceled")
+			}
+			service.performance.mu.Lock()
+			attached := service.performance.job
+			cancel := service.performance.cancel
+			generation := service.performance.workerGeneration
+			service.performance.mu.Unlock()
+			if attached != nil || cancel != nil || generation != "" {
+				t.Fatalf("old controller remained attached: job=%+v cancel=%t generation=%q", attached, cancel != nil, generation)
+			}
+
+			current, err := service.PerformanceJob()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if current == nil || current.ID != next.ID || current.Status != performanceJobCompleted {
+				t.Fatalf("active project returned old or missing job: %+v", current)
+			}
+			oldPersisted, err := loadPerformanceJob(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if oldPersisted == nil || oldPersisted.ID != old.ID || oldPersisted.Status != performanceJobStale {
+				t.Fatalf("old project persisted job = %+v", oldPersisted)
+			}
+			nextPersisted, err := loadPerformanceJob(nextRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if nextPersisted == nil || nextPersisted.ID != next.ID || nextPersisted.Status != performanceJobCompleted {
+				t.Fatalf("new project persisted job changed: %+v", nextPersisted)
+			}
+		})
+	}
+}
+
+func TestProjectChangeDetachesPerformanceJobWithoutNextPersistedJob(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := performanceJobFixture(root, analysis, "old")
+	old.Status = performanceJobPaused
+	service.performance.mu.Lock()
+	service.performance.job = old
+	service.performance.mu.Unlock()
+
+	nextRoot, nextAnalysis := newPerformanceProject(t, "empty")
+	if err := service.ActivateProject(nextRoot, nextAnalysis); err != nil {
+		t.Fatal(err)
+	}
+	current, err := service.PerformanceJob()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current != nil {
+		t.Fatalf("active project returned detached old job: %+v", current)
+	}
+	oldPersisted, err := loadPerformanceJob(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldPersisted == nil || oldPersisted.ID != old.ID || oldPersisted.Status != performanceJobStale {
+		t.Fatalf("old project persisted job = %+v", oldPersisted)
+	}
+}
+
+func newPerformanceProject(t *testing.T, name string) (string, *project.Analysis) {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package "+name+"\n\nfunc Run() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis := &project.Analysis{Name: name, Path: root}
+	if err := manager.Set(root, analysis); err != nil {
+		t.Fatal(err)
+	}
+	return root, analysis
+}
+
+func TestPerformanceWorkerCannotAffectReplacementJob(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := performanceJobFixture(root, analysis, "old")
+	old.Files[0].Status = performanceFileRunning
+	old.Files[0].Attempts = 1
+	replacement := performanceJobFixture(t.TempDir(), analysis, "replacement")
+	replacement.Files[0].Status = performanceFileRunning
+	replacement.Files[0].Attempts = 1
+	replacement.Elapsed = 5 * time.Second
+	replacement.ActiveStartedAt = time.Now().Add(-time.Second)
+	replacementCancelCalled := false
+	service.performance.mu.Lock()
+	service.performance.job = replacement
+	service.performance.cancel = func() { replacementCancelCalled = true }
+	service.performance.workerGeneration = replacement.Generation
+	service.performance.mu.Unlock()
+
+	service.recordPerformanceResult(old, old.Files[0].Path, nil)
+	published := false
+	err = service.authorizePerformancePublication(old, old.Files[0].Path, old.Files[0].ContentHash, func() error {
+		published = true
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || published {
+		t.Fatalf("old worker publication = %v, published = %t", err, published)
+	}
+	service.clearPerformanceWorker(old.Generation)
+
+	service.performance.mu.Lock()
+	current := clonePerformanceJob(service.performance.job)
+	cancel := service.performance.cancel
+	generation := service.performance.workerGeneration
+	service.performance.mu.Unlock()
+	if current.Files[0].Status != performanceFileRunning || current.Files[0].Attempts != 1 || current.Elapsed != 5*time.Second || current.ActiveStartedAt != replacement.ActiveStartedAt || cancel == nil || generation != replacement.Generation || replacementCancelCalled {
+		t.Fatalf("replacement controller after old worker = %+v, cancel=%t, generation=%q, canceled=%t", current, cancel != nil, generation, replacementCancelCalled)
+	}
+}
+
+func TestValidPerformanceJobRejectsInvalidPersistedState(t *testing.T) {
+	analysis := &project.Analysis{ProjectID: "project", ProjectRevision: "revision"}
+	valid := performanceJobFixture(t.TempDir(), analysis, "valid")
+	if validPerformanceJob(nil) {
+		t.Fatal("nil persisted job was accepted")
+	}
+	for _, test := range []struct {
+		name   string
+		mutate func(*PerformanceJob)
+	}{
+		{name: "missing identity", mutate: func(job *PerformanceJob) { job.ID = "" }},
+		{name: "too many files", mutate: func(job *PerformanceJob) { job.Files = append(job.Files, job.Files[0]) }},
+		{name: "negative attempts", mutate: func(job *PerformanceJob) { job.Files[0].Attempts = -1 }},
+		{name: "invalid job state", mutate: func(job *PerformanceJob) { job.Status = "unknown" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			job := clonePerformanceJob(valid)
+			test.mutate(job)
+			if validPerformanceJob(job) {
+				t.Fatalf("invalid persisted job was accepted: %+v", job)
+			}
+		})
+	}
+}
+
+func performanceJobFixture(root string, analysis *project.Analysis, generation string) *PerformanceJob {
+	now := time.Now().UTC()
+	return &PerformanceJob{
+		ID:                "performance-" + generation,
+		Generation:        generation,
+		ProjectID:         analysis.ProjectID,
+		ProjectRevision:   analysis.ProjectRevision,
+		Root:              root,
+		PolicyFingerprint: "policy",
+		QueueID:           "performance:" + generation,
+		Status:            performanceJobRunning,
+		MaxFiles:          1,
+		RunBudget:         time.Minute,
+		Files: []PerformanceJobFile{{
+			Path: "main.go", ContentHash: "hash", Status: performanceFilePending,
+		}},
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }
 

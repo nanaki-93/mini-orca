@@ -345,7 +345,7 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 
 func (s *Service) invalidateJobsForProjectChange() {
 	s.invalidateAnalyzeAll()
-	s.invalidatePerformanceJob()
+	s.detachPerformanceJobForProjectChange()
 	s.cancelGoScan()
 	s.clearDraftsForProjectChange()
 	s.clearChatSessions()
