@@ -16,6 +16,7 @@ import (
 
 const (
 	PerformancePromptVersion  = "performance-file-v1"
+	PerformanceMaxSourceBytes = 64 * 1024
 	maxPerformanceOutputBytes = 64 * 1024
 	maxPerformanceFindings    = 5
 )
@@ -95,11 +96,11 @@ func ParsePerformanceFindings(output, path, source string, symbols []SymbolInfo)
 	}
 	lines := strings.Count(source, "\n") + 1
 	valid := make([]PerformanceFinding, 0, len(wire.Findings))
-	dropped := 0
+	dropped := performanceFindingValidationFailures{}
 	for _, item := range wire.Findings {
 		finding := PerformanceFinding{Category: strings.ToLower(strings.TrimSpace(item.Category)), PotentialImpact: strings.ToLower(strings.TrimSpace(item.PotentialImpact)), Confidence: strings.ToLower(strings.TrimSpace(item.Confidence)), Title: strings.TrimSpace(item.Title), ObservedPattern: strings.TrimSpace(item.ObservedPattern), WorkloadConditions: strings.TrimSpace(item.WorkloadConditions), Recommendation: strings.TrimSpace(item.Recommendation), Tradeoff: strings.TrimSpace(item.Tradeoff), VerificationPlan: strings.TrimSpace(item.VerificationPlan), StartLine: item.StartLine, EndLine: item.EndLine, Symbol: strings.TrimSpace(item.Symbol)}
-		if !validPerformanceFinding(finding, lines, symbols) {
-			dropped++
+		if failure := invalidPerformanceFinding(finding, lines, symbols); failure != performanceFindingValid {
+			dropped.add(failure)
 			continue
 		}
 		finding.EngineeringInsight, _ = ParseOptionalEngineeringInsight(item.Insight)
@@ -111,14 +112,88 @@ func ParsePerformanceFindings(output, path, source string, symbols []SymbolInfo)
 		return nil, "", fmt.Errorf("performance review had no usable findings")
 	}
 	warning := ""
-	if dropped > 0 {
-		warning = "Some model opportunities were omitted because their source anchors were invalid."
+	if dropped.any() {
+		warning = dropped.warning()
 	}
 	return valid, warning, nil
 }
 
-func validPerformanceFinding(f PerformanceFinding, lines int, symbols []SymbolInfo) bool {
-	if !oneOf(f.Category, "cpu", "memory", "io", "concurrency", "caching", "ui") || !oneOf(f.PotentialImpact, "high", "medium", "low", "unknown") || !oneOf(f.Confidence, "high", "medium", "low") || f.Title == "" || f.ObservedPattern == "" || f.WorkloadConditions == "" || f.Recommendation == "" || f.Tradeoff == "" || f.VerificationPlan == "" || f.StartLine < 1 || f.EndLine < f.StartLine || f.EndLine > lines {
+type performanceFindingValidationFailure uint8
+
+const (
+	performanceFindingValid performanceFindingValidationFailure = iota
+	performanceFindingInvalidFields
+	performanceFindingInvalidEnums
+	performanceFindingInvalidAnchor
+)
+
+type performanceFindingValidationFailures struct {
+	fields bool
+	enums  bool
+	anchor bool
+}
+
+func invalidPerformanceFinding(f PerformanceFinding, lines int, symbols []SymbolInfo) performanceFindingValidationFailure {
+	if !validPerformanceFindingFields(f) {
+		return performanceFindingInvalidFields
+	}
+	if !validPerformanceFindingEnums(f) {
+		return performanceFindingInvalidEnums
+	}
+	if !validPerformanceFindingAnchor(f, lines, symbols) {
+		return performanceFindingInvalidAnchor
+	}
+	return performanceFindingValid
+}
+
+func (f *performanceFindingValidationFailures) add(failure performanceFindingValidationFailure) {
+	switch failure {
+	case performanceFindingInvalidFields:
+		f.fields = true
+	case performanceFindingInvalidEnums:
+		f.enums = true
+	case performanceFindingInvalidAnchor:
+		f.anchor = true
+	}
+}
+
+func (f performanceFindingValidationFailures) any() bool {
+	return f.fields || f.enums || f.anchor
+}
+
+func (f performanceFindingValidationFailures) warning() string {
+	reasons := make([]string, 0, 3)
+	if f.fields {
+		reasons = append(reasons, "required fields")
+	}
+	if f.enums {
+		reasons = append(reasons, "category, potential impact, or confidence values")
+	}
+	if f.anchor {
+		reasons = append(reasons, "source anchors")
+	}
+	if len(reasons) == 1 {
+		if f.anchor {
+			return "Some model opportunities were omitted because their source anchors were invalid."
+		}
+		return "Some model opportunities were omitted because " + reasons[0] + " were invalid."
+	}
+	if len(reasons) == 2 {
+		return "Some model opportunities were omitted because " + reasons[0] + " or " + reasons[1] + " were invalid."
+	}
+	return "Some model opportunities were omitted because " + strings.Join(reasons[:len(reasons)-1], ", ") + ", or " + reasons[len(reasons)-1] + " were invalid."
+}
+
+func validPerformanceFindingFields(f PerformanceFinding) bool {
+	return f.Title != "" && f.ObservedPattern != "" && f.WorkloadConditions != "" && f.Recommendation != "" && f.Tradeoff != "" && f.VerificationPlan != ""
+}
+
+func validPerformanceFindingEnums(f PerformanceFinding) bool {
+	return oneOf(f.Category, "cpu", "memory", "io", "concurrency", "caching", "ui") && oneOf(f.PotentialImpact, "high", "medium", "low", "unknown") && oneOf(f.Confidence, "high", "medium", "low")
+}
+
+func validPerformanceFindingAnchor(f PerformanceFinding, lines int, symbols []SymbolInfo) bool {
+	if f.StartLine < 1 || f.EndLine < f.StartLine || f.EndLine > lines {
 		return false
 	}
 	if f.Symbol == "" {
@@ -151,9 +226,13 @@ func StorePerformanceFileReport(root string, report PerformanceFileReport) error
 	return storage.WriteFile(performanceCachePath(root, report.Path), data, 0600)
 }
 
-// LoadPerformanceFileReport reads only sanitized metadata. Changed identity is
-// reported as stale instead of being presented as a current review.
-func LoadPerformanceFileReport(root, path, contentHash string) (*PerformanceFileReport, error) {
+// LoadPerformanceFileReport reads only sanitized metadata. Changed identity,
+// context policy, or an unavailable source file is reported as stale instead of
+// being presented as a current review.
+func LoadPerformanceFileReport(root, path, contentHash string, policy *ContextPolicy) (*PerformanceFileReport, error) {
+	if policy == nil {
+		return nil, fmt.Errorf("performance report policy is required")
+	}
 	cachePath := performanceCachePath(root, path)
 	data, err := os.ReadFile(cachePath)
 	if os.IsNotExist(err) {
@@ -169,7 +248,12 @@ func LoadPerformanceFileReport(root, path, contentHash string) (*PerformanceFile
 		}
 		return nil, nil
 	}
-	if report.ContentHash != contentHash {
+	if report.ContentHash != contentHash || report.ContextPolicyVersion != policy.Version() || !policy.Decide(path).Include {
+		report.Status = "stale"
+		return clonePerformanceFileReport(&report), nil
+	}
+	current, err := GetFileInfo(root, path)
+	if err != nil || current.SizeBytes > PerformanceMaxSourceBytes || current.ContentHash != contentHash {
 		report.Status = "stale"
 	}
 	return clonePerformanceFileReport(&report), nil

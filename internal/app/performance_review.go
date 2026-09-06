@@ -12,75 +12,146 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-const maxPerformanceSourceBytes = 64 * 1024
+type performanceReviewSnapshot struct {
+	root          string
+	analysis      project.Analysis
+	file          project.IndexFile
+	source        string
+	policyVersion string
+}
 
-func (s *Service) reviewPerformanceFile(ctx context.Context, path string, confirmRemoteProvider bool, authorizePublication func() error) (*project.PerformanceFileReport, error) {
+func (s *Service) reviewPerformanceFile(ctx context.Context, path string, confirmRemoteProvider bool, authorizePublication func(func() error) error) (*project.PerformanceFileReport, error) {
 	if err := s.RequireRemoteConfirmation(config.AnalyzeModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
+	snapshot, err := s.preparePerformanceReview(path)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.requestPerformanceReview(ctx, snapshot)
+	if err != nil {
+		return nil, err
+	}
+	findings, warning, err := project.ParsePerformanceFindings(result.Content, snapshot.file.Path, snapshot.source, snapshot.file.Symbols)
+	if err != nil {
+		return nil, err
+	}
+	return s.publishPerformanceReview(ctx, snapshot, result, findings, warning, authorizePublication)
+}
+
+func (s *Service) preparePerformanceReview(path string) (performanceReviewSnapshot, error) {
 	file, err := s.manager.IndexedFile(path)
 	if err != nil {
-		return nil, err
+		return performanceReviewSnapshot{}, err
 	}
-	policy, err := project.NewContextPolicy(s.manager.Root())
+	root := s.manager.Root()
+	policy, err := project.NewContextPolicy(root)
 	if err != nil {
-		return nil, err
+		return performanceReviewSnapshot{}, err
 	}
 	if decision := policy.Decide(file.Path); !decision.Include {
-		return nil, fmt.Errorf("performance review path is not eligible: %s", decision.Reason)
+		return performanceReviewSnapshot{}, fmt.Errorf("performance review path is not eligible: %s", decision.Reason)
 	}
-	info, err := project.GetFileInfo(s.manager.Root(), file.Path)
+	info, err := project.GetFileInfo(root, file.Path)
 	if err != nil {
-		return nil, err
+		return performanceReviewSnapshot{}, err
 	}
 	if info.ContentHash != file.ContentHash {
-		return nil, project.ErrRevisionConflict
+		return performanceReviewSnapshot{}, project.ErrRevisionConflict
 	}
-	if len(info.Content) > maxPerformanceSourceBytes {
-		return nil, fmt.Errorf("performance review skipped: source exceeds 64 KiB")
+	if len(info.Content) > project.PerformanceMaxSourceBytes {
+		return performanceReviewSnapshot{}, fmt.Errorf("performance review skipped: source exceeds 64 KiB")
 	}
 	analysis, err := s.manager.Analysis()
 	if err != nil {
-		return nil, err
+		return performanceReviewSnapshot{}, err
 	}
+	return performanceReviewSnapshot{root: root, analysis: *analysis, file: *file, source: info.Content, policyVersion: policy.Version()}, nil
+}
+
+func (s *Service) requestPerformanceReview(ctx context.Context, snapshot performanceReviewSnapshot) (modelOutput, error) {
 	runtime := s.runtimes.analyze
-	prompt, err := performancePrompt(info.Content, *analysis, *file)
+	prompt, err := performancePrompt(snapshot.source, snapshot.analysis, snapshot.file)
 	if err != nil {
-		return nil, err
+		return modelOutput{}, err
 	}
 	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
 	defer cancel()
 	result, err := s.retry(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}})
 	if timed.Err() != nil {
-		return nil, timed.Err()
+		return modelOutput{}, timed.Err()
 	}
 	if err != nil {
+		return modelOutput{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) publishPerformanceReview(ctx context.Context, snapshot performanceReviewSnapshot, result modelOutput, findings []project.PerformanceFinding, warning string, authorizePublication func(func() error) error) (*project.PerformanceFileReport, error) {
+	if err := s.validatePerformanceReviewSnapshot(ctx, snapshot); err != nil {
 		return nil, err
 	}
-	findings, warning, err := project.ParsePerformanceFindings(result.Content, file.Path, info.Content, file.Symbols)
-	if err != nil {
-		return nil, err
-	}
-	current, err := project.GetFileInfo(s.manager.Root(), file.Path)
-	if err != nil {
-		return nil, err
-	}
-	if current.ContentHash != file.ContentHash {
-		return nil, project.ErrRevisionConflict
-	}
-	report := project.PerformanceFileReport{SchemaVersion: "1", ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: file.ContentHash, Status: "completed", Findings: findings, Warning: warning, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, ReasoningEffort: runtime.effective.ReasoningEffort, PromptVersion: project.PerformancePromptVersion, ContextPolicyVersion: policy.Version(), GeneratedAt: time.Now().UTC()}
+	runtime := s.runtimes.analyze
+	report := project.PerformanceFileReport{SchemaVersion: "1", ProjectID: snapshot.analysis.ProjectID, ProjectRevision: snapshot.analysis.ProjectRevision, Path: snapshot.file.Path, ContentHash: snapshot.file.ContentHash, Status: "completed", Findings: findings, Warning: warning, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, ReasoningEffort: runtime.effective.ReasoningEffort, PromptVersion: project.PerformancePromptVersion, ContextPolicyVersion: snapshot.policyVersion, GeneratedAt: time.Now().UTC()}
 	if result.Model != "" {
 		report.Model = result.Model
 	}
+	published := false
+	store := func() error {
+		if published {
+			return fmt.Errorf("performance report is already published")
+		}
+		if err := s.validatePerformanceReviewSnapshot(ctx, snapshot); err != nil {
+			return err
+		}
+		if err := project.StorePerformanceFileReport(snapshot.root, report); err != nil {
+			return err
+		}
+		published = true
+		return nil
+	}
 	if authorizePublication != nil {
-		if err := authorizePublication(); err != nil {
+		if err := authorizePublication(store); err != nil {
 			return nil, err
 		}
-	}
-	if err := project.StorePerformanceFileReport(s.manager.Root(), report); err != nil {
+		if !published {
+			return nil, fmt.Errorf("performance publication was not completed")
+		}
+	} else if err := store(); err != nil {
 		return nil, err
 	}
 	return &report, nil
+}
+
+func (s *Service) validatePerformanceReviewSnapshot(ctx context.Context, snapshot performanceReviewSnapshot) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.manager.Root() != snapshot.root {
+		return project.ErrRevisionConflict
+	}
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		return err
+	}
+	if analysis.ProjectID != snapshot.analysis.ProjectID || analysis.ProjectRevision != snapshot.analysis.ProjectRevision {
+		return project.ErrRevisionConflict
+	}
+	policy, err := project.NewContextPolicy(snapshot.root)
+	if err != nil {
+		return err
+	}
+	if policy.Version() != snapshot.policyVersion || !policy.Decide(snapshot.file.Path).Include {
+		return project.ErrRevisionConflict
+	}
+	current, err := project.GetFileInfo(snapshot.root, snapshot.file.Path)
+	if err != nil {
+		return err
+	}
+	if current.ContentHash != snapshot.file.ContentHash {
+		return project.ErrRevisionConflict
+	}
+	return nil
 }
 
 func performancePrompt(source string, analysis project.Analysis, file project.IndexFile) (string, error) {

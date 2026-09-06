@@ -2,6 +2,7 @@ package io.miniorca.desktop
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PerformanceWorkspaceTest {
@@ -42,6 +43,87 @@ class PerformanceWorkspaceTest {
         presentation.rows,
     )
   }
+
+  @Test
+  fun coveragePresentationTreatsStaleReportCoverageAsPartial() {
+    val job =
+        PerformanceJob(
+            projectId = "project",
+            projectRevision = "revision",
+            queueId = "performance:queue",
+            status = "completed",
+        )
+    val presentation =
+        performanceCoveragePresentation(
+            job,
+            PerformanceReport(
+                projectId = job.projectId,
+                projectRevision = job.projectRevision,
+                queueId = job.queueId,
+                status = "stale",
+                counts = mapOf("stale" to 1),
+            ),
+        )
+
+    assertEquals("Partial · source or policy changed", presentation.stateLabel)
+    assertEquals(
+        listOf(
+            "Reviewed" to "0 completed · 0 cached",
+            "Stale" to "1",
+            "Skipped" to "0",
+            "Failed" to "0",
+            "Remaining" to "0 pending · 0 running",
+        ),
+        presentation.rows,
+    )
+    assertEquals("Stale · source or policy changed", performanceStatusLabel(job, staleReport(job)))
+    assertEquals(
+        "Completed · source-based queue",
+        performanceStatusLabel(job, staleReport(job).copy(queueId = "performance:old")),
+    )
+  }
+
+  @Test
+  fun mismatchedReportCannotRenderFindingsOrPaths() {
+    val job =
+        PerformanceJob(
+            projectId = "project",
+            projectRevision = "revision",
+            queueId = "performance:current",
+        )
+    val finding = PerformanceFinding(id = "finding-1", title = "Current finding")
+    val report =
+        PerformanceReport(
+            projectId = job.projectId,
+            projectRevision = job.projectRevision,
+            queueId = job.queueId,
+            paths = mapOf(finding.id to "internal/current.go"),
+            findings = listOf(finding),
+        )
+
+    val matching = performanceReviewPresentation(job, report)
+    assertEquals(listOf(finding), matching.findings("", "", ""))
+    assertEquals("internal/current.go", matching.pathFor(finding))
+
+    val mismatched = performanceReviewPresentation(job, report.copy(queueId = "performance:old"))
+    assertFalse(mismatched.hasReport)
+    assertEquals(emptyList(), mismatched.findings("", "", ""))
+    assertEquals("", mismatched.pathFor(finding))
+
+    val missingIdentity = performanceReviewPresentation(job.copy(queueId = ""), report)
+    assertFalse(missingIdentity.hasReport)
+    assertEquals(emptyList(), missingIdentity.findings("", "", ""))
+    assertEquals("", missingIdentity.pathFor(finding))
+  }
+
+  private fun staleReport(job: PerformanceJob) =
+      PerformanceReport(
+          projectId = job.projectId,
+          projectRevision = job.projectRevision,
+          queueId = job.queueId,
+          status = "stale",
+          counts = mapOf("stale" to 1),
+      )
 
   @Test
   fun headerActionsKeepPreviewAndJobLifecycleGuardsIntact() {

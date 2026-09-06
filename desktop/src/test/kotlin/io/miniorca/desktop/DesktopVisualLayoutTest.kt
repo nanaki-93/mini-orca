@@ -167,10 +167,19 @@ class DesktopVisualLayoutTest {
       ComposeVisualFixture(width, height) {
             PerformanceWorkspacePane(
                 PerformanceWorkspacePaneState(
-                    job = PerformanceJob(status = "running", elapsed = 8_000_000_000),
+                    job =
+                        PerformanceJob(
+                            projectId = "project",
+                            projectRevision = "revision",
+                            queueId = "performance:current",
+                            status = "running",
+                            elapsed = 8_000_000_000),
                     report =
                         PerformanceReport(
-                            status = "completed",
+                            projectId = "project",
+                            projectRevision = "revision",
+                            queueId = "performance:current",
+                            status = "running",
                             paths = mapOf(performanceFinding.id to "internal/api/server.go"),
                             findings = listOf(performanceFinding)),
                     context =

@@ -270,13 +270,24 @@ func (s *Service) PerformanceProjectReport() (*PerformanceReport, error) {
 	if job == nil {
 		return nil, nil
 	}
+	policy, err := project.NewContextPolicy(job.Root)
+	if err != nil {
+		return nil, err
+	}
 	report := &PerformanceReport{ProjectID: job.ProjectID, ProjectRevision: job.ProjectRevision, QueueID: job.QueueID, Status: job.Status, Counts: map[string]int{}, Categories: map[string]int{}, Paths: map[string]string{}}
 	for _, file := range job.Files {
-		report.Counts[file.Status]++
-		cached, err := project.LoadPerformanceFileReport(job.Root, file.Path, file.ContentHash)
+		cached, err := project.LoadPerformanceFileReport(job.Root, file.Path, file.ContentHash, policy)
 		if err != nil {
 			return nil, err
 		}
+		if cached != nil && cached.Status == performanceJobStale && performanceFileContributesCoverage(file.Status) {
+			if report.Status == performanceJobCompleted {
+				report.Status = performanceJobStale
+			}
+			report.Counts[performanceJobStale]++
+			continue
+		}
+		report.Counts[file.Status]++
 		if cached == nil || cached.Status != "completed" || cached.ProjectID != job.ProjectID || cached.ProjectRevision != job.ProjectRevision {
 			continue
 		}
@@ -287,6 +298,10 @@ func (s *Service) PerformanceProjectReport() (*PerformanceReport, error) {
 		}
 	}
 	return report, nil
+}
+
+func performanceFileContributesCoverage(status string) bool {
+	return status == performanceFileCompleted || status == performanceFileCached
 }
 
 func (s *Service) startPerformanceWorker(parent context.Context) {
@@ -314,8 +329,8 @@ func (s *Service) runPerformanceJob(ctx context.Context) {
 		}
 		remaining := job.RunBudget - job.Elapsed
 		timed, cancel := context.WithTimeout(ctx, remaining)
-		_, err := s.reviewPerformanceFile(timed, index.Path, true, func() error {
-			return s.authorizePerformancePublication(job, index.Path, index.ContentHash)
+		_, err := s.reviewPerformanceFile(timed, index.Path, true, func(publish func() error) error {
+			return s.authorizePerformancePublication(job, index.Path, index.ContentHash, publish)
 		})
 		cancel()
 		s.recordPerformanceResult(job, index.Path, err)
@@ -452,7 +467,7 @@ func (s *Service) updatePerformanceJob(expected *PerformanceJob, update func(*Pe
 	return clonePerformanceJob(current), nil
 }
 
-func (s *Service) authorizePerformancePublication(expected *PerformanceJob, path, contentHash string) error {
+func (s *Service) authorizePerformancePublication(expected *PerformanceJob, path, contentHash string, publish func() error) error {
 	s.performance.mu.Lock()
 	defer s.performance.mu.Unlock()
 	current := s.performance.job
@@ -461,7 +476,7 @@ func (s *Service) authorizePerformancePublication(expected *PerformanceJob, path
 	}
 	for _, file := range current.Files {
 		if file.Path == path && file.ContentHash == contentHash && file.Status == performanceFileRunning {
-			return nil
+			return publish()
 		}
 	}
 	return context.Canceled
@@ -517,7 +532,7 @@ func (s *Service) performanceCandidates(index *project.ProjectIndex, policy *pro
 			excluded++
 			continue
 		}
-		if file.SizeBytes > maxPerformanceSourceBytes {
+		if file.SizeBytes > project.PerformanceMaxSourceBytes {
 			oversized++
 			continue
 		}
@@ -526,7 +541,7 @@ func (s *Service) performanceCandidates(index *project.ProjectIndex, policy *pro
 			continue
 		}
 		status := performanceFilePending
-		if cached, err := project.LoadPerformanceFileReport(s.manager.Root(), file.Path, file.ContentHash); err != nil {
+		if cached, err := project.LoadPerformanceFileReport(s.manager.Root(), file.Path, file.ContentHash, policy); err != nil {
 			return nil, 0, 0, 0, err
 		} else if cached != nil && cached.Status == "completed" {
 			status = performanceFileCached
