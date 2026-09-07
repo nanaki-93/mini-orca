@@ -117,3 +117,25 @@ checks, locking, budgets or review.
 AUTO-00 records the installed schedule. AUTO-02 later replaces this bootstrap with
 a repository-tested dispatcher; the single-task prompt remains useful for manual
 recovery.
+
+## Repository dispatcher
+
+`scripts/autopilot.py` runs at most one eligible ledger task from the clean
+`codex/autopilot` branch. It creates an ignored detached worktree, uses ephemeral
+schema-constrained Codex runs for a writer and fresh reviewer, then runs the fixed,
+base-verified `make check` gate outside the agents. Ignored worker build output is
+discarded from the isolated worktree before review and after validation:
+
+```sh
+./scripts/autopilot.py --dry-run
+./scripts/autopilot.py --task READY-ID
+./scripts/autopilot.py --task READY-ID --integrate
+```
+
+Without `--integrate`, an accepted result stops at `awaiting_integration`.
+`--integrate` explicitly authorizes its local task commit and fast-forward; the
+dispatcher never pushes. Safe phases resume from `.mini-orca/autopilot`; an
+interrupted paid invocation stops without another paid call. Recover a stale lease
+only with `--recover-stale-lease` after confirming its dispatcher and child are gone.
+Secure candidate validation currently fails closed unless macOS `sandbox-exec` is
+available; the fake CLI suite remains portable and makes no paid calls.

@@ -24,7 +24,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build build-linux clean test test-race vet fmt-check quality check desktop-test desktop-build desktop-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
+.PHONY: all build build-linux clean test test-race vet fmt-check quality check agent-dispatcher desktop-test desktop-build desktop-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
 
 # ─── Default Target ────────────────────────────────────────────────────────────
 all: help
@@ -68,6 +68,9 @@ test-race: ## Run all Go tests under the race detector
 vet: ## Vet all Go packages
 	@$(GO) vet ./...
 
+agent-dispatcher: ## Run the local dispatcher tests without paid agent calls
+	@python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
 fmt-check: ## Verify Go formatting without modifying files
 	@files="$$(gofmt -l $$(find . -path '*/testdata/*' -prune -o -name '*.go' -type f -not -path './build/*' -print))"; test -z "$$files" || { echo "Run go fmt ./...:"; echo "$$files"; exit 1; }
 
@@ -80,7 +83,7 @@ desktop-test: ## Run desktop unit tests through the Gradle wrapper
 desktop-build: ## Build the current OS desktop distribution through the wrapper
 	@$(GRADLE) clean packageDistributionForCurrentOS
 
-check: fmt-check test test-race vet desktop-test ## Run the complete supported validation path
+check: fmt-check test test-race vet agent-dispatcher desktop-test ## Run the complete supported validation path
 
 desktop-run: ## Run the Compose Desktop client (daemon required at localhost:9090)
 	@echo "$(COLOR_GREEN)Starting the Mini-Orca desktop client...$(COLOR_RESET)"
