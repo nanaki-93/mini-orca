@@ -90,6 +90,8 @@ untrusted networks.
 | PATCH | `/api/projects/current/drafts/{draftID}` | Replace only the declaration/import list and create the next draft revision. |
 | POST | `/api/projects/current/drafts/{draftID}/validate` | Compose and validate one exact draft revision. |
 | POST | `/api/projects/current/drafts/{draftID}/checks` | Run scoped checks for one validated draft revision and hash. |
+| GET | `/api/projects/current/drafts/{draftID}/benchmarks` | List explicitly selectable existing Go benchmarks in the affected package for one validated draft revision. |
+| POST | `/api/projects/current/drafts/{draftID}/benchmarks` | Compare one selected existing Go benchmark in isolated base and candidate copies. |
 | POST | `/api/projects/current/apply` | Apply one validated, checked declaration draft only after `confirm: true`. |
 | POST | `/api/projects/current/undo` | Restore only the immediately preceding unchanged apply after `confirm: true`. |
 
@@ -139,6 +141,31 @@ repair lineage, uses bounded sanitized check evidence supplied by the client,
 and permits at most three such repair requests. A later repair cannot drop or
 replace the pinned proof. Checks, temporary tests, validation, Apply, and Undo
 never start a provider request on their own.
+
+## Optional Go benchmark comparison
+
+For a valid displayed Go draft, `GET /api/projects/current/drafts/{draftID}/benchmarks`
+lists only valid existing benchmark functions from the draft target's package.
+Each choice includes the exact daemon-built argv and an opaque selected-scope
+guard bound to a bounded whole-workspace fixture fingerprint before trust is
+granted. It requires the same exact draft revision/hash and current project
+revision as the comparison request. The list is unavailable when the candidate
+is invalid or stale or the affected package has no eligible benchmark. Its
+`trusted` flag reports current-session execution consent.
+
+`POST /api/projects/current/drafts/{draftID}/benchmarks` accepts one listed
+benchmark name and the displayed selected-scope guard. The daemon recomputes the
+scope before execution, so any workspace change since display makes the request
+unavailable. The daemon constructs the fixed argv itself: `go test .`, `-run ^$`,
+an exact escaped `-bench` filter, five 100 ms samples, `-benchmem`, and bounded
+test/process deadlines. It runs the base and candidate in separate temporary
+copies with the same captured whole-workspace fingerprint, argv and sanitized
+toolchain environment. Request cancellation owns the active process group; no
+shell, model-authored command, benchmark generator or project-source write is
+involved. A changed baseline or draft invalidates the comparison. Failed,
+canceled or incomplete results return no samples and never grant Apply authority.
+A completed result returns paired samples as optional evidence without declaring
+a winner; reviewers still assess variability and noise.
 
 `POST /api/projects/current/apply` requires the displayed draft id, revision,
 hash, project identity, base file hash, and an explicit `confirm: true`. It

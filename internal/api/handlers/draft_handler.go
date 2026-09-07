@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
@@ -38,6 +39,14 @@ type draftCheckRequest struct {
 	ExpectedHash     string `json:"expected_hash"`
 	RunLint          bool   `json:"run_lint,omitempty"`
 	RunTests         bool   `json:"run_tests,omitempty"`
+}
+
+type benchmarkComparisonRequest struct {
+	ProjectRevision  string `json:"project_revision"`
+	ExpectedRevision int64  `json:"expected_revision"`
+	ExpectedHash     string `json:"expected_hash"`
+	Benchmark        string `json:"benchmark"`
+	ExpectedScope    string `json:"expected_scope"`
 }
 
 // UpdateDraft creates a new revision for a manual declaration/import edit.
@@ -80,6 +89,45 @@ func (h *DraftHandler) CheckDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, report)
+}
+
+// GoBenchmarks lists the bounded existing benchmark choices for one exact
+// validated draft. It does not run project code.
+func (h *DraftHandler) GoBenchmarks(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	if !requireCurrentRevision(w, h.manager, query.Get("project_revision")) {
+		return
+	}
+	expectedRevision, err := strconv.ParseInt(query.Get("expected_revision"), 10, 64)
+	if err != nil {
+		api.WriteRequestError(w, err, "invalid benchmark request", "Provide the displayed draft revision and hash.")
+		return
+	}
+	catalog, err := h.service.AvailableGoBenchmarks(r.Context(), app.GoBenchmarkCatalogRequest{ID: r.PathValue("draftID"), ExpectedRevision: expectedRevision, ExpectedHash: query.Get("expected_hash")})
+	if err != nil {
+		writeDraftError(w, "benchmark lookup failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, catalog)
+}
+
+// CompareGoBenchmark runs one caller-selected existing benchmark in base and
+// candidate temporary copies. Its optional evidence never changes Apply state.
+func (h *DraftHandler) CompareGoBenchmark(w http.ResponseWriter, r *http.Request) {
+	var request benchmarkComparisonRequest
+	if !decodeDraftRequest(w, r, &request) || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
+		return
+	}
+	comparison, err := h.service.CompareGoBenchmark(r.Context(), app.GoBenchmarkComparisonRequest{
+		GoBenchmarkCatalogRequest: app.GoBenchmarkCatalogRequest{ID: r.PathValue("draftID"), ExpectedRevision: request.ExpectedRevision, ExpectedHash: request.ExpectedHash},
+		Benchmark:                 request.Benchmark,
+		ExpectedScope:             request.ExpectedScope,
+	})
+	if err != nil {
+		writeDraftError(w, "benchmark comparison failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, comparison)
 }
 
 func (h *DraftHandler) Apply(w http.ResponseWriter, r *http.Request) {

@@ -67,11 +67,64 @@ func TestDraftEndpointsAreRevisionAndHashGuarded(t *testing.T) {
 		t.Fatalf("check report = %+v", report)
 	}
 
+	benchmarks := httptest.NewRecorder()
+	benchmarkRequest := httptest.NewRequest(http.MethodGet, "/api/projects/current/drafts/draft-api/benchmarks?project_revision="+index.ProjectRevision+"&expected_revision=1&expected_hash="+validated.Hash, nil)
+	benchmarkRequest.SetPathValue("draftID", draft.ID)
+	handler.GoBenchmarks(benchmarks, benchmarkRequest)
+	if benchmarks.Code != http.StatusOK || !bytes.Contains(benchmarks.Body.Bytes(), []byte(`"available":false`)) || !bytes.Contains(benchmarks.Body.Bytes(), []byte(`no benchmark exists`)) {
+		t.Fatalf("benchmarks = %d: %s", benchmarks.Code, benchmarks.Body.String())
+	}
+
 	staleUpdate := draftHandlerRequest(http.MethodPatch, "/api/projects/current/drafts/draft-api", `{"project_revision":"`+index.ProjectRevision+`","expected_revision":0,"declaration":"func Run() {}"}`, draft.ID)
 	staleResponse := httptest.NewRecorder()
 	handler.UpdateDraft(staleResponse, staleUpdate)
 	if staleResponse.Code != http.StatusConflict {
 		t.Fatalf("stale update = %d: %s", staleResponse.Code, staleResponse.Body.String())
+	}
+}
+
+func TestBenchmarkHandlerPreviewsFixedScopeBeforeTrust(t *testing.T) {
+	root := t.TempDir()
+	for path, content := range map[string]string{
+		"go.mod":        "module fixture\n\ngo 1.22\n",
+		"main.go":       "package main\n\nfunc Run() int { return 1 }\n",
+		"bench_test.go": "package main\n\nimport \"testing\"\n\nfunc BenchmarkRun(b *testing.B) { for i := 0; i < b.N; i++ { _ = Run() } }\n",
+	} {
+		writeProjectHandlerFixture(t, root, path, content)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(scopedHandlerConfig("http://127.0.0.1:1"), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := manager.IndexedFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := service.CreateDraft(app.DraftCreateRequest{ID: "benchmark-api", ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: "Run", Declaration: "func Run() int { return 2 }"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err = service.ValidateDraft(draft.ID, draft.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/projects/current/drafts/benchmark-api/benchmarks?project_revision="+index.ProjectRevision+"&expected_revision=1&expected_hash="+draft.Hash, nil)
+	request.SetPathValue("draftID", draft.ID)
+	NewDraftHandler(service, manager).GoBenchmarks(response, request)
+	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte(`"trusted":false`)) || !bytes.Contains(response.Body.Bytes(), []byte(`"command":["go","test","."`)) || !bytes.Contains(response.Body.Bytes(), []byte(`"scope":"benchmark:`)) {
+		t.Fatalf("preview = %d: %s", response.Code, response.Body.String())
 	}
 }
 

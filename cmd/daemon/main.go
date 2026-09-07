@@ -184,6 +184,8 @@ func newHTTPMux(
 	mux.HandleFunc("PATCH /api/projects/current/drafts/{draftID}", draftHandler.UpdateDraft)
 	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/validate", draftHandler.ValidateDraft)
 	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/checks", draftHandler.CheckDraft)
+	mux.HandleFunc("GET /api/projects/current/drafts/{draftID}/benchmarks", draftHandler.GoBenchmarks)
+	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/benchmarks", draftHandler.CompareGoBenchmark)
 	mux.HandleFunc("POST /api/projects/current/apply", draftHandler.Apply)
 	mux.HandleFunc("POST /api/projects/current/undo", draftHandler.Undo)
 

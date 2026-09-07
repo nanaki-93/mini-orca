@@ -12,7 +12,7 @@ release evidence and open validation obligations.
 | Fresh `go test ./...` on 2026-09-06 | Passed, including daemon route/version contracts; some packages cached | Foundation |
 | Final Desktop gate on 2026-09-07 | 291 tests passed with zero failures; Spotless and Detekt passed on the documented Java 21/JBR 25 split | UI-04 complete |
 | Post-cleanup daemon/config tests (`-count=1`) | Passed, including maintained documentation/version contracts | Foundation |
-| Fresh `make quality` | Staticcheck/deadcode passed; gocyclo failed on five functions; later clone/Desktop static stages not run | FND-02–04, AUTO-01 |
+| Fresh `make quality` on 2026-09-08 | Static analysis, reachability, clone detection and Desktop static checks passed; Go complexity reports only the two accepted baseline functions | REL-01 |
 | Final focused UI matrix | Forced 24 visual-layout, 8 accessibility and 7 keyboard-navigation tests passed; 70 ignored PNGs | UI-04 complete |
 | Task 170 production render additions | Historical component/test evidence is tracked; generated images remain ignored build output | UI-04 complete |
 | FND-01 production fixture baseline | Current 1440×900 and 999×760 Editor, Analysis, populated Review, and populated Performance component captures; JBR 25.0.4.1 rerun, not native acceptance | UI-04 complete |
@@ -25,7 +25,8 @@ release evidence and open validation obligations.
 
 The exact quality diagnostics are in the plan. An old quality deferral is not a
 current release waiver. Tasks 149/170/171 are superseded by their plan owners,
-not marked passed. No future Security/benchmark feature is implemented yet.
+not marked passed. The Security scan/review and optional benchmark comparison
+APIs are implemented; SEC-08 and PERF-03 still own their desktop presentation.
 
 Retained working evidence, including pre-existing user edits:
 

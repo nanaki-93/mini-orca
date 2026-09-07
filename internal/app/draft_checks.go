@@ -256,12 +256,18 @@ func runCheckCommand(ctx context.Context, directory string, command []string) (c
 }
 
 func runCheckCommandWithStart(ctx context.Context, directory string, command []string, ownsDescendants bool, beforeStart func() error) (checkCommandResult, error) {
+	return runCheckCommandWithEnvironment(ctx, directory, command, ownsDescendants, beforeStart, checkChildEnvironment(os.Environ()))
+}
+
+// runCheckCommandWithEnvironment accepts a caller-captured, already-sanitized
+// environment when two commands must use the exact same toolchain inputs.
+func runCheckCommandWithEnvironment(ctx context.Context, directory string, command []string, ownsDescendants bool, beforeStart func() error, environment []string) (checkCommandResult, error) {
 	if len(command) == 0 {
 		return checkCommandResult{}, fmt.Errorf("empty check command")
 	}
 	process := exec.CommandContext(ctx, command[0], command[1:]...)
 	process.Dir = directory
-	process.Env = checkChildEnvironment(os.Environ())
+	process.Env = append([]string(nil), environment...)
 	if ownsDescendants {
 		if err := configureCheckCommand(process); err != nil {
 			return checkCommandResult{}, err
