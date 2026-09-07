@@ -64,6 +64,7 @@ type Service struct {
 	performance             *performanceController
 	executionTrust          *executionTrustStore
 	buildDeclarationContext func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
+	loadSecurityFileReport  func(string, project.SecurityReportInput) (*project.SecurityFileReport, error)
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
@@ -114,6 +115,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		performance:             newPerformanceController(),
 		executionTrust:          newExecutionTrustStore(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
+		loadSecurityFileReport:  project.LoadSecurityFileReport,
 	}, nil
 }
 

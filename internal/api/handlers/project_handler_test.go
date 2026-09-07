@@ -313,6 +313,46 @@ func TestProjectWorkspaceAPIsAreRevisionGuardedAndSourceFree(t *testing.T) {
 	}
 }
 
+func TestSecurityScanIsRevisionGuardedSourceOnlyAndReportsUnavailableLanguages(t *testing.T) {
+	root := t.TempDir()
+	writeProjectHandlerFixture(t, root, "main.go", "package fixture\nimport \"crypto/tls\"\nfunc Run() { _ = tls.Config{InsecureSkipVerify: true} }\n")
+	writeProjectHandlerFixture(t, root, "notes.kt", "fun run() = Unit\n")
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(scopedHandlerConfig("http://127.0.0.1:1"), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewProjectHandler(manager, service)
+	index, err := manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := httptest.NewRecorder()
+	handler.ScanSecurityFile(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/files/security-scan", bytes.NewBufferString(`{"path":"main.go","project_revision":"`+index.ProjectRevision+`"}`)))
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "package fixture") || !strings.Contains(response.Body.String(), `"evidence_kind":"rule_match"`) {
+		t.Fatalf("security scan = %d %s", response.Code, response.Body.String())
+	}
+
+	stale := httptest.NewRecorder()
+	handler.ScanSecurityFile(stale, httptest.NewRequest(http.MethodPost, "/api/projects/current/files/security-scan", bytes.NewBufferString(`{"path":"main.go","project_revision":"stale"}`)))
+	if stale.Code != http.StatusConflict {
+		t.Fatalf("stale security scan = %d %s", stale.Code, stale.Body.String())
+	}
+
+	unsupported := httptest.NewRecorder()
+	handler.ScanSecurityFile(unsupported, httptest.NewRequest(http.MethodPost, "/api/projects/current/files/security-scan", bytes.NewBufferString(`{"path":"notes.kt","project_revision":"`+index.ProjectRevision+`"}`)))
+	if unsupported.Code != http.StatusUnprocessableEntity || !strings.Contains(unsupported.Body.String(), "unavailable") {
+		t.Fatalf("unsupported security scan = %d %s", unsupported.Code, unsupported.Body.String())
+	}
+}
+
 func TestProjectIndexAPIsRequireAnActiveProject(t *testing.T) {
 	root := t.TempDir()
 	manager, err := project.NewManager(root)

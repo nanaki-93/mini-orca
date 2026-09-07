@@ -46,6 +46,11 @@ type fileAnalysisRequest struct {
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }
 
+type securityScanRequest struct {
+	Path            string `json:"path"`
+	ProjectRevision string `json:"project_revision"`
+}
+
 type declarationExplanationRequest struct {
 	ProjectID             string `json:"project_id"`
 	ProjectRevision       string `json:"project_revision"`
@@ -568,6 +573,24 @@ func (h *ProjectHandler) AnalyzeFile(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, analysis)
 }
 
+// ScanSecurityFile runs the bounded deterministic rules against one selected
+// Go file. It is source-only and does not contact a provider or run project code.
+func (h *ProjectHandler) ScanSecurityFile(w http.ResponseWriter, r *http.Request) {
+	var request securityScanRequest
+	if !decodeStrictJSON(w, r, &request, "invalid security scan request", "Provide path and project_revision.") || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
+		return
+	}
+	report, err := h.service.ScanSecurityFile(r.Context(), request.Path, request.ProjectRevision)
+	if err != nil {
+		if writeContextError(w, "security scan", err) {
+			return
+		}
+		writeProjectError(w, "security scan failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, report)
+}
+
 // ExplainDeclaration performs one transient, read-only Function-scope request.
 func (h *ProjectHandler) ExplainDeclaration(w http.ResponseWriter, r *http.Request) {
 	var request declarationExplanationRequest
@@ -656,6 +679,8 @@ func writeProjectError(w http.ResponseWriter, action string, err error) {
 		api.WriteAppError(w, api.Conflict(action, "The active project changed. Refresh and try again.", err))
 	case errors.Is(err, project.ErrUnsupportedFile):
 		api.WriteAppError(w, api.NewAppError(api.ErrorBadRequest, action, "This file does not support symbol extraction.", http.StatusUnprocessableEntity, err))
+	case errors.Is(err, project.ErrSecurityRulesUnavailable):
+		api.WriteAppError(w, api.NewAppError(api.ErrorBadRequest, action, "Security source-only scanning is unavailable for this file language.", http.StatusUnprocessableEntity, err))
 	default:
 		api.WriteAppError(w, api.BadRequest(action, "Review the request and try again.", err))
 	}
