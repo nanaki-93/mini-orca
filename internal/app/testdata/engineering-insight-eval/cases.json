@@ -1,0 +1,58 @@
+[
+  {
+    "name": "cancellation-locking",
+    "source": "package queue\n\ntype Queue struct { mu sync.Mutex }\n\nfunc (q *Queue) Wait(ctx context.Context) {\n\tq.mu.Lock()\n\tdefer q.mu.Unlock()\n\t<-ctx.Done()\n}\n",
+    "anchor": {"start_line": 6, "end_line": 8, "evidence": "<-ctx.Done()"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Waits for cancellation.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Wait holds q.mu while it blocks on context cancellation.\",\"why_it_matters_here\":\"The lock spans the <-ctx.Done() wait, so a caller that needs the queue lock cannot make progress until cancellation.\",\"tradeoff_or_failure_mode\":\"Releasing the lock before waiting requires a separate condition check to avoid racing a concurrent state change.\",\"transferable_lesson\":\"Keep blocking waits outside ownership locks; verify by canceling while another goroutine acquires q.mu.\"}}"
+  },
+  {
+    "name": "allocation",
+    "source": "package render\n\nfunc Labels(users []User) []string {\n\tlabels := []string{}\n\tfor _, user := range users {\n\t\tlabels = append(labels, fmt.Sprintf(\"%s:%d\", user.Name, user.ID))\n\t}\n\treturn labels\n}\n",
+    "anchor": {"start_line": 4, "end_line": 6, "evidence": "labels := []string{}"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Formats user labels.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Labels grows an initially empty slice while formatting every user.\",\"why_it_matters_here\":\"The selected loop has the input length before appending, so repeated slice growth can add allocations for large user lists.\",\"tradeoff_or_failure_mode\":\"Preallocating len(users) retains capacity for every produced label and does not remove fmt.Sprintf allocations.\",\"transferable_lesson\":\"Preallocate result slices only where a representative allocation profile shows growth matters; verify with -benchmem.\"}}"
+  },
+  {
+    "name": "n-plus-one-io",
+    "source": "package orders\n\nfunc Load(ctx context.Context, store Store, orders []Order) error {\n\tfor _, order := range orders {\n\t\tif _, err := store.Customer(ctx, order.CustomerID); err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}\n",
+    "anchor": {"start_line": 5, "end_line": 5, "evidence": "store.Customer(ctx, order.CustomerID)"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Loads customers for orders.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Load issues one Store.Customer call for each order.\",\"why_it_matters_here\":\"The selected loop turns an order batch into N dependent I/O operations, including duplicate customer IDs.\",\"tradeoff_or_failure_mode\":\"Batch loading changes error and missing-customer behavior and may use more memory for a customer map.\",\"transferable_lesson\":\"Measure call count and latency with repeated customer IDs before introducing a batched lookup.\"}}"
+  },
+  {
+    "name": "idempotency",
+    "source": "package billing\n\nfunc (s *Service) Charge(ctx context.Context, request Request) error {\n\treturn s.gateway.Charge(ctx, request.Amount)\n}\n",
+    "anchor": {"start_line": 4, "end_line": 4, "evidence": "s.gateway.Charge(ctx, request.Amount)"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Charges a request.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Charge sends a payment request without an idempotency key.\",\"why_it_matters_here\":\"A caller retry after an ambiguous network failure can submit the same amount again.\",\"tradeoff_or_failure_mode\":\"Persisting an idempotency record needs expiry and a defined response for conflicting reuse of a key.\",\"transferable_lesson\":\"For externally visible writes, test a timeout after provider acceptance followed by the same request key.\"}}"
+  },
+  {
+    "name": "authorization",
+    "source": "package account\n\nfunc (s *Service) Delete(ctx context.Context, id string) error {\n\treturn s.repo.Delete(ctx, id)\n}\n",
+    "anchor": {"start_line": 4, "end_line": 4, "evidence": "s.repo.Delete(ctx, id)"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Deletes an account.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Delete forwards an account ID to the repository without checking the caller's authority in this boundary.\",\"why_it_matters_here\":\"The selected method receives context and an arbitrary ID, so authorization must be established by a documented upstream or here.\",\"tradeoff_or_failure_mode\":\"Adding a local check can duplicate a policy already enforced below unless ownership of the authorization decision is explicit.\",\"transferable_lesson\":\"Trace one unauthorized caller through this method and its repository boundary before deciding where to enforce policy.\"}}"
+  },
+  {
+    "name": "trivial-edit",
+    "source": "package status\n\nfunc Label() string {\n\treturn \"ready\"\n}\n",
+    "anchor": {"start_line": 4, "end_line": 4, "evidence": "return \"ready\""},
+    "expect_insight": false,
+    "sanitized_output": "{\"purpose\":\"Returns a status label.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+  },
+  {
+    "name": "no-finding",
+    "source": "package format\n\nfunc Trim(value string) string {\n\treturn strings.TrimSpace(value)\n}\n",
+    "anchor": {"start_line": 4, "end_line": 4, "evidence": "strings.TrimSpace(value)"},
+    "expect_insight": false,
+    "sanitized_output": "{\"purpose\":\"Trims surrounding whitespace.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+  },
+  {
+    "name": "malformed-overconfident",
+    "source": "package cleanup\n\nfunc Remove(ctx context.Context, store Store, id string) error {\n\treturn store.Remove(ctx, id)\n}\n",
+    "anchor": {"start_line": 4, "end_line": 4, "evidence": "store.Remove(ctx, id)"},
+    "expect_insight": false,
+    "sanitized_output": "{\"purpose\":\"Removes an item.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"This proves every caller is authorized.\",\"why_it_matters_here\":\"Removal is always safe.\",\"certainty\":\"guaranteed\"}}"
+  }
+]

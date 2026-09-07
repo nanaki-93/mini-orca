@@ -35,7 +35,28 @@ class EngineeringInsightPanelTest {
   }
 
   @Test
-  fun insightPiecesHaveStableLabelsAndOmitBlankOptionalFields() {
+  fun insightPieceLabelsAreStable() {
+    val pieces =
+        engineeringInsightPieces(
+            EngineeringInsight(
+                mechanism = "Mechanism.",
+                whyItMattersHere = "Local evidence.",
+                tradeoffOrFailureMode = "Trade-off.",
+                transferableLesson = "Verification."))
+
+    assertEquals(
+        listOf(
+            "Mechanism",
+            "Why it matters here",
+            "Trade-off or failure mode",
+            "Transferable lesson",
+        ),
+        pieces.map { it.label },
+    )
+  }
+
+  @Test
+  fun insightPiecesOmitBlankOptionalFields() {
     val pieces =
         engineeringInsightPieces(
             EngineeringInsight(
@@ -44,8 +65,7 @@ class EngineeringInsightPanelTest {
                 tradeoffOrFailureMode = "   ",
                 transferableLesson = "Verify by changing the file before publication."))
 
-    assertEquals(
-        listOf("Mechanism", "Why it matters here", "Transferable lesson"), pieces.map { it.label })
+    assertEquals(3, pieces.size)
     assertEquals("Cache identity binds the evidence.", pieces.first().content)
     assertFalse(pieces.any { it.content.isBlank() })
   }
