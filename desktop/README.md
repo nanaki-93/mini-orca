@@ -13,15 +13,27 @@ Multiplatform 1.11.0 and Jewel standalone `0.40.0-262.10315.125`. Use JBR
 toolchain setup and full validation, including explicit JDK/JBR locations. Do not
 commit a local runtime path or replace a system JDK as part of a task.
 
+From the repository root:
+
 ```sh
-JAVA_HOME="$MINI_ORCA_JBR25_HOME" ./desktop/gradlew -p desktop run
-JAVA_HOME="$MINI_ORCA_JBR25_HOME" ./desktop/gradlew -p desktop test createDistributable
+MINI_ORCA_JDK21_HOME=/path/to/jdk-21 \
+MINI_ORCA_JBR25_HOME=/path/to/jbr-25 \
+  ./scripts/desktop-gradle.sh run
+
+MINI_ORCA_JDK21_HOME=/path/to/jdk-21 \
+MINI_ORCA_JBR25_HOME=/path/to/jbr-25 \
+  ./scripts/desktop-gradle.sh test createDistributable
 ```
+
+The build runs Gradle on Java 21 and explicitly launches Desktop `JavaExec` tasks,
+including `run`, with the selected Java 25 toolchain. Calling `gradlew run` with a
+Java 21 `JAVA_HOME` and no discoverable Java 25 toolchain cannot start the app.
 
 Packaged images include `java.net.http` for the daemon client and `jdk.unsupported`
 for Jewel's native bridge. Package with the JBR launcher, not the Detekt launcher.
-The earlier macOS arm64 startup smoke passed; native UI/accessibility and final
-package acceptance remain separate checks in [acceptance](../docs/RELEASE_ACCEPTANCE.md).
+The macOS arm64 startup and attainable UI-04 native/accessibility checks passed;
+unsupported combinations and final package acceptance remain in
+[acceptance](../docs/RELEASE_ACCEPTANCE.md).
 
 Pinned dependency provenance from the completed migration:
 [Jewel POM](https://repo1.maven.org/maven2/org/jetbrains/jewel/jewel-int-ui-standalone/0.40.0-262.10315.125/jewel-int-ui-standalone-0.40.0-262.10315.125.pom),
@@ -62,8 +74,8 @@ that a provider is connected. Non-loopback scopes require their own confirmation
 | Cmd/Ctrl+Shift+V / Shift+C | Validate / focused checks when eligible |
 | Escape | Dismiss the top transient surface or cancel the active operation |
 
-Use arrows and Enter/Space for tree/tab/disclosure navigation. The supported native
-keyboard and reader checks remain in the retained
+Use arrows and Enter/Space for tree/tab/disclosure navigation. Native keyboard and
+reader results plus their explicit limitations remain in the retained
 [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md); its dated baseline sections are
 history, not current dimensions. [Visual reproduction](VISUAL_REVIEW.md) describes
 fixture captures; these are not native-window evidence.

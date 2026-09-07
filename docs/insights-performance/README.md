@@ -23,5 +23,6 @@ Mini-Orca itself; PERF-02/03 propose an explicit benchmark comparison feature.
 
 The completed implementation passed automated checks historically. Real-provider
 content quality, queue confirmation/lifecycle UI and native checks remain in
-[release acceptance](../RELEASE_ACCEPTANCE.md), assigned to UI-04, LEARN-02 and
-REL-01. No content-quality or measured-speed claim follows from schema tests.
+[release acceptance](../RELEASE_ACCEPTANCE.md). UI-04 closed the attainable native
+matrix; LEARN-02 and REL-01 own content quality, provider lifecycle and the listed
+release limitations. No content-quality or measured-speed claim follows from schema tests.

@@ -97,16 +97,18 @@ and per-task commit requirement; it preserves the unfinished behavioral checks.
 | --- | --- | --- |
 | Tasks 01–139 | Implemented; some manual release follow-ups outstanding | Preserve existing behavior; provider/content follow-ups go to LEARN-02 and REL-01. |
 | Tasks 140–148 and 150–169 | Implemented, including Jewel and flat pane migrations | Remove completed task instructions; recover detail from Git when needed. |
-| Task 149 | Native visual/regression acceptance Pending | UI-04 covers reference comparison, real windows and interactions; REL-01 covers release checks. No second dark-theme implementation. |
-| Task 170 | In Progress; uncommitted render/test evidence; native popup, OS focus and screen-reader checks missing | UI-04 owns the remaining checks. Retained working evidence is linked from [acceptance](docs/RELEASE_ACCEPTANCE.md). |
-| Task 171 | Pending, dependent on 170 | Runtime/package verification → REL-01; final cleanup → REL-02; quality debt → FND-02–04. Old commit-ledger policy is retired. |
-| Insights/Performance manual follow-ups | Remote queue consent, lifecycle UX and real insight usefulness unverified | UI-04, LEARN-02 and REL-01. Do not recreate insights/jobs. |
+| Task 149 | Superseded; its attainable native visual/regression checks are closed by UI-04 | REL-01 retains final release checks. No second dark-theme implementation. |
+| Task 170 | Superseded; its component matrix plus attainable native popup, OS focus and reader checks are closed by UI-04 | Unsupported combinations and retained evidence are linked from [acceptance](docs/RELEASE_ACCEPTANCE.md). |
+| Task 171 | Pending; its historical Task 170 dependency is resolved by UI-04 | Runtime/package verification → REL-01; final cleanup → REL-02; quality debt → FND-02–04. Old commit-ledger policy is retired. |
+| Insights/Performance manual follow-ups | Remote queue consent, lifecycle UX and real insight usefulness unverified | LEARN-02 and REL-01. Do not recreate insights/jobs. |
 | Earlier container acceptance | Image build/health not recorded as passed | REL-01, only for the distribution support actually claimed. |
 | Detekt/JBR workaround | JDK 21 launcher for Detekt; JBR 25 app/toolchain; JVM 22 bytecode | Keep the working combination documented in `desktop/README.md`. Change only after a verified compatible release. |
 
-Missing native evidence blocks UI-04 and release acceptance. It does not block an
-independent backend task with passing relevant tests. An agent must not claim the
-whole plan complete while a required check is unavailable.
+UI-04 records the material native evidence available on the supported host and lists
+unsupported combinations explicitly. Those release limitations remain visible in
+the acceptance ledger and do not block an independent backend task with passing
+relevant tests. An agent must not claim the whole plan complete while a required
+release check is unavailable.
 
 ## UI and interaction specification
 
@@ -230,7 +232,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | UI-01 | Remove unsupported product previews | FND-01 | M / medium | Complete |
 | UI-02 | Correct source-first layout against captures | UI-01 | M / medium | Complete |
 | UI-03 | Make draft/review progression explicit | UI-02 | M / high | Complete |
-| UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Blocked — native/reader matrix incomplete |
+| UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Complete |
 | FLOW-01 | Short function-scoped change requests | UI-03 | M / medium | Complete |
 | FLOW-02 | Read-only declaration explanation | FLOW-01, SEC-02, FND-06 | M / high | Complete |
 | FLOW-03 | Reusable temporary behavioral proof | FLOW-01, SEC-03, SEC-04 | M / high | Blocked — repair proof pinning review failed after two cycles |
@@ -304,8 +306,9 @@ the full quality gate green. No inherited quality exception applies to final rel
   fixtures cover Editor, Analysis, populated Review and populated Performance at
   1440×900 and 999×760. A fresh review found no issues. The coordinator passed
   Spotless, Detekt, the full Desktop tests, a forced 36-test visual/accessibility/
-  keyboard run, link validation and `git diff --check`. UI-04 retains the explicitly
-  unavailable native-window, popup, OS-focus and screen-reader evidence.
+  keyboard run, link validation and `git diff --check`. The then-unavailable native
+  window, popup, OS-focus and screen-reader evidence was assigned to UI-04 and is
+  closed within its recorded supported-host limits below.
 
 ### FND-02 — Simplify Performance review and finding validation
 
@@ -473,7 +476,7 @@ the full quality gate green. No inherited quality exception applies to final rel
   full diagnostics without obscuring failure evidence. Fresh review accepted stale,
   failed and ready states, including the bound-request happy-path fixture. Focused
   visual/accessibility/keyboard tests and the full Desktop suite passed. Native
-  window, popup, OS-focus and screen-reader acceptance remains with UI-04.
+  window, popup, OS-focus and screen-reader acceptance was completed by UI-04.
 
 ### UI-04 — Close inherited native and accessibility checks
 
@@ -489,16 +492,22 @@ the full quality gate green. No inherited quality exception applies to final rel
   combinations explicitly listed. Missing native access leaves this task Blocked.
 - Verify: D, V and the current keyboard checklist. Update the single acceptance
   ledger; identify which remaining 149/170 requirements this closes.
-- Blocked 2026-09-07 after permissions were restored and the packaged JBR app was
-  inspected with a disposable fixture. Native checks at 1000×760, 999×760,
-  800×650 and 1280×600 found and fixed rail selection plus palette/bottom-overlay
-  focus restoration. The host cannot provide exact 1440×900 or 1920×1080 windows,
-  native 125%/150% text or alternate density; VoiceOver was not running; and the
-  empty, loading, stale, generated-diff, consent/discard, provider-confirmation and
-  guarded-Review native states remain unobserved. The full Desktop gate and forced 23 visual, 8
-  accessibility and 7 keyboard component tests pass. Exact supported evidence and
-  unclaimed items remain in `desktop/UI_PRECISION_ACCEPTANCE.md`; independent tasks
-  may continue.
+- Completed 2026-09-07 on macOS 26.6.2 with the exact pinned JBR, a disposable
+  project and loopback daemon. Native checks at 1000×760, 999×760, 800×650 and
+  1280×600 covered wide/compact panes, menus, drawers, source selection, one-layer
+  Escape, focus restoration, splitter resizing and retained preferences. They found
+  and fixed rail selection plus palette/bottom-overlay focus restoration. VoiceOver
+  10 was enabled and its output service was active while the packaged app's native
+  accessibility tree exposed named controls and selected/error state. The
+  full `make check` gate and a forced 24 visual, 8 accessibility and 7 keyboard run
+  passed; 291 Desktop tests passed in the final full run. The external Q2789 was
+  detected at 2560×1440, but the automation surface could not bind the Gradle-run
+  window placed there or relocate its packaged fixture across the negative-origin
+  display boundary. Exact native 1440×900/1920×1080, 125%/150% text, alternate
+  density, loading/stale/generated-diff/provider/guarded-Review states and a speech
+  transcript remain explicitly unclaimed. Deterministic production-component tests
+  cover those UI states and scales. This closes the attainable UI-04 requirements
+  inherited from Tasks 149/170; release/provider/package work remains with REL-01.
 
 ## Function workflow and learning task instructions
 

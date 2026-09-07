@@ -33,7 +33,9 @@ Configure all three model scopes using [CONFIG.md](CONFIG.md).
 cp config.example.yaml config.yaml
 go run ./cmd/daemon
 # In a second terminal, with the documented desktop runtime:
-./desktop/gradlew -p desktop run
+MINI_ORCA_JDK21_HOME=/path/to/jdk-21 \
+MINI_ORCA_JBR25_HOME=/path/to/jbr-25 \
+  ./scripts/desktop-gradle.sh run
 ```
 
 The daemon defaults to `127.0.0.1:9090`; the desktop uses
