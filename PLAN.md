@@ -244,7 +244,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | SEC-04 | Explicit project-execution trust and environment | SEC-03 | M / high | Complete |
 | SEC-05 | Define strict Security report contracts | FND-05 | S / medium | Complete |
 | SEC-06 | Add small deterministic Go security rules | SEC-05 | M / medium | Blocked — two repair/review cycles exhausted with a confirmed shadowing false positive |
-| SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Pending |
+| SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Blocked — two repair/review cycles exhausted on source-echo containment |
 | SEC-08 | Deliver Security workspace and focused handoff | SEC-06, SEC-07, UI-03, FND-06 | M / high | Pending |
 | PERF-01 | Measure and improve Mini-Orca hotspots | FND-03, FND-06, SEC-03 | M / medium | Complete |
 | PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Pending |
@@ -802,6 +802,15 @@ the full quality gate green. No inherited quality exception applies to final rel
   absence of findings is not labeled “secure.” Never execute suggested exploit code.
 - Verify: fake-provider request/provenance/limits tests, G/C. Put exact routes and
   schemas in OpenAPI/API guide in this task, not another prose contract file.
+- Blocked 2026-09-07 after the two allowed repair/review cycles. The final patch
+  still permits short or whitespace-altered source lines echoed by the provider
+  to enter returned and persisted report prose, so it does not meet the
+  source-free report boundary. Other review criteria and the supported checks
+  passed; the quality runner reported only the two existing untouched complexity
+  findings. The preserved patch is `.git/mini-orca-autopilot-SEC-07.patch`
+  (SHA-256
+  `0ff3a189c9783e3716f415c41dea795f24cce2da0f860542e574d00d0fd13a5f`).
+  No Security review API, cache publication, or storage change was integrated.
 
 ### SEC-08 — Deliver Security workspace and one-function handoff
 
