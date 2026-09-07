@@ -469,6 +469,11 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                 color = if (progress.warnings.isNotEmpty()) Warning else SecondaryText,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+            Text(
+                "Trusted local execution runs: go test ./... in a copied workspace. go vet ./... reads source only.",
+                color = SecondaryText,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = MiniOrcaSpacing.compact))
             progress.warnings.forEach { warning ->
               Text(
                   "Warning: $warning",
@@ -494,7 +499,7 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                   tone = ActionTone.Primary,
                   density = ButtonDensity.Toolbar,
                   modifier = Modifier.padding(top = MiniOrcaSpacing.standard)) {
-                    Text("Run verified scan", fontSize = 11.sp)
+                    Text("Trust local execution & run scan", fontSize = 11.sp)
                   }
             }
           }

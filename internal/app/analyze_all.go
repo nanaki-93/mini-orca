@@ -321,6 +321,7 @@ func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
 	s.cancelGoScan()
 	index, err := s.manager.Reindex()
 	if err == nil {
+		s.clearExecutionTrust()
 		s.ExpireDraftsForOpenFile(index.ProjectID, index.ProjectRevision, "", "")
 	}
 	return index, err
@@ -349,6 +350,7 @@ func (s *Service) invalidateJobsForProjectChange() {
 	s.cancelGoScan()
 	s.clearDraftsForProjectChange()
 	s.clearChatSessions()
+	s.clearExecutionTrust()
 }
 
 func (s *Service) cancelGoScan() {

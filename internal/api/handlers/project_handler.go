@@ -81,6 +81,11 @@ type goScanRequest struct {
 	ProjectRevision string `json:"project_revision"`
 }
 
+type executionTrustRequest struct {
+	ProjectRevision string `json:"project_revision"`
+	Confirm         bool   `json:"confirm"`
+}
+
 func NewProjectHandler(manager *project.Manager, service *app.Service) *ProjectHandler {
 	return &ProjectHandler{manager: manager, service: service}
 }
@@ -201,6 +206,35 @@ func (h *ProjectHandler) StartGoScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.WriteJSON(w, http.StatusAccepted, report)
+}
+
+// ExecutionTrust reports the command scope that can execute imported project
+// code and whether this active project revision has been explicitly trusted.
+func (h *ProjectHandler) ExecutionTrust(w http.ResponseWriter, r *http.Request) {
+	revision := r.URL.Query().Get("project_revision")
+	if !requireCurrentRevision(w, h.manager, revision) {
+		return
+	}
+	trust, err := h.service.ExecutionTrust(revision, r.URL.Query().Get("task_test_name"))
+	if err != nil {
+		writeProjectError(w, "execution trust lookup failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, trust)
+}
+
+// TrustProjectExecution records a deliberate, current-session authorization.
+func (h *ProjectHandler) TrustProjectExecution(w http.ResponseWriter, r *http.Request) {
+	var request executionTrustRequest
+	if !decodeStrictJSON(w, r, &request, "invalid execution trust request", "Provide project_revision and confirm: true.") || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
+		return
+	}
+	trust, err := h.service.TrustProjectExecution(request.ProjectRevision, request.Confirm)
+	if err != nil {
+		api.WriteAppError(w, api.BadRequest("trusted local execution confirmation required", "Review the command scope and explicitly trust local execution for this project.", err))
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, trust)
 }
 
 // GoScanProgress reads source-free persisted progress for the active revision.

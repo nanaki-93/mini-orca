@@ -90,11 +90,76 @@ func TestRunCheckCommandCancellationDoesNotWaitForInheritedOutputPipe(t *testing
 	}
 }
 
+func TestRunCheckCommandUsesAllowlistedChildEnvironment(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "openai-must-not-reach-child")
+	t.Setenv("ANTHROPIC_API_KEY", "anthropic-must-not-reach-child")
+	t.Setenv("PATH", os.Getenv("PATH"))
+	result, err := runCheckCommand(context.Background(), t.TempDir(), checkHelperCommand("environment"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(result.output, "must-not-reach-child") {
+		t.Fatalf("child inherited sentinel: %q", result.output)
+	}
+	if !strings.Contains(result.output, "path-present") {
+		t.Fatalf("child lost toolchain path: %q", result.output)
+	}
+}
+
+func TestSourceOnlyCheckCommandDoesNotRequireDescendantOwnership(t *testing.T) {
+	result, err := runCheckCommand(context.Background(), t.TempDir(), checkHelperCommand("environment"))
+	if err != nil || !strings.Contains(result.output, "path-present") {
+		t.Fatalf("source-only command = %+v, %v", result, err)
+	}
+}
+
+func TestRunCheckCommandCancellationStopsDescendants(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "descendant-marker")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	_, err := runCheckCommandWithStart(ctx, t.TempDir(), checkHelperCommand("descendant-parent", marker), true, nil)
+	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatalf("command error = %v, context = %v", err, ctx.Err())
+	}
+	before, readErr := os.ReadFile(marker)
+	if readErr != nil {
+		t.Fatalf("descendant did not start: %v", readErr)
+	}
+	time.Sleep(40 * time.Millisecond)
+	after, readErr := os.ReadFile(marker)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("descendant survived cancellation: before=%q after=%q", before, after)
+	}
+}
+
 func TestCheckCommandHelperProcess(t *testing.T) {
-	if os.Getenv("MINI_ORCA_CHECK_HELPER") != "1" {
+	separator := -1
+	for index, argument := range os.Args {
+		if argument == "--" {
+			separator = index
+			break
+		}
+	}
+	if separator < 0 || len(os.Args) <= separator+1 {
 		return
 	}
-	switch os.Args[len(os.Args)-1] {
+	mode := os.Args[separator+1]
+	argument := ""
+	if len(os.Args) > separator+2 {
+		argument = os.Args[separator+2]
+	}
+	switch mode {
+	case "environment":
+		if os.Getenv("PATH") == "" {
+			fmt.Fprint(os.Stdout, "path-missing")
+		} else {
+			fmt.Fprint(os.Stdout, "path-present")
+		}
+		fmt.Fprint(os.Stdout, os.Getenv("OPENAI_API_KEY"))
+		fmt.Fprint(os.Stdout, os.Getenv("ANTHROPIC_API_KEY"))
 	case "huge-output":
 		chunk := strings.Repeat("x", checkLimits.maxOutputBytes)
 		_, _ = fmt.Fprint(os.Stdout, chunk)
@@ -111,6 +176,19 @@ func TestCheckCommandHelperProcess(t *testing.T) {
 			_, _ = fmt.Fprintln(os.Stdout, "parent output")
 			time.Sleep(time.Millisecond)
 		}
+	case "descendant-parent":
+		child := exec.Command(os.Args[0], "-test.run=^TestCheckCommandHelperProcess$", "--", "descendant-child", argument)
+		if err := child.Start(); err != nil {
+			os.Exit(18)
+		}
+		for {
+			time.Sleep(time.Millisecond)
+		}
+	case "descendant-child":
+		for counter := 0; ; counter++ {
+			_ = os.WriteFile(argument, []byte(fmt.Sprintf("%d", counter)), 0600)
+			time.Sleep(time.Millisecond)
+		}
 	case "keep-output":
 		deadline := time.Now().Add(time.Second)
 		for time.Now().Before(deadline) {
@@ -121,8 +199,8 @@ func TestCheckCommandHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-func checkHelperCommand(mode string) []string {
-	return []string{os.Args[0], "-test.run=^TestCheckCommandHelperProcess$", "--", mode}
+func checkHelperCommand(mode string, arguments ...string) []string {
+	return append([]string{os.Args[0], "-test.run=^TestCheckCommandHelperProcess$", "--", mode}, arguments...)
 }
 
 func TestCopyCheckWorkspaceExcludesCachesAndPreservesTestFixtures(t *testing.T) {
@@ -346,7 +424,11 @@ func TestTaskTestCheckCancellationAndEvidenceSanitization(t *testing.T) {
 	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	check := service.runTaskTestCheck(ctx, t.TempDir(), "task", []string{"go", "test", "./..."}, true)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := service.runTaskTestCheck(ctx, t.TempDir(), analysis.ProjectRevision, "task", []string{"go", "test", "./..."}, true)
 	if check.State != CheckCanceled {
 		t.Fatalf("canceled task check = %+v", check)
 	}
@@ -417,6 +499,15 @@ func jsonAudit(t *testing.T, audits []AuditEntry) string {
 func stringMustContain(value, unwanted string) bool { return strings.Contains(value, unwanted) }
 
 func runFixtureDraftChecks(service *Service, ctx context.Context, source string, options DraftCheckOptions, taskTest *project.GoTestCandidateSpec) (DraftCheckReport, error) {
+	if taskTest != nil || options.RunTests {
+		analysis, err := service.manager.Analysis()
+		if err != nil {
+			return DraftCheckReport{}, err
+		}
+		if _, err := service.TrustProjectExecution(analysis.ProjectRevision, true); err != nil {
+			return DraftCheckReport{}, err
+		}
+	}
 	file, err := service.manager.IndexedFile("main.go")
 	if err != nil {
 		return DraftCheckReport{}, err
