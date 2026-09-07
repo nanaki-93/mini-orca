@@ -38,3 +38,9 @@ config.yaml
 desktop/.gradle/
 desktop/.kotlin/
 desktop/build/
+
+# Local agent-dispatch runs, leases, schemas, worktrees, and Python cache.
+.mini-orca/autopilot/
+__pycache__/
+*.py[cod]
+.DS_Store
