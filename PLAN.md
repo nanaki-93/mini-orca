@@ -244,7 +244,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | SEC-06 | Add small deterministic Go security rules | SEC-05 | M / medium | Pending |
 | SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Pending |
 | SEC-08 | Deliver Security workspace and focused handoff | SEC-06, SEC-07, UI-03, FND-06 | M / high | Pending |
-| PERF-01 | Measure and improve Mini-Orca hotspots | FND-03, FND-06, SEC-03 | M / medium | Pending |
+| PERF-01 | Measure and improve Mini-Orca hotspots | FND-03, FND-06, SEC-03 | M / medium | Complete |
 | PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Pending |
 | PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Pending |
 | AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Pending |
@@ -791,6 +791,18 @@ the full quality gate green. No inherited quality exception applies to final rel
   from measurements, not invented latency claims or timing-flaky unit tests.
 - Verify: behavioral tests plus measured benchmark/capture, G or D as affected.
   Keep timing artifacts ignored and report the measurement uncertainty.
+- Completed 2026-09-07. On macOS 26.6.2, Apple M5 Pro/48 GiB, Go 1.26.1
+  (`GOMAXPROCS=18`) and JBR 25.0.4.1, warm deterministic probes measured a
+  2,000×4 KiB traversal at 1.91 ms, warm index rebuild at 71.47 ms, copied
+  check workspace at 207.18 ms/69.93 MB allocated, 20k-line/2k-symbol source-row
+  preparation at 151.65 ms, 1,000 in-memory polling updates at 0.462 ms and file
+  navigation below microsecond clock resolution. Five three-iteration comparable
+  copy runs justified reusing one per-copy 32 KiB buffer: allocation fell to
+  4.43 MB/op (93.7%) while median time remained 206.62 ms, within filesystem
+  noise. Source pages were warm and destinations new; cold disk, Compose paint
+  and HTTP polling were not measured, so no latency improvement is claimed. The
+  retained benchmark, focused behavior tests, fresh review and G passed; no timing
+  artifact, configuration change or migration is required.
 
 ### PERF-02 — Compare one explicitly chosen existing Go benchmark
 

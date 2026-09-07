@@ -514,3 +514,45 @@ func runFixtureDraftChecks(service *Service, ctx context.Context, source string,
 	}
 	return service.runDraftChecks(ctx, draftCheckInput{file: *file, source: source, taskTest: taskTest}, options)
 }
+
+func BenchmarkCopyCheckWorkspace(b *testing.B) {
+	for _, files := range []int{50, 2000} {
+		b.Run(fmt.Sprintf("files_%d", files), func(b *testing.B) {
+			root := writeCheckWorkspaceBenchmarkFixture(b, files, 4096)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				dest, err := os.MkdirTemp("", "perf01-copy-")
+				if err != nil {
+					b.Fatal(err)
+				}
+				err = copyCheckWorkspace(context.Background(), root, dest)
+				removeErr := os.RemoveAll(dest)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if removeErr != nil {
+					b.Fatal(removeErr)
+				}
+			}
+		})
+	}
+}
+
+func writeCheckWorkspaceBenchmarkFixture(b *testing.B, files, bytes int) string {
+	b.Helper()
+	root := b.TempDir()
+	content := make([]byte, bytes)
+	for i := range content {
+		content[i] = 'x'
+	}
+	for i := 0; i < files; i++ {
+		path := filepath.Join(root, fmt.Sprintf("pkg%03d", i/100), fmt.Sprintf("file%05d.dat", i))
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			b.Fatal(err)
+		}
+		if err := os.WriteFile(path, content, 0600); err != nil {
+			b.Fatal(err)
+		}
+	}
+	return root
+}

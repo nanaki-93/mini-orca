@@ -19,12 +19,13 @@ import (
 )
 
 const (
-	CheckNotRun      = "not-run"
-	CheckPassed      = "passed"
-	CheckFailed      = "failed"
-	CheckSkipped     = "skipped"
-	CheckCanceled    = "canceled"
-	CheckUnavailable = "unavailable"
+	CheckNotRun         = "not-run"
+	CheckPassed         = "passed"
+	CheckFailed         = "failed"
+	CheckSkipped        = "skipped"
+	CheckCanceled       = "canceled"
+	CheckUnavailable    = "unavailable"
+	checkCopyBufferSize = 32 * 1024
 )
 
 type checkResourceLimits struct {
@@ -376,7 +377,10 @@ func sanitizeCheckOutput(output string, truncated bool, workspace, root string) 
 // caches), whereas project.WalkProjectFiles returns only source-policy
 // candidates. destination must be a temporary workspace owned by the caller.
 func copyCheckWorkspace(ctx context.Context, source, destination string) error {
-	copier := checkWorkspaceCopier{ctx: ctx, source: source, destination: destination}
+	copier := checkWorkspaceCopier{
+		ctx: ctx, source: source, destination: destination,
+		buffer: make([]byte, checkCopyBufferSize),
+	}
 	if err := copier.copy(); err != nil {
 		if cleanupErr := os.RemoveAll(destination); cleanupErr != nil {
 			return fmt.Errorf("%w; clean failed check workspace: %v", err, cleanupErr)
@@ -392,6 +396,7 @@ type checkWorkspaceCopier struct {
 	destination string
 	files       int
 	bytes       int64
+	buffer      []byte
 }
 
 func (copier *checkWorkspaceCopier) copy() error {
@@ -452,7 +457,7 @@ func (copier *checkWorkspaceCopier) copy() error {
 			_ = input.Close()
 			return err
 		}
-		copied, copyErr := copyCheckWorkspaceFile(copier.ctx, output, input, checkLimits.maxWorkspaceBytes-copier.bytes)
+		copied, copyErr := copyCheckWorkspaceFile(copier.ctx, output, input, copier.buffer, checkLimits.maxWorkspaceBytes-copier.bytes)
 		closeErr := output.Close()
 		inputErr := input.Close()
 		if copyErr != nil {
@@ -498,8 +503,7 @@ func validateCheckWorkspaceFile(path string, expected os.FileInfo, input *os.Fil
 	return nil
 }
 
-func copyCheckWorkspaceFile(ctx context.Context, output io.Writer, input io.Reader, remaining int64) (int64, error) {
-	buffer := make([]byte, 32*1024)
+func copyCheckWorkspaceFile(ctx context.Context, output io.Writer, input io.Reader, buffer []byte, remaining int64) (int64, error) {
 	var copied int64
 	for {
 		if err := ctx.Err(); err != nil {
