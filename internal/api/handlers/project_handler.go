@@ -60,6 +60,15 @@ type declarationExplanationRequest struct {
 	ConfirmRemoteProvider *bool  `json:"confirm_remote_provider"`
 }
 
+type securityReviewRequest struct {
+	ProjectID             string `json:"project_id"`
+	ProjectRevision       string `json:"project_revision"`
+	BaseFileHash          string `json:"base_file_hash"`
+	Path                  string `json:"path"`
+	Symbol                string `json:"symbol,omitempty"`
+	ConfirmRemoteProvider *bool  `json:"confirm_remote_provider"`
+}
+
 type analyzeAllRequest struct {
 	ProjectRevision       string `json:"project_revision"`
 	MaxFiles              int    `json:"max_files,omitempty"`
@@ -615,6 +624,31 @@ func (h *ProjectHandler) ExplainDeclaration(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, result)
+}
+
+// ReviewSecurityFile performs one explicit, passive Analyze-scope review of a
+// selected eligible file. It never starts a scan or executes project code.
+func (h *ProjectHandler) ReviewSecurityFile(w http.ResponseWriter, r *http.Request) {
+	var request securityReviewRequest
+	if !decodeStrictJSON(w, r, &request, "invalid security review request", "Provide the current project, file identity, and remote-provider confirmation.") {
+		return
+	}
+	if request.ConfirmRemoteProvider == nil {
+		api.WriteRequestError(w, errors.New("confirm_remote_provider is required"), "invalid security review request", "Confirm whether the Analyze provider may receive this file context.")
+		return
+	}
+	report, err := h.service.ReviewSecurityFile(r.Context(), app.SecurityReviewRequest{
+		ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, BaseFileHash: request.BaseFileHash,
+		Path: request.Path, Symbol: request.Symbol, ConfirmRemoteProvider: *request.ConfirmRemoteProvider,
+	})
+	if err != nil {
+		if writeContextError(w, "security review", err) {
+			return
+		}
+		writeProjectError(w, "security review failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, report)
 }
 
 func (h *ProjectHandler) decodeFileAnalysisRequest(w http.ResponseWriter, r *http.Request) (fileAnalysisRequest, bool) {

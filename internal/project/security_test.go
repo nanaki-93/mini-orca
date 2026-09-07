@@ -342,7 +342,51 @@ func securitySource() string {
 }
 
 func securityIndexedFile() IndexFile {
-	return IndexFile{Path: "main.go", ContentHash: contentHash([]byte(securitySource())), LineCount: 6, Symbols: []SymbolInfo{{Name: "Run", StartLine: 3, EndLine: 5}}}
+	return IndexFile{Path: "main.go", ContentHash: contentHash([]byte(securitySource())), LineCount: 5, Symbols: []SymbolInfo{{Name: "Run", StartLine: 3, EndLine: 5}}}
+}
+
+func TestParseSecurityFindingsUsesIndexedLineCountForTrailingNewlineFiles(t *testing.T) {
+	indexed := securityIndexedFile()
+	if got := securitySourceLineCount(securitySource()); got != indexed.LineCount {
+		t.Fatalf("security source lines = %d, indexed = %d", got, indexed.LineCount)
+	}
+	if _, err := ParseSecurityFindings(validSecurityFindingsJSON(), indexed, securitySource()); err != nil {
+		t.Fatalf("parse indexed trailing-newline source: %v", err)
+	}
+}
+
+func TestParseSecurityFindingsAllowsEmptyIndexedTextOnlyForEmptyResults(t *testing.T) {
+	indexed := IndexFile{Path: "empty.go", ContentHash: contentHash(nil), LineCount: 0}
+	findings, err := ParseSecurityFindings(`{"findings":[]}`, indexed, "")
+	if err != nil || len(findings) != 0 {
+		t.Fatalf("empty indexed findings = %+v, %v", findings, err)
+	}
+	output := strings.Replace(validSecurityFindingsJSON(), `"path":"main.go"`, `"path":"empty.go"`, 1)
+	if _, err := ParseSecurityFindings(output, indexed, ""); err == nil {
+		t.Fatal("nonempty findings were accepted for an empty indexed file")
+	}
+}
+
+func TestValidateSecurityFileReportSourceFreeNormalizesMeaningfulSourceLines(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source string
+		text   string
+		want   bool
+	}{
+		{name: "short line", source: "package main\n", text: "package main", want: true},
+		{name: "whitespace and punctuation", source: "func Run() { fmt.Println(\"run\") }\n", text: "func  Run ( ) { fmt . Println ( run ) }", want: true},
+		{name: "comment content", source: "// validate attacker input\n", text: "validate   attacker input", want: true},
+		{name: "trivial overlap", source: "return\nx := y\n", text: "The function may return an error and compare x with y."},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			report := SecurityFileReport{Findings: []SecurityFinding{{ObservedCondition: test.text}}}
+			err := ValidateSecurityFileReportSourceFree(report, test.source)
+			if (err != nil) != test.want {
+				t.Fatalf("source-free error = %v, want rejection = %t", err, test.want)
+			}
+		})
+	}
 }
 
 func validSecurityFindingsJSON() string {

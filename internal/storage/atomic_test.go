@@ -48,6 +48,39 @@ func TestWriteFileKeepsPriorDataAndCleansTempWhenReplacementFails(t *testing.T) 
 	}
 }
 
+func TestWriteFileAuthorizedRejectsAfterTempSyncWithoutReplacing(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "record.json")
+	if err := os.WriteFile(path, []byte("prior"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rejected := errors.New("authorization rejected")
+	called := false
+	err := WriteFileAuthorized(path, []byte("next"), 0600, func() error {
+		called = true
+		temporaries, globErr := filepath.Glob(filepath.Join(directory, ".metadata-*.tmp"))
+		if globErr != nil || len(temporaries) != 1 {
+			t.Fatalf("temporary metadata = %v, %v", temporaries, globErr)
+		}
+		data, readErr := os.ReadFile(temporaries[0])
+		if readErr != nil || string(data) != "next" {
+			t.Fatalf("temporary content = %q, %v", data, readErr)
+		}
+		return rejected
+	})
+	if !called || !errors.Is(err, rejected) {
+		t.Fatalf("authorization result = %v, called = %t", err, called)
+	}
+	data, readErr := os.ReadFile(path)
+	if readErr != nil || string(data) != "prior" {
+		t.Fatalf("metadata after rejected authorization = %q, %v", data, readErr)
+	}
+	temporaries, globErr := filepath.Glob(filepath.Join(directory, ".metadata-*.tmp"))
+	if globErr != nil || len(temporaries) != 0 {
+		t.Fatalf("temporary metadata after rejection = %v, %v", temporaries, globErr)
+	}
+}
+
 func TestWriteFileCleansTempOnWriteSyncAndCloseFailures(t *testing.T) {
 	for _, test := range []struct {
 		name      string
