@@ -48,6 +48,18 @@ class DesktopLayoutStateTest {
   }
 
   @Test
+  fun preparedSecurityFixAlwaysShowsAndFocusesTheAssistantComposer() {
+    val layout =
+        layoutForPreparedRequest(
+            DesktopLayoutState(
+                activeRightToolWindow = RightToolWindow.Review, rightToolWindowVisible = false))
+
+    assertEquals(RightToolWindow.Assistant, layout.activeRightToolWindow)
+    assertTrue(layout.rightToolWindowVisible)
+    assertEquals(DesktopFocusRegion.RightToolWindow, layout.lastFocusedRegion)
+  }
+
+  @Test
   fun dimensionsClampAtSafeBounds() {
     val layout =
         DesktopLayoutState().withExplorerWidth(-1f).withActionWidth(10_000f).withBottomHeight(-1f)

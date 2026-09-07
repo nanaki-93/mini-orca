@@ -177,6 +177,7 @@ internal fun statusProviderForWorkspace(
       Workspace.Performance -> DesktopStatusProvider(ModelScope.Analyze, providers.analyze)
       Workspace.Analysis,
       Workspace.Bugs -> DesktopStatusProvider(ModelScope.Bug, providers.bugs)
+      Workspace.Security -> DesktopStatusProvider(ModelScope.Analyze, providers.analyze)
       Workspace.Editor -> DesktopStatusProvider(ModelScope.Function, providers.functionEdits)
     }
 
@@ -194,6 +195,7 @@ internal data class DesktopShellContextState(
     val bugProviderConfirmed: Boolean,
     val analyzeModel: ScopedModel,
     val analyzeProviderConfirmed: Boolean,
+    val securityReviewRemoteConfirmed: Boolean,
 )
 
 internal data class DesktopShellPaletteState(
@@ -236,6 +238,7 @@ internal data class DesktopShellAnalysisActions(
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
     val confirmPerformanceProvider: (Boolean) -> Unit,
+    val confirmSecurityReviewProvider: (Boolean) -> Unit,
     val previewPerformance: () -> Unit,
     val startPerformance: (PerformanceQueuePreview, Boolean) -> Unit,
     val pausePerformance: () -> Unit,
@@ -243,6 +246,10 @@ internal data class DesktopShellAnalysisActions(
     val cancelPerformance: () -> Unit,
     val openPerformanceFinding: (String, PerformanceFinding) -> Unit,
     val preparePerformanceFinding: (String, PerformanceFinding) -> Unit,
+    val scanSecurity: () -> Unit,
+    val reviewSecurity: () -> Unit,
+    val openSecurityFinding: (SecurityFinding) -> Unit,
+    val prepareSecurityFinding: (SecurityFinding) -> Unit,
 )
 
 internal data class DesktopShellPaletteActions(
@@ -950,6 +957,19 @@ private fun DesktopCanvas(
                             context = appState.findings.performanceContext,
                             model = context.analyzeModel,
                             remoteProviderConfirmed = context.analyzeProviderConfirmed),
+                    security =
+                        SecurityWorkspacePaneState(
+                            project = appState.project,
+                            selectedFile = appState.selectedFile,
+                            index = appState.index,
+                            sourceReport = appState.security.sourceReport,
+                            aiReport = appState.security.aiReport,
+                            action = appState.security.action,
+                            error = appState.security.error,
+                            model = context.analyzeModel,
+                            remoteProviderConfirmed = context.securityReviewRemoteConfirmed,
+                            sourceOperation = appState.security.sourceOperation,
+                            aiOperation = appState.security.aiOperation),
                 ),
             navigation =
                 ContentPaneNavigationActions(
@@ -977,6 +997,13 @@ private fun DesktopCanvas(
                     cancel = analysisActions.cancelPerformance,
                     openInEditor = analysisActions.openPerformanceFinding,
                     prepareOptimization = analysisActions.preparePerformanceFinding),
+            securityActions =
+                SecurityWorkspaceActions(
+                    confirmRemoteProvider = analysisActions.confirmSecurityReviewProvider,
+                    scan = analysisActions.scanSecurity,
+                    review = analysisActions.reviewSecurity,
+                    openSource = analysisActions.openSecurityFinding,
+                    prepareFix = analysisActions.prepareSecurityFinding),
             modifier = Modifier.fillMaxSize(),
         )
       },
@@ -991,6 +1018,7 @@ private fun ContentPane(
     analysisActions: AnalysisWorkspaceActions,
     bugsActions: BugsWorkspaceActions,
     performanceActions: PerformanceWorkspaceActions,
+    securityActions: SecurityWorkspaceActions,
     modifier: Modifier,
 ) {
   Column(modifier.background(EditorCanvas)) {
@@ -1019,6 +1047,7 @@ private fun ContentPane(
       Workspace.Analysis -> AnalysisWorkspacePane(state.analysis, analysisActions)
       Workspace.Performance -> PerformanceWorkspacePane(state.performance, performanceActions)
       Workspace.Bugs -> BugsWorkspacePane(state.bugs, bugsActions)
+      Workspace.Security -> SecurityWorkspacePane(state.security, securityActions)
     }
   }
 }
@@ -1037,6 +1066,7 @@ private data class ContentPaneState(
     val analysis: AnalysisWorkspacePaneState,
     val bugs: BugsWorkspacePaneState,
     val performance: PerformanceWorkspacePaneState,
+    val security: SecurityWorkspacePaneState,
 )
 
 private data class ContentPaneNavigationActions(

@@ -6,6 +6,7 @@ enum class Workspace {
   Analysis,
   Performance,
   Bugs,
+  Security,
   Editor
 }
 
@@ -43,6 +44,29 @@ data class FindingsState(
     val performanceContext: PerformanceQueuePreview? = null,
 )
 
+enum class SecuritySectionOperationStatus {
+  Idle,
+  Running,
+  Canceled,
+  Failed,
+}
+
+/** Lifecycle is held separately from retained evidence so a later attempt cannot erase a report. */
+data class SecuritySectionOperation(
+    val status: SecuritySectionOperationStatus = SecuritySectionOperationStatus.Idle,
+    val message: String = "",
+)
+
+/** Security reports are file-bound evidence and deliberately never join Bugs findings state. */
+data class SecurityWorkspaceState(
+    val sourceReport: SecurityFileReport? = null,
+    val aiReport: SecurityFileReport? = null,
+    val action: String = "",
+    val sourceOperation: SecuritySectionOperation = SecuritySectionOperation(),
+    val aiOperation: SecuritySectionOperation = SecuritySectionOperation(),
+    val error: String? = null,
+)
+
 data class EditorNavigationTarget(
     val path: String,
     val symbol: String = "",
@@ -59,7 +83,8 @@ fun nextWorkspace(workspace: Workspace): Workspace =
       Workspace.Summary -> Workspace.Analysis
       Workspace.Analysis -> Workspace.Performance
       Workspace.Performance -> Workspace.Bugs
-      Workspace.Bugs -> Workspace.Editor
+      Workspace.Bugs -> Workspace.Security
+      Workspace.Security -> Workspace.Editor
       Workspace.Editor -> Workspace.Summary
     }
 
@@ -148,6 +173,7 @@ data class DesktopState(
     val selection: FileSelectionState = FileSelectionState(),
     val jobs: JobState = JobState(),
     val findings: FindingsState = FindingsState(),
+    val security: SecurityWorkspaceState = SecurityWorkspaceState(),
     val chat: ChatState = ChatState(),
     val review: DraftReviewState = DraftReviewState(),
     val connection: ConnectionState = ConnectionState(),
@@ -228,6 +254,14 @@ sealed interface DesktopEvent {
 
   data class GoScanLoaded(val scan: GoScanReport?) : DesktopEvent
 
+  data class SecurityActionStarted(val action: String) : DesktopEvent
+
+  data object SecurityActionCanceled : DesktopEvent
+
+  data class SecurityReportLoaded(val report: SecurityFileReport) : DesktopEvent
+
+  data class SecurityActionFailed(val action: String, val message: String) : DesktopEvent
+
   data class FileLoaded(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) : DesktopEvent
 
   data class SymbolSelected(val symbol: SymbolInfo) : DesktopEvent
@@ -290,6 +324,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
               projectState = ProjectWorkspaceState(event.project, event.index),
               selection = FileSelectionState(),
               findings = FindingsState(),
+              security = SecurityWorkspaceState(),
               chat = ChatState(),
               review = DraftReviewState(),
               jobs =
@@ -328,6 +363,75 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.PerformanceContextLoaded ->
           copy(findings = findings.copy(performanceContext = event.context))
       is DesktopEvent.GoScanLoaded -> copy(findings = findings.copy(scan = event.scan))
+      is DesktopEvent.SecurityActionStarted ->
+          copy(
+              security =
+                  when (event.action) {
+                    "scan" ->
+                        security.copy(
+                            action = event.action,
+                            sourceOperation =
+                                SecuritySectionOperation(SecuritySectionOperationStatus.Running),
+                            error = null)
+                    "review" ->
+                        security.copy(
+                            action = event.action,
+                            aiOperation =
+                                SecuritySectionOperation(SecuritySectionOperationStatus.Running),
+                            error = null)
+                    else -> security.copy(action = event.action, error = null)
+                  })
+      DesktopEvent.SecurityActionCanceled ->
+          copy(
+              security =
+                  when (security.action) {
+                    "scan" ->
+                        security.copy(
+                            action = "",
+                            sourceOperation =
+                                SecuritySectionOperation(SecuritySectionOperationStatus.Canceled))
+                    "review" ->
+                        security.copy(
+                            action = "",
+                            aiOperation =
+                                SecuritySectionOperation(SecuritySectionOperationStatus.Canceled))
+                    else -> security
+                  })
+      is DesktopEvent.SecurityReportLoaded ->
+          copy(
+              security =
+                  if (event.report.source.equals("deterministic", ignoreCase = true))
+                      security.copy(
+                          sourceReport = event.report,
+                          action = "",
+                          sourceOperation = SecuritySectionOperation(),
+                          error = null)
+                  else
+                      security.copy(
+                          aiReport = event.report,
+                          action = "",
+                          aiOperation = SecuritySectionOperation(),
+                          error = null))
+      is DesktopEvent.SecurityActionFailed ->
+          copy(
+              security =
+                  when (event.action) {
+                    "scan" ->
+                        security.copy(
+                            action = "",
+                            sourceOperation =
+                                SecuritySectionOperation(
+                                    SecuritySectionOperationStatus.Failed, event.message),
+                            error = event.message)
+                    "review" ->
+                        security.copy(
+                            action = "",
+                            aiOperation =
+                                SecuritySectionOperation(
+                                    SecuritySectionOperationStatus.Failed, event.message),
+                            error = event.message)
+                    else -> security.copy(action = "", error = event.message)
+                  })
       is DesktopEvent.FileLoaded ->
           copy(
               selection = FileSelectionState(selectedFile = event.file, symbols = event.symbols),

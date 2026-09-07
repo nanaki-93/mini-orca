@@ -49,6 +49,20 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun securityWorkspaceKeepsActionsAndEvidenceReadableAcrossWideNarrowAndLargeText() {
+    listOf(Triple(1440, 900, 1f), Triple(999, 760, 1f), Triple(1280, 600, 1.5f)).forEach {
+        (width, height, scale) ->
+      ComposeVisualFixture(width, height, scale) { SecurityVisualFixture() }
+          .use { fixture ->
+            fixture.render("security-$width-${scale}")
+            listOf("Security", "Scan", "Review", "Source rule matches")
+                .forEach(fixture::assertTextFits)
+            assertTrue(fixture.hasScrollableContent())
+          }
+    }
+  }
+
+  @Test
   fun compactFieldKeepsEditingAndItsAccessibleNameAfterInput() {
     var query by mutableStateOf("")
     ComposeVisualFixture(360, 100) {
@@ -1632,6 +1646,81 @@ private fun AnalysisPaneVisualFixture(
         AnalysisWorkspacePaneState(
             job, AnalysisCoverage(total = 23, stale = 23), ScopedModel(), false),
         actions)
+  }
+}
+
+@Composable
+private fun SecurityVisualFixture() {
+  val finding =
+      SecurityFinding(
+          id = "security-fixture",
+          title = "Credential-like assignment",
+          severity = "high",
+          evidenceKind = "rule_match",
+          triage = "open",
+          verificationState = "unverified",
+          anchor = SecuritySourceAnchor("internal/service.go", 18, 18, "Run"),
+          observedCondition = "A deterministic rule matched a source condition.",
+          remediation = "Move the value out of source.")
+  val file =
+      ProjectFileInfo(
+          "internal/service.go",
+          "security-hash",
+          "service.go",
+          language = "Go",
+          sizeBytes = 10,
+          lineCount = 30,
+          modifiedAt = "",
+          binary = false)
+  val index =
+      ProjectIndex(
+          visualFixtureProject.projectId,
+          visualFixtureProject.projectRevision,
+          files =
+              listOf(
+                  IndexedFile(
+                      file.path,
+                      file.contentHash,
+                      "Go",
+                      false,
+                      lineCount = 30,
+                      symbols =
+                          listOf(
+                              SymbolInfo(
+                                  "Run",
+                                  "function",
+                                  startLine = 12,
+                                  endLine = 24,
+                                  confidence = "exact",
+                                  atomicTarget = true)))))
+  Column(Modifier.fillMaxSize().background(AppBackground)) {
+    SecurityWorkspacePane(
+        SecurityWorkspacePaneState(
+            visualFixtureProject,
+            file,
+            index,
+            SecurityFileReport(
+                "1",
+                visualFixtureProject.projectId,
+                visualFixtureProject.projectRevision,
+                file.path,
+                file.contentHash,
+                "completed",
+                "deterministic",
+                findings = listOf(finding)),
+            SecurityFileReport(
+                "1",
+                visualFixtureProject.projectId,
+                visualFixtureProject.projectRevision,
+                file.path,
+                file.contentHash,
+                "completed_empty",
+                "ai"),
+            "",
+            null,
+            ScopedModel(scope = "analyze", profile = "analyze", model = "fixture"),
+            true),
+        SecurityWorkspaceActions({}, {}, {}, {}, {}))
   }
 }
 

@@ -420,6 +420,7 @@ internal fun leftToolWindowIcon(toolWindow: LeftToolWindow): DesktopIcon =
       LeftToolWindow.Analysis -> DesktopIcon.Analysis
       LeftToolWindow.Performance -> DesktopIcon.Performance
       LeftToolWindow.Problems -> DesktopIcon.Problems
+      LeftToolWindow.Security -> DesktopIcon.Analysis
       LeftToolWindow.Editor -> DesktopIcon.Editor
     }
 

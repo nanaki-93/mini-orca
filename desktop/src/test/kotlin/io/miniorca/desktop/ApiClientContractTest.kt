@@ -153,6 +153,35 @@ class ApiClientContractTest {
   }
 
   @Test
+  fun securityScanAndReviewUseSeparateExplicitContracts() {
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, body ->
+                  when (method to path) {
+                    "POST" to "/api/projects/current/files/security-scan" -> {
+                      assertContains(body.orEmpty(), "\"path\":\"main.go\"")
+                      assertContains(body.orEmpty(), "\"project_revision\":\"revision\"")
+                      assertFalse(body.orEmpty().contains("confirm_remote_provider"))
+                      TransportResponse(200, securityReportJson("deterministic"))
+                    }
+                    "POST" to "/api/projects/current/security-review" -> {
+                      assertContains(body.orEmpty(), "\"project_id\":\"project\"")
+                      assertContains(body.orEmpty(), "\"base_file_hash\":\"hash\"")
+                      assertContains(body.orEmpty(), "\"symbol\":\"Run\"")
+                      assertContains(body.orEmpty(), "\"confirm_remote_provider\":true")
+                      TransportResponse(200, securityReportJson("ai"))
+                    }
+                    else -> error("unexpected request: $method $path")
+                  }
+                })
+
+    assertEquals("deterministic", client.securityScan("main.go", "revision").source)
+    assertEquals(
+        "ai", client.securityReview("project", "revision", "hash", "main.go", "Run", true).source)
+  }
+
+  @Test
   fun workspaceResponsesDecodeToTypedModelsAndIgnoreUnknownFields() {
     val client =
         ApiClient(
@@ -391,6 +420,9 @@ class ApiClientContractTest {
 
   private fun draftResponse() =
       """{"id":"draft","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","mode":"replace_symbol","target_symbol":"Run","declaration":"func Run() {}","imports":null,"revision":1,"hash":"hash","state":"valid","validation":{"applicable":true,"scope_mode":"replace_symbol","diagnostics":null,"diff":{"old_path":"main.go","new_path":"main.go","lines":null}}}"""
+
+  private fun securityReportJson(source: String) =
+      """{"schema_version":"1","project_id":"project","project_revision":"revision","path":"main.go","content_hash":"hash","status":"completed_empty","source":"$source","findings":[],"context_policy_version":"policy","generated_at":"2026-09-08T00:00:00Z"}"""
 
   private fun jobResponse(status: String) =
       """{"project_id":"project","project_revision":"revision","status":"$status","max_files":10,"max_retries":2,"files":null}"""
