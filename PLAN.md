@@ -247,7 +247,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | PERF-01 | Measure and improve Mini-Orca hotspots | FND-03, FND-06, SEC-03 | M / medium | Complete |
 | PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Pending |
 | PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Pending |
-| AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Pending |
+| AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Blocked — final review rejected unsafe execution boundaries |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03 | M / high | Pending |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
 
@@ -898,6 +898,14 @@ the full quality gate green. No inherited quality exception applies to final rel
 - Verify: fake CLI/worker tests without paid calls, interruption/resume and lock
   tests, one explicitly authorized pilot task. Leave integration approval pending
   if it has not been granted; do not ask workers to self-approve.
+- Blocked 2026-09-07 after the two allowed repair/review cycles. The preserved
+  implementation patch is `.git/mini-orca-autopilot-AUTO-02.patch` (SHA-256
+  `0f50aa89ff3bab54a6f821cc5e6fffe92d2ef57d2db3b99f2a0e6623c9229c05`). The
+  final fresh reviewer rejected bypassable validator sandbox selection, unbounded
+  result-file writes, inherited Git variables that can redirect mutations, paid-call
+  resume gaps and a 1,913-line dispatcher that exceeded this task's small-workflow
+  scope. The 30-case fake suite, Python compilation, shell syntax and diff checks
+  passed; the repaired implementation was not integrated or used for a paid pilot.
 
 ### REL-01 — Validate the selected release end to end
 
