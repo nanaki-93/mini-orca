@@ -124,34 +124,7 @@ func (s *Service) publishPerformanceReview(ctx context.Context, snapshot perform
 }
 
 func (s *Service) validatePerformanceReviewSnapshot(ctx context.Context, snapshot performanceReviewSnapshot) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if s.manager.Root() != snapshot.root {
-		return project.ErrRevisionConflict
-	}
-	analysis, err := s.manager.Analysis()
-	if err != nil {
-		return err
-	}
-	if analysis.ProjectID != snapshot.analysis.ProjectID || analysis.ProjectRevision != snapshot.analysis.ProjectRevision {
-		return project.ErrRevisionConflict
-	}
-	policy, err := project.NewContextPolicy(snapshot.root)
-	if err != nil {
-		return err
-	}
-	if policy.Version() != snapshot.policyVersion || !policy.Decide(snapshot.file.Path).Include {
-		return project.ErrRevisionConflict
-	}
-	current, err := project.GetFileInfo(snapshot.root, snapshot.file.Path)
-	if err != nil {
-		return err
-	}
-	if current.ContentHash != snapshot.file.ContentHash {
-		return project.ErrRevisionConflict
-	}
-	return nil
+	return s.validateSourceFileSnapshot(ctx, snapshot.root, snapshot.analysis, snapshot.file, snapshot.policyVersion, false)
 }
 
 func performancePrompt(source string, analysis project.Analysis, file project.IndexFile) (string, error) {

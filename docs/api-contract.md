@@ -71,6 +71,7 @@ untrusted networks.
 | GET | `/api/projects/current/git` | Read target-file Git availability, branch, and status. |
 | GET | `/api/projects/current/files/analysis` | Read cached semantic analysis for one selected file and revision. |
 | POST | `/api/projects/current/files/analysis` | Explicitly analyze exactly one selected file. |
+| POST | `/api/projects/current/files/security-scan` | Scan one selected eligible Go file with deterministic source-only rules; no provider request or subprocess execution occurs. Matches require syntactic review and do not prove exploitability. At most five source-order matches are returned; a `partial` report says when that limit truncates coverage. |
 | POST | `/api/projects/current/files/explanation` | Explicitly explain one exact indexed Go declaration using transient Function-scope context. |
 | GET | `/api/projects/current/analysis-job` | Read explicit bounded Analyze-all progress. |
 | POST | `/api/projects/current/analysis-job` | Start bounded sequential Analyze-all cache warming. |

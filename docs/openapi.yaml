@@ -18,6 +18,7 @@ servers:
 tags:
   - name: Daemon
   - name: Projects
+  - name: Security
   - name: Chat
   - name: Drafts
 paths:
@@ -315,6 +316,20 @@ paths:
         '200': {description: Fresh or failed source-free analysis, content: {application/json: {schema: {$ref: '#/components/schemas/FileAnalysis'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/files/security-scan:
+    post:
+      tags: [Security]
+      summary: Scan exactly one eligible Go file with deterministic source-only security rules
+      description: Applies the current Go ruleset without provider access or subprocess execution. A rule match requires syntactic review and is not proof of exploitability.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SecurityScanRequest'}}}
+      responses:
+        '200': {description: Source-free deterministic Security report; partial reports retain the first five source-order matches and state that coverage limit, content: {application/json: {schema: {$ref: '#/components/schemas/SecurityFileReport'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
   /api/projects/current/files/explanation:
     post:
       tags: [Projects]
@@ -878,6 +893,56 @@ components:
         project_revision: {type: string}
         refresh: {type: boolean}
         confirm_remote_provider: {type: boolean}
+    SecurityScanRequest:
+      type: object
+      required: [path, project_revision]
+      properties:
+        path: {type: string, description: One project-relative context-policy-eligible Go file.}
+        project_revision: {type: string}
+    SecurityFileReport:
+      type: object
+      required: [schema_version, project_id, project_revision, path, content_hash, status, source, rule_set_version, findings, context_policy_version, generated_at]
+      properties:
+        schema_version: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        path: {type: string}
+        content_hash: {type: string}
+        status: {type: string, enum: [completed, completed_empty, partial]}
+        source: {type: string, enum: [deterministic]}
+        rule_set_version: {type: string}
+        findings: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/SecurityFinding'}}
+        reason: {type: string, description: Present only when the deterministic five-finding limit truncates source-order matches.}
+        context_policy_version: {type: string}
+        generated_at: {type: string, format: date-time}
+    SecurityFinding:
+      type: object
+      required: [id, rule, category, title, source_anchor, severity, confidence, evidence_kind, observed_condition, preconditions_or_unknowns, remediation, verification_idea, triage, verification_state]
+      properties:
+        id: {type: string}
+        rule: {type: string}
+        category: {type: string}
+        title: {type: string}
+        source_anchor: {$ref: '#/components/schemas/SecuritySourceAnchor'}
+        severity: {type: string, enum: [high]}
+        confidence: {type: string, enum: [high]}
+        evidence_kind: {type: string, enum: [rule_match]}
+        observed_condition: {type: string}
+        preconditions_or_unknowns: {type: string}
+        remediation: {type: string}
+        verification_idea: {type: string}
+        cwe: {type: string}
+        reference: {type: string, format: uri}
+        triage: {type: string, enum: [open, dismissed, accepted]}
+        verification_state: {type: string, enum: [unverified, verified, not_reproducible]}
+    SecuritySourceAnchor:
+      type: object
+      required: [path, start_line, end_line]
+      properties:
+        path: {type: string}
+        start_line: {type: integer}
+        end_line: {type: integer}
+        symbol: {type: string}
     FileAnalysis:
       type: object
       required: [schema_version, project_id, project_revision, path, content_hash, language, status, prompt_version, context_policy_version, generated_at]
