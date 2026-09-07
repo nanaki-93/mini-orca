@@ -11,6 +11,32 @@ import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
   @Test
+  fun executionTrustUsesASeparateCurrentSessionConsentContract() {
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, body ->
+                  when (method to path) {
+                    "GET" to "/api/projects/current/execution-trust?project_revision=revision" ->
+                        TransportResponse(
+                            200,
+                            """{"project_id":"project","project_revision":"revision","trusted":false,"commands":[["go","test","./..."]]}""")
+                    "POST" to "/api/projects/current/execution-trust" -> {
+                      assertContains(body.orEmpty(), "\"project_revision\":\"revision\"")
+                      assertContains(body.orEmpty(), "\"confirm\":true")
+                      TransportResponse(
+                          200,
+                          """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}""")
+                    }
+                    else -> error("unexpected request: $method $path")
+                  }
+                })
+
+    assertFalse(client.executionTrust("revision").trusted)
+    assertTrue(client.trustProjectExecution("revision").trusted)
+  }
+
+  @Test
   fun projectRestoreUsesTheNonAnalyzingRestoreEndpoint() {
     val client =
         ApiClient(

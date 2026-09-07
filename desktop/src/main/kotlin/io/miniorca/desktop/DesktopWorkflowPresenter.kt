@@ -751,11 +751,26 @@ class DesktopWorkflowPresenter(
     activeDraft = identity
     draftChecksJob?.cancel()
     dispatch(DesktopEvent.Loading)
-    dispatch(DesktopEvent.Status("Running focused checks for ${draft.targetSymbol}…"))
+    val taskTestName = draft.taskSpec?.goTestCandidate?.name
+    dispatch(
+        DesktopEvent.Status(
+            if (taskTestName == null)
+                "Running source-only focused checks for ${draft.targetSymbol}…"
+            else
+                "Trusting local execution for ${draft.targetSymbol}, then running focused checks…"))
     draftChecksJob =
         scope.launch {
           try {
             val checks = io {
+              if (taskTestName != null) {
+                val expectedCommand = listOf("go", "test", "./...", "-run", "^$taskTestName$")
+                val trustScope = api.executionTrust(project.projectRevision, taskTestName)
+                if (trustScope.commands != listOf(expectedCommand)) {
+                  throw IllegalStateException(
+                      "Local execution command scope changed; review it again before trusting execution.")
+                }
+                api.trustProjectExecution(project.projectRevision)
+              }
               api.checkDraft(draft.id, project.projectRevision, draft.revision, draft.hash)
             }
             if (activeDraft == identity &&
@@ -925,7 +940,15 @@ class DesktopWorkflowPresenter(
         val report =
             io {
               if (!canInvokeVerifiedScanAction(request)) null
-              else api.startGoScan(request.project.revision)
+              else {
+                val trustScope = api.executionTrust(request.project.revision)
+                if (trustScope.commands != listOf(listOf("go", "test", "./..."))) {
+                  throw IllegalStateException(
+                      "Local execution command scope changed; review it again before trusting execution.")
+                }
+                api.trustProjectExecution(request.project.revision)
+                api.startGoScan(request.project.revision)
+              }
             } ?: return@launch
         if (!isCurrentVerifiedScanAction(request.project, request.generation)) return@launch
         publishVerifiedScan(request.project, report, request.generation)

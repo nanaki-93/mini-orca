@@ -172,5 +172,8 @@ func newGoScanService(t *testing.T, files map[string]string) (*Service, string, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := service.TrustProjectExecution(analysis.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
 	return service, root, analysis.ProjectRevision
 }

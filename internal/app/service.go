@@ -62,6 +62,7 @@ type Service struct {
 	drafts                  *draftStore
 	chatSessions            *chatSessionStore
 	performance             *performanceController
+	executionTrust          *executionTrustStore
 	buildDeclarationContext func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
 }
 
@@ -111,6 +112,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		drafts:                  newDraftStore(),
 		chatSessions:            newChatSessionStore(),
 		performance:             newPerformanceController(),
+		executionTrust:          newExecutionTrustStore(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 	}, nil
 }

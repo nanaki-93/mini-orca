@@ -239,7 +239,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | SEC-01 | Harden daemon and container network boundary | FND-01 | M / high | Complete |
 | SEC-02 | Bind provider delivery to consent and context | FND-01 | M / high | Complete |
 | SEC-03 | Bound subprocess output and workspace resources | FND-01 | M / high | Complete |
-| SEC-04 | Explicit project-execution trust and environment | SEC-03 | M / high | Pending |
+| SEC-04 | Explicit project-execution trust and environment | SEC-03 | M / high | Complete |
 | SEC-05 | Define strict Security report contracts | FND-05 | S / medium | Pending |
 | SEC-06 | Add small deterministic Go security rules | SEC-05 | M / medium | Pending |
 | SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Pending |
@@ -693,6 +693,17 @@ the full quality gate green. No inherited quality exception applies to final rel
   The UI explicitly says trusted local execution, not sandboxed execution.
 - Verify: environment sentinel and child-process fixtures, scope/consent API and UI
   tests, G/C/D. An OS sandbox is a separate future capability, not implied here.
+- Completed 2026-09-07. Project-code checks now require explicit in-memory trust
+  for the active project revision and recheck that revision immediately before
+  each `go test` process starts. The Desktop shows the exact scan or generated
+  task-test argv, verifies it against the daemon scope, and keeps source-only
+  draft checks free of execution consent. Child processes receive an allowlisted
+  toolchain environment; supported Unix systems own and cancel the whole process
+  group, while unsupported platforms reject project-code execution clearly.
+  Project replacement and reindex clear trust, independently of remote-provider
+  consent. Fresh review accepted the result after two repairs; G, C and D passed,
+  including provider-secret, descendant-cancellation and cross-compile fixtures.
+  No configuration or data migration is required, and no OS sandbox is implied.
 
 ### SEC-05 — Define the Security evidence contract
 

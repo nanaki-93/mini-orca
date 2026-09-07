@@ -7,6 +7,15 @@ import kotlin.test.assertTrue
 
 class ReviewToolWindowTest {
   @Test
+  fun taskTestTrustScopeShowsTheExactGeneratedTestCommand() {
+    val current =
+        draft().copy(taskSpec = BugTaskSpec(goTestCandidate = GoTestCandidateSpec("TestRun")))
+
+    assertEquals("go test ./... -run ^TestRun$", draftProjectCodeCommand(current))
+    assertEquals("go test ./...", draftProjectCodeCommand(draft()))
+  }
+
+  @Test
   fun eligibleDecisionNamesExactlyOneSymbolAndFile() {
     val current = draft()
     val checks =

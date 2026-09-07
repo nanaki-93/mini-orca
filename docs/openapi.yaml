@@ -195,6 +195,33 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/execution-trust:
+    get:
+      tags: [Projects]
+      summary: Read the current project's trusted local execution scope
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+        - name: task_test_name
+          in: query
+          required: false
+          schema: {type: string}
+          description: Exact generated Go test name for a task-test trust preview.
+      responses:
+        '200': {description: Current-session trust and the exact project-code command scope, content: {application/json: {schema: {$ref: '#/components/schemas/ExecutionTrust'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Explicitly trust local execution for the current project revision
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ExecutionTrustRequest'}}}
+      responses:
+        '200': {description: Current-session trust recorded, content: {application/json: {schema: {$ref: '#/components/schemas/ExecutionTrust'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/index:
     get:
       tags: [Projects]
@@ -747,6 +774,23 @@ components:
         updated_at: {type: string, format: date-time}
         completed_at: {type: string, format: date-time}
         phases: {type: array, items: {$ref: '#/components/schemas/GoScanPhase'}}
+    ExecutionTrustRequest:
+      type: object
+      required: [project_revision, confirm]
+      properties:
+        project_revision: {type: string}
+        confirm: {type: boolean, description: Must be true after the client shows the command scope.}
+    ExecutionTrust:
+      type: object
+      required: [project_id, project_revision, trusted, commands]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        trusted: {type: boolean, description: In-memory authorization for this daemon session only.}
+        commands:
+          type: array
+          description: Exact argv vectors for this requested scan or task-test action; gofmt and go vet are source-only and omitted.
+          items: {type: array, items: {type: string}}
     GoScanPhase:
       type: object
       required: [name, state]

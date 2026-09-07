@@ -443,6 +443,9 @@ func TestScopedModelEndToEndTaskFlowKeepsNonPromptOperationsModelFree(t *testing
 	if err != nil || validated.State != DraftValid {
 		t.Fatalf("validated draft = %+v, err = %v", validated, err)
 	}
+	if _, err := service.TrustProjectExecution(analysis.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
 	checks, err := service.CheckDraft(context.Background(), DraftCheckRequest{ID: validated.ID, ExpectedRevision: validated.Revision, ExpectedHash: validated.Hash})
 	if err != nil || !checks.Applicable || len(taskChecks(checks.Checks)) != 2 {
 		t.Fatalf("task checks = %+v, err = %v", checks, err)
@@ -456,6 +459,9 @@ func TestScopedModelEndToEndTaskFlowKeepsNonPromptOperationsModelFree(t *testing
 	}
 	current, err := manager.Analysis()
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.TrustProjectExecution(current.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.ScanGoProject(context.Background(), current.ProjectRevision); err != nil {

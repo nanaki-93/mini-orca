@@ -34,6 +34,12 @@ private data class ProjectRevisionRequest(
 )
 
 @Serializable
+private data class ExecutionTrustRequest(
+    @SerialName("project_revision") val projectRevision: String,
+    val confirm: Boolean,
+)
+
+@Serializable
 private data class FileAnalysisRequest(
     val path: String,
     @SerialName("project_revision") val projectRevision: String,
@@ -264,6 +270,20 @@ class ApiClient(
   fun goScan(revision: String): GoScanReport? =
       decodeOptional(
           sendResponse("GET", "/api/projects/current/scan?project_revision=${encode(revision)}"))
+
+  fun executionTrust(revision: String, taskTestName: String = ""): ExecutionTrust =
+      decode(
+          send(
+              "GET",
+              "/api/projects/current/execution-trust?project_revision=${encode(revision)}" +
+                  if (taskTestName.isBlank()) "" else "&task_test_name=${encode(taskTestName)}"))
+
+  fun trustProjectExecution(revision: String): ExecutionTrust =
+      decode(
+          send(
+              "POST",
+              "/api/projects/current/execution-trust",
+              requestBody(ExecutionTrustRequest(revision, confirm = true))))
 
   fun startGoScan(revision: String): GoScanReport =
       decode(

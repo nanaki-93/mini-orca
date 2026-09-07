@@ -213,6 +213,11 @@ func (s *Service) CheckDraft(ctx context.Context, request DraftCheckRequest) (*D
 	if err != nil {
 		return nil, err
 	}
+	if request.Options.RunTests || input.taskTest != nil {
+		if err := s.requireProjectExecutionTrust(draft.ProjectRevision); err != nil {
+			return nil, err
+		}
+	}
 	report, err := s.runDraftChecks(ctx, input, request.Options)
 	if err != nil {
 		return nil, err
@@ -243,7 +248,7 @@ func (s *Service) composeDraftCheckInput(draft Draft) (draftCheckInput, string, 
 	if file.ContentHash != draft.BaseFileHash {
 		return draftCheckInput{}, "", project.ErrRevisionConflict
 	}
-	input := draftCheckInput{file: *file, source: composition.Source}
+	input := draftCheckInput{file: *file, source: composition.Source, projectRevision: draft.ProjectRevision}
 	if draft.TaskSpec != nil {
 		input.taskTest = draft.TaskSpec.GoTestCandidate
 	}

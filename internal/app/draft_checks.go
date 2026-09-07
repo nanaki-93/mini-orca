@@ -83,15 +83,24 @@ type DraftCheckOptions struct {
 }
 
 type draftCheckInput struct {
-	file     project.IndexFile
-	source   string
-	taskTest *project.GoTestCandidateSpec
+	file            project.IndexFile
+	source          string
+	projectRevision string
+	taskTest        *project.GoTestCandidateSpec
 }
 
 // runDraftChecks executes only the exact, already-validated draft in an
 // temporary project copy. It is intentionally not a general source-check API.
 func (s *Service) runDraftChecks(ctx context.Context, input draftCheckInput, options DraftCheckOptions) (DraftCheckReport, error) {
 	file := input.file
+	revision := input.projectRevision
+	if revision == "" {
+		analysis, err := s.manager.Analysis()
+		if err != nil {
+			return DraftCheckReport{}, err
+		}
+		revision = analysis.ProjectRevision
+	}
 	workspace, err := os.MkdirTemp("", "mini-orca-check-")
 	if err != nil {
 		return DraftCheckReport{}, fmt.Errorf("create draft check workspace: %w", err)
@@ -110,8 +119,8 @@ func (s *Service) runDraftChecks(ctx context.Context, input draftCheckInput, opt
 		if err := os.WriteFile(testPath, []byte(input.taskTest.Content), 0600); err != nil {
 			return DraftCheckReport{}, fmt.Errorf("write task test workspace file: %w", err)
 		}
-		taskCommand = []string{"go", "test", "./...", "-run", "^" + input.taskTest.Name + "$"}
-		taskChecks = append(taskChecks, s.runTaskTestCheck(ctx, workspace, "task test baseline", taskCommand, false))
+		taskCommand = []string{"go", "test", "./...", "-run", "^" + regexp.QuoteMeta(input.taskTest.Name) + "$"}
+		taskChecks = append(taskChecks, s.runTaskTestCheck(ctx, workspace, revision, "task test baseline", taskCommand, false))
 	}
 	draftPath := filepath.Join(workspace, filepath.FromSlash(file.Path))
 	if err := os.MkdirAll(filepath.Dir(draftPath), 0700); err != nil {
@@ -125,14 +134,14 @@ func (s *Service) runDraftChecks(ctx context.Context, input draftCheckInput, opt
 	switch file.Language {
 	case "Go":
 		report.Checks = append(report.Checks, parseGoDraft(draftPath, input.source))
-		report.Checks = append(report.Checks, s.runCheck(ctx, workspace, "format", true, []string{"gofmt", "-d", file.Path}, true))
+		report.Checks = append(report.Checks, s.runCheck(ctx, workspace, revision, "format", true, []string{"gofmt", "-d", file.Path}, true, false))
 		if options.RunLint {
-			report.Checks = append(report.Checks, s.runCheck(ctx, workspace, "lint", false, []string{"go", "vet", "./..."}, false))
+			report.Checks = append(report.Checks, s.runCheck(ctx, workspace, revision, "lint", false, []string{"go", "vet", "./..."}, false, false))
 		} else {
 			report.Checks = append(report.Checks, DraftCheck{Name: "lint", State: CheckSkipped})
 		}
 		if options.RunTests {
-			report.Checks = append(report.Checks, s.runCheck(ctx, workspace, "tests", false, []string{"go", "test", "./..."}, false))
+			report.Checks = append(report.Checks, s.runCheck(ctx, workspace, revision, "tests", false, []string{"go", "test", "./..."}, false, true))
 		} else {
 			report.Checks = append(report.Checks, DraftCheck{Name: "tests", State: CheckSkipped})
 		}
@@ -145,7 +154,7 @@ func (s *Service) runDraftChecks(ctx context.Context, input draftCheckInput, opt
 		)
 	}
 	if len(taskChecks) == 1 && taskChecks[0].State == CheckPassed {
-		taskChecks = append(taskChecks, s.runTaskTestCheck(ctx, workspace, "task test verification", taskCommand, true))
+		taskChecks = append(taskChecks, s.runTaskTestCheck(ctx, workspace, revision, "task test verification", taskCommand, true))
 	}
 	report.Checks = append(report.Checks, taskChecks...)
 	report.Applicable = requiredChecksPassed(report.Checks)
@@ -169,8 +178,8 @@ func taskTestPath(workspace, targetPath string) (string, error) {
 	return "", fmt.Errorf("no available generated task test filename")
 }
 
-func (s *Service) runTaskTestCheck(ctx context.Context, workspace, name string, command []string, expectPass bool) DraftCheck {
-	check, err := s.executeDraftCheck(ctx, workspace, DraftCheck{Name: name, Required: true, Command: append([]string(nil), command...)})
+func (s *Service) runTaskTestCheck(ctx context.Context, workspace, revision, name string, command []string, expectPass bool) DraftCheck {
+	check, err := s.executeDraftCheck(ctx, workspace, revision, DraftCheck{Name: name, Required: true, Command: append([]string(nil), command...)}, true)
 	if check.State == CheckCanceled {
 		return check
 	}
@@ -194,8 +203,8 @@ func parseGoDraft(path, source string) DraftCheck {
 	return check
 }
 
-func (s *Service) runCheck(ctx context.Context, workspace, name string, required bool, command []string, failOnOutput bool) DraftCheck {
-	check, err := s.executeDraftCheck(ctx, workspace, DraftCheck{Name: name, Required: required, Command: append([]string(nil), command...)})
+func (s *Service) runCheck(ctx context.Context, workspace, revision, name string, required bool, command []string, failOnOutput, executesProjectCode bool) DraftCheck {
+	check, err := s.executeDraftCheck(ctx, workspace, revision, DraftCheck{Name: name, Required: required, Command: append([]string(nil), command...)}, executesProjectCode)
 	if check.State == CheckCanceled {
 		return check
 	}
@@ -207,7 +216,7 @@ func (s *Service) runCheck(ctx context.Context, workspace, name string, required
 	return check
 }
 
-func (s *Service) executeDraftCheck(ctx context.Context, workspace string, check DraftCheck) (DraftCheck, error) {
+func (s *Service) executeDraftCheck(ctx context.Context, workspace, revision string, check DraftCheck, executesProjectCode bool) (DraftCheck, error) {
 	if err := ctx.Err(); err != nil {
 		check.State = CheckCanceled
 		check.Output = err.Error()
@@ -215,7 +224,7 @@ func (s *Service) executeDraftCheck(ctx context.Context, workspace string, check
 	}
 	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
 	defer cancel()
-	result, err := runCheckCommand(timed, workspace, check.Command)
+	result, err := s.runCheckCommand(timed, workspace, check.Command, revision, executesProjectCode)
 	check.Output = sanitizeCheckOutput(result.output, result.truncated, workspace, s.manager.Root())
 	check.ExitCode = result.exitCode
 	if timed.Err() != nil {
@@ -226,6 +235,15 @@ func (s *Service) executeDraftCheck(ctx context.Context, workspace string, check
 	return check, err
 }
 
+func (s *Service) runCheckCommand(ctx context.Context, workspace string, command []string, revision string, executesProjectCode bool) (checkCommandResult, error) {
+	if !executesProjectCode {
+		return runCheckCommand(ctx, workspace, command)
+	}
+	return runCheckCommandWithStart(ctx, workspace, command, true, func() error {
+		return s.requireProjectExecutionTrust(revision)
+	})
+}
+
 type checkCommandResult struct {
 	output    string
 	exitCode  int
@@ -233,21 +251,57 @@ type checkCommandResult struct {
 }
 
 func runCheckCommand(ctx context.Context, directory string, command []string) (checkCommandResult, error) {
+	return runCheckCommandWithStart(ctx, directory, command, false, nil)
+}
+
+func runCheckCommandWithStart(ctx context.Context, directory string, command []string, ownsDescendants bool, beforeStart func() error) (checkCommandResult, error) {
 	if len(command) == 0 {
 		return checkCommandResult{}, fmt.Errorf("empty check command")
 	}
 	process := exec.CommandContext(ctx, command[0], command[1:]...)
 	process.Dir = directory
+	process.Env = checkChildEnvironment(os.Environ())
+	if ownsDescendants {
+		if err := configureCheckCommand(process); err != nil {
+			return checkCommandResult{}, err
+		}
+	}
 	process.WaitDelay = checkLimits.pipeDrainWait
 	output := &boundedCheckOutput{limit: checkLimits.maxOutputBytes}
 	process.Stdout = output
 	process.Stderr = output
+	if beforeStart != nil {
+		if err := beforeStart(); err != nil {
+			return checkCommandResult{}, err
+		}
+	}
 	err := process.Run()
 	result := checkCommandResult{output: output.String(), truncated: output.Truncated()}
 	if exitError, ok := err.(*exec.ExitError); ok {
 		result.exitCode = exitError.ExitCode()
 	}
 	return result, err
+}
+
+var checkEnvironmentAllowlist = map[string]bool{
+	"PATH": true, "HOME": true, "TMPDIR": true, "TMP": true, "TEMP": true,
+	"LANG": true, "LC_ALL": true, "LC_CTYPE": true,
+	"GOROOT": true, "GOPATH": true, "GOCACHE": true, "GOENV": true,
+	"CGO_ENABLED": true, "CC": true, "CXX": true, "PKG_CONFIG": true,
+	"SYSTEMROOT": true, "SystemRoot": true, "COMSPEC": true, "ComSpec": true,
+}
+
+// checkChildEnvironment starts from a small toolchain allowlist. In
+// particular it never inherits provider credentials or arbitrary host secrets.
+func checkChildEnvironment(parent []string) []string {
+	child := make([]string, 0, len(checkEnvironmentAllowlist))
+	for _, entry := range parent {
+		name, _, found := strings.Cut(entry, "=")
+		if found && checkEnvironmentAllowlist[name] {
+			child = append(child, entry)
+		}
+	}
+	return child
 }
 
 // boundedCheckOutput owns both command streams. Write always reports a full

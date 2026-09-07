@@ -55,6 +55,9 @@ func newGoScanController() *goScanController { return &goScanController{} }
 // ScanGoProject performs parser, vet, and test phases only after an explicit
 // request for the active revision. Tool commands run in a copied workspace.
 func (s *Service) ScanGoProject(ctx context.Context, revision string) (*GoScanReport, error) {
+	if err := s.requireProjectExecutionTrust(revision); err != nil {
+		return nil, err
+	}
 	scan, err := s.prepareGoScan(revision)
 	if err != nil {
 		return nil, err
@@ -123,7 +126,7 @@ func (s *Service) runGoScanToolPhases(ctx context.Context, scan *preparedGoScan)
 		command []string
 		source  string
 	}{{"vet", []string{"go", "vet", "./..."}, project.FindingSourceVet}, {"tests", []string{"go", "test", "./..."}, project.FindingSourceTest}} {
-		result := s.runGoScanPhase(ctx, scan.workspace, scan.root, phase.name, phase.command)
+		result := s.runGoScanPhase(ctx, scan.workspace, scan.root, scan.report.ProjectRevision, phase.name, phase.command)
 		scan.report.Phases = append(scan.report.Phases, result)
 		scan.findings = append(scan.findings, toolScanFindings(result, phase.source, scan.fileHashes)...)
 		if err := s.recordGoScanPhase(scan.root, scan.report, scan.findings, scan.fileHashes, phase.source); err != nil {
@@ -158,6 +161,9 @@ func (s *Service) StartGoScan(revision string) (*GoScanReport, error) {
 	}
 	if revision == "" || revision != analysis.ProjectRevision {
 		return nil, project.ErrRevisionConflict
+	}
+	if err := s.requireProjectExecutionTrust(revision); err != nil {
+		return nil, err
 	}
 	worker, cancel := context.WithCancel(context.Background())
 	s.goScan.mu.Lock()
@@ -276,11 +282,11 @@ func failedGoScanReport(projectID, revision, root string, failure error) *GoScan
 	}
 }
 
-func (s *Service) runGoScanPhase(ctx context.Context, workspace, root, name string, command []string) GoScanPhase {
+func (s *Service) runGoScanPhase(ctx context.Context, workspace, root, revision, name string, command []string) GoScanPhase {
 	phase := GoScanPhase{Name: name, Command: append([]string(nil), command...)}
 	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
 	defer cancel()
-	result, err := runCheckCommand(timed, workspace, command)
+	result, err := s.runCheckCommand(timed, workspace, command, revision, name == "tests")
 	phase.Output = sanitizeCheckOutput(result.output, result.truncated, workspace, root)
 	phase.ExitCode = result.exitCode
 	if timed.Err() != nil {

@@ -1457,12 +1457,60 @@ class DesktopWorkflowPresenterTest {
     }
   }
 
+  @Test
+  fun verifiedScanTrustsBeforeStartingAndNavigationSendsNoTrustRequest() {
+    val requests = mutableListOf<String>()
+    val presenter =
+        presenter(interceptTrust = false) { method, path, _ ->
+          requests += "$method $path"
+          when (method to path) {
+            "GET" to "/api/projects/current/execution-trust?project_revision=revision" ->
+                response(
+                    """{"project_id":"project","project_revision":"revision","trusted":false,"commands":[["go","test","./..."]]}""")
+            "POST" to "/api/projects/current/scan" ->
+                response(
+                    """{"project_id":"project","project_revision":"revision","status":"canceled"}""")
+            "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
+            else -> response("{}")
+          }
+        }
+    try {
+      loadProject(presenter)
+      assertTrue(requests.isEmpty())
+      presenter.runVerifiedScan()
+      eventually { requests.any { it == "POST /api/projects/current/scan" } }
+      assertEquals(
+          listOf(
+              "GET /api/projects/current/execution-trust?project_revision=revision",
+              "POST /api/projects/current/execution-trust",
+              "POST /api/projects/current/scan"),
+          requests.take(3))
+    } finally {
+      presenter.close()
+    }
+  }
+
   private fun presenter(
       parentScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+      interceptTrust: Boolean = true,
       responder: (String, String, String?) -> TransportResponse,
   ): DesktopWorkflowPresenter {
     return DesktopWorkflowPresenter(
-        ApiClient(transport = DaemonTransport(responder)),
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, body ->
+                  if (interceptTrust &&
+                      method == "GET" &&
+                      path == "/api/projects/current/execution-trust?project_revision=revision")
+                      response(
+                          """{"project_id":"project","project_revision":"revision","trusted":false,"commands":[["go","test","./..."]]}""")
+                  else if (interceptTrust &&
+                      method == "POST" &&
+                      path == "/api/projects/current/execution-trust")
+                      response(
+                          """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}""")
+                  else responder(method, path, body)
+                }),
         LastProjectStore(),
         parentScope,
         Dispatchers.Default,

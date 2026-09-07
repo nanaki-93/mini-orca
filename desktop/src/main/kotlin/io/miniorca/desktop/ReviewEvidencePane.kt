@@ -569,11 +569,24 @@ internal fun ReviewToolWindow(
               stateLabel = nextAction.scope,
               stateTint = if (nextAction.enabled) SelectionText else Warning) {
                 ReviewNextAction(nextAction, evidenceActions, applicationActions)
+                if (evidence.canRunChecks && state.draft?.taskSpec?.goTestCandidate != null)
+                    Text(
+                        "Trusted local execution may run ${draftProjectCodeCommand(state.draft)}. gofmt and go vet are source-only.",
+                        color = SecondaryText,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(top = 5.dp))
                 if (nextAction.kind == ReviewNextActionKind.Apply && evidence.canRunChecks)
                     ChromeButton(
                         onClick = evidenceActions.runChecks,
-                        accessibleName = "Rerun focused checks") {
-                          Text("Rerun focused checks", fontSize = 11.sp)
+                        accessibleName =
+                            if (state.draft?.taskSpec?.goTestCandidate != null)
+                                "Trust local execution and rerun focused checks"
+                            else "Rerun focused checks") {
+                          Text(
+                              if (state.draft?.taskSpec?.goTestCandidate != null)
+                                  "Trust local execution & rerun checks"
+                              else "Rerun focused checks",
+                              fontSize = 11.sp)
                         }
                 if (nextAction.kind == ReviewNextActionKind.EditDraft &&
                     repairLimitReached(state.session, state.draft, state.checks))
@@ -593,6 +606,11 @@ internal fun ReviewToolWindow(
           }
         }
   }
+}
+
+internal fun draftProjectCodeCommand(draft: DeclarationDraft?): String {
+  val taskName = draft?.taskSpec?.goTestCandidate?.name?.takeIf { it.isNotBlank() }
+  return if (taskName == null) "go test ./..." else "go test ./... -run ^$taskName$"
 }
 
 /** Immutable daemon-derived review evidence for one file-scoped candidate. */

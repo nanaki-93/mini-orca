@@ -234,6 +234,15 @@ data class DraftCheck(
     @SerialName("exit_code") val exitCode: Int = 0
 )
 
+/** Current-session permission for the fixed commands that execute project code. */
+@Serializable
+data class ExecutionTrust(
+    @SerialName("project_id") val projectId: String = "",
+    @SerialName("project_revision") val projectRevision: String = "",
+    val trusted: Boolean = false,
+    val commands: List<List<String>> = emptyList(),
+)
+
 @Serializable
 data class ApplyResult(
     @SerialName("project_revision") val projectRevision: String,
