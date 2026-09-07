@@ -104,9 +104,14 @@ class PerformanceWorkspaceTest {
     val matching = performanceReviewPresentation(job, report)
     assertEquals(listOf(finding), matching.findings("", "", ""))
     assertEquals("internal/current.go", matching.pathFor(finding))
+    assertFalse(matching.isStale)
+
+    val stale = performanceReviewPresentation(job, staleReport(job))
+    assertTrue(stale.isStale)
 
     val mismatched = performanceReviewPresentation(job, report.copy(queueId = "performance:old"))
     assertFalse(mismatched.hasReport)
+    assertFalse(mismatched.isStale)
     assertEquals(emptyList(), mismatched.findings("", "", ""))
     assertEquals("", mismatched.pathFor(finding))
 

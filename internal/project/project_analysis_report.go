@@ -15,7 +15,7 @@ import (
 
 const (
 	projectAnalysisSchemaVersion = "1"
-	projectAnalysisPromptVersion = "project-analysis-v2"
+	projectAnalysisPromptVersion = "project-analysis-v3"
 	projectAnalysisReportPath    = ".mini-orca/project-analysis.json"
 	maxProjectAnalysisBytes      = 64 * 1024
 	maxProjectAnalysisItems      = 32
@@ -113,7 +113,7 @@ func newProjectAnalysisReportWithProvenance(projectID, revision, model, profile,
 
 func projectAnalysisMessages(contextText string) []llm.ChatMessage {
 	return []llm.ChatMessage{
-		{Role: "system", Content: "You are a software architect. Analyze only the supplied project facts and context. Return exactly one JSON object with these fields and no Markdown or prose: purpose (non-empty string), architecture (non-empty string), components (string array), entry_points (string array), flows (string array), risks ({severity,summary,engineering_insight?} array), next_steps (string array), engineering_insight? ({mechanism,why_it_matters_here,tradeoff_or_failure_mode?,transferable_lesson?}). Insights are optional 50-90 word advisory explanations grounded in supplied evidence; omit generic commentary. Do not invent files or dependencies. Risks are suggestions, not verified findings."},
+		{Role: "system", Content: "You are a software architect. Analyze only the supplied project facts and context. Return exactly one JSON object with these fields and no Markdown or prose: purpose (non-empty string), architecture (non-empty string), components (string array), entry_points (string array), flows (string array), risks ({severity,summary,engineering_insight?} array), next_steps (string array), engineering_insight? ({mechanism,why_it_matters_here,tradeoff_or_failure_mode?,transferable_lesson?}). " + EngineeringInsightPromptInstructions + "Do not invent files or dependencies. Risks are suggestions, not verified findings."},
 		{Role: "user", Content: contextText},
 	}
 }

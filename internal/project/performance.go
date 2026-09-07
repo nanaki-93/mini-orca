@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	PerformancePromptVersion  = "performance-file-v1"
+	PerformancePromptVersion  = "performance-file-v2"
 	PerformanceMaxSourceBytes = 64 * 1024
 	maxPerformanceOutputBytes = 64 * 1024
 	maxPerformanceFindings    = 5
@@ -227,8 +227,8 @@ func StorePerformanceFileReport(root string, report PerformanceFileReport) error
 }
 
 // LoadPerformanceFileReport reads only sanitized metadata. Changed identity,
-// context policy, or an unavailable source file is reported as stale instead of
-// being presented as a current review.
+// prompt version, context policy, or an unavailable source file is reported as
+// stale instead of being presented as a current review.
 func LoadPerformanceFileReport(root, path, contentHash string, policy *ContextPolicy) (*PerformanceFileReport, error) {
 	if policy == nil {
 		return nil, fmt.Errorf("performance report policy is required")
@@ -248,7 +248,7 @@ func LoadPerformanceFileReport(root, path, contentHash string, policy *ContextPo
 		}
 		return nil, nil
 	}
-	if report.ContentHash != contentHash || report.ContextPolicyVersion != policy.Version() || !policy.Decide(path).Include {
+	if report.ContentHash != contentHash || report.PromptVersion != PerformancePromptVersion || report.ContextPolicyVersion != policy.Version() || !policy.Decide(path).Include {
 		report.Status = "stale"
 		return clonePerformanceFileReport(&report), nil
 	}

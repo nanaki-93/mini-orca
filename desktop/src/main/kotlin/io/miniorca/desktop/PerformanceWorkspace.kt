@@ -91,7 +91,10 @@ internal fun PerformanceWorkspacePane(
         }
       }
       selected?.let { finding ->
-        item { PerformanceFindingDetails(finding, presentation.pathFor(finding), actions) }
+        item {
+          PerformanceFindingDetails(
+              finding, presentation.pathFor(finding), presentation.isStale, actions)
+        }
       }
       item {
         SectionLabel("Opportunities")
@@ -224,6 +227,7 @@ private fun PerformanceReviewScope(
 private fun PerformanceFindingDetails(
     finding: PerformanceFinding,
     path: String,
+    stale: Boolean,
     actions: PerformanceWorkspaceActions
 ) {
   Column(Modifier.fillMaxWidth()) {
@@ -267,7 +271,7 @@ private fun PerformanceFindingDetails(
       }
     }
     EngineeringInsightPanel(
-        finding.engineeringInsight, scopeLabel = "Selected performance opportunity")
+        finding.engineeringInsight, stale = stale, scopeLabel = "Selected performance opportunity")
   }
 }
 
@@ -314,6 +318,9 @@ private constructor(
 ) {
   val hasReport: Boolean
     get() = report != null
+
+  val isStale: Boolean
+    get() = report?.status.equals("stale", ignoreCase = true)
 
   fun findings(category: String, impact: String, path: String): List<PerformanceFinding> =
       report

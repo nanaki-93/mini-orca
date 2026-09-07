@@ -104,10 +104,12 @@ func TestParsePerformanceFindingsValidatesFieldsEnumsAndSymbolAnchors(t *testing
 func TestParsePerformanceFindingsOmitsMalformedOptionalInsight(t *testing.T) {
 	source := "package main\nfunc Run() {\n for range []int{1} {}\n}\n"
 	symbols := []SymbolInfo{{Name: "Run", StartLine: 2, EndLine: 4}}
-	output := strings.Replace(validPerformanceFindingsJSON(), `"symbol":"Run"`, `"symbol":"Run","engineering_insight":"not an object"`, 1)
-	findings, warning, err := ParsePerformanceFindings(output, "main.go", source, symbols)
-	if err != nil || warning != "" || len(findings) != 1 || findings[0].EngineeringInsight != nil {
-		t.Fatalf("findings with malformed insight = %+v, %q, %v", findings, warning, err)
+	for _, insight := range []string{`"not an object"`, `{"mechanism":"m"}`, `{"mechanism":"m","why_it_matters_here":"w","unknown":true}`, `null`} {
+		output := strings.Replace(validPerformanceFindingsJSON(), `"symbol":"Run"`, `"symbol":"Run","engineering_insight":`+insight, 1)
+		findings, warning, err := ParsePerformanceFindings(output, "main.go", source, symbols)
+		if err != nil || warning != "" || len(findings) != 1 || findings[0].EngineeringInsight != nil {
+			t.Fatalf("findings with malformed insight %q = %+v, %q, %v", insight, findings, warning, err)
+		}
 	}
 }
 

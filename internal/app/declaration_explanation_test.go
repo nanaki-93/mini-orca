@@ -240,10 +240,30 @@ func TestParseDeclarationExplanationResponseIsStrictAndBounded(t *testing.T) {
 		`{"version":"v1","summary":"x","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[],"unknown":true}`,
 		`{"version":"v1","summary":"x","behavior":[],"inputs":[],"outputs":[],"side_effects":[]}`,
 		`{"version":"v1","summary":"x","behavior":["","b"],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[]}`,
-		`{"version":"v1","summary":"x","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[],"engineering_insight":{"mechanism":"m","why_it_matters_here":"w","unknown":true}}`,
 	} {
 		if _, err := ParseDeclarationExplanationResponse(output); err == nil {
 			t.Fatalf("accepted malformed output %s", output)
+		}
+	}
+}
+
+func TestParseDeclarationExplanationResponseOmitsInvalidOptionalInsight(t *testing.T) {
+	base := `{"version":"v1","summary":"x","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[]`
+	for _, insight := range []string{
+		`"not an object"`,
+		`{"mechanism":"m","why_it_matters_here":"w","unknown":true}`,
+		`{"mechanism":"m"}`,
+		`{"mechanism":"` + strings.Repeat("界", 1000) + `","why_it_matters_here":"w"}`,
+		`null`,
+		``,
+	} {
+		output := base + `}`
+		if insight != "" {
+			output = base + `,"engineering_insight":` + insight + `}`
+		}
+		parsed, err := ParseDeclarationExplanationResponse(output)
+		if err != nil || parsed.EngineeringInsight != nil || parsed.Summary != "x" {
+			t.Fatalf("optional insight %q parsed = %+v, %v", insight, parsed, err)
 		}
 	}
 }

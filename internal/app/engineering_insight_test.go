@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -16,6 +17,30 @@ func TestOptionalInsightsDoNotRejectSemanticOrDraftParents(t *testing.T) {
 	draft, err := ParseDeclarationDraftResponse(`{"version":"v1","declaration":"func Run() {}","explanation":"Proposal.","engineering_insight":{"mechanism":false}}`)
 	if err != nil || draft.EngineeringInsight != nil {
 		t.Fatalf("draft with malformed optional insight = %+v, %v", draft, err)
+	}
+}
+
+func TestEngineeringInsightPromptsRequireUsefulGroundedContentOrOmission(t *testing.T) {
+	draft, err := declarationDraftMessages("Improve Run.", "", "context", "main.go", "Run", project.DeclarationEditReplaceSymbol)
+	if err != nil {
+		t.Fatal(err)
+	}
+	semantic, err := semanticPrompt("package main\nfunc Run() {}", project.Analysis{Name: "fixture", Type: "go"}, &project.ProjectIndex{}, project.IndexFile{Path: "main.go"}, project.ContextManifest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	performance, err := performancePrompt("package main\nfunc Run() {}", project.Analysis{Name: "fixture", Type: "go"}, project.IndexFile{Path: "main.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, prompt := range map[string]string{
+		"draft": draft[0].Content, "explanation": declarationExplanationPrompt("context"), "file": semantic, "performance": performance,
+	} {
+		for _, required := range []string{"mechanism explains the concrete mechanism", "why_it_matters_here names the exact local evidence", "tradeoff_or_failure_mode names a real trade-off or failure condition", "transferable_lesson gives a reusable lesson with a concrete verification idea", "Omit trivial or generic lessons."} {
+			if !strings.Contains(prompt, required) {
+				t.Fatalf("%s prompt is missing %q: %s", name, required, prompt)
+			}
+		}
 	}
 }
 

@@ -7,9 +7,9 @@ import (
 )
 
 func TestOptionalEngineeringInsightIsBoundedAndIndependent(t *testing.T) {
-	valid := json.RawMessage(`{"mechanism":"  Cache identity prevents a late answer from replacing current evidence. ","why_it_matters_here":"  The review remains advisory unless it belongs to this file hash.  ","tradeoff_or_failure_mode":"Extra identity checks reject stale work."}`)
+	valid := json.RawMessage(`{"mechanism":"  Cache\nidentity prevents a late answer from replacing current evidence. ","why_it_matters_here":"  The review\tremains advisory unless it belongs to this file hash.  ","tradeoff_or_failure_mode":"Extra identity checks reject stale work."}`)
 	insight, diagnostic := ParseOptionalEngineeringInsight(valid)
-	if diagnostic != "" || insight == nil || insight.Mechanism != "Cache identity prevents a late answer from replacing current evidence." {
+	if diagnostic != "" || insight == nil || insight.Mechanism != "Cache identity prevents a late answer from replacing current evidence." || insight.WhyItMattersHere != "The review remains advisory unless it belongs to this file hash." {
 		t.Fatalf("valid insight = %+v, %q", insight, diagnostic)
 	}
 	for _, raw := range []json.RawMessage{
@@ -22,8 +22,22 @@ func TestOptionalEngineeringInsightIsBoundedAndIndependent(t *testing.T) {
 			t.Fatalf("invalid insight = %+v, %q", insight, diagnostic)
 		}
 	}
-	if insight, diagnostic := ParseOptionalEngineeringInsight(nil); insight != nil || diagnostic != "" {
-		t.Fatalf("absent insight = %+v, %q", insight, diagnostic)
+	for _, raw := range []json.RawMessage{nil, json.RawMessage(`null`)} {
+		if insight, diagnostic := ParseOptionalEngineeringInsight(raw); insight != nil || diagnostic != "" {
+			t.Fatalf("absent insight = %+v, %q", insight, diagnostic)
+		}
+	}
+}
+
+func TestOptionalEngineeringInsightCountsUnicodeRunesAcrossAllFields(t *testing.T) {
+	atLimit := json.RawMessage(`{"mechanism":"` + strings.Repeat("界", 400) + `","why_it_matters_here":"` + strings.Repeat("界", 300) + `","tradeoff_or_failure_mode":"` + strings.Repeat("界", 200) + `","transferable_lesson":"` + strings.Repeat("界", 100) + `"}`)
+	insight, diagnostic := ParseOptionalEngineeringInsight(atLimit)
+	if diagnostic != "" || insight == nil {
+		t.Fatalf("insight at rune limit = %+v, %q", insight, diagnostic)
+	}
+	overLimit := json.RawMessage(`{"mechanism":"` + strings.Repeat("界", 400) + `","why_it_matters_here":"` + strings.Repeat("界", 300) + `","tradeoff_or_failure_mode":"` + strings.Repeat("界", 200) + `","transferable_lesson":"` + strings.Repeat("界", 101) + `"}`)
+	if insight, diagnostic := ParseOptionalEngineeringInsight(overLimit); insight != nil || diagnostic != "optional engineering insight omitted" {
+		t.Fatalf("insight over rune limit = %+v, %q", insight, diagnostic)
 	}
 }
 
