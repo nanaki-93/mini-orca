@@ -33,7 +33,7 @@ run_go_quality() {
   # go run and npx use their user-level module/package caches. No quality tool is
   # added to go.mod, the daemon image, or this worktree.
   run_stage "Go static analysis" go run honnef.co/go/tools/cmd/staticcheck@"$staticcheck_version" ./...
-  run_stage "Go reachability" go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon
+  run_stage "Go reachability" go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval
   run_stage "Go complexity" find cmd internal -name '*.go' -type f ! -name '*_test.go' -exec go run github.com/fzipp/gocyclo/cmd/gocyclo@"$gocyclo_version" -over 15 '{}' +
   run_stage "Go clone detection" npx --yes jscpd@"$jscpd_version" \
     --min-tokens 70 \

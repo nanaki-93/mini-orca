@@ -237,7 +237,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | FLOW-02 | Read-only declaration explanation | FLOW-01, SEC-02, FND-06 | M / high | Complete |
 | FLOW-03 | Reusable temporary behavioral proof | FLOW-01, SEC-03, SEC-04 | M / high | Complete |
 | LEARN-01 | Concise, grounded engineering insights | FLOW-02 | S / medium | Complete |
-| LEARN-02 | Evaluate usefulness and model reliability | LEARN-01, FLOW-03 | M / medium | Pending |
+| LEARN-02 | Evaluate usefulness and model reliability | LEARN-01, FLOW-03 | M / medium | Complete |
 | SEC-01 | Harden daemon and container network boundary | FND-01 | M / high | Complete |
 | SEC-02 | Bind provider delivery to consent and context | FND-01 | M / high | Complete |
 | SEC-03 | Bound subprocess output and workspace resources | FND-01 | M / high | Complete |
@@ -625,6 +625,18 @@ the full quality gate green. No inherited quality exception applies to final rel
   counterexamples that should return nothing and independently inspect the labels.
 - Verify: deterministic suite in G/D; a manual live sample with an explicitly chosen
   model/provider and budget. Carry unrun live quality evidence into REL-01.
+- Completed 2026-09-07. Eight sanitized fixtures cover the required useful,
+  no-insight and malformed cases; deterministic Go checks enforce structure,
+  source anchors, the 1,000-rune bound and omission, while Desktop tests inspect
+  the labels independently. An opt-in receipt validator records the selected
+  provider, model, prompt version, sample count and request/token budgets, then
+  enforces human scores, critical-false-claim rejection and the 6/8 retention
+  threshold without contacting a provider. Two repair/review cycles removed new
+  quality findings and added command-boundary coverage. `make check` passed; the
+  quality runner has only the existing pending-Security reachability output and
+  complexity findings in `checkWorkspaceCopier.copy` and
+  `LoadPerformanceFileReport`. No live sample was run; REL-01 retains that evidence
+  requirement until a user selects the provider, model and budget.
 
 ## Security task instructions
 
