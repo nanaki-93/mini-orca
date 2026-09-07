@@ -244,7 +244,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | SEC-04 | Explicit project-execution trust and environment | SEC-03 | M / high | Complete |
 | SEC-05 | Define strict Security report contracts | FND-05 | S / medium | Complete |
 | SEC-06 | Add small deterministic Go security rules | SEC-05 | M / medium | Complete |
-| SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Blocked — two repair/review cycles exhausted on source-echo containment |
+| SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Complete |
 | SEC-08 | Deliver Security workspace and focused handoff | SEC-06, SEC-07, UI-03, FND-06 | M / high | Pending |
 | PERF-01 | Measure and improve Mini-Orca hotspots | FND-03, FND-06, SEC-03 | M / medium | Complete |
 | PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Blocked — two repair/review cycles exhausted on truthful failed-result handling and parser validation |
@@ -806,15 +806,19 @@ the full quality gate green. No inherited quality exception applies to final rel
   absence of findings is not labeled “secure.” Never execute suggested exploit code.
 - Verify: fake-provider request/provenance/limits tests, G/C. Put exact routes and
   schemas in OpenAPI/API guide in this task, not another prose contract file.
-- Blocked 2026-09-07 after the two allowed repair/review cycles. The final patch
-  still permits short or whitespace-altered source lines echoed by the provider
-  to enter returned and persisted report prose, so it does not meet the
-  source-free report boundary. Other review criteria and the supported checks
-  passed; the quality runner reported only the two existing untouched complexity
-  findings. The preserved patch is `.git/mini-orca-autopilot-SEC-07.patch`
-  (SHA-256
-  `0ff3a189c9783e3716f415c41dea795f24cce2da0f860542e574d00d0fd13a5f`).
-  No Security review API, cache publication, or storage change was integrated.
+- Completed 2026-09-08. The explicit Security review route sends one current,
+  policy-eligible file and optionally one exact declaration through the configured
+  Analyze scope after fresh remote-provider consent. Project, revision, file hash,
+  policy, focus and provider identity are rechecked around model delivery and
+  immediately before atomic cache publication; canceled or stale results leave no
+  report. Strict bounded parsing allows an empty finding list without calling the
+  file secure and rejects malformed, out-of-scope or over-limit responses. Returned
+  and persisted reports are redacted and source-free: meaningful source-line token
+  sequences are rejected even when the provider changes their spacing or
+  punctuation. Fake-provider, provenance, limits, atomic-publication, API/OpenAPI
+  and source-echo regression tests passed with G/C, including the race suite and
+  Desktop tests. The quality runner reports only the two accepted baseline
+  complexities. No configuration or persistence migration is required.
 
 ### SEC-08 — Deliver Security workspace and one-function handoff
 

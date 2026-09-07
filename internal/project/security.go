@@ -14,17 +14,20 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const (
-	SecurityPromptVersion  = "security-file-v1"
-	SecurityMaxSourceBytes = 64 * 1024
-	maxSecurityOutputBytes = 64 * 1024
-	maxSecurityFindings    = 5
-	maxSecurityTextBytes   = 2048
-	maxSecurityReasonBytes = 1024
+	SecurityPromptVersion               = "security-file-v1"
+	SecurityMaxSourceBytes              = 64 * 1024
+	maxSecurityOutputBytes              = 64 * 1024
+	maxSecurityFindings                 = 5
+	maxSecurityTextBytes                = 2048
+	maxSecurityReasonBytes              = 1024
+	minSecurityEchoWordCharacters       = 4
+	minSecurityEchoSingleWordCharacters = 8
 
 	SecurityStatusNotRun         = "not_run"
 	SecurityStatusRunning        = "running"
@@ -143,10 +146,21 @@ func ParseSecurityFindings(output string, indexed IndexFile, source string) ([]S
 	if err != nil {
 		return nil, err
 	}
-	if wire.Findings == nil || len(wire.Findings) > maxSecurityFindings || strings.Count(source, "\n")+1 != indexed.LineCount {
+	if wire.Findings == nil || len(wire.Findings) > maxSecurityFindings || securitySourceLineCount(source) != indexed.LineCount {
 		return nil, fmt.Errorf("security review findings or indexed facts are invalid")
 	}
 	return securityFindingsFromWire(wire.Findings, indexed)
+}
+
+func securitySourceLineCount(source string) int {
+	if source == "" {
+		return 0
+	}
+	lines := strings.Count(source, "\n")
+	if !strings.HasSuffix(source, "\n") {
+		lines++
+	}
+	return lines
 }
 
 func validSecurityReviewInput(output string, indexed IndexFile, source string) bool {
@@ -215,7 +229,7 @@ func validSecurityWireLengths(item securityFindingWire) bool {
 
 func validSecurityIndex(indexed IndexFile) bool {
 	path, err := normalizedIndexedPath(indexed.Path)
-	return err == nil && path == indexed.Path && indexed.ContentHash != "" && indexed.LineCount > 0
+	return err == nil && path == indexed.Path && indexed.ContentHash != "" && indexed.LineCount >= 0
 }
 
 func validSecurityFindingContent(f SecurityFinding) bool {
@@ -283,8 +297,9 @@ func validStoredSecurityInsight(insight *EngineeringInsight) bool {
 
 type SecurityReportCache struct {
 	root string
-	mu   sync.Mutex
 }
+
+var securityCacheMu sync.Mutex
 
 func NewSecurityReportCache(root string) (*SecurityReportCache, error) {
 	canonical, err := CanonicalRoot(root)
@@ -297,8 +312,22 @@ func NewSecurityReportCache(root string) (*SecurityReportCache, error) {
 // Store requires current indexed facts. It only redacts prose/provenance, and
 // otherwise rejects malformed states, IDs, fields, anchors, and identities.
 func (c *SecurityReportCache) Store(report SecurityFileReport, indexed IndexFile) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	return c.store(report, indexed, nil)
+}
+
+// StoreAuthorized validates and serializes a report under the shared cache
+// lock. Authorization runs after the temporary file is durable and immediately
+// before its atomic rename, so rejected results never become visible.
+func (c *SecurityReportCache) StoreAuthorized(report SecurityFileReport, indexed IndexFile, authorize func() error) error {
+	if authorize == nil {
+		return c.Store(report, indexed)
+	}
+	return c.store(report, indexed, authorize)
+}
+
+func (c *SecurityReportCache) store(report SecurityFileReport, indexed IndexFile, authorize func() error) error {
+	securityCacheMu.Lock()
+	defer securityCacheMu.Unlock()
 	report = cloneSecurityFileReportValue(report)
 	redactSecurityReport(&report)
 	if !validStoredSecurityReport(report, &indexed) {
@@ -308,11 +337,14 @@ func (c *SecurityReportCache) Store(report SecurityFileReport, indexed IndexFile
 	if err != nil {
 		return fmt.Errorf("encode security report: %w", err)
 	}
-	return storage.WriteFile(c.cachePath(report.Path, report.Source), data, 0600)
+	if authorize == nil {
+		return storage.WriteFile(c.cachePath(report.Path, report.Source), data, 0600)
+	}
+	return storage.WriteFileAuthorized(c.cachePath(report.Path, report.Source), data, 0600, authorize)
 }
 func (c *SecurityReportCache) Load(input SecurityReportInput) (*SecurityFileReport, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	securityCacheMu.Lock()
+	defer securityCacheMu.Unlock()
 	redactSecurityInput(&input)
 	if err := validSecurityInput(input); err != nil {
 		return nil, err
@@ -347,10 +379,12 @@ func (c *SecurityReportCache) Load(input SecurityReportInput) (*SecurityFileRepo
 	}
 	return cloneSecurityFileReport(&report), nil
 }
+
 func (c *SecurityReportCache) cachePath(path, source string) string {
 	key := sha256.Sum256([]byte(source + "\x00" + path))
 	return filepath.Join(c.root, ".mini-orca", "security", "files", hex.EncodeToString(key[:])+".json")
 }
+
 func StoreSecurityFileReport(root string, report SecurityFileReport, indexed IndexFile) error {
 	cache, err := NewSecurityReportCache(root)
 	if err != nil {
@@ -358,6 +392,7 @@ func StoreSecurityFileReport(root string, report SecurityFileReport, indexed Ind
 	}
 	return cache.Store(report, indexed)
 }
+
 func LoadSecurityFileReport(root string, input SecurityReportInput) (*SecurityFileReport, error) {
 	cache, err := NewSecurityReportCache(root)
 	if err != nil {
@@ -365,6 +400,7 @@ func LoadSecurityFileReport(root string, input SecurityReportInput) (*SecurityFi
 	}
 	return cache.Load(input)
 }
+
 func decodeStoredSecurityReport(data []byte, report *SecurityFileReport) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -459,6 +495,81 @@ func redactSecurityReport(report *SecurityFileReport) {
 		f.Remediation, f.VerificationIdea, f.Reference = redactSecurityText(f.Remediation), redactSecurityText(f.VerificationIdea), redactSecurityText(f.Reference)
 		f.EngineeringInsight = redactSecurityInsight(f.EngineeringInsight)
 	}
+}
+
+// SanitizeSecurityFileReport returns a source-free report with every prose and
+// provenance field redacted using the same rules enforced by cache storage.
+func SanitizeSecurityFileReport(report SecurityFileReport) SecurityFileReport {
+	report = cloneSecurityFileReportValue(report)
+	redactSecurityReport(&report)
+	return report
+}
+
+// ValidateSecurityFileReportSourceFree rejects report prose that repeats a
+// meaningful source-line token sequence. Redaction removes credentials; this
+// guard keeps formatting variations of source out of durable and returned
+// review evidence.
+func ValidateSecurityFileReportSourceFree(report SecurityFileReport, source string) error {
+	reportSignatures := make([]string, 0, len(report.Findings)*9+9)
+	for _, text := range securityReportText(report) {
+		if signature, _, _ := securityEchoSignature(text); signature != "" {
+			reportSignatures = append(reportSignatures, signature)
+		}
+	}
+	for _, line := range strings.Split(source, "\n") {
+		signature, words, wordCharacters := securityEchoSignature(line)
+		if !meaningfulSecurityEcho(words, wordCharacters) {
+			continue
+		}
+		for _, reportSignature := range reportSignatures {
+			if strings.Contains(reportSignature, signature) {
+				return fmt.Errorf("security report repeats source text")
+			}
+		}
+	}
+	return nil
+}
+
+func securityEchoSignature(value string) (string, int, int) {
+	words := make([]string, 0, 8)
+	var word strings.Builder
+	wordCharacters := 0
+	flush := func() {
+		if word.Len() == 0 {
+			return
+		}
+		words = append(words, word.String())
+		word.Reset()
+	}
+	for _, character := range value {
+		if unicode.IsLetter(character) || unicode.IsDigit(character) || character == '_' {
+			word.WriteRune(character)
+			wordCharacters++
+			continue
+		}
+		flush()
+	}
+	flush()
+	if len(words) == 0 {
+		return "", 0, 0
+	}
+	return "\x00" + strings.Join(words, "\x00") + "\x00", len(words), wordCharacters
+}
+
+func meaningfulSecurityEcho(words, wordCharacters int) bool {
+	return wordCharacters >= minSecurityEchoWordCharacters &&
+		(words > 1 || wordCharacters >= minSecurityEchoSingleWordCharacters)
+}
+
+func securityReportText(report SecurityFileReport) []string {
+	texts := []string{report.Reason, report.Model, report.ConfiguredModel, report.Profile, report.Scope, report.ProviderOrigin, report.ReasoningEffort, report.PromptVersion, report.ContextPolicyVersion}
+	for _, finding := range report.Findings {
+		texts = append(texts, finding.Rule, finding.Category, finding.Title, finding.ObservedCondition, finding.Preconditions, finding.Remediation, finding.VerificationIdea, finding.CWE, finding.Reference)
+		if finding.EngineeringInsight != nil {
+			texts = append(texts, finding.EngineeringInsight.Mechanism, finding.EngineeringInsight.WhyItMattersHere, finding.EngineeringInsight.TradeoffOrFailureMode, finding.EngineeringInsight.TransferableLesson)
+		}
+	}
+	return texts
 }
 
 func validStoredSecurityReport(report SecurityFileReport, indexed *IndexFile) bool {

@@ -49,22 +49,23 @@ type modelOutput struct {
 
 // Service owns configured model access and the active project's generation path.
 type Service struct {
-	manager                 *project.Manager
-	runtimes                scopedRuntimes
-	importTimeout           time.Duration
-	analysisTimeout         time.Duration
-	focusedCheckTimeout     time.Duration
-	retryBase               time.Duration
-	retryMax                time.Duration
-	jobLifecycleMu          sync.Mutex
-	analysisAll             *analysisAllController
-	goScan                  *goScanController
-	drafts                  *draftStore
-	chatSessions            *chatSessionStore
-	performance             *performanceController
-	executionTrust          *executionTrustStore
-	buildDeclarationContext func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
-	loadSecurityFileReport  func(string, project.SecurityReportInput) (*project.SecurityFileReport, error)
+	manager                         *project.Manager
+	runtimes                        scopedRuntimes
+	importTimeout                   time.Duration
+	analysisTimeout                 time.Duration
+	focusedCheckTimeout             time.Duration
+	retryBase                       time.Duration
+	retryMax                        time.Duration
+	jobLifecycleMu                  sync.Mutex
+	analysisAll                     *analysisAllController
+	goScan                          *goScanController
+	drafts                          *draftStore
+	chatSessions                    *chatSessionStore
+	performance                     *performanceController
+	executionTrust                  *executionTrustStore
+	buildDeclarationContext         func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
+	loadSecurityFileReport          func(string, project.SecurityReportInput) (*project.SecurityFileReport, error)
+	beforeSecurityReviewPublication func()
 }
 
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {

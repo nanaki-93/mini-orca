@@ -450,6 +450,50 @@ func TestDeclarationExplanationHandlerRejectsUnknownRequestFields(t *testing.T) 
 	assertStructuredError(t, missingConfirmation)
 }
 
+func TestSecurityReviewHandlerUsesStrictRevisionGuardedRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"findings":[]}`}}}})
+	}))
+	defer server.Close()
+	root := t.TempDir()
+	writeProjectHandlerFixture(t, root, "main.go", "package main\n\nfunc Run() {}\n")
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(scopedHandlerConfig(server.URL), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, _ := manager.Index()
+	file, _ := manager.IndexedFile("main.go")
+	handler := NewProjectHandler(manager, service)
+	for _, test := range []struct {
+		name string
+		body string
+		want int
+	}{
+		{name: "unknown field", body: `{"project_id":"x","unknown":true}`, want: http.StatusBadRequest},
+		{name: "missing confirmation", body: `{"project_id":"x","project_revision":"x","base_file_hash":"x","path":"main.go"}`, want: http.StatusBadRequest},
+		{name: "stale revision", body: `{"project_id":"` + index.ProjectID + `","project_revision":"stale","base_file_hash":"` + file.ContentHash + `","path":"main.go","confirm_remote_provider":false}`, want: http.StatusConflict},
+		{name: "valid", body: `{"project_id":"` + index.ProjectID + `","project_revision":"` + index.ProjectRevision + `","base_file_hash":"` + file.ContentHash + `","path":"main.go","symbol":"Run","confirm_remote_provider":false}`, want: http.StatusOK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			handler.ReviewSecurityFile(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/security-review", strings.NewReader(test.body)))
+			if response.Code != test.want {
+				t.Fatalf("status = %d, want %d: %s", response.Code, test.want, response.Body.String())
+			}
+			if test.want != http.StatusOK {
+				assertStructuredError(t, response)
+			}
+		})
+	}
+}
+
 func TestDeclarationExplanationHandlerRequiresAnActiveProject(t *testing.T) {
 	manager, err := project.NewManager(t.TempDir())
 	if err != nil {

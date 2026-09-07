@@ -16,6 +16,13 @@ func WriteFile(path string, data []byte, mode os.FileMode) error {
 	return writeFile(path, data, mode, defaultAtomicFileOperations())
 }
 
+// WriteFileAuthorized writes and syncs a same-directory temporary file, then
+// calls authorize immediately before atomically replacing path. A rejected
+// authorization leaves the destination unchanged and removes the temporary.
+func WriteFileAuthorized(path string, data []byte, mode os.FileMode, authorize func() error) error {
+	return writeFileAuthorized(path, data, mode, authorize, defaultAtomicFileOperations())
+}
+
 type atomicFileOperations struct {
 	write   func(*os.File, []byte) (int, error)
 	chmod   func(*os.File, os.FileMode) error
@@ -35,6 +42,10 @@ func defaultAtomicFileOperations() atomicFileOperations {
 }
 
 func writeFile(path string, data []byte, mode os.FileMode, operations atomicFileOperations) error {
+	return writeFileAuthorized(path, data, mode, nil, operations)
+}
+
+func writeFileAuthorized(path string, data []byte, mode os.FileMode, authorize func() error, operations atomicFileOperations) error {
 	directory := filepath.Dir(path)
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return fmt.Errorf("create metadata directory: %w", err)
@@ -65,6 +76,11 @@ func writeFile(path string, data []byte, mode os.FileMode, operations atomicFile
 		return fmt.Errorf("close metadata: %w", err)
 	}
 	closed = true
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			return fmt.Errorf("authorize metadata replacement: %w", err)
+		}
+	}
 	if err := operations.replace(temporaryPath, path); err != nil {
 		return fmt.Errorf("replace metadata: %w", err)
 	}
