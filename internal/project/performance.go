@@ -241,22 +241,33 @@ func LoadPerformanceFileReport(root, path, contentHash string, policy *ContextPo
 	if err != nil {
 		return nil, fmt.Errorf("read performance cache: %w", err)
 	}
-	var report PerformanceFileReport
-	if err := json.Unmarshal(data, &report); err != nil || report.SchemaVersion != "1" || report.Path != path || report.ContentHash == "" {
+	report, valid := parsePerformanceFileReport(data, path)
+	if !valid {
 		if recoverErr := storage.RecoverCorrupt(cachePath); recoverErr != nil {
 			return nil, recoverErr
 		}
 		return nil, nil
 	}
-	if report.ContentHash != contentHash || report.PromptVersion != PerformancePromptVersion || report.ContextPolicyVersion != policy.Version() || !policy.Decide(path).Include {
-		report.Status = "stale"
-		return clonePerformanceFileReport(&report), nil
-	}
-	current, err := GetFileInfo(root, path)
-	if err != nil || current.SizeBytes > PerformanceMaxSourceBytes || current.ContentHash != contentHash {
+	if performanceReportIsStale(report, root, path, contentHash, policy) {
 		report.Status = "stale"
 	}
 	return clonePerformanceFileReport(&report), nil
+}
+
+func parsePerformanceFileReport(data []byte, path string) (PerformanceFileReport, bool) {
+	var report PerformanceFileReport
+	if err := json.Unmarshal(data, &report); err != nil || report.SchemaVersion != "1" || report.Path != path || report.ContentHash == "" {
+		return PerformanceFileReport{}, false
+	}
+	return report, true
+}
+
+func performanceReportIsStale(report PerformanceFileReport, root, path, contentHash string, policy *ContextPolicy) bool {
+	if report.ContentHash != contentHash || report.PromptVersion != PerformancePromptVersion || report.ContextPolicyVersion != policy.Version() || !policy.Decide(path).Include {
+		return true
+	}
+	current, err := GetFileInfo(root, path)
+	return err != nil || current.SizeBytes > PerformanceMaxSourceBytes || current.ContentHash != contentHash
 }
 
 func performanceCachePath(root, path string) string {

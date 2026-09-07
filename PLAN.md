@@ -250,7 +250,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Complete |
 | PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Complete |
 | AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Complete |
-| REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03 | M / high | Pending |
+| REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
 
 Recommended first delivery: FND-01–06, AUTO-01, UI-01–04, FLOW-01, SEC-01–04.
@@ -1023,6 +1023,24 @@ the full quality gate green. No inherited quality exception applies to final rel
 - Accept: exact release scope, real check results, runtime setup and unresolved
   limitations recorded in `docs/RELEASE_ACCEPTANCE.md`. Missing required native,
   provider or supported-package evidence blocks this release decision.
+- Review evidence 2026-09-08. Q is green after reducing the last two Go complexity
+  findings with focused corruption and mid-copy cancellation coverage. The macOS
+  arm64 package, embedded JBR 25 modules and native startup passed. A disposable
+  fixture passed replace/create through explicit Apply and Undo; native Security
+  and local Performance lifecycle states were inspected. Docker Desktop built the
+  image and its container reached healthy. The Dockerfile now builds for BuildKit's
+  target OS/architecture and fails closed when either target is absent; a newly
+  built native arm64 image, Compose build, negative empty-target build, and retained
+  healthy loopback container passed. Deterministic ephemeral-root and loopback tests
+  passed required-check/source-write protection, stale identities, cancellation,
+  refused-provider failure, local/remote/mixed scope consent denial, Analyze-all
+  retry-budget handling, Performance empty/failed/partial/stale/restart/budget
+  lifecycle states, and exact-function
+  handoff. Fresh review accepted this retained repair diff. Native narrow/wide and
+  offline failure inspection closed the changed-surface checks for the declared
+  macOS arm64 and Linux arm64 release scope. Release acceptance is blocked only on
+  live-provider compatibility and insight quality under an explicitly authorized
+  finite budget. No migration is required.
 
 ### REL-02 — Finish code/document retirement and handoff
 

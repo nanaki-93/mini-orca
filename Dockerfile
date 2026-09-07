@@ -2,6 +2,9 @@
 
 FROM golang:1.22-alpine AS builder
 
+ARG TARGETOS
+ARG TARGETARCH
+
 RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
@@ -11,7 +14,8 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+RUN test -n "$TARGETOS" && test -n "$TARGETARCH" \
+    && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -ldflags="-w -s" -o /mini-orca-daemon ./cmd/daemon
 
 FROM alpine:3.19

@@ -12,7 +12,7 @@ release evidence and open validation obligations.
 | Fresh `go test ./...` on 2026-09-06 | Passed, including daemon route/version contracts; some packages cached | Foundation |
 | Final Desktop gate on 2026-09-07 | 291 tests passed with zero failures; Spotless and Detekt passed on the documented Java 21/JBR 25 split | UI-04 complete |
 | Post-cleanup daemon/config tests (`-count=1`) | Passed, including maintained documentation/version contracts | Foundation |
-| Fresh `make quality` on 2026-09-08 | Static analysis, reachability, clone detection and Desktop static checks passed; Go complexity reports only the two accepted baseline functions | REL-01 |
+| Fresh `make quality` on 2026-09-08 | Static analysis, reachability, clone detection, Go complexity, and Desktop static checks passed | REL-01 |
 | Final focused UI matrix | Forced 24 visual-layout, 8 accessibility and 7 keyboard-navigation tests passed; 70 ignored PNGs | UI-04 complete |
 | Task 170 production render additions | Historical component/test evidence is tracked; generated images remain ignored build output | UI-04 complete |
 | FND-01 production fixture baseline | Current 1440×900 and 999×760 Editor, Analysis, populated Review, and populated Performance component captures; JBR 25.0.4.1 rerun, not native acceptance | UI-04 complete |
@@ -52,6 +52,50 @@ UI-04 closed the attainable native window, edge popup, operating-system focus an
 name/state inspection inherited from Tasks 149/170. REL-01 owns provider, lifecycle, package,
 distribution and any release matrix combinations that require a different operator surface;
 LEARN-02 owns insight usefulness; FND-02–04 and AUTO-01 own the quality findings.
+
+## REL-01 execution — 2026-09-08
+
+Initial integrated base: `bd727e1980cada41e8a5a6d01945143cbb07163c` (`4.4.0`),
+clean before execution. The final repair validation below includes the uncommitted
+REL-01 complexity repair. The host was macOS 26.6.2 (25G83), arm64, with Temurin
+21.0.11+10 as Gradle launcher and ignored JBR `25.0.4+1-b508.27` as Desktop
+toolchain. No user project, credential, or real remote provider was used.
+
+| Evidence | Result |
+| --- | --- |
+| `make check` | Passed with the documented JDK 21/JBR 25 split: Go tests, race tests, vet, dispatcher tests, and Desktop tests. |
+| `make quality` | Passed after the repair: staticcheck, deadcode, complexity, clone detection, Spotless, and Detekt all passed. |
+| Desktop package | The repaired checkout's `./scripts/desktop-gradle.sh createDistributable` passed with JBR 25 and produced macOS arm64 `desktop/build/compose/binaries/main/app/Mini-Orca.app`, version 4.4.0, 159,968 KiB (~156 MiB). `Info.plist` identifies `io.miniorca.desktop`; the launcher SHA-256 is `229007d006b64fb1666943c0c77301e3b0e35b392d617ab9944721b9ad7ffde7`. |
+| Bundle runtime and startup | The freshly generated embedded release manifest reports `JAVA_VERSION="25.0.4"` and lists `java.net.http` and `jdk.unsupported`. The freshly packaged macOS app launched with isolated Java preferences against the loopback daemon. The native chooser selected `desktop/build/rel-01/fixture.uOcgY4` and imported it. |
+| Disposable fixture | A copied Git fixture and deterministic loopback fake provider completed replace (`Run`) and create (`ReleaseNote`) separately: import → draft → validation → explicitly trusted copied-workspace checks → explicit Apply → Undo. Parse, format, lint, and tests passed for both. Only `main.go` changed during Apply and Undo restored its original content. The ignored `desktop/build/rel-01/` directory contains sanitized disposable-fixture artifacts as well as copied fixture source; no separate source-free failed-check receipt is retained. |
+| Native Security and Performance accessibility smoke | After import, accessibility inspection exposed named radio-button tool windows. Security with `main.go` selected exposed named Scan and Review controls plus source-only/advisory copy; Scan returned `Completed — no findings returned; this does not prove the file is secure.` With the local provider stopped, Review moved through Running to `Failed — Review the request and try again.` Performance showed `Source-based review · Not measured`, the local provider identity, and Preview limits of 10 selected and 0 excluded/oversized/outside. Its deterministic local run exposed named Pause, Resume, and Cancel controls: Pause showed `Paused · resume explicitly`; Resume showed 9 pending/1 running; Cancel ended at `Canceled · completed reviews remain available` and `Partial · canceled review retains completed files.` The changed Security and Performance surfaces remained readable without clipping in native 800×600 and 1305×768 windows. No external provider was used. |
+| Docker | Docker Desktop CLI/server 29.3.1 and Compose 5.1.0 built `mini-orca:4.4.0` as image `sha256:502e36efe017669bbc083cb418fb436882c94a89490ac7d82d839408306e3f58`. A container using `config.example.yaml` reached `healthy`; its in-container `/health` response was `{"status":"ok","version":"4.4.0"}`. No cleanup was run. |
+
+### Continued offline acceptance — 2026-09-08
+
+The focused deterministic checks use `httptest` loopback providers and ephemeral
+`t.TempDir` project roots. They make no external request. Separately, the ignored
+native-run artifacts under `desktop/build/rel-01/` retain sanitized copied fixture
+source; no tracked evidence retains fixture source, provider content, or credentials.
+
+| Evidence | Result |
+| --- | --- |
+| Final candidate gates | A fresh `make check` and `make quality` passed on this uncommitted REL-01 candidate after the offline acceptance and Docker portability work. The check runs Go tests, race/vet, dispatcher tests, and Desktop tests; quality runs static analysis, reachability, complexity, clone detection, Spotless, and Detekt. |
+| Source-safe failed checks, stale evidence, and cancellation | `go test -count=1 ./internal/app -run 'TestApplyDraftRejectsSourceChangedAfterChecksWithoutWriting|TestApplyDraftCancellationAndFailedChecksLeaveSourceUntouched|TestDraftValidateCheckApplyAndUndoRequireCurrentEvidence|TestTaskTestChecksRequireBaseFailureAndCandidatePassWithoutWritingProject|TestTaskTestChecksReportCandidateFailureAndUseNonConflictingFilename|TestTaskTestCheckCancellationAndEvidenceSanitization|TestRunCheckCommandHonorsCancellation'` passed. It verifies failed required checks and cancellation leave imported source unchanged, stale validate/check/apply evidence is rejected, and temporary proposed test files do not enter the source project. |
+| Offline provider and local/remote/mixed scope consent | `go test -count=1 ./internal/api/handlers -run 'TestPromptHandlersConfirmOnlyTheirOwnRemoteScope|TestChatSessionEndpointReportsCancellationAndStaleSession|TestDraftEndpointsAreRevisionAndHashGuarded'` and `go test -count=1 ./internal/app -run 'TestScopedModelLocalMixedAndRemoteConfirmationMatrixUsesNoProvider|TestRemoteProviderRequiresConfirmation|TestReviewSecurityFileRejectsConsentAndStaleResultsWithoutPublishing|TestExplainDeclarationHandlesRefusedLoopbackProviderWithoutWorkflowMutation'` passed. The scope matrix uses local network aliases and denies confirmation before a request. The refused loopback test first closes its own listener, then verifies the request fails without source, draft, or session mutation. |
+| Analyze-all lifecycle | `go test -count=1 ./internal/app -run 'TestAnalyzeAllProcessesEligibleFilesSequentially|TestStartAnalyzeAllCompletesEmptyEligibleSelection|TestAnalyzeAllRetriesFailedFiles|TestAnalyzeAllStopsRetryingAfterRetryBudget|TestAnalyzeAllCancelRetainsCompletedEntries|TestAnalyzeAllPersistsPausedJobAndResumesAfterServiceRestart|TestAnalyzeAllBecomesStaleWhenReindexChangesRevision|TestStartAnalyzeAllRequiresRemoteProviderConfirmation'` passed. It covers start, empty completion, transient failure retry, exhausted retry budget, cancellation with completed entries retained, restart/resume, stale revision, and denied remote consent. |
+| Performance lifecycle and source identity | `go test -count=1 ./internal/app -run 'TestPerformanceJobPausesResumesAndDerivesCachedReport|TestPerformanceJobRejectsChangedPreviewAndConcurrentAnalyzeAll|TestPerformanceJobReportsFailedFileAndEmptyQueue|TestPerformanceReportsMarkStaleCachedCoverageWithoutChangingCompletedJob|TestPerformanceReportsPreserveLifecycleStatusWithStaleCoverage|TestRecoverPersistedPerformanceJobNormalizesInterruptedRequests|TestPerformanceJobRecoveryResumesInterruptedFile|TestReviewPerformanceFileRejectsChangedSourceOrPolicyBeforePublication|TestReviewPerformanceFileRechecksCancellationDuringPublicationAuthorization|TestReviewPerformanceFileCancellationPreventsPublication'` passed. It covers empty and failed queues, pause/resume/cancel with partial coverage, preview mismatch, stale reports, exhausted-budget recovery, restart recovery, and publication cancellation. |
+| Exact-function handoff | `go test -count=1 ./internal/api/handlers -run 'TestChatSessionEndpointsKeepMessagesBoundToOneFile|TestChatSessionEndpointPinsTaskSpecsAndRejectsUnpreparedRepairs'` and `go test -count=1 ./internal/app -run 'TestAnalyzeFileValidatesAndCachesOneExactBugTaskWithoutAnotherModelCall|TestExplainDeclarationRequiresConsentAndRejectsIneligibleOrStaleTargetsWithoutProviderCall'` passed. The selected path, symbol, hash, and task specification stay pinned through the prepared handoff; unprepared repair, stale, ineligible, or denied requests do not send a provider request. |
+| Fixture and corrupt-cache boundary | `go test -count=1 ./internal/project -run 'TestReleaseFixtureRepresentsPolicyAndParserAcceptanceCases|TestPerformanceCacheRecoversMalformedFile|TestPerformanceCacheIsStaleWhenSourceIsUnavailable'` passed. It confirms the fixture's secret placeholders are excluded, parser cases are isolated, corrupt cache is recovered, and unavailable source becomes stale. |
+| Native Docker portability repair | The Dockerfile now fails before `go build` when either BuildKit `TARGETOS` or `TARGETARCH` is empty. Normal `docker build --progress=plain -t mini-orca:rel-01-native-r1 .` and `docker compose build mini-orca` passed, each logging `GOOS=linux GOARCH=arm64`. The explicit negative `docker build --progress=plain --build-arg TARGETOS= --build-arg TARGETARCH= -t mini-orca:rel-01-empty-target .` failed at the target guard with exit code 1. The current tag `mini-orca:rel-01-native-r1` has ID `sha256:2c90266ffab445dd0a95a43eb00977abff82be42a177459178098d0b8b8e0be5` and platform `linux/arm64`. The newly retained container `mini-orca-rel01-native-r1` has ID `aee4b1f41878b9552ad2204f5adce613446b764fc12568c1a0cbc427c8170bbd`, image ID `sha256:2c90266ffab445dd0a95a43eb00977abff82be42a177459178098d0b8b8e0be5`, platform `linux`, and is `running healthy`; its sole loopback endpoint `127.0.0.1:52120` returned `{"status":"ok","version":"4.4.0"}`. No Docker cleanup was run. |
+
+The release scope is the tested macOS arm64 desktop package and the Linux arm64
+container on this Docker Desktop host; no other desktop or container platform is
+claimed. Release acceptance remains blocked because the offline cases do not
+establish live-provider compatibility or insight quality. No finite live-provider
+budget or authorization was supplied, so no external request or insight-quality
+receipt was created. The Dockerfile is portable at build time; other architectures
+remain outside this tested release scope.
 
 ## Reproduce acceptance
 

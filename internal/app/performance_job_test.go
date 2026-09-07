@@ -119,6 +119,57 @@ func TestPerformanceJobRejectsChangedPreviewAndConcurrentAnalyzeAll(t *testing.T
 	}
 }
 
+func TestPerformanceJobReportsFailedFileAndEmptyQueue(t *testing.T) {
+	t.Run("failed file", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "deterministic provider failure", http.StatusBadGateway)
+		}))
+		defer server.Close()
+		service, _ := newSemanticAnalysisService(t, server.URL, 0)
+		preview, err := service.PreviewPerformanceQueue(PerformanceJobOptions{MaxFiles: 1})
+		if err != nil || len(preview.Files) != 1 {
+			t.Fatalf("preview = %+v, %v", preview, err)
+		}
+		if _, err := service.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 1, QueueID: preview.QueueID, PolicyFingerprint: preview.PolicyFingerprint}, false); err != nil {
+			t.Fatal(err)
+		}
+		job := waitForPerformanceJob(t, service, performanceJobCompleted)
+		report, err := service.PerformanceProjectReport()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job.Files[0].Status != performanceFileFailed || job.Files[0].Error == "" || report == nil || report.Counts[performanceFileFailed] != 1 || len(report.Findings) != 0 {
+			t.Fatalf("failed performance review = job:%+v report:%+v", job, report)
+		}
+	})
+
+	t.Run("empty queue", func(t *testing.T) {
+		service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+		policyPath := filepath.Join(root, ".mini-orca", "context-policy.json")
+		if err := os.MkdirAll(filepath.Dir(policyPath), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(policyPath, []byte(`{"exclude":["main.go"]}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		preview, err := service.PreviewPerformanceQueue(PerformanceJobOptions{MaxFiles: 1})
+		if err != nil || len(preview.Files) != 0 || preview.Excluded != 1 {
+			t.Fatalf("empty preview = %+v, %v", preview, err)
+		}
+		if _, err := service.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 1, QueueID: preview.QueueID, PolicyFingerprint: preview.PolicyFingerprint}, false); err != nil {
+			t.Fatal(err)
+		}
+		job := waitForPerformanceJob(t, service, performanceJobCompleted)
+		report, err := service.PerformanceProjectReport()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(job.Files) != 0 || report == nil || report.Status != performanceJobCompleted || len(report.Counts) != 0 || len(report.Findings) != 0 {
+			t.Fatalf("empty performance review = job:%+v report:%+v", job, report)
+		}
+	})
+}
+
 func TestPerformanceReportsMarkStaleCachedCoverageWithoutChangingCompletedJob(t *testing.T) {
 	for _, test := range []struct {
 		name   string

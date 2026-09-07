@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -227,6 +228,36 @@ func TestExplainDeclarationReturnsProviderFailureWithoutWorkflowMutation(t *test
 	}
 	if len(service.drafts.records) != 0 || len(service.chatSessions.records) != 0 {
 		t.Fatal("provider failure created workflow state")
+	}
+}
+
+func TestExplainDeclarationHandlesRefusedLoopbackProviderWithoutWorkflowMutation(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseURL := "http://" + listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	service, root := newSemanticAnalysisService(t, baseURL, 0)
+	index, _ := service.manager.Index()
+	file, _ := service.manager.IndexedFile("main.go")
+	before, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run"})
+	if err == nil {
+		t.Fatal("refused provider request was accepted")
+	}
+	after, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) || len(service.drafts.records) != 0 || len(service.chatSessions.records) != 0 {
+		t.Fatal("refused provider request mutated workflow or source")
 	}
 }
 

@@ -420,68 +420,76 @@ func (copier *checkWorkspaceCopier) copy() error {
 		if relative == "." {
 			return nil
 		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if isCheckWorkspaceMetadata(relative) {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if info.IsDir() {
-			if skipCheckWorkspaceDirectory(relative) {
-				return filepath.SkipDir
-			}
-			return os.MkdirAll(filepath.Join(copier.destination, relative), 0700)
-		}
-		if !isRegularCheckWorkspaceFile(info) {
-			return nil
-		}
-		if copier.files == checkLimits.maxWorkspaceFiles {
-			return fmt.Errorf("check workspace exceeds file limit of %d files", checkLimits.maxWorkspaceFiles)
-		}
-		if info.Size() > checkLimits.maxWorkspaceBytes-copier.bytes {
-			return fmt.Errorf("check workspace exceeds byte limit of %d bytes", checkLimits.maxWorkspaceBytes)
-		}
-		input, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		if err := validateCheckWorkspaceFile(path, info, input); err != nil {
-			_ = input.Close()
-			return err
-		}
-		outputPath := filepath.Join(copier.destination, relative)
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0700); err != nil {
-			_ = input.Close()
-			return err
-		}
-		output, err := os.OpenFile(outputPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
-		if err != nil {
-			_ = input.Close()
-			return err
-		}
-		copied, copyErr := copyCheckWorkspaceFile(copier.ctx, output, input, copier.buffer, checkLimits.maxWorkspaceBytes-copier.bytes)
-		closeErr := output.Close()
-		inputErr := input.Close()
-		if copyErr != nil {
-			_ = os.Remove(outputPath)
-			return copyErr
-		}
-		if closeErr != nil {
-			_ = os.Remove(outputPath)
-			return closeErr
-		}
-		if inputErr != nil {
-			_ = os.Remove(outputPath)
-			return inputErr
-		}
-		copier.files++
-		copier.bytes += copied
-		return nil
+		return copier.copyEntry(path, relative, entry)
 	})
+}
+
+func (copier *checkWorkspaceCopier) copyEntry(path, relative string, entry os.DirEntry) error {
+	info, err := entry.Info()
+	if err != nil {
+		return err
+	}
+	if isCheckWorkspaceMetadata(relative) {
+		if info.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	}
+	if info.IsDir() {
+		if skipCheckWorkspaceDirectory(relative) {
+			return filepath.SkipDir
+		}
+		return os.MkdirAll(filepath.Join(copier.destination, relative), 0700)
+	}
+	if !isRegularCheckWorkspaceFile(info) {
+		return nil
+	}
+	if copier.files == checkLimits.maxWorkspaceFiles {
+		return fmt.Errorf("check workspace exceeds file limit of %d files", checkLimits.maxWorkspaceFiles)
+	}
+	if info.Size() > checkLimits.maxWorkspaceBytes-copier.bytes {
+		return fmt.Errorf("check workspace exceeds byte limit of %d bytes", checkLimits.maxWorkspaceBytes)
+	}
+	return copier.copyFile(path, relative, info)
+}
+
+func (copier *checkWorkspaceCopier) copyFile(path, relative string, info os.FileInfo) error {
+	input, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	if err := validateCheckWorkspaceFile(path, info, input); err != nil {
+		_ = input.Close()
+		return err
+	}
+	outputPath := filepath.Join(copier.destination, relative)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0700); err != nil {
+		_ = input.Close()
+		return err
+	}
+	output, err := os.OpenFile(outputPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		_ = input.Close()
+		return err
+	}
+	copied, copyErr := copyCheckWorkspaceFile(copier.ctx, output, input, copier.buffer, checkLimits.maxWorkspaceBytes-copier.bytes)
+	closeErr := output.Close()
+	inputErr := input.Close()
+	if copyErr != nil {
+		_ = os.Remove(outputPath)
+		return copyErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(outputPath)
+		return closeErr
+	}
+	if inputErr != nil {
+		_ = os.Remove(outputPath)
+		return inputErr
+	}
+	copier.files++
+	copier.bytes += copied
+	return nil
 }
 
 func isRegularCheckWorkspaceFile(info os.FileInfo) bool {
