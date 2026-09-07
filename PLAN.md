@@ -243,7 +243,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | SEC-03 | Bound subprocess output and workspace resources | FND-01 | M / high | Complete |
 | SEC-04 | Explicit project-execution trust and environment | SEC-03 | M / high | Complete |
 | SEC-05 | Define strict Security report contracts | FND-05 | S / medium | Complete |
-| SEC-06 | Add small deterministic Go security rules | SEC-05 | M / medium | Pending |
+| SEC-06 | Add small deterministic Go security rules | SEC-05 | M / medium | Blocked — two repair/review cycles exhausted with a confirmed shadowing false positive |
 | SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Pending |
 | SEC-08 | Deliver Security workspace and focused handoff | SEC-06, SEC-07, UI-03, FND-06 | M / high | Pending |
 | PERF-01 | Measure and improve Mini-Orca hotspots | FND-03, FND-06, SEC-03 | M / medium | Complete |
@@ -779,6 +779,14 @@ the full quality gate green. No inherited quality exception applies to final rel
   cases; no provider/process call; excluded/symlink paths stay excluded.
 - Verify: rule fixtures, G/C if exposing the source-only scan operation. Add only
   the needed endpoint and keep mutation routes unchanged.
+- Blocked 2026-09-07 after the two allowed repair/review cycles. The final patch
+  still reports `Config{InsecureSkipVerify: true}` as `crypto/tls.Config` when a
+  valid local `type Config` shadows a dot import, violating the required
+  scope/lookalike behavior. A coordinator reproduction confirmed the false
+  positive even though the full supported checks passed. The preserved patch is
+  `.git/mini-orca-autopilot-SEC-06.patch` (SHA-256
+  `6889d33f2fdc569011ac7b3edc20643512bc4656c3b3874e55eaf721dd2f57c5`).
+  No Security scan code or API change was integrated.
 
 ### SEC-07 — Add explicit AI Security review
 
