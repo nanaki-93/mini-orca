@@ -242,7 +242,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | SEC-02 | Bind provider delivery to consent and context | FND-01 | M / high | Complete |
 | SEC-03 | Bound subprocess output and workspace resources | FND-01 | M / high | Complete |
 | SEC-04 | Explicit project-execution trust and environment | SEC-03 | M / high | Complete |
-| SEC-05 | Define strict Security report contracts | FND-05 | S / medium | Blocked — secret redaction review failed after two cycles |
+| SEC-05 | Define strict Security report contracts | FND-05 | S / medium | Complete |
 | SEC-06 | Add small deterministic Go security rules | SEC-05 | M / medium | Pending |
 | SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Pending |
 | SEC-08 | Deliver Security workspace and focused handoff | SEC-06, SEC-07, UI-03, FND-06 | M / high | Pending |
@@ -740,15 +740,20 @@ the full quality gate green. No inherited quality exception applies to final rel
   Security persistence separate from bug/Performance reconciliation.
 - Verify: project schema/parse/persistence fixtures and G. No visible workspace or
   new generic finding framework before there is a producer.
-- Blocked 2026-09-07 after the two allowed repair/review cycles. The preserved
-  patch defines strict source-bound Security evidence, lifecycle, provenance,
-  anchor and cache contracts; focused project tests, race tests, formatting and
-  diff checks pass. Final review found one remaining persistence gap: common
-  credential forms such as quoted JSON keys, provider-prefixed token keys and
-  equals-form Authorization headers can bypass redaction. The patch is retained
-  at `.git/mini-orca-autopilot-SEC-05.patch` (SHA-256
-  `a91b4d9cc191be56c86e49c6fd9fc2a24f30e3f41cbcec40ae870604937b056b`) for a
-  later bounded repair before SEC-06 or SEC-07 begins.
+- Completed 2026-09-07. Security now has a separate source-bound report,
+  finding identity, lifecycle, provenance, anchor and cache contract for future
+  deterministic and AI producers. Strict decoding rejects malformed, oversized,
+  mixed-invalid and duplicate results; persistence distinguishes empty, partial,
+  stale, failed and canceled states while keeping triage separate from verification.
+  Before storage, prose and provenance redact quoted JSON credentials,
+  provider-prefixed token/key names, secret-access-key variants, escaped quoted
+  values and colon/equals Authorization forms. Raw-cache tests cover those forms,
+  and identity fields reject secret-like assignments. G passed, including the
+  complete race suite; the descendant-cancellation fixture now waits for observed
+  child startup instead of assuming it occurs within 30 ms. SEC-05 adds no new
+  complexity finding. The quality runner still stops on the two existing untouched
+  findings in `checkWorkspaceCopier.copy` and `LoadPerformanceFileReport`. No API,
+  UI, configuration or persistence migration is introduced.
 
 ### SEC-06 — Add a small deterministic Go rule set
 

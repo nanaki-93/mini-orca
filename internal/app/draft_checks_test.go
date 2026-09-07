@@ -115,15 +115,42 @@ func TestSourceOnlyCheckCommandDoesNotRequireDescendantOwnership(t *testing.T) {
 
 func TestRunCheckCommandCancellationStopsDescendants(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "descendant-marker")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	directory := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_, err := runCheckCommandWithStart(ctx, t.TempDir(), checkHelperCommand("descendant-parent", marker), true, nil)
-	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	done := make(chan error, 1)
+	go func() {
+		_, err := runCheckCommandWithStart(ctx, directory, checkHelperCommand("descendant-parent", marker), true, nil)
+		done <- err
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.ReadFile(marker); err == nil {
+			break
+		} else if time.Now().After(deadline) {
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("descendant command did not stop after cancellation")
+			}
+			t.Fatalf("descendant did not start: %v", err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("descendant command did not stop after cancellation")
+	}
+	if err == nil || !errors.Is(ctx.Err(), context.Canceled) {
 		t.Fatalf("command error = %v, context = %v", err, ctx.Err())
 	}
 	before, readErr := os.ReadFile(marker)
 	if readErr != nil {
-		t.Fatalf("descendant did not start: %v", readErr)
+		t.Fatal(readErr)
 	}
 	time.Sleep(40 * time.Millisecond)
 	after, readErr := os.ReadFile(marker)
