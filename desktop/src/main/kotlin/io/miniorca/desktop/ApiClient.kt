@@ -105,6 +105,15 @@ private data class PerformanceJobRequest(
 )
 
 @Serializable
+private data class GoBenchmarkComparisonRequest(
+    @SerialName("project_revision") val projectRevision: String,
+    @SerialName("expected_revision") val expectedRevision: Long,
+    @SerialName("expected_hash") val expectedHash: String,
+    val benchmark: String,
+    @SerialName("expected_scope") val expectedScope: String,
+)
+
+@Serializable
 private data class ChatSessionRequest(
     @SerialName("project_id") val projectId: String,
     @SerialName("project_revision") val projectRevision: String,
@@ -515,6 +524,35 @@ class ApiClient(
               requestBody(
                   DraftCheckRequest(
                       projectRevision, expectedRevision, expectedHash, runLint, runTests))))
+
+  /** Lists daemon-built benchmark choices only; this route does not execute project code. */
+  fun goBenchmarkCatalog(
+      draftId: String,
+      projectRevision: String,
+      expectedRevision: Long,
+      expectedHash: String,
+  ): GoBenchmarkCatalog =
+      decode(
+          send(
+              "GET",
+              "/api/projects/current/drafts/${encodePath(draftId)}/benchmarks" +
+                  "?project_revision=${encode(projectRevision)}" +
+                  "&expected_revision=$expectedRevision&expected_hash=${encode(expectedHash)}"))
+
+  fun compareGoBenchmark(
+      draftId: String,
+      projectRevision: String,
+      expectedRevision: Long,
+      expectedHash: String,
+      choice: GoBenchmarkChoice,
+  ): GoBenchmarkComparison =
+      decode(
+          send(
+              "POST",
+              "/api/projects/current/drafts/${encodePath(draftId)}/benchmarks",
+              requestBody(
+                  GoBenchmarkComparisonRequest(
+                      projectRevision, expectedRevision, expectedHash, choice.name, choice.scope))))
 
   fun applyDraft(draft: DeclarationDraft): ApplyResult =
       decode(

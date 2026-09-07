@@ -152,6 +152,15 @@ data class DraftReviewState(
     val draft: DeclarationDraft? = null,
     val editor: EditableDraftState? = null,
     val applied: ApplyResult? = null,
+    val benchmark: BenchmarkEvidenceState = BenchmarkEvidenceState(),
+)
+
+/** Catalog lookups and a completed comparison stay tied to their exact reviewed draft. */
+data class BenchmarkEvidenceState(
+    val catalog: GoBenchmarkCatalog? = null,
+    val selected: GoBenchmarkChoice? = null,
+    val comparison: GoBenchmarkComparison? = null,
+    val running: Boolean = false,
 )
 
 data class ConnectionState(
@@ -286,6 +295,16 @@ sealed interface DesktopEvent {
   data class GitStatusLoaded(val gitStatus: GitStatus) : DesktopEvent
 
   data class ChecksLoaded(val checks: DraftCheckReport) : DesktopEvent
+
+  data class GoBenchmarkCatalogLoaded(val catalog: GoBenchmarkCatalog) : DesktopEvent
+
+  data class GoBenchmarkSelected(val choice: GoBenchmarkChoice) : DesktopEvent
+
+  data object GoBenchmarkComparisonStarted : DesktopEvent
+
+  data class GoBenchmarkComparisonLoaded(val comparison: GoBenchmarkComparison) : DesktopEvent
+
+  data object GoBenchmarkComparisonStopped : DesktopEvent
 
   data class ChatLoaded(val session: ChatSession) : DesktopEvent
 
@@ -465,6 +484,35 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
           copy(
               review = review.copy(checks = event.checks),
               jobs = jobs.copy(loading = false, error = null))
+      is DesktopEvent.GoBenchmarkCatalogLoaded ->
+          copy(
+              review =
+                  review.copy(
+                      benchmark =
+                          review.benchmark.copy(
+                              catalog = event.catalog, selected = null, running = false)),
+              jobs = jobs.copy(loading = false, error = null))
+      is DesktopEvent.GoBenchmarkSelected ->
+          copy(
+              review =
+                  review.copy(
+                      benchmark = review.benchmark.copy(selected = event.choice, running = false)),
+              jobs = jobs.copy(loading = false))
+      DesktopEvent.GoBenchmarkComparisonStarted ->
+          copy(
+              review = review.copy(benchmark = review.benchmark.copy(running = true)),
+              jobs = jobs.copy(loading = true, error = null))
+      is DesktopEvent.GoBenchmarkComparisonLoaded ->
+          copy(
+              review =
+                  review.copy(
+                      benchmark =
+                          review.benchmark.copy(comparison = event.comparison, running = false)),
+              jobs = jobs.copy(loading = false, error = null))
+      DesktopEvent.GoBenchmarkComparisonStopped ->
+          copy(
+              review = review.copy(benchmark = review.benchmark.copy(running = false)),
+              jobs = jobs.copy(loading = false))
       is DesktopEvent.ChatLoaded -> copy(chat = chat.copy(session = event.session))
       is DesktopEvent.ChatProposalLoaded -> {
         val messages =
@@ -481,7 +529,8 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                 review.copy(
                     draft = event.proposal.draft,
                     editor = editableDraft(event.proposal.draft),
-                    checks = null),
+                    checks = null,
+                    benchmark = BenchmarkEvidenceState()),
             jobs = jobs.copy(loading = false, error = null),
         )
       }
@@ -497,14 +546,19 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                     review.copy(
                         draft = changed.serverDraft.copy(validation = null),
                         editor = changed,
-                        checks = null))
+                        checks = null,
+                        benchmark = review.benchmark.withoutCatalog()),
+                jobs = jobs.copy(loading = false))
           } ?: this
       DesktopEvent.DraftValidationStarted ->
           review.editor?.let { editor ->
             copy(
                 review =
                     review.copy(
-                        editor = editor.copy(status = DraftEditorStatus.Validating), checks = null))
+                        editor = editor.copy(status = DraftEditorStatus.Validating),
+                        checks = null,
+                        benchmark = review.benchmark.withoutCatalog()),
+                jobs = jobs.copy(loading = false))
           } ?: this
       DesktopEvent.DraftMarkedStale ->
           review.editor?.let { editor ->
@@ -513,22 +567,33 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                     review.copy(
                         draft = editor.serverDraft.copy(validation = null),
                         editor = editor.copy(status = DraftEditorStatus.Stale),
-                        checks = null))
+                        checks = null,
+                        benchmark = review.benchmark.withoutCatalog()),
+                jobs = jobs.copy(loading = false))
           } ?: this
       is DesktopEvent.DraftLoaded ->
           copy(
               review =
                   review.copy(
-                      draft = event.draft, editor = editableDraft(event.draft), checks = null))
+                      draft = event.draft,
+                      editor = editableDraft(event.draft),
+                      checks = null,
+                      benchmark = review.benchmark.withoutCatalog()),
+              jobs = jobs.copy(loading = false))
       DesktopEvent.DraftDiscarded ->
           copy(
               chat = ChatState(),
-              review = DraftReviewState(applied = review.applied),
-              jobs = jobs.copy(error = null))
+              review =
+                  DraftReviewState(
+                      applied = review.applied, benchmark = review.benchmark.withoutCatalog()),
+              jobs = jobs.copy(loading = false, error = null))
       is DesktopEvent.Applied -> copy(review = review.copy(applied = event.result))
       is DesktopEvent.Failed -> copy(jobs = jobs.copy(loading = false, error = event.message))
       is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))
     }
+
+private fun BenchmarkEvidenceState.withoutCatalog(): BenchmarkEvidenceState =
+    copy(catalog = null, selected = null, running = false)
 
 data class RequestIdentity(
     val id: Long,

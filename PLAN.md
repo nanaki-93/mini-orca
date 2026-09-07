@@ -248,7 +248,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | SEC-08 | Deliver Security workspace and focused handoff | SEC-06, SEC-07, UI-03, FND-06 | M / high | Complete |
 | PERF-01 | Measure and improve Mini-Orca hotspots | FND-03, FND-06, SEC-03 | M / medium | Complete |
 | PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Complete |
-| PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Pending |
+| PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Complete |
 | AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Complete |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03 | M / high | Pending |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -913,6 +913,19 @@ the full quality gate green. No inherited quality exception applies to final rel
   improvement cannot hide higher memory use; viewing evidence starts no process.
 - Verify: parsing/presentation fixtures and stale identity tests, D and V. No score
   dashboard and no automatic benchmark after an edit.
+- Completed 2026-09-08. The Performance workspace now loads a read-only benchmark
+  catalog for the exact validated draft, requires an explicit benchmark choice and
+  execution consent, and presents the daemon-built argv before running. Retained
+  evidence is bound to the draft, workload, benchmark and scope, with five samples
+  per side, test conditions, ns/op, B/op and allocs/op where available. Missing,
+  stale, noisy, contradictory and zero-baseline results remain textual and
+  inconclusive; CPU improvement cannot conceal a memory regression, and source
+  findings remain Not measured. Cancellation and generation guards prevent late
+  catalog or comparison results from restoring invalid state. A fresh independent
+  review accepted the result. Focused state, presenter, API-contract and rendering
+  tests, the full Desktop suite and `make check` passed; Spotless and Detekt passed.
+  `make quality` reports only the two accepted baseline Go complexities. No
+  configuration or persistence migration is required.
 
 ## Automation and release task instructions
 
