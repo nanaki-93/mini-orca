@@ -38,6 +38,30 @@ func TestParseProjectAnalysisResponseRejectsMalformedUnknownAndOversizedOutput(t
 	}
 }
 
+func TestParseProjectAnalysisResponseOmitsInvalidOptionalInsights(t *testing.T) {
+	base := `{"purpose":"Explains the project.","architecture":"One Go daemon.","components":[],"entry_points":[],"flows":[],"risks":[{"severity":"low","summary":"Add a regression test.","engineering_insight":`
+	for _, insight := range []string{`"not an object"`, `{"mechanism":"m"}`, `{"mechanism":"m","why_it_matters_here":"w","unknown":true}`, `null`} {
+		output := base + insight + `}],"next_steps":[],"engineering_insight":` + insight + `}`
+		parsed, err := parseProjectAnalysisResponse(output)
+		if err != nil || parsed.EngineeringInsight != nil || len(parsed.Risks) != 1 || parsed.Risks[0].EngineeringInsight != nil {
+			t.Fatalf("optional insight %q parsed = %+v, %v", insight, parsed, err)
+		}
+	}
+	parsed, err := parseProjectAnalysisResponse(`{"purpose":"Explains the project.","architecture":"One Go daemon.","components":[],"entry_points":[],"flows":[],"risks":[{"severity":"low","summary":"Add a regression test."}],"next_steps":[]}`)
+	if err != nil || parsed.EngineeringInsight != nil || parsed.Risks[0].EngineeringInsight != nil {
+		t.Fatalf("absent optional insight parsed = %+v, %v", parsed, err)
+	}
+}
+
+func TestProjectAnalysisPromptRequestsUsefulInsightsOrOmission(t *testing.T) {
+	prompt := projectAnalysisMessages("context")[0].Content
+	for _, required := range []string{"mechanism explains the concrete mechanism", "why_it_matters_here names the exact local evidence", "tradeoff_or_failure_mode names a real trade-off or failure condition", "transferable_lesson gives a reusable lesson with a concrete verification idea", "Omit trivial or generic lessons."} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("project prompt is missing %q: %s", required, prompt)
+		}
+	}
+}
+
 func TestProjectAnalysisReportPersistsAndInvalidatesChangedInputs(t *testing.T) {
 	root := t.TempDir()
 	report := newProjectAnalysisReportWithProvenance("project", "revision-one", "model-a", "analysis", "analysis", "", "")

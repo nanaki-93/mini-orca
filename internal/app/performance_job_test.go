@@ -215,6 +215,29 @@ func TestPerformanceReportsPreserveLifecycleStatusWithStaleCoverage(t *testing.T
 	}
 }
 
+func TestPerformancePreviewDoesNotReuseLegacyPromptVersionReport(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	analysis, file, policy := storeCachedPerformanceReport(t, service, root)
+	legacy := project.PerformanceFileReport{
+		SchemaVersion: "1", ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
+		Path: file.Path, ContentHash: file.ContentHash, Status: "completed",
+		Findings: []project.PerformanceFinding{{ID: "performance:legacy", Category: "cpu"}},
+		Model:    "model", Profile: "analyze", Scope: "analyze", PromptVersion: "performance-file-v1",
+		ContextPolicyVersion: policy.Version(), GeneratedAt: time.Now().UTC(),
+	}
+	if err := project.StorePerformanceFileReport(root, legacy); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := project.LoadPerformanceFileReport(root, file.Path, file.ContentHash, policy)
+	if err != nil || loaded == nil || loaded.Status != "stale" {
+		t.Fatalf("legacy report load = %+v, %v", loaded, err)
+	}
+	preview, err := service.PreviewPerformanceQueue(PerformanceJobOptions{MaxFiles: 1})
+	if err != nil || len(preview.Files) != 1 || preview.Files[0].Status != performanceFilePending {
+		t.Fatalf("legacy prompt preview = %+v, %v", preview, err)
+	}
+}
+
 func TestRecoverPersistedPerformanceJobNormalizesInterruptedRequests(t *testing.T) {
 	analysis := &project.Analysis{ProjectID: "project", ProjectRevision: "revision"}
 	now := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)

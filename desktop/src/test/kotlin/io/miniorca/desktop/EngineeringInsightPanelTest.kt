@@ -33,4 +33,20 @@ class EngineeringInsightPanelTest {
       EngineeringInsightPreference.save(original)
     }
   }
+
+  @Test
+  fun insightPiecesHaveStableLabelsAndOmitBlankOptionalFields() {
+    val pieces =
+        engineeringInsightPieces(
+            EngineeringInsight(
+                mechanism = "  Cache identity binds the evidence.  ",
+                whyItMattersHere = "The selected file can change while work is in flight.",
+                tradeoffOrFailureMode = "   ",
+                transferableLesson = "Verify by changing the file before publication."))
+
+    assertEquals(
+        listOf("Mechanism", "Why it matters here", "Transferable lesson"), pieces.map { it.label })
+    assertEquals("Cache identity binds the evidence.", pieces.first().content)
+    assertFalse(pieces.any { it.content.isBlank() })
+  }
 }

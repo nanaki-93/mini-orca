@@ -234,7 +234,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | FLOW-01 | Short function-scoped change requests | UI-03 | M / medium | Complete |
 | FLOW-02 | Read-only declaration explanation | FLOW-01, SEC-02, FND-06 | M / high | Complete |
 | FLOW-03 | Reusable temporary behavioral proof | FLOW-01, SEC-03, SEC-04 | M / high | Pending |
-| LEARN-01 | Concise, grounded engineering insights | FLOW-02 | S / medium | Pending |
+| LEARN-01 | Concise, grounded engineering insights | FLOW-02 | S / medium | Complete |
 | LEARN-02 | Evaluate usefulness and model reliability | LEARN-01, FLOW-03 | M / medium | Pending |
 | SEC-01 | Harden daemon and container network boundary | FND-01 | M / high | Complete |
 | SEC-02 | Bind provider delivery to consent and context | FND-01 | M / high | Complete |
@@ -580,6 +580,15 @@ the full quality gate green. No inherited quality exception applies to final rel
   disclosure/navigation never contacts a provider or changes evidence.
 - Verify: Unicode/limits/malformed/omission fixtures, meaningful senior examples,
   G when prompts/parser change, D and narrow/150% V.
+- Completed 2026-09-07. All producers now share concise guidance for a concrete
+  mechanism, local evidence, a real trade-off and a reusable verification idea;
+  file, project and Performance prompt versions invalidate prior cached prose.
+  Optional malformed insights are omitted without rejecting valid parent data,
+  whitespace is normalized before the aggregate 1,000-Unicode-rune limit, and the
+  desktop renders only nonempty labeled pieces with owner and stale state. Draft
+  edits still clear prior insights and disclosure remains local presentation state.
+  Fresh review accepted the result after two repairs. G, D and focused narrow/150%
+  visual checks passed; no API, schema or manual migration is required.
 
 ### LEARN-02 — Evaluate usefulness and model reliability
 

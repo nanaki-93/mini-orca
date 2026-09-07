@@ -213,6 +213,44 @@ class DesktopVisualLayoutTest {
           }
     }
 
+    val stalePerformanceFinding =
+        performanceFinding.copy(
+            engineeringInsight =
+                EngineeringInsight(
+                    mechanism = "The review remains bound to the reported source revision.",
+                    whyItMattersHere =
+                        "This selected opportunity came from stale review evidence."))
+    ComposeVisualFixture(800, 760, 1.3f) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(
+                  job =
+                      PerformanceJob(
+                          projectId = "project",
+                          projectRevision = "revision",
+                          queueId = "performance:stale",
+                          status = "stale"),
+                  report =
+                      PerformanceReport(
+                          projectId = "project",
+                          projectRevision = "revision",
+                          queueId = "performance:stale",
+                          status = "stale",
+                          paths = mapOf(stalePerformanceFinding.id to "internal/api/server.go"),
+                          findings = listOf(stalePerformanceFinding)),
+                  context = null,
+                  model = model,
+                  remoteProviderConfirmed = false),
+              performanceActionsFixture)
+        }
+        .use { fixture ->
+          fixture.render("performance-stale-insight-800-1.3")
+          fixture.clickText(
+              "ALLOCATION · high · internal/api/server.go:24 · Avoid repeated buffer allocation")
+          fixture.render()
+          assertTrue(
+              fixture.hasText("AI interpretation · Selected performance opportunity · stale"))
+        }
+
     ComposeVisualFixture(800, 900, 1.3f) {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(
@@ -1179,42 +1217,42 @@ class DesktopVisualLayoutTest {
             whyItMattersHere = "The returned error remains distinguishable for the caller.",
             tradeoffOrFailureMode = "Malformed input otherwise reaches the persistence layer.",
             transferableLesson = "Keep boundary validation close to request handling.")
-    val prose =
-        listOf(
-                insight.mechanism,
-                insight.whyItMattersHere,
-                insight.tradeoffOrFailureMode,
-                insight.transferableLesson)
-            .joinToString(" ")
+    val originalInsight = insight.copy()
 
     try {
       EngineeringInsightPreference.save(false)
-      ComposeVisualFixture(720, 420, 1.3f) {
+      ComposeVisualFixture(720, 420, 1.5f) {
             EngineeringInsightPanel(insight, stale = true, scopeLabel = "Visual fixture")
           }
           .use { fixture ->
-            fixture.render("engineering-insight-collapsed-720-1.3")
+            fixture.render("engineering-insight-collapsed-720-1.5")
             assertTrue(fixture.hasText("Engineering insight"))
             assertTrue(fixture.hasText("AI interpretation · Visual fixture · stale"))
             assertTrue(fixture.stateDescription("Engineering insight") == "Collapsed")
-            assertFalse(fixture.hasText(prose))
+            assertFalse(fixture.hasText("Mechanism"))
             assertTrue(fixture.requestFocus("Engineering insight"))
             assertTrue(fixture.pressKey(Key.Enter))
-            fixture.render("engineering-insight-expanded-720-1.3")
+            fixture.render("engineering-insight-expanded-720-1.5")
             assertTrue(fixture.stateDescription("Engineering insight") == "Expanded")
-            assertTrue(fixture.hasText(prose))
+            assertTrue(fixture.hasText("Mechanism"))
+            assertTrue(fixture.hasText("Why it matters here"))
+            assertTrue(fixture.hasText("Trade-off or failure mode"))
+            assertTrue(fixture.hasText("Transferable lesson"))
+            assertTrue(fixture.hasText(insight.mechanism))
+            assertTrue(fixture.hasText(insight.whyItMattersHere))
             assertFalse(fixture.hasText("Close insight"))
             assertTrue(fixture.pressKey(Key.Spacebar))
             fixture.render()
             fixture.render()
-            assertFalse(fixture.hasText(prose))
+            assertFalse(fixture.hasText("Mechanism"))
             assertTrue(fixture.isFocused("Engineering insight"))
+            assertEquals(originalInsight, insight)
           }
-      ComposeVisualFixture(360, 220, 1.3f) {
+      ComposeVisualFixture(360, 220, 1.5f) {
             EngineeringInsightPanel(insight, stale = true, scopeLabel = "File")
           }
           .use { fixture ->
-            fixture.render("engineering-insight-narrow-360-1.3")
+            fixture.render("engineering-insight-narrow-360-1.5")
             fixture.assertTextFits("Engineering insight")
             fixture.assertTextFits("AI interpretation · File · stale")
           }

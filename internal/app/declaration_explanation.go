@@ -69,6 +69,17 @@ type declarationExplanationModelResponse struct {
 	EngineeringInsight *project.EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
+type declarationExplanationWireResponse struct {
+	Version            string          `json:"version"`
+	Summary            string          `json:"summary"`
+	Behavior           []string        `json:"behavior"`
+	Inputs             []string        `json:"inputs"`
+	Outputs            []string        `json:"outputs"`
+	SideEffects        []string        `json:"side_effects"`
+	ErrorBehavior      []string        `json:"error_behavior"`
+	EngineeringInsight json.RawMessage `json:"engineering_insight"`
+}
+
 type preparedDeclarationExplanation struct {
 	file     project.IndexFile
 	symbol   project.SymbolInfo
@@ -206,7 +217,7 @@ func exactExplanationSymbol(file project.IndexFile, target string) *project.Symb
 func declarationExplanationPrompt(functionContext string) string {
 	return "Explain exactly the supplied Go declaration. Return one JSON object only, without Markdown or code fences. " +
 		"Required fields: version (\"v1\"), summary (string), behavior (string array), inputs (string array), outputs (string array), side_effects (string array), error_behavior (string array). " +
-		"Each array must contain at most six concise items. Optionally include engineering_insight with exactly mechanism, why_it_matters_here, and optional tradeoff_or_failure_mode and transferable_lesson. " +
+		"Each array must contain at most six concise items. Optionally include engineering_insight with exactly mechanism, why_it_matters_here, and optional tradeoff_or_failure_mode and transferable_lesson. " + project.EngineeringInsightPromptInstructions +
 		"Ground every statement in the supplied declaration and indexed facts. Do not propose edits, invent callers, or reproduce the declaration wholesale.\n\n" + functionContext
 }
 
@@ -219,15 +230,20 @@ func ParseDeclarationExplanationResponse(output string) (declarationExplanationM
 	if trimmed == "" {
 		return declarationExplanationModelResponse{}, fmt.Errorf("declaration explanation response is empty or exceeds the size limit")
 	}
-	var response declarationExplanationModelResponse
+	var wire declarationExplanationWireResponse
 	decoder := json.NewDecoder(strings.NewReader(trimmed))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&response); err != nil {
+	if err := decoder.Decode(&wire); err != nil {
 		return declarationExplanationModelResponse{}, fmt.Errorf("parse declaration explanation response: %w", err)
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return declarationExplanationModelResponse{}, fmt.Errorf("declaration explanation response must contain one JSON object")
 	}
+	response := declarationExplanationModelResponse{
+		Version: wire.Version, Summary: wire.Summary, Behavior: wire.Behavior, Inputs: wire.Inputs,
+		Outputs: wire.Outputs, SideEffects: wire.SideEffects, ErrorBehavior: wire.ErrorBehavior,
+	}
+	response.EngineeringInsight, _ = project.ParseOptionalEngineeringInsight(wire.EngineeringInsight)
 	if err := validateDeclarationExplanation(response); err != nil {
 		return declarationExplanationModelResponse{}, err
 	}
@@ -253,9 +269,6 @@ func validateDeclarationExplanation(response declarationExplanationModelResponse
 	}
 	if runes > maxDeclarationExplanationRunes {
 		return fmt.Errorf("declaration explanation response exceeds text limits")
-	}
-	if response.EngineeringInsight != nil && !project.ValidEngineeringInsight(response.EngineeringInsight) {
-		return fmt.Errorf("declaration explanation engineering insight is invalid")
 	}
 	response.Summary = strings.TrimSpace(response.Summary)
 	return nil

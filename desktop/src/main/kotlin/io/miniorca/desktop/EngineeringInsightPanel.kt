@@ -29,7 +29,8 @@ internal fun EngineeringInsightPanel(
     scopeLabel: String = "",
     modifier: Modifier = Modifier,
 ) {
-  if (insight == null) return
+  val pieces = insight?.let(::engineeringInsightPieces).orEmpty()
+  if (pieces.isEmpty()) return
   var expanded by remember { mutableStateOf(EngineeringInsightPreference.load()) }
   val headerFocus = remember { FocusRequester() }
   var restoreHeaderFocus by remember { mutableStateOf(false) }
@@ -47,20 +48,22 @@ internal fun EngineeringInsightPanel(
         stateLabel = engineeringInsightStateLabel(scopeLabel, stale),
         stateTint = if (stale) Warning else SecondaryText)
     if (expanded) {
-      val prose =
-          listOf(
-                  insight.mechanism,
-                  insight.whyItMattersHere,
-                  insight.tradeoffOrFailureMode,
-                  insight.transferableLesson)
-              .filter(String::isNotBlank)
-              .joinToString(" ")
       Box(
           Modifier.fillMaxWidth()
               .heightIn(max = 240.dp)
               .verticalScroll(rememberScrollState())
               .padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Text(prose, color = PrimaryText, fontSize = 12.sp, lineHeight = 18.sp)
+            Column {
+              pieces.forEach { piece ->
+                Text(piece.label, color = SecondaryText, fontSize = 10.sp)
+                Text(
+                    piece.content,
+                    color = PrimaryText,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(bottom = 6.dp))
+              }
+            }
           }
     }
   }
@@ -71,6 +74,19 @@ internal fun EngineeringInsightPanel(
     }
   }
 }
+
+internal data class EngineeringInsightPiece(val label: String, val content: String)
+
+internal fun engineeringInsightPieces(insight: EngineeringInsight): List<EngineeringInsightPiece> =
+    listOf(
+            EngineeringInsightPiece("Mechanism", insight.mechanism),
+            EngineeringInsightPiece("Why it matters here", insight.whyItMattersHere),
+            EngineeringInsightPiece("Trade-off or failure mode", insight.tradeoffOrFailureMode),
+            EngineeringInsightPiece("Transferable lesson", insight.transferableLesson),
+        )
+        .mapNotNull { piece ->
+          piece.content.trim().takeIf(String::isNotEmpty)?.let { piece.copy(content = it) }
+        }
 
 internal fun engineeringInsightStateLabel(scopeLabel: String, stale: Boolean): String =
     buildString {
