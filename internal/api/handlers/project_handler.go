@@ -189,7 +189,7 @@ func (h *ProjectHandler) UpdateFindingStatus(w http.ResponseWriter, r *http.Requ
 }
 
 // StartGoScan explicitly starts parser, vet, and test verification in an
-// isolated copy; no imported source is modified.
+// temporary copied workspace; no imported source is modified.
 func (h *ProjectHandler) StartGoScan(w http.ResponseWriter, r *http.Request) {
 	var request goScanRequest
 	if !decodeStrictJSON(w, r, &request, "invalid verified scan request", "Provide project_revision.") || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
@@ -221,7 +221,7 @@ func (h *ProjectHandler) GoScanProgress(w http.ResponseWriter, r *http.Request) 
 	api.WriteJSON(w, http.StatusOK, report)
 }
 
-// CancelGoScan requests cancellation for the active isolated scan.
+// CancelGoScan requests cancellation for the active temporary-workspace scan.
 func (h *ProjectHandler) CancelGoScan(w http.ResponseWriter, r *http.Request) {
 	revision := r.URL.Query().Get("project_revision")
 	if !requireCurrentRevision(w, h.manager, revision) {

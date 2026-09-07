@@ -238,7 +238,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | LEARN-02 | Evaluate usefulness and model reliability | LEARN-01, FLOW-03 | M / medium | Pending |
 | SEC-01 | Harden daemon and container network boundary | FND-01 | M / high | Complete |
 | SEC-02 | Bind provider delivery to consent and context | FND-01 | M / high | Complete |
-| SEC-03 | Bound subprocess output and workspace resources | FND-01 | M / high | Pending |
+| SEC-03 | Bound subprocess output and workspace resources | FND-01 | M / high | Complete |
 | SEC-04 | Explicit project-execution trust and environment | SEC-03 | M / high | Pending |
 | SEC-05 | Define strict Security report contracts | FND-05 | S / medium | Pending |
 | SEC-06 | Add small deterministic Go security rules | SEC-05 | M / medium | Pending |
@@ -667,6 +667,16 @@ the full quality gate green. No inherited quality exception applies to final rel
 - Verify: deterministic helper-process output/timeout/exit tests and temp-root copy
   tests, G. Do not claim process isolation or silently turn incomplete copies into
   valid check evidence.
+- Completed 2026-09-07. Draft checks and Go scans now share an 8 KiB draining
+  output collector plus one copied-workspace budget of 4,096 regular files and
+  64 MiB. Copying checks cancellation during traversal and reads, excludes VCS,
+  Mini-Orca and known build metadata, preserves testdata fixtures, rejects changed
+  or nonregular source identities and removes every incomplete workspace. Async
+  copy failures publish a sanitized `workspace` phase; API and Desktop wording now
+  describes temporary copied workspaces without implying process isolation.
+  Authorization variants are fully redacted. Fresh review accepted the result
+  after two repairs; G, C, D and full diff checks passed. The added workspace
+  phase needs no configuration or data migration.
 
 ### SEC-04 — Explicit project-code execution trust
 

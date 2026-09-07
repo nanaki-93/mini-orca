@@ -198,7 +198,7 @@ func (s *Service) composeDraft(draft Draft) (project.GoDeclarationComposition, e
 	}), nil
 }
 
-// CheckDraft runs isolated checks for exactly one current, validated draft.
+// CheckDraft runs temporary-workspace checks for exactly one current, validated draft.
 // A concurrent manual edit cannot retain its predecessor's check evidence.
 func (s *Service) CheckDraft(ctx context.Context, request DraftCheckRequest) (*DraftCheckReport, error) {
 	identity, err := newDraftRevisionIdentity(request.ID, request.ExpectedRevision, request.ExpectedHash)
