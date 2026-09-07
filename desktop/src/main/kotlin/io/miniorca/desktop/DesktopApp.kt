@@ -28,6 +28,9 @@ private enum class ComposerFocusTarget {
   Draft
 }
 
+internal fun layoutForPreparedRequest(layout: DesktopLayoutState): DesktopLayoutState =
+    layout.openRight(RightToolWindow.Assistant).withFocus(DesktopFocusRegion.RightToolWindow)
+
 private data class DraftFieldIdentity(
     val id: String,
     val revision: Long,
@@ -128,7 +131,9 @@ internal fun MiniOrcaApp(
     if (appState.preparedAction.isNotBlank()) contextAction = appState.preparedAction
     if (appState.preparedTaskSpec != null) chatMode = ChatEditMode.ReplaceSymbol
     chatMessage = TextFieldValue(preparedRequest)
+    layout = layoutForPreparedRequest(layout)
     composerRequested = true
+    pendingComposerFocus = ComposerFocusTarget.Chat
   }
   LaunchedEffect(appState.project?.projectId, appState.project?.projectRevision) {
     appState.index?.let { collapsedDirectories = explorerDirectories(it.files) }
@@ -521,6 +526,7 @@ internal fun MiniOrcaApp(
                       bugProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
                       analyzeModel = analyzeModel,
                       analyzeProviderConfirmed = workflow.providerConfirmed(ModelScope.Analyze),
+                      securityReviewRemoteConfirmed = workflow.securityReviewRemoteConfirmed,
                   ),
               palette = DesktopShellPaletteState(paletteMode, paletteQuery, showPalette),
               statusProviders =
@@ -581,6 +587,7 @@ internal fun MiniOrcaApp(
               confirmPerformanceProvider = {
                 presenter.setProviderConfirmation(ModelScope.Analyze, it)
               },
+              confirmSecurityReviewProvider = presenter::setSecurityReviewRemoteConfirmation,
               previewPerformance = presenter::previewPerformance,
               startPerformance = presenter::startPerformance,
               pausePerformance = presenter::pausePerformance,
@@ -605,6 +612,13 @@ internal fun MiniOrcaApp(
                     presenter.dispatch(
                         DesktopEvent.Failed(
                             "This opportunity is analysis-only; it is not one exact eligible Go declaration."))
+              },
+              scanSecurity = presenter::scanSecurity,
+              reviewSecurity = presenter::reviewSecurity,
+              openSecurityFinding = presenter::openSecurityFinding,
+              prepareSecurityFinding = { finding ->
+                clearComposerInput()
+                presenter.prepareSecurityFinding(finding)
               },
           ),
       findingActions = findingActions,
@@ -633,6 +647,8 @@ internal fun MiniOrcaApp(
                   "create_declaration" -> requestCreateDeclaration()
                   "open_performance" ->
                       presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Performance))
+                  "open_security" ->
+                      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Security))
                   else -> contextAction = it
                 }
               },

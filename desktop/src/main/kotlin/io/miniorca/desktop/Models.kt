@@ -452,6 +452,58 @@ data class FindingFilter(
 )
 
 @Serializable
+data class SecuritySourceAnchor(
+    val path: String = "",
+    @SerialName("start_line") val startLine: Int = 0,
+    @SerialName("end_line") val endLine: Int = 0,
+    val symbol: String = "",
+)
+
+@Serializable
+data class SecurityFinding(
+    val id: String = "",
+    val rule: String = "",
+    val category: String = "",
+    val title: String = "",
+    @SerialName("source_anchor") val anchor: SecuritySourceAnchor = SecuritySourceAnchor(),
+    val severity: String = "",
+    val confidence: String = "",
+    @SerialName("evidence_kind") val evidenceKind: String = "",
+    @SerialName("observed_condition") val observedCondition: String = "",
+    @SerialName("preconditions_or_unknowns") val preconditions: String = "",
+    val remediation: String = "",
+    @SerialName("verification_idea") val verificationIdea: String = "",
+    val cwe: String = "",
+    val reference: String = "",
+    val triage: String = "",
+    @SerialName("verification_state") val verificationState: String = "",
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null,
+)
+
+@Serializable
+data class SecurityFileReport(
+    @SerialName("schema_version") val schemaVersion: String = "",
+    @SerialName("project_id") val projectId: String = "",
+    @SerialName("project_revision") val projectRevision: String = "",
+    val path: String = "",
+    @SerialName("content_hash") val contentHash: String = "",
+    val status: String = "not_run",
+    val source: String = "",
+    @SerialName("rule_set_version") val ruleSetVersion: String = "",
+    val findings: List<SecurityFinding> = emptyList(),
+    val reason: String = "",
+    val model: String = "",
+    @SerialName("configured_model") val configuredModel: String = "",
+    val profile: String = "",
+    val scope: String = "",
+    @SerialName("provider_origin") val providerOrigin: String = "",
+    @SerialName("reasoning_effort") val reasoningEffort: String = "",
+    @SerialName("prompt_version") val promptVersion: String = "",
+    @SerialName("context_policy_version") val contextPolicyVersion: String = "",
+    @SerialName("generated_at") val generatedAt: String = "",
+)
+
+@Serializable
 data class GoScanPhase(
     val name: String = "",
     val state: String = "",

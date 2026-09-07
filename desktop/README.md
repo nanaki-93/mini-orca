@@ -46,7 +46,8 @@ Recheck the resolved graph before an upgrade; no upgrade is needed for the new p
 The last successfully opened project is restored from local metadata without
 contacting a model. If restore fails, the landing screen offers Open project/retry.
 Summary describes the project, Analysis owns explicit runs, Bugs owns triage,
-Performance shows source hypotheses, and Editor owns one declaration change.
+Performance shows source hypotheses, Security separates deterministic rule matches
+from advisory AI suggestions, and Editor owns one declaration change.
 
 Editor has docked Files and Context/Assistant/Review panes at widths ≥1000dp.
 Below that width they become labeled drawers; bottom tools use a bounded overlay.
@@ -79,6 +80,12 @@ reader results plus their explicit limitations remain in the retained
 [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md); its dated baseline sections are
 history, not current dimensions. [Visual reproduction](VISUAL_REVIEW.md) describes
 fixture captures; these are not native-window evidence.
+
+Security entry, filtering and selection stay local. Scan checks the selected Go
+file with source-only rules. Review covers one eligible text file through Analyze
+and asks for fresh consent when that provider is remote. Prepare fix opens the
+existing Assistant composer only for a current, exact Go declaration; it does not
+send the request or change source.
 
 UI work follows [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and the
 [single plan](../PLAN.md). No API/config migration is caused by this doc cleanup.

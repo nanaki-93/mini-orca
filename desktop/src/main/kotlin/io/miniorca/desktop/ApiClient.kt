@@ -58,6 +58,22 @@ private data class DeclarationExplanationRequest(
 )
 
 @Serializable
+private data class SecurityScanRequest(
+    val path: String,
+    @SerialName("project_revision") val projectRevision: String,
+)
+
+@Serializable
+private data class SecurityReviewRequest(
+    @SerialName("project_id") val projectId: String,
+    @SerialName("project_revision") val projectRevision: String,
+    @SerialName("base_file_hash") val baseFileHash: String,
+    val path: String,
+    val symbol: String = "",
+    @SerialName("confirm_remote_provider") val confirmRemoteProvider: Boolean,
+)
+
+@Serializable
 private data class FindingStatusRequest(
     @SerialName("project_revision") val projectRevision: String,
     val status: String,
@@ -222,6 +238,34 @@ class ApiClient(
                       baseFileHash,
                       targetPath,
                       targetSymbol,
+                      confirmRemoteProvider))))
+
+  fun securityScan(path: String, revision: String): SecurityFileReport =
+      decode(
+          send(
+              "POST",
+              "/api/projects/current/files/security-scan",
+              requestBody(SecurityScanRequest(path, revision))))
+
+  fun securityReview(
+      projectId: String,
+      projectRevision: String,
+      baseFileHash: String,
+      path: String,
+      symbol: String = "",
+      confirmRemoteProvider: Boolean = false,
+  ): SecurityFileReport =
+      decode(
+          send(
+              "POST",
+              "/api/projects/current/security-review",
+              requestBody(
+                  SecurityReviewRequest(
+                      projectId,
+                      projectRevision,
+                      baseFileHash,
+                      path,
+                      symbol,
                       confirmRemoteProvider))))
 
   fun context(path: String, action: String = "fix"): ContextManifest =

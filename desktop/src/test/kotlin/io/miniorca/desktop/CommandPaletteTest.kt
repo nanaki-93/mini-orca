@@ -41,9 +41,9 @@ class CommandPaletteTest {
   }
 
   @Test
-  fun actionsKeepFileCommandsScopedAndExposePerformanceNavigation() {
+  fun actionsKeepFileCommandsScopedAndExposeWorkspaceNavigation() {
     assertEquals(
-        listOf("open_performance"),
+        listOf("open_performance", "open_security"),
         availableCommandActions(FileAnalysis("main.go", "fresh"), hasActiveFile = false))
     val freshActions =
         commandSearchResults(
@@ -60,6 +60,7 @@ class CommandPaletteTest {
             "Document",
             "Fix",
             "Open Performance workspace",
+            "Open Security workspace",
             "Refactor",
             "Refresh file analysis"),
         freshActions.map { it.label })

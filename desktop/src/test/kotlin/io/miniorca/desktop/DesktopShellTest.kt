@@ -155,24 +155,27 @@ class DesktopShellTest {
   }
 
   @Test
-  fun toolWindowBarMapsTheFiveRetainedNavigationDestinations() {
+  fun toolWindowBarMapsTheSixNavigationDestinations() {
     assertEquals(
         listOf(
             LeftToolWindow.Summary,
             LeftToolWindow.Analysis,
             LeftToolWindow.Performance,
             LeftToolWindow.Problems,
+            LeftToolWindow.Security,
             LeftToolWindow.Editor),
         LeftToolWindow.entries.toList())
     assertEquals("Summary", leftToolWindowLabel(LeftToolWindow.Summary))
     assertEquals("Analysis", leftToolWindowLabel(LeftToolWindow.Analysis))
     assertEquals("Bugs & Problems", leftToolWindowLabel(LeftToolWindow.Problems))
+    assertEquals("Security", leftToolWindowLabel(LeftToolWindow.Security))
     assertEquals("Editor", leftToolWindowLabel(LeftToolWindow.Editor))
     assertEquals(Workspace.Bugs, workspaceForLeftToolWindow(LeftToolWindow.Problems))
     assertEquals(LeftToolWindow.Summary, leftToolWindowForWorkspace(Workspace.Summary))
     assertEquals(LeftToolWindow.Analysis, leftToolWindowForWorkspace(Workspace.Analysis))
     assertEquals(LeftToolWindow.Performance, leftToolWindowForWorkspace(Workspace.Performance))
     assertEquals(LeftToolWindow.Problems, leftToolWindowForWorkspace(Workspace.Bugs))
+    assertEquals(LeftToolWindow.Security, leftToolWindowForWorkspace(Workspace.Security))
     assertEquals(LeftToolWindow.Editor, leftToolWindowForWorkspace(Workspace.Editor))
     assertEquals(DesktopIcon.Problems, leftToolWindowIcon(LeftToolWindow.Problems))
     assertEquals(DesktopIcon.Performance, leftToolWindowIcon(LeftToolWindow.Performance))
@@ -303,7 +306,8 @@ class DesktopShellTest {
     assertEquals(Workspace.Analysis, nextWorkspace(Workspace.Summary))
     assertEquals(Workspace.Performance, nextWorkspace(Workspace.Analysis))
     assertEquals(Workspace.Bugs, nextWorkspace(Workspace.Performance))
-    assertEquals(Workspace.Editor, nextWorkspace(Workspace.Bugs))
+    assertEquals(Workspace.Security, nextWorkspace(Workspace.Bugs))
+    assertEquals(Workspace.Editor, nextWorkspace(Workspace.Security))
     assertEquals(Workspace.Summary, nextWorkspace(Workspace.Editor))
   }
 

@@ -14,14 +14,15 @@ The Kotlin/Compose Desktop client talks to a Go daemon on loopback.
 4. Validate, run focused checks and inspect Review. Apply names the exact file
    and declaration. Undo restores only the immediately preceding unchanged Apply.
 
-Analysis/scans and source-based Performance review are explicit actions. Findings
-retain provenance and freshness. Engineering insights explain concrete mechanisms
-and trade-offs; Performance does not yet measure runtime improvements.
+Analysis, deterministic scans, advisory Security review and selected benchmark
+runs are explicit actions. Findings retain provenance and freshness. Security
+keeps local rule matches separate from AI suggestions, and remote review consumes
+a fresh Security-specific Analyze confirmation.
 
 Mini-Orca does not automatically edit source, run scans, write tests to your
 project, commit or push. Exact declaration editing is currently Go-first; other
-languages have conservative analysis and symbol information. The Security section,
-read-only explanation and measured benchmarks in [PLAN.md](PLAN.md) are planned.
+languages have conservative analysis and symbol information. Remaining delivery
+and release work is tracked in [PLAN.md](PLAN.md).
 
 ## Run
 

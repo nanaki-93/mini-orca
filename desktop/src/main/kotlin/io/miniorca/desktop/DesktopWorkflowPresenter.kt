@@ -65,6 +65,7 @@ data class DesktopWorkflowSnapshot(
     val state: DesktopState = DesktopState(),
     val modelCatalog: ModelCatalog = ModelCatalog(),
     val providerConfirmations: ScopedConfirmationState = ScopedConfirmationState(),
+    val securityReviewRemoteConfirmed: Boolean = false,
     val contextManifest: ContextManifest? = null,
     val analysisInProgress: Boolean = false,
     val generating: Boolean = false,
@@ -135,6 +136,7 @@ class DesktopWorkflowPresenter(
   private var chatJob: Job? = null
   private var draftValidationJob: Job? = null
   private var draftChecksJob: Job? = null
+  private var securityJob: Job? = null
   private var analysisGeneration = 0L
   private var declarationExplanationGeneration = 0L
   private var analyzeAllActionGeneration = 0L
@@ -158,6 +160,7 @@ class DesktopWorkflowPresenter(
       jobCoordinator.projectOpened(event.project.identity())
     }
     controller.dispatch(event)
+    if (event is DesktopEvent.ProjectLoaded) clearSecurityReviewRemoteConfirmation()
     val after = selectedDeclarationTarget(controller.state)
     if (before != after &&
         mutableSnapshot.value.declarationExplanation.status !=
@@ -180,6 +183,11 @@ class DesktopWorkflowPresenter(
         )
   }
 
+  /** Security review uses a per-request confirmation, independent of other Analyze operations. */
+  fun setSecurityReviewRemoteConfirmation(confirmed: Boolean) {
+    mutableSnapshot.value = mutableSnapshot.value.copy(securityReviewRemoteConfirmed = confirmed)
+  }
+
   fun refreshConnection() {
     connectionJob?.cancel()
     connectionJob =
@@ -193,7 +201,13 @@ class DesktopWorkflowPresenter(
                     previous.providerConfirmations
                 else ScopedConfirmationState()
             mutableSnapshot.value =
-                previous.copy(modelCatalog = catalog, providerConfirmations = confirmations)
+                previous.copy(
+                    modelCatalog = catalog,
+                    providerConfirmations = confirmations,
+                    securityReviewRemoteConfirmed =
+                        previous.securityReviewRemoteConfirmed.takeIf {
+                          previous.modelCatalog.identity() == catalog.identity()
+                        } ?: false)
             val function = catalog.forScope(ModelScope.Function)
             dispatch(
                 DesktopEvent.ConnectionUpdated(
@@ -217,6 +231,7 @@ class DesktopWorkflowPresenter(
 
   fun loadProject(path: String, restore: Boolean) {
     projectJob?.cancel()
+    clearSecurityReviewRemoteConfirmation()
     cancelProjectScopedWork()
     val request = controller.beginProjectLoad()
     publish()
@@ -259,6 +274,7 @@ class DesktopWorkflowPresenter(
 
   fun reanalyze() {
     val project = snapshot.value.state.project ?: return
+    clearSecurityReviewRemoteConfirmation()
     cancelProjectScopedWork()
     dispatch(DesktopEvent.Loading)
     dispatch(DesktopEvent.Status("Refreshing deterministic project facts…"))
@@ -286,6 +302,7 @@ class DesktopWorkflowPresenter(
       preparedFixRequest: String? = null,
       preparedTaskSpec: BugTaskSpec? = null,
   ) {
+    clearSecurityReviewRemoteConfirmation()
     if (mutableSnapshot.value.declarationExplanation.status !=
         DeclarationExplanationStatus.Unavailable) {
       invalidateDeclarationExplanation(
@@ -294,6 +311,7 @@ class DesktopWorkflowPresenter(
     chatJob?.cancel()
     draftValidationJob?.cancel()
     draftChecksJob?.cancel()
+    cancelSecurityAction()
     activeTask = null
     activeDraft = null
     val request = controller.beginFileLoad(path) ?: return
@@ -368,6 +386,154 @@ class DesktopWorkflowPresenter(
       return
     }
     openFileInEditor(target.path, target, requirement, finding.taskSpec)
+  }
+
+  fun scanSecurity() {
+    val state = snapshot.value.state
+    val project = state.project ?: return
+    val file =
+        state.selectedFile
+            ?: run {
+              dispatch(
+                  DesktopEvent.SecurityActionFailed(
+                      "scan", "Open one indexed Go file before scanning."))
+              return
+            }
+    if (file.language != "Go") {
+      dispatch(
+          DesktopEvent.SecurityActionFailed(
+              "scan", "Security scanning currently supports one indexed Go file."))
+      return
+    }
+    securityJob?.cancel()
+    val identity = file.identity(project)
+    dispatch(DesktopEvent.SecurityActionStarted("scan"))
+    securityJob =
+        scope.launch {
+          try {
+            val report = io { api.securityScan(file.path, project.projectRevision) }
+            if (isCurrentFile(identity)) {
+              if (securityReportMatchesFile(report, identity, "deterministic"))
+                  dispatch(DesktopEvent.SecurityReportLoaded(report))
+              else
+                  dispatch(
+                      DesktopEvent.SecurityActionFailed(
+                          "scan", "The returned scan no longer matches the selected file."))
+            }
+          } catch (_: CancellationException) {
+            throw CancellationException()
+          } catch (error: Exception) {
+            if (isCurrentFile(identity))
+                dispatch(
+                    DesktopEvent.SecurityActionFailed(
+                        "scan", error.message ?: "Security scan failed"))
+          }
+        }
+  }
+
+  fun reviewSecurity() {
+    val state = snapshot.value.state
+    val project = state.project ?: return
+    val file =
+        state.selectedFile
+            ?: run {
+              dispatch(
+                  DesktopEvent.SecurityActionFailed(
+                      "review", "Open one indexed file before reviewing."))
+              return
+            }
+    if (file.binary) {
+      dispatch(
+          DesktopEvent.SecurityActionFailed(
+              "review", "Security review requires one eligible non-binary text file."))
+      return
+    }
+    val model = snapshot.value.model(ModelScope.Analyze)
+    val remoteConfirmed = snapshot.value.securityReviewRemoteConfirmed
+    if (model.remoteProvider && !remoteConfirmed) {
+      dispatch(
+          DesktopEvent.SecurityActionFailed(
+              "review", "Confirm the remote Analyze destination for this Security review."))
+      return
+    }
+    val exactSymbol =
+        state.selectedSymbol
+            ?.takeIf { file.language == "Go" && it.atomicTarget && it.confidence == "exact" }
+            ?.name
+            .orEmpty()
+    securityJob?.cancel()
+    val identity = file.identity(project)
+    // Fresh confirmation is consumed by every review attempt, including an unsuccessful one.
+    clearSecurityReviewRemoteConfirmation()
+    dispatch(DesktopEvent.SecurityActionStarted("review"))
+    securityJob =
+        scope.launch {
+          try {
+            val report = io {
+              api.securityReview(
+                  project.projectId,
+                  project.projectRevision,
+                  file.contentHash,
+                  file.path,
+                  exactSymbol,
+                  remoteConfirmed)
+            }
+            if (isCurrentFile(identity)) {
+              if (securityReportMatchesFile(report, identity, "ai"))
+                  dispatch(DesktopEvent.SecurityReportLoaded(report))
+              else
+                  dispatch(
+                      DesktopEvent.SecurityActionFailed(
+                          "review", "The returned review no longer matches the selected file."))
+            }
+          } catch (_: CancellationException) {
+            throw CancellationException()
+          } catch (error: Exception) {
+            if (isCurrentFile(identity)) {
+              val message = staleRemoteConfirmationMessage(error, ModelScope.Analyze)
+              if (message != null) clearSecurityReviewRemoteConfirmation()
+              dispatch(
+                  DesktopEvent.SecurityActionFailed(
+                      "review", message ?: error.message ?: "Security review failed"))
+            }
+          }
+        }
+  }
+
+  fun openSecurityFinding(finding: SecurityFinding) {
+    val state = snapshot.value.state
+    val target =
+        finding
+            .takeIf { securityFindingIsCurrent(it, state) }
+            ?.let { securityFindingNavigationTarget(it, state.index) }
+    if (target == null)
+        dispatch(DesktopEvent.Failed("This security finding no longer points to an indexed file."))
+    else openFileInEditor(target.path, target)
+  }
+
+  fun prepareSecurityFinding(finding: SecurityFinding) {
+    val state = snapshot.value.state
+    if (!securityFindingIsCurrent(finding, state)) {
+      dispatch(DesktopEvent.Failed("Refresh Security results before preparing a fix."))
+      return
+    }
+    val indexed = state.index?.files?.firstOrNull { it.path == finding.anchor.path }
+    val exact =
+        indexed?.symbols?.singleOrNull {
+          it.name == finding.anchor.symbol && it.atomicTarget && it.confidence == "exact"
+        }
+    if (indexed?.language != "Go" ||
+        exact == null ||
+        !securityAnchorWithinDeclaration(finding.anchor, indexed, exact)) {
+      dispatch(
+          DesktopEvent.Failed(
+              "Prepare fix is available only for one exact supported Go declaration."))
+      return
+    }
+    openFileInEditor(
+        indexed.path,
+        EditorNavigationTarget(indexed.path, exact.name, finding.anchor.startLine),
+        "Address the reviewed security finding in ${exact.name}.\nObserved condition: ${finding.observedCondition}\nRemediation: ${finding.remediation}\nKeep the change limited to this declaration.")
   }
 
   fun triageFinding(finding: UnifiedFinding, action: FindingLifecycleAction) {
@@ -1019,6 +1185,7 @@ class DesktopWorkflowPresenter(
     projectJob?.cancel()
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
+    securityJob?.cancel()
     jobCoordinator.close()
     lifetime.cancel()
   }
@@ -1307,6 +1474,7 @@ class DesktopWorkflowPresenter(
     jobCoordinator.projectClosed()
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
+    cancelSecurityAction()
     cancelAll()
   }
 
@@ -1409,6 +1577,17 @@ class DesktopWorkflowPresenter(
     dispatch(DesktopEvent.Failed(staleConfirmation ?: error.message ?: fallback))
   }
 
+  private fun clearSecurityReviewRemoteConfirmation() {
+    if (mutableSnapshot.value.securityReviewRemoteConfirmed)
+        mutableSnapshot.value = mutableSnapshot.value.copy(securityReviewRemoteConfirmed = false)
+  }
+
+  private fun cancelSecurityAction() {
+    securityJob?.cancel()
+    if (snapshot.value.state.security.action.isNotBlank())
+        dispatch(DesktopEvent.SecurityActionCanceled)
+  }
+
   private fun publish() {
     mutableSnapshot.value = mutableSnapshot.value.copy(state = controller.state)
   }
@@ -1463,6 +1642,17 @@ private fun ProjectAnalysis.identity(): WorkflowProjectIdentity =
 
 private fun ProjectFileInfo.identity(project: ProjectAnalysis): WorkflowFileIdentity =
     WorkflowFileIdentity(project.identity(), path, contentHash)
+
+private fun securityReportMatchesFile(
+    report: SecurityFileReport,
+    file: WorkflowFileIdentity,
+    expectedSource: String,
+): Boolean =
+    report.projectId == file.project.id &&
+        report.projectRevision == file.project.revision &&
+        report.path == file.path &&
+        report.contentHash == file.contentHash &&
+        report.source == expectedSource
 
 private fun selectedDeclarationTarget(state: DesktopState): DeclarationExplanationTarget? {
   val project = state.project ?: return null

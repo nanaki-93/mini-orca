@@ -245,7 +245,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | SEC-05 | Define strict Security report contracts | FND-05 | S / medium | Complete |
 | SEC-06 | Add small deterministic Go security rules | SEC-05 | M / medium | Complete |
 | SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Complete |
-| SEC-08 | Deliver Security workspace and focused handoff | SEC-06, SEC-07, UI-03, FND-06 | M / high | Blocked — two repair/review cycles exhausted on Security report source ownership |
+| SEC-08 | Deliver Security workspace and focused handoff | SEC-06, SEC-07, UI-03, FND-06 | M / high | Complete |
 | PERF-01 | Measure and improve Mini-Orca hotspots | FND-03, FND-06, SEC-03 | M / medium | Complete |
 | PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Complete |
 | PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Pending |
@@ -832,16 +832,17 @@ the full quality gate green. No inherited quality exception applies to final rel
   Prepare fix opens the existing composer without sending; no multi-file patch,
   score or unsupported capability claim. Numbered shortcuts remain unchanged.
 - Verify: client/presenter/interaction tests, D/C and V at wide/999dp/150% text.
-- Blocked 2026-09-08 after the two allowed repair/review cycles. The final patch
-  validates project, revision, path and content hash but not the expected report
-  source before publishing a response. A wrong-source Scan response can therefore
-  overwrite AI evidence, and a wrong-source Review response can overwrite source
-  rule evidence, violating independent report ownership. Spotless, Detekt, focused
-  and full Desktop tests, the supported checks during the first repair, visual
-  fixtures and diff checks passed; the final fresh review rejected this boundary.
-  The preserved patch is `.git/mini-orca-autopilot-SEC-08.patch` (SHA-256
-  `8a2f807dc5ad9e262ae6ce522f826c96aaeda754f9ec659d0ccc15fc8ac72a22`).
-  No Security workspace or desktop client change was integrated.
+- Completed 2026-09-08. The desktop now exposes a real Security workspace with
+  explicit local Go Scan and advisory AI Review actions, separate source/AI report
+  state, local filters, coverage and lifecycle labels, and validated source anchors.
+  Remote Review consumes its own one-request Analyze confirmation. Prepare fix
+  accepts only a current exact Go declaration, opens and focuses the existing
+  Assistant composer, and never sends or writes automatically. Scan and Review
+  responses must match project, revision, file hash and their expected evidence
+  source before publication, so they cannot overwrite one another. Client,
+  presenter, interaction, layout and wide/999dp/150% visual fixtures passed with D
+  and `make check`; `make quality` reports only the two accepted baseline Go
+  complexities. No configuration, API or persistence migration is required.
 
 ## Performance task instructions
 

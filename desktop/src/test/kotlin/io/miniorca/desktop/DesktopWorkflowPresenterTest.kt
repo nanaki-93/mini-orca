@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1490,6 +1491,239 @@ class DesktopWorkflowPresenterTest {
     }
   }
 
+  @Test
+  fun remoteSecurityReviewUsesItsOwnOneTimeConfirmationAndNeverStartsFromSelection() {
+    val reviewCalls = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "GET" to "/status" -> response("{\"status\":\"ok\",\"version\":\"v1\"}")
+        "GET" to "/api/models/current" ->
+            response(
+                """{"scopes":{"analyze":{"scope":"analyze","profile":"analyze","model":"remote","remote_provider":true}}}""")
+        "POST" to "/api/projects/current/security-review" -> {
+          reviewCalls.incrementAndGet()
+          response(securityReportJson("ai"))
+        }
+        else -> response("{}")
+      }
+    }
+    try {
+      presenter.refreshConnection()
+      eventually { presenter.snapshot.value.model(ModelScope.Analyze).remoteProvider }
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Security))
+
+      assertEquals(0, reviewCalls.get())
+      presenter.setProviderConfirmation(ModelScope.Analyze, true)
+      presenter.reviewSecurity()
+      assertEquals(0, reviewCalls.get())
+      assertTrue(presenter.snapshot.value.state.security.error.orEmpty().contains("Confirm"))
+
+      presenter.setSecurityReviewRemoteConfirmation(true)
+      presenter.reviewSecurity()
+      eventually { reviewCalls.get() == 1 }
+      assertFalse(presenter.snapshot.value.securityReviewRemoteConfirmed)
+
+      presenter.reviewSecurity()
+      assertEquals(1, reviewCalls.get())
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun securityActionsRejectReportsOwnedByTheOtherSource() {
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/files/security-scan" -> response(securityReportJson("ai"))
+        "POST" to "/api/projects/current/security-review" ->
+            response(securityReportJson("deterministic"))
+        else -> response("{}")
+      }
+    }
+    try {
+      loadFile(presenter)
+
+      presenter.scanSecurity()
+      eventually {
+        presenter.snapshot.value.state.security.sourceOperation.status ==
+            SecuritySectionOperationStatus.Failed
+      }
+      assertNull(presenter.snapshot.value.state.security.sourceReport)
+      assertNull(presenter.snapshot.value.state.security.aiReport)
+
+      presenter.reviewSecurity()
+      eventually {
+        presenter.snapshot.value.state.security.aiOperation.status ==
+            SecuritySectionOperationStatus.Failed
+      }
+      assertNull(presenter.snapshot.value.state.security.sourceReport)
+      assertNull(presenter.snapshot.value.state.security.aiReport)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun reanalyzeCancelsTheVisibleSecurityAction() {
+    val scanStarted = CountDownLatch(1)
+    val releaseScan = CountDownLatch(1)
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/files/security-scan" -> {
+          scanStarted.countDown()
+          releaseScan.await(2, TimeUnit.SECONDS)
+          response(securityReportJson("deterministic"))
+        }
+        "POST" to "/api/projects/current/reindex" -> response(indexJson())
+        else -> response("{}")
+      }
+    }
+    try {
+      loadFile(presenter)
+      presenter.scanSecurity()
+      assertTrue(scanStarted.await(1, TimeUnit.SECONDS))
+
+      presenter.reanalyze()
+
+      assertTrue(presenter.snapshot.value.state.security.action.isBlank())
+      assertEquals(
+          SecuritySectionOperationStatus.Canceled,
+          presenter.snapshot.value.state.security.sourceOperation.status)
+    } finally {
+      releaseScan.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun preparingASecurityFixOnlyOpensTheComposerPathWithoutASend() {
+    val chatPosts = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when {
+        method == "POST" && path.contains("/chat/") -> {
+          chatPosts.incrementAndGet()
+          response("{}")
+        }
+        path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
+        path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go", "Run"))
+        path.contains("files/analysis") -> response("{\"path\":\"main.go\",\"status\":\"missing\"}")
+        path.contains("/impact") -> response("{\"target_path\":\"main.go\"}")
+        path.contains("/git") -> response("{\"available\":false}")
+        else -> response("{}")
+      }
+    }
+    try {
+      presenter.dispatch(
+          DesktopEvent.ProjectLoaded(
+              project(),
+              ProjectIndex(
+                  "project",
+                  "revision",
+                  files =
+                      listOf(
+                          IndexedFile(
+                              "main.go",
+                              "base",
+                              "Go",
+                              false,
+                              lineCount = 8,
+                              symbols =
+                                  listOf(
+                                      SymbolInfo(
+                                          "Run",
+                                          "function",
+                                          startLine = 3,
+                                          endLine = 6,
+                                          confidence = "exact",
+                                          atomicTarget = true)))))))
+      presenter.dispatch(DesktopEvent.FileLoaded(file(), emptyList()))
+      val finding =
+          SecurityFinding(
+              id = "security-1",
+              anchor = SecuritySourceAnchor("main.go", 4, 4, "Run"),
+              observedCondition = "Unchecked input reaches a sink.",
+              remediation = "Validate the input.")
+      presenter.dispatch(
+          DesktopEvent.SecurityReportLoaded(
+              SecurityFileReport(
+                  "1",
+                  "project",
+                  "revision",
+                  "main.go",
+                  "base",
+                  "completed",
+                  "deterministic",
+                  findings = listOf(finding))))
+      presenter.prepareSecurityFinding(finding)
+      eventually { presenter.snapshot.value.state.preparedRequest.contains("Address the reviewed") }
+
+      assertEquals(0, chatPosts.get())
+      assertEquals("fix", presenter.snapshot.value.state.preparedAction)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun securityReviewAcceptsEligibleNonGoTextWithoutAnExactSymbol() {
+    val reviewCalls = AtomicInteger()
+    val presenter = presenter { method, path, body ->
+      if (method == "POST" && path == "/api/projects/current/security-review") {
+        reviewCalls.incrementAndGet()
+        assertFalse(body.orEmpty().contains("Run"))
+        response(securityReportJson("ai"))
+      } else response("{}")
+    }
+    try {
+      loadProject(presenter)
+      presenter.dispatch(DesktopEvent.FileLoaded(file().copy(language = "Markdown"), emptyList()))
+
+      presenter.reviewSecurity()
+      eventually { reviewCalls.get() == 1 }
+      eventually { presenter.snapshot.value.state.security.aiReport?.source == "ai" }
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun staleSecurityFindingCannotPrepareAComposerRequest() {
+    val sourceOpenCalls = AtomicInteger()
+    val presenter = presenter { _, path, _ ->
+      if (path.contains("/files/info")) sourceOpenCalls.incrementAndGet()
+      response("{}")
+    }
+    try {
+      loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.FileLoaded(
+              file(),
+              listOf(
+                  SymbolInfo(
+                      "Run",
+                      "function",
+                      startLine = 2,
+                      endLine = 4,
+                      confidence = "exact",
+                      atomicTarget = true))))
+      val stale =
+          SecurityFinding(
+              id = "stale",
+              anchor = SecuritySourceAnchor("main.go", 5, 5, "Run"),
+              observedCondition = "Old evidence.",
+              remediation = "Refresh.")
+      presenter.openSecurityFinding(stale)
+      presenter.prepareSecurityFinding(stale)
+
+      assertTrue(presenter.snapshot.value.state.jobs.error.orEmpty().contains("Refresh Security"))
+      assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
+      assertEquals(0, sourceOpenCalls.get())
+    } finally {
+      presenter.close()
+    }
+  }
+
   private fun presenter(
       parentScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
       interceptTrust: Boolean = true,
@@ -1579,6 +1813,9 @@ class DesktopWorkflowPresenterTest {
 
   private fun explanationJson(symbol: String) =
       """{"version":"v1","project_id":"project","project_revision":"revision","base_file_hash":"base","anchor":{"path":"main.go","symbol":"$symbol","signature":"","start_line":0,"end_line":0},"summary":"Explains $symbol.","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[],"context_manifest":{"scope":"function"}}"""
+
+  private fun securityReportJson(source: String) =
+      """{"schema_version":"1","project_id":"project","project_revision":"revision","path":"main.go","content_hash":"base","status":"completed_empty","source":"$source","findings":[],"context_policy_version":"policy","generated_at":"2026-09-08T00:00:00Z"}"""
 
   private fun projectJson() =
       "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"name\":\"project\",\"path\":\"/tmp/project\",\"type\":\"go\",\"file_count\":0,\"source_file_count\":0,\"total_lines\":0,\"summary\":\"\",\"ai_status\":\"missing\",\"analyzed_at\":\"\"}"
