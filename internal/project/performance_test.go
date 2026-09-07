@@ -179,6 +179,33 @@ func TestPerformanceCacheIsStaleWhenSourceIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestPerformanceCacheRecoversMalformedFile(t *testing.T) {
+	root := t.TempDir()
+	policy, err := NewContextPolicy(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cachePath := performanceCachePath(root, "main.go")
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cachePath, []byte("not-json"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadPerformanceFileReport(root, "main.go", "hash", policy)
+	if err != nil || loaded != nil {
+		t.Fatalf("malformed report = %+v, %v", loaded, err)
+	}
+	if _, err := os.Stat(cachePath); !os.IsNotExist(err) {
+		t.Fatalf("malformed cache still exists: %v", err)
+	}
+	corrupt, err := filepath.Glob(cachePath + ".corrupt-*")
+	if err != nil || len(corrupt) != 1 {
+		t.Fatalf("corrupt recovery = %v, %v", corrupt, err)
+	}
+}
+
 func TestPerformanceCacheRemainsCurrentAtSourceLimitWithUnchangedPolicy(t *testing.T) {
 	root := t.TempDir()
 	source := []byte(strings.Repeat("a", PerformanceMaxSourceBytes))

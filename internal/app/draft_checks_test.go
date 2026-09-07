@@ -1,10 +1,12 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -368,6 +370,63 @@ func TestCopyCheckWorkspaceHonorsCancellation(t *testing.T) {
 	if _, statErr := os.Stat(destination); !os.IsNotExist(statErr) {
 		t.Fatalf("canceled copy left workspace behind: %v", statErr)
 	}
+}
+
+func TestCopyCheckWorkspaceFileStopsAfterMidCopyCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	input := cancelAfterFirstRead{data: []byte("first-second"), cancel: cancel}
+	var output bytes.Buffer
+
+	copied, err := copyCheckWorkspaceFile(ctx, &output, &input, make([]byte, len("first")), int64(len(input.data)))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("copy error = %v", err)
+	}
+	if copied != int64(len("first")) || output.String() != "first" {
+		t.Fatalf("partial copy = %d, %q", copied, output.String())
+	}
+}
+
+func TestCheckWorkspaceCopierCopyFileRemovesOutputOnCancellation(t *testing.T) {
+	source := t.TempDir()
+	destination := filepath.Join(t.TempDir(), "workspace")
+	sourcePath := filepath.Join(source, "main.go")
+	if err := os.WriteFile(sourcePath, []byte("package fixture\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	copier := checkWorkspaceCopier{
+		ctx: ctx, source: source, destination: destination,
+		buffer: make([]byte, checkCopyBufferSize),
+	}
+
+	err = copier.copyFile(sourcePath, "main.go", info)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("copy error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(destination, "main.go")); !os.IsNotExist(err) {
+		t.Fatalf("canceled file copy left output behind: %v", err)
+	}
+}
+
+type cancelAfterFirstRead struct {
+	data   []byte
+	cancel context.CancelFunc
+	read   bool
+}
+
+func (reader *cancelAfterFirstRead) Read(destination []byte) (int, error) {
+	if reader.read {
+		return 0, io.EOF
+	}
+	reader.read = true
+	read := copy(destination, reader.data)
+	reader.cancel()
+	return read, nil
 }
 
 func TestTaskTestChecksRequireBaseFailureAndCandidatePassWithoutWritingProject(t *testing.T) {
