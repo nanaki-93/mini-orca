@@ -249,19 +249,24 @@ func (s *chatSessionStore) create(session ChatSession) *ChatSession {
 	return &published
 }
 
-func (s *chatSessionStore) reserveRepair(id, parentDraftID string) error {
+func (s *chatSessionStore) reserveRepair(id, parentDraftID string, taskSpec *project.BugTaskSpec) (ChatSession, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	stored := s.records[id]
 	if stored == nil || stored.session.State != "active" || stored.session.LatestDraftID != parentDraftID {
-		return project.ErrRevisionConflict
+		return ChatSession{}, project.ErrRevisionConflict
 	}
 	if stored.session.RepairCount >= 3 {
-		return fmt.Errorf("check-driven repair limit reached")
+		return ChatSession{}, fmt.Errorf("check-driven repair limit reached")
 	}
+	pinned, ok := pinParentRepairTaskSpec(stored.session.TaskSpec, taskSpec)
+	if !ok || !sameTaskSpec(pinned, taskSpec) {
+		return ChatSession{}, fmt.Errorf("check-driven repair task proof changed")
+	}
+	stored.session.TaskSpec = pinned
 	stored.session.RepairCount++
 	stored.session.UpdatedAt = time.Now().UTC()
-	return nil
+	return cloneChatSession(stored.session), nil
 }
 
 func (s *chatSessionStore) forMessage(id, parentDraftID string) (ChatSession, error) {

@@ -651,7 +651,11 @@ class DesktopWorkflowPresenter(
                 controller.chatProposalLoaded(
                     request,
                     fileRequest,
-                    session.copy(repairCount = session.repairCount + if (repair) 1 else 0),
+                    session.copy(
+                        repairCount = session.repairCount + if (repair) 1 else 0,
+                        taskSpec =
+                            sessionTaskSpecAfterProposal(
+                                session.taskSpec, proposal.draft.taskSpec)),
                     content,
                     proposal)) {
               activeDraft = proposal.draft.identity(identity.file)

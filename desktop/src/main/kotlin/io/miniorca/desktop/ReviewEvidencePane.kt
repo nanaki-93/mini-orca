@@ -296,7 +296,7 @@ internal fun repairMessageForChecks(
 ): String? {
   if (session?.taskSpec == null ||
       draft?.taskSpec == null ||
-      !sameTaskSpec(session.taskSpec, draft.taskSpec) ||
+      !repairTaskSpecMatches(session.taskSpec, draft.taskSpec) ||
       session.repairCount >= 3 ||
       !checksMatchDraft(checks, draft))
       return null
@@ -323,7 +323,7 @@ private fun repairLimitReached(
 ): Boolean =
     session?.taskSpec != null &&
         draft?.taskSpec != null &&
-        sameTaskSpec(session.taskSpec, draft.taskSpec) &&
+        repairTaskSpecMatches(session.taskSpec, draft.taskSpec) &&
         session.repairCount >= 3 &&
         checksMatchDraft(checks, draft) &&
         !checks!!.applicable

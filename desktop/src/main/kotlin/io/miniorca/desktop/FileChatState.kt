@@ -107,3 +107,14 @@ fun chatDraftMatchesSession(draft: DeclarationDraft?, session: ChatSession?): Bo
         sameTaskSpec(draft.taskSpec, session.taskSpec)
 
 internal fun sameTaskSpec(left: BugTaskSpec?, right: BugTaskSpec?): Boolean = left == right
+
+internal fun repairTaskSpecMatches(session: BugTaskSpec, parent: BugTaskSpec): Boolean =
+    session.copy(goTestCandidate = parent.goTestCandidate) == parent &&
+        (session.goTestCandidate == null || session.goTestCandidate == parent.goTestCandidate)
+
+internal fun sessionTaskSpecAfterProposal(
+    current: BugTaskSpec?,
+    proposed: BugTaskSpec?
+): BugTaskSpec? =
+    if (current != null && proposed != null && repairTaskSpecMatches(current, proposed)) proposed
+    else current

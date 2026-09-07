@@ -56,7 +56,7 @@ paths:
     post:
       tags: [Chat]
       summary: Request a declaration proposal in an existing session
-      description: The message body cannot change the session's project, file, mode, or declaration target. A repair is explicit and limited to the latest failed task draft.
+      description: The message body cannot change the session's project, file, mode, or declaration target. A repair is explicit, limited to the latest failed task draft, and pins that parent's reviewed temporary proof for the remaining lineage.
       parameters:
         - {$ref: '#/components/parameters/SessionID'}
       requestBody:
@@ -1129,7 +1129,7 @@ components:
         message: {type: string}
         parent_draft_id: {type: string, description: Optional earlier draft in this same session.}
         confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
-        repair: {type: boolean, description: Explicit check-driven repair for the latest task-bound failed draft; limited to three per session.}
+        repair: {type: boolean, description: Explicit check-driven repair for the latest task-bound failed draft; pins its reviewed temporary proof and is limited to three per session.}
     ChatSession:
       type: object
       required: [id, project_id, project_revision, base_file_hash, open_path, mode, target_symbol, state, messages, created_at, updated_at]
