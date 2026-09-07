@@ -130,9 +130,11 @@ and pass with the composed candidate before its required check succeeds.
 
 When current task-bound checks fail, a client can send the next pinned session
 message with `repair: true`. The daemon requires that exact latest failed draft,
-uses bounded sanitized check evidence supplied by the client, and permits at
-most three such repair requests. Checks, temporary tests, validation, Apply,
-and Undo never start a provider request on their own.
+pins any reviewed temporary proof carried by that parent for the rest of the
+repair lineage, uses bounded sanitized check evidence supplied by the client,
+and permits at most three such repair requests. A later repair cannot drop or
+replace the pinned proof. Checks, temporary tests, validation, Apply, and Undo
+never start a provider request on their own.
 
 `POST /api/projects/current/apply` requires the displayed draft id, revision,
 hash, project identity, base file hash, and an explicit `confirm: true`. It

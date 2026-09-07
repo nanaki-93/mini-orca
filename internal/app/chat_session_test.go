@@ -252,6 +252,60 @@ func TestTaskBoundChatRepairsAreExplicitAndLimitedToThreeProviderRequests(t *tes
 	}
 }
 
+func TestTaskBoundRepairPinsParentProofAndRejectsReplacement(t *testing.T) {
+	providerCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		providerCalls++
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]string{"content": `{"version":"v1","declaration":"func Run() { println(\"revised\") }","explanation":"Proposal ready."}`}}}})
+	}))
+	defer server.Close()
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := service.manager.IndexedFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := &project.BugTaskSpec{SchemaVersion: project.BugTaskSpecSchemaVersion, TargetPath: file.Path, TargetSymbol: "Run", TargetSignature: file.Symbols[0].Signature, AcceptanceCriteria: []string{"Change only Run."}}
+	session, err := service.OpenChatSession(ChatSessionCreateRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, OpenPath: file.Path, Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: "Run", TaskSpec: task})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, Message: "Fix the reviewed task."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof := &project.GoTestCandidateSpec{Name: "TestRun", Content: "package main\n\nimport \"testing\"\n\nfunc TestRun(t *testing.T) { Run() }"}
+	setTaskDraftProofAndFailedChecks(t, service, parent.Draft.ID, proof)
+
+	repaired, err := service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, ParentDraftID: parent.Draft.ID, Message: "Use the failed behavioral proof.", Repair: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repaired.Draft.TaskSpec == nil || !sameGoTestCandidate(repaired.Draft.TaskSpec.GoTestCandidate, proof) {
+		t.Fatalf("repaired draft proof = %+v", repaired.Draft.TaskSpec)
+	}
+	stored, err := service.ChatSession(session.ID)
+	if err != nil || stored.TaskSpec == nil || !sameGoTestCandidate(stored.TaskSpec.GoTestCandidate, proof) || stored.RepairCount != 1 {
+		t.Fatalf("pinned repair session = %+v, err = %v", stored, err)
+	}
+
+	replacement := &project.GoTestCandidateSpec{Name: "TestRunReplacement", Content: "package main\n\nimport \"testing\"\n\nfunc TestRunReplacement(t *testing.T) { Run() }"}
+	setTaskDraftProofAndFailedChecks(t, service, repaired.Draft.ID, replacement)
+	if _, err := service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, ParentDraftID: repaired.Draft.ID, Message: "Replace the proof.", Repair: true}); err == nil || !strings.Contains(err.Error(), "pinned proof") {
+		t.Fatalf("replacement proof error = %v", err)
+	}
+	stored, err = service.ChatSession(session.ID)
+	if err != nil || stored.RepairCount != 1 || !sameGoTestCandidate(stored.TaskSpec.GoTestCandidate, proof) {
+		t.Fatalf("session changed after rejected replacement = %+v, err = %v", stored, err)
+	}
+	if providerCalls != 2 {
+		t.Fatalf("provider calls = %d; replacement must fail before model execution", providerCalls)
+	}
+}
+
 func markTaskDraftChecksFailed(t *testing.T, service *Service, draftID string) {
 	t.Helper()
 	draft, err := service.ValidateDraft(draftID, 1)
@@ -262,6 +316,22 @@ func markTaskDraftChecksFailed(t *testing.T, service *Service, draftID string) {
 	defer service.drafts.mu.Unlock()
 	stored := service.drafts.records[draftID]
 	stored.checks = &draftCheckEvidence{Revision: draft.Revision, CompositionHash: draft.CompositionHash, Report: DraftCheckReport{DraftID: draft.ID, DraftRevision: draft.Revision, DraftHash: draft.Hash, CompositionHash: draft.CompositionHash, Applicable: false, Checks: []DraftCheck{{Name: "task test verification", Required: true, State: CheckFailed, Output: "sanitized failure"}}}}
+}
+
+func setTaskDraftProofAndFailedChecks(t *testing.T, service *Service, draftID string, proof *project.GoTestCandidateSpec) {
+	t.Helper()
+	func() {
+		service.drafts.mu.Lock()
+		defer service.drafts.mu.Unlock()
+		stored := service.drafts.records[draftID]
+		if stored == nil || stored.draft.TaskSpec == nil {
+			t.Fatalf("task draft %q is unavailable", draftID)
+		}
+		taskSpec := project.SanitizeBugTaskSpec(stored.draft.TaskSpec)
+		taskSpec.GoTestCandidate = proof
+		stored.draft.TaskSpec = project.SanitizeBugTaskSpec(taskSpec)
+	}()
+	markTaskDraftChecksFailed(t, service, draftID)
 }
 
 func TestParseDeclarationDraftResponseContract(t *testing.T) {

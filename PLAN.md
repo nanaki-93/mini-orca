@@ -235,7 +235,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | UI-04 | Close inherited native/accessibility checks | UI-03 | M / high | Complete |
 | FLOW-01 | Short function-scoped change requests | UI-03 | M / medium | Complete |
 | FLOW-02 | Read-only declaration explanation | FLOW-01, SEC-02, FND-06 | M / high | Complete |
-| FLOW-03 | Reusable temporary behavioral proof | FLOW-01, SEC-03, SEC-04 | M / high | Blocked — repair proof pinning review failed after two cycles |
+| FLOW-03 | Reusable temporary behavioral proof | FLOW-01, SEC-03, SEC-04 | M / high | Complete |
 | LEARN-01 | Concise, grounded engineering insights | FLOW-02 | S / medium | Complete |
 | LEARN-02 | Evaluate usefulness and model reliability | LEARN-01, FLOW-03 | M / medium | Pending |
 | SEC-01 | Harden daemon and container network boundary | FND-01 | M / high | Complete |
@@ -575,12 +575,18 @@ the full quality gate green. No inherited quality exception applies to final rel
   at three. No source test file, sibling change or auto-repair loop is introduced.
 - Verify: base/candidate fixtures, target/revision/repair guards, G/C and D. Document
   test execution trust and any exact contract extension.
-- Blocked 2026-09-07 after the two allowed repair/review cycles. The preserved
-  patch passes G, C and D and covers strict test validation, copied-workspace
-  execution, package-scoped trust, truncation, create-mode limits and generic
-  proof inheritance. Final review found one remaining integrity gap: a task-bound
-  repair whose task spec has no Go test can drop or replace an optional failed
-  behavioral proof. Pin that parent proof before resuming independent review.
+- Completed 2026-09-07. Strict test validation, copied-workspace execution,
+  package-scoped trust, truncation, create-mode limits and generic proof
+  inheritance are covered. A repair now adopts a reviewed optional proof from
+  its exact failed parent into the session and next draft; full task/proof
+  equality then prevents later repairs from dropping or replacing it before a
+  provider request. The desktop retains the adopted proof for review and trust
+  presentation. Focused repair/UI tests and `make check` passed G, C and D. The
+  quality runner passed static analysis, reachability, clone detection and
+  Desktop checks, but its existing complexity gate still reports
+  `checkWorkspaceCopier.copy` and `LoadPerformanceFileReport`; neither function
+  was changed by FLOW-03. No API shape, configuration or persistence migration
+  is required.
 
 ### LEARN-01 — Improve engineering insight content and presentation
 

@@ -146,6 +146,24 @@ class FileChatStateTest {
   }
 
   @Test
+  fun proposalMayPinAMissingParentProofButCannotReplaceIt() {
+    val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return an error."))
+    val proof = GoTestCandidateSpec("TestRun", "package main\nfunc TestRun() {}")
+    val provedTask = task.copy(goTestCandidate = proof)
+
+    assertEquals(provedTask, sessionTaskSpecAfterProposal(task, provedTask))
+    assertEquals(
+        provedTask,
+        sessionTaskSpecAfterProposal(
+            provedTask,
+            provedTask.copy(
+                goTestCandidate =
+                    GoTestCandidateSpec(
+                        "TestReplacement", "package main\nfunc TestReplacement() {}"))))
+    assertNull(sessionTaskSpecAfterProposal(null, provedTask))
+  }
+
+  @Test
   fun proposalAddsOnlyBoundTurnsAndPreservesDraftLineage() {
     val controller = loadedController()
     val request = controller.beginFileLoad("main.go")!!

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/token"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -202,7 +203,8 @@ func (s *Service) prepareChatSessionMessage(request ChatSessionMessageRequest) (
 		return preparedChatSessionMessage{}, err
 	}
 	if request.Repair {
-		if err := s.reserveTaskRepair(session, request.ParentDraftID); err != nil {
+		session, err = s.reserveTaskRepair(session, request.ParentDraftID)
+		if err != nil {
 			return preparedChatSessionMessage{}, err
 		}
 	}
@@ -272,24 +274,30 @@ func (s *Service) validateSessionTaskSpec(spec *project.BugTaskSpec, file projec
 	return validated, nil
 }
 
-func (s *Service) reserveTaskRepair(session ChatSession, parentDraftID string) error {
+func (s *Service) reserveTaskRepair(session ChatSession, parentDraftID string) (ChatSession, error) {
 	if session.TaskSpec == nil || parentDraftID == "" {
-		return fmt.Errorf("check-driven repair requires a task-bound draft")
+		return ChatSession{}, fmt.Errorf("check-driven repair requires a task-bound draft")
 	}
-	if err := s.taskDraftHasFailedChecks(parentDraftID, session); err != nil {
-		return err
+	taskSpec, err := s.failedRepairTaskSpec(parentDraftID, session)
+	if err != nil {
+		return ChatSession{}, err
 	}
-	return s.chatSessions.reserveRepair(session.ID, parentDraftID)
+	return s.chatSessions.reserveRepair(session.ID, parentDraftID, taskSpec)
 }
 
-func (s *Service) taskDraftHasFailedChecks(id string, session ChatSession) error {
-	if _, err := s.requireCurrentDraft(id); err != nil {
-		return err
+func (s *Service) failedRepairTaskSpec(id string, session ChatSession) (*project.BugTaskSpec, error) {
+	draft, err := s.requireCurrentDraft(id)
+	if err != nil {
+		return nil, err
 	}
-	if !s.drafts.hasFailedChecks(id, session.TaskSpec) {
-		return fmt.Errorf("check-driven repair requires failed checks for the current task draft")
+	if draft.ProjectID != session.ProjectID || draft.ProjectRevision != session.ProjectRevision || draft.BaseFileHash != session.BaseFileHash || draft.TargetPath != session.OpenPath || draft.Mode != session.Mode || draft.TargetSymbol != session.TargetSymbol {
+		return nil, project.ErrRevisionConflict
 	}
-	return nil
+	taskSpec, ok := pinParentRepairTaskSpec(session.TaskSpec, draft.TaskSpec)
+	if !ok || !s.drafts.hasFailedChecks(id, draft.TaskSpec) {
+		return nil, fmt.Errorf("check-driven repair requires failed checks for the current task draft and its pinned proof")
+	}
+	return taskSpec, nil
 }
 
 func checksFailed(report DraftCheckReport) bool {
@@ -305,7 +313,33 @@ func sameTaskSpec(left, right *project.BugTaskSpec) bool {
 	if left == nil || right == nil {
 		return left == right
 	}
-	return left.SchemaVersion == right.SchemaVersion && left.TargetPath == right.TargetPath && left.TargetSymbol == right.TargetSymbol && left.TargetSignature == right.TargetSignature
+	return sameTaskContract(left, right) && sameGoTestCandidate(left.GoTestCandidate, right.GoTestCandidate)
+}
+
+func pinParentRepairTaskSpec(session, parent *project.BugTaskSpec) (*project.BugTaskSpec, bool) {
+	if session == nil || parent == nil || !sameTaskContract(session, parent) {
+		return nil, false
+	}
+	if session.GoTestCandidate != nil && !sameGoTestCandidate(session.GoTestCandidate, parent.GoTestCandidate) {
+		return nil, false
+	}
+	return project.SanitizeBugTaskSpec(parent), true
+}
+
+func sameTaskContract(left, right *project.BugTaskSpec) bool {
+	return left.SchemaVersion == right.SchemaVersion &&
+		left.TargetPath == right.TargetPath &&
+		left.TargetSymbol == right.TargetSymbol &&
+		left.TargetSignature == right.TargetSignature &&
+		slices.Equal(left.AcceptanceCriteria, right.AcceptanceCriteria) &&
+		slices.Equal(left.NonGoals, right.NonGoals)
+}
+
+func sameGoTestCandidate(left, right *project.GoTestCandidateSpec) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return left.Name == right.Name && left.Content == right.Content
 }
 
 func (s *Service) chatSessionForMessage(id, parentDraftID string) (ChatSession, error) {

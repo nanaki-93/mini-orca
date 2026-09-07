@@ -16,6 +16,35 @@ class ReviewToolWindowTest {
   }
 
   @Test
+  fun repairAcceptsAParentProofOnlyOnceAndRejectsReplacement() {
+    val sessionTask =
+        BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return the expected value."))
+    val proof = GoTestCandidateSpec("TestRun", "package main\nfunc TestRun() {}")
+    val parentTask = sessionTask.copy(goTestCandidate = proof)
+    val current = draft().copy(taskSpec = parentTask)
+    val session = ChatSession(taskSpec = sessionTask)
+    val checks =
+        DraftCheckReport(
+            "main.go",
+            false,
+            checks =
+                listOf(DraftCheck("task test verification", true, "failed", output = "failed")),
+            draftId = current.id,
+            draftRevision = current.revision,
+            draftHash = current.hash)
+
+    assertTrue(repairMessageForChecks(session, current, checks)?.contains("failed") == true)
+    assertTrue(repairTaskSpecMatches(sessionTask, parentTask))
+    assertFalse(
+        repairTaskSpecMatches(
+            parentTask,
+            parentTask.copy(
+                goTestCandidate =
+                    GoTestCandidateSpec(
+                        "TestReplacement", "package main\nfunc TestReplacement() {}"))))
+  }
+
+  @Test
   fun eligibleDecisionNamesExactlyOneSymbolAndFile() {
     val current = draft()
     val checks =
