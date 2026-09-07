@@ -247,7 +247,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | SEC-07 | Add explicit AI Security review | SEC-05, SEC-02, FND-03 | M / high | Complete |
 | SEC-08 | Deliver Security workspace and focused handoff | SEC-06, SEC-07, UI-03, FND-06 | M / high | Pending |
 | PERF-01 | Measure and improve Mini-Orca hotspots | FND-03, FND-06, SEC-03 | M / medium | Complete |
-| PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Blocked — two repair/review cycles exhausted on truthful failed-result handling and parser validation |
+| PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Complete |
 | PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Pending |
 | AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Blocked — final review rejected unsafe execution boundaries |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03 | M / high | Pending |
@@ -875,16 +875,20 @@ the full quality gate green. No inherited quality exception applies to final rel
   tested project source and its benchmarks are not written by this operation.
 - Verify: helper/fake-runner parsing and budget tests plus one disposable real
   benchmark, G/C. No profiler UI, benchmark generator or general command console.
-- Blocked 2026-09-07 after the two allowed repair/review cycles. The final patch
-  retains base samples after a failed or truncated candidate, accepts negative
-  custom metrics and malformed benchmark CPU suffixes, and its OpenAPI contract
-  does not prohibit partial samples for `failed` results. These violate the
-  required inconclusive-result and strict-parser behavior even though G/C and the
-  full supported checks passed; `make quality` reported only the accepted baseline
-  complexities. The preserved patch is
-  `.git/mini-orca-autopilot-PERF-02.patch` (SHA-256
-  `67d0ec5c04dbe82f0c74cb6c1ab730d881612963c93127e1cb7ed23c7cba6d16`).
-  No benchmark comparison code or API change was integrated.
+- Completed 2026-09-08. The benchmark catalog lists existing exact Go benchmark
+  functions in the affected package without executing code and binds each fixed,
+  escaped argv preview to the current draft and bounded workspace fingerprint.
+  After revision-bound local execution consent, comparison runs five base and five
+  candidate samples in separate disposable copies with the same captured fixture,
+  toolchain environment and limits. Current project, draft, source and benchmark
+  identity are rechecked between phases. Canceled, failed, truncated, malformed or
+  incomplete runs return no samples and make no performance claim; strict parsing
+  rejects invalid CPU suffixes, non-finite or negative metrics, duplicate metrics
+  and invalid sample counts. The operation never changes Apply eligibility or the
+  project source. Fake-runner, budget, parser, API/OpenAPI and one disposable real
+  benchmark test passed with G/C, including the race suite and Desktop tests. The
+  quality runner reports only the two accepted baseline complexities. No
+  configuration or persistence migration is required.
 
 ### PERF-03 — Show measurements without overstating conclusions
 

@@ -548,6 +548,31 @@ paths:
         '200': {description: Isolated check report for the displayed revision and hash, content: {application/json: {schema: {$ref: '#/components/schemas/DraftCheckReport'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/drafts/{draftID}/benchmarks:
+    get:
+      tags: [Performance]
+      summary: List selectable existing Go benchmarks for one validated draft
+      parameters:
+        - {$ref: '#/components/parameters/DraftID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+        - {name: expected_revision, in: query, required: true, schema: {type: integer, format: int64, minimum: 1}}
+        - {name: expected_hash, in: query, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Available existing benchmarks or an unavailable reason; no process is started, content: {application/json: {schema: {$ref: '#/components/schemas/GoBenchmarkCatalog'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Performance]
+      summary: Compare one selected existing Go benchmark in copied workspaces
+      parameters:
+        - {$ref: '#/components/parameters/DraftID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/GoBenchmarkComparisonRequest'}}}
+      responses:
+        '200': {description: Complete paired measurements or a sample-free unavailable/failed/canceled state; this does not enable Apply, content: {application/json: {schema: {$ref: '#/components/schemas/GoBenchmarkComparison'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/apply:
     post:
       tags: [Drafts]
@@ -1348,6 +1373,88 @@ components:
         target_path: {type: string}
         applicable: {type: boolean}
         checks: {type: array, items: {type: object}}
+    GoBenchmarkComparisonRequest:
+      type: object
+      required: [project_revision, expected_revision, expected_hash, benchmark, expected_scope]
+      additionalProperties: false
+      properties:
+        project_revision: {type: string}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+        expected_hash: {type: string}
+        benchmark: {type: string, description: Exact name returned by the benchmark catalog; never a command or shell fragment.}
+        expected_scope: {type: string, description: Opaque scope returned with the displayed fixed argv; binds execution to that reviewed selection.}
+    GoBenchmarkCatalog:
+      type: object
+      required: [draft_id, draft_revision, draft_hash, available, trusted, benchmarks]
+      properties:
+        draft_id: {type: string}
+        draft_revision: {type: integer, format: int64}
+        draft_hash: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        base_file_hash: {type: string}
+        target_path: {type: string}
+        available: {type: boolean}
+        trusted: {type: boolean, description: Current project-revision execution consent. False still returns command previews.}
+        reason: {type: string}
+        benchmarks: {type: array, items: {$ref: '#/components/schemas/GoBenchmarkChoice'}, description: Existing valid benchmark choices in the affected package.}
+    GoBenchmarkChoice:
+      type: object
+      required: [name, command, scope]
+      properties:
+        name: {type: string}
+        command: {type: array, items: {type: string}, description: Exact daemon-built argv preview.}
+        scope: {type: string, description: Opaque selected-scope guard bound to the reviewed workspace fixture and required to run this displayed argv.}
+    GoBenchmarkSample:
+      type: object
+      required: [iterations, ns_per_op, bytes_per_op, allocs_per_op]
+      properties:
+        iterations: {type: integer, format: int64, minimum: 1}
+        ns_per_op: {type: number, format: double, minimum: 0, exclusiveMinimum: true}
+        bytes_per_op: {type: integer, format: int64, minimum: 0}
+        allocs_per_op: {type: integer, format: int64, minimum: 0}
+    GoBenchmarkMeasurement:
+      type: object
+      required: [samples]
+      properties:
+        samples: {type: array, minItems: 5, maxItems: 5, items: {$ref: '#/components/schemas/GoBenchmarkSample'}}
+    GoBenchmarkComparison:
+      type: object
+      required: [draft_id, draft_revision, draft_hash, status]
+      properties:
+        draft_id: {type: string}
+        draft_revision: {type: integer, format: int64}
+        draft_hash: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        base_file_hash: {type: string}
+        target_path: {type: string}
+        benchmark: {type: string}
+        scope: {type: string}
+        status: {type: string, enum: [completed, unavailable, failed, canceled]}
+        reason: {type: string}
+        command: {type: array, items: {type: string}, description: Fixed daemon-built argv preview.}
+        base: {$ref: '#/components/schemas/GoBenchmarkMeasurement'}
+        candidate: {$ref: '#/components/schemas/GoBenchmarkMeasurement'}
+      allOf:
+        - oneOf:
+            - properties:
+                status: {type: string, enum: [completed]}
+              required: [status, base, candidate]
+            - properties:
+                status: {type: string, enum: [unavailable, canceled]}
+              required: [status]
+              not:
+                anyOf:
+                  - required: [base]
+                  - required: [candidate]
+            - properties:
+                status: {type: string, enum: [failed]}
+              required: [status]
+              not:
+                anyOf:
+                  - required: [base]
+                  - required: [candidate]
     ApplyRequest:
       type: object
       required: [draft_id, draft_revision, draft_hash, project_id, project_revision, base_file_hash, confirm]

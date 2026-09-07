@@ -251,6 +251,57 @@ func TestOpenAPIGoScanPhaseIncludesWorkspace(t *testing.T) {
 	t.Fatalf("GoScanPhase names = %v, want workspace", spec.Components.Schemas["GoScanPhase"].Properties["name"].Enum)
 }
 
+func TestOpenAPIGoBenchmarkSchemaMatchesRuntimeBounds(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type schema struct {
+		Properties       map[string]schema `yaml:"properties"`
+		Required         []string          `yaml:"required"`
+		Minimum          *float64          `yaml:"minimum"`
+		ExclusiveMinimum bool              `yaml:"exclusiveMinimum"`
+		MinItems         int               `yaml:"minItems"`
+		MaxItems         int               `yaml:"maxItems"`
+		AllOf            []schema          `yaml:"allOf"`
+		OneOf            []schema          `yaml:"oneOf"`
+		Not              *schema           `yaml:"not"`
+	}
+	var spec struct {
+		Components struct {
+			Schemas map[string]schema `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		t.Fatal(err)
+	}
+	request := spec.Components.Schemas["GoBenchmarkComparisonRequest"]
+	if request.Properties["expected_revision"].Minimum == nil || *request.Properties["expected_revision"].Minimum != 1 {
+		t.Fatalf("expected_revision schema = %#v", request.Properties["expected_revision"])
+	}
+	sample := spec.Components.Schemas["GoBenchmarkSample"]
+	if sample.Properties["iterations"].Minimum == nil || *sample.Properties["iterations"].Minimum != 1 || sample.Properties["ns_per_op"].Minimum == nil || *sample.Properties["ns_per_op"].Minimum != 0 || !sample.Properties["ns_per_op"].ExclusiveMinimum || sample.Properties["bytes_per_op"].Minimum == nil || *sample.Properties["bytes_per_op"].Minimum != 0 || sample.Properties["allocs_per_op"].Minimum == nil || *sample.Properties["allocs_per_op"].Minimum != 0 {
+		t.Fatalf("sample schema = %#v", sample)
+	}
+	measurement := spec.Components.Schemas["GoBenchmarkMeasurement"]
+	if measurement.Properties["samples"].MinItems != 5 || measurement.Properties["samples"].MaxItems != 5 {
+		t.Fatalf("measurement schema = %#v", measurement.Properties["samples"])
+	}
+	comparison := spec.Components.Schemas["GoBenchmarkComparison"]
+	if len(comparison.AllOf) != 1 || len(comparison.AllOf[0].OneOf) != 3 || !containsSchemaRequired(comparison.AllOf[0].OneOf[0].Required, "base") || !containsSchemaRequired(comparison.AllOf[0].OneOf[0].Required, "candidate") || comparison.AllOf[0].OneOf[1].Not == nil || comparison.AllOf[0].OneOf[2].Not == nil {
+		t.Fatalf("comparison status schema = %#v", comparison.AllOf)
+	}
+}
+
+func containsSchemaRequired(required []string, name string) bool {
+	for _, item := range required {
+		if item == name {
+			return true
+		}
+	}
+	return false
+}
+
 func requestPathForDocumentedRoute(path string) string {
 	switch path {
 	case "/api/projects/current/files/info", "/api/projects/current/files/symbols", "/api/projects/current/files/analysis", "/api/projects/current/context":

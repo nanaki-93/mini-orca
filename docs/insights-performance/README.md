@@ -14,12 +14,13 @@ contention, allocation, query fan-out, idempotency, backpressure or authorizatio
 Skip syntax tutorials and generic advice. Opening the collapsed panel starts no
 model request. LEARN-01/02 improve presentation and evaluate actual usefulness.
 
-Performance is **source-based review, not measurement**. Reports describe observed
-patterns, workload conditions, confidence, trade-offs and verification plans. They
-use the `analyze` model scope, separate report/job state and current source/policy/
-provider identity. File input/output is capped at 64 KiB and five findings; jobs
-have bounded file/time budgets that do not reset on resume. PERF-01 measures
-Mini-Orca itself; PERF-02/03 propose an explicit benchmark comparison feature.
+Performance reports are **source-based review, not measurement**. They describe
+observed patterns, workload conditions, confidence, trade-offs and verification
+plans. Reports use the `analyze` model scope, separate report/job state and current
+source/policy/provider identity. File input/output is capped at 64 KiB and five
+findings; jobs have bounded file/time budgets that do not reset on resume. PERF-01
+measured Mini-Orca itself. PERF-02 adds an optional, explicitly selected Go
+benchmark comparison for a validated draft; PERF-03 owns its desktop presentation.
 
 The completed implementation passed automated checks historically. Real-provider
 content quality, queue confirmation/lifecycle UI and native checks remain in

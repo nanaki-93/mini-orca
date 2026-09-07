@@ -63,6 +63,7 @@ type Service struct {
 	chatSessions                    *chatSessionStore
 	performance                     *performanceController
 	executionTrust                  *executionTrustStore
+	benchmarkRunner                 goBenchmarkRunner
 	buildDeclarationContext         func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
 	loadSecurityFileReport          func(string, project.SecurityReportInput) (*project.SecurityFileReport, error)
 	beforeSecurityReviewPublication func()
@@ -97,7 +98,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	}
 
 	contextBuilder := project.NewContextBuilder()
-	return &Service{
+	service := &Service{
 		manager: manager,
 		runtimes: scopedRuntimes{
 			analyze:  newModelRuntime(profiles.Analyze, importTimeout, maxRetries),
@@ -117,7 +118,9 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		executionTrust:          newExecutionTrustStore(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 		loadSecurityFileReport:  project.LoadSecurityFileReport,
-	}, nil
+	}
+	service.benchmarkRunner = checkGoBenchmarkRunner{service: service}
+	return service, nil
 }
 
 func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetries int) modelRuntime {
