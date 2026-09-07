@@ -11,14 +11,14 @@ Current rules and tokens live in
 The dark theme, navigation and Jewel migration are already implemented. Do not
 repeat those migrations or restore the older navy/purple palette.
 
-The next improvements in [PLAN.md](../../PLAN.md) remove inert previews, make the
-selected-function workflow obvious and verify the real desktop at narrow widths,
-large text and with a screen reader. Adapt the mock's sample tabs, terminal,
+The current implementation in [PLAN.md](../../PLAN.md) removes inert previews, makes
+the selected-function workflow explicit and records supported-host native checks.
+Adapt the mock's sample tabs, terminal,
 profile, scores and multi-file extraction to Mini-Orca's actual capabilities.
 Native window controls and explicit Review before Apply remain intentional.
 
 The old dark plan/baseline/contrast/acceptance documents were consolidated here and
-in [release acceptance](../RELEASE_ACCEPTANCE.md). Their Task 149 native checks
-remain outstanding under UI-04 and REL-01; document consolidation is not a pass.
+in [release acceptance](../RELEASE_ACCEPTANCE.md). UI-04 closes the attainable Task
+149 native checks; REL-01 retains the explicit release limitations.
 Current measured token pairs remain in [UI_CONTRAST.md](../../desktop/UI_CONTRAST.md).
 Full historical instructions and old measurements are recoverable from Git.

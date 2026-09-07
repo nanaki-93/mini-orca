@@ -86,7 +86,9 @@ if [ -z "$launcher_home" ]; then
 fi
 
 if [ -n "$java25_home" ]; then
-  exec env JAVA_HOME="$launcher_home" ./desktop/gradlew -p desktop "$@" "-Porg.gradle.java.installations.paths=$java25_home"
+  exec env JAVA_HOME="$launcher_home" ./desktop/gradlew -p desktop "$@" \
+    "-Porg.gradle.java.installations.paths=$java25_home" \
+    "-Porg.gradle.java.installations.auto-detect=false"
 fi
 
 exec env JAVA_HOME="$launcher_home" ./desktop/gradlew -p desktop "$@"

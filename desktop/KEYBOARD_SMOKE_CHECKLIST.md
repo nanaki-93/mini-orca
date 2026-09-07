@@ -156,14 +156,21 @@ matrix and release follow-ups. These are native-release checks, not fixture pass
 
 ## Task 170 native operator matrix
 
-The deterministic keyboard/semantics suite covers the retained navigation shortcuts, responsive
-1000dp breakpoint, rail/tab selection state, command palette arrows, popup dismissal/focus return,
-disclosures, provider-confirmation state, and topmost transient-surface policy. It cannot prove
-native window focus order, platform popup positioning, or screen-reader speech.
+Task 170 is superseded by UI-04. The final deterministic suite covers navigation shortcuts, the
+responsive 1000dp boundary, rail/tab selection, command-palette arrows, popup dismissal/focus
+return, disclosures, provider confirmation and topmost transient-surface policy. The final forced
+run passed 24 visual-layout, 8 accessibility and 7 keyboard-navigation tests and generated 70
+ignored PNGs.
 
-Before marking Task 170 complete, run the numbered checklist above with the pinned JBR 25 build
-and a disposable fixture at `1440x900`, `1920x1080`, `1000x760`, `999x760`, `800x650`, and
-`1280x600`; repeat the short view at supported 125% and 150% text scales. Record the native
-screenshots, focus order, Escape/dismissal result, and VoiceOver (or other supported reader)
-names/states in [UI_PRECISION_ACCEPTANCE.md](UI_PRECISION_ACCEPTANCE.md). Do not infer any of
-those results from the offscreen component renders.
+The packaged JBR 25 fixture directly covered `1000x760`, `999x760`, `800x650` and `1280x600`.
+Keyboard inspection covered native traversal, one-layer Escape, trigger focus restoration, source
+selection, drawer/menu/overlay placement, splitter resizing and preference recovery. VoiceOver 10
+services were active while the app exposed its control names and selected/error states through the
+native accessibility tree. The operator surface could not capture VoiceOver speech or its reader
+cursor.
+
+Exact native `1440x900`/`1920x1080`, 125%/150% text, alternate density and provider/Review state
+combinations remain explicitly unclaimed. Their deterministic coverage is not presented as native
+evidence. Full observations and the external-display limitation are recorded in
+[UI_PRECISION_ACCEPTANCE.md](UI_PRECISION_ACCEPTANCE.md); release-level follow-up belongs to
+[RELEASE_ACCEPTANCE.md](../docs/RELEASE_ACCEPTANCE.md).

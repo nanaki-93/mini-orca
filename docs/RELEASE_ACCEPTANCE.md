@@ -1,22 +1,24 @@
 # Release acceptance
 
-**Current state: incomplete.** The 2026-09-06 planning/docs change does not establish
-native, provider or distribution acceptance. [PLAN.md](../PLAN.md) is the task/status
-source; this document owns release evidence and open validation obligations.
+**Current state: incomplete.** UI-04 establishes the attainable native/accessibility
+checks on the supported macOS host. Provider, lifecycle and distribution acceptance
+remain open. [PLAN.md](../PLAN.md) is the task/status source; this document owns
+release evidence and open validation obligations.
 
 ## Evidence and open work
 
 | Evidence | Result / boundary | Plan owner |
 | --- | --- | --- |
 | Fresh `go test ./...` on 2026-09-06 | Passed, including daemon route/version contracts; some packages cached | Foundation |
-| Fresh desktop `test` command | Successful; all tasks up to date, not a new native run | UI-04 |
+| Final Desktop gate on 2026-09-07 | 291 tests passed with zero failures; Spotless and Detekt passed on the documented Java 21/JBR 25 split | UI-04 complete |
 | Post-cleanup daemon/config tests (`-count=1`) | Passed, including maintained documentation/version contracts | Foundation |
 | Fresh `make quality` | Staticcheck/deadcode passed; gocyclo failed on five functions; later clone/Desktop static stages not run | FND-02–04, AUTO-01 |
-| Earlier deterministic UI and workflow tests | Recorded passes in completed work; not rerun as a full matrix by this docs change | UI-04, REL-01 |
-| Task 170 production render additions | Historical component/test evidence is tracked; generated images remain ignored build output | UI-04 |
-| FND-01 production fixture baseline | Current 1440×900 and 999×760 Editor, Analysis, populated Review, and populated Performance component captures; JBR 25.0.4.1 rerun, not native acceptance | UI-04 |
+| Final focused UI matrix | Forced 24 visual-layout, 8 accessibility and 7 keyboard-navigation tests passed; 70 ignored PNGs | UI-04 complete |
+| Task 170 production render additions | Historical component/test evidence is tracked; generated images remain ignored build output | UI-04 complete |
+| FND-01 production fixture baseline | Current 1440×900 and 999×760 Editor, Analysis, populated Review, and populated Performance component captures; JBR 25.0.4.1 rerun, not native acceptance | UI-04 complete |
 | Saved fixture inspection during planning | Editor at 1000dp, Analysis at 150% text and ready Review inspected; concrete UI corrections recorded in PLAN | UI-01–03 |
-| Native window/edge popup/OS focus/reader | Missing; observing an app process did not exercise the UI | UI-04 |
+| Native window/edge popup/OS focus/reader | Material supported-host checks passed at 1000×760, 999×760, 800×650 and 1280×600; VoiceOver 10 services active while names/states were inspected; unsupported combinations are recorded separately | UI-04 complete; remaining release combinations REL-01 |
+| Desktop `run` runtime | Fixed Java 22-bytecode startup on a Java 21 Gradle launcher; direct and scripted runs launched the app with JBR 25, confirmed by `jcmd` | UI-04 complete |
 | Real local/remote/mixed model scopes | Manual compatibility and end-to-end checks not recorded as passed | REL-01 |
 | Insight usefulness and Performance lifecycle UI | Manual content-quality/consent follow-ups outstanding | LEARN-02, REL-01 |
 | Final packages / supported Docker image | Earlier macOS startup smoke is not final acceptance; Docker release evidence outstanding | REL-01 |
@@ -45,9 +47,10 @@ FND-01 started at `d0a7cc9`. The only pre-existing worktree edit was the coordin
 The current eight-fixture matrix, command, runtime identity, scale, artifact names, and native
 limitation are recorded in [UI precision evidence](../desktop/UI_PRECISION_ACCEPTANCE.md).
 
-The inherited release items remain assigned: UI-04 owns native window, edge popup, operating-system
-focus, and screen-reader inspection; REL-01 owns provider, lifecycle, package, and distribution
-acceptance; LEARN-02 owns insight usefulness; FND-02–04 and AUTO-01 own the quality findings.
+UI-04 closed the attainable native window, edge popup, operating-system focus and screen-reader
+name/state inspection inherited from Tasks 149/170. REL-01 owns provider, lifecycle, package,
+distribution and any release matrix combinations that require a different operator surface;
+LEARN-02 owns insight usefulness; FND-02–04 and AUTO-01 own the quality findings.
 
 ## Reproduce acceptance
 

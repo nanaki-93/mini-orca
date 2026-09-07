@@ -1,5 +1,6 @@
 import io.gitlab.arturbosch.detekt.Detekt
 import org.gradle.api.JavaVersion
+import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -37,9 +38,13 @@ dependencies {
   testImplementation(kotlin("test"))
 }
 
+val desktopJavaLauncher =
+    javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(25)) }
+
 compose.desktop {
   application {
     mainClass = "io.miniorca.desktop.MainKt"
+    javaHome = desktopJavaLauncher.get().metadata.installationPath.asFile.absolutePath
     nativeDistributions {
       modules("java.net.http", "jdk.unsupported")
       packageName = "Mini-Orca"

@@ -2,9 +2,10 @@
 
 ## Task 170 status
 
-In progress. This record separates deterministic production-component evidence from the
-required native-window and assistive-technology checks. An offscreen render is never used as
-evidence for native menu, dialog, window-edge, or screen-reader behavior.
+Superseded by UI-04. UI-04 closed the attainable inherited native and assistive-technology
+checks on 2026-09-07 and records unsupported combinations below. This record keeps deterministic
+production-component evidence separate from native evidence. An offscreen render is never used
+as evidence for native menu, dialog, window-edge, or screen-reader behavior.
 
 ## Environment
 
@@ -158,7 +159,8 @@ followed by Return reopened each corrected trigger. Deterministic assertions cov
 workspace-to-rail mapping and prove that the exact Search and Open tools triggers can receive
 focus. The dismissal and trigger-restoration sequence is direct native evidence only.
 
-After the final fixes, the full Desktop gate passed 272 tests with zero Detekt findings:
+After the final fixes and launcher correction, the full Desktop run passed 291 tests with zero
+Detekt findings:
 
 ```sh
 MINI_ORCA_JDK21_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem \
@@ -166,9 +168,9 @@ MINI_ORCA_JBR25_HOME="$PWD/desktop/build/ui-04/toolchains/jbrsdk-25.0.4-osx-aarc
   ./scripts/desktop-gradle.sh spotlessCheck detekt test
 ```
 
-The forced focused run passed 23 visual-layout, 8 accessibility, and 7 keyboard-navigation tests
-with no skipped, failed, or errored cases. It generated 66 PNGs under the ignored
-`desktop/build/reports/ui-precision/ui-04-after-fix/` directory:
+The final forced focused run passed 24 visual-layout, 8 accessibility, and 7 keyboard-navigation
+tests with no skipped, failed, or errored cases. It generated 70 PNGs under the ignored
+`desktop/build/reports/ui-precision/ui-04-resumed/` directory:
 
 ```sh
 MINI_ORCA_JDK21_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem \
@@ -177,21 +179,43 @@ MINI_ORCA_JBR25_HOME="$PWD/desktop/build/ui-04/toolchains/jbrsdk-25.0.4-osx-aarc
   --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' \
   --tests 'io.miniorca.desktop.DesktopAccessibilityTest' \
   --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' \
-  -PvisualOutput="$PWD/desktop/build/reports/ui-precision/ui-04-after-fix"
+  -PvisualOutput="$PWD/desktop/build/reports/ui-precision/ui-04-resumed"
 ```
 
-The native restart restored only the disposable project. It did not restore the saved Editor rail
-selection: the stored layout named Editor, while the restarted workspace correctly opened and
-announced Summary. Splitter dimensions were not changed and therefore are not claimed as native
-recovery evidence.
+The Compose `run` task had launched the Java 22-bytecode application on Gradle's Java 21 runtime,
+causing `UnsupportedClassVersionError`. The application now resolves `javaHome` from the Java 25
+toolchain, and `scripts/desktop-gradle.sh` restricts discovery to an explicitly supplied JBR 25.
+A direct Java 21 Gradle launch started `MainKt` on the discovered SDKMAN JBR 25; the documented
+script started it on the exact ignored `25.0.4+1-b508.27` JBR confirmed by `jcmd`. The repository
+`make check` gate passed with that launcher/toolchain split.
 
-VoiceOver was not running. Only `AccessibilityUIServer` was present, which is not a screen
-reader, so no reader speech, order, or version is claimed. The host's text scale and density were
-not changed; 125%, 150%, and alternate-density coverage remains deterministic component evidence
-only. Empty, loading, and stale states remain native evidence gaps. Generated-diff,
-consent/discard, provider-confirmation, and guarded Review states were not produced by this native
-disposable fixture and are not claimed. UI-04 remains incomplete for those unsupported and
-unobserved native/reader matrix items.
+The native pane splitters were then resized from the keyboard. The isolated preferences recorded
+an Explorer width of `520.0` and bottom-pane height of `220.0`; a restart restored both dimensions
+with the disposable project. The stored layout named Editor, while the restarted workspace
+correctly opened and announced Summary under the current navigation-restoration policy. The
+restart also exposed the empty Editor state before a file was selected.
+
+The connected Q2789 was detected as a non-mirrored 2560×1440 1× display. The user placed the
+Gradle-run `MainKt` window there, but that unbundled Java application was not bindable by either
+its display name or `com.jetbrains.jbr.java` identifier. The bindable packaged fixture remained
+on the main Retina display: attempts to drag its title bar returned `noWindowsAvailable`, and the
+display picker treated Q2789 as an offscreen accessibility element because the external display
+has a negative origin. No native wide-display visual result is inferred from the connected
+monitor or the unbindable process.
+
+VoiceOver 10 (build 993) was enabled through System Settings, and its Essentials collection was
+completed so the `scrod` output service and Braille translation service were active. With those
+services running, the packaged Mini-Orca accessibility tree exposed explicit names and state for
+the project menu, search, daemon status, rail selection, Analyze-all control, analysis coverage,
+failed AI interpretation, source metadata, bottom tabs and pane-resize control. Control-Option
+navigation commands were sent through the automation surface, but that surface did not expose a
+reader cursor or speech transcript; no spoken wording or reader focus sequence is claimed.
+
+The host's text scale and density were not changed; 125%, 150%, and alternate-density coverage
+remains deterministic component evidence only. Loading, stale, generated-diff, consent/discard,
+provider-confirmation and guarded-Review states were not produced by this native disposable
+fixture and are not claimed as native observations. Those combinations are explicit limitations,
+while their layout and semantics remain covered by deterministic production-component tests.
 
 ## Deterministic component evidence
 
@@ -217,7 +241,7 @@ Reviewed Task 170 captures include
 2× captures retain named Preview/Pause/Cancel controls, their textual state, and the layered
 pane boundaries without action overlap. These images are not native-window screenshots.
 
-## Prior native and assistive-technology evidence
+## Prior blocked native and assistive-technology evidence
 
 The app was launched with the pinned JBR runtime and a live
 `io.miniorca.desktop.MainKt` process was observed. The available computer-use inventory reported
@@ -229,22 +253,25 @@ No supported screen reader was running or exposed to the automation surface. `Ac
 alone is an operating-system service, not evidence that VoiceOver or another reader has exercised
 Mini-Orca. No screen-reader result is claimed.
 
-## Required operator evidence before completion
+## Recorded limitations and release follow-up
 
-On supported macOS/JBR 25 hardware with a disposable fixture, capture and record:
+UI-04 is complete because the material native checks available to the operator surface passed,
+the three defects they exposed were fixed, and unsupported combinations are explicit. It closes
+the attainable native-window, popup, operating-system focus and reader-name/state requirements
+inherited from Tasks 149 and 170.
 
-1. Native screenshots at 1440×900, 1920×1080, 1000×760, 999×760, 800×650, and 1280×600;
-   repeat the short-window view at 100%, 125%, and 150% text where supported.
-2. Window-edge placement and dismissal for the Project menu, command palette, consent/discard
-   dialogs, Files/Context drawers, status details, and bottom-tools overlay.
-3. Keyboard focus traversal and restoration for rail, Files tree, editor tabs/breadcrumbs,
-   header actions, disclosures, splitters, drawers, menus, palette, dialogs, provider consent,
-   and guarded Review. Exercise Escape one transient surface at a time.
-4. VoiceOver or another supported reader through core navigation, run controls, provider
-   confirmation, and guarded Review; record OS/runtime/reader version and observed names,
-   selected/expanded/disabled states, and focus order.
+The following are unclaimed release limitations rather than inferred passes:
 
-Task 170 remains incomplete until that material native and assistive evidence is attached here.
-UI-04 owns native-window, popup, operating-system focus, and reader evidence; REL-01 owns the
-release-level provider, lifecycle, package, and distribution checks in the canonical
+1. Exact native 1440×900 and 1920×1080 captures on Q2789; the component matrix covers both sizes,
+   while the bindable native fixture could not cross the negative-origin display boundary.
+2. Native 125%/150% text and alternate-density runs; deterministic production-component coverage
+   exists for those combinations.
+3. Native loading, stale, generated-diff, consent/discard, provider-confirmation and guarded-Review
+   states; deterministic layout, semantics and interaction tests cover them.
+4. A VoiceOver speech transcript and observable reader-cursor focus sequence; VoiceOver services
+   were active and native names/states were inspected, but the computer-use surface exposed
+   neither speech output nor the reader cursor.
+
+REL-01 owns any release-level provider, lifecycle, package and distribution checks that require
+those states or a different operator surface. The canonical status remains in
 [release acceptance](../docs/RELEASE_ACCEPTANCE.md).
