@@ -615,6 +615,57 @@ data class PerformanceFinding(
     @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null,
 )
 
+/** A completed or terminal PERF-02 comparison. Rendering this value never starts a benchmark. */
+@Serializable
+data class GoBenchmarkComparison(
+    @SerialName("draft_id") val draftId: String = "",
+    @SerialName("draft_revision") val draftRevision: Long = 0,
+    @SerialName("draft_hash") val draftHash: String = "",
+    @SerialName("project_id") val projectId: String = "",
+    @SerialName("project_revision") val projectRevision: String = "",
+    @SerialName("base_file_hash") val baseFileHash: String = "",
+    @SerialName("target_path") val targetPath: String = "",
+    val benchmark: String = "",
+    val scope: String = "",
+    val status: String = "",
+    val reason: String = "",
+    val command: List<String> = emptyList(),
+    val base: GoBenchmarkMeasurement? = null,
+    val candidate: GoBenchmarkMeasurement? = null,
+)
+
+@Serializable
+data class GoBenchmarkCatalog(
+    @SerialName("draft_id") val draftId: String = "",
+    @SerialName("draft_revision") val draftRevision: Long = 0,
+    @SerialName("draft_hash") val draftHash: String = "",
+    @SerialName("project_id") val projectId: String = "",
+    @SerialName("project_revision") val projectRevision: String = "",
+    @SerialName("base_file_hash") val baseFileHash: String = "",
+    @SerialName("target_path") val targetPath: String = "",
+    val available: Boolean = false,
+    val trusted: Boolean = false,
+    val reason: String = "",
+    val benchmarks: List<GoBenchmarkChoice> = emptyList(),
+)
+
+@Serializable
+data class GoBenchmarkChoice(
+    val name: String = "",
+    val command: List<String> = emptyList(),
+    val scope: String = "",
+)
+
+@Serializable data class GoBenchmarkMeasurement(val samples: List<GoBenchmarkSample> = emptyList())
+
+@Serializable
+data class GoBenchmarkSample(
+    val iterations: Long = 0,
+    @SerialName("ns_per_op") val nanosecondsPerOperation: Double = 0.0,
+    @SerialName("bytes_per_op") val bytesPerOperation: Long? = null,
+    @SerialName("allocs_per_op") val allocationsPerOperation: Long? = null,
+)
+
 @Serializable
 data class ChatSession(
     @SerialName("id") val id: String = "",

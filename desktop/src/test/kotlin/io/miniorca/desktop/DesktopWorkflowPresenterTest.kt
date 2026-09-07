@@ -19,6 +19,241 @@ import kotlinx.coroutines.launch
 
 class DesktopWorkflowPresenterTest {
   @Test
+  fun benchmarkComparisonUsesAnExplicitReadOnlyCatalogThenRetainsExactEvidence() {
+    val catalogCalls = AtomicInteger()
+    val comparisonCalls = AtomicInteger()
+    val presenter = presenter { method, path, body ->
+      when (method to path) {
+        "GET" to
+            "/api/projects/current/drafts/draft/benchmarks?project_revision=revision&expected_revision=1&expected_hash=draft-hash" -> {
+          catalogCalls.incrementAndGet()
+          response(benchmarkCatalogJson())
+        }
+        "POST" to "/api/projects/current/drafts/draft/benchmarks" -> {
+          comparisonCalls.incrementAndGet()
+          assertTrue(body.orEmpty().contains("\"benchmark\":\"BenchmarkRun\""))
+          assertTrue(body.orEmpty().contains("\"expected_scope\":\"scope\""))
+          response(benchmarkComparisonJson())
+        }
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+
+      assertEquals(0, catalogCalls.get())
+      assertEquals(0, comparisonCalls.get())
+      presenter.loadGoBenchmarks()
+      eventually { presenter.snapshot.value.state.review.benchmark.catalog != null }
+
+      assertEquals(1, catalogCalls.get())
+      assertNull(presenter.snapshot.value.state.review.benchmark.selected)
+      presenter.compareSelectedGoBenchmark()
+      assertEquals(0, comparisonCalls.get())
+      assertFalse(presenter.snapshot.value.state.review.benchmark.running)
+
+      presenter.selectGoBenchmark(
+          presenter.snapshot.value.state.review.benchmark.catalog!!.benchmarks.single())
+      presenter.compareSelectedGoBenchmark()
+      eventually {
+        presenter.snapshot.value.state.review.benchmark.comparison?.status == "completed"
+      }
+
+      assertEquals(1, comparisonCalls.get())
+      assertEquals(
+          "BenchmarkRun", presenter.snapshot.value.state.review.benchmark.comparison?.benchmark)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun benchmarkCatalogRequestIsCanceledWhenTheDraftChanges() {
+    val started = CountDownLatch(1)
+    val interrupted = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "GET" to
+            "/api/projects/current/drafts/draft/benchmarks?project_revision=revision&expected_revision=1&expected_hash=draft-hash" -> {
+          started.countDown()
+          try {
+            release.await(2, TimeUnit.SECONDS)
+          } catch (error: InterruptedException) {
+            interrupted.countDown()
+            throw error
+          }
+          response(benchmarkCatalogJson())
+        }
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.loadGoBenchmarks()
+      assertTrue(started.await(1, TimeUnit.SECONDS))
+
+      presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() int { return 2 }"))
+
+      assertTrue(interrupted.await(1, TimeUnit.SECONDS))
+      assertNull(presenter.snapshot.value.state.review.benchmark.catalog)
+      assertFalse(presenter.snapshot.value.state.loading)
+    } finally {
+      release.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun benchmarkCatalogRequestIsCanceledImmediatelyWhenAFileIsSelected() {
+    val started = CountDownLatch(1)
+    val interrupted = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val presenter = presenter { _, path, _ ->
+      when {
+        path.startsWith("/api/projects/current/drafts/draft/benchmarks") -> {
+          started.countDown()
+          try {
+            release.await(2, TimeUnit.SECONDS)
+          } catch (error: InterruptedException) {
+            interrupted.countDown()
+            throw error
+          }
+          response(benchmarkCatalogJson())
+        }
+        path.contains("files/info?path=other.go") -> response(fileJson("other.go", "other"))
+        path.contains("files/symbols?path=other.go") -> response(symbolsJson("other.go"))
+        path.contains("files/analysis?path=other.go") ->
+            response("""{"path":"other.go","status":"missing"}""")
+        path.contains("/impact?path=other.go") -> response("""{"target_path":"other.go"}""")
+        path.contains("/git?path=other.go") -> response("""{"available":false}""")
+        else -> error("unexpected request $path")
+      }
+    }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.loadGoBenchmarks()
+      assertTrue(started.await(1, TimeUnit.SECONDS))
+
+      presenter.selectFile("other.go")
+
+      assertTrue(interrupted.await(1, TimeUnit.SECONDS))
+      eventually { presenter.snapshot.value.state.selectedFile?.path == "other.go" }
+      assertNull(presenter.snapshot.value.state.review.benchmark.catalog)
+    } finally {
+      release.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun failedReanalysisDoesNotLeaveBenchmarkComparisonRunning() {
+    val presenter = presenter { method, path, _ ->
+      if (method == "POST" && path == "/api/projects/current/reindex")
+          throw IllegalStateException("reindex failed")
+      else error("unexpected request $method $path")
+    }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.dispatch(DesktopEvent.GoBenchmarkComparisonStarted)
+      assertTrue(presenter.snapshot.value.state.review.benchmark.running)
+
+      presenter.reanalyze()
+
+      eventually { presenter.snapshot.value.state.error == "reindex failed" }
+      assertFalse(presenter.snapshot.value.state.review.benchmark.running)
+      assertFalse(presenter.snapshot.value.state.loading)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun benchmarkComparisonResponseCannotPublishAfterTheDraftChanges() {
+    val started = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "GET" to
+            "/api/projects/current/drafts/draft/benchmarks?project_revision=revision&expected_revision=1&expected_hash=draft-hash" ->
+            response(benchmarkCatalogJson(trusted = true))
+        "POST" to "/api/projects/current/drafts/draft/benchmarks" -> {
+          started.countDown()
+          release.await(2, TimeUnit.SECONDS)
+          response(benchmarkComparisonJson())
+        }
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.loadGoBenchmarks()
+      eventually { presenter.snapshot.value.state.review.benchmark.catalog != null }
+      presenter.selectGoBenchmark(
+          presenter.snapshot.value.state.review.benchmark.catalog!!.benchmarks.single())
+      presenter.compareSelectedGoBenchmark()
+      assertTrue(started.await(1, TimeUnit.SECONDS))
+      presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() int { return 1 }"))
+      assertFalse(presenter.snapshot.value.state.review.benchmark.running)
+      assertFalse(presenter.snapshot.value.state.loading)
+      release.countDown()
+      eventually { !presenter.snapshot.value.state.review.benchmark.running }
+
+      assertNull(presenter.snapshot.value.state.review.benchmark.comparison)
+      assertNull(presenter.snapshot.value.state.review.benchmark.catalog)
+    } finally {
+      release.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun unavailableBenchmarkResponseWithARecomputedScopeStopsAndPublishesStaleEvidence() {
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "GET" to
+            "/api/projects/current/drafts/draft/benchmarks?project_revision=revision&expected_revision=1&expected_hash=draft-hash" ->
+            response(benchmarkCatalogJson(trusted = true))
+        "POST" to "/api/projects/current/drafts/draft/benchmarks" ->
+            response(unavailableBenchmarkComparisonJson(scope = "recomputed-scope"))
+        else -> error("unexpected request $method $path")
+      }
+    }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.loadGoBenchmarks()
+      eventually { presenter.snapshot.value.state.review.benchmark.catalog != null }
+      presenter.selectGoBenchmark(
+          presenter.snapshot.value.state.review.benchmark.catalog!!.benchmarks.single())
+      presenter.compareSelectedGoBenchmark()
+
+      eventually {
+        !presenter.snapshot.value.state.review.benchmark.running &&
+            presenter.snapshot.value.state.review.benchmark.comparison != null
+      }
+
+      val comparison = presenter.snapshot.value.state.review.benchmark.comparison!!
+      assertEquals("unavailable", comparison.status)
+      assertEquals("recomputed-scope", comparison.scope)
+      assertEquals(
+          "Stale · selected benchmark changed",
+          performanceBenchmarkPresentation(
+                  comparison,
+                  goBenchmarkComparisonIdentity(presenter.snapshot.value.state.review.draft),
+                  presenter.snapshot.value.state.review.benchmark.selected)
+              .stateLabel)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
   fun explanationPublishesOnlyForItsExactSelectionAndDoesNotAlterDraftState() {
     val calls = AtomicInteger()
     val presenter = presenter { method, path, _ ->
@@ -1808,6 +2043,15 @@ class DesktopWorkflowPresenterTest {
               DeclarationValidation(
                   true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")),
       )
+
+  private fun benchmarkCatalogJson(trusted: Boolean = false) =
+      """{"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","available":true,"trusted":$trusted,"benchmarks":[{"name":"BenchmarkRun","command":["go","test","-run","^$","-bench","^BenchmarkRun$","-benchtime","100ms","-benchmem"],"scope":"scope"}]}"""
+
+  private fun benchmarkComparisonJson() =
+      """{"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","benchmark":"BenchmarkRun","scope":"scope","status":"completed","command":["go","test","-benchtime","100ms","-benchmem"],"base":{"samples":[{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1}]},"candidate":{"samples":[{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1}]}}"""
+
+  private fun unavailableBenchmarkComparisonJson(scope: String) =
+      """{"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","benchmark":"BenchmarkRun","scope":"$scope","status":"unavailable","reason":"displayed benchmark scope changed","command":["go","test","-benchtime","100ms","-benchmem"]}"""
 
   private fun response(body: String) = TransportResponse(200, body)
 

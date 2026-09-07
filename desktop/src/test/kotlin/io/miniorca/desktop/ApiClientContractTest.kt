@@ -11,6 +11,43 @@ import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
   @Test
+  fun benchmarkCatalogIsReadOnlyAndComparisonSendsTheExactCatalogChoice() {
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, body ->
+                  when (method to path) {
+                    "GET" to
+                        "/api/projects/current/drafts/draft-1/benchmarks?project_revision=revision&expected_revision=2&expected_hash=candidate-hash" ->
+                        TransportResponse(
+                            200,
+                            """{"draft_id":"draft-1","draft_revision":2,"draft_hash":"candidate-hash","available":true,"trusted":false,"benchmarks":[{"name":"BenchmarkRun","command":["go","test","-run","^$","-bench","^BenchmarkRun$","-benchmem"],"scope":"scope-1"}]}""",
+                        )
+                    "POST" to "/api/projects/current/drafts/draft-1/benchmarks" -> {
+                      assertContains(body.orEmpty(), "\"project_revision\":\"revision\"")
+                      assertContains(body.orEmpty(), "\"expected_revision\":2")
+                      assertContains(body.orEmpty(), "\"expected_hash\":\"candidate-hash\"")
+                      assertContains(body.orEmpty(), "\"benchmark\":\"BenchmarkRun\"")
+                      assertContains(body.orEmpty(), "\"expected_scope\":\"scope-1\"")
+                      TransportResponse(
+                          200,
+                          """{"draft_id":"draft-1","draft_revision":2,"draft_hash":"candidate-hash","status":"unavailable","reason":"execution trust is required"}""",
+                      )
+                    }
+                    else -> error("unexpected request: $method $path")
+                  }
+                })
+
+    val catalog = client.goBenchmarkCatalog("draft-1", "revision", 2, "candidate-hash")
+    assertTrue(catalog.available)
+    assertFalse(catalog.trusted)
+    val comparison =
+        client.compareGoBenchmark(
+            "draft-1", "revision", 2, "candidate-hash", catalog.benchmarks.single())
+    assertEquals("unavailable", comparison.status)
+  }
+
+  @Test
   fun executionTrustUsesASeparateCurrentSessionConsentContract() {
     val client =
         ApiClient(

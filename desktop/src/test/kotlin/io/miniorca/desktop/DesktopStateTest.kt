@@ -2,6 +2,7 @@ package io.miniorca.desktop
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.serialization.encodeToString
@@ -38,11 +39,17 @@ class DesktopStateTest {
                                 lineCount = 1,
                                 modifiedAt = "",
                                 binary = false)),
-                review = DraftReviewState(draft = DeclarationDraft(id = "draft")),
+                review =
+                    DraftReviewState(
+                        draft = DeclarationDraft(id = "draft"),
+                        benchmark = BenchmarkEvidenceState(running = true)),
+                jobs = JobState(loading = true),
             )
             .reduce(DesktopEvent.ProjectLoaded(project, index))
     assertNull(state.selectedFile)
     assertNull(state.review.draft)
+    assertFalse(state.review.benchmark.running)
+    assertFalse(state.loading)
     assertEquals(project, state.project)
   }
 
@@ -119,11 +126,130 @@ class DesktopStateTest {
     val state =
         DesktopState(
                 selection = FileSelectionState(selectedFile = selected),
+                review = DraftReviewState(benchmark = BenchmarkEvidenceState(running = true)),
                 jobs = JobState(loading = true))
             .reduce(DesktopEvent.IndexRefreshed(refreshed))
     assertEquals(selected, state.selectedFile)
     assertEquals(refreshed, state.index)
-    assertTrue(!state.loading)
+    assertFalse(state.review.benchmark.running)
+    assertFalse(state.loading)
+  }
+
+  @Test
+  fun draftEditsRetainBenchmarkEvidenceButInvalidateItsCatalogAndCurrentIdentity() {
+    val draft =
+        DeclarationDraft(
+            id = "draft",
+            projectId = "project",
+            projectRevision = "revision",
+            baseFileHash = "base",
+            targetPath = "main.go",
+            revision = 1,
+            hash = "candidate",
+            validation =
+                DeclarationValidation(
+                    applicable = true,
+                    scopeMode = "strict_symbol",
+                    diff = UnifiedDiff("main.go", "main.go")),
+        )
+    val comparison =
+        GoBenchmarkComparison(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            targetPath = draft.targetPath,
+            benchmark = "BenchmarkRun",
+            status = "completed",
+        )
+    val updated =
+        DesktopState(
+                review =
+                    DraftReviewState(
+                        draft = draft,
+                        editor = editableDraft(draft),
+                        benchmark =
+                            BenchmarkEvidenceState(
+                                catalog =
+                                    GoBenchmarkCatalog(
+                                        draftId = draft.id,
+                                        draftRevision = draft.revision,
+                                        draftHash = draft.hash),
+                                comparison = comparison,
+                                running = true),
+                    ),
+                jobs = JobState(loading = true))
+            .reduce(DesktopEvent.DraftEdited(declaration = "func Run() int { return 1 }"))
+
+    assertEquals(comparison, updated.review.benchmark.comparison)
+    assertNull(updated.review.benchmark.catalog)
+    assertFalse(updated.review.benchmark.running)
+    assertFalse(updated.loading)
+    assertEquals(DraftEditorStatus.Dirty, updated.review.editor?.status)
+  }
+
+  @Test
+  fun loadingBenchmarkCatalogRequiresAnExplicitSelectionBeforeItCanRun() {
+    val catalog =
+        GoBenchmarkCatalog(
+            draftId = "draft",
+            draftRevision = 1,
+            draftHash = "candidate",
+            available = true,
+            benchmarks = listOf(GoBenchmarkChoice("BenchmarkRun", listOf("go", "test"), "scope")))
+
+    val running =
+        DesktopState(
+            review =
+                DraftReviewState(
+                    benchmark = BenchmarkEvidenceState(catalog = catalog, running = true)),
+            jobs = JobState(loading = true),
+        )
+    val loaded = running.reduce(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
+
+    assertEquals(catalog, loaded.review.benchmark.catalog)
+    assertNull(loaded.review.benchmark.selected)
+    assertNull(loaded.review.benchmark.comparison)
+    assertFalse(loaded.review.benchmark.running)
+    assertFalse(loaded.loading)
+
+    val selected = loaded.reduce(DesktopEvent.GoBenchmarkSelected(catalog.benchmarks.single()))
+    assertFalse(selected.review.benchmark.running)
+    assertFalse(selected.loading)
+  }
+
+  @Test
+  fun replacingOrDiscardingADraftStopsActiveBenchmarkLoading() {
+    val draft =
+        DeclarationDraft(
+            id = "draft",
+            validation =
+                DeclarationValidation(
+                    applicable = true,
+                    scopeMode = "strict_symbol",
+                    diff = UnifiedDiff("main.go", "main.go")))
+    val catalog = GoBenchmarkCatalog(available = true)
+    val active =
+        DesktopState(
+            review =
+                DraftReviewState(
+                    draft = draft,
+                    editor = editableDraft(draft),
+                    benchmark = BenchmarkEvidenceState(catalog = catalog, running = true)),
+            jobs = JobState(loading = true),
+        )
+
+    val validating = active.reduce(DesktopEvent.DraftValidationStarted)
+    val replaced = active.reduce(DesktopEvent.DraftLoaded(DeclarationDraft(id = "replacement")))
+    val discarded = active.reduce(DesktopEvent.DraftDiscarded)
+
+    listOf(validating, replaced, discarded).forEach {
+      assertFalse(it.review.benchmark.running)
+      assertNull(it.review.benchmark.catalog)
+      assertFalse(it.loading)
+    }
   }
 
   @Test

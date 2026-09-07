@@ -613,6 +613,9 @@ internal fun MiniOrcaApp(
                         DesktopEvent.Failed(
                             "This opportunity is analysis-only; it is not one exact eligible Go declaration."))
               },
+              loadGoBenchmarks = presenter::loadGoBenchmarks,
+              selectGoBenchmark = presenter::selectGoBenchmark,
+              compareSelectedGoBenchmark = presenter::compareSelectedGoBenchmark,
               scanSecurity = presenter::scanSecurity,
               reviewSecurity = presenter::reviewSecurity,
               openSecurityFinding = presenter::openSecurityFinding,

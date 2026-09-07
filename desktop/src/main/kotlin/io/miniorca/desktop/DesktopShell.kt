@@ -246,6 +246,9 @@ internal data class DesktopShellAnalysisActions(
     val cancelPerformance: () -> Unit,
     val openPerformanceFinding: (String, PerformanceFinding) -> Unit,
     val preparePerformanceFinding: (String, PerformanceFinding) -> Unit,
+    val loadGoBenchmarks: () -> Unit,
+    val selectGoBenchmark: (GoBenchmarkChoice) -> Unit,
+    val compareSelectedGoBenchmark: () -> Unit,
     val scanSecurity: () -> Unit,
     val reviewSecurity: () -> Unit,
     val openSecurityFinding: (SecurityFinding) -> Unit,
@@ -956,7 +959,12 @@ private fun DesktopCanvas(
                             report = appState.findings.performanceReport,
                             context = appState.findings.performanceContext,
                             model = context.analyzeModel,
-                            remoteProviderConfirmed = context.analyzeProviderConfirmed),
+                            remoteProviderConfirmed = context.analyzeProviderConfirmed,
+                            benchmarkComparison = appState.review.benchmark.comparison,
+                            expectedBenchmarkIdentity = benchmarkEvidenceIdentity(appState.review),
+                            benchmarkCatalog = appState.review.benchmark.catalog,
+                            selectedBenchmark = appState.review.benchmark.selected,
+                            benchmarkRunning = appState.review.benchmark.running),
                     security =
                         SecurityWorkspacePaneState(
                             project = appState.project,
@@ -996,7 +1004,10 @@ private fun DesktopCanvas(
                     resume = analysisActions.resumePerformance,
                     cancel = analysisActions.cancelPerformance,
                     openInEditor = analysisActions.openPerformanceFinding,
-                    prepareOptimization = analysisActions.preparePerformanceFinding),
+                    prepareOptimization = analysisActions.preparePerformanceFinding,
+                    loadBenchmarks = analysisActions.loadGoBenchmarks,
+                    selectBenchmark = analysisActions.selectGoBenchmark,
+                    runBenchmark = analysisActions.compareSelectedGoBenchmark),
             securityActions =
                 SecurityWorkspaceActions(
                     confirmRemoteProvider = analysisActions.confirmSecurityReviewProvider,
