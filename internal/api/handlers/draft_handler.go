@@ -68,7 +68,7 @@ func (h *DraftHandler) ValidateDraft(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, draft)
 }
 
-// CheckDraft runs isolated checks for the exact validated draft revision and hash.
+// CheckDraft runs temporary-workspace checks for the exact validated draft revision and hash.
 func (h *DraftHandler) CheckDraft(w http.ResponseWriter, r *http.Request) {
 	var request draftCheckRequest
 	if !decodeDraftRequest(w, r, &request) || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {

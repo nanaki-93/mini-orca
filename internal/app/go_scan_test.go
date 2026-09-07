@@ -111,6 +111,38 @@ func TestGoScanLifecycleStartsReadsAndCancels(t *testing.T) {
 	t.Fatal("scan did not report cancellation")
 }
 
+func TestGoScanLifecyclePersistsWorkspaceLimitFailure(t *testing.T) {
+	service, root, revision := newGoScanService(t, map[string]string{
+		"go.mod":  "module fixture\n\ngo 1.22\n",
+		"main.go": "package fixture\n",
+	})
+	largePath := filepath.Join(root, "workspace-limit.bin")
+	if err := os.WriteFile(largePath, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(largePath, checkLimits.maxWorkspaceBytes+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.StartGoScan(revision); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		report, err := service.GoScanProgress(revision)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if report != nil && report.Status == "failed" {
+			if len(report.Phases) != 1 || report.Phases[0].Name != "workspace" || report.Phases[0].State != CheckFailed || !strings.Contains(report.Phases[0].Output, "byte limit") {
+				t.Fatalf("workspace limit report = %+v", report)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("scan did not persist workspace limit failure")
+}
+
 func newGoScanService(t *testing.T, files map[string]string) (*Service, string, string) {
 	t.Helper()
 	root := t.TempDir()

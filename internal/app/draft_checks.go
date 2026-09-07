@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"go/parser"
@@ -11,6 +12,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -24,9 +27,27 @@ const (
 	CheckUnavailable = "unavailable"
 )
 
-const maxCheckOutputBytes = 8 * 1024
+type checkResourceLimits struct {
+	maxOutputBytes    int
+	maxWorkspaceFiles int
+	maxWorkspaceBytes int64
+	pipeDrainWait     time.Duration
+}
 
-var checkSecret = regexp.MustCompile(`(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|credential|authorization)\b\s*[:=]\s*[^\s,;]+`)
+// checkLimits is the single resource budget for copied check workspaces and
+// their command diagnostics. A copy that exceeds this budget is not evidence
+// for a successful check.
+var checkLimits = checkResourceLimits{
+	maxOutputBytes:    8 * 1024,
+	maxWorkspaceFiles: 4 * 1024,
+	maxWorkspaceBytes: 64 * 1024 * 1024,
+	pipeDrainWait:     250 * time.Millisecond,
+}
+
+var (
+	checkAuthorization = regexp.MustCompile(`(?i)\b(?:proxy-)?authorization\b\s*[:=]\s*[^\r\n]*`)
+	checkSecret        = regexp.MustCompile(`(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|credential)\b\s*[:=]\s*[^\s,;]+`)
+)
 
 // DraftCheck is one parser, formatter, lint, or test result. Command is a
 // display-only argv preview; it is never executed through a shell.
@@ -68,7 +89,7 @@ type draftCheckInput struct {
 }
 
 // runDraftChecks executes only the exact, already-validated draft in an
-// isolated project copy. It is intentionally not a general source-check API.
+// temporary project copy. It is intentionally not a general source-check API.
 func (s *Service) runDraftChecks(ctx context.Context, input draftCheckInput, options DraftCheckOptions) (DraftCheckReport, error) {
 	file := input.file
 	workspace, err := os.MkdirTemp("", "mini-orca-check-")
@@ -76,7 +97,7 @@ func (s *Service) runDraftChecks(ctx context.Context, input draftCheckInput, opt
 		return DraftCheckReport{}, fmt.Errorf("create draft check workspace: %w", err)
 	}
 	defer os.RemoveAll(workspace)
-	if err := copyCheckWorkspace(s.manager.Root(), workspace); err != nil {
+	if err := copyCheckWorkspace(ctx, s.manager.Root(), workspace); err != nil {
 		return DraftCheckReport{}, err
 	}
 	var taskChecks []DraftCheck
@@ -194,9 +215,9 @@ func (s *Service) executeDraftCheck(ctx context.Context, workspace string, check
 	}
 	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
 	defer cancel()
-	output, exitCode, err := runCheckCommand(timed, workspace, check.Command)
-	check.Output = sanitizeCheckOutput(output, workspace, s.manager.Root())
-	check.ExitCode = exitCode
+	result, err := runCheckCommand(timed, workspace, check.Command)
+	check.Output = sanitizeCheckOutput(result.output, result.truncated, workspace, s.manager.Root())
+	check.ExitCode = result.exitCode
 	if timed.Err() != nil {
 		check.State = CheckCanceled
 		check.Output = timed.Err().Error()
@@ -205,18 +226,67 @@ func (s *Service) executeDraftCheck(ctx context.Context, workspace string, check
 	return check, err
 }
 
-func runCheckCommand(ctx context.Context, directory string, command []string) (string, int, error) {
+type checkCommandResult struct {
+	output    string
+	exitCode  int
+	truncated bool
+}
+
+func runCheckCommand(ctx context.Context, directory string, command []string) (checkCommandResult, error) {
 	if len(command) == 0 {
-		return "", 0, fmt.Errorf("empty check command")
+		return checkCommandResult{}, fmt.Errorf("empty check command")
 	}
 	process := exec.CommandContext(ctx, command[0], command[1:]...)
 	process.Dir = directory
-	output, err := process.CombinedOutput()
-	exitCode := 0
+	process.WaitDelay = checkLimits.pipeDrainWait
+	output := &boundedCheckOutput{limit: checkLimits.maxOutputBytes}
+	process.Stdout = output
+	process.Stderr = output
+	err := process.Run()
+	result := checkCommandResult{output: output.String(), truncated: output.Truncated()}
 	if exitError, ok := err.(*exec.ExitError); ok {
-		exitCode = exitError.ExitCode()
+		result.exitCode = exitError.ExitCode()
 	}
-	return string(output), exitCode, err
+	return result, err
+}
+
+// boundedCheckOutput owns both command streams. Write always reports a full
+// write so os/exec continues draining either pipe after the diagnostic budget
+// is exhausted.
+type boundedCheckOutput struct {
+	mu        sync.Mutex
+	buffer    bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (output *boundedCheckOutput) Write(data []byte) (int, error) {
+	output.mu.Lock()
+	defer output.mu.Unlock()
+	remaining := output.limit - output.buffer.Len()
+	if remaining <= 0 {
+		output.truncated = true
+		return len(data), nil
+	}
+	if len(data) > remaining {
+		_, _ = output.buffer.Write(data[:remaining])
+		output.truncated = true
+		return len(data), nil
+	}
+	_, _ = output.buffer.Write(data)
+	return len(data), nil
+}
+
+func (output *boundedCheckOutput) String() string {
+	output.mu.Lock()
+	defer output.mu.Unlock()
+	return output.buffer.String()
+}
+
+func (output *boundedCheckOutput) Truncated() bool {
+	output.mu.Lock()
+	defer output.mu.Unlock()
+	return output.truncated
 }
 
 func requiredChecksPassed(checks []DraftCheck) bool {
@@ -228,58 +298,205 @@ func requiredChecksPassed(checks []DraftCheck) bool {
 	return true
 }
 
-func sanitizeCheckOutput(output, workspace, root string) string {
-	output = strings.ReplaceAll(output, workspace, "<workspace>")
-	output = strings.ReplaceAll(output, root, "<project>")
+func sanitizeCheckOutput(output string, truncated bool, workspace, root string) string {
+	if workspace != "" {
+		output = strings.ReplaceAll(output, workspace, "<workspace>")
+	}
+	if root != "" {
+		output = strings.ReplaceAll(output, root, "<project>")
+	}
+	output = checkAuthorization.ReplaceAllString(output, "[redacted]")
 	output = checkSecret.ReplaceAllString(output, "[redacted]")
-	if len(output) > maxCheckOutputBytes {
-		output = output[:maxCheckOutputBytes] + "\n[output truncated]"
+	if len(output) > checkLimits.maxOutputBytes {
+		output = output[:checkLimits.maxOutputBytes]
+		truncated = true
+	}
+	if truncated {
+		output += "\n[output truncated]"
 	}
 	return strings.TrimSpace(output)
 }
 
-// copyCheckWorkspace intentionally keeps its own traversal: an isolated Go
-// check needs every regular project file (except Mini-Orca metadata), whereas
-// project.WalkProjectFiles returns only source-policy candidates.
-func copyCheckWorkspace(source, destination string) error {
-	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+// copyCheckWorkspace intentionally keeps its own traversal: a temporary Go
+// check workspace needs every regular project file (except metadata and known
+// caches), whereas project.WalkProjectFiles returns only source-policy
+// candidates. destination must be a temporary workspace owned by the caller.
+func copyCheckWorkspace(ctx context.Context, source, destination string) error {
+	copier := checkWorkspaceCopier{ctx: ctx, source: source, destination: destination}
+	if err := copier.copy(); err != nil {
+		if cleanupErr := os.RemoveAll(destination); cleanupErr != nil {
+			return fmt.Errorf("%w; clean failed check workspace: %v", err, cleanupErr)
+		}
+		return err
+	}
+	return nil
+}
+
+type checkWorkspaceCopier struct {
+	ctx         context.Context
+	source      string
+	destination string
+	files       int
+	bytes       int64
+}
+
+func (copier *checkWorkspaceCopier) copy() error {
+	return filepath.WalkDir(copier.source, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		relative, err := filepath.Rel(source, path)
+		if err := copier.ctx.Err(); err != nil {
+			return fmt.Errorf("copy check workspace: %w", err)
+		}
+		relative, err := filepath.Rel(copier.source, path)
 		if err != nil {
 			return err
 		}
 		if relative == "." {
 			return nil
 		}
-		if entry.IsDir() {
-			if entry.Name() == ".mini-orca" {
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if isCheckWorkspaceMetadata(relative) {
+			if info.IsDir() {
 				return filepath.SkipDir
 			}
-			return os.MkdirAll(filepath.Join(destination, relative), 0700)
-		}
-		if entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
 			return nil
+		}
+		if info.IsDir() {
+			if skipCheckWorkspaceDirectory(relative) {
+				return filepath.SkipDir
+			}
+			return os.MkdirAll(filepath.Join(copier.destination, relative), 0700)
+		}
+		if !isRegularCheckWorkspaceFile(info) {
+			return nil
+		}
+		if copier.files == checkLimits.maxWorkspaceFiles {
+			return fmt.Errorf("check workspace exceeds file limit of %d files", checkLimits.maxWorkspaceFiles)
+		}
+		if info.Size() > checkLimits.maxWorkspaceBytes-copier.bytes {
+			return fmt.Errorf("check workspace exceeds byte limit of %d bytes", checkLimits.maxWorkspaceBytes)
 		}
 		input, err := os.Open(path)
 		if err != nil {
 			return err
 		}
-		defer input.Close()
-		outputPath := filepath.Join(destination, relative)
+		if err := validateCheckWorkspaceFile(path, info, input); err != nil {
+			_ = input.Close()
+			return err
+		}
+		outputPath := filepath.Join(copier.destination, relative)
 		if err := os.MkdirAll(filepath.Dir(outputPath), 0700); err != nil {
+			_ = input.Close()
 			return err
 		}
 		output, err := os.OpenFile(outputPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 		if err != nil {
+			_ = input.Close()
 			return err
 		}
-		_, copyErr := io.Copy(output, input)
+		copied, copyErr := copyCheckWorkspaceFile(copier.ctx, output, input, checkLimits.maxWorkspaceBytes-copier.bytes)
 		closeErr := output.Close()
+		inputErr := input.Close()
 		if copyErr != nil {
+			_ = os.Remove(outputPath)
 			return copyErr
 		}
-		return closeErr
+		if closeErr != nil {
+			_ = os.Remove(outputPath)
+			return closeErr
+		}
+		if inputErr != nil {
+			_ = os.Remove(outputPath)
+			return inputErr
+		}
+		copier.files++
+		copier.bytes += copied
+		return nil
 	})
+}
+
+func isRegularCheckWorkspaceFile(info os.FileInfo) bool {
+	return info.Mode()&os.ModeSymlink == 0 && info.Mode().IsRegular()
+}
+
+func validateCheckWorkspaceFile(path string, expected os.FileInfo, input *os.File) error {
+	if !isRegularCheckWorkspaceFile(expected) {
+		return fmt.Errorf("check workspace source %q is not a regular file", path)
+	}
+	opened, err := input.Stat()
+	if err != nil {
+		return fmt.Errorf("stat check workspace source %q: %w", path, err)
+	}
+	if !isRegularCheckWorkspaceFile(opened) || !os.SameFile(expected, opened) {
+		return fmt.Errorf("check workspace source %q changed while opening", path)
+	}
+	current, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("recheck workspace source %q: %w", path, err)
+	}
+	if !isRegularCheckWorkspaceFile(current) || !os.SameFile(expected, current) {
+		return fmt.Errorf("check workspace source %q changed while opening", path)
+	}
+	return nil
+}
+
+func copyCheckWorkspaceFile(ctx context.Context, output io.Writer, input io.Reader, remaining int64) (int64, error) {
+	buffer := make([]byte, 32*1024)
+	var copied int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return copied, fmt.Errorf("copy check workspace: %w", err)
+		}
+		read, readErr := input.Read(buffer)
+		if read > 0 {
+			if int64(read) > remaining-copied {
+				return copied, fmt.Errorf("check workspace exceeds byte limit of %d bytes", checkLimits.maxWorkspaceBytes)
+			}
+			written, writeErr := output.Write(buffer[:read])
+			copied += int64(written)
+			if writeErr != nil {
+				return copied, writeErr
+			}
+			if written != read {
+				return copied, io.ErrShortWrite
+			}
+		}
+		if readErr == io.EOF {
+			return copied, nil
+		}
+		if readErr != nil {
+			return copied, readErr
+		}
+	}
+}
+
+func skipCheckWorkspaceDirectory(relative string) bool {
+	switch filepath.Base(relative) {
+	case "node_modules", ".gradle", ".kotlin", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", "build", "dist", "target":
+		return !checkWorkspaceFixturePath(relative)
+	default:
+		return false
+	}
+}
+
+func isCheckWorkspaceMetadata(relative string) bool {
+	switch filepath.Base(relative) {
+	case ".mini-orca", ".git", ".hg", ".svn":
+		return true
+	default:
+		return false
+	}
+}
+
+func checkWorkspaceFixturePath(relative string) bool {
+	for _, part := range strings.FieldsFunc(filepath.ToSlash(relative), func(r rune) bool { return r == '/' }) {
+		if part == "testdata" {
+			return true
+		}
+	}
+	return false
 }

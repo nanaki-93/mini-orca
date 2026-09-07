@@ -127,7 +127,7 @@ class BugsWorkspaceStateTest {
     assertTrue(
         verifiedScanProgress(GoScanReport(status = "running"))
             .summary
-            .contains("isolated copy; source remains unchanged"))
+            .contains("temporary copied workspace; source remains unchanged"))
   }
 
   @Test

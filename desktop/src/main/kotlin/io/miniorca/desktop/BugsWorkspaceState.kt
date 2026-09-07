@@ -189,7 +189,7 @@ fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress =
               emptyList())
       shouldPollVerifiedScan(scan) ->
           VerifiedScanProgress(
-              "Verified scan ${scan.status.lowercase()} in an isolated copy; source remains unchanged.",
+              "Verified scan ${scan.status.lowercase()} in a temporary copied workspace; source remains unchanged.",
               true,
               scanWarnings(scan))
       else ->

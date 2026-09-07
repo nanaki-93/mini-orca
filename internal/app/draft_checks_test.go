@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -50,11 +52,216 @@ func TestDraftChecksReportFormatterFailure(t *testing.T) {
 }
 
 func TestRunCheckCommandHonorsCancellation(t *testing.T) {
+	t.Setenv("MINI_ORCA_CHECK_HELPER", "1")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	_, _, err := runCheckCommand(ctx, t.TempDir(), []string{"sleep", "1"})
+	_, err := runCheckCommand(ctx, t.TempDir(), checkHelperCommand("cancel-with-output"))
 	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		t.Fatalf("command error = %v, context = %v", err, ctx.Err())
+	}
+}
+
+func TestRunCheckCommandBoundsOutputAndPreservesExitCode(t *testing.T) {
+	t.Setenv("MINI_ORCA_CHECK_HELPER", "1")
+	result, err := runCheckCommand(context.Background(), t.TempDir(), checkHelperCommand("huge-output"))
+	if err == nil || result.exitCode != 17 {
+		t.Fatalf("command result = %+v, err = %v", result, err)
+	}
+	if !result.truncated || len(result.output) != checkLimits.maxOutputBytes {
+		t.Fatalf("unbounded command result = %+v", result)
+	}
+	output := sanitizeCheckOutput(result.output, result.truncated, "/workspace", "/project")
+	if !strings.Contains(output, "[output truncated]") {
+		t.Fatalf("sanitized output = %q", output)
+	}
+}
+
+func TestRunCheckCommandCancellationDoesNotWaitForInheritedOutputPipe(t *testing.T) {
+	t.Setenv("MINI_ORCA_CHECK_HELPER", "1")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	_, err := runCheckCommand(ctx, t.TempDir(), checkHelperCommand("cancel-with-output"))
+	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatalf("command error = %v, context = %v", err, ctx.Err())
+	}
+	if elapsed := time.Since(started); elapsed > 2*checkLimits.pipeDrainWait {
+		t.Fatalf("canceled command waited %s for inherited output pipe", elapsed)
+	}
+}
+
+func TestCheckCommandHelperProcess(t *testing.T) {
+	if os.Getenv("MINI_ORCA_CHECK_HELPER") != "1" {
+		return
+	}
+	switch os.Args[len(os.Args)-1] {
+	case "huge-output":
+		chunk := strings.Repeat("x", checkLimits.maxOutputBytes)
+		_, _ = fmt.Fprint(os.Stdout, chunk)
+		_, _ = fmt.Fprint(os.Stderr, chunk)
+		os.Exit(17)
+	case "cancel-with-output":
+		child := exec.Command(os.Args[0], "-test.run=^TestCheckCommandHelperProcess$", "--", "keep-output")
+		child.Stdout = os.Stdout
+		child.Stderr = os.Stderr
+		if err := child.Start(); err != nil {
+			os.Exit(18)
+		}
+		for {
+			_, _ = fmt.Fprintln(os.Stdout, "parent output")
+			time.Sleep(time.Millisecond)
+		}
+	case "keep-output":
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) {
+			_, _ = fmt.Fprintln(os.Stdout, "child output")
+			time.Sleep(time.Millisecond)
+		}
+	}
+	os.Exit(0)
+}
+
+func checkHelperCommand(mode string) []string {
+	return []string{os.Args[0], "-test.run=^TestCheckCommandHelperProcess$", "--", mode}
+}
+
+func TestCopyCheckWorkspaceExcludesCachesAndPreservesTestFixtures(t *testing.T) {
+	source := t.TempDir()
+	destination := filepath.Join(t.TempDir(), "workspace")
+	for path, content := range map[string]string{
+		"main.go":                               "package fixture\n",
+		".git":                                  "gitdir: /outside/worktree\n",
+		"node_modules/dependency/index.js":      "cache",
+		"desktop/build/generated.txt":           "cache",
+		".mini-orca/check.json":                 "metadata",
+		"testdata/node_modules/fixture.txt":     "required fixture",
+		"testdata/nested/.git":                  "gitdir: /outside/fixture-worktree\n",
+		"testdata/nested/.hg/store":             "metadata fixture",
+		"testdata/nested/.svn/entries":          "metadata fixture",
+		"testdata/nested/.mini-orca/check.json": "metadata fixture",
+	} {
+		full := filepath.Join(source, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(source, "main.go"), filepath.Join(source, "linked.go")); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyCheckWorkspace(context.Background(), source, destination); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"main.go", "testdata/node_modules/fixture.txt"} {
+		if _, err := os.Stat(filepath.Join(destination, path)); err != nil {
+			t.Fatalf("required copied path %q: %v", path, err)
+		}
+	}
+	for _, path := range []string{".git", "node_modules", "desktop/build", ".mini-orca", "linked.go", "testdata/nested/.git", "testdata/nested/.hg", "testdata/nested/.svn", "testdata/nested/.mini-orca"} {
+		if _, err := os.Lstat(filepath.Join(destination, path)); !os.IsNotExist(err) {
+			t.Fatalf("excluded path %q has error %v", path, err)
+		}
+	}
+}
+
+func TestValidateCheckWorkspaceFileRejectsNonRegularAndChangedFiles(t *testing.T) {
+	directory := t.TempDir()
+	regularPath := filepath.Join(directory, "regular.txt")
+	otherPath := filepath.Join(directory, "other.txt")
+	if err := os.WriteFile(regularPath, []byte("first"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(otherPath, []byte("second"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	regular, err := os.Lstat(regularPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := os.Open(otherPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if err := validateCheckWorkspaceFile(regularPath, regular, other); err == nil || !strings.Contains(err.Error(), "changed while opening") {
+		t.Fatalf("identity mismatch error = %v", err)
+	}
+	directoryInfo, err := os.Lstat(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := os.Open(regularPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	if err := validateCheckWorkspaceFile(directory, directoryInfo, input); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("nonregular source error = %v", err)
+	}
+}
+
+func TestCopyCheckWorkspaceRejectsResourceLimitAndCleansWorkspace(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		setup func(t *testing.T, source string)
+		limit string
+	}{
+		{
+			name: "bytes",
+			setup: func(t *testing.T, source string) {
+				t.Helper()
+				path := filepath.Join(source, "large.bin")
+				if err := os.WriteFile(path, nil, 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Truncate(path, checkLimits.maxWorkspaceBytes+1); err != nil {
+					t.Fatal(err)
+				}
+			},
+			limit: "byte limit",
+		},
+		{
+			name: "files",
+			setup: func(t *testing.T, source string) {
+				t.Helper()
+				for index := 0; index <= checkLimits.maxWorkspaceFiles; index++ {
+					path := filepath.Join(source, fmt.Sprintf("file-%05d", index))
+					if err := os.WriteFile(path, nil, 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+			},
+			limit: "file limit",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := t.TempDir()
+			destination := filepath.Join(t.TempDir(), "workspace")
+			test.setup(t, source)
+			err := copyCheckWorkspace(context.Background(), source, destination)
+			if err == nil || !strings.Contains(err.Error(), test.limit) {
+				t.Fatalf("copy error = %v", err)
+			}
+			if _, statErr := os.Stat(destination); !os.IsNotExist(statErr) {
+				t.Fatalf("failed copy left workspace behind: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestCopyCheckWorkspaceHonorsCancellation(t *testing.T) {
+	source := t.TempDir()
+	destination := filepath.Join(t.TempDir(), "workspace")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := copyCheckWorkspace(ctx, source, destination)
+	if err == nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("copy error = %v", err)
+	}
+	if _, statErr := os.Stat(destination); !os.IsNotExist(statErr) {
+		t.Fatalf("canceled copy left workspace behind: %v", statErr)
 	}
 }
 
@@ -143,9 +350,22 @@ func TestTaskTestCheckCancellationAndEvidenceSanitization(t *testing.T) {
 	if check.State != CheckCanceled {
 		t.Fatalf("canceled task check = %+v", check)
 	}
-	evidence := sanitizeCheckOutput("/tmp/work/api_key=private\npassword: hidden\n"+strings.Repeat("x", maxCheckOutputBytes+1), "/tmp/work", "/project")
+	evidence := sanitizeCheckOutput("/tmp/work/api_key=private\npassword: hidden\n"+strings.Repeat("x", checkLimits.maxOutputBytes+1), false, "/tmp/work", "/project")
 	if strings.Contains(evidence, "private") || strings.Contains(evidence, "hidden") || !strings.Contains(evidence, "[output truncated]") || !strings.Contains(evidence, "<workspace>") {
 		t.Fatalf("sanitized evidence = %q", evidence)
+	}
+}
+
+func TestSanitizeCheckOutputRedactsAuthorizationValues(t *testing.T) {
+	for _, value := range []string{
+		"Authorization: Bearer secret.token,with=delimiters",
+		"authorization=Basic YWxpY2U6c2VjcmV0",
+		"proxy-authorization: Bearer another secret",
+	} {
+		evidence := sanitizeCheckOutput(value, false, "", "")
+		if evidence != "[redacted]" {
+			t.Fatalf("authorization evidence = %q", evidence)
+		}
 	}
 }
 

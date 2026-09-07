@@ -166,17 +166,17 @@ paths:
   /api/projects/current/scan:
     get:
       tags: [Projects]
-      summary: Read explicit isolated Go scan progress
+      summary: Read explicit Go scan progress from a temporary copied workspace
       parameters:
         - {$ref: '#/components/parameters/ProjectRevision'}
       responses:
-        '200': {description: Source-free parser, vet, and test progress, content: {application/json: {schema: {$ref: '#/components/schemas/GoScanReport'}}}}
+        '200': {description: Source-free workspace preparation, parser, vet, and test progress; bounded workspace failures include sanitized evidence, content: {application/json: {schema: {$ref: '#/components/schemas/GoScanReport'}}}}
         '204': {description: No verified scan exists for this project revision.}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
     post:
       tags: [Projects]
-      summary: Explicitly start an isolated Go verified scan
+      summary: Explicitly start a Go verified scan in a temporary copied workspace
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/GoScanRequest'}}}
@@ -187,7 +187,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
     delete:
       tags: [Projects]
-      summary: Cancel the active isolated Go scan
+      summary: Cancel the active temporary-workspace Go scan
       parameters:
         - {$ref: '#/components/parameters/ProjectRevision'}
       responses:
@@ -751,7 +751,7 @@ components:
       type: object
       required: [name, state]
       properties:
-        name: {type: string, enum: [parse, vet, tests]}
+        name: {type: string, enum: [workspace, parse, vet, tests]}
         state: {type: string, enum: [passed, failed, canceled]}
         command: {type: array, items: {type: string}}
         output: {type: string, description: Sanitized and bounded output.}
@@ -998,7 +998,7 @@ components:
       required: [name, content]
       properties:
         name: {type: string, description: One valid Go Test function name.}
-        content: {type: string, description: Reviewed test source used only in an isolated check copy.}
+        content: {type: string, description: Reviewed test source used only in a temporary copied check workspace.}
     Suggestion:
       type: object
       properties: {title: {type: string}, summary: {type: string}, target_symbol: {type: string}, action: {type: string}, engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}}

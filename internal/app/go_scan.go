@@ -25,7 +25,7 @@ type GoScanPhase struct {
 	ExitCode int      `json:"exit_code,omitempty"`
 }
 
-// GoScanReport is an explicit, source-free record of isolated verification.
+// GoScanReport is an explicit, source-free record of copied-workspace verification.
 type GoScanReport struct {
 	ProjectID       string        `json:"project_id"`
 	ProjectRevision string        `json:"project_revision"`
@@ -60,7 +60,10 @@ func (s *Service) ScanGoProject(ctx context.Context, revision string) (*GoScanRe
 		return nil, err
 	}
 	defer os.RemoveAll(scan.workspace)
-	if err := copyCheckWorkspace(scan.root, scan.workspace); err != nil {
+	if err := copyCheckWorkspace(ctx, scan.root, scan.workspace); err != nil {
+		if ctx.Err() != nil {
+			return s.completeGoScan(ctx, scan.root, scan.report, scan.findings, scan.fileHashes)
+		}
 		return nil, err
 	}
 	if err := s.recordGoScanPhase(scan.root, scan.report, scan.findings, scan.fileHashes, project.FindingSourceParser); err != nil {
@@ -145,7 +148,7 @@ func (s *Service) completeGoScan(ctx context.Context, root string, report *GoSca
 	return cloneGoScanReport(report), nil
 }
 
-// StartGoScan starts one explicit isolated scan for the active revision and
+// StartGoScan starts one explicit copied-workspace scan for the active revision and
 // returns immediately with source-free progress. Repeated calls reuse the
 // active scan instead of running verification commands concurrently.
 func (s *Service) StartGoScan(revision string) (*GoScanReport, error) {
@@ -218,7 +221,7 @@ func (s *Service) GoScanProgress(revision string) (*GoScanReport, error) {
 	return report, nil
 }
 
-// CancelGoScan stops the active isolated scan. Completed phase results remain
+// CancelGoScan stops the active copied-workspace scan. Completed phase results remain
 // available in the persisted progress report.
 func (s *Service) CancelGoScan(revision string) (*GoScanReport, error) {
 	analysis, err := s.manager.Analysis()
@@ -242,12 +245,13 @@ func (s *Service) CancelGoScan(revision string) (*GoScanReport, error) {
 func (s *Service) runStartedGoScan(ctx context.Context, projectID, revision string) {
 	report, err := s.ScanGoProject(ctx, revision)
 	if err != nil {
-		now := time.Now().UTC()
-		report = &GoScanReport{ProjectID: projectID, ProjectRevision: revision, Status: "failed", StartedAt: now, UpdatedAt: now, CompletedAt: now, Phases: []GoScanPhase{}}
 		if active, activeErr := s.manager.Analysis(); activeErr == nil && active.ProjectID == projectID && active.ProjectRevision == revision {
+			report = failedGoScanReport(projectID, revision, active.Path, err)
 			if data, marshalErr := marshalGoScanReport(report); marshalErr == nil {
 				_ = writeGoScanReport(active.Path, data)
 			}
+		} else {
+			report = failedGoScanReport(projectID, revision, "", err)
 		}
 	}
 	s.goScan.mu.Lock()
@@ -259,13 +263,26 @@ func (s *Service) runStartedGoScan(ctx context.Context, projectID, revision stri
 	s.goScan.cancel = nil
 }
 
+func failedGoScanReport(projectID, revision, root string, failure error) *GoScanReport {
+	now := time.Now().UTC()
+	return &GoScanReport{
+		ProjectID:       projectID,
+		ProjectRevision: revision,
+		Status:          "failed",
+		StartedAt:       now,
+		UpdatedAt:       now,
+		CompletedAt:     now,
+		Phases:          []GoScanPhase{{Name: "workspace", State: CheckFailed, Output: sanitizeCheckOutput(failure.Error(), false, "", root)}},
+	}
+}
+
 func (s *Service) runGoScanPhase(ctx context.Context, workspace, root, name string, command []string) GoScanPhase {
 	phase := GoScanPhase{Name: name, Command: append([]string(nil), command...)}
 	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
 	defer cancel()
-	output, exitCode, err := runCheckCommand(timed, workspace, command)
-	phase.Output = sanitizeCheckOutput(output, workspace, root)
-	phase.ExitCode = exitCode
+	result, err := runCheckCommand(timed, workspace, command)
+	phase.Output = sanitizeCheckOutput(result.output, result.truncated, workspace, root)
+	phase.ExitCode = result.exitCode
 	if timed.Err() != nil {
 		phase.State = CheckCanceled
 		phase.Output = timed.Err().Error()

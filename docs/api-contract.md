@@ -59,8 +59,8 @@ untrusted networks.
 | GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, coverage, and finding counts for `project_revision`. |
 | GET | `/api/projects/current/findings` | List source-free verified findings and AI suggestions with provenance, filters, and freshness. |
 | PATCH | `/api/projects/current/findings/{findingID}` | Record an explicit user triage status for one finding. |
-| GET | `/api/projects/current/scan` | Read an explicitly started isolated Go scan for `project_revision`. |
-| POST | `/api/projects/current/scan` | Start an explicit isolated Go parser/vet/test scan. |
+| GET | `/api/projects/current/scan` | Read an explicitly started Go scan for `project_revision` from a temporary copied workspace. |
+| POST | `/api/projects/current/scan` | Start an explicit Go parser/vet/test scan in a temporary copied workspace. |
 | DELETE | `/api/projects/current/scan` | Cancel the active explicit Go scan. |
 | GET | `/api/projects/current/index` | Read deterministic eligible-file and symbol facts. |
 | GET | `/api/projects/current/files/info` | Read safe selected-file information for project-relative `path`. |
@@ -138,10 +138,12 @@ draft text, prompts, and secret-like values.
 ## Project intelligence and limits
 
 Import and reindex build deterministic metadata; neither starts a verified scan
-or Analyze-all. Go scans and semantic analysis are always user-started. Findings
-keep source (`ai`, parser, vet, or test), confidence, severity, status, and
-freshness separate so a model suggestion is never presented as a verified tool
-result.
+or Analyze-all. Go scans and semantic analysis are always user-started. A scan
+prepares a bounded temporary copied workspace before parser, vet, and test phases;
+a resource failure is returned as a failed `workspace` phase with sanitized evidence.
+Findings keep source (`ai`, parser, vet, or test), confidence, severity, status,
+and freshness separate so a model suggestion is never presented as a verified
+tool result.
 
 Declaration editing, exact symbol targeting, composition, and mandatory parse /
 format checks are Go-first. Other languages may have conservative approximate
