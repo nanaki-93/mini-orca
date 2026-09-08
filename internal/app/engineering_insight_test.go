@@ -23,7 +23,7 @@ func TestOptionalInsightsDoNotRejectSemanticOrDraftParents(t *testing.T) {
 func TestFileAnalysisInsightUsesCompleteGroundedAdviceOrOmission(t *testing.T) {
 	target := project.IndexFile{Path: "gate.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Gate.Wait", Signature: "func (g *Gate) Wait(ctx context.Context)", Confidence: "exact", AtomicTarget: true}}}
 	lockSource := "package cases\n\nimport (\n\t\"context\"\n\t\"sync\"\n)\n\ntype Gate struct { mu sync.Mutex }\n\nfunc (g *Gate) Wait(ctx context.Context) {\n\tg.mu.Lock()\n\tdefer g.mu.Unlock()\n\t<-ctx.Done()\n}\n"
-	complete := `{"mechanism":"Wait holds g.mu while it blocks on context cancellation.","why_it_matters_here":"If another caller needs g.mu, the lock spans <-ctx.Done() and that caller waits.","tradeoff_or_failure_mode":"Releasing the lock before waiting needs an ownership check before later state is published.","transferable_lesson":"Cancel one waiter while another acquires g.mu and expect the second caller to proceed only after release."}`
+	complete := `{"mechanism":"Wait holds g.mu while it blocks on context cancellation.","why_it_matters_here":"If another caller needs g.mu, the lock spans <-ctx.Done() and that caller waits.","tradeoff_or_failure_mode":"Releasing g.mu before waiting would let concurrent Wait calls stop serializing; whether that serialization is needed is not shown.","transferable_lesson":"Cancel one waiter while another acquires g.mu and expect the second caller to proceed only after release."}`
 	incomplete := `{"mechanism":"Wait has a mutex.","why_it_matters_here":"Use locks carefully."}`
 	parent := func(insight string) string {
 		return `{"purpose":"Waits for cancellation.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{},"engineering_insight":` + insight + `}`
@@ -78,11 +78,28 @@ func TestEngineeringInsightPromptsRequireUsefulGroundedContentOrOmission(t *test
 		"describe that behavior as unknown unless TARGET_SOURCE demonstrates it",
 		"states impact conditionally, with an if, when, or workload condition",
 		"Otherwise omit it, especially for a trivial wrapper",
+		"same mutex remains held across <-ctx.Done() with no intervening release",
+		"Mention later state or ownership revalidation only when TARGET_SOURCE shows a later publication or ownership transition",
+		"say the mutex is released before the wait and do not invent revalidation",
+		"expect the second to acquire it only after the first releases it",
 		"known-length append loop may grow a result slice",
 	} {
 		if !strings.Contains(semantic, requirement) {
 			t.Fatalf("file analysis prompt is missing grounded-insight guidance %q", requirement)
 		}
+	}
+}
+
+func TestFileAnalysisInsightAllowsSourceBoundedUnlockBeforeWaitGuidance(t *testing.T) {
+	source := "package fixture\n\nimport (\n\t\"context\"\n\t\"sync\"\n)\n\ntype Gate struct { mu sync.Mutex }\n\nfunc (g *Gate) Wait(ctx context.Context) {\n\tg.mu.Lock()\n\tg.mu.Unlock()\n\t<-ctx.Done()\n}\n"
+	target := project.IndexFile{Path: "gate.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Gate.Wait", Signature: "func (g *Gate) Wait(ctx context.Context)", Confidence: "exact", AtomicTarget: true}}}
+	response := `{"purpose":"Waits for cancellation after releasing a mutex.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{},"engineering_insight":{"mechanism":"Gate.Wait releases g.mu before blocking on <-ctx.Done(), so the source does not show a mutex held during the cancellation wait.","why_it_matters_here":"g.mu.Unlock() appears before <-ctx.Done() and this function has no later state publication or ownership transition.","tradeoff_or_failure_mode":"Adding a revalidation step here would invent a state transition that this source does not show.","transferable_lesson":"When reviewing lock scope, trace each Lock and Unlock around the blocking operation before proposing a concurrency test."}}`
+	parsed, err := parseSemanticAnalysis(response, target, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.EngineeringInsight == nil {
+		t.Fatal("source-bounded unlock-before-wait insight was omitted")
 	}
 }
 

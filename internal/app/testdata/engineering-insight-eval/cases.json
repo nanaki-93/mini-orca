@@ -9,13 +9,13 @@
     "scoring_anchors": {
       "correctness": {"0": "Misses the lock or cancellation wait.", "1": "Notes blocking but overstates its consequence.", "2": "States that the mutex spans the cancellation wait."},
       "local_relevance": {"0": "No source evidence.", "1": "Mentions the function generally.", "2": "Cites g.mu and <-ctx.Done()."},
-      "tradeoff_clarity": {"0": "No constraint.", "1": "Vague advice to unlock sooner.", "2": "Explains that releasing the lock needs a state/ownership check."},
+      "tradeoff_clarity": {"0": "No constraint.", "1": "Vague advice to unlock sooner.", "2": "Explains that releasing the lock changes serialization of waits, while whether that serialization is needed is unknown."},
       "useful_verification": {"0": "No test idea.", "1": "Generic concurrency test.", "2": "Cancels one waiter while another attempts to acquire g.mu."}
     },
     "source": "package cases\n\nimport (\n\t\"context\"\n\t\"sync\"\n)\n\ntype Gate struct {\n\tmu sync.Mutex\n}\n\nfunc (g *Gate) Wait(ctx context.Context) {\n\tg.mu.Lock()\n\tdefer g.mu.Unlock()\n\t<-ctx.Done()\n}\n",
     "anchor": {"start_line": 12, "end_line": 15, "evidence": "<-ctx.Done()"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Waits for cancellation while owning the gate.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Wait holds g.mu while it blocks on context cancellation.\",\"why_it_matters_here\":\"If another caller needs g.mu, the lock spans <-ctx.Done() and that caller waits for cancellation.\",\"tradeoff_or_failure_mode\":\"Releasing the lock before waiting needs a state check before a later publish.\",\"transferable_lesson\":\"Keep blocking waits outside ownership locks; cancel one waiter while another acquires g.mu.\"}}"
+    "sanitized_output": "{\"purpose\":\"Waits for cancellation while owning the gate.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Wait holds g.mu while it blocks on context cancellation.\",\"why_it_matters_here\":\"If another caller needs g.mu, the lock spans <-ctx.Done() and that caller waits for cancellation.\",\"tradeoff_or_failure_mode\":\"Releasing g.mu before waiting would let concurrent Wait calls stop serializing; whether that serialization is needed is not shown.\",\"transferable_lesson\":\"Keep blocking waits outside ownership locks; cancel one waiter while another acquires g.mu.\"}}"
   },
   {
     "name": "development-slice-capacity",
