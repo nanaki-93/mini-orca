@@ -28,14 +28,15 @@ current release waiver. Tasks 149/170/171 are superseded by their plan owners,
 not marked passed. The Security scan/review and optional benchmark comparison
 APIs are implemented; SEC-08 and PERF-03 still own their desktop presentation.
 
-## QUAL-05 development pilot — 2026-09-08
+## Historical QUAL-05 development pilots — 2026-09-08
 
 The local `bug` profile remained `qwen/qwen3-coder-30b`. After the original
 six-request budget, the user authorized six more development requests through
 persistent grant `qual05-extension-1`; no counters or prior results were reset.
 All 12 attempts completed under 4,096 output tokens and 300 seconds per attempt,
-without retries. Total development consumption is 4,978 output tokens; all 24
-qualification requests remain unused. The development ceiling is exhausted.
+without retries. These historical development runs consumed 4,978 output tokens;
+qualification consumption remained zero. The then-current development ceiling was
+exhausted. The subsequent Qwen3.8 recovery is recorded below.
 
 | Candidate / source-free receipt | Independent digest-bound score audit | Collection metadata |
 | --- | --- | --- |
@@ -48,11 +49,11 @@ A fresh independent agent scores each pilot against actual private replies and
 joins scores to response digests. The v9 recovery produced a low-value allocation
 insight; v10 omitted that substantive insight again and falsely attributed a public
 API endpoint to the constant-returning helper. Neither recovery candidate
-qualifies for promotion, so QUAL-05 remains Blocked and no candidate is frozen.
+qualified for promotion, so QUAL-05 was Blocked and no candidate was frozen.
 Collection validity is not evidence of useful-insight coverage or a release pass.
 Historical scores and receipts are preserved; private replies are discarded after
-scoring. Further development requires a new explicit candidate/budget decision;
-the scheduler remains stopped.
+scoring. Further development required a new explicit candidate/budget decision;
+the scheduler was stopped until the recovery authorization below.
 
 Validation: independent code reviews, `make check`, `make quality`, focused Go
 tests, formatting and vet passed. A subsequent race run hit the existing
@@ -89,7 +90,7 @@ The unchanged corpus digest is
 The one-time grant command was `go run ./cmd/engineering-insight-eval -mode
 grant-development -root . -authorization-id qual05-extension-1 -requests 6`.
 
-The latest source-free receipt can be validated without a provider call:
+The historical v10 source-free receipt can be validated without a provider call:
 
 ```sh
 go run ./cmd/engineering-insight-eval \
@@ -100,6 +101,134 @@ go run ./cmd/engineering-insight-eval \
   -base-revision c0e8dc25e075549228bea8aa16020a9ebd53be81 \
   -max-requests 6 -max-output-tokens 4096 -attempt-timeout-seconds 300
 ```
+
+## Qwen3.8 frozen recovery pilot — 2026-09-08 UTC
+
+**QUAL-05 failed; the recovery scheduler is Paused.** Grant
+`qual05-qwen38-recovery-1` added exactly six development slots to the existing
+campaign without resetting its 12 consumed requests. Both three-case batches
+were collected before independent content scoring, at identical frozen settings
+and base `2e823825aa3c1ed9c272e179db247b781a15745c`. The run IDs below distinguish
+repetitions; the CLI records repetition 1 within each batch. No qualification
+request, extra probe, retry, prompt change or model switch occurred.
+
+The candidate was `qwen38-v10-recovery-1`, provider label `configured-bug`, local
+model `qwen/qwen3.8-27b`, artifact `lmstudio-community/Qwen3.8-27B-MLX-4bit`,
+LM Studio 0.4.23+1 / MLX 1.11.0. The frozen profile used low thinking,
+temperature 1, top-p 0.95, top-k 20, min-p 0, presence penalty 0 and repeat penalty
+1, with 4,096 total completion tokens including reasoning and 300 seconds per
+attempt. Application input budget was 16,384 tokens; **measured effective runtime
+context was 119,552**, parallelism 1, with no speculative draft. REC-03 documented
+why MLX expanded the initial context target; 16K was not the runtime cap.
+
+The unchanged prompt was `file-analysis-v10`, corpus `engineering-insight-v1`,
+SHA-256 `e4e7c71e1721986417e59dfcc581e7f31c7eeac1829fd20f441bc3dfec35a6c7`.
+Both pre-batch checks of the private candidate manifest passed; manifest SHA-256
+was `9cfc0ae5d60af3798a2c9f1024c356864e8f32649c62dd46591b6c24fb45f3c5`.
+The manifest, readback evidence and verifier remain under the ignored evaluation
+root's `qwen38-v10-recovery-1/` directory. No production behavior changed during
+collection or this evidence update, and no qualification candidate was promoted.
+
+A fresh independent GPT-5.6 Terra agent scored every whole emitted response
+against the development source/rubric, including the final parent summary for
+false claims. This is agent scoring, not human testing. Scores below list
+correctness / local relevance / trade-off clarity / useful verification, each 0–2.
+Controls' 8/8 scores represent successful omission, not retained insight examples.
+
+| Run / case | Dimension scores | Complete / insight status | Completion tokens / latency |
+| --- | --- | --- | --- |
+| `qual05-qwen38-dev1` / lock-cancellation | 2 / 2 / 1 / 2 = **7/8** | Complete; eligible insight | 1,653 / 123,839ms |
+| `qual05-qwen38-dev1` / slice-capacity | 2 / 2 / 2 / 2 = **8/8 diagnostic** | Degraded; nested insight rejected; ineligible | 1,246 / 93,972ms |
+| `qual05-qwen38-dev1` / trivial-wrapper | 2 / 2 / 2 / 2 = 8/8 omission | Complete; intentional omission | 347 / 27,581ms |
+| `qual05-qwen38-dev2` / lock-cancellation | 2 / 2 / 1 / 2 = **7/8** | Complete; eligible insight | 1,340 / 97,938ms |
+| `qual05-qwen38-dev2` / slice-capacity | 2 / 1 / 2 / 2 = **7/8 diagnostic** | Degraded; nested insight rejected; ineligible | 1,414 / 101,905ms |
+| `qual05-qwen38-dev2` / trivial-wrapper | 2 / 2 / 2 / 2 = 8/8 omission | Complete; intentional omission | 421 / 30,699ms |
+
+Both locking insights lacked the rubric's full uncertainty caveat about whether
+serialization is needed. The second allocation insight lacked the full local
+reference set. Neither omission was a critical false claim. The scorer found
+**zero critical false claims across all six final summaries** and confirmed both
+controls intentionally omitted insight material.
+
+Both allocation responses contained a valid top-level insight and a **string**
+in `suggestions[0].engineering_insight`. The same field requires a four-part object
+at every location. The parser preserves the valid parent and top-level insight,
+but rejects that nested field. `evaluationOptionalState` merges a nested rejection
+into the attempt's `optional_insight: rejected` and degraded status. Thus these
+allocation insights are diagnostically useful, but neither attempt counts under
+`hasUsefulSubstantiveInsight`. They are not retained examples. The failure is
+schema adherence, not absent allocation reasoning, truncation or a token cutoff.
+The next separately authorized recovery should target this nested schema boundary
+and repeat a fresh finite pilot; these failed attempts remain failed evidence.
+
+Official pilot totals are **6/6 usable, 4/6 complete, 2/4 useful substantive,
+2/2 intentional control omissions, zero critical claims**. Requirements were all
+six complete and all four substantive attempts eligible at >=6/8, so promotion
+fails. All attempts ended with `stop`; none timed out or had invalid provider
+metadata. Batch 1 consumed 3,246 completion tokens, batch 2 consumed 3,175, for
+**6,421** including reasoning. Combined successful latency median was **95,955ms**
+and nearest-rank p95 **123,839ms**, with zero timeout/censored attempts. Per-batch
+median/p95 were 93,972/123,839ms and 97,938/101,905ms. These are six-case development
+observations, not qualification reliability or a controlled model speed comparison.
+
+The persistent campaign now records **18 development / 0 qualification requests**;
+all 24 conditional qualification slots remain unused. The dispatcher's removed
+token cutoff and Terra-to-Sol coding repair policy do not enlarge this separate
+application-provider budget. QUAL-06 remains Pending behind Blocked QUAL-05;
+REL-01 remains Blocked. No further recovery grant is implied.
+
+Both scored, source-free `<run-id>-receipt.json` files remain in
+`.mini-orca/autopilot/engineering-insight-evaluation/`, alongside durable manifests
+and `qual05-qwen38-scoring/audit.json`. Every score joined to its whole-response
+SHA-256. Private responses were discarded with the CLI after scoring and offline
+validation, and absence was verified; no response prose was copied into Git.
+The second batch's coordinator wrapper raised an attribute error while recording
+the already-finished child result. Its exit-code value was lost, not assumed zero.
+The durable manifest was finished with three completed attempts and its exported
+receipt; process inspection confirmed no collector remained. No call was replayed.
+
+The following are **historical collection commands; do not replay**. The grant
+was applied once, and the development budget is now exhausted. Both batches used
+the same collection command with `RUN_ID` set once to `qual05-qwen38-dev1` and once
+to `qual05-qwen38-dev2`:
+
+```sh
+go run ./cmd/engineering-insight-eval -mode grant-development -root . \
+  -authorization-id qual05-qwen38-recovery-1 -requests 6 \
+  -candidate-id qwen38-v10-recovery-1 -model qwen/qwen3.8-27b
+
+python3 .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v10-recovery-1/verify.py
+
+go run ./cmd/engineering-insight-eval -mode development -root . -run-id "$RUN_ID" \
+  -receipt ".mini-orca/autopilot/engineering-insight-evaluation/$RUN_ID-receipt.json" \
+  -cases internal/app/testdata/engineering-insight-eval/cases.json \
+  -config .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v10-recovery-1/config.yaml \
+  -candidate-id qwen38-v10-recovery-1 -provider configured-bug \
+  -prompt-version file-analysis-v10 -corpus-id engineering-insight-v1 \
+  -base-revision 2e823825aa3c1ed9c272e179db247b781a15745c
+```
+
+Both receipts passed the following **offline** validation, with `RUN_ID` set to
+each run above. Each reported 3/3 usable, 2/3 complete, 1 useful substantive,
+1 omitted control and zero critical claims. A collection-valid verdict is not a
+pilot pass. The receipt's six-request limit is the collector contract; each batch
+consumed three and the separate persistent campaign enforces the overall ceiling.
+
+```sh
+go run ./cmd/engineering-insight-eval \
+  -receipt ".mini-orca/autopilot/engineering-insight-evaluation/$RUN_ID-receipt.json" \
+  -cases internal/app/testdata/engineering-insight-eval/cases.json \
+  -candidate-id qwen38-v10-recovery-1 -provider configured-bug -model qwen/qwen3.8-27b \
+  -prompt-version file-analysis-v10 -corpus-id engineering-insight-v1 \
+  -base-revision 2e823825aa3c1ed9c272e179db247b781a15745c \
+  -max-requests 6 -max-output-tokens 4096 -attempt-timeout-seconds 300
+```
+
+Coordinator validation: `go test ./internal/app ./cmd/engineering-insight-eval
+-count=1` and `git diff --check` passed. No full Go/race/Desktop/quality rerun was
+required for this documentation-only verdict; REC-03's reviewed production code
+already passed its full gates. Validation and independent scoring made no
+application-provider generation requests.
 
 Retained working evidence, including pre-existing user edits:
 
