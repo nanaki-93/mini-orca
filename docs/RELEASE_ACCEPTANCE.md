@@ -230,6 +230,57 @@ required for this documentation-only verdict; REC-03's reviewed production code
 already passed its full gates. Validation and independent scoring made no
 application-provider generation requests.
 
+## QUAL-05 nested insight prompt repair — 2026-09-09
+
+The user requested the bounded schema repair after the failed frozen pilot.
+Code `76fdf95b57bead9ed423790c01c03f6a7f77a542` introduces `file-analysis-v11`:
+every supported `engineering_insight` location now has the same explicit contract
+of exactly four non-empty string fields, no extra keys, or omission/null. The
+prompt includes a concise object shape, explicitly excludes strings/arrays/partial
+objects, and discourages duplicate per-risk/per-suggestion lessons. This clarifies
+the model instruction; it does not add provider-side constrained decoding or prove
+that the local model will always comply. The production parser remains strict,
+and invalid nested fields still degrade their attempts.
+
+Synthetic regressions cover the observed wrong nested string type in both risks
+and suggestions, preserving the parent and top-level insight while recording
+rejection/degradation. Correct nested objects, null and omission retain complete
+status. The assembled prompt contract is checked, and the cache regression verifies
+v10 entries become stale under v11. No fixture rubric, historical score, budget,
+provider configuration or live candidate manifest was changed. Refreshing stale
+analysis remains an explicit user operation; no migration or automatic generation
+is required.
+
+A fresh independent Terra reviewer accepted exact code diff SHA-256
+`0d4af9723481b016899992d103ac58a1f55af8340fca6c944e897a745b008dea`.
+Focused app tests and formatting passed. The first coordinator `make check` passed
+its Go/dispatcher stages but stalled in AWT `nativeGetScreenInsets` while an
+offscreen Compose fixture initialized Jewel font metrics. Repeated thread dumps
+confirmed the stall; the coordinator stopped only that validation's test executor.
+The resulting failed gate and private diagnostics are preserved, not reported as
+passing.
+
+Independent review confirmed the suite uses offscreen raster/Compose fixtures and
+has no native-window prerequisite or headless skip. The coordinator reran the
+**entire `make check`** with the same base-verified Makefile, private HOME/TMPDIR,
+filesystem/network sandbox, Java 21 launcher and JBR 25 executor, adding only
+`-Djava.awt.headless=true` to `JAVA_TOOL_OPTIONS` with a fresh Gradle daemon. It
+passed, including **327 Desktop tests in 38 suites, zero failures/errors/skips**,
+Go tests, race checks, vet, formatting and simulated dispatcher tests. The reviewed
+code digest was unchanged before and after both validations. This establishes
+headless offscreen component coverage; native-window/release acceptance was not
+rerun, nor was the separate `make quality` gate. Evidence is retained in ignored
+`.mini-orca/autopilot/coordinator/QUAL-05-schema-repair.json` and referenced private
+diagnostics.
+
+The code repair is accepted locally, but **QUAL-05 remains Blocked on a fresh
+live pilot**. Consumption is still 18 development / 0 qualification, and the
+scheduler is Paused. No live effectiveness or promotion is claimed. The old v10
+manifest remains historical: a new six-request allowance and new v11 candidate
+manifest/run IDs are needed to evaluate all three development cases twice under
+unchanged scoring thresholds. All 24 qualification slots remain conditional and
+unused. Historical v10 receipts retain their original prompt/base identity.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)

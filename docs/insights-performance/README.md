@@ -75,8 +75,8 @@ requests, and a duplicate authorization ID is rejected. Advisory locks reject co
 writers and release after crashes; an in-flight reserved attempt remains `unknown` and consumed on resume.
 Source-free receipts and ordinary logs never contain source, endpoint URLs, keys, or response prose.
 
-For the frozen local Qwen3.8 recovery candidate, configure the `bug` scope in the
-private ignored evaluation configuration with `temperature: 1`,
+The historical failed v10 Qwen3.8 candidate used a private ignored `bug` scope
+configuration with `temperature: 1`,
 `reasoning_effort: low`, `top_p: 0.95`, `top_k: 20`, `min_p: 0`,
 `presence_penalty: 0`, and `repeat_penalty: 1`. These optional fields are sent as
 OpenAI-compatible request fields only when explicitly configured, including zero;
@@ -87,7 +87,10 @@ candidate's thinking template. Its MLX sampler accepts the selected `top_p`,
 processor, so the required neutral `presence_penalty: 0` is the verified fixed
 effective setting; nonzero presence penalties are not supported for this candidate.
 The coordinator keeps the runtime/template read-back and candidate manifest in
-private ignored evaluation storage and verifies them before collection.
+private ignored evaluation storage and verifies them before collection. That v10
+freeze is historical and its development allowance is exhausted. A future v11
+pilot needs a separately authorized allowance and a new verified candidate manifest;
+do not reuse the v10 manifest or replay its grant/collection commands.
 
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
@@ -96,6 +99,12 @@ rubric and scores correctness, local relevance, trade-off clarity and useful ver
 from 0–2, including every emitted malformed or failed response. A retained example needs
 no critical false claim and at least 6/8. Collection receipts may be unscored; a
 qualification receipt with emitted but unscored prose is invalid.
+
+The current file-analysis prompt is `file-analysis-v11`. It explicitly requires
+the same four-field insight object at file, risk and suggestion locations. Earlier
+cached analysis becomes stale. Historical receipts keep the prompt version and
+base used for their actual run; updating these examples does not requalify a
+candidate or authorize new model requests.
 
 Save a receipt such as this outside the repository:
 
@@ -106,7 +115,7 @@ Save a receipt such as this outside the repository:
   "candidate_id": "candidate-v1",
   "provider": "chosen-provider",
   "model": "chosen-model",
-  "prompt_version": "file-analysis-v10",
+  "prompt_version": "file-analysis-v11",
   "corpus_id": "engineering-insight-v1",
   "corpus_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "base_revision": "selected-base-revision",
@@ -161,7 +170,7 @@ go run ./cmd/engineering-insight-eval \
   -candidate-id candidate-v1 \
   -provider chosen-provider \
   -model chosen-model \
-  -prompt-version file-analysis-v10 \
+  -prompt-version file-analysis-v11 \
   -corpus-id engineering-insight-v1 \
   -base-revision selected-base-revision \
   -max-requests 24 \
@@ -169,7 +178,9 @@ go run ./cmd/engineering-insight-eval \
   -attempt-timeout-seconds 300
 ```
 
-Collection requires an explicit mode and run identity. No test or quality target invokes
+Collection requires an explicit mode and run identity. The example below describes
+the interface; the current campaign cannot start a fresh development run until a
+new allowance is authorized and implemented. No test or quality target invokes
 this command mode:
 
 ```sh
@@ -178,22 +189,22 @@ go run ./cmd/engineering-insight-eval \
   -receipt /safe/local/development-receipt.json \
   -cases internal/app/testdata/engineering-insight-eval/cases.json \
   -config config.yaml -candidate-id candidate-v1 -provider configured-bug \
-  -prompt-version file-analysis-v10 -corpus-id engineering-insight-v1 \
+  -prompt-version file-analysis-v11 -corpus-id engineering-insight-v1 \
   -base-revision selected-base-revision
 ```
 
-After the original six development requests are exhausted, an authorized extension is a
-separate local state mutation and does not contact a provider:
+Historical grant commands below are accounting evidence only; both were already
+applied and fully consumed. Do not replay them. The first six-request extension was
+a separate local state mutation with no provider call:
 
 ```sh
 go run ./cmd/engineering-insight-eval \
   -mode grant-development -root . -authorization-id qual05-extension-1 -requests 6
 ```
 
-After all 12 original and first-recovery development requests are consumed, the
-single approved Qwen3.8 recovery grant may be appended. It remains local state
-only; collection verifies the same candidate and loopback model again before
-reserving any of its six requests:
+After the first 12 development requests, the approved Qwen3.8 recovery grant was
+appended once. Collection verified its bound candidate and loopback model before
+reserving its six requests, all now consumed:
 
 ```sh
 go run ./cmd/engineering-insight-eval \
@@ -202,8 +213,10 @@ go run ./cmd/engineering-insight-eval \
   -candidate-id qwen38-v10-recovery-1 -model qwen/qwen3.8-27b
 ```
 
-This is the final development extension: the campaign ceiling is 18 requests.
-The qualification campaign and its 24-request ceiling are unchanged.
+This exhausted the currently implemented 18-request development ceiling. The v11
+schema repair does not add a grant or reset consumption. A future pilot must use
+its separately authorized new candidate/manifest and finite grant. The qualification
+campaign and its conditional 24-request ceiling are unchanged.
 
 Private replies are held in mode-0700 storage for an independent scorer. `-mode handoff`
 lists only attempt IDs, `-mode score -scores scores.json -receipt scored.json` writes a
