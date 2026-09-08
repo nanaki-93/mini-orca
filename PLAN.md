@@ -254,7 +254,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Complete |
 | QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Complete |
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Complete |
-| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04 | S / medium | Pending |
+| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04 | S / medium | Blocked |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Pending |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Pending |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
@@ -1245,6 +1245,19 @@ accounting and qualification pass criteria below still apply in full.
   pass. No prompt, corpus, model configuration or budget changes in this task.
 - **Verify:** focused `internal/llm` tests, G, fresh independent review and the
   dispatcher `make check` gate before local integration.
+- **Blocked execution — 2026-09-08:** the first scheduled dispatch at 12:14 UTC
+  selected REC-01 from clean base `78058eb` and ran
+  `./scripts/autopilot.py --task REC-01 --integrate`. It stopped with `worker
+  process failed` before returning worker output. The isolated worktree remains
+  unchanged; no implementation, independent code review or validation gate ran.
+  Ignored `runs/REC-01.json` retains failed phase and uncertain `worker-1` with a
+  20,000-token reservation (not confirmed actual consumption). The dispatcher
+  discards subprocess error detail, so the underlying CLI failure is unconfirmed;
+  read-only CLI help confirms its requested flags exist. Do not clear/replay this
+  invocation or start a replacement writer automatically. Recovery requires
+  diagnosing the dispatcher failure and an explicit decision about the uncertain
+  invocation. The recovery heartbeat is paused. Application-provider consumption
+  remains 12 development / 0 qualification; no recovery grant was applied.
 
 ### REC-02 — Account for one model-bound six-request recovery grant
 
