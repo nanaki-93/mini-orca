@@ -1,7 +1,5 @@
 package io.miniorca.desktop
 
-import java.util.UUID
-import java.util.prefs.Preferences
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -16,6 +14,7 @@ class LastProjectStoreTest {
       first.save("/tmp/mini-orca-project")
 
       assertEquals("/tmp/mini-orca-project", LastProjectStore(preferences).load())
+      assertEquals(1, preferences.flushCount)
     }
   }
 
@@ -28,15 +27,9 @@ class LastProjectStoreTest {
       store.save("  ")
 
       assertEquals("/tmp/mini-orca-project", store.load())
+      assertEquals(1, preferences.flushCount)
     }
   }
 
-  private fun withPreferences(test: (Preferences) -> Unit) {
-    val preferences = Preferences.userRoot().node("/io/miniorca/desktop/tests/${UUID.randomUUID()}")
-    try {
-      test(preferences)
-    } finally {
-      preferences.removeNode()
-    }
-  }
+  private fun withPreferences(test: (InMemoryPreferences) -> Unit) = test(InMemoryPreferences())
 }

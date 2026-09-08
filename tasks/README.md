@@ -175,12 +175,22 @@ process group on timeout or output exhaustion. It does not set a process-global
 file-size limit: Codex may need to append to existing local databases larger than
 the output budget. Worktree validation and sandbox boundaries still apply.
 
-Failed worker/reviewer calls retain bounded private diagnostics outside worker
-worktrees, in mode-0700 storage with mode-0600 files. Treat this output as untrusted
+Failed worker/reviewer calls and validation runs retain bounded private diagnostics
+outside worker worktrees, in mode-0700 storage with mode-0600 files. Treat this output as untrusted
 and potentially sensitive; inspect it locally and do not copy raw output into
 Git, ordinary logs, shared receipts or prompts. Ordinary run state records only
 diagnostic identity and exit/signal information. A missing successful completion
 does not prove that no model request was charged; its reservation stays consumed.
+
+Validation uses private temporary HOME/TMPDIR storage outside Git repositories,
+so temporary fixtures do not inherit the integration checkout. Each validation
+retains a distinct evidence record across retries. Repair prompts receive only
+bounded stage/test identifiers; raw validator output remains in private diagnostics.
+Java user.home also points to scratch. Supply the documented
+`MINI_ORCA_JDK21_HOME` and `MINI_ORCA_JAVA25_HOME` (or `MINI_ORCA_JBR25_HOME`)
+when running validation, because Gradle cannot discover SDKs through the real user
+home from this isolated environment. Desktop store tests inject Preferences and
+verify store behavior without writing host settings.
 
 Archived recovery of an interrupted or legacy failed run is a separate explicit
 coordinator action after diagnosis and accepted repairs. Normal bounded repairs

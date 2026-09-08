@@ -256,7 +256,8 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Complete |
 | AUTO-03 | Repair dispatcher startup diagnostics and explicit recovery | AUTO-02 | M / high | Complete |
 | AUTO-04 | Report tokens without blocking and escalate Terra repairs to Sol | AUTO-03 | M / high | Complete |
-| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-04 | S / medium | Pending |
+| AUTO-05 | Isolate validation scratch and preserve failure evidence | AUTO-04 | S / high | Complete |
+| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Pending |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Pending |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Pending |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
@@ -1128,6 +1129,58 @@ the full quality gate green. No inherited quality exception applies to final rel
   Verify the new `worker_complete` state by dry-run, then continue REC-01 through
   the normal dispatcher review/validation gate and resume the recovery heartbeat.
 
+### AUTO-05 — Isolate validation scratch and preserve failure evidence
+
+- **Authorization:** the user authorized autonomous problem resolution and Sol
+  escalation. The first real REC-01 run under AUTO-04 passed review, then exposed
+  a validator-environment failure and escalated from Terra to Sol as configured.
+  A coordinator reproduction on unchanged accepted code found the same failure.
+- **Evidence:** validation places HOME/TMPDIR inside the canonical Git repository.
+  A Go test's intended non-Git temporary directory therefore discovers the parent
+  `codex/autopilot` checkout. `TestReadGitStatusSupportsGitAndNonGitRoots` fails
+  only under this harness. Code repair attempts cannot resolve that environment.
+- **Execute:** one isolated Sol writer repairs `scripts/autopilot.py` and its
+  fake tests; use fresh Sol review and coordinator gates. The full sandbox gate
+  also exposed Java using the real user home and native macOS preferences in unit
+  fixtures. Set Java user.home to scratch, supply the documented explicit JDK
+  locations, and inject shared test-only Preferences into the two desktop store
+  suites. Preserve their behavior assertions and assert LastProjectStore flushes
+  successful saves but not blank paths. No desktop production changes or expanded
+  sandbox writes are needed. Place validation scratch
+  outside Git worktrees while retaining mode-0700 isolation and the existing
+  narrowly writable sandbox. Retain bounded private validation output and
+  source-free attempt/digest/result history so repair failures remain diagnosable.
+  Keep `make check`, exact-diff review, model policy and request limits unchanged.
+- **Accept/verify:** focused regression proves temporary non-Git fixtures remain
+  non-Git; diagnostics tests cover privacy, bounds and retained history. Run the
+  full production sandboxed `make check`, standard `make check`, `make quality`
+  and diff checks. No local-model evaluation requests are part of this repair.
+- **Interrupted REC-01:** the coordinator intentionally stopped dispatcher 97206
+  and worker process group 1440 after diagnosing the environment; both were
+  verified gone and the lease released. Archive interrupted state digest
+  `92bf8e039436d30fee0604019dc4c7757dd852663e83b11f7b950c3cc0279e5d`
+  unchanged. Keep attempt 4, Terra→Sol escalation, all 857,141 recorded tokens,
+  and the pending Sol invocation's already-counted 20,000-token uncertainty.
+  The two-file temperature patch still matches
+  `ede77e4bf9b18bc6a53b455edaa43d1b29cc482fda1c34a292a00d6688e65e4e`.
+  After accepted repair, explicitly adopt that unchanged patch on the new base,
+  record the verified operator stop without replaying its worker, and resume at
+  fresh Sol review. The evaluation campaign remains 12 development / 0 qualification.
+- **Recovery artifact:** the independently reviewed, private one-off migration is
+  `.mini-orca/autopilot/migrations/rec01-adopt-after-validation-fix-1.py`, digest
+  `afe5f1880bf0cb025eba0c4d6e748447c1d065ebb52690b00cc6e8168ab62968`.
+  Offline tests passed normal adoption, interruption before/after atomic state
+  replacement, and idempotent replay, preserving the exact draft and accounting.
+- **Accepted 2026-09-08:** fresh Sol review found no blocking issues. Standard
+  `make check`, all 32 fake dispatcher tests, focused desktop tests and
+  `make quality` passed; final production sandboxed `make check` passed against
+  candidate digest `0ccfecf3032e949a8d82c74f33aac498ff01113340f0c49e38472c9876058331`.
+  The sandbox denial test passes standalone and is intentionally skipped inside
+  an existing validation sandbox. Private validation record `validation-1-3`
+  preserves the final output identity and prior failed environment evidence.
+  REC-01 is Pending for the reviewed adoption above, then fresh Sol review and
+  the normal fixed gate. No live evaluation requests were made.
+
 ## Insight qualification tasks
 
 These cards turn the remaining REL-01 work into one sequential agent queue. Keep
@@ -1342,7 +1395,7 @@ accounting and qualification pass criteria below still apply in full.
 
 ### REC-01 — Preserve explicit zero-temperature provider requests
 
-- **Dependencies:** QUAL-04, AUTO-04. This task makes no live provider requests.
+- **Dependencies:** QUAL-04, AUTO-05. This task makes no live provider requests.
 - **Target files:** `internal/llm/client.go`, `internal/llm/client_test.go`.
 - **Evidence:** `ChatRequest.Temperature` uses `omitempty`; a temporary wire-level
   test reproduced that configured zero disappears from JSON. The current local
