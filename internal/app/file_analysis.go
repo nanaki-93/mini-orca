@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v10"
+	semanticAnalysisPromptVersion = "file-analysis-v11"
 	maxSemanticAnalysisBytes      = 64 * 1024
 )
 
@@ -29,7 +29,9 @@ const fileAnalysisInsightGuidance = "Trace what the selected code actually does 
 	"Otherwise omit it, especially for a trivial wrapper. " +
 	"When TARGET_SOURCE shows the same mutex remains held across <-ctx.Done() with no intervening release, say that the mutex spans the cancellation wait and name both operations; do not reduce this to generic blocking. If that mutex is released before the wait, do not claim serialization or a lock-held wait; describe only observed behavior. Mention later state or ownership revalidation only when TARGET_SOURCE shows a later publication or ownership transition. For a Lock, Unlock, <-ctx.Done() sequence with no later state use, say the mutex is released before the wait and do not invent revalidation. Verify the held-lock pattern by canceling one waiter while another attempts that mutex, and expect the second to acquire it only after the first releases it. " +
 	"A visible known-length append loop can support measurement-oriented engineering guidance even when it is not a bug. When TARGET_SOURCE starts a result slice at zero capacity and appends once per known input item, name the input-length and result-slice identifiers and explain capacity growth. Preallocation changes retained result capacity. If TARGET_SOURCE visibly allocates while formatting items, preallocation does not remove that separately visible cost; otherwise do not infer a formatting allocation. State each only when shown. State allocation impact conditionally for workloads or input sizes where growth matters, and treat retained result capacity as the preallocation trade-off. Verify with before-and-after -benchmem runs at representative input sizes and compare allocations per operation rather than only saying to benchmark. " +
-	"Prefer one file-level insight and omit repeated per-risk or per-suggestion insights. "
+	"Prefer one file-level insight. Do not duplicate that lesson in risks or suggestions. "
+
+const fileAnalysisInsightSchema = "At every supported engineering_insight location (the top level, each risks[] item, and each suggestions[] item), either omit engineering_insight or use null, or provide exactly one object with exactly these four non-empty string fields and no other keys: mechanism, why_it_matters_here, tradeoff_or_failure_mode, and transferable_lesson. Shape: {\"mechanism\":\"...\",\"why_it_matters_here\":\"...\",\"tradeoff_or_failure_mode\":\"...\",\"transferable_lesson\":\"...\"}. Never use a string, array, or partial object. "
 
 // EngineeringInsightPromptVersion returns the production selected-file prompt
 // identity used by evaluation; callers cannot supply an unrelated label.
@@ -278,7 +280,8 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 		return "", err
 	}
 	return "You summarize exactly one selected source file. Return one JSON object only; do not use Markdown or code fences. " +
-		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? ({mechanism,why_it_matters_here,tradeoff_or_failure_mode,transferable_lesson}). Keep each array to at most three concise items. " + project.EngineeringInsightPromptInstructions +
+		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? (see the shared engineering insight contract below). Keep each array to at most three concise items. " +
+		fileAnalysisInsightSchema + project.EngineeringInsightPromptInstructions +
 		"For symbol_explanations, copy keys verbatim from TARGET_FACTS.symbols[].name. Do not explain parameters, local variables, fields, imported names, or referenced types unless their exact name appears in that list. An empty object is valid. Risk severity must be low, medium, or high. " +
 		fileAnalysisInsightGuidance +
 		"Keep all four insight fields together under 1,000 characters. Generic advice to use defer, handle errors, or follow best practices is not an insight. " +
