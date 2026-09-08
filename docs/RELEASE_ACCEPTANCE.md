@@ -30,29 +30,37 @@ APIs are implemented; SEC-08 and PERF-03 still own their desktop presentation.
 
 ## QUAL-05 development pilot — 2026-09-08
 
-The local `bug` profile remained `qwen/qwen3-coder-30b`. Development collection
-used the shared 6-request cap, 4,096 output-token cap, and 300-second attempt
-cap; all six attempts completed. The campaign records 6 development and 0
-qualification requests, so development collection is exhausted and the 24
-qualification requests remain untouched. Recorded development consumption totals
-2,548 output tokens.
+The local `bug` profile remained `qwen/qwen3-coder-30b`. After the original
+six-request budget, the user authorized six more development requests through
+persistent grant `qual05-extension-1`; no counters or prior results were reset.
+All 12 attempts completed under 4,096 output tokens and 300 seconds per attempt,
+without retries. Total development consumption is 4,978 output tokens; all 24
+qualification requests remain unused. The development ceiling is exhausted.
 
 | Candidate / source-free receipt | Independent digest-bound score audit | Collection metadata |
 | --- | --- | --- |
 | Historical `v7-dev1` — ignored `.mini-orca/autopilot/engineering-insight-evaluation/qual05-v7-dev1-receipt.json` | Lock/cancellation 5/8; slice-capacity 7/8; trivial control intentionally omitted; zero critical false claims. | Three completed attempts; 1,320 output tokens. This historical collection was not rerun. |
 | Corrected `v8-dev2` at accepted code `4293799289201c6797e735c60c1e3aa567055206` — ignored `.mini-orca/autopilot/engineering-insight-evaluation/qual05-v8-dev2-receipt.json` | Lock/cancellation 6/8; slice-capacity omitted its insight (0); trivial control intentionally omitted; zero critical false claims. | Three completed attempts; 1,228 output tokens; 4,984ms median and 9,311ms nearest-rank p95 successful latency. |
+| Recovery `v9-dev3` at `e778302` — ignored `qual05-v9-dev3-receipt.json` | Lock/cancellation 6/8; slice-capacity 4/8; trivial insight omitted; zero critical false claims. | Three usable/complete attempts; 1,355 output tokens; median 7,058ms, nearest-rank p95 9,420ms. |
+| Final `v10-dev4` at `c0e8dc2` — ignored `qual05-v10-dev4-receipt.json` | Lock/cancellation 6/8; slice-capacity insight absent (0); trivial insight omitted, but one critical false claim elsewhere in that summary. | Three usable/complete attempts; 1,075 output tokens; median 4,110ms, nearest-rank p95 9,700ms. |
 
-A fresh independent agent scored each pilot. Scores were joined to source-free
-receipts by response digest and validated. The
-corrected receipt reports 3/3 usable and complete summaries, one useful
-substantive insight, one intentional control omission, and zero critical claims.
-Raw reply material from both pilots was discarded under the evaluation policy; retained scores
-are historical evidence, not a retroactive promotion. The second pilot still
-missed a substantive insight, so no candidate is frozen or promoted and pilot
-quality remains blocked.
+A fresh independent agent scores each pilot against actual private replies and
+joins scores to response digests. The v9 recovery produced a low-value allocation
+insight; v10 omitted that substantive insight again and falsely attributed a public
+API endpoint to the constant-returning helper. Neither recovery candidate
+qualifies for promotion, so QUAL-05 remains Blocked and no candidate is frozen.
+Collection validity is not evidence of useful-insight coverage or a release pass.
+Historical scores and receipts are preserved; private replies are discarded after
+scoring. Further development requires a new explicit candidate/budget decision;
+the scheduler remains stopped.
+
+Validation: independent code reviews, `make check`, `make quality`, focused Go
+tests, formatting and vet passed. A subsequent race run hit the existing
+`TestPerformanceJobRecoveryResumesInterruptedFile/paused` TempDir cleanup failure;
+its full `make test-race` rerun passed. No qualification corpus or rubric changed.
 
 The following collection commands are historical evidence only and must not be
-replayed: durable accounting now prevents another development dispatch.
+replayed: all development slots are now consumed.
 
 ```sh
 go run ./cmd/engineering-insight-eval -mode collect -root . -run-id qual05-v7-dev1 \
@@ -68,15 +76,28 @@ go run ./cmd/engineering-insight-eval -mode collect -root . -run-id qual05-v8-de
   -corpus-id engineering-insight-v1 -base-revision 4293799289201c6797e735c60c1e3aa567055206
 ```
 
-The source-free corrected receipt can be validated without a provider call:
+Recovery collection used the same flags above with these exact identities:
+
+| Run ID / candidate ID | Prompt | Base revision |
+| --- | --- | --- |
+| `qual05-v9-dev3` / `v9-dev3` | `file-analysis-v9` | `e778302dbe08ffabcff715121562fb7261496b6c` |
+| `qual05-v10-dev4` / `v10-dev4` | `file-analysis-v10` | `c0e8dc25e075549228bea8aa16020a9ebd53be81` |
+
+Each receipt is `<run-id>-receipt.json` in the same ignored evaluation directory.
+The unchanged corpus digest is
+`e4e7c71e1721986417e59dfcc581e7f31c7eeac1829fd20f441bc3dfec35a6c7`.
+The one-time grant command was `go run ./cmd/engineering-insight-eval -mode
+grant-development -root . -authorization-id qual05-extension-1 -requests 6`.
+
+The latest source-free receipt can be validated without a provider call:
 
 ```sh
 go run ./cmd/engineering-insight-eval \
-  -receipt .mini-orca/autopilot/engineering-insight-evaluation/qual05-v8-dev2-receipt.json \
+  -receipt .mini-orca/autopilot/engineering-insight-evaluation/qual05-v10-dev4-receipt.json \
   -cases internal/app/testdata/engineering-insight-eval/cases.json \
-  -candidate-id v8-dev2 -provider configured-bug -model qwen/qwen3-coder-30b \
-  -prompt-version file-analysis-v8 -corpus-id engineering-insight-v1 \
-  -base-revision 4293799289201c6797e735c60c1e3aa567055206 \
+  -candidate-id v10-dev4 -provider configured-bug -model qwen/qwen3-coder-30b \
+  -prompt-version file-analysis-v10 -corpus-id engineering-insight-v1 \
+  -base-revision c0e8dc25e075549228bea8aa16020a9ebd53be81 \
   -max-requests 6 -max-output-tokens 4096 -attempt-timeout-seconds 300
 ```
 
