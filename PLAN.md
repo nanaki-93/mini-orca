@@ -253,7 +253,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | QUAL-01 | Realistic development/qualification corpus and rubric | LEARN-02 | S / medium | Complete |
 | QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Complete |
 | QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Complete |
-| QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Pending |
+| QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Complete |
 | QUAL-05 | Six-request development pilot and candidate freeze | QUAL-04 | S / high | Pending |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
@@ -1210,6 +1210,14 @@ Use one Terra worker, a fresh reviewer and coordinator-run gates per task, follo
   no broader quality claim is made until fresh independently scored provider runs.
   The qualification set/rubric has not been modified to fit the candidate.
 - **Verify:** `go test ./internal/app ./internal/project -count=1`; G.
+- **Evidence:** independent review accepted v7 grounded guidance, advisory
+  four-field file-insight validation and shared runner diagnostics. Tests verify
+  v6 cache staleness and rejected/degraded incomplete insights at file, risk and
+  suggestion locations. Coordinator G, `make quality` and `git diff --check` passed.
+  Qualification cases/rubric are unchanged; only development example wording was
+  refined. No provider requests were made, and all 30 authorized requests remain
+  available. Live insight quality remains unqualified until QUAL-05/06.
+
 
 ### QUAL-05 — Run and independently score the bounded development pilot
 

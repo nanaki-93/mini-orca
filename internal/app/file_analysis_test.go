@@ -87,6 +87,31 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 	}
 }
 
+func TestCachedFileAnalysisMarksV6PromptResultsStale(t *testing.T) {
+	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	prepared, err := service.prepareFileAnalysis("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v7" {
+		t.Fatalf("file analysis prompt version = %q, want file-analysis-v7", got)
+	}
+	legacy := project.FileAnalysis{
+		SchemaVersion: "1", ProjectID: prepared.input.ProjectID, ProjectRevision: prepared.input.ProjectRevision,
+		Path: prepared.input.Path, ContentHash: prepared.input.ContentHash, Language: prepared.input.Language,
+		Status: project.AnalysisStatusFresh, Model: prepared.input.Model, ConfiguredModel: prepared.input.Model,
+		Profile: prepared.input.Profile, Scope: prepared.input.Scope, ProviderOrigin: prepared.input.ProviderOrigin,
+		ReasoningEffort: prepared.input.ReasoningEffort, PromptVersion: "file-analysis-v6", ContextPolicyVersion: prepared.input.ContextPolicyVersion,
+	}
+	if err := prepared.cache.Store(legacy); err != nil {
+		t.Fatal(err)
+	}
+	cached, err := service.CachedFileAnalysis("main.go")
+	if err != nil || cached.Status != project.AnalysisStatusStale {
+		t.Fatalf("v6 cache = %+v, %v; want stale", cached, err)
+	}
+}
+
 func TestAnalyzeFileRequiresRemoteConfirmationBeforeSendingPrompt(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

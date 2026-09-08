@@ -269,6 +269,58 @@ func TestEngineeringInsightRunnerStoresOnlyDigestBoundScores(t *testing.T) {
 	}
 }
 
+func TestEngineeringInsightRunnerRejectsIncompleteFileInsightsAcrossOptionalLocations(t *testing.T) {
+	target := project.IndexFile{Path: "fixture.go", Language: "Go"}
+	source := "package fixture\nfunc Run() {}\n"
+	response := func(location, insight string) string {
+		switch location {
+		case "top-level":
+			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{},"engineering_insight":` + insight + `}`
+		case "risk":
+			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional.","engineering_insight":` + insight + `}],"suggestions":[],"symbol_explanations":{}}`
+		case "suggestion":
+			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[{"title":"Keep behavior","summary":"No change.","engineering_insight":` + insight + `}],"symbol_explanations":{}}`
+		default:
+			return ""
+		}
+	}
+
+	for name, insight := range map[string]string{
+		"missing trade-off":    `{"mechanism":"Run returns.","why_it_matters_here":"The local function returns.","transferable_lesson":"Call Run and expect its result."}`,
+		"missing verification": `{"mechanism":"Run returns.","why_it_matters_here":"The local function returns.","tradeoff_or_failure_mode":"Changing it alters the returned value."}`,
+	} {
+		for _, location := range []string{"top-level", "risk", "suggestion"} {
+			t.Run(name+"/"+location, func(t *testing.T) {
+				content := response(location, insight)
+				parsed, err := parseSemanticAnalysis(content, target, source)
+				if err != nil {
+					t.Fatal(err)
+				}
+				optional, degraded := evaluationOptionalState(content, target, source, parsed)
+				if optional != "rejected" || !degraded {
+					t.Fatalf("incomplete %s insight state = %q, degraded=%t", location, optional, degraded)
+				}
+			})
+		}
+	}
+
+	client := &fakeEngineeringInsightClient{reply: response("top-level", `{"mechanism":"Run returns.","why_it_matters_here":"The local function returns.","transferable_lesson":"Call Run and expect its result."}`)}
+	cfg := runnerTestConfig(t, "incomplete-control", EngineeringInsightCollectRunMode, 3, client)
+	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control := receipt.Attempts[2]
+	if !control.UsableSummary || control.CompleteSummary || !control.OptionalSectionDegraded || control.OptionalInsight != "rejected" {
+		t.Fatalf("control attempt treated incomplete insight as complete or omitted: %+v", control)
+	}
+	report := EngineeringInsightEvaluationReport{}
+	recordScoreCounts(&report, cfg.Cases[2].Expected, control)
+	if report.OmittedControls != 0 {
+		t.Fatalf("incomplete control insight counted as intentional omission: %+v", report)
+	}
+}
+
 func runnerTestConfig(t *testing.T, runID, mode string, count int, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
 	t.Helper()
 	cases := make([]EngineeringInsightRunnerCase, 0, count)
