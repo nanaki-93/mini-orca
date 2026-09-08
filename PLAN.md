@@ -1692,16 +1692,42 @@ accounting and qualification pass criteria below still apply in full.
   current run cannot be reclassified after a repair. See `docs/RELEASE_ACCEPTANCE.md`
   for exact identities, dimension scores, accounting and reproducible offline checks.
 
+- **User-authorized schema repair — 2026-09-09:** the request to repair QUAL-05
+  authorizes the bounded nested-field prompt correction after the failed pilot.
+  Reviewed code `76fdf95b57bead9ed423790c01c03f6a7f77a542` defines one explicit
+  four-field, non-empty-string object contract for file, risk and suggestion
+  insights; omission/null remain allowed. It rejects scalar/array/partial shapes
+  in the guidance and discourages duplicated nested lessons. Production parsing,
+  degradation accounting and score thresholds are unchanged. The prompt/cache
+  identity is now `file-analysis-v11`; v10 cache entries become stale.
+- Fresh Terra review and coordinator `make check` passed on the exact code diff.
+  The first full gate stalled in macOS AWT screen detection during an offscreen
+  Desktop fixture and was stopped with diagnostics retained. After independent
+  review of the environment change, the full sandbox gate passed with
+  `-Djava.awt.headless=true`: **327 Desktop tests, zero failures/errors/skips**,
+  plus Go tests, race checks, vet, formatting and dispatcher tests. This is
+  offscreen component validation, not native-window acceptance.
+- **Repair accepted; live acceptance still Blocked.** No fresh model call or
+  grant was made: consumption remains **18 development / 0 qualification** and
+  the scheduler remains Paused. The previous v10 candidate manifest and failed
+  receipts are historical and must not be reused as a v11 freeze. To finish
+  QUAL-05, authorize a fresh six-request local pilot, prepare a new v11 candidate
+  identity/manifest, collect the three cases twice unchanged, and apply the same
+  independent scoring and promotion gates. Existing 24-request qualification
+  authorization remains conditional on that pilot passing.
+
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
 - **Shared input:** read the qualification contract above before work; its budgets,
   sample counts, privacy rules and pass criteria apply to this card.
 - **Dependencies:** QUAL-05; QUAL-02/03 validation and accounting remain intact.
-- For the scheduled recovery, use the promoted `qwen38-v10-recovery-1` candidate,
-  the manifest and documentation-only base transition recorded by QUAL-05, and
-  the same canonical campaign. Recheck 18 development / 0 qualification before
-  starting a new run; on resume use its durable reservation state instead of
-  requiring zero or constructing a new run. All existing gates below remain.
+- Use only the candidate promoted by a fresh v11 QUAL-05 pilot, its new verified
+  manifest and recorded documentation-only base transition, in the same canonical
+  campaign. The failed `qwen38-v10-recovery-1` candidate is not eligible. Before a
+  new qualification run, verify development consumption matches that pilot's
+  accepted grant/receipt ledger and qualification consumption is still zero. On
+  resume use durable reservation state instead of requiring zero or constructing
+  a new run. No v11 candidate is promoted yet; the existing gates below remain.
 - **Target files:** `docs/RELEASE_ACCEPTANCE.md`,
   `docs/insights-performance/README.md` (tested scope/limitations only).
 - **Execute:** twelve qualification cases twice, exactly 24 reserved single
@@ -1710,7 +1736,7 @@ accounting and qualification pass criteria below still apply in full.
   and actual fixture prose, including failed/degraded/control cases; a separate
   coordinator checks evidence joins, counts and the computed verdict. Label agent
   scoring honestly, not as human testing. Any separately metered evaluator requires
-  its own explicit budget; do not hide it in the 30 generation requests.
+  its own explicit budget; do not hide it in the authorized generation requests.
 - **Accept:** the receipt validator enforces 23/24 usable, 22/24 fully valid,
   13/16 useful substantive insights, 8/8 controls omitted and zero critical claims.
   Retain failure evidence and explain why this small sample does not guarantee
