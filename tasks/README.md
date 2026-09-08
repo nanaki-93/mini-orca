@@ -139,3 +139,30 @@ interrupted paid invocation stops without another paid call. Recover a stale lea
 only with `--recover-stale-lease` after confirming its dispatcher and child are gone.
 Secure candidate validation currently fails closed unless macOS `sandbox-exec` is
 available; the fake CLI suite remains portable and makes no paid calls.
+
+## Scheduled insight recovery
+
+The 2026-09-08 recovery queue is REC-01 → REC-02 → REC-03 → QUAL-05 → QUAL-06
+in `PLAN.md`. The user's request to prepare and schedule this recovery covers the
+selected installed local Qwen3.8-27B candidate and six additional development
+requests; the existing 24 qualification requests are conditional on pilot success.
+The old automation was no longer present in the app when inspected. Its replacement
+uses the same 30-minute cadence and failed-run-only notification policy, scoped to
+this recovery chain. It pauses on an unresolved blocker, failed pilot, or the final
+qualification verdict; it does not automatically continue into release work.
+
+Invoke the repository dispatcher only with an explicit `--task REC-01` or
+`--task REC-02` for this schedule; never use its unrestricted next-task selection.
+REC-03 also needs coordinator-owned local
+runtime/configuration preparation; use the reviewed worker/coordinator workflow
+above and mark it Complete only after that preparation succeeds. Do not let the
+generic dispatcher's code-only completion bypass host acceptance. QUAL-05/06 are
+coordinator-run collections with fresh independent scorers, not provider work
+performed by a code writer in an isolated worktree.
+
+Every live attempt uses the canonical checkout's existing ignored evaluation
+campaign. Never copy/reset the campaign to obtain another budget. New code is
+reviewed and integrated before collection. The plan specifies the exact finite
+grant, repeated pilot, model settings, candidate identity, documentation-only
+revision transition and qualification gates. No uncounted compatibility probes,
+prompt tuning, replacement models or additional scoring-service budget are allowed.

@@ -254,7 +254,10 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Complete |
 | QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Complete |
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Complete |
-| QUAL-05 | Six-request development pilot and candidate freeze | QUAL-04 | S / high | Blocked |
+| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04 | S / medium | Pending |
+| REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Pending |
+| REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Pending |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1026,6 +1029,13 @@ Use one Terra worker, a fresh reviewer and coordinator-run gates per task, follo
 
 ### Qualification contract shared by QUAL-01–06
 
+The original contract and historical budgets below remain evidence. The authorized
+2026-09-08 REC-01–03 / QUAL-05 recovery adds a second finite six-development grant:
+18 development requests total across all candidates, plus the unchanged 24
+qualification requests. Its candidate and execution rules in the QUAL-05 recovery
+paragraph override only the older candidate/development procedure; the privacy,
+accounting and qualification pass criteria below still apply in full.
+
 - Proposed application-provider budget: **30 requests total**, split into at most
   **6 development requests + 24 qualification requests**. Each attempt allows
   4,096 output tokens and 300 seconds, sequentially, without automatic retry.
@@ -1219,11 +1229,110 @@ Use one Terra worker, a fresh reviewer and coordinator-run gates per task, follo
   available. Live insight quality remains unqualified until QUAL-05/06.
 
 
+### REC-01 — Preserve explicit zero-temperature provider requests
+
+- **Dependencies:** QUAL-04. This task makes no live provider requests.
+- **Target files:** `internal/llm/client.go`, `internal/llm/client_test.go`.
+- **Evidence:** `ChatRequest.Temperature` uses `omitempty`; a temporary wire-level
+  test reproduced that configured zero disappears from JSON. The current local
+  bug profile is 0.1, so this is not established as the historical quality cause.
+- **Execute:** always serialize the resolved temperature, including zero. Keep
+  configuration defaults and nonzero values unchanged. Test the actual HTTP JSON
+  field's presence and value for zero and nonzero temperatures; decoding into a
+  zero-valued Go field alone cannot distinguish omission from an explicit zero.
+  Exercise the evaluation client too, which must use the same request path.
+- **Accept:** explicit zero reaches the fake provider; existing request contracts
+  pass. No prompt, corpus, model configuration or budget changes in this task.
+- **Verify:** focused `internal/llm` tests, G, fresh independent review and the
+  dispatcher `make check` gate before local integration.
+
+### REC-02 — Account for one model-bound six-request recovery grant
+
+- **Dependencies:** REC-01, QUAL-03. Offline implementation only; the coordinator
+  applies the production grant during QUAL-05 after this result is integrated.
+- **Target files:** `internal/app/engineering_insight_runner.go`, its tests,
+  `cmd/engineering-insight-eval/` and `docs/insights-performance/README.md`.
+- **Execute:** extend the existing append-only grant mechanism for exactly one
+  additional six-request grant, `qual05-qwen38-recovery-1`, bound to local
+  `qwen/qwen3.8-27b` and candidate `qwen38-v10-recovery-1`. Preserve the original
+  grant and every historical receipt. The total development ceiling becomes 18;
+  the qualification ceiling remains 24. This is a finite second recovery grant,
+  not an unlimited grant API or a fresh campaign. Reject duplicate authorizations,
+  incorrect amounts, exhausted grants, wrong candidate/model/destination and
+  attempts to use this increment before the prior 12 slots are consumed.
+- Keep the existing lock/reserve-before-dispatch/resume behavior. A crash,
+  timeout, malformed reply or uncertain dispatch consumes its reserved slot.
+  Bind the new authorization to the actual dispatch identity, not just a label
+  written during grant creation. Existing 6- and 12-request ledgers remain readable
+  without increasing their budgets unless the new grant is explicitly applied.
+- **Accept:** fake-provider tests cover 12-to-18 accounting, cap exhaustion, grant
+  replay, candidate mismatch, concurrent grant/dispatch and interrupted resume;
+  qualification remains unchanged at 0/24 in recovery fixtures. Test both new and
+  existing persisted ledger forms. Normal test/check targets make no live calls.
+- **Verify:** focused runner/CLI tests, G, independent review, `make check`.
+
+### REC-03 — Prepare and verify the frozen local reasoning candidate
+
+- **Dependencies:** REC-02. No generation requests, including smoke tests, here.
+- **Target files:** `internal/llm/`, `internal/config/`,
+  `cmd/engineering-insight-eval/`, runner tests and
+  `docs/insights-performance/README.md`, only where a demonstrated compatibility
+  gap requires a change. The coordinator owns ignored local candidate settings.
+- **Execute:** prepare the already-installed LM Studio
+  `lmstudio-community/Qwen3.8-27B-MLX-4bit` artifact, requested through
+  `qwen/qwen3.8-27b`, with thinking enabled and `low` reasoning. Its installed
+  template defaults to `xhigh`; verify the installed runtime forwards the chosen
+  setting into the template rather than merely accepting an unused API field.
+  Use installed runtime/template metadata or a local template-render test. If the
+  setting cannot be established without generation, the first QUAL-05 attempt is
+  the counted compatibility check; never invent an unmetered probe.
+- Keep `file-analysis-v10` and the complete corpus/rubric byte-for-byte unchanged.
+  Start from the model-card thinking sampling settings (temperature 1.0, top-p
+  0.95, top-k 20, min-p 0, presence penalty 0, repetition penalty 1); verify support
+  in the installed runtime and record actual effective settings. Use one model
+  inference lane, a bounded context sufficient for prompt plus output (16K initial
+  target), 4,096 total completion tokens including reasoning, and 300 seconds.
+  The selected model card is https://huggingface.co/Qwen/Qwen3.8-27B . Do not
+  silently switch model, thinking mode, sampler or context after collection starts.
+- The current config/request only carries temperature and reasoning effort among
+  these sampler controls. Establish a verified mechanism for every required value:
+  explicit validated request fields or candidate-scoped runtime overrides with
+  read-back of effective values before each batch. Add the minimal config/wire
+  plumbing and bind new fields into the runner fingerprint when needed; document
+  and test the chosen mechanism. A manifest listing desired values or an implicit
+  provider default is insufficient. If a required setting cannot be enforced and
+  verified, mark REC-03 Blocked before any generation; do not silently weaken it.
+- Verify with fake responses that final JSON alone reaches the semantic parser;
+  separately returned reasoning is not prefixed to it. Preserve failure/token
+  accounting for reasoning-only or truncated output; no automatic retry, permissive
+  JSON extraction or hidden second model call. Add only the minimal compatibility
+  repair supported by this evidence; retain the existing provider-neutral boundary.
+  In particular, `Client.Chat` currently rejects empty final content before the
+  runner receives usage. Provide a tested evaluation failure path that retains
+  provider usage/finish metadata and any emitted material for private independent
+  scoring even when only reasoning was emitted. Ordinary production callers must
+  still receive an explicit unusable-response failure. No reasoning prose enters
+  normal logs or source-free receipts.
+- **Accept:** coordinator records an ignored, private candidate manifest with
+  model artifact/quantization identity, runtime version, template digest, effective
+  settings, prompt/corpus digest and accepted code revision. Derived configuration
+  stays mode 0600 under ignored evaluation storage; do not overwrite `config.yaml`
+  or edit downloaded model files. Temporarily loading/unloading this installed
+  candidate is within this recovery; no downloads or global LM Studio changes.
+  The manifest is checked again before every collection phase.
+- All live state uses the existing campaign under this repository's
+  `.mini-orca/autopilot/engineering-insight-evaluation/`. Never run a provider
+  collection against a fresh worker worktree's empty campaign. The coordinator
+  runs the accepted CLI on the clean integration checkout using its real HEAD.
+- **Verify:** fake-provider/config/CLI tests, G for code changes, independent review
+  and `make check`. After integration, coordinator-only read-only runtime checks
+  and private configuration preparation establish readiness for QUAL-05.
+
 ### QUAL-05 — Run and independently score the bounded development pilot
 
 - **Shared input:** read the qualification contract above before work; its budgets,
   sample counts, privacy rules and pass criteria apply to this card.
-- **Dependencies:** QUAL-04; selected provider/model and the shared 30-request
+- **Dependencies:** QUAL-04, REC-03; selected provider/model and the shared 30-request
   authorization resolved before any call. Mark Blocked with the missing decision
   only if existing session authorization does not cover the new run.
 - **Target files:** `docs/RELEASE_ACCEPTANCE.md` (sanitized evidence);
@@ -1277,11 +1386,54 @@ Use one Terra worker, a fresh reviewer and coordinator-run gates per task, follo
   the scheduler remains stopped. See `docs/RELEASE_ACCEPTANCE.md` for the complete
   independent score audit and validation evidence, including the race-test flake.
 
+- **Current recovery authorization and execution — 2026-09-08:** the user's
+  request to prepare and schedule the proposed recovery authorizes REC-01–03,
+  six new local development requests for `qwen/qwen3.8-27b`, and the existing
+  24-request qualification phase only after promotion. This supersedes the
+  historical same-model restriction and the one-correction pilot procedure for
+  this recovery only. Earlier failures remain failures. The ledger is Pending
+  behind REC-03; requeueing does not promote the candidate or reset consumption.
+- Coordinator applies the reviewed `qual05-qwen38-recovery-1` grant once to the
+  existing campaign, checking 12 development / 0 qualification consumption first.
+  Collect all three development cases twice at identical frozen settings using
+  two distinct three-case run IDs (`qual05-qwen38-dev1`, `qual05-qwen38-dev2`),
+  the same candidate `qwen38-v10-recovery-1`, and one clean code base. The two run
+  IDs are the repetition join because the current CLI numbers each batch as
+  repetition 1. Do not change the prompt or settings between batches or select
+  the better response. Collect both batches before content scoring. If runtime
+  incompatibility prevents valid dispatch/collection, stop with the consumed
+  count; do not spend the rest on improvised settings or retry an uncertain call.
+- Use the first scheduled attempt for any required live compatibility check. All
+  generation, including failed reasoning output, counts toward these six slots;
+  there is no extra probe allowance. Stop on unverified runtime/configuration
+  drift. Expected completed consumption is 18 development / 0 qualification.
+- A fresh independent scorer reviews every emitted response, including the
+  entire parent summary for false claims. Require usable, complete summaries on
+  all six attempts, >=6/8 for each of the four substantive insights, intentional
+  omission on both controls, and zero critical false claims. Scoring uses the
+  established Codex reviewer workflow; no additional metered scoring service.
+  Join all scores to response digests, validate both receipts offline, then discard
+  private prose using the existing workflow. Collection validity alone cannot pass.
+- On failure mark QUAL-05 Blocked with exact scores/accounting and pause this
+  recovery schedule. No further grants, model switches or prompt repairs. On
+  success mark QUAL-05 Complete after coordinator acceptance and local evidence
+  integration. Before QUAL-06, freeze the resulting clean HEAD as the qualification
+  base and verify its diff from the pilot base contains only ledger/evidence docs;
+  preserve both revision IDs and unchanged production-code/prompt/corpus/config
+  identities. Any behavior change invalidates promotion and stops qualification.
+  This explicit documentation-only transition accommodates the CLI's clean-HEAD
+  requirement without mislabeling the historical pilot revision.
+
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
 - **Shared input:** read the qualification contract above before work; its budgets,
   sample counts, privacy rules and pass criteria apply to this card.
 - **Dependencies:** QUAL-05; QUAL-02/03 validation and accounting remain intact.
+- For the scheduled recovery, use the promoted `qwen38-v10-recovery-1` candidate,
+  the manifest and documentation-only base transition recorded by QUAL-05, and
+  the same canonical campaign. Recheck 18 development / 0 qualification before
+  starting a new run; on resume use its durable reservation state instead of
+  requiring zero or constructing a new run. All existing gates below remain.
 - **Target files:** `docs/RELEASE_ACCEPTANCE.md`,
   `docs/insights-performance/README.md` (tested scope/limitations only).
 - **Execute:** twelve qualification cases twice, exactly 24 reserved single
