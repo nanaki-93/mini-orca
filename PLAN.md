@@ -257,7 +257,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | AUTO-03 | Repair dispatcher startup diagnostics and explicit recovery | AUTO-02 | M / high | Complete |
 | AUTO-04 | Report tokens without blocking and escalate Terra repairs to Sol | AUTO-03 | M / high | Complete |
 | AUTO-05 | Isolate validation scratch and preserve failure evidence | AUTO-04 | S / high | Complete |
-| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Pending |
+| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Pending |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Pending |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
@@ -1448,6 +1448,7 @@ accounting and qualification pass criteria below still apply in full.
   fresh review and validation; its recorded 442,015 tokens and both historical
   failures remain preserved. No new implementation call is needed for adoption.
   The new policy supersedes the budget/recovery decision requirement above.
+- Automated acceptance 2026-09-08: attempt 4; a fresh review accepted diff `ede77e4bf9b1` and `make check` passed.
 
 ### REC-02 — Account for one model-bound six-request recovery grant
 

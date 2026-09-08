@@ -174,6 +174,49 @@ func TestClientPreservesConfiguredCompatibilityPrefixAndRequestContract(t *testi
 	}
 }
 
+func TestClientSendsConfiguredTemperatureIncludingZero(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		temperature float32
+		newClient   func(config.ModelProfile) *Client
+	}{
+		{name: "standard client zero", temperature: 0, newClient: NewClient},
+		{name: "evaluation client zero", temperature: 0, newClient: NewEvaluationClient},
+		{name: "standard client nonzero", temperature: 0.2, newClient: NewClient},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			profile := testProfile("https://provider.example/v1", "")
+			profile.Temperature = test.temperature
+			client := test.newClient(profile)
+			client.transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				var request map[string]json.RawMessage
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Fatalf("decode request: %v", err)
+				}
+				rawTemperature, ok := request["temperature"]
+				if !ok {
+					t.Fatal("request omitted temperature")
+				}
+				var temperature float32
+				if err := json.Unmarshal(rawTemperature, &temperature); err != nil {
+					t.Fatalf("decode temperature: %v", err)
+				}
+				if temperature != test.temperature {
+					t.Fatalf("temperature = %v, want %v", temperature, test.temperature)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader(`{"model":"fixture","choices":[{"message":{"role":"assistant","content":"ok"}}]}`)),
+					Request:    r,
+				}, nil
+			})
+			if _, err := client.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}); err != nil {
+				t.Fatalf("Chat() error = %v", err)
+			}
+		})
+	}
+}
+
 func TestClientForwardsConfiguredReasoningEffort(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request ChatRequest
@@ -192,6 +235,12 @@ func TestClientForwardsConfiguredReasoningEffort(t *testing.T) {
 	if _, err := NewClient(profile).Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}); err != nil {
 		t.Fatalf("Chat() error = %v", err)
 	}
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }
 
 func testProfile(apiBaseURL, apiKey string) config.ModelProfile {
