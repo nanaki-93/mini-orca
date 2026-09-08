@@ -60,7 +60,7 @@ func evaluationRunModeRequested(args []string) bool {
 func runEvaluationMode(args []string) error {
 	flags := flag.NewFlagSet("engineering-insight-eval", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	mode := flags.String("mode", "", "collect, development, qualification, handoff, score, export, or discard")
+	mode := flags.String("mode", "", "collect, development, qualification, grant-development, handoff, score, export, or discard")
 	root := flags.String("root", ".", "project root containing private evaluation state")
 	runID := flags.String("run-id", "", "new or resumable evaluation run identity")
 	receiptPath := flags.String("receipt", "", "source-free receipt destination")
@@ -73,8 +73,13 @@ func runEvaluationMode(args []string) error {
 	baseRevision := flags.String("base-revision", "", "selected base revision")
 	confirmRemote := flags.Bool("confirm-remote-provider", false, "confirm this exact configured remote destination")
 	scoresPath := flags.String("scores", "", "digest-bound score JSON for score mode")
+	authorizationID := flags.String("authorization-id", "", "unique explicit development-budget authorization")
+	requests := flags.Int("requests", 0, "explicit development-budget grant request count")
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("invalid evaluation command")
+	}
+	if *mode == "grant-development" {
+		return app.GrantEngineeringInsightDevelopmentBudget(*root, *authorizationID, *requests)
 	}
 	if !app.ValidEngineeringInsightEvaluationRunID(*runID) {
 		return fmt.Errorf("evaluation run ID is invalid")

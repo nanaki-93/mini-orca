@@ -66,10 +66,13 @@ cases (16 attempts) and four omission controls (8 attempts). Each attempt is bou
 destination needs `-confirm-remote-provider`; loopback is the default.
 
 Private campaign state lives under ignored `.mini-orca/autopilot/engineering-insight-evaluation/`.
-It reserves the aggregate 6-development/24-qualification budget before every dispatch.
-Advisory locks reject concurrent writers and release after crashes; an in-flight reserved
-attempt remains `unknown` and consumed on resume. Source-free receipts and ordinary logs
-never contain source, endpoint URLs, keys, or response prose.
+It reserves the original 6-development/24-qualification budget before every dispatch.
+An explicit append-only development grant can add exactly six development requests, once,
+with a unique authorization ID; the resulting development cap is 12 and the qualification
+cap remains 24. Grants never happen automatically, cannot reset consumed requests, and a
+duplicate authorization ID is rejected. Advisory locks reject concurrent writers and release
+after crashes; an in-flight reserved attempt remains `unknown` and consumed on resume.
+Source-free receipts and ordinary logs never contain source, endpoint URLs, keys, or response prose.
 
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
@@ -162,6 +165,14 @@ go run ./cmd/engineering-insight-eval \
   -config config.yaml -candidate-id candidate-v1 -provider configured-bug \
   -prompt-version file-analysis-v7 -corpus-id engineering-insight-v1 \
   -base-revision selected-base-revision
+```
+
+After the original six development requests are exhausted, an authorized extension is a
+separate local state mutation and does not contact a provider:
+
+```sh
+go run ./cmd/engineering-insight-eval \
+  -mode grant-development -root . -authorization-id qual05-extension-1 -requests 6
 ```
 
 Private replies are held in mode-0700 storage for an independent scorer. `-mode handoff`
