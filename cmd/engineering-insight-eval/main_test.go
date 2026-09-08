@@ -190,6 +190,100 @@ func TestGrantDevelopmentModeRequiresOneUniqueAuthorization(t *testing.T) {
 	if err := runEvaluationMode(recovery); err == nil {
 		t.Fatal("recovery grant replay was accepted")
 	}
+	v11 := []string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-schema-1", "-requests", "6", "-candidate-id", "qwen38-v11-schema-1", "-model", "qwen/qwen3.8-27b", "-prompt-version", "file-analysis-v11"}
+	if err := runEvaluationMode(v11); err == nil {
+		t.Fatal("v11 grant was accepted before recovery budget exhaustion")
+	}
+	if err := os.WriteFile(filepath.Join(state, "campaign.json"), []byte(`{"development_requests":18,"qualification_requests":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-schema-1", "-requests", "6", "-candidate-id", "qwen38-v11-schema-1", "-model", "qwen/qwen3.8-27b"}); err == nil {
+		t.Fatal("unbound v11 grant was accepted")
+	}
+	wrongV11Prompt := append([]string(nil), v11...)
+	wrongV11Prompt[len(wrongV11Prompt)-1] = "wrong-prompt"
+	if err := runEvaluationMode(wrongV11Prompt); err == nil {
+		t.Fatal("wrong v11 prompt was accepted")
+	}
+	if err := runEvaluationMode(v11); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode(v11); err == nil {
+		t.Fatal("v11 grant replay was accepted")
+	}
+}
+
+func TestRunEvaluationModeUsesV11GrantForExactlyFinalSixRequests(t *testing.T) {
+	root := t.TempDir()
+	git(t, root, "init")
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".mini-orca/\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "add", ".gitignore")
+	git(t, root, "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-m", "fixture")
+	base := strings.TrimSpace(git(t, root, "rev-parse", "HEAD"))
+	var calls int
+	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		calls++
+		_ = json.NewEncoder(writer).Encode(map[string]any{"model": "qwen/qwen3.8-27b", "choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": `{"purpose":"summary","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`}, "finish_reason": "stop"}}, "usage": map[string]int{"completion_tokens": 7}})
+	}))
+	defer provider.Close()
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	configText := "model_scopes:\n  analyze: {api_base_url: " + provider.URL + ", model: qwen/qwen3.8-27b}\n  bug: {api_base_url: " + provider.URL + ", model: qwen/qwen3.8-27b}\n  function: {api_base_url: " + provider.URL + ", model: qwen/qwen3.8-27b}\n"
+	if err := os.WriteFile(configPath, []byte(configText), 0600); err != nil {
+		t.Fatal(err)
+	}
+	casesPath, err := filepath.Abs("../../internal/app/testdata/engineering-insight-eval/cases.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(mode, runID, candidateID string) error {
+		return runEvaluationMode([]string{"-mode", mode, "-root", root, "-run-id", runID, "-receipt", filepath.Join(t.TempDir(), runID+".json"), "-cases", casesPath, "-config", configPath, "-candidate-id", candidateID, "-provider", "fixture", "-prompt-version", app.EngineeringInsightPromptVersion(), "-corpus-id", "corpus", "-base-revision", base})
+	}
+	if err := run(app.EngineeringInsightCollectRunMode, "campaign-one", "candidate"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(app.EngineeringInsightDevelopmentRunMode, "campaign-two", "candidate"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "extension-one", "-requests", "6"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, runID := range []string{"campaign-three", "campaign-four"} {
+		if err := run(app.EngineeringInsightDevelopmentRunMode, runID, "candidate"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-recovery-1", "-requests", "6", "-candidate-id", "qwen38-v10-recovery-1", "-model", "qwen/qwen3.8-27b"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, runID := range []string{"campaign-five", "campaign-six"} {
+		if err := run(app.EngineeringInsightDevelopmentRunMode, runID, "qwen38-v10-recovery-1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 18 {
+		t.Fatalf("pre-v11 provider calls = %d, want 18", calls)
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-schema-1", "-requests", "6", "-candidate-id", "qwen38-v11-schema-1", "-model", "qwen/qwen3.8-27b", "-prompt-version", "file-analysis-v11"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, runID := range []string{"campaign-seven", "campaign-eight"} {
+		if err := run(app.EngineeringInsightDevelopmentRunMode, runID, "qwen38-v11-schema-1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 18+6 {
+		t.Fatalf("v11 provider calls = %d, want 24", calls)
+	}
+	if err := run(app.EngineeringInsightDevelopmentRunMode, "campaign-nine", "qwen38-v11-schema-1"); err == nil || calls != 24 {
+		t.Fatalf("twenty-fifth request dispatched: %v, calls=%d", err, calls)
+	}
+	state := filepath.Join(root, ".mini-orca", "autopilot", "engineering-insight-evaluation")
+	campaign, err := os.ReadFile(filepath.Join(state, "campaign.json"))
+	if err != nil || string(campaign) != `{"development_requests":24,"qualification_requests":0}` {
+		t.Fatalf("final campaign = %s, %v", campaign, err)
+	}
 }
 
 func TestEvaluationBugProfilePreservesExplicitSamplingControls(t *testing.T) {

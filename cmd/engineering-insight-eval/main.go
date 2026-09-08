@@ -80,8 +80,11 @@ func runEvaluationMode(args []string) error {
 		return fmt.Errorf("invalid evaluation command")
 	}
 	if *mode == "grant-development" {
-		if *candidateID == "" && *model == "" {
+		if *candidateID == "" && *model == "" && *promptVersion == "" {
 			return app.GrantEngineeringInsightDevelopmentBudget(*root, *authorizationID, *requests)
+		}
+		if *promptVersion != "" {
+			return app.GrantEngineeringInsightV11DevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
 		}
 		return app.GrantEngineeringInsightRecoveryDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model)
 	}

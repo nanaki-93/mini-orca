@@ -369,6 +369,88 @@ func TestEngineeringInsightRunnerRejectsRecoveryAuthorizationAsFirstGrant(t *tes
 	}
 }
 
+func TestEngineeringInsightRunnerAppliesV11GrantOnlyAtRequestsEighteenThroughTwentyThree(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := v11RunnerTestConfig(t, "v11-one", client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{
+		{AuthorizationID: "extension-one", Requests: 6},
+		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
+	}}
+	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: recoveryDevelopmentRequestCap}); err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
+		{CandidateID: "wrong-candidate", Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion},
+		{CandidateID: v11DevelopmentCandidateID, Model: "wrong-model", PromptVersion: v11DevelopmentPromptVersion},
+		{CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: "wrong-prompt"},
+	} {
+		if err := GrantEngineeringInsightV11DevelopmentBudget(cfg.Root, v11DevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
+			t.Fatal("v11 grant accepted the wrong identity")
+		}
+	}
+	if err := GrantEngineeringInsightRecoveryDevelopmentBudget(cfg.Root, v11DevelopmentAuthorizationID, 6, v11DevelopmentCandidateID, v11DevelopmentModel); err == nil {
+		t.Fatal("unbound v11 grant was accepted")
+	}
+	if err := GrantEngineeringInsightV11DevelopmentBudget(cfg.Root, v11DevelopmentAuthorizationID, 6, v11DevelopmentCandidateID, v11DevelopmentModel, v11DevelopmentPromptVersion); err != nil {
+		t.Fatal(err)
+	}
+	if err := GrantEngineeringInsightV11DevelopmentBudget(cfg.Root, "extra-grant", 6, v11DevelopmentCandidateID, v11DevelopmentModel, v11DevelopmentPromptVersion); err == nil {
+		t.Fatal("extra development grant was accepted")
+	}
+
+	wrongCandidate := v11RunnerTestConfig(t, "v11-wrong-candidate", client)
+	wrongCandidate.Root = cfg.Root
+	wrongCandidate.CandidateID = "another-candidate"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong v11 candidate dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongModel := v11RunnerTestConfig(t, "v11-wrong-model", client)
+	wrongModel.Root = cfg.Root
+	wrongModel.Model = "another-model"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongModel); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong v11 model dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongProfile := v11RunnerTestConfig(t, "v11-wrong-profile", client)
+	wrongProfile.Root = cfg.Root
+	wrongProfile.Profile.Model = "another-model"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongProfile); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong v11 profile model dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongDestination := v11RunnerTestConfig(t, "v11-wrong-destination", client)
+	wrongDestination.Root = cfg.Root
+	wrongDestination.Profile.APIBaseURL = "https://provider.example/v1"
+	wrongDestination.ConfirmRemoteProvider = true
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongDestination); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("remote v11 destination dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	for _, runID := range []string{"v11-one", "v11-two"} {
+		valid := v11RunnerTestConfig(t, runID, client)
+		valid.Root = cfg.Root
+		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), valid); err != nil {
+			t.Fatalf("v11 run %q: %v", runID, err)
+		}
+	}
+	if client.calls.Load() != 6 {
+		t.Fatalf("v11 grant dispatched %d requests, want 6", client.calls.Load())
+	}
+	exhausted := v11RunnerTestConfig(t, "v11-exhausted", client)
+	exhausted.Root = cfg.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
+		t.Fatalf("v11 cap was not exhausted: %v, calls=%d", err, client.calls.Load())
+	}
+	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
+	if err != nil || campaign.DevelopmentRequests != finalDevelopmentRequestCap || campaign.QualificationRequests != 0 {
+		t.Fatalf("v11 campaign counters: %+v, %v", campaign, err)
+	}
+}
+
 func TestEngineeringInsightRunnerPreservesPersistedDevelopmentCampaignCaps(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -377,10 +459,13 @@ func TestEngineeringInsightRunnerPreservesPersistedDevelopmentCampaignCaps(t *te
 		wantCap    int
 		wantGrants int
 		recovery   bool
+		v11        bool
 	}{
 		{name: "original six-request campaign", consumed: 6, wantCap: 6},
 		{name: "legacy twelve-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6}]}`, consumed: 12, wantCap: 12, wantGrants: 1},
 		{name: "bound eighteen-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"}]}`, consumed: 12, wantCap: 18, wantGrants: 2, recovery: true},
+		{name: "v11 ledger retains recovery binding through request seventeen", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`, consumed: 12, wantCap: 24, wantGrants: 3, recovery: true},
+		{name: "bound twenty-four-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`, consumed: 18, wantCap: 24, wantGrants: 3, v11: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -404,6 +489,9 @@ func TestEngineeringInsightRunnerPreservesPersistedDevelopmentCampaignCaps(t *te
 			cfg := runnerTestConfig(t, "persisted-cap", EngineeringInsightDevelopmentRunMode, 3, &fakeEngineeringInsightClient{})
 			if test.recovery {
 				cfg = recoveryRunnerTestConfig(t, "persisted-cap", &fakeEngineeringInsightClient{})
+			}
+			if test.v11 {
+				cfg = v11RunnerTestConfig(t, "persisted-cap", &fakeEngineeringInsightClient{})
 			}
 			cap, err := developmentRequestCap(directory, test.consumed, cfg)
 			if err != nil || cap != test.wantCap {
@@ -487,10 +575,12 @@ func TestEngineeringInsightRunnerLocksBoundRecoveryGrantAndDispatchTogether(t *t
 
 func TestEngineeringInsightRunnerRejectsCorruptDevelopmentGrantLedgerBeforeDispatch(t *testing.T) {
 	for name, ledger := range map[string]string{
-		"unknown field":   `{"grants":[{"authorization_id":"extension-one","requests":6}],"unexpected":true}`,
-		"duplicate field": `{"grants":[],"grants":[{"authorization_id":"extension-one","requests":6}]}`,
-		"empty grants":    `{"grants":[]}`,
-		"wrong requests":  `{"grants":[{"authorization_id":"extension-one","requests":5}]}`,
+		"unknown field":    `{"grants":[{"authorization_id":"extension-one","requests":6}],"unexpected":true}`,
+		"duplicate field":  `{"grants":[],"grants":[{"authorization_id":"extension-one","requests":6}]}`,
+		"empty grants":     `{"grants":[]}`,
+		"wrong requests":   `{"grants":[{"authorization_id":"extension-one","requests":5}]}`,
+		"v11 out of order": `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`,
+		"unbound v11":      `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b"}]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
@@ -758,6 +848,15 @@ func recoveryRunnerTestConfig(t *testing.T, runID string, client EngineeringInsi
 	cfg.CandidateID = recoveryDevelopmentCandidateID
 	cfg.Model = recoveryDevelopmentModel
 	cfg.Profile.Model = recoveryDevelopmentModel
+	return cfg
+}
+
+func v11RunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
+	cfg := runnerTestConfig(t, runID, EngineeringInsightDevelopmentRunMode, 3, client)
+	cfg.CandidateID = v11DevelopmentCandidateID
+	cfg.Model = v11DevelopmentModel
+	cfg.Profile.Model = v11DevelopmentModel
+	cfg.PromptVersion = v11DevelopmentPromptVersion
 	return cfg
 }
 
