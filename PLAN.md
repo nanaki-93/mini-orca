@@ -260,7 +260,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Blocked |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Running |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1198,7 +1198,11 @@ The original contract and historical budgets below remain evidence. The authoriz
 18 development requests total across all candidates, plus the unchanged 24
 qualification requests. Its candidate and execution rules in the QUAL-05 recovery
 paragraph override only the older candidate/development procedure; the privacy,
-accounting and qualification pass criteria below still apply in full.
+accounting and qualification pass criteria below still apply in full. The
+subsequent 2026-09-09 user-approved v11 verification adds exactly six more
+local development requests through `qual05-qwen38-schema-1`: **24 development
+requests total and the same conditional 24 qualification requests**. Its detailed
+candidate and protocol are recorded in QUAL-05; all earlier outcomes remain intact.
 
 - Proposed application-provider budget: **30 requests total**, split into at most
   **6 development requests + 24 qualification requests**. Each attempt allows
@@ -1715,6 +1719,41 @@ accounting and qualification pass criteria below still apply in full.
   identity/manifest, collect the three cases twice unchanged, and apply the same
   independent scoring and promotion gates. Existing 24-request qualification
   authorization remains conditional on that pilot passing.
+
+- **Fresh pilot authorized — 2026-09-09:** the user approved six new local
+  development requests to verify v11. This supersedes the preceding pending-
+  allowance stop for this pilot only. Grant `qual05-qwen38-schema-1` was appended
+  once after verifying 18 development / 0 qualification consumed. Reviewed code
+  `3cf5d9e913f809570fceffa6187a6bebdc5661de` binds it to candidate
+  `qwen38-v11-schema-1`, model `qwen/qwen3.8-27b`, fixed `file-analysis-v11`, and
+  loopback dispatch. The development ceiling is now **24 total**, with qualification
+  still capped at 24; no counters or historical grants/receipts were reset.
+- Independent Terra review, focused tests, Go quality and the coordinator's full
+  headless `make check` passed (327 Desktop tests, no failures/errors/skips). The
+  fresh private manifest has SHA-256
+  `e691cfc0504127e7afdedff5b9e76ca6ed6c658017d5a80bea8069d97bb6f142`.
+  It retains the previous model artifact, low reasoning, explicit sampling,
+  runtime context 119,552, application input budget 16,384, one request lane,
+  4,096 completion tokens and 300 seconds per attempt; only prompt/code identity
+  changes for this verification. Before each batch, verify its runtime/configuration
+  readback and immutable hashes without generation.
+- Collect `qual05-qwen38-v11-dev1` and `qual05-qwen38-v11-dev2` at one clean pilot
+  base: the same three development cases twice, with no tuning, probes or retries.
+  Collect both batches before content scoring, even if one has degraded optional
+  fields; stop on incompatible runtime, drift or an uncertain request. A fresh
+  independent scorer audits all six complete emitted responses and whole final
+  summaries, joins scores to digests, and applies the unchanged all-six-complete,
+  all-four-substantive >=6/8, two intentional omissions and zero-critical-claim
+  gates. A surviving top-level insight on an aggregate-rejected attempt may be
+  scored diagnostically but cannot count as official useful coverage.
+- Expected final accounting is **24 development / 0 qualification**. Discard
+  private response material only after scoring and offline receipt validation.
+  On failure, mark Blocked and keep the schedule Paused with no further grant or
+  prompt repair. On success, mark Complete after reviewed evidence integration,
+  freeze the clean qualification HEAD after verifying its changes from the pilot
+  base are documentation-only, and resume the existing scheduled QUAL-06 phase.
+  The scheduler stays Paused during this manual pilot; QUAL-06 is a subsequent
+  task, never part of these six development requests.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 

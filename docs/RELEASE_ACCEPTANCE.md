@@ -281,6 +281,44 @@ manifest/run IDs are needed to evaluate all three development cases twice under
 unchanged scoring thresholds. All 24 qualification slots remain conditional and
 unused. Historical v10 receipts retain their original prompt/base identity.
 
+## Authorized v11 verification pilot — 2026-09-09
+
+The user approved six fresh local requests after the v11 schema repair. The exact
+append-only grant `qual05-qwen38-schema-1` was applied once at 18 development /
+0 qualification consumption, bound to `qwen38-v11-schema-1`,
+`qwen/qwen3.8-27b`, and fixed `file-analysis-v11`. The current development ceiling
+is 24; qualification remains separately capped at 24. No prior result or counter
+was reset. Grant code `3cf5d9e913f809570fceffa6187a6bebdc5661de` passed independent
+review, focused tests, Go quality and full coordinator headless `make check`,
+including all 327 Desktop tests with no failures/errors/skips.
+
+The new private manifest SHA-256 is
+`e691cfc0504127e7afdedff5b9e76ca6ed6c658017d5a80bea8069d97bb6f142`.
+Configuration bytes, model/runtime/template identity and sampling settings match
+the failed v10 pilot; the prompt/code identity changes to the reviewed v11 repair
+and grant implementation. The prior v10 manifest remains unchanged. Runtime
+readback showed the same local model, low thinking and context 119,552 without
+generation; full pre-batch checks are required before each dispatch.
+
+The protocol is three development cases twice at one clean base, using
+`qual05-qwen38-v11-dev1` and `qual05-qwen38-v11-dev2`, under 4,096 completion tokens
+including reasoning and 300 seconds per attempt. Collect both before independent
+scoring; no probes, retries or tuning between batches. Require all six summaries
+usable/complete, all four substantive attempts eligible at >=6/8, intentional
+omission on both controls, and zero critical false claims. Runtime drift or an
+uncertain request stops dispatch. Receipt validity alone cannot promote a candidate.
+The schedule remains Paused while this manual pilot runs; qualification is a
+subsequent task only if the pilot passes and its evidence is accepted.
+
+The applied grant command is historical evidence and must not be replayed:
+
+```sh
+go run ./cmd/engineering-insight-eval -mode grant-development -root . \
+  -authorization-id qual05-qwen38-schema-1 -requests 6 \
+  -candidate-id qwen38-v11-schema-1 -model qwen/qwen3.8-27b \
+  -prompt-version file-analysis-v11
+```
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
