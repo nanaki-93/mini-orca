@@ -1253,13 +1253,29 @@ Use one Terra worker, a fresh reviewer and coordinator-run gates per task, follo
   No critical false claims were confirmed. All six summaries were usable/complete,
   but neither candidate meets useful-insight coverage. No candidate is promoted
   or frozen. The validator's collection verdict is not a qualification pass.
-- Persistent consumption is **6 development / 0 qualification requests**. The
-  development budget is exhausted; all 24 qualification requests remain unused
-  and cannot be substituted for development. Source-free digest-joined receipts
+- Original pilot consumption was **6 development / 0 qualification requests**. Its
+  original development budget was exhausted; all 24 qualification requests remain
+  unused and cannot be substituted for development. Source-free digest-joined receipts
   and reproducible offline validation are recorded in `docs/RELEASE_ACCEPTANCE.md`.
   Private response material is discarded after scoring. Further prompt/model
   development requires a new explicit budget decision; the scheduler remains
   stopped. No consumed attempt may be replayed or existing budget reset.
+
+- **Authorized recovery:** the user approved six additional development requests
+  on the same local model. Grant `qual05-extension-1` raises the development
+  ceiling from 6 to 12 without resetting consumption or past results; qualification
+  remains capped at 24. Add and validate explicit persistent grant accounting before
+  dispatch. Use new run IDs, independent scoring and the same 4,096-token/300-second
+  limits. No automatic retries, provider changes or further budget increases.
+- **Recovery outcome:** the grant was applied once, preserving original counters.
+  Reviewed code commits `e778302` (v9) and `c0e8dc2` (v10) passed validation.
+  The v9 allocation insight scored 4/8; the v10 allocation insight was absent.
+  V10 also made one critical false claim about the trivial helper exposing an API
+  endpoint. Both locking insights scored 6/8. Neither meets promotion criteria.
+  Persistent consumption is now **12 development / 0 qualification requests**, with all 24 qualification slots untouched. No
+  candidate is frozen. Further work needs an explicit candidate/budget decision;
+  the scheduler remains stopped. See `docs/RELEASE_ACCEPTANCE.md` for the complete
+  independent score audit and validation evidence, including the race-test flake.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
