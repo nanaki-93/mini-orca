@@ -18,9 +18,18 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v6"
+	semanticAnalysisPromptVersion = "file-analysis-v7"
 	maxSemanticAnalysisBytes      = 64 * 1024
 )
+
+const fileAnalysisInsightGuidance = "Trace what the selected code actually does and distinguish visible behavior from assumptions about unseen callees. " +
+	"A lock alone does not prove thread safety, and a context parameter alone does not prove cancellation is handled or ignored. " +
+	"A delegated call alone does not prove that authorization, idempotency, or another safeguard is missing downstream; describe that behavior as unknown unless TARGET_SOURCE demonstrates it. " +
+	"Return engineering_insight only when all four fields can be grounded in TARGET_SOURCE: mechanism names an observable code relationship; why_it_matters_here cites exact local identifiers or control flow and states impact conditionally, with an if, when, or workload condition; tradeoff_or_failure_mode names a constraint of the proposed change; transferable_lesson gives a concrete test or measurement and expected observation. " +
+	"Otherwise omit it, especially for a trivial wrapper. " +
+	"For example, a lock held while waiting for cancellation can delay another caller if it needs that lock; releasing it needs an ownership check, so cancel one waiter while another acquires the lock. " +
+	"A known-length append loop may grow a result slice, but that matters only at representative input sizes; preallocation retains capacity, so compare allocations with -benchmem. " +
+	"Prefer one file-level insight and omit repeated per-risk or per-suggestion insights. "
 
 // EngineeringInsightPromptVersion returns the production selected-file prompt
 // identity used by evaluation; callers cannot supply an unrelated label.
@@ -269,10 +278,10 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 		return "", err
 	}
 	return "You summarize exactly one selected source file. Return one JSON object only; do not use Markdown or code fences. " +
-		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? ({mechanism,why_it_matters_here,tradeoff_or_failure_mode?,transferable_lesson?}). Keep each array to at most three concise items. " + project.EngineeringInsightPromptInstructions +
+		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? ({mechanism,why_it_matters_here,tradeoff_or_failure_mode,transferable_lesson}). Keep each array to at most three concise items. " + project.EngineeringInsightPromptInstructions +
 		"For symbol_explanations, copy keys verbatim from TARGET_FACTS.symbols[].name. Do not explain parameters, local variables, fields, imported names, or referenced types unless their exact name appears in that list. An empty object is valid. Risk severity must be low, medium, or high. " +
-		"Before answering, trace what the selected code actually does and distinguish visible behavior from assumptions about unseen callees. A lock alone does not prove thread safety; a context parameter alone does not prove cancellation is handled or ignored; a delegated call alone does not prove authorization or idempotency is missing downstream. State unknowns conditionally. " +
-		"Prefer one file-level engineering insight and omit repeated per-risk or per-suggestion insights. Keep its four fields together under 1,000 characters. Describe an observable mechanism, its workload or failure condition, the trade-off of a proposed change, and a specific test or measurement with an expected observation. Generic advice to use defer, handle errors, or follow best practices is not an insight. For trivial wrappers with no grounded lesson, omit engineering_insight. " +
+		fileAnalysisInsightGuidance +
+		"Keep all four insight fields together under 1,000 characters. Generic advice to use defer, handle errors, or follow best practices is not an insight. " +
 		"Usually omit task_spec. If you include one, it must have only these fields: schema_version \"1\", target_path copied exactly from TARGET_FACTS.path, target_symbol copied exactly from one exact atomic TARGET_FACTS.symbols name, target_signature copied exactly from that symbol's TARGET_FACTS signature, acceptance_criteria (array), non_goals (array), and optional go_test_candidate {name,content}. Do not use a symbol field. Never target another file. " +
 		"Treat all interpretations as suggestions. Do not quote source wholesale, invent files, or include source from another file.\n\n" +
 		"PROJECT_FACTS:\n" + string(facts) + "\n\nCONTEXT_MANIFEST:\n" + string(manifestJSON) + "\n\nTARGET_FACTS:\n" + string(targetJSON) + "\n\nTARGET_SOURCE (the only source content supplied):\n```\n" + source + "\n```\n", nil
@@ -321,7 +330,7 @@ func parseSemanticAnalysis(output string, target project.IndexFile, source strin
 		return semanticAnalysisResponse{}, err
 	}
 	suggestions := parseSemanticSuggestions(wire.Suggestions)
-	insight, _ := project.ParseOptionalEngineeringInsight(wire.EngineeringInsight)
+	insight, _ := parseFileAnalysisEngineeringInsight(wire.EngineeringInsight)
 	limitFileAnalysisInsights(&insight, risks, suggestions)
 	return semanticAnalysisResponse{
 		Purpose:            wire.Purpose,
@@ -397,7 +406,7 @@ func parseSemanticRisks(risks []semanticAnalysisFinding, target project.IndexFil
 			return nil, fmt.Errorf("semantic analysis contains an invalid risk")
 		}
 		finding.TaskSpec = parseOptionalBugTaskSpec(risk.TaskSpec, target, source)
-		finding.EngineeringInsight, _ = project.ParseOptionalEngineeringInsight(risk.Insight)
+		finding.EngineeringInsight, _ = parseFileAnalysisEngineeringInsight(risk.Insight)
 		parsed = append(parsed, finding)
 	}
 	return parsed, nil
@@ -406,10 +415,25 @@ func parseSemanticRisks(risks []semanticAnalysisFinding, target project.IndexFil
 func parseSemanticSuggestions(suggestions []semanticAnalysisSuggestion) []project.Suggestion {
 	parsed := make([]project.Suggestion, 0, len(suggestions))
 	for _, suggestion := range suggestions {
-		insight, _ := project.ParseOptionalEngineeringInsight(suggestion.Insight)
+		insight, _ := parseFileAnalysisEngineeringInsight(suggestion.Insight)
 		parsed = append(parsed, project.Suggestion{Title: suggestion.Title, Summary: suggestion.Summary, TargetSymbol: suggestion.TargetSymbol, Action: suggestion.Action, EngineeringInsight: insight})
 	}
 	return parsed
+}
+
+// parseFileAnalysisEngineeringInsight keeps advisory prose isolated from a
+// strict file summary while requiring the complete four-part file guidance.
+// Its diagnostic lets the evaluation runner distinguish omitted prose from a
+// supplied insight that production would drop.
+func parseFileAnalysisEngineeringInsight(raw json.RawMessage) (*project.EngineeringInsight, string) {
+	insight, diagnostic := project.ParseOptionalEngineeringInsight(raw)
+	if diagnostic != "" || insight == nil {
+		return insight, diagnostic
+	}
+	if insight.TradeoffOrFailureMode == "" || insight.TransferableLesson == "" {
+		return nil, "optional engineering insight omitted"
+	}
+	return insight, ""
 }
 
 func limitFileAnalysisInsights(report **project.EngineeringInsight, risks []project.Finding, suggestions []project.Suggestion) {

@@ -5,9 +5,14 @@ These capabilities already exist. The next work is in
 
 Engineering insights are optional, bounded AI interpretation attached to a project,
 file, finding or draft. The four fields explain the mechanism, why it matters here,
-a trade-off/failure mode and a transferable lesson. Invalid optional insight is
-omitted without rejecting valid parent output. The total limit is 1,000 Unicode
-runes; draft edits clear the old insight and stale owners remain labeled.
+a trade-off/failure mode and a transferable lesson. The file-analysis prompt asks for
+an insight only when it can cite visible local evidence, state impact conditionally,
+name a meaningful trade-off, and give a concrete verification with an expected
+observation. Its parser retains file insights only when all four fields are present.
+The prompt omits low-value wrappers and treats unshown callee behavior as unknown,
+rather than claiming a downstream safeguard is absent. Invalid optional insight is
+omitted without rejecting valid parent output. The total limit is 1,000 Unicode runes;
+draft edits clear the old insight and stale owners remain labeled.
 
 For an experienced engineer, prefer a concrete explanation of cancellation,
 contention, allocation, query fan-out, idempotency, backpressure or authorization.
@@ -83,7 +88,7 @@ Save a receipt such as this outside the repository:
   "candidate_id": "candidate-v1",
   "provider": "chosen-provider",
   "model": "chosen-model",
-  "prompt_version": "file-analysis-v6",
+  "prompt_version": "file-analysis-v7",
   "corpus_id": "engineering-insight-v1",
   "corpus_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "base_revision": "selected-base-revision",
@@ -138,7 +143,7 @@ go run ./cmd/engineering-insight-eval \
   -candidate-id candidate-v1 \
   -provider chosen-provider \
   -model chosen-model \
-  -prompt-version file-analysis-v6 \
+  -prompt-version file-analysis-v7 \
   -corpus-id engineering-insight-v1 \
   -base-revision selected-base-revision \
   -max-requests 24 \
@@ -155,7 +160,7 @@ go run ./cmd/engineering-insight-eval \
   -receipt /safe/local/development-receipt.json \
   -cases internal/app/testdata/engineering-insight-eval/cases.json \
   -config config.yaml -candidate-id candidate-v1 -provider configured-bug \
-  -prompt-version file-analysis-v6 -corpus-id engineering-insight-v1 \
+  -prompt-version file-analysis-v7 -corpus-id engineering-insight-v1 \
   -base-revision selected-base-revision
 ```
 

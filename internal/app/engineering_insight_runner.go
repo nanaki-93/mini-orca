@@ -592,7 +592,7 @@ func evaluationOptionalState(content string, target project.IndexFile, source st
 	if _, err := normalizeSymbolExplanations(wire.SymbolExplanations, target.Symbols); err != nil {
 		degraded = true
 	}
-	insight, insightError := project.ParseOptionalEngineeringInsight(wire.EngineeringInsight)
+	insight, insightError := parseFileAnalysisEngineeringInsight(wire.EngineeringInsight)
 	optional := "omitted"
 	if insightError != "" {
 		optional, degraded = "rejected", true
@@ -621,7 +621,7 @@ func suggestionOptionalState(suggestion semanticAnalysisSuggestion) optionalStat
 	return optionalInsightState(suggestion.Insight)
 }
 func optionalInsightState(raw json.RawMessage) optionalState {
-	insight, reason := project.ParseOptionalEngineeringInsight(raw)
+	insight, reason := parseFileAnalysisEngineeringInsight(raw)
 	return optionalState{present: insight != nil, rejected: reason != "", degraded: reason != ""}
 }
 func mergeOptionalState(optional string, degraded bool, state optionalState) (string, bool) {
