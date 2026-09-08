@@ -63,9 +63,10 @@ mode = (worktree / "mode.txt").read_text().strip()
 role = "worker" if args[args.index("--sandbox") + 1] == "workspace-write" else "reviewer"
 control[f"{role}_calls"] = control.get(f"{role}_calls", 0) + 1
 control.setdefault("argv", []).append(args)
-control_path.write_text(json.dumps(control))
 call = control[f"{role}_calls"]
 prompt = sys.stdin.read()
+control.setdefault(f"{role}_prompts", []).append(prompt)
+control_path.write_text(json.dumps(control))
 task_id = re.search(r"\b[A-Z][A-Z0-9]*-[0-9]{2}\b", prompt).group(0)
 
 if role == "worker" and mode == "timeout":
@@ -170,11 +171,14 @@ class RepositoryFixture:
         return f'''#!/usr/bin/env python3
 import json
 import sys
+from pathlib import Path
 sys.path.insert(0, {str(ROOT / "scripts")!r})
 import autopilot
 
 class TestDispatcher(autopilot.Dispatcher):
     def validation_command(self, worktree, temporary, command, environment):
+        if (worktree / "mode.txt").read_text().strip() == "validation_launch_error":
+            return [str(worktree / "missing-validator")]
         return [str(worktree / "scripts" / "validate.sh")]
 
 try:
@@ -189,18 +193,44 @@ except autopilot.DispatchError as exc:
         return f'''#!/usr/bin/env python3
 import json
 import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 control_path = Path({str(self.control)!r})
 control = json.loads(control_path.read_text())
 control["validator_calls"] = control.get("validator_calls", 0) + 1
 control["credential_seen"] = "OPENAI_API_KEY" in os.environ
+validation_home = Path(os.environ["HOME"]).resolve()
+control.setdefault("validation_homes", []).append(str(validation_home))
+control.setdefault("validation_home_modes", []).append(validation_home.stat().st_mode & 0o777)
+control.setdefault("validation_java_options", []).append(
+    {{"gradle": os.environ["GRADLE_OPTS"], "java": os.environ["JAVA_TOOL_OPTIONS"]}}
+)
+control.setdefault("validation_java25_homes", []).append(os.environ.get("MINI_ORCA_JAVA25_HOME"))
+home_git = subprocess.run(
+    ["git", "-C", str(validation_home), "rev-parse", "--is-inside-work-tree"],
+    text=True,
+    capture_output=True,
+    check=False,
+)
+control.setdefault("validation_homes_in_git", []).append(home_git.returncode == 0)
 control_path.write_text(json.dumps(control))
 mode = Path("mode.txt").read_text().strip()
+if mode == "validation_timeout":
+    time.sleep(10)
+if mode == "validation_output_exhaust":
+    print("x" * 8192)
 if mode == "validator_mutation":
     Path("result.txt").write_text("validator mutation\\n")
 failed = mode == "validation_fail" or (mode == "validation_fail_once" and Path("result.txt").read_text() == "worker 1\\n")
 print(("FAIL" if failed else "PASS") + " fake-validation")
+if failed:
+    print("--- FAIL: TestValidationFixture (0.01s)")
+    print("FAIL: test_validation_fixture (tests.ValidatorTest.test_validation_fixture)", file=sys.stderr)
+    print("LastProjectStoreTest > lastProjectRoundTrips() FAILED", file=sys.stderr)
+    print("private validation failure detail", file=sys.stderr)
 raise SystemExit(1 if failed else 0)
 '''
 
@@ -515,7 +545,12 @@ class DispatcherTest(unittest.TestCase):
 
     def test_repair_receives_fresh_review_and_fixed_validation(self) -> None:
         fixture = self.fresh("validation_fail_once")
-        result = fixture.dispatch(environment={"OPENAI_API_KEY": "must-not-reach-validation"})
+        result = fixture.dispatch(
+            environment={
+                "OPENAI_API_KEY": "must-not-reach-validation",
+                "MINI_ORCA_JAVA25_HOME": str(fixture.root),
+            }
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = fixture.calls()
         self.assertEqual((calls["worker_calls"], calls["reviewer_calls"], calls["validator_calls"]), (2, 2, 2))
@@ -525,6 +560,108 @@ class DispatcherTest(unittest.TestCase):
         self.assertEqual(state["reviewer"]["diff"], state["validator"]["diff"])
         self.assertEqual(state["validator"]["command"], "make check")
         self.assertEqual(state["validator"]["stages"], [{"name": "fake-validation", "outcome": "pass"}])
+        self.assertEqual(
+            [(item["id"], item["attempt"], item["code"]) for item in state["validations"]],
+            [("validation-1-1", 1, 1), ("validation-2-2", 2, 0)],
+        )
+        self.assertEqual(
+            state["validations"][0]["failed_checks"],
+            [
+                {"kind": "stage", "id": "fake-validation"},
+                {"kind": "test", "id": "TestValidationFixture"},
+                {"kind": "test", "id": "test_validation_fixture"},
+                {"kind": "test", "id": "LastProjectStoreTest.lastProjectRoundTrips"},
+            ],
+        )
+        self.assertNotIn("private validation failure detail", json.dumps(state))
+        self.assertIn("VALIDATION_STAGE_FAILED: Failed validation stage: fake-validation.", calls["worker_prompts"][1])
+        self.assertIn("VALIDATION_TEST_FAILED: Failed validation test: TestValidationFixture.", calls["worker_prompts"][1])
+        self.assertIn("VALIDATION_TEST_FAILED: Failed validation test: test_validation_fixture.", calls["worker_prompts"][1])
+        self.assertIn(
+            "VALIDATION_TEST_FAILED: Failed validation test: LastProjectStoreTest.lastProjectRoundTrips.",
+            calls["worker_prompts"][1],
+        )
+        self.assertNotIn("private validation failure detail", calls["worker_prompts"][1])
+        for evidence in state["validations"]:
+            self.assertEqual(len(evidence["output_digest"]), 64)
+            self.assertIn("launch_failed", evidence)
+            self.assertIn("cleanup_incomplete", evidence)
+            for stream in ("stdout", "stderr"):
+                path = fixture.repo / evidence["diagnostics"][stream]
+                self.assertTrue(path.is_file())
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+        repo = fixture.repo.resolve()
+        self.assertTrue(calls["validation_homes"])
+        self.assertFalse(any(calls["validation_homes_in_git"]))
+        self.assertEqual(calls["validation_home_modes"], [0o700, 0o700])
+        self.assertEqual(calls["validation_java25_homes"], [str(fixture.root.resolve())] * 2)
+        for raw_home, options in zip(calls["validation_homes"], calls["validation_java_options"], strict=True):
+            self.assertIn(f"-Duser.home={raw_home}", options["gradle"])
+            self.assertIn(f"-Duser.home={raw_home}", options["java"])
+        for raw_home in calls["validation_homes"]:
+            with self.assertRaises(ValueError):
+                Path(raw_home).resolve().relative_to(repo)
+
+    def test_replayed_validation_keeps_unique_private_evidence(self) -> None:
+        fixture = self.fresh("accept")
+        first = fixture.dispatch()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        state = fixture.state()
+        first_evidence = state["validations"][0]
+        first_stdout = fixture.repo / first_evidence["diagnostics"]["stdout"]
+        retained = first_stdout.read_bytes()
+
+        state["phase"] = "review_complete"
+        fixture.state_path().write_text(json.dumps(state))
+        replayed = fixture.dispatch()
+        self.assertEqual(replayed.returncode, 0, replayed.stderr)
+
+        state = fixture.state()
+        self.assertEqual([item["id"] for item in state["validations"]], ["validation-1-1", "validation-1-2"])
+        self.assertNotEqual(
+            state["validations"][0]["diagnostics"]["stdout"],
+            state["validations"][1]["diagnostics"]["stdout"],
+        )
+        self.assertEqual(first_stdout.read_bytes(), retained)
+        self.assertEqual((fixture.calls()["worker_calls"], fixture.calls()["reviewer_calls"]), (1, 1))
+
+    def test_validation_infrastructure_failures_retain_private_evidence(self) -> None:
+        cases = [
+            ("validation_launch_error", (), "validation launch failed", "launch_failed"),
+            ("validation_timeout", ("--timeout-seconds", "0.1"), "validation timed out", "timed_out"),
+            (
+                "validation_output_exhaust",
+                ("--max-output-bytes", "1024"),
+                "validation output limit exhausted",
+                "output_exhausted",
+            ),
+        ]
+        for mode, options, message, flag in cases:
+            with self.subTest(mode=mode):
+                fixture = self.fresh(mode)
+                self.assert_failed(fixture.dispatch(*options), message)
+                state = fixture.state()
+                self.assertEqual((state["phase"], state["attempt"]), ("failed", 1))
+                self.assertEqual(len(state["validations"]), 1)
+                evidence = state["validations"][0]
+                self.assertEqual(evidence["id"], "validation-1-1")
+                self.assertTrue(evidence[flag])
+                if flag == "launch_failed":
+                    self.assertEqual(evidence["code"], 127)
+                for stream in ("stdout", "stderr"):
+                    path = fixture.repo / evidence["diagnostics"][stream]
+                    self.assertTrue(path.is_file())
+                    self.assertLessEqual(path.stat().st_size, autopilot.MAX_DIAGNOSTIC_BYTES)
+                self.assertEqual((fixture.calls()["worker_calls"], fixture.calls()["reviewer_calls"]), (1, 1))
+
+    def test_validation_rejects_repository_local_temporary_root(self) -> None:
+        fixture = self.fresh("accept")
+        result = fixture.dispatch(environment={"TMPDIR": str(fixture.repo)})
+        self.assert_failed(result, "validation scratch parent is inside the repository")
+        state = fixture.state()
+        self.assertEqual((state["phase"], state["validations"]), ("failed", []))
+        self.assertNotIn("validator_calls", fixture.calls())
 
     def test_resume_replays_persisted_review_and_validation_outcomes(self) -> None:
         rejected = self.fresh("accept")

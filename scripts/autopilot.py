@@ -35,6 +35,8 @@ MAX_FILES = 200
 MAX_FILE_BYTES = 16 * 1024 * 1024
 MAX_CANDIDATE_BYTES = 64 * 1024 * 1024
 MAX_DIAGNOSTIC_BYTES = 2 * 1024 * 1024
+MAX_VALIDATION_STAGES = 32
+MAX_VALIDATION_FAILURE_IDENTIFIERS = 16
 TERMINAL_PHASES = {"failed", "integrated"}
 PROTECTED_FILES = {
     ".gitignore",
@@ -163,6 +165,7 @@ def clean_environment(*, auth: bool, temporary_home: Path | None = None) -> dict
                 "GRADLE_USER_HOME",
                 "JAVA_HOME",
                 "MINI_ORCA_JBR25_HOME",
+                "MINI_ORCA_JAVA25_HOME",
                 "MINI_ORCA_JDK21_HOME",
             }
         )
@@ -184,15 +187,18 @@ def clean_environment(*, auth: bool, temporary_home: Path | None = None) -> dict
         scratch = str(temporary_home.resolve())
         if "GRADLE_USER_HOME" not in environment and os.environ.get("HOME"):
             environment["GRADLE_USER_HOME"] = str(Path(os.environ["HOME"]) / ".gradle")
-        for key in ("GOCACHE", "GOMODCACHE", "GOPATH", "GRADLE_USER_HOME", "JAVA_HOME", "MINI_ORCA_JDK21_HOME", "MINI_ORCA_JBR25_HOME"):
+        for key in (
+            "GOCACHE", "GOMODCACHE", "GOPATH", "GRADLE_USER_HOME", "JAVA_HOME",
+            "MINI_ORCA_JDK21_HOME", "MINI_ORCA_JBR25_HOME", "MINI_ORCA_JAVA25_HOME",
+        ):
             if key in environment:
                 environment[key] = str(Path(environment[key]).resolve())
         environment["PATH"] = os.pathsep.join(str(Path(item).resolve()) for item in environment["PATH"].split(os.pathsep) if item)
         environment.update({
             "HOME": scratch,
             "TMPDIR": scratch,
-            "GRADLE_OPTS": f"-Dorg.gradle.daemon=false -Djava.io.tmpdir={scratch}",
-            "JAVA_TOOL_OPTIONS": f"-Djava.io.tmpdir={scratch}",
+            "GRADLE_OPTS": f"-Dorg.gradle.daemon=false -Djava.io.tmpdir={scratch} -Duser.home={scratch}",
+            "JAVA_TOOL_OPTIONS": f"-Djava.io.tmpdir={scratch} -Duser.home={scratch}",
             "MINI_ORCA_AUTOPILOT_VALIDATION": "1",
         })
         if environment.get("GOMODCACHE"):
@@ -739,6 +745,7 @@ class Dispatcher:
             "candidate": None,
             "reviewer": None,
             "validator": None,
+            "validations": [],
             "integration": {"authorized": False, "commit": None},
             "created_at": now(),
         }
@@ -760,21 +767,27 @@ class Dispatcher:
         os.chmod(path, 0o700)
         return path
 
+    def retain_diagnostics(self, prefix: str, result: ProcessResult) -> dict[str, Any]:
+        diagnostics = self.private_directory("diagnostics")
+        retained: dict[str, Any] = {}
+        for name, content in (("stdout", result.stdout), ("stderr", result.stderr)):
+            path = diagnostics / f"{prefix}.{name}"
+            if path.is_symlink():
+                raise DispatchError("private diagnostics path must not contain symlinks")
+            bounded = content[:MAX_DIAGNOSTIC_BYTES]
+            atomic_bytes(path, bounded)
+            os.chmod(path, 0o600)
+            retained[name] = str(path.relative_to(self.repo))
+            retained[f"{name}_digest"] = hashlib.sha256(bounded).hexdigest()
+            retained[f"{name}_bytes"] = len(bounded)
+        return retained
+
     def record_invocation_failure(
         self, role: str, invocation_id: str, model: str, stage: str, result: ProcessResult, *, retryable: bool
     ) -> None:
         """Persist bounded private evidence without copying CLI prose into state."""
         assert self.state is not None
-        diagnostics = self.private_directory("diagnostics")
         prefix = f"{self.state['task']}-{invocation_id}"
-        stdout_path = diagnostics / f"{prefix}.stdout"
-        stderr_path = diagnostics / f"{prefix}.stderr"
-        for path, content in ((stdout_path, result.stdout), (stderr_path, result.stderr)):
-            if path.is_symlink():
-                raise DispatchError("private diagnostics path must not contain symlinks")
-            retained = content[:MAX_DIAGNOSTIC_BYTES]
-            atomic_bytes(path, retained)
-            os.chmod(path, 0o600)
         signal_number = -result.code if result.code < 0 else None
         self.state["failure"] = {
             "role": role,
@@ -787,14 +800,7 @@ class Dispatcher:
             "timed_out": result.timed_out,
             "output_exhausted": result.output_exhausted,
             "cleanup_incomplete": result.cleanup_incomplete,
-            "diagnostics": {
-                "stdout": str(stdout_path.relative_to(self.repo)),
-                "stderr": str(stderr_path.relative_to(self.repo)),
-                "stdout_digest": hashlib.sha256(result.stdout[:MAX_DIAGNOSTIC_BYTES]).hexdigest(),
-                "stderr_digest": hashlib.sha256(result.stderr[:MAX_DIAGNOSTIC_BYTES]).hexdigest(),
-                "stdout_bytes": min(len(result.stdout), MAX_DIAGNOSTIC_BYTES),
-                "stderr_bytes": min(len(result.stderr), MAX_DIAGNOSTIC_BYTES),
-            },
+            "diagnostics": self.retain_diagnostics(prefix, result),
             "recorded_at": now(),
         }
         self.state["failures"].append(self.state["failure"])
@@ -1280,8 +1286,23 @@ class Dispatcher:
         base_control = git_bytes(worktree, "show", f"{self.state['base']}:{VALIDATOR}")
         if control.is_symlink() or not control.is_file() or control.read_bytes() != base_control:
             raise DispatchError("fixed validation control differs from the captured base")
-        with tempfile.TemporaryDirectory(prefix="validation-", dir=self.state_root) as directory:
+        validations = self.state.setdefault("validations", [])
+        if not isinstance(validations, list):
+            raise DispatchError("validation history is invalid")
+        validation_id = f"validation-{self.state['attempt']}-{len(validations) + 1}"
+        scratch_parent = Path(tempfile.gettempdir()).resolve()
+        try:
+            scratch_parent.relative_to(self.repo)
+        except ValueError:
+            pass
+        else:
+            raise DispatchError("validation scratch parent is inside the repository")
+        scratch_git = git_bytes(scratch_parent, "rev-parse", "--is-inside-work-tree", check=False)
+        if scratch_git.strip() == b"true":
+            raise DispatchError("validation scratch parent is inside a Git worktree")
+        with tempfile.TemporaryDirectory(prefix="mini-orca-validation-", dir=scratch_parent) as directory:
             home = Path(directory)
+            os.chmod(home, 0o700)
             environment = clean_environment(auth=False, temporary_home=home)
             result = bounded_process(
                 self.validation_command(worktree, home, ["make", f"TMPDIR={home.resolve()}", "check"], environment),
@@ -1291,6 +1312,67 @@ class Dispatcher:
                 self.args.max_output_bytes,
                 started=self.lease.update if self.lease else None,
             )
+            diagnostics = self.retain_diagnostics(f"{self.state['task']}-{validation_id}", result)
+        stages = []
+        seen_stages = set()
+        failed_checks = []
+        seen_failed_checks = set()
+
+        def add_failed_check(kind: str, identifier: str) -> None:
+            identity = (kind, identifier)
+            if identity in seen_failed_checks or len(failed_checks) >= MAX_VALIDATION_FAILURE_IDENTIFIERS:
+                return
+            seen_failed_checks.add(identity)
+            failed_checks.append({"kind": kind, "id": identifier})
+
+        output = (result.stdout + b"\n" + result.stderr).decode(errors="replace")
+        for line in output.splitlines():
+            match = re.fullmatch(r"(PASS|FAIL) ([A-Za-z0-9][A-Za-z0-9_.:/+-]{0,127})", line.strip())
+            if match and match.group(2) not in seen_stages and len(stages) < MAX_VALIDATION_STAGES:
+                seen_stages.add(match.group(2))
+                stages.append({"name": match.group(2), "outcome": match.group(1).lower()})
+                if match.group(1) == "FAIL":
+                    add_failed_check("stage", match.group(2))
+            test_match = re.fullmatch(r"--- FAIL: ([A-Za-z0-9][A-Za-z0-9_./-]{0,127}) \([^)]{1,32}\)", line.strip())
+            if test_match:
+                add_failed_check("test", test_match.group(1))
+            unittest_match = re.fullmatch(
+                r"(?:FAIL|ERROR): ([A-Za-z0-9][A-Za-z0-9_./-]{0,127}) \([A-Za-z0-9_.]{1,256}\)",
+                line.strip(),
+            )
+            if unittest_match:
+                add_failed_check("test", unittest_match.group(1))
+            gradle_test_match = re.fullmatch(
+                r"([A-Za-z_$][A-Za-z0-9_$]{0,62}) > ([A-Za-z_$][A-Za-z0-9_$]{0,62})\(\) FAILED",
+                line.strip(),
+            )
+            if gradle_test_match:
+                add_failed_check("test", f"{gradle_test_match.group(1)}.{gradle_test_match.group(2)}")
+        evidence = {
+            "id": validation_id,
+            "attempt": self.state["attempt"],
+            "command": "make check",
+            "code": result.code,
+            "diff": reviewed["diff"],
+            "output_digest": hashlib.sha256(result.stdout + result.stderr).hexdigest(),
+            "diagnostics": diagnostics,
+            "stages": stages,
+            "failed_checks": failed_checks,
+            "launch_failed": result.launch_error is not None,
+            "cleanup_incomplete": result.cleanup_incomplete,
+            "timed_out": result.timed_out,
+            "output_exhausted": result.output_exhausted,
+            "finished_at": now(),
+        }
+        if any(item.get("id") == validation_id for item in validations):
+            raise DispatchError("validation attempt identity was already recorded")
+        validations.append(evidence)
+        self.state["validator"] = evidence
+        self.save()
+        if result.launch_error:
+            raise DispatchError("validation launch failed")
+        if result.cleanup_incomplete:
+            raise DispatchError("validation process cleanup was incomplete")
         if result.timed_out:
             raise DispatchError("validation timed out")
         if result.output_exhausted:
@@ -1299,19 +1381,21 @@ class Dispatcher:
         after = self.candidate(worktree)
         if after != reviewed:
             raise DispatchError("validator changed the reviewed candidate")
-        stages = []
-        for line in result.stdout.decode(errors="replace").splitlines():
-            match = re.fullmatch(r"(PASS|FAIL) (.+)", line.strip())
-            if match:
-                stages.append({"name": match.group(2), "outcome": match.group(1).lower()})
-        return {
-            "command": "make check",
-            "code": result.code,
-            "diff": after["diff"],
-            "output_digest": hashlib.sha256(result.stdout + result.stderr).hexdigest(),
-            "stages": stages,
-            "finished_at": now(),
-        }
+        evidence["diff"] = after["diff"]
+        return evidence
+
+    @staticmethod
+    def validation_findings(evidence: dict[str, Any]) -> list[dict[str, str]]:
+        failed = evidence.get("failed_checks", [])[:MAX_VALIDATION_FAILURE_IDENTIFIERS]
+        if not failed:
+            return [{"code": "VALIDATION_FAILED", "message": "The fixed repository validation gate failed."}]
+        return [
+            {
+                "code": f"VALIDATION_{item['kind'].upper()}_FAILED",
+                "message": f"Failed validation {item['kind']}: {item['id']}.",
+            }
+            for item in failed
+        ]
 
     def validation_command(
         self, worktree: Path, temporary: Path, command: Sequence[str], environment: dict[str, str]
@@ -1331,7 +1415,7 @@ class Dispatcher:
                 readable.add(sdkman_java.resolve())
         for key in (
             "GOCACHE", "GOMODCACHE", "GOPATH", "GRADLE_USER_HOME", "JAVA_HOME",
-            "MINI_ORCA_JDK21_HOME", "MINI_ORCA_JBR25_HOME",
+            "MINI_ORCA_JDK21_HOME", "MINI_ORCA_JBR25_HOME", "MINI_ORCA_JAVA25_HOME",
         ):
             if environment.get(key):
                 readable.add(Path(environment[key]).resolve())
@@ -1565,7 +1649,7 @@ class Dispatcher:
                             self.bind_retry_snapshot(worktree, "validation failed")
                             self.retry_or_fail(
                                 "validation failed",
-                                [{"code": "VALIDATION_FAILED", "message": "The fixed repository validation gate failed."}],
+                                self.validation_findings(evidence),
                             )
                             continue
                         self.save("awaiting_integration")
