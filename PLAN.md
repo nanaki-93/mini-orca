@@ -260,7 +260,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Running |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Blocked |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1754,6 +1754,31 @@ candidate and protocol are recorded in QUAL-05; all earlier outcomes remain inta
   base are documentation-only, and resume the existing scheduled QUAL-06 phase.
   The scheduler stays Paused during this manual pilot; QUAL-06 is a subsequent
   task, never part of these six development requests.
+
+- **v11 pilot verdict — 2026-09-09: Blocked.** Both unchanged batches completed
+  at clean base `7bcea884d64fbadfc4fc58cce5a2d8afbe0225ab`; both preflights passed.
+  Fresh independent Terra scoring found locking **8/8, 0/8 official** and
+  allocation **6/8, 8/8**. The second locking response has an invalid JSON escape
+  in `suggestions[0].action`, so its parent summary cannot decode. Diagnostic
+  content scored 6/8 but is unusable and excluded from coverage. Both allocation
+  responses passed the nested insight schema boundary targeted by the repair.
+- Totals: **5/6 usable and complete, 3/4 useful substantive, 2/2 intentional
+  control omissions, zero critical false claims**. The all-six-complete and
+  all-four-useful gates fail; no candidate is promoted. All calls ended with
+  `stop`; no timeout, truncation, invalid provider metadata, retry, probe or tuning
+  occurred. This pilot consumed 9,402 completion tokens including reasoning.
+- Coordinator verified all six response/score digest joins and the malformed
+  JSON cause, stored scores, and passed both offline receipt validators. Private
+  response text was then discarded; source-free receipts/audits remain. Detailed
+  scores, latency and reproduction commands are in
+  [release acceptance](docs/RELEASE_ACCEPTANCE.md#v11-verification-result--2026-09-09).
+  Prior full headless `make check` and independent code review remain valid;
+  this verdict changes documentation only.
+- Campaign accounting is **24 development / 0 qualification**. Keep the existing
+  scheduler **Paused**, QUAL-06 Pending and REL-01 Blocked. No further grant,
+  prompt repair or provider request is authorized by this failed pilot. Any next
+  recovery must address reliable JSON delivery, preserve these failed results,
+  and receive separate bounded evaluation authorization.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 

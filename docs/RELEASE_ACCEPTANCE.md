@@ -319,6 +319,91 @@ go run ./cmd/engineering-insight-eval -mode grant-development -root . \
   -prompt-version file-analysis-v11
 ```
 
+### v11 verification result — 2026-09-09
+
+**QUAL-05 remains Blocked; the scheduler remains Paused.** Both batches completed
+at clean pilot base `7bcea884d64fbadfc4fc58cce5a2d8afbe0225ab`, with the manifest
+above verified before each batch. Candidate `qwen38-v11-schema-1`, provider
+`configured-bug`, prompt `file-analysis-v11`, and corpus `engineering-insight-v1`
+remained fixed. Corpus SHA-256 was
+`e4e7c71e1721986417e59dfcc581e7f31c7eeac1829fd20f441bc3dfec35a6c7`.
+Both batches were collected before content scoring. No retry, probe, prompt or
+configuration change, model switch, or qualification call occurred.
+
+A fresh independent GPT-5.6 Terra agent scored all six whole emitted responses
+against the development fixtures/rubrics and checked final summaries for false
+claims. This was agent review, not human testing. Scores list correctness / local
+relevance / trade-off clarity / useful verification, each 0–2. Control scores
+represent successful omission, not retained insights.
+
+| Run / case | Dimension scores | Complete / insight status | Completion tokens / latency |
+| --- | --- | --- | --- |
+| `qual05-qwen38-v11-dev1` / lock-cancellation | 2 / 2 / 2 / 2 = **8/8** | Complete; eligible insight | 1,479 / 110,977ms |
+| `qual05-qwen38-v11-dev1` / slice-capacity | 2 / 1 / 2 / 1 = **6/8** | Complete; eligible insight | 2,850 / 207,803ms |
+| `qual05-qwen38-v11-dev1` / trivial-wrapper | 2 / 2 / 2 / 2 = 8/8 omission | Complete; intentional omission | 442 / 35,938ms |
+| `qual05-qwen38-v11-dev2` / lock-cancellation | 0 / 0 / 0 / 0 = **0/8 official** | Malformed parent; unusable | 1,754 / 126,515ms |
+| `qual05-qwen38-v11-dev2` / slice-capacity | 2 / 2 / 2 / 2 = **8/8** | Complete; eligible insight | 2,398 / 171,202ms |
+| `qual05-qwen38-v11-dev2` / trivial-wrapper | 2 / 2 / 2 / 2 = 8/8 omission | Complete; intentional omission | 479 / 34,870ms |
+
+The targeted nested insight error did not recur in either allocation response.
+The first allocation insight lacked one fixture-specific local detail and one
+measurement detail, earning 6/8. The second locking response instead contains an
+**invalid JSON escape in `suggestions[0].action`**. The strict final-content JSON
+decoder rejects the entire parent object before insight extraction. Coordinator
+inspection independently confirmed this parse failure. Its diagnostic content
+scored 2 / 1 / 1 / 2 = 6/8, but it was not delivered as a usable insight and gets
+zero official score/coverage; it is not retained. No parser rule was relaxed and
+no response was repaired or replayed. The independent scorer found **zero critical
+false claims across all six responses** and confirmed both intentional omissions.
+
+Official totals are **5/6 usable, 5/6 complete, 3/4 useful substantive, 2/2
+intentional omissions, zero critical claims**. The required six complete and four
+useful substantive attempts were not achieved. No qualification candidate or
+qualification HEAD was frozen. This small pilot supports improvement at the
+targeted schema boundary; it does not establish reliable overall JSON delivery.
+
+All six calls ended with `stop`, with zero transport timeouts, truncations or
+invalid provider metadata. Batch token totals were **4,771** and **4,631**, or
+**9,402 completion tokens including reasoning**. For the five usable completed
+summaries, latency median / nearest-rank p95 were **110,977 / 207,803ms**; per-batch
+successful values were 110,977 / 207,803ms and 103,036 / 171,202ms. The malformed
+attempt's measured 126,515ms is excluded from successful latency. The receipt
+validator groups this one non-success under its `timeout/censored` label; it was
+not a transport timeout. Including all six observed call durations, median / p95
+were 118,746 / 207,803ms (batch medians 110,977ms and 126,515ms).
+
+Coordinator checks matched all six score keys and SHA-256 response digests,
+stored both score maps, and passed both offline receipt validators. All original
+private response files were then discarded with the runner's `discard` mode.
+Source-free receipts and the scoring audit remain under the ignored evaluation
+root, in the two run receipt files and `qual05-qwen38-v11-scoring/`. The durable
+coordinator record is `.mini-orca/autopilot/coordinator/QUAL-05-v11-pilot.json`.
+Full headless `make check` and independent code review passed before collection,
+including 327 Desktop tests; the verdict changes only documentation, so those
+code gates were not rerun.
+
+The following offline validation is repeatable and makes no provider calls:
+
+```sh
+for run in qual05-qwen38-v11-dev1 qual05-qwen38-v11-dev2; do
+  go run ./cmd/engineering-insight-eval \
+    -receipt ".mini-orca/autopilot/engineering-insight-evaluation/${run}-receipt.json" \
+    -cases internal/app/testdata/engineering-insight-eval/cases.json \
+    -candidate-id qwen38-v11-schema-1 -provider configured-bug \
+    -model qwen/qwen3.8-27b -prompt-version file-analysis-v11 \
+    -corpus-id engineering-insight-v1 \
+    -base-revision 7bcea884d64fbadfc4fc58cce5a2d8afbe0225ab \
+    -max-requests 6 -max-output-tokens 4096 -attempt-timeout-seconds 300
+done
+```
+
+The exact historical collection commands are retained in the private coordinator
+record; do not replay either run or the grant command above. Campaign accounting
+is **24 development / 0 qualification**. All 24 conditional qualification slots
+remain unused; QUAL-06 stays Pending and REL-01 Blocked. The approved failure path
+keeps the schedule Paused with no further grant or prompt repair. A subsequent
+recovery must address JSON delivery and use a separately authorized finite pilot.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
