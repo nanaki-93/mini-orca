@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v7"
+	semanticAnalysisPromptVersion = "file-analysis-v8"
 	maxSemanticAnalysisBytes      = 64 * 1024
 )
 
@@ -27,7 +27,7 @@ const fileAnalysisInsightGuidance = "Trace what the selected code actually does 
 	"A delegated call alone does not prove that authorization, idempotency, or another safeguard is missing downstream; describe that behavior as unknown unless TARGET_SOURCE demonstrates it. " +
 	"Return engineering_insight only when all four fields can be grounded in TARGET_SOURCE: mechanism names an observable code relationship; why_it_matters_here cites exact local identifiers or control flow and states impact conditionally, with an if, when, or workload condition; tradeoff_or_failure_mode names a constraint of the proposed change; transferable_lesson gives a concrete test or measurement and expected observation. " +
 	"Otherwise omit it, especially for a trivial wrapper. " +
-	"For example, a lock held while waiting for cancellation can delay another caller if it needs that lock; releasing it needs an ownership check, so cancel one waiter while another acquires the lock. " +
+	"When TARGET_SOURCE shows the same mutex remains held across <-ctx.Done() with no intervening release, say that the mutex spans the cancellation wait and name both operations; do not reduce this to generic blocking. If that mutex is released before the wait, do not claim serialization or a lock-held wait; describe only observed behavior. Mention later state or ownership revalidation only when TARGET_SOURCE shows a later publication or ownership transition. For a Lock, Unlock, <-ctx.Done() sequence with no later state use, say the mutex is released before the wait and do not invent revalidation. Verify the held-lock pattern by canceling one waiter while another attempts that mutex, and expect the second to acquire it only after the first releases it. " +
 	"A known-length append loop may grow a result slice, but that matters only at representative input sizes; preallocation retains capacity, so compare allocations with -benchmem. " +
 	"Prefer one file-level insight and omit repeated per-risk or per-suggestion insights. "
 
