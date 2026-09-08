@@ -94,6 +94,82 @@ func TestEngineeringInsightPromptsRequireUsefulGroundedContentOrOmission(t *test
 	}
 }
 
+func TestSemanticPromptRequiresTypedInsightsAtEverySupportedLocation(t *testing.T) {
+	prompt, err := semanticPrompt("package fixture\nfunc Process() {}", project.Analysis{Name: "fixture", Type: "go"}, &project.ProjectIndex{}, project.IndexFile{Path: "fixture.go"}, project.ContextManifest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, requirement := range []string{
+		"the top level, each risks[] item, and each suggestions[] item",
+		"either omit engineering_insight or use null",
+		"exactly these four non-empty string fields and no other keys: mechanism, why_it_matters_here, tradeoff_or_failure_mode, and transferable_lesson",
+		"Never use a string, array, or partial object",
+		"Do not duplicate that lesson in risks or suggestions",
+	} {
+		if !strings.Contains(prompt, requirement) {
+			t.Fatalf("semantic prompt is missing nested insight contract %q", requirement)
+		}
+	}
+}
+
+func TestFileAnalysisNestedInsightSchemaPreservesParentAndCompleteness(t *testing.T) {
+	target := project.IndexFile{Path: "fixture.go", Language: "Go"}
+	source := "package fixture\nfunc Process() {}\n"
+	topLevel := `{"mechanism":"Process delegates one local operation.","why_it_matters_here":"The selected function calls the local operation once.","tradeoff_or_failure_mode":"Changing the call order can alter observable behavior.","transferable_lesson":"Exercise the call with a recording dependency and verify its order."}`
+	nested := `{"mechanism":"The suggestion changes one call site.","why_it_matters_here":"The proposed edit is scoped to Process.","tradeoff_or_failure_mode":"A different call can change the returned result.","transferable_lesson":"Run the focused behavior test after the edit."}`
+	response := func(location string, includeNested bool, value string) string {
+		base := `{"purpose":"Processes one item.","responsibilities":[],"dependencies":[],"side_effects":[],"symbol_explanations":{},"engineering_insight":` + topLevel
+		switch location {
+		case "risk":
+			if !includeNested {
+				return base + `,"risks":[{"severity":"low","summary":"A conditional concern."}],"suggestions":[]}`
+			}
+			return base + `,"risks":[{"severity":"low","summary":"A conditional concern.","engineering_insight":` + value + `}],"suggestions":[]}`
+		case "suggestion":
+			if !includeNested {
+				return base + `,"risks":[],"suggestions":[{"title":"Adjust call","summary":"Keep behavior explicit."}]}`
+			}
+			return base + `,"risks":[],"suggestions":[{"title":"Adjust call","summary":"Keep behavior explicit.","engineering_insight":` + value + `}]}`
+		}
+		return base + `,"risks":[],"suggestions":[]}`
+	}
+
+	for _, test := range []struct {
+		name, location, value    string
+		includeNested            bool
+		nestedRetained, complete bool
+		optional                 string
+	}{
+		{name: "risk string is rejected", location: "risk", includeNested: true, value: `"plain advice"`, optional: "rejected"},
+		{name: "suggestion string is rejected", location: "suggestion", includeNested: true, value: `"plain advice"`, optional: "rejected"},
+		{name: "risk object is retained", location: "risk", includeNested: true, value: nested, nestedRetained: true, complete: true, optional: "present"},
+		{name: "suggestion object is retained", location: "suggestion", includeNested: true, value: nested, nestedRetained: true, complete: true, optional: "present"},
+		{name: "risk null is complete", location: "risk", includeNested: true, value: `null`, complete: true, optional: "present"},
+		{name: "suggestion omission is complete", location: "suggestion", complete: true, optional: "present"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			content := response(test.location, test.includeNested, test.value)
+			parsed, err := parseSemanticAnalysis(content, target, source)
+			if err != nil || parsed.Purpose != "Processes one item." || parsed.EngineeringInsight == nil {
+				t.Fatalf("parent summary was not preserved: %+v, %v", parsed, err)
+			}
+			var actual *project.EngineeringInsight
+			if test.location == "risk" {
+				actual = parsed.Risks[0].EngineeringInsight
+			} else {
+				actual = parsed.Suggestions[0].EngineeringInsight
+			}
+			if (actual != nil) != test.nestedRetained {
+				t.Fatalf("nested insight retained=%t, want %t", actual != nil, test.nestedRetained)
+			}
+			optional, degraded := evaluationOptionalState(content, target, source, parsed)
+			if optional != test.optional || (!degraded) != test.complete {
+				t.Fatalf("optional=%q degraded=%t, want optional=%q complete=%t", optional, degraded, test.optional, test.complete)
+			}
+		})
+	}
+}
+
 func TestFileAnalysisInsightAllowsSourceBoundedUnlockBeforeWaitGuidance(t *testing.T) {
 	source := "package fixture\n\nimport (\n\t\"context\"\n\t\"sync\"\n)\n\ntype Gate struct { mu sync.Mutex }\n\nfunc (g *Gate) Wait(ctx context.Context) {\n\tg.mu.Lock()\n\tg.mu.Unlock()\n\t<-ctx.Done()\n}\n"
 	target := project.IndexFile{Path: "gate.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Gate.Wait", Signature: "func (g *Gate) Wait(ctx context.Context)", Confidence: "exact", AtomicTarget: true}}}
