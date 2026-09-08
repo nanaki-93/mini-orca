@@ -30,17 +30,28 @@ release limitations. No content-quality or measured-speed claim follows from sch
 
 ## Opt-in insight evaluation
 
-The deterministic fixture suite checks the schema, 1,000-rune limit, source anchors
-and omission behavior. It does not assess whether an explanation is useful. The
-representative cases live beside their owner at
+The deterministic fixture suite checks the schema, 1,000-rune limit, source anchors,
+offline isolated Go compilation and omission behavior. It does not assess whether an
+explanation is useful. The representative cases live beside their owner at
 `internal/app/testdata/engineering-insight-eval/cases.json`.
+
+That corpus has three development cases and twelve qualification cases. The
+qualification partition has eight substantive cases and four omission controls;
+development and qualification cases are deliberately separate. Every case records
+its stable name, intent, source anchor, reference mechanism, qualified uncertainty,
+examples of critical false claims, and 0–2 anchors for correctness, local relevance,
+trade-off clarity and useful verification. The controls are normal low-value code,
+not malformed model responses. Parser-malformation coverage is a separate
+deterministic test so an invalid optional section cannot be counted as a successful
+omission.
 
 For a real-provider sample, a user first selects the provider, model, prompt version,
 request cap and output-token cap, then runs no more than that many fixture cases through
 the normal explicit-confirmation flow. Do not include source text, endpoint URLs, keys,
-or raw provider replies in the receipt. A human scorer records 0–2 for correctness,
-local relevance, trade-off clarity and useful verification, plus any critical false
-claim. A retained example needs no critical false claim and at least 6/8.
+or raw provider replies in the receipt. An independent scorer compares actual private
+prose with the case rubric, records 0–2 for correctness, local relevance, trade-off
+clarity and useful verification, and records any critical false claim. A retained
+example needs no critical false claim and at least 6/8.
 
 Save a receipt such as this outside the repository:
 
@@ -54,7 +65,7 @@ Save a receipt such as this outside the repository:
   "max_output_tokens": 800,
   "samples": [
     {
-      "case_name": "allocation",
+      "case_name": "development-slice-capacity",
       "correctness": 2,
       "local_relevance": 2,
       "tradeoff_clarity": 1,

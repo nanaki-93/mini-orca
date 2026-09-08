@@ -250,7 +250,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Complete |
 | PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Complete |
 | AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Complete |
-| QUAL-01 | Realistic development/qualification corpus and rubric | LEARN-02 | S / medium | Pending |
+| QUAL-01 | Realistic development/qualification corpus and rubric | LEARN-02 | S / medium | Complete |
 | QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Pending |
 | QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Pending |
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Pending |
@@ -1020,7 +1020,7 @@ the full quality gate green. No inherited quality exception applies to final rel
 These cards turn the remaining REL-01 work into one sequential agent queue. Keep
 this ledger authoritative; do not create `docs/tasks.md` or per-task documents.
 The existing v6 prompt and optional-explanation isolation are the starting point,
-not tasks to reimplement. `QUAL-01` is ready; completed LEARN tasks stay complete.
+not tasks to reimplement. Follow the ledger dependencies; completed LEARN tasks stay complete.
 Use one Terra worker, a fresh reviewer and coordinator-run gates per task, following
 `tasks/README.md`. A worker does not approve its own result or change ledger status.
 
@@ -1091,6 +1091,15 @@ Use one Terra worker, a fresh reviewer and coordinator-run gates per task, follo
   answer leaks into production prompts.
 - **Verify:** `go test ./internal/app -run '^TestEngineeringInsightEvaluation' -count=1`;
   G. Verify each temporary fixture with `go test ./...` using no external modules.
+- **Evidence:** accepted after one repair and a fresh independent review. The
+  corpus contains 3 development and 12 qualification cases (8 substantive,
+  4 controls), each compiled in an offline temporary module. Controls require raw
+  insight absence; the synchronized idempotency reference includes consumed-on-error
+  semantics. Focused evaluation tests and coordinator-run G passed, including full
+  race tests after repair; earlier worker runs encountered unrelated temporary
+  directory cleanup flakes. `git diff --check` passed. No provider requests were
+  made; the 30-request qualification budget remains unused. The old opt-in collector
+  is not usable with this corpus until its scheduled QUAL-03 replacement.
 
 ### QUAL-02 — Enforce qualification metrics in the receipt validator
 
