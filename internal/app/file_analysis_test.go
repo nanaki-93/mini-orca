@@ -87,28 +87,28 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 	}
 }
 
-func TestCachedFileAnalysisMarksV8PromptResultsStale(t *testing.T) {
+func TestCachedFileAnalysisMarksV9PromptResultsStale(t *testing.T) {
 	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	prepared, err := service.prepareFileAnalysis("main.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v9" {
-		t.Fatalf("file analysis prompt version = %q, want file-analysis-v9", got)
+	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v10" {
+		t.Fatalf("file analysis prompt version = %q, want file-analysis-v10", got)
 	}
 	legacy := project.FileAnalysis{
 		SchemaVersion: "1", ProjectID: prepared.input.ProjectID, ProjectRevision: prepared.input.ProjectRevision,
 		Path: prepared.input.Path, ContentHash: prepared.input.ContentHash, Language: prepared.input.Language,
 		Status: project.AnalysisStatusFresh, Model: prepared.input.Model, ConfiguredModel: prepared.input.Model,
 		Profile: prepared.input.Profile, Scope: prepared.input.Scope, ProviderOrigin: prepared.input.ProviderOrigin,
-		ReasoningEffort: prepared.input.ReasoningEffort, PromptVersion: "file-analysis-v8", ContextPolicyVersion: prepared.input.ContextPolicyVersion,
+		ReasoningEffort: prepared.input.ReasoningEffort, PromptVersion: "file-analysis-v9", ContextPolicyVersion: prepared.input.ContextPolicyVersion,
 	}
 	if err := prepared.cache.Store(legacy); err != nil {
 		t.Fatal(err)
 	}
 	cached, err := service.CachedFileAnalysis("main.go")
 	if err != nil || cached.Status != project.AnalysisStatusStale {
-		t.Fatalf("v8 cache = %+v, %v; want stale", cached, err)
+		t.Fatalf("v9 cache = %+v, %v; want stale", cached, err)
 	}
 }
 

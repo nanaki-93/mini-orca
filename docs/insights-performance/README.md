@@ -91,7 +91,7 @@ Save a receipt such as this outside the repository:
   "candidate_id": "candidate-v1",
   "provider": "chosen-provider",
   "model": "chosen-model",
-  "prompt_version": "file-analysis-v7",
+  "prompt_version": "file-analysis-v10",
   "corpus_id": "engineering-insight-v1",
   "corpus_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "base_revision": "selected-base-revision",
@@ -146,7 +146,7 @@ go run ./cmd/engineering-insight-eval \
   -candidate-id candidate-v1 \
   -provider chosen-provider \
   -model chosen-model \
-  -prompt-version file-analysis-v7 \
+  -prompt-version file-analysis-v10 \
   -corpus-id engineering-insight-v1 \
   -base-revision selected-base-revision \
   -max-requests 24 \
@@ -163,7 +163,7 @@ go run ./cmd/engineering-insight-eval \
   -receipt /safe/local/development-receipt.json \
   -cases internal/app/testdata/engineering-insight-eval/cases.json \
   -config config.yaml -candidate-id candidate-v1 -provider configured-bug \
-  -prompt-version file-analysis-v7 -corpus-id engineering-insight-v1 \
+  -prompt-version file-analysis-v10 -corpus-id engineering-insight-v1 \
   -base-revision selected-base-revision
 ```
 
