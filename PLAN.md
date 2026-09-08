@@ -251,7 +251,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Complete |
 | AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Complete |
 | QUAL-01 | Realistic development/qualification corpus and rubric | LEARN-02 | S / medium | Complete |
-| QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Pending |
+| QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Complete |
 | QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Pending |
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Pending |
 | QUAL-05 | Six-request development pilot and candidate freeze | QUAL-04 | S / high | Pending |
@@ -1129,6 +1129,14 @@ Use one Terra worker, a fresh reviewer and coordinator-run gates per task, follo
   obsolete receipt tests/examples; historical recorded results remain historical.
 - **Verify:** `go test ./internal/app ./cmd/engineering-insight-eval -count=1`; G.
   All test data is deterministic; the validator makes no provider call.
+- **Evidence:** accepted after one repair and a fresh independent review. Strict
+  receipt decoding rejects duplicate/unknown/aliased/null fields and trailing JSON;
+  qualification binds digest-scored attempts to the external candidate, ordered
+  24-attempt schedule and fixed caps. Exact passing/failing threshold boundaries,
+  per-case intent stability, outcome/finish consistency and missing evidence are
+  covered. Coordinator G and `make quality` passed after repair, plus
+  `git diff --check`. No provider requests were made; all 30 authorized requests
+  remain available. Collection/development execution is still QUAL-03 work.
 
 ### QUAL-03 — Replace the ad hoc collector with a resumable bounded runner
 

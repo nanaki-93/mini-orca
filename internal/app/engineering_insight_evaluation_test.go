@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -134,33 +135,236 @@ func TestEngineeringInsightEvaluationMalformedOutputIsSeparateFromControls(t *te
 	}
 }
 
-func TestEngineeringInsightEvaluationReceiptRequiresASelectedBoundedSampleAndSafeRetention(t *testing.T) {
-	accepted := EngineeringInsightEvaluationReceipt{
-		Provider: "chosen-provider", Model: "chosen-model", PromptVersion: semanticAnalysisPromptVersion,
-		SampleCount: 1, MaxRequests: 1, MaxOutputTokens: 800,
-		Samples: []EngineeringInsightSampleScore{{CaseName: "development-slice-capacity", Correctness: 2, LocalRelevance: 2, TradeoffClarity: 1, UsefulVerification: 1, RetainExample: true}},
-	}
-	if err := ValidateEngineeringInsightEvaluationReceipt(accepted); err != nil {
-		t.Fatalf("accepted receipt = %v", err)
-	}
-	for name, mutate := range map[string]func(*EngineeringInsightEvaluationReceipt){
-		"missing provider":     func(receipt *EngineeringInsightEvaluationReceipt) { receipt.Provider = "" },
-		"unbounded sample":     func(receipt *EngineeringInsightEvaluationReceipt) { receipt.SampleCount = 2 },
-		"critical false claim": func(receipt *EngineeringInsightEvaluationReceipt) { receipt.Samples[0].CriticalFalseClaim = true },
-		"low retained score": func(receipt *EngineeringInsightEvaluationReceipt) {
-			receipt.Samples[0].Correctness = 1
-			receipt.Samples[0].LocalRelevance = 1
-		},
+func TestEngineeringInsightQualificationThresholdBoundaries(t *testing.T) {
+	expected := qualificationExpectation()
+	for name, mutate := range map[string]struct {
+		want  EngineeringInsightEvaluationOutcome
+		apply func(*EngineeringInsightEvaluationReceipt)
+	}{
+		"thresholds pass": {want: EngineeringInsightPassedOutcome},
+		"23 usable passes": {want: EngineeringInsightPassedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			degradeAttempt(&receipt.Attempts[0], false)
+		}},
+		"22 complete passes": {want: EngineeringInsightPassedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			degradeAttempt(&receipt.Attempts[0], true)
+			degradeAttempt(&receipt.Attempts[1], true)
+		}},
+		"13 useful passes": {want: EngineeringInsightPassedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			for index := 0; index < 3; index++ {
+				receipt.Attempts[index].Score.Correctness = 0
+				receipt.Attempts[index].Score.LocalRelevance = 1
+			}
+		}},
+		"optional degradation retains useful and omitted metrics": {want: EngineeringInsightPassedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0].CompleteSummary = false
+			receipt.Attempts[0].OptionalSectionDegraded = true
+			for index := range receipt.Attempts {
+				if receipt.Attempts[index].Intent == controlIntent {
+					receipt.Attempts[index].CompleteSummary = false
+					receipt.Attempts[index].OptionalSectionDegraded = true
+					return
+				}
+			}
+		}},
+		"22 usable fails": {want: EngineeringInsightFailedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			degradeAttempt(&receipt.Attempts[0], false)
+			degradeAttempt(&receipt.Attempts[1], false)
+		}},
+		"21 complete fails": {want: EngineeringInsightFailedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			degradeAttempt(&receipt.Attempts[0], true)
+			degradeAttempt(&receipt.Attempts[1], true)
+			degradeAttempt(&receipt.Attempts[2], true)
+		}},
+		"12 useful fails": {want: EngineeringInsightFailedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			for index := 0; index < 4; index++ {
+				receipt.Attempts[index].Score.Correctness = 0
+				receipt.Attempts[index].Score.LocalRelevance = 1
+			}
+		}},
+		"one bad control fails": {want: EngineeringInsightFailedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			for index := range receipt.Attempts {
+				if receipt.Attempts[index].Intent == controlIntent {
+					receipt.Attempts[index].OptionalInsight = "present"
+					return
+				}
+			}
+		}},
+		"critical claim always fails": {want: EngineeringInsightFailedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0].Score.CriticalFalseClaim = true
+		}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			receipt := accepted
-			receipt.Samples = append([]EngineeringInsightSampleScore(nil), accepted.Samples...)
-			mutate(&receipt)
-			if err := ValidateEngineeringInsightEvaluationReceipt(receipt); err == nil {
-				t.Fatal("invalid evaluation receipt was accepted")
+			receipt := qualificationReceipt()
+			if mutate.apply != nil {
+				mutate.apply(&receipt)
+			}
+			report, err := ValidateEngineeringInsightEvaluationReceipt(receipt, expected)
+			if err != nil {
+				t.Fatalf("validate receipt: %v", err)
+			}
+			if report.Outcome != mutate.want {
+				t.Fatalf("outcome = %s, want %s", report.Outcome, mutate.want)
+			}
+			if name == "thresholds pass" && (report.Latency.MedianMilliseconds != 12.5 || report.Latency.P95Milliseconds != 23) {
+				t.Fatalf("latency = %+v, want median 12.5 and p95 23", report.Latency)
 			}
 		})
 	}
+}
+
+func TestEngineeringInsightEvaluationRejectsCaseIntentChangedBetweenRepetitions(t *testing.T) {
+	expected := qualificationExpectation()
+	expected.Schedule[12].Intent = controlIntent
+	if _, err := ValidateEngineeringInsightEvaluationReceipt(qualificationReceipt(), expected); err == nil {
+		t.Fatal("schedule with a changed case intent was accepted")
+	}
+}
+
+func TestEngineeringInsightEvaluationSeparatesCollectionIncompleteAndInvalidEvidence(t *testing.T) {
+	expected := qualificationExpectation()
+	collection := qualificationReceipt()
+	collection.Mode = EngineeringInsightCollectionMode
+	collection.Attempts = collection.Attempts[:1]
+	collection.Consumption.Requests = 1
+	collection.Consumption.OutputTokens = collection.Attempts[0].OutputTokens
+	collection.Attempts[0].Score = nil
+	report, err := ValidateEngineeringInsightEvaluationReceipt(collection, expected)
+	if err != nil || report.Outcome != EngineeringInsightCollectionOutcome {
+		t.Fatalf("collection = %+v, %v", report, err)
+	}
+
+	incomplete := qualificationReceipt()
+	incomplete.Attempts = incomplete.Attempts[:23]
+	incomplete.Consumption.Requests = len(incomplete.Attempts)
+	incomplete.Consumption.OutputTokens -= 100
+	report, err = ValidateEngineeringInsightEvaluationReceipt(incomplete, expected)
+	if err != nil || report.Outcome != EngineeringInsightIncompleteOutcome {
+		t.Fatalf("incomplete = %+v, %v", report, err)
+	}
+
+	timeout := qualificationReceipt()
+	makeNonCompletedAttempt(&timeout.Attempts[0], "timeout", "timeout")
+	report, err = ValidateEngineeringInsightEvaluationReceipt(timeout, expected)
+	if err != nil || report.Outcome != EngineeringInsightPassedOutcome || report.Latency.SuccessfulCount != 23 || report.Latency.TimeoutOrCensoredAttempts != 1 {
+		t.Fatalf("timeout evidence = %+v, %v", report, err)
+	}
+
+	for name, mutate := range map[string]func(*EngineeringInsightEvaluationReceipt){
+		"unscored emitted qualification response": func(receipt *EngineeringInsightEvaluationReceipt) { receipt.Attempts[0].Score = nil },
+		"mixed candidate":                         func(receipt *EngineeringInsightEvaluationReceipt) { receipt.Attempts[0].CandidateID = "other" },
+		"duplicate attempt":                       func(receipt *EngineeringInsightEvaluationReceipt) { receipt.Attempts[1] = receipt.Attempts[0] },
+		"out of order attempt": func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0], receipt.Attempts[1] = receipt.Attempts[1], receipt.Attempts[0]
+		},
+		"selected cap mismatch": func(receipt *EngineeringInsightEvaluationReceipt) { receipt.MaxOutputTokens++ },
+		"over cap consumption":  func(receipt *EngineeringInsightEvaluationReceipt) { receipt.Consumption.Requests++ },
+		"elapsed time exceeds cap": func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0].ElapsedMilliseconds = 300001
+		},
+		"nonfinite latency": func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0].ElapsedMilliseconds = math.Inf(1)
+		},
+		"completed length finish": func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0].FinishReason = "length"
+		},
+		"truncated stop finish": func(receipt *EngineeringInsightEvaluationReceipt) {
+			makeNonCompletedAttempt(&receipt.Attempts[0], "truncated", "stop")
+		},
+		"timeout error finish": func(receipt *EngineeringInsightEvaluationReceipt) {
+			makeNonCompletedAttempt(&receipt.Attempts[0], "timeout", "error")
+		},
+		"canceled completed finish": func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0].FinishReason = "canceled"
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			receipt := qualificationReceipt()
+			mutate(&receipt)
+			if _, err := ValidateEngineeringInsightEvaluationReceipt(receipt, expected); err == nil {
+				t.Fatal("invalid evidence was accepted")
+			}
+		})
+	}
+}
+
+func TestDecodeEngineeringInsightEvaluationReceiptRejectsUnsafeJSON(t *testing.T) {
+	for name, data := range map[string]string{
+		"unknown field":   `{"unexpected":true}`,
+		"trailing JSON":   `{} {}`,
+		"duplicate field": `{"mode":"qualification","mode":"collection"}`,
+		"missing fields":  `{"mode":"qualification"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := DecodeEngineeringInsightEvaluationReceipt([]byte(data)); err == nil || strings.Contains(err.Error(), "unexpected") {
+				t.Fatal("unsafe JSON was accepted or exposed")
+			}
+		})
+	}
+}
+
+func TestDecodeEngineeringInsightEvaluationReceiptRejectsNullAndCaseAliasFields(t *testing.T) {
+	receipt, err := json.Marshal(qualificationReceipt())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{
+		"required scalar null": strings.Replace(string(receipt), `"provider":"provider"`, `"provider":null`, 1),
+		"case alias":           strings.Replace(string(receipt), `"critical_false_claim":false`, `"critical_false_claim":true,"CRITICAL_FALSE_CLAIM":false`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := DecodeEngineeringInsightEvaluationReceipt([]byte(data)); err == nil || strings.Contains(err.Error(), "CRITICAL") {
+				t.Fatal("unsafe field alias or null was accepted or exposed")
+			}
+		})
+	}
+}
+
+func qualificationExpectation() EngineeringInsightEvaluationExpectation {
+	schedule := make([]EngineeringInsightExpectedAttempt, 0, 24)
+	for repetition := 1; repetition <= 2; repetition++ {
+		for index := 0; index < 12; index++ {
+			intent := substantiveIntent
+			if index >= 8 {
+				intent = controlIntent
+			}
+			schedule = append(schedule, EngineeringInsightExpectedAttempt{CaseName: fmt.Sprintf("qualification-%02d", index), Partition: qualificationPartition, Intent: intent, Repetition: repetition, Attempt: 1})
+		}
+	}
+	return EngineeringInsightEvaluationExpectation{CandidateID: "candidate-v1", Provider: "provider", Model: "model", PromptVersion: "file-analysis-v6", CorpusID: "engineering-insight-v1", CorpusDigest: strings.Repeat("a", 64), BaseRevision: "base6a14c01", MaxRequests: 24, MaxOutputTokens: 4096, AttemptTimeoutSeconds: 300, Schedule: schedule}
+}
+
+func qualificationReceipt() EngineeringInsightEvaluationReceipt {
+	expected := qualificationExpectation()
+	receipt := EngineeringInsightEvaluationReceipt{Mode: EngineeringInsightQualificationMode, RunID: "run-1", CandidateID: expected.CandidateID, Provider: expected.Provider, Model: expected.Model, PromptVersion: expected.PromptVersion, CorpusID: expected.CorpusID, CorpusDigest: expected.CorpusDigest, BaseRevision: expected.BaseRevision, MaxRequests: expected.MaxRequests, MaxOutputTokens: expected.MaxOutputTokens, AttemptTimeoutSeconds: expected.AttemptTimeoutSeconds}
+	for index, scheduled := range expected.Schedule {
+		digest := fmt.Sprintf("%064x", index+1)
+		optional := "present"
+		if scheduled.Intent == controlIntent {
+			optional = "omitted"
+		}
+		receipt.Attempts = append(receipt.Attempts, EngineeringInsightEvaluationAttempt{CaseName: scheduled.CaseName, Partition: scheduled.Partition, Intent: scheduled.Intent, Repetition: scheduled.Repetition, Attempt: scheduled.Attempt, CandidateID: expected.CandidateID, Outcome: "completed", UsableSummary: true, CompleteSummary: true, OptionalInsight: optional, EmittedResponse: true, ResponseDigest: digest, OutputTokens: 100, FinishReason: "stop", ElapsedMilliseconds: float64(index + 1), Score: &EngineeringInsightAttemptScore{ResponseDigest: digest, Correctness: 2, LocalRelevance: 2, TradeoffClarity: 2, UsefulVerification: 2}})
+	}
+	receipt.Consumption = EngineeringInsightEvaluationConsumption{Requests: len(receipt.Attempts), OutputTokens: len(receipt.Attempts) * 100}
+	return receipt
+}
+
+func degradeAttempt(attempt *EngineeringInsightEvaluationAttempt, keepUsable bool) {
+	attempt.CompleteSummary = false
+	attempt.UsableSummary = keepUsable
+	if keepUsable {
+		attempt.OptionalInsight = "rejected"
+	} else {
+		attempt.OptionalInsight = "not_evaluated"
+	}
+}
+
+func makeNonCompletedAttempt(attempt *EngineeringInsightEvaluationAttempt, outcome, finishReason string) {
+	attempt.Outcome = outcome
+	attempt.FinishReason = finishReason
+	attempt.UsableSummary = false
+	attempt.CompleteSummary = false
+	attempt.OptionalInsight = "not_evaluated"
+	attempt.OptionalSectionDegraded = false
 }
 
 func assertFixturePartitionAndIntent(t *testing.T, fixture engineeringInsightFixture) {
