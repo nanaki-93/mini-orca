@@ -260,7 +260,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Blocked |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1629,8 +1629,8 @@ accounting and qualification pass criteria below still apply in full.
   six new local development requests for `qwen/qwen3.8-27b`, and the existing
   24-request qualification phase only after promotion. This supersedes the
   historical same-model restriction and the one-correction pilot procedure for
-  this recovery only. Earlier failures remain failures. The ledger is Pending
-  behind REC-03; requeueing does not promote the candidate or reset consumption.
+  this recovery only. Earlier failures remain failures. The task was requeued
+  Pending behind REC-03 without promoting the candidate or resetting consumption.
 - Coordinator applies the reviewed `qual05-qwen38-recovery-1` grant once to the
   existing campaign, checking 12 development / 0 qualification consumption first.
   Collect all three development cases twice at identical frozen settings using
@@ -1661,6 +1661,36 @@ accounting and qualification pass criteria below still apply in full.
   identities. Any behavior change invalidates promotion and stops qualification.
   This explicit documentation-only transition accommodates the CLI's clean-HEAD
   requirement without mislabeling the historical pilot revision.
+
+- **Recovery verdict — 2026-09-08 UTC:** **Blocked** after all six authorized
+  requests at pilot base `2e823825aa3c1ed9c272e179db247b781a15745c` and unchanged
+  `qwen38-v10-recovery-1` settings. Both pre-batch runtime checks passed. All six
+  requests completed normally and produced usable summaries, but only **4/6 were
+  complete**. Both allocation summaries supplied a string in
+  `suggestions[0].engineering_insight`, where a four-field object is required.
+  Their valid top-level insights survived; the nested rejection correctly marks
+  the attempt degraded and excludes it from official useful-insight coverage.
+- Fresh independent Terra scoring, digest-joined to every emitted response:
+  locking **7/8 and 7/8**; allocation top-level prose **8/8 and 7/8 diagnostically**,
+  with neither degraded attempt eligible for coverage; both controls intentionally
+  omitted insights; **zero critical false claims** across all six whole summaries.
+  Official useful substantive coverage is **2/4**, not 4/4. No candidate is promoted
+  and no qualification base is frozen. The concrete remaining failure is nested
+  insight schema adherence; another model switch is not established as necessary.
+- Final campaign consumption: **18 development / 0 qualification requests**.
+  This recovery used **6,421 completion tokens** including reasoning, without
+  retries or probes. The conditional 24 qualification requests remain untouched.
+  Both source-free receipts passed offline validation; focused app/CLI tests and
+  `git diff --check` passed. Private responses were discarded after scoring and
+  digest validation. A post-completion coordinator bookkeeping exception lost the
+  second collector's exit-code record; its finished durable manifest, exported
+  receipt and all three terminal attempts verified completion, with no replay.
+- The recovery automation is **Paused**. QUAL-06 remains Pending behind this
+  blocked dependency, and REL-01 remains Blocked. Per this recovery's stop rule,
+  no further grant, prompt repair, model switch or live request was made. Any next
+  recovery must separately authorize its schema repair and finite new pilot; the
+  current run cannot be reclassified after a repair. See `docs/RELEASE_ACCEPTANCE.md`
+  for exact identities, dimension scores, accounting and reproducible offline checks.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
