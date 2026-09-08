@@ -36,7 +36,7 @@ type ChatMessage struct {
 type ChatRequest struct {
 	Model           string        `json:"model"`
 	Messages        []ChatMessage `json:"messages"`
-	Temperature     float32       `json:"temperature,omitempty"`
+	Temperature     float32       `json:"temperature"`
 	MaxTokens       int           `json:"max_tokens,omitempty"`
 	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
 	Stream          bool          `json:"stream,omitempty"`
