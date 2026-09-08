@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
 )
@@ -26,6 +27,11 @@ type ModelProfile struct {
 	Model            string
 	ReasoningEffort  string
 	Temperature      float32
+	TopP             *float32
+	TopK             *int
+	MinP             *float32
+	PresencePenalty  *float32
+	RepeatPenalty    *float32
 	MaxTokens        int
 	ContextMaxTokens int
 }
@@ -59,7 +65,7 @@ func ResolveModelProfiles(cfg *Config) (ModelProfiles, error) {
 
 func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
 	if strings.TrimSpace(configured.APIBaseURL) == "" {
-		if configured.APIKey != "" || strings.TrimSpace(configured.Model) != "" || strings.TrimSpace(configured.ReasoningEffort) != "" || configured.Temperature != nil || configured.MaxTokens != nil || configured.ContextMaxTokens != nil {
+		if profileConfigHasValues(configured) {
 			return ModelProfile{}, missingFieldError(scope, "api_base_url")
 		}
 		return ModelProfile{}, missingScopeError(scope)
@@ -85,6 +91,11 @@ func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfi
 	if configured.Temperature != nil {
 		profile.Temperature = *configured.Temperature
 	}
+	profile.TopP = configured.TopP
+	profile.TopK = configured.TopK
+	profile.MinP = configured.MinP
+	profile.PresencePenalty = configured.PresencePenalty
+	profile.RepeatPenalty = configured.RepeatPenalty
 	if configured.MaxTokens != nil {
 		profile.MaxTokens = *configured.MaxTokens
 	}
@@ -95,6 +106,20 @@ func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfi
 		return ModelProfile{}, err
 	}
 	return profile, nil
+}
+
+func profileConfigHasValues(configured ModelProfileConfig) bool {
+	return configured.APIKey != "" ||
+		strings.TrimSpace(configured.Model) != "" ||
+		strings.TrimSpace(configured.ReasoningEffort) != "" ||
+		configured.Temperature != nil ||
+		configured.TopP != nil ||
+		configured.TopK != nil ||
+		configured.MinP != nil ||
+		configured.PresencePenalty != nil ||
+		configured.RepeatPenalty != nil ||
+		configured.MaxTokens != nil ||
+		configured.ContextMaxTokens != nil
 }
 
 func defaultContextBudget(scope ModelScope) int {
@@ -128,6 +153,21 @@ func validateProfileValues(scope ModelScope, profile ModelProfile) error {
 	if profile.Temperature < 0 || profile.Temperature > 2 {
 		return fmt.Errorf("model_scopes.%s.temperature must be between 0 and 2", scope)
 	}
+	if err := validateOptionalFloat(scope, "top_p", profile.TopP, 0, 1, true); err != nil {
+		return err
+	}
+	if profile.TopK != nil && *profile.TopK < 0 {
+		return fmt.Errorf("model_scopes.%s.top_k must be at least 0", scope)
+	}
+	if err := validateOptionalFloat(scope, "min_p", profile.MinP, 0, 1, true); err != nil {
+		return err
+	}
+	if err := validateOptionalFloat(scope, "presence_penalty", profile.PresencePenalty, -2, 2, true); err != nil {
+		return err
+	}
+	if err := validateOptionalFloat(scope, "repeat_penalty", profile.RepeatPenalty, 0, 2, false); err != nil {
+		return err
+	}
 	if profile.MaxTokens <= 0 || profile.MaxTokens > MaxModelOutputTokens {
 		return fmt.Errorf("model_scopes.%s.max_tokens must be between 1 and %d", scope, MaxModelOutputTokens)
 	}
@@ -136,6 +176,23 @@ func validateProfileValues(scope ModelScope, profile ModelProfile) error {
 	}
 	if !validReasoningEffort(profile.ReasoningEffort) {
 		return fmt.Errorf("model_scopes.%s.reasoning_effort must be one of none, minimal, low, medium, high, xhigh, or max", scope)
+	}
+	return nil
+}
+
+func validateOptionalFloat(scope ModelScope, field string, value *float32, minimum, maximum float32, includeMinimum bool) error {
+	if value == nil {
+		return nil
+	}
+	if math.IsNaN(float64(*value)) || math.IsInf(float64(*value), 0) || *value > maximum || (includeMinimum && *value < minimum) || (!includeMinimum && *value <= minimum) {
+		comparison := "between"
+		if !includeMinimum {
+			comparison = "greater than"
+		}
+		if comparison == "greater than" {
+			return fmt.Errorf("model_scopes.%s.%s must be greater than %v and at most %v", scope, field, minimum, maximum)
+		}
+		return fmt.Errorf("model_scopes.%s.%s must be between %v and %v", scope, field, minimum, maximum)
 	}
 	return nil
 }

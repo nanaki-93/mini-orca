@@ -43,6 +43,11 @@ type ModelProfileConfig struct {
 	Model            string   `yaml:"model"`
 	ReasoningEffort  string   `yaml:"reasoning_effort"`
 	Temperature      *float32 `yaml:"temperature"`
+	TopP             *float32 `yaml:"top_p"`
+	TopK             *int     `yaml:"top_k"`
+	MinP             *float32 `yaml:"min_p"`
+	PresencePenalty  *float32 `yaml:"presence_penalty"`
+	RepeatPenalty    *float32 `yaml:"repeat_penalty"`
 	MaxTokens        *int     `yaml:"max_tokens"`
 	ContextMaxTokens *int     `yaml:"context_max_tokens"`
 }
@@ -186,7 +191,7 @@ var configurationFields = fieldSet{
 
 var modelProfileFields = fieldSet{
 	"api_base_url": {}, "api_key": {}, "model": {}, "reasoning_effort": {},
-	"temperature": {}, "max_tokens": {}, "context_max_tokens": {},
+	"temperature": {}, "top_p": {}, "top_k": {}, "min_p": {}, "presence_penalty": {}, "repeat_penalty": {}, "max_tokens": {}, "context_max_tokens": {},
 }
 
 type fieldSet map[string]fieldSet

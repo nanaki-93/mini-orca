@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
 func TestChatRejectsMalformedNonSuccessAndOversizedProviderResponses(t *testing.T) {
@@ -158,7 +160,7 @@ func TestClientPreservesConfiguredCompatibilityPrefixAndRequestContract(t *testi
 				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 					t.Fatalf("decode request: %v", err)
 				}
-				if request.Model != "compatible-model" || request.Temperature != 0.2 || request.MaxTokens != 1234 || request.ReasoningEffort != "" || len(request.Messages) != 1 {
+				if request.Model != "compatible-model" || request.Temperature != 0.2 || request.MaxTokens != 1234 || request.ReasoningEffort != "" || request.TopP != nil || request.TopK != nil || request.MinP != nil || request.PresencePenalty != nil || request.RepeatPenalty != nil || len(request.Messages) != 1 {
 					t.Fatalf("request = %+v", request)
 				}
 				_ = json.NewEncoder(w).Encode(ChatResponse{Model: "compatible-model", Choices: []ChatChoice{{Message: ChatMessage{Role: "assistant", Content: "ok"}}}})
@@ -234,6 +236,71 @@ func TestClientForwardsConfiguredReasoningEffort(t *testing.T) {
 	profile.Model, profile.ReasoningEffort = "reasoning-model", "high"
 	if _, err := NewClient(profile).Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}); err != nil {
 		t.Fatalf("Chat() error = %v", err)
+	}
+}
+
+func TestClientForwardsOptionalSamplingControlsIncludingZero(t *testing.T) {
+	profile := testProfile("https://provider.example/v1", "")
+	topP, minP, presencePenalty, repeatPenalty := float32(0.95), float32(0), float32(0), float32(1)
+	topK := 20
+	profile.TopP = &topP
+	profile.TopK = &topK
+	profile.MinP = &minP
+	profile.PresencePenalty = &presencePenalty
+	profile.RepeatPenalty = &repeatPenalty
+	client := NewClient(profile)
+	client.transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		var payload map[string]json.RawMessage
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		for field, want := range map[string]string{"top_p": "0.95", "top_k": "20", "min_p": "0", "presence_penalty": "0", "repeat_penalty": "1"} {
+			if got := string(payload[field]); got != want {
+				t.Fatalf("%s = %s, want %s", field, got, want)
+			}
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"model":"fixture","choices":[{"message":{"role":"assistant","content":"ok"}}]}`)), Request: request}, nil
+	})
+	if _, err := client.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}); err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+}
+
+func TestEvaluationClientRetainsReasoningOnlyResponseWithoutNormalLogDisclosure(t *testing.T) {
+	var output bytes.Buffer
+	logging.Init(logging.Config{Level: "info", Format: "json", Output: &output})
+	t.Cleanup(func() { logging.Init(logging.Config{Level: "info", Format: "json"}) })
+
+	const reasoning = "private reasoning_content must stay out of ordinary logs"
+	const alternateReasoning = "private reasoning must stay out of ordinary logs"
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(writer).Encode(ChatResponse{Model: "fixture", Choices: []ChatChoice{{Message: ChatMessage{Role: "assistant", Content: "final", ReasoningContent: reasoning, Reasoning: alternateReasoning}, FinishReason: "stop"}}, Usage: ChatUsage{TotalTokens: 7}})
+	}))
+	defer server.Close()
+
+	ordinary, err := NewClient(testProfile(server.URL, "")).Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}})
+	if err != nil {
+		t.Fatalf("ordinary Chat() error = %v", err)
+	}
+	if ordinary.Choices[0].Message.ReasoningContent != reasoning || ordinary.Choices[0].Message.Reasoning != alternateReasoning {
+		t.Fatalf("ordinary Chat() did not retain separate reasoning fields: %+v", ordinary.Choices[0].Message)
+	}
+	if strings.Contains(output.String(), reasoning) || strings.Contains(output.String(), alternateReasoning) {
+		t.Fatalf("ordinary completion log exposed reasoning: %s", output.String())
+	}
+
+	server.Config.Handler = http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(writer).Encode(ChatResponse{Model: "fixture", Choices: []ChatChoice{{Message: ChatMessage{Role: "assistant", ReasoningContent: reasoning}, FinishReason: "length"}}, Usage: ChatUsage{CompletionTokens: 19, TotalTokens: 23}})
+	})
+	if _, err := NewClient(testProfile(server.URL, "")).Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}); !errors.Is(err, ErrUnusableResponse) {
+		t.Fatalf("ordinary empty final error = %v", err)
+	}
+	response, err := NewEvaluationClient(testProfile(server.URL, "")).Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}})
+	if err != nil || response.Choices[0].Message.ReasoningContent != reasoning || response.Usage.CompletionTokens != 19 || response.Choices[0].FinishReason != "length" {
+		t.Fatalf("evaluation response = %+v, error = %v", response, err)
+	}
+	if strings.Contains(output.String(), reasoning) {
+		t.Fatalf("evaluation response exposed reasoning in ordinary logs: %s", output.String())
 	}
 }
 

@@ -26,10 +26,16 @@ const (
 // can change the destination that receives source context and credentials.
 var ErrRedirectRejected = errors.New("provider redirect rejected")
 
+// ErrUnusableResponse reports a provider response that an ordinary application
+// caller cannot use as final assistant output.
+var ErrUnusableResponse = errors.New("provider response is unusable")
+
 // ChatMessage represents a single message in a chat conversation.
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role             string `json:"role"`
+	Content          string `json:"content"`
+	ReasoningContent string `json:"reasoning_content,omitempty"`
+	Reasoning        string `json:"reasoning,omitempty"`
 }
 
 // ChatRequest is the OpenAI-compatible chat-completions request payload.
@@ -39,6 +45,11 @@ type ChatRequest struct {
 	Temperature     float32       `json:"temperature"`
 	MaxTokens       int           `json:"max_tokens,omitempty"`
 	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
+	TopP            *float32      `json:"top_p,omitempty"`
+	TopK            *int          `json:"top_k,omitempty"`
+	MinP            *float32      `json:"min_p,omitempty"`
+	PresencePenalty *float32      `json:"presence_penalty,omitempty"`
+	RepeatPenalty   *float32      `json:"repeat_penalty,omitempty"`
 	Stream          bool          `json:"stream,omitempty"`
 }
 
@@ -71,6 +82,7 @@ type Client struct {
 	profile               config.ModelProfile
 	transport             http.RoundTripper
 	suppressCompletionLog bool
+	allowEmptyFinal       bool
 }
 
 // NewEvaluationClient creates a client for private evaluation work.  Provider
@@ -79,6 +91,7 @@ type Client struct {
 func NewEvaluationClient(profile config.ModelProfile) *Client {
 	client := NewClient(profile)
 	client.suppressCompletionLog = true
+	client.allowEmptyFinal = true
 	return client
 }
 
@@ -102,6 +115,11 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatRespons
 		Temperature:     c.profile.Temperature,
 		MaxTokens:       c.profile.MaxTokens,
 		ReasoningEffort: c.profile.ReasoningEffort,
+		TopP:            c.profile.TopP,
+		TopK:            c.profile.TopK,
+		MinP:            c.profile.MinP,
+		PresencePenalty: c.profile.PresencePenalty,
+		RepeatPenalty:   c.profile.RepeatPenalty,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("llm client: marshal chat request: %w", err)
@@ -121,8 +139,11 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatRespons
 	if err := json.Unmarshal(responseBody, &response); err != nil {
 		return nil, fmt.Errorf("llm client: decode chat response: %w", err)
 	}
-	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
-		return nil, fmt.Errorf("llm client: chat response has no content")
+	if len(response.Choices) == 0 {
+		return nil, fmt.Errorf("llm client: %w: chat response has no content", ErrUnusableResponse)
+	}
+	if strings.TrimSpace(response.Choices[0].Message.Content) == "" && !c.allowEmptyFinal {
+		return nil, fmt.Errorf("llm client: %w: chat response has no final content", ErrUnusableResponse)
 	}
 	if !c.suppressCompletionLog {
 		logging.Info("Chat completed", "model", response.Model, "tokens", response.Usage.TotalTokens)
