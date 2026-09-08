@@ -23,6 +23,9 @@ const (
 	EngineeringInsightDevelopmentRunMode   = "development"
 	EngineeringInsightQualificationRunMode = "qualification"
 	runnerRelativeDirectory                = ".mini-orca/autopilot/engineering-insight-evaluation"
+	defaultDevelopmentRequestCap           = 6
+	extendedDevelopmentRequestCap          = 12
+	developmentGrantRequestCount           = 6
 )
 
 var (
@@ -88,6 +91,61 @@ type engineeringInsightRunManifest struct {
 type engineeringInsightCampaign struct {
 	DevelopmentRequests   int `json:"development_requests"`
 	QualificationRequests int `json:"qualification_requests"`
+}
+
+type engineeringInsightDevelopmentGrantLedger struct {
+	Grants []engineeringInsightDevelopmentGrant `json:"grants"`
+}
+
+type engineeringInsightDevelopmentGrant struct {
+	AuthorizationID string `json:"authorization_id"`
+	Requests        int    `json:"requests"`
+}
+
+// GrantEngineeringInsightDevelopmentBudget records one explicit recovery grant.
+// The original campaign remains capped at six requests unless this append-only
+// authorization raises its development limit to twelve. It never affects the
+// independent qualification budget.
+func GrantEngineeringInsightDevelopmentBudget(root, authorizationID string, requests int) error {
+	if strings.TrimSpace(root) == "" || !validRunnerID(authorizationID) || requests != developmentGrantRequestCount {
+		return fmt.Errorf("development budget grant is invalid")
+	}
+	directory := filepath.Join(root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		return fmt.Errorf("create evaluation storage")
+	}
+	lock, err := lockRunnerFile(filepath.Join(directory, "campaign.lock"))
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := ensureEvaluationCampaign(directory); err != nil {
+		return err
+	}
+	ledger, _, err := loadDevelopmentGrantLedger(directory)
+	if err != nil {
+		return err
+	}
+	for _, grant := range ledger.Grants {
+		if grant.AuthorizationID == authorizationID {
+			return fmt.Errorf("development budget grant already exists")
+		}
+	}
+	if len(ledger.Grants) != 0 {
+		return fmt.Errorf("development request budget extension is exhausted")
+	}
+	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
+	if err != nil {
+		return fmt.Errorf("read evaluation campaign")
+	}
+	if campaign.DevelopmentRequests != defaultDevelopmentRequestCap {
+		return fmt.Errorf("development base budget is not exhausted")
+	}
+	ledger.Grants = append(ledger.Grants, engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests})
+	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RunEngineeringInsightEvaluation executes the selected schedule sequentially.
@@ -393,7 +451,7 @@ func validDevelopmentRunnerSchedule(cases []EngineeringInsightRunnerCase, mode s
 
 func runnerReceipt(cfg EngineeringInsightRunnerConfig) EngineeringInsightEvaluationReceipt {
 	mode := EngineeringInsightCollectionMode
-	maxRequests := 6
+	maxRequests := defaultDevelopmentRequestCap
 	if cfg.Mode == EngineeringInsightQualificationRunMode {
 		mode, maxRequests = EngineeringInsightQualificationMode, qualificationRequestCap
 	}
@@ -425,7 +483,11 @@ func reserveRunnerAttempt(directory, mode string) error {
 		}
 		campaign.QualificationRequests++
 	} else {
-		if campaign.DevelopmentRequests >= 6 {
+		cap, err := developmentRequestCap(directory)
+		if err != nil {
+			return err
+		}
+		if campaign.DevelopmentRequests >= cap {
 			return fmt.Errorf("development request budget is exhausted")
 		}
 		campaign.DevelopmentRequests++
@@ -459,10 +521,65 @@ func loadEvaluationCampaign(path string) (engineeringInsightCampaign, error) {
 	var campaign engineeringInsightCampaign
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&campaign) != nil || campaign.DevelopmentRequests < 0 || campaign.DevelopmentRequests > 6 || campaign.QualificationRequests < 0 || campaign.QualificationRequests > qualificationRequestCap {
+	if decoder.Decode(&campaign) != nil || campaign.DevelopmentRequests < 0 || campaign.DevelopmentRequests > extendedDevelopmentRequestCap || campaign.QualificationRequests < 0 || campaign.QualificationRequests > qualificationRequestCap {
 		return engineeringInsightCampaign{}, fmt.Errorf("invalid campaign")
 	}
 	return campaign, nil
+}
+
+func developmentRequestCap(directory string) (int, error) {
+	ledger, _, err := loadDevelopmentGrantLedger(directory)
+	if err != nil {
+		return 0, err
+	}
+	cap := defaultDevelopmentRequestCap
+	for _, grant := range ledger.Grants {
+		cap += grant.Requests
+	}
+	if cap > extendedDevelopmentRequestCap {
+		return 0, fmt.Errorf("invalid development grant ledger")
+	}
+	return cap, nil
+}
+
+func developmentGrantLedgerPath(directory string) string {
+	return filepath.Join(directory, "development-grants.json")
+}
+
+func loadDevelopmentGrantLedger(directory string) (engineeringInsightDevelopmentGrantLedger, bool, error) {
+	path := developmentGrantLedgerPath(directory)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return engineeringInsightDevelopmentGrantLedger{}, false, nil
+	}
+	if err != nil || ValidateStrictJSONDocument(data) != nil {
+		return engineeringInsightDevelopmentGrantLedger{}, false, fmt.Errorf("invalid development grant ledger")
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) != nil || len(fields) != 1 || fields["grants"] == nil {
+		return engineeringInsightDevelopmentGrantLedger{}, false, fmt.Errorf("invalid development grant ledger")
+	}
+	var ledger engineeringInsightDevelopmentGrantLedger
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&ledger) != nil || requireJSONEOF(decoder) != nil || !validDevelopmentGrantLedger(ledger) {
+		return engineeringInsightDevelopmentGrantLedger{}, false, fmt.Errorf("invalid development grant ledger")
+	}
+	return ledger, true, nil
+}
+
+func validDevelopmentGrantLedger(ledger engineeringInsightDevelopmentGrantLedger) bool {
+	if len(ledger.Grants) != 1 {
+		return false
+	}
+	seen := make(map[string]bool, len(ledger.Grants))
+	for _, grant := range ledger.Grants {
+		if !validRunnerID(grant.AuthorizationID) || grant.Requests != developmentGrantRequestCount || seen[grant.AuthorizationID] {
+			return false
+		}
+		seen[grant.AuthorizationID] = true
+	}
+	return true
 }
 
 func unknownReservedAttempt(expected EngineeringInsightExpectedAttempt, candidate string) EngineeringInsightEvaluationAttempt {

@@ -97,6 +97,81 @@ func TestEngineeringInsightRunnerPersistsSourceFreeSixRequestDevelopmentCampaign
 	}
 }
 
+func TestEngineeringInsightRunnerRequiresExplicitDevelopmentBudgetGrantForSecondSixRequests(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	first := runnerTestConfig(t, "development-one", EngineeringInsightCollectRunMode, 3, client)
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	second := runnerTestConfig(t, "development-two", EngineeringInsightDevelopmentRunMode, 3, client)
+	second.Root = first.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), second); err != nil || client.calls.Load() != 6 {
+		t.Fatalf("original development budget = %v, calls=%d", err, client.calls.Load())
+	}
+	third := runnerTestConfig(t, "development-three", EngineeringInsightDevelopmentRunMode, 3, client)
+	third.Root = first.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), third); err == nil || client.calls.Load() != 6 {
+		t.Fatalf("ungranted extension dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	if err := GrantEngineeringInsightDevelopmentBudget(first.Root, "extension-one", 6); err != nil {
+		t.Fatal(err)
+	}
+	if err := GrantEngineeringInsightDevelopmentBudget(first.Root, "extension-one", 6); err == nil {
+		t.Fatal("duplicate development budget grant was accepted")
+	}
+	campaign, err := loadEvaluationCampaign(filepath.Join(first.Root, runnerRelativeDirectory, "campaign.json"))
+	if err != nil || campaign.DevelopmentRequests != 6 || campaign.QualificationRequests != 0 {
+		t.Fatalf("grant changed campaign counters: %+v, %v", campaign, err)
+	}
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), third); err != nil || client.calls.Load() != 9 {
+		t.Fatalf("first granted run = %v, calls=%d", err, client.calls.Load())
+	}
+	fourth := runnerTestConfig(t, "development-four", EngineeringInsightDevelopmentRunMode, 3, client)
+	fourth.Root = first.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), fourth); err != nil || client.calls.Load() != 12 {
+		t.Fatalf("second granted run = %v, calls=%d", err, client.calls.Load())
+	}
+	fifth := runnerTestConfig(t, "development-five", EngineeringInsightDevelopmentRunMode, 3, client)
+	fifth.Root = first.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), fifth); err == nil || client.calls.Load() != 12 {
+		t.Fatalf("development requests exceeded twelve: %v, calls=%d", err, client.calls.Load())
+	}
+	campaign, err = loadEvaluationCampaign(filepath.Join(first.Root, runnerRelativeDirectory, "campaign.json"))
+	if err != nil || campaign.DevelopmentRequests != 12 || campaign.QualificationRequests != 0 {
+		t.Fatalf("extended campaign counters: %+v, %v", campaign, err)
+	}
+}
+
+func TestEngineeringInsightRunnerRejectsCorruptDevelopmentGrantLedgerBeforeDispatch(t *testing.T) {
+	for name, ledger := range map[string]string{
+		"unknown field":   `{"grants":[{"authorization_id":"extension-one","requests":6}],"unexpected":true}`,
+		"duplicate field": `{"grants":[],"grants":[{"authorization_id":"extension-one","requests":6}]}`,
+		"empty grants":    `{"grants":[]}`,
+		"wrong requests":  `{"grants":[{"authorization_id":"extension-one","requests":5}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+			cfg := runnerTestConfig(t, "corrupt-grant", EngineeringInsightCollectRunMode, 3, client)
+			directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+			if err := os.MkdirAll(directory, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 6}); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(ledger), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
+				t.Fatalf("corrupt grant ledger dispatched: %v, calls=%d", err, client.calls.Load())
+			}
+			if err := GrantEngineeringInsightDevelopmentBudget(cfg.Root, "extension-two", 6); err == nil {
+				t.Fatal("corrupt grant ledger accepted another grant")
+			}
+		})
+	}
+}
+
 func TestEngineeringInsightRunnerStopsBeforeDispatchWhenReservationPersistenceFails(t *testing.T) {
 	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
 	cfg := runnerTestConfig(t, "persistence", EngineeringInsightCollectRunMode, 3, client)

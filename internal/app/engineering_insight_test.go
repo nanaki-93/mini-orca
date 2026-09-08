@@ -82,7 +82,7 @@ func TestEngineeringInsightPromptsRequireUsefulGroundedContentOrOmission(t *test
 		"Mention later state or ownership revalidation only when TARGET_SOURCE shows a later publication or ownership transition",
 		"say the mutex is released before the wait and do not invent revalidation",
 		"expect the second to acquire it only after the first releases it",
-		"known-length append loop may grow a result slice",
+		"visible known-length append loop can support measurement-oriented engineering guidance even when it is not a bug",
 	} {
 		if !strings.Contains(semantic, requirement) {
 			t.Fatalf("file analysis prompt is missing grounded-insight guidance %q", requirement)

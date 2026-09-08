@@ -155,6 +155,30 @@ func TestRunEvaluationModeCompletesOfflineDevelopmentLifecycle(t *testing.T) {
 	}
 }
 
+func TestGrantDevelopmentModeRequiresOneUniqueAuthorization(t *testing.T) {
+	root := t.TempDir()
+	grant := []string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-extension-1", "-requests", "6"}
+	if err := runEvaluationMode(grant); err == nil {
+		t.Fatal("grant before original budget exhaustion was accepted")
+	}
+	state := filepath.Join(root, ".mini-orca", "autopilot", "engineering-insight-evaluation")
+	if err := os.WriteFile(filepath.Join(state, "campaign.json"), []byte(`{"development_requests":6,"qualification_requests":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode(grant); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode(grant); err == nil {
+		t.Fatal("duplicate grant was accepted")
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-extension-2", "-requests", "5"}); err == nil {
+		t.Fatal("non-six grant was accepted")
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "..", "-requests", "6"}); err == nil {
+		t.Fatal("path-like authorization ID was accepted")
+	}
+}
+
 func lifecycleArgs(root, configPath, casesPath, base, receiptPath string) []string {
 	return []string{"-mode", "collect", "-root", root, "-run-id", "development-one", "-receipt", receiptPath, "-cases", casesPath, "-config", configPath, "-candidate-id", "candidate", "-provider", "fixture", "-prompt-version", app.EngineeringInsightPromptVersion(), "-corpus-id", "corpus", "-base-revision", base}
 }
