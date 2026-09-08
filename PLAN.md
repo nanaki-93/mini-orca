@@ -250,7 +250,13 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | PERF-02 | Compare an explicitly selected Go benchmark | SEC-04, FLOW-03, PERF-01 | M / high | Complete |
 | PERF-03 | Present measured evidence beside hypotheses | PERF-02, UI-03 | M / medium | Complete |
 | AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Complete |
-| REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03 | M / high | Blocked |
+| QUAL-01 | Realistic development/qualification corpus and rubric | LEARN-02 | S / medium | Pending |
+| QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Pending |
+| QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Pending |
+| QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Pending |
+| QUAL-05 | Six-request development pilot and candidate freeze | QUAL-04 | S / high | Pending |
+| QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
+| REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
 
 Recommended first delivery: FND-01–06, AUTO-01, UI-01–04, FLOW-01, SEC-01–04.
@@ -1009,6 +1015,222 @@ the full quality gate green. No inherited quality exception applies to final rel
   its unchanged rerun passed. `make quality` retains only the two accepted baseline
   complexity findings. No configuration or source-data migration is required.
 
+## Insight qualification tasks
+
+These cards turn the remaining REL-01 work into one sequential agent queue. Keep
+this ledger authoritative; do not create `docs/tasks.md` or per-task documents.
+The existing v6 prompt and optional-explanation isolation are the starting point,
+not tasks to reimplement. `QUAL-01` is ready; completed LEARN tasks stay complete.
+Use one Terra worker, a fresh reviewer and coordinator-run gates per task, following
+`tasks/README.md`. A worker does not approve its own result or change ledger status.
+
+### Qualification contract shared by QUAL-01–06
+
+- Proposed application-provider budget: **30 requests total**, split into at most
+  **6 development requests + 24 qualification requests**. Each attempt allows
+  4,096 output tokens and 300 seconds, sequentially, without automatic retry.
+  The all-timeout request-time ceiling is 150 minutes, excluding scoring/builds.
+  Planning these tasks does not spend or grant this new budget. Before QUAL-05,
+  resolve the selected model/provider and one authorization covering both phases;
+  reuse any explicit authorization already present instead of asking per case.
+  The configured local model is the initial candidate. Do not switch models,
+  send fixture content remotely, or add paid scoring calls without authorization.
+- Qualification uses **12 distinct cases twice**, with a fixed order/seed and
+  configuration: 8 substantive cases (16 attempts) and 4 omission controls
+  (8 attempts). Development uses a separate three-case set twice at most.
+  An implementation agent must not tune prompts against qualification responses.
+  This is a small release sample, not a guarantee about arbitrary user projects.
+- Count every scheduled attempt, including timeouts, malformed output, truncation,
+  abstention and exhausted budget. Require **23/24 usable first-attempt summaries**,
+  **22/24 fully valid summaries without invalid optional sections being dropped**,
+  **13/16 substantive attempts with useful insights scoring >=6/8**, omission on
+  **all 8 controls**, and **zero critical false claims across all 24 attempts**.
+  A legitimate empty explanation map counts as complete; a rejected map does not.
+  A rejected optional insight on a control is not successful intentional omission.
+- Each retained insight needs correctness, local relevance, trade-off clarity and
+  useful verification scores (0–2 each). Missing insight on a substantive case is
+  zero useful coverage; errors never disappear from denominators. An independent
+  reviewer scores actual prose against source and rubric; format validation,
+  insight-presence booleans and model self-scores cannot establish usefulness.
+- Store source-free receipts with case/repetition/attempt IDs, configuration and
+  corpus/prompt/base identity, failure categories, output tokens, finish reasons,
+  elapsed times and scores. Include counts and median/nearest-rank p95 latency,
+  distinguishing successful latency from timeout/censored attempts. No endpoint,
+  credential, source or free-form model prose in receipts or ordinary logs.
+  Use private temporary fixture-only material for scoring; redact before any
+  tracked regression fixture and discard temporary response material afterward.
+- Failed qualification keeps QUAL-06 and REL-01 Blocked. Preserve all results;
+  do not retry only failed cases, lower thresholds, change the corpus mid-run or
+  restart a consumed budget. Diagnose offline first. A changed prompt/model starts
+  a separately authorized full qualification with fresh run identity; additional
+  model evaluation is a conditional recovery path, not mandatory paid work.
+
+### QUAL-01 — Build realistic development and qualification cases
+
+- **Shared input:** read the qualification contract above before work; its budgets,
+  sample counts, privacy rules and pass criteria apply to this card.
+- **Dependencies:** LEARN-02.
+- **Target files:** `internal/app/testdata/engineering-insight-eval/cases.json`,
+  `internal/app/engineering_insight_evaluation_test.go`,
+  `docs/insights-performance/README.md`.
+- **Implement:** evolve the existing corpus into explicit development/qualification
+  partitions, with stable IDs, intent (substantive/control), reference mechanisms,
+  permitted uncertainty, critical false-claim examples and 0–2 scoring anchors.
+  Keep synthetic source beside the owning tests; no additional planning document.
+  Supply complete imports/types and deterministic stubs so each case compiles in
+  isolation with a temporary go.mod and no network access. Cover locking, cancellation, allocation,
+  repeated I/O, idempotency and authorization, including protections in supplied
+  callees and cases whose opaque dependencies require qualified statements.
+  Keep at least four qualification cases materially different from development
+  cases; do not claim secrecy from agents that can read the repository.
+  Keep malformed-output parser tests separate from live control cases.
+- **Accept:** three development cases and twelve distinct qualification cases
+  (eight substantive, four controls) with mechanically checked source anchors;
+  isolated compile/tests pass; known valid/invalid outputs still exercise strict
+  parent validation, optional omission and the 1,000-rune bound. No fixture-specific
+  answer leaks into production prompts.
+- **Verify:** `go test ./internal/app -run '^TestEngineeringInsightEvaluation' -count=1`;
+  G. Verify each temporary fixture with `go test ./...` using no external modules.
+
+### QUAL-02 — Enforce qualification metrics in the receipt validator
+
+- **Shared input:** read the qualification contract above before work; its budgets,
+  sample counts, privacy rules and pass criteria apply to this card.
+- **Dependencies:** QUAL-01.
+- **Target files:** `internal/app/engineering_insight_evaluation.go`,
+  `internal/app/engineering_insight_evaluation_test.go`,
+  `cmd/engineering-insight-eval/main.go`,
+  `cmd/engineering-insight-eval/main_test.go`,
+  `docs/insights-performance/README.md`.
+- **Implement:** extend the existing receipt/validator, replacing the old
+  one-row-per-case format. Uniquely identify case plus repetition and attempt;
+  preserve raw outcome counts and bind scores to the corresponding response digest.
+  Validate partition, complete expected schedule, model/prompt/corpus identity,
+  authorized caps and actual consumption. Separate valid collection, incomplete
+  qualification, failed qualification and passed qualification in output/exit status.
+  Compute all shared-contract thresholds and latency statistics; distinguish
+  optional-section degradation from failures and deliberate omission. Reject
+  unknown fields, trailing JSON, duplicates, missing attempts, mixed candidates,
+  invalid/nonfinite measurements and unscored qualification output. Do not print
+  arbitrary invalid receipt content in errors. Critical claims block the entire
+  run even if the offending example is not retained.
+- **Accept:** boundary tests prove 22 usable fails/23 passes, 21 complete fails/22
+  passes, 12 useful fails/13 passes, one bad control fails, and any critical claim
+  fails. Budget or missing evidence cannot produce a passing verdict. Replace
+  obsolete receipt tests/examples; historical recorded results remain historical.
+- **Verify:** `go test ./internal/app ./cmd/engineering-insight-eval -count=1`; G.
+  All test data is deterministic; the validator makes no provider call.
+
+### QUAL-03 — Replace the ad hoc collector with a resumable bounded runner
+
+- **Shared input:** read the qualification contract above before work; its budgets,
+  sample counts, privacy rules and pass criteria apply to this card.
+- **Dependencies:** QUAL-02.
+- **Target files:** `internal/app/engineering_insight_live_test.go` (retire),
+  `internal/app/engineering_insight_runner.go` (new),
+  `internal/app/engineering_insight_runner_test.go` (new),
+  `cmd/engineering-insight-eval/main.go`,
+  `cmd/engineering-insight-eval/main_test.go`,
+  `internal/app/file_analysis.go` (only narrow shared evaluation hooks if needed),
+  `docs/insights-performance/README.md`.
+- **Implement:** add explicit collect/development/qualification modes to the existing
+  command; reuse production selected-file prompt, model client and parser. Keep
+  validation mode provider-free. Replace the environment-gated test collector;
+  do not maintain two runners or introduce a second app/agent platform. Select
+  the configured `bug` scope and production context limits; use synthetic facts
+  and one isolated compiled fixture per case. Record that this is component-level
+  qualification, not an import/Desktop end-to-end run.
+- Persist a private run manifest and attempt reservations atomically under ignored
+  `.mini-orca/autopilot/`; reserve budget before network dispatch. Reject concurrent
+  writers, changed configuration/corpus/base, reused run IDs and exhausted caps.
+  An interrupted in-flight attempt stays unknown/consumed; never automatically
+  repeat it. Disable nested retries, count every transport attempt, and apply the
+  request deadline. Explicit selection/confirmation binds any remote delivery to
+  its configured destination; local-only remains the default. Never modify the
+  user's configuration or fixture source. Whitelist persisted provider metadata.
+- **Accept:** fake-provider tests prove exact request limits, no hidden import or
+  retry, crash/resume accounting, failed persistence before dispatch, lock safety,
+  source/secret-free receipts and safe scoring handoff. Default `make check` and
+  `make quality` cannot contact a configured live model, even from inherited opt-in
+  environment variables. Allow the independent scorer to read selected fixture
+  prose privately without requiring a second generation call or source-bearing logs.
+- **Verify:** `go test ./internal/app ./cmd/engineering-insight-eval -count=1`; Q.
+
+### QUAL-04 — Improve grounded insights using development cases only
+
+- **Shared input:** read the qualification contract above before work; its budgets,
+  sample counts, privacy rules and pass criteria apply to this card.
+- **Dependencies:** QUAL-01, QUAL-03.
+- **Target files:** `internal/app/file_analysis.go`,
+  `internal/app/file_analysis_test.go`, `internal/app/engineering_insight_test.go`,
+  `internal/app/testdata/engineering-insight-eval/cases.json` (development examples
+  only), `docs/insights-performance/README.md`.
+- **Implement:** build on v6 rather than appending another competing instruction
+  block. Require a visible mechanism, exact local evidence, a conditional impact,
+  meaningful trade-off and concrete verification when an insight is returned.
+  Teach omission on trivial wrappers and distinguish unknown downstream behavior
+  from demonstrated missing safeguards. Use compact, general examples drawn only
+  from development cases; do not demand a lesson for every file or insert a second
+  automatic model request. Keep prose limits, advisory status, strict core schema,
+  target identity and optional-explanation isolation intact.
+- Keep changes local to file analysis unless a demonstrated shared-contract defect
+  requires a separately scoped task; avoid gratuitous changes to Security/drafts.
+  Increment the prompt version on behavior changes and prove old caches become
+  stale. Tests check representative behavior/contracts, not just prompt substrings.
+- **Accept:** deterministic positive, uncertainty and omission examples pass;
+  no broader quality claim is made until fresh independently scored provider runs.
+  The qualification set/rubric has not been modified to fit the candidate.
+- **Verify:** `go test ./internal/app ./internal/project -count=1`; G.
+
+### QUAL-05 — Run and independently score the bounded development pilot
+
+- **Shared input:** read the qualification contract above before work; its budgets,
+  sample counts, privacy rules and pass criteria apply to this card.
+- **Dependencies:** QUAL-04; selected provider/model and the shared 30-request
+  authorization resolved before any call. Mark Blocked with the missing decision
+  only if existing session authorization does not cover the new run.
+- **Target files:** `docs/RELEASE_ACCEPTANCE.md` (sanitized evidence);
+  `internal/app/file_analysis.go`, `internal/app/file_analysis_test.go`,
+  `internal/app/engineering_insight_test.go` (only a demonstrated bounded repair).
+- **Execute:** run the three development cases, inspect real output with a fresh
+  scorer, and permit at most one focused correction plus a second three-case pass.
+  Six calls is a total cap, not a cap per model or restart; spare calls do not enlarge
+  the 24-call qualification budget. All development controls must omit low-value
+  lessons and substantive cases must meet >=6/8 before promotion. If the pilot fails,
+  stop and record specific mechanism/verification/schema failures. A different
+  model is evaluated only within an explicitly authorized candidate/budget decision.
+- **Accept:** independent scores and real provider metadata support promoting a
+  single candidate; lock prompt/corpus/config/base identity for qualification.
+  Do not expose qualification outputs to the tuning worker. This is development
+  evidence, never a release reliability percentage.
+- **Verify:** run collect and validate with the exact CLI implemented/documented
+  by QUAL-03; attach its reproducible command with secret values omitted. Receipt
+  validator and `git diff --check`; G if prompt/code changed, fresh review after fixes.
+
+### QUAL-06 — Qualify the frozen candidate and issue the release verdict
+
+- **Shared input:** read the qualification contract above before work; its budgets,
+  sample counts, privacy rules and pass criteria apply to this card.
+- **Dependencies:** QUAL-05; QUAL-02/03 validation and accounting remain intact.
+- **Target files:** `docs/RELEASE_ACCEPTANCE.md`,
+  `docs/insights-performance/README.md` (tested scope/limitations only).
+- **Execute:** twelve qualification cases twice, exactly 24 reserved single
+  attempts at the locked settings. Generate all outputs before tuning or deciding
+  to rerun anything. A fresh reviewer scores every attempt against the frozen rubric
+  and actual fixture prose, including failed/degraded/control cases; a separate
+  coordinator checks evidence joins, counts and the computed verdict. Label agent
+  scoring honestly, not as human testing. Any separately metered evaluator requires
+  its own explicit budget; do not hide it in the 30 generation requests.
+- **Accept:** the receipt validator enforces 23/24 usable, 22/24 fully valid,
+  13/16 useful substantive insights, 8/8 controls omitted and zero critical claims.
+  Retain failure evidence and explain why this small sample does not guarantee
+  production reliability. On failure, stay Blocked with an exact cause and bounded
+  next proposal; switching model/prompt or retrying a case cannot salvage this run.
+  On success, mark only QUAL-06 Complete and let REL-01 perform final integration.
+- **Verify:** exact collection/scoring/validation commands from QUAL-03, independent
+  receipt inspection, `go test ./internal/app ./cmd/engineering-insight-eval -count=1`,
+  `git diff --check`. No code changes during a qualification run.
+
 ### REL-01 — Validate the selected release end to end
 
 - Run Q on the integrated candidate, then desktop packaging with JBR 25. Smoke the
@@ -1019,19 +1241,11 @@ the full quality gate green. No inherited quality exception applies to final rel
   local/offline/remote scopes and denied consent. Include Security/measurements only
   once in this release's implemented scope. Use no secrets in captures or records.
 - Repeat native checks for surfaces changed since UI-04, not every historical
-  capture. Evaluate the same configured model with 4,096 output tokens and a
-  300-second deadline per attempt; never interpret a larger cap as proof of quality.
-- Freeze cases and criteria before live qualification: at least 20 attempts across
-  substantive mechanisms and trivial/no-insight controls, with repeat runs. Require
-  at least 95% usable first-attempt summaries and 90% complete optional explanation
-  sections. Count omitted invalid explanations separately as degraded, never as
-  fully valid. Record failures, finish reasons, tokens, latency median/p95 and retries.
-  Each retained insight must score at least 6/8 with no critical false claim; at
-  least 80% of substantive cases must produce a qualifying insight. All trivial
-  controls must omit generic lessons. These are sample gates, not population guarantees.
-- Keep live qualification explicitly bounded; the eight-case development run is
-  diagnostic evidence only. Compare parser replays separately from fresh live runs.
-  Passing the receipt validator checks the record, not model quality.
+  capture. Resume after QUAL-06 passes the frozen qualification contract above;
+  reuse its provider/quality evidence instead of spending another live budget.
+  Run Q on the final integrated candidate and rebuild/smoke affected distributions
+  if implementation changes invalidated their prior evidence. QUAL-06 does not
+  replace end-to-end source-safety and native/package acceptance.
 - Accept: exact release scope, real check results, runtime setup and unresolved
   limitations recorded in `docs/RELEASE_ACCEPTANCE.md`. Missing required native,
   provider or supported-package evidence blocks this release decision.
@@ -1074,8 +1288,8 @@ the full quality gate green. No inherited quality exception applies to final rel
   of those same responses with the repair gave 8/8 usable summaries, comprising
   3 complete and 5 with omitted explanations. This is offline replay evidence,
   not an 8/8 fresh-run qualification or proof of insight quality. Trivial controls
-  still generated generic insights. REL-01 remains Blocked on the stronger
-  qualification and useful/appropriately omitted insights. No config migration
+  still generated generic insights. REL-01 remains Blocked pending QUAL-01–06,
+  which own the repair, bounded runs and useful/appropriately omitted insights. No config migration
   is needed; the prompt version invalidates prior file-analysis cache entries.
 
 ### REL-02 — Finish code/document retirement and handoff
