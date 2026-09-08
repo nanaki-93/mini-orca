@@ -255,7 +255,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Complete |
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Complete |
 | AUTO-03 | Repair dispatcher startup diagnostics and explicit recovery | AUTO-02 | M / high | Complete |
-| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-03 | S / medium | Pending |
+| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-03 | S / medium | Blocked |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Pending |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Pending |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
@@ -1316,6 +1316,20 @@ accounting and qualification pass criteria below still apply in full.
   This decision supersedes the historical retry block; the old invocation stays
   uncertain and charged against the existing dispatcher budget. REC-01 code is
   still unimplemented, and the application-provider campaign remains 12/0.
+- **Blocked execution — 2026-09-08, 14:19 UTC:** the scheduled recovered attempt
+  started successfully from `e5d001e` and returned worker completion evidence.
+  The worker reported 422,015 input-plus-output tokens; with the preserved
+  20,000-token reservation, recorded usage is 442,015 against the unchanged
+  200,000-token dispatcher budget. The dispatcher stopped with `token budget
+  exhausted` before candidate acceptance, independent review or coordinator
+  validation. This is a budget blocker, not a recurrence of SIGXFSZ.
+  A two-file draft remains in the ignored recovered worktree: temperature JSON
+  serialization and HTTP request tests, 50 additions / 1 deletion. It is not
+  accepted or integrated. Keep the failed run, completion digest, old archive and
+  draft unchanged; do not retry, recover again or enlarge the budget automatically.
+  The heartbeat is paused pending an explicit budget/recovery decision. No
+  application-provider request or recovery grant was used; campaign and grant
+  ledger hashes are unchanged at 12 development / 0 qualification.
 
 ### REC-02 — Account for one model-bound six-request recovery grant
 
