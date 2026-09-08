@@ -1,9 +1,11 @@
-// Command engineering-insight-eval validates a human-scored live insight sample.
-// It makes no provider request; a reviewer runs the selected bounded sample through
-// Mini-Orca first, then records the resulting scores in the receipt passed here.
+// Command engineering-insight-eval validates source-free collection and
+// qualification receipts. It never contacts a provider.
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -21,104 +23,175 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	if err := options.validateReceipt(receipt); err != nil {
-		fail(err)
-	}
-	caseNames, err := loadCaseNames(options.caseSetPath)
+	expected, err := options.expectation()
 	if err != nil {
 		fail(err)
 	}
-	if err := validateReceiptCaseNames(receipt, caseNames); err != nil {
+	report, err := app.ValidateEngineeringInsightEvaluationReceipt(receipt, expected)
+	if err != nil {
 		fail(err)
 	}
-	fmt.Printf("accepted %d scored samples for %s / %s / %s within %d requests and %d output tokens per request\n", receipt.SampleCount, receipt.Provider, receipt.Model, receipt.PromptVersion, receipt.MaxRequests, receipt.MaxOutputTokens)
+	fmt.Printf("%s: %d/%d usable, %d/%d complete, %d useful substantive, %d omitted controls, %d critical claims; successful latency median %.0fms p95 %.0fms (%d timeout/censored)\n", report.Outcome, report.UsableAttempts, report.ScheduledAttempts, report.CompleteAttempts, report.ScheduledAttempts, report.UsefulSubstantiveAttempts, report.OmittedControls, report.CriticalFalseClaims, report.Latency.MedianMilliseconds, report.Latency.P95Milliseconds, report.Latency.TimeoutOrCensoredAttempts)
+	failWithStatus(nil, evaluationExitStatus(report.Outcome))
 }
 
 type evaluationOptions struct {
-	receiptPath     string
-	caseSetPath     string
-	provider        string
-	model           string
-	promptVersion   string
-	maxRequests     int
-	maxOutputTokens int
+	receiptPath           string
+	caseSetPath           string
+	candidateID           string
+	provider              string
+	model                 string
+	promptVersion         string
+	corpusID              string
+	baseRevision          string
+	maxRequests           int
+	maxOutputTokens       int
+	attemptTimeoutSeconds int
 }
 
 func evaluationOptionsFromFlags() (evaluationOptions, error) {
-	receiptPath := flag.String("receipt", "", "path to a human-scored evaluation receipt")
-	caseSetPath := flag.String("cases", "", "path to the selected evaluation case set")
-	provider := flag.String("provider", "", "provider selected for the live sample")
-	model := flag.String("model", "", "model selected for the live sample")
-	promptVersion := flag.String("prompt-version", "", "prompt version selected for the live sample")
-	maxRequests := flag.Int("max-requests", 0, "maximum provider requests authorized for the sample")
-	maxOutputTokens := flag.Int("max-output-tokens", 0, "maximum output tokens authorized per request")
+	receiptPath := flag.String("receipt", "", "path to a source-free evaluation receipt")
+	caseSetPath := flag.String("cases", "", "path to the frozen evaluation case set")
+	candidateID := flag.String("candidate-id", "", "externally selected candidate identity")
+	provider := flag.String("provider", "", "selected provider identity")
+	model := flag.String("model", "", "selected model identity")
+	promptVersion := flag.String("prompt-version", "", "selected prompt version")
+	corpusID := flag.String("corpus-id", "", "externally selected corpus identity")
+	baseRevision := flag.String("base-revision", "", "selected candidate base revision")
+	maxRequests := flag.Int("max-requests", 0, "authorized request cap")
+	maxOutputTokens := flag.Int("max-output-tokens", 0, "authorized output-token cap per request")
+	attemptTimeoutSeconds := flag.Int("attempt-timeout-seconds", 0, "authorized timeout per attempt")
 	flag.Parse()
-	if *receiptPath == "" || *caseSetPath == "" || *provider == "" || *model == "" || *promptVersion == "" || *maxRequests <= 0 || *maxOutputTokens <= 0 {
-		return evaluationOptions{}, fmt.Errorf("receipt, cases, provider, model, prompt-version, max-requests, and max-output-tokens are required")
+	if *receiptPath == "" || *caseSetPath == "" || *candidateID == "" || *provider == "" || *model == "" || *promptVersion == "" || *corpusID == "" || *baseRevision == "" || *maxRequests <= 0 || *maxOutputTokens <= 0 || *attemptTimeoutSeconds <= 0 {
+		return evaluationOptions{}, fmt.Errorf("receipt, cases, candidate-id, provider, model, prompt-version, corpus-id, base-revision, max-requests, max-output-tokens, and attempt-timeout-seconds are required")
 	}
-	return evaluationOptions{receiptPath: *receiptPath, caseSetPath: *caseSetPath, provider: *provider, model: *model, promptVersion: *promptVersion, maxRequests: *maxRequests, maxOutputTokens: *maxOutputTokens}, nil
+	return evaluationOptions{receiptPath: *receiptPath, caseSetPath: *caseSetPath, candidateID: *candidateID, provider: *provider, model: *model, promptVersion: *promptVersion, corpusID: *corpusID, baseRevision: *baseRevision, maxRequests: *maxRequests, maxOutputTokens: *maxOutputTokens, attemptTimeoutSeconds: *attemptTimeoutSeconds}, nil
 }
 
 func loadReceipt(path string) (app.EngineeringInsightEvaluationReceipt, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return app.EngineeringInsightEvaluationReceipt{}, err
+		return app.EngineeringInsightEvaluationReceipt{}, fmt.Errorf("read evaluation receipt")
 	}
-	var receipt app.EngineeringInsightEvaluationReceipt
-	if err := json.Unmarshal(data, &receipt); err != nil {
-		return app.EngineeringInsightEvaluationReceipt{}, fmt.Errorf("decode evaluation receipt: %w", err)
+	receipt, err := app.DecodeEngineeringInsightEvaluationReceipt(data)
+	if err != nil {
+		return app.EngineeringInsightEvaluationReceipt{}, err
 	}
 	return receipt, nil
 }
 
-func (options evaluationOptions) validateReceipt(receipt app.EngineeringInsightEvaluationReceipt) error {
-	if receipt.Provider != options.provider || receipt.Model != options.model || receipt.PromptVersion != options.promptVersion || receipt.MaxRequests != options.maxRequests || receipt.MaxOutputTokens != options.maxOutputTokens {
-		return fmt.Errorf("receipt metadata must match the explicitly selected provider, model, prompt version, and budget")
+func (options evaluationOptions) expectation() (app.EngineeringInsightEvaluationExpectation, error) {
+	data, err := os.ReadFile(options.caseSetPath)
+	if err != nil {
+		return app.EngineeringInsightEvaluationExpectation{}, fmt.Errorf("read evaluation cases")
 	}
-	if err := app.ValidateEngineeringInsightEvaluationReceipt(receipt); err != nil {
-		return err
+	schedule, err := qualificationSchedule(data)
+	if err != nil {
+		return app.EngineeringInsightEvaluationExpectation{}, err
 	}
-	return nil
+	digest := sha256.Sum256(data)
+	return app.EngineeringInsightEvaluationExpectation{CandidateID: options.candidateID, Provider: options.provider, Model: options.model, PromptVersion: options.promptVersion, CorpusID: options.corpusID, CorpusDigest: hex.EncodeToString(digest[:]), BaseRevision: options.baseRevision, MaxRequests: options.maxRequests, MaxOutputTokens: options.maxOutputTokens, AttemptTimeoutSeconds: options.attemptTimeoutSeconds, Schedule: schedule}, nil
 }
 
-func validateReceiptCaseNames(receipt app.EngineeringInsightEvaluationReceipt, caseNames map[string]bool) error {
-	for _, sample := range receipt.Samples {
-		if !caseNames[sample.CaseName] {
-			return fmt.Errorf("receipt names unknown evaluation case %q", sample.CaseName)
-		}
+func qualificationSchedule(data []byte) ([]app.EngineeringInsightExpectedAttempt, error) {
+	if err := app.ValidateStrictJSONDocument(data); err != nil {
+		return nil, fmt.Errorf("invalid evaluation cases")
 	}
-	return nil
-}
-
-func loadCaseNames(path string) (map[string]bool, error) {
-	data, err := os.ReadFile(path)
+	cases, err := decodeEvaluationCases(data)
 	if err != nil {
 		return nil, err
 	}
-	var cases []struct {
-		Name string `json:"name"`
+	qualification, err := selectQualificationCases(cases)
+	if err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(data, &cases); err != nil {
-		return nil, fmt.Errorf("decode evaluation cases: %w", err)
-	}
-	names := make(map[string]bool, len(cases))
-	for _, evaluationCase := range cases {
-		if evaluationCase.Name == "" || names[evaluationCase.Name] {
-			return nil, fmt.Errorf("evaluation cases contain an empty or repeated name %q", evaluationCase.Name)
-		}
-		names[evaluationCase.Name] = true
-	}
-	if len(names) == 0 {
-		return nil, fmt.Errorf("evaluation cases are empty")
-	}
-	return names, nil
+	return repeatQualificationCases(qualification), nil
 }
 
-func fail(err error) {
-	failWithStatus(err, 1)
+type evaluationCase struct {
+	Name      string `json:"name"`
+	Partition string `json:"partition"`
+	Intent    string `json:"intent"`
 }
+
+type qualificationCase struct {
+	name   string
+	intent string
+}
+
+func decodeEvaluationCases(data []byte) ([]evaluationCase, error) {
+	var cases []evaluationCase
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&cases); err != nil || len(cases) == 0 {
+		return nil, fmt.Errorf("invalid evaluation cases")
+	}
+	return cases, nil
+}
+
+func selectQualificationCases(cases []evaluationCase) ([]qualificationCase, error) {
+	seen := make(map[string]bool, len(cases))
+	qualification := make([]qualificationCase, 0, 12)
+	for _, evaluationCase := range cases {
+		if !validEvaluationCase(evaluationCase, seen) {
+			return nil, fmt.Errorf("invalid evaluation cases")
+		}
+		seen[evaluationCase.Name] = true
+		if evaluationCase.Partition == "qualification" {
+			qualification = append(qualification, qualificationCase{name: evaluationCase.Name, intent: evaluationCase.Intent})
+		}
+	}
+	if !hasQualificationCaseBalance(qualification) {
+		return nil, fmt.Errorf("evaluation cases do not define the qualification schedule")
+	}
+	return qualification, nil
+}
+
+func validEvaluationCase(evaluationCase evaluationCase, seen map[string]bool) bool {
+	return evaluationCase.Name != "" && !seen[evaluationCase.Name] && validCasePartition(evaluationCase.Partition) && validCaseIntent(evaluationCase.Intent)
+}
+
+func validCasePartition(partition string) bool {
+	return partition == "development" || partition == "qualification"
+}
+func validCaseIntent(intent string) bool { return intent == "substantive" || intent == "control" }
+
+func hasQualificationCaseBalance(cases []qualificationCase) bool {
+	substantive := 0
+	for _, evaluationCase := range cases {
+		if evaluationCase.intent == "substantive" {
+			substantive++
+		}
+	}
+	return len(cases) == 12 && substantive == 8
+}
+
+func repeatQualificationCases(cases []qualificationCase) []app.EngineeringInsightExpectedAttempt {
+	schedule := make([]app.EngineeringInsightExpectedAttempt, 0, 24)
+	for repetition := 1; repetition <= 2; repetition++ {
+		for _, evaluationCase := range cases {
+			schedule = append(schedule, app.EngineeringInsightExpectedAttempt{CaseName: evaluationCase.name, Partition: "qualification", Intent: evaluationCase.intent, Repetition: repetition, Attempt: 1})
+		}
+	}
+	return schedule
+}
+
+func evaluationExitStatus(outcome app.EngineeringInsightEvaluationOutcome) int {
+	if outcome == app.EngineeringInsightCollectionOutcome || outcome == app.EngineeringInsightPassedOutcome {
+		return 0
+	}
+	if outcome == app.EngineeringInsightIncompleteOutcome {
+		return 2
+	}
+	return 1
+}
+
+func fail(err error) { failWithStatus(err, 1) }
 
 func failWithStatus(err error, status int) {
-	fmt.Fprintln(os.Stderr, "engineering-insight-eval:", err)
-	os.Exit(status)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "engineering-insight-eval:", err)
+	}
+	if status != 0 {
+		os.Exit(status)
+	}
 }
