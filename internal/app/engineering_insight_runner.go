@@ -25,7 +25,11 @@ const (
 	runnerRelativeDirectory                = ".mini-orca/autopilot/engineering-insight-evaluation"
 	defaultDevelopmentRequestCap           = 6
 	extendedDevelopmentRequestCap          = 12
+	recoveryDevelopmentRequestCap          = 18
 	developmentGrantRequestCount           = 6
+	recoveryDevelopmentAuthorizationID     = "qual05-qwen38-recovery-1"
+	recoveryDevelopmentCandidateID         = "qwen38-v10-recovery-1"
+	recoveryDevelopmentModel               = "qwen/qwen3.8-27b"
 )
 
 var (
@@ -100,14 +104,26 @@ type engineeringInsightDevelopmentGrantLedger struct {
 type engineeringInsightDevelopmentGrant struct {
 	AuthorizationID string `json:"authorization_id"`
 	Requests        int    `json:"requests"`
+	CandidateID     string `json:"candidate_id,omitempty"`
+	Model           string `json:"model,omitempty"`
 }
 
-// GrantEngineeringInsightDevelopmentBudget records one explicit recovery grant.
-// The original campaign remains capped at six requests unless this append-only
-// authorization raises its development limit to twelve. It never affects the
-// independent qualification budget.
+// GrantEngineeringInsightDevelopmentBudget records the original append-only
+// recovery authorization. It remains unbound because it predates dispatch
+// identity binding.
 func GrantEngineeringInsightDevelopmentBudget(root, authorizationID string, requests int) error {
-	if strings.TrimSpace(root) == "" || !validRunnerID(authorizationID) || requests != developmentGrantRequestCount {
+	return grantEngineeringInsightDevelopmentBudget(root, authorizationID, requests, nil)
+}
+
+// GrantEngineeringInsightRecoveryDevelopmentBudget records the one approved
+// model-bound recovery authorization. Dispatch validates this identity again
+// before any request from the grant is reserved.
+func GrantEngineeringInsightRecoveryDevelopmentBudget(root, authorizationID string, requests int, candidateID, model string) error {
+	return grantEngineeringInsightDevelopmentBudget(root, authorizationID, requests, []string{candidateID, model})
+}
+
+func grantEngineeringInsightDevelopmentBudget(root, authorizationID string, requests int, dispatchIdentity []string) error {
+	if !validDevelopmentGrantRequest(root, authorizationID, requests) {
 		return fmt.Errorf("development budget grant is invalid")
 	}
 	directory := filepath.Join(root, runnerRelativeDirectory)
@@ -122,30 +138,83 @@ func GrantEngineeringInsightDevelopmentBudget(root, authorizationID string, requ
 	if err := ensureEvaluationCampaign(directory); err != nil {
 		return err
 	}
+	return appendDevelopmentGrant(directory, authorizationID, requests, dispatchIdentity)
+}
+
+func validDevelopmentGrantRequest(root, authorizationID string, requests int) bool {
+	return strings.TrimSpace(root) != "" && validRunnerID(authorizationID) && requests == developmentGrantRequestCount
+}
+
+func appendDevelopmentGrant(directory, authorizationID string, requests int, dispatchIdentity []string) error {
 	ledger, _, err := loadDevelopmentGrantLedger(directory)
 	if err != nil {
 		return err
 	}
-	for _, grant := range ledger.Grants {
-		if grant.AuthorizationID == authorizationID {
-			return fmt.Errorf("development budget grant already exists")
-		}
-	}
-	if len(ledger.Grants) != 0 {
-		return fmt.Errorf("development request budget extension is exhausted")
+	grant, err := nextDevelopmentGrant(ledger, authorizationID, requests, dispatchIdentity)
+	if err != nil {
+		return err
 	}
 	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
 	if err != nil {
 		return fmt.Errorf("read evaluation campaign")
 	}
-	if campaign.DevelopmentRequests != defaultDevelopmentRequestCap {
-		return fmt.Errorf("development base budget is not exhausted")
+	priorCap := developmentGrantCap(ledger)
+	if campaign.DevelopmentRequests != priorCap {
+		return fmt.Errorf("development prior budget is not exhausted")
 	}
-	ledger.Grants = append(ledger.Grants, engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests})
+	ledger.Grants = append(ledger.Grants, grant)
 	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
 		return err
 	}
 	return nil
+}
+
+func nextDevelopmentGrant(ledger engineeringInsightDevelopmentGrantLedger, authorizationID string, requests int, dispatchIdentity []string) (engineeringInsightDevelopmentGrant, error) {
+	if hasDevelopmentGrantAuthorization(ledger, authorizationID) {
+		return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development budget grant already exists")
+	}
+	switch len(ledger.Grants) {
+	case 0:
+		if !validOriginalDevelopmentGrant(authorizationID, dispatchIdentity) {
+			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development budget grant identity is invalid")
+		}
+		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests}, nil
+	case 1:
+		if !validRecoveryDevelopmentGrant(authorizationID, dispatchIdentity) {
+			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development recovery grant is invalid")
+		}
+		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests, CandidateID: dispatchIdentity[0], Model: dispatchIdentity[1]}, nil
+	default:
+		return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development request budget extension is exhausted")
+	}
+}
+
+func hasDevelopmentGrantAuthorization(ledger engineeringInsightDevelopmentGrantLedger, authorizationID string) bool {
+	for _, grant := range ledger.Grants {
+		if grant.AuthorizationID == authorizationID {
+			return true
+		}
+	}
+	return false
+}
+
+func validOriginalDevelopmentGrant(authorizationID string, dispatchIdentity []string) bool {
+	return authorizationID != recoveryDevelopmentAuthorizationID && len(dispatchIdentity) == 0
+}
+
+func validRecoveryDevelopmentGrant(authorizationID string, dispatchIdentity []string) bool {
+	return authorizationID == recoveryDevelopmentAuthorizationID &&
+		len(dispatchIdentity) == 2 &&
+		dispatchIdentity[0] == recoveryDevelopmentCandidateID &&
+		dispatchIdentity[1] == recoveryDevelopmentModel
+}
+
+func developmentGrantCap(ledger engineeringInsightDevelopmentGrantLedger) int {
+	cap := defaultDevelopmentRequestCap
+	for _, grant := range ledger.Grants {
+		cap += grant.Requests
+	}
+	return cap
 }
 
 // RunEngineeringInsightEvaluation executes the selected schedule sequentially.
@@ -219,7 +288,7 @@ func executeRemainingAttempts(ctx context.Context, cfg EngineeringInsightRunnerC
 		if index < len(manifest.Receipt.Attempts) {
 			continue
 		}
-		if err := reserveRunnerAttempt(directory, cfg.Mode); err != nil {
+		if err := reserveRunnerAttempt(directory, cfg); err != nil {
 			return err
 		}
 		// A reservation is recorded as unknown before prompt delivery. If this
@@ -471,19 +540,19 @@ func runnerFingerprint(cfg EngineeringInsightRunnerConfig) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func reserveRunnerAttempt(directory, mode string) error {
+func reserveRunnerAttempt(directory string, cfg EngineeringInsightRunnerConfig) error {
 	path := filepath.Join(directory, "campaign.json")
 	campaign, err := loadEvaluationCampaign(path)
 	if err != nil {
 		return fmt.Errorf("read evaluation campaign")
 	}
-	if mode == EngineeringInsightQualificationRunMode {
+	if cfg.Mode == EngineeringInsightQualificationRunMode {
 		if campaign.QualificationRequests >= qualificationRequestCap {
 			return fmt.Errorf("qualification request budget is exhausted")
 		}
 		campaign.QualificationRequests++
 	} else {
-		cap, err := developmentRequestCap(directory)
+		cap, err := developmentRequestCap(directory, campaign.DevelopmentRequests, cfg)
 		if err != nil {
 			return err
 		}
@@ -521,25 +590,35 @@ func loadEvaluationCampaign(path string) (engineeringInsightCampaign, error) {
 	var campaign engineeringInsightCampaign
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&campaign) != nil || campaign.DevelopmentRequests < 0 || campaign.DevelopmentRequests > extendedDevelopmentRequestCap || campaign.QualificationRequests < 0 || campaign.QualificationRequests > qualificationRequestCap {
+	if decoder.Decode(&campaign) != nil || campaign.DevelopmentRequests < 0 || campaign.DevelopmentRequests > recoveryDevelopmentRequestCap || campaign.QualificationRequests < 0 || campaign.QualificationRequests > qualificationRequestCap {
 		return engineeringInsightCampaign{}, fmt.Errorf("invalid campaign")
 	}
 	return campaign, nil
 }
 
-func developmentRequestCap(directory string) (int, error) {
+func developmentRequestCap(directory string, consumed int, cfg EngineeringInsightRunnerConfig) (int, error) {
 	ledger, _, err := loadDevelopmentGrantLedger(directory)
 	if err != nil {
 		return 0, err
 	}
-	cap := defaultDevelopmentRequestCap
-	for _, grant := range ledger.Grants {
-		cap += grant.Requests
-	}
-	if cap > extendedDevelopmentRequestCap {
+	cap := developmentGrantCap(ledger)
+	if cap > recoveryDevelopmentRequestCap {
 		return 0, fmt.Errorf("invalid development grant ledger")
 	}
+	if len(ledger.Grants) == 2 && consumed >= extendedDevelopmentRequestCap && !matchesRecoveryDevelopmentDispatch(cfg, ledger.Grants[1]) {
+		return 0, fmt.Errorf("development recovery grant does not match dispatch identity")
+	}
 	return cap, nil
+}
+
+func matchesRecoveryDevelopmentDispatch(cfg EngineeringInsightRunnerConfig, grant engineeringInsightDevelopmentGrant) bool {
+	return grant.AuthorizationID == recoveryDevelopmentAuthorizationID &&
+		grant.CandidateID == recoveryDevelopmentCandidateID &&
+		grant.Model == recoveryDevelopmentModel &&
+		cfg.CandidateID == grant.CandidateID &&
+		cfg.Model == grant.Model &&
+		cfg.Profile.Model == grant.Model &&
+		isLoopbackURL(cfg.Profile.APIBaseURL)
 }
 
 func developmentGrantLedgerPath(directory string) string {
@@ -569,12 +648,18 @@ func loadDevelopmentGrantLedger(directory string) (engineeringInsightDevelopment
 }
 
 func validDevelopmentGrantLedger(ledger engineeringInsightDevelopmentGrantLedger) bool {
-	if len(ledger.Grants) != 1 {
+	if len(ledger.Grants) != 1 && len(ledger.Grants) != 2 {
 		return false
 	}
 	seen := make(map[string]bool, len(ledger.Grants))
-	for _, grant := range ledger.Grants {
+	for index, grant := range ledger.Grants {
 		if !validRunnerID(grant.AuthorizationID) || grant.Requests != developmentGrantRequestCount || seen[grant.AuthorizationID] {
+			return false
+		}
+		if index == 0 && (grant.AuthorizationID == recoveryDevelopmentAuthorizationID || grant.CandidateID != "" || grant.Model != "") {
+			return false
+		}
+		if index == 1 && (grant.AuthorizationID != recoveryDevelopmentAuthorizationID || grant.CandidateID != recoveryDevelopmentCandidateID || grant.Model != recoveryDevelopmentModel) {
 			return false
 		}
 		seen[grant.AuthorizationID] = true

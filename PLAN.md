@@ -258,7 +258,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | AUTO-04 | Report tokens without blocking and escalate Terra repairs to Sol | AUTO-03 | M / high | Complete |
 | AUTO-05 | Isolate validation scratch and preserve failure evidence | AUTO-04 | S / high | Complete |
 | REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
-| REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Pending |
+| REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Pending |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
@@ -1474,6 +1474,7 @@ accounting and qualification pass criteria below still apply in full.
   qualification remains unchanged at 0/24 in recovery fixtures. Test both new and
   existing persisted ledger forms. Normal test/check targets make no live calls.
 - **Verify:** focused runner/CLI tests, G, independent review, `make check`.
+- Automated acceptance 2026-09-08: attempt 5; a fresh review accepted diff `229020bf7358` and `make check` passed.
 
 ### REC-03 — Prepare and verify the frozen local reasoning candidate
 

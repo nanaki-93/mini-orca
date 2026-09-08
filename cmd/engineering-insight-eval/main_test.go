@@ -177,6 +177,19 @@ func TestGrantDevelopmentModeRequiresOneUniqueAuthorization(t *testing.T) {
 	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "..", "-requests", "6"}); err == nil {
 		t.Fatal("path-like authorization ID was accepted")
 	}
+	if err := os.WriteFile(filepath.Join(state, "campaign.json"), []byte(`{"development_requests":12,"qualification_requests":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	recovery := []string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-recovery-1", "-requests", "6", "-candidate-id", "qwen38-v10-recovery-1", "-model", "qwen/qwen3.8-27b"}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-recovery-1", "-requests", "6"}); err == nil {
+		t.Fatal("unbound recovery grant was accepted")
+	}
+	if err := runEvaluationMode(recovery); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode(recovery); err == nil {
+		t.Fatal("recovery grant replay was accepted")
+	}
 }
 
 func lifecycleArgs(root, configPath, casesPath, base, receiptPath string) []string {

@@ -142,6 +142,219 @@ func TestEngineeringInsightRunnerRequiresExplicitDevelopmentBudgetGrantForSecond
 	}
 }
 
+func TestEngineeringInsightRunnerAppliesBoundQwenRecoveryGrantOnlyAfterTwelveRequests(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	first := runnerTestConfig(t, "development-one", EngineeringInsightCollectRunMode, 3, client)
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	second := runnerTestConfig(t, "development-two", EngineeringInsightDevelopmentRunMode, 3, client)
+	second.Root = first.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), second); err != nil {
+		t.Fatal(err)
+	}
+	if err := GrantEngineeringInsightDevelopmentBudget(first.Root, "extension-one", 6); err != nil {
+		t.Fatal(err)
+	}
+	if err := GrantEngineeringInsightRecoveryDevelopmentBudget(first.Root, recoveryDevelopmentAuthorizationID, 6, recoveryDevelopmentCandidateID, recoveryDevelopmentModel); err == nil {
+		t.Fatal("second recovery grant was accepted before twelve requests")
+	}
+	for _, runID := range []string{"development-three", "development-four"} {
+		cfg := runnerTestConfig(t, runID, EngineeringInsightDevelopmentRunMode, 3, client)
+		cfg.Root = first.Root
+		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err != nil {
+			t.Fatalf("complete first recovery %q: %v", runID, err)
+		}
+	}
+	if client.calls.Load() != 12 {
+		t.Fatalf("first two development grants dispatched %d requests, want 12", client.calls.Load())
+	}
+	if err := GrantEngineeringInsightRecoveryDevelopmentBudget(first.Root, recoveryDevelopmentAuthorizationID, 6, "wrong-candidate", recoveryDevelopmentModel); err == nil {
+		t.Fatal("recovery grant accepted the wrong candidate")
+	}
+	if err := GrantEngineeringInsightRecoveryDevelopmentBudget(first.Root, recoveryDevelopmentAuthorizationID, 6, recoveryDevelopmentCandidateID, "wrong-model"); err == nil {
+		t.Fatal("recovery grant accepted the wrong model")
+	}
+	if err := GrantEngineeringInsightRecoveryDevelopmentBudget(first.Root, recoveryDevelopmentAuthorizationID, 6, recoveryDevelopmentCandidateID, recoveryDevelopmentModel); err != nil {
+		t.Fatal(err)
+	}
+	if err := GrantEngineeringInsightRecoveryDevelopmentBudget(first.Root, recoveryDevelopmentAuthorizationID, 6, recoveryDevelopmentCandidateID, recoveryDevelopmentModel); err == nil {
+		t.Fatal("recovery grant replay was accepted")
+	}
+
+	wrongCandidate := recoveryRunnerTestConfig(t, "recovery-wrong-candidate", client)
+	wrongCandidate.Root = first.Root
+	wrongCandidate.CandidateID = "another-candidate"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 12 {
+		t.Fatalf("wrong recovery candidate dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongModel := recoveryRunnerTestConfig(t, "recovery-wrong-model", client)
+	wrongModel.Root = first.Root
+	wrongModel.Profile.Model = "another-model"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongModel); err == nil || client.calls.Load() != 12 {
+		t.Fatalf("wrong recovery model dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongDestination := recoveryRunnerTestConfig(t, "recovery-wrong-destination", client)
+	wrongDestination.Root = first.Root
+	wrongDestination.Profile.APIBaseURL = "https://provider.example/v1"
+	wrongDestination.ConfirmRemoteProvider = true
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongDestination); err == nil || client.calls.Load() != 12 {
+		t.Fatalf("remote recovery destination dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	for _, runID := range []string{"recovery-one", "recovery-two"} {
+		cfg := recoveryRunnerTestConfig(t, runID, client)
+		cfg.Root = first.Root
+		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err != nil {
+			t.Fatalf("bound recovery %q: %v", runID, err)
+		}
+	}
+	final := recoveryRunnerTestConfig(t, "recovery-exhausted", client)
+	final.Root = first.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), final); err == nil || client.calls.Load() != 18 {
+		t.Fatalf("recovery cap was not exhausted: %v, calls=%d", err, client.calls.Load())
+	}
+	campaign, err := loadEvaluationCampaign(filepath.Join(first.Root, runnerRelativeDirectory, "campaign.json"))
+	if err != nil || campaign.DevelopmentRequests != 18 || campaign.QualificationRequests != 0 {
+		t.Fatalf("recovery campaign counters: %+v, %v", campaign, err)
+	}
+}
+
+func TestEngineeringInsightRunnerRejectsRecoveryAuthorizationAsFirstGrant(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: defaultDevelopmentRequestCap}); err != nil {
+		t.Fatal(err)
+	}
+	if err := GrantEngineeringInsightDevelopmentBudget(root, recoveryDevelopmentAuthorizationID, developmentGrantRequestCount); err == nil {
+		t.Fatal("unbound recovery authorization was accepted as first grant")
+	}
+	if err := GrantEngineeringInsightRecoveryDevelopmentBudget(root, recoveryDevelopmentAuthorizationID, developmentGrantRequestCount, recoveryDevelopmentCandidateID, recoveryDevelopmentModel); err == nil {
+		t.Fatal("bound recovery authorization was accepted as first grant")
+	}
+	if _, exists, err := loadDevelopmentGrantLedger(directory); err != nil || exists {
+		t.Fatalf("recovery authorization created a ledger: exists=%t err=%v", exists, err)
+	}
+}
+
+func TestEngineeringInsightRunnerPreservesPersistedDevelopmentCampaignCaps(t *testing.T) {
+	tests := []struct {
+		name       string
+		ledger     string
+		consumed   int
+		wantCap    int
+		wantGrants int
+		recovery   bool
+	}{
+		{name: "original six-request campaign", consumed: 6, wantCap: 6},
+		{name: "legacy twelve-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6}]}`, consumed: 12, wantCap: 12, wantGrants: 1},
+		{name: "bound eighteen-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"}]}`, consumed: 12, wantCap: 18, wantGrants: 2, recovery: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: test.consumed}); err != nil {
+				t.Fatal(err)
+			}
+			if test.ledger != "" {
+				if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(test.ledger), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			loaded, exists, err := loadDevelopmentGrantLedger(directory)
+			if err != nil || exists != (test.ledger != "") || len(loaded.Grants) != test.wantGrants {
+				t.Fatalf("load persisted ledger: %+v, %t, %v", loaded, exists, err)
+			}
+			campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
+			if err != nil || campaign.DevelopmentRequests != test.consumed || campaign.QualificationRequests != 0 {
+				t.Fatalf("load persisted campaign: %+v, %v", campaign, err)
+			}
+			cfg := runnerTestConfig(t, "persisted-cap", EngineeringInsightDevelopmentRunMode, 3, &fakeEngineeringInsightClient{})
+			if test.recovery {
+				cfg = recoveryRunnerTestConfig(t, "persisted-cap", &fakeEngineeringInsightClient{})
+			}
+			cap, err := developmentRequestCap(directory, test.consumed, cfg)
+			if err != nil || cap != test.wantCap {
+				t.Fatalf("development cap = %d, want %d: %v", cap, test.wantCap, err)
+			}
+		})
+	}
+}
+
+func TestEngineeringInsightRunnerRejectsUnboundRecoveryAuthorizationInPersistedLedger(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(`{"grants":[{"authorization_id":"qual05-qwen38-recovery-1","requests":6}]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := loadDevelopmentGrantLedger(directory); err == nil {
+		t.Fatal("persisted recovery authorization was accepted as an unbound first grant")
+	}
+}
+
+func TestEngineeringInsightRunnerDoesNotReplayInterruptedBoundRecovery(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := recoveryRunnerTestConfig(t, "interrupted-recovery", client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{
+		{AuthorizationID: "extension-one", Requests: 6},
+		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
+	}}
+	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
+		t.Fatal(err)
+	}
+	manifest := engineeringInsightRunManifest{Fingerprint: runnerFingerprint(cfg), Receipt: runnerReceipt(cfg)}
+	for _, item := range cfg.Cases {
+		manifest.Receipt.Attempts = append(manifest.Receipt.Attempts, unknownReservedAttempt(item.Expected, cfg.CandidateID))
+	}
+	manifest.Receipt.Consumption.Requests = len(cfg.Cases)
+	if err := writeRunnerJSON(filepath.Join(directory, cfg.RunID+".json"), manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 15}); err != nil {
+		t.Fatal(err)
+	}
+	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil || client.calls.Load() != 0 || receipt.Attempts[0].Outcome != "unknown" {
+		t.Fatalf("interrupted bound recovery replayed: receipt=%+v calls=%d err=%v", receipt, client.calls.Load(), err)
+	}
+	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
+	if err != nil || campaign.DevelopmentRequests != 15 || campaign.QualificationRequests != 0 {
+		t.Fatalf("interrupted recovery campaign changed: %+v, %v", campaign, err)
+	}
+}
+
+func TestEngineeringInsightRunnerLocksBoundRecoveryGrantAndDispatchTogether(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := recoveryRunnerTestConfig(t, "concurrent-recovery", client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{{AuthorizationID: "extension-one", Requests: 6}}}
+	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 12}); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := lockRunnerFile(filepath.Join(directory, "campaign.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	if err := GrantEngineeringInsightRecoveryDevelopmentBudget(cfg.Root, recoveryDevelopmentAuthorizationID, 6, recoveryDevelopmentCandidateID, recoveryDevelopmentModel); !errors.Is(err, ErrEngineeringInsightRunLocked) {
+		t.Fatalf("concurrent recovery grant = %v", err)
+	}
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); !errors.Is(err, ErrEngineeringInsightRunLocked) || client.calls.Load() != 0 {
+		t.Fatalf("concurrent recovery dispatch = %v, calls=%d", err, client.calls.Load())
+	}
+}
+
 func TestEngineeringInsightRunnerRejectsCorruptDevelopmentGrantLedgerBeforeDispatch(t *testing.T) {
 	for name, ledger := range map[string]string{
 		"unknown field":   `{"grants":[{"authorization_id":"extension-one","requests":6}],"unexpected":true}`,
@@ -408,6 +621,14 @@ func runnerTestConfig(t *testing.T, runID, mode string, count int, client Engine
 		cases = append(cases, EngineeringInsightRunnerCase{Expected: EngineeringInsightExpectedAttempt{CaseName: "case-" + string(rune('a'+caseIndex)), Partition: "development", Intent: intent, Repetition: index/3 + 1, Attempt: 1}, Source: "package fixture\n\n// fixture-secret\nfunc Run() {}\n"})
 	}
 	return EngineeringInsightRunnerConfig{Root: t.TempDir(), RunID: runID, Mode: mode, CandidateID: "candidate", Provider: "configured", Model: "model", PromptVersion: semanticAnalysisPromptVersion, CorpusID: "corpus", CorpusDigest: strings.Repeat("a", 64), BaseRevision: "base", Profile: config.ModelProfile{Scope: config.BugModelScope, APIBaseURL: "http://127.0.0.1:9999", APIKey: "provider-secret", Model: "model", ContextMaxTokens: 32000}, Cases: cases, Client: client}
+}
+
+func recoveryRunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
+	cfg := runnerTestConfig(t, runID, EngineeringInsightDevelopmentRunMode, 3, client)
+	cfg.CandidateID = recoveryDevelopmentCandidateID
+	cfg.Model = recoveryDevelopmentModel
+	cfg.Profile.Model = recoveryDevelopmentModel
+	return cfg
 }
 
 func qualificationRunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
