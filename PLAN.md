@@ -1475,6 +1475,14 @@ accounting and qualification pass criteria below still apply in full.
   existing persisted ledger forms. Normal test/check targets make no live calls.
 - **Verify:** focused runner/CLI tests, G, independent review, `make check`.
 - Automated acceptance 2026-09-08: attempt 5; a fresh review accepted diff `229020bf7358` and `make check` passed.
+- Coordinator `make quality` also passed for that exact candidate. The production
+  grant remains unapplied; the canonical campaign and original grant ledger are
+  unchanged at 12 development requests and 0 qualification requests.
+- Validation note: the existing desktop workflow assertion
+  `DesktopWorkflowPresenterTest.explicitSendMakesOneChatRequestAndPreservesFunctionRemoteConsent`
+  failed once in `validation-4-1`; the unchanged candidate passed the complete
+  gate in `validation-5-2`. Both private receipts remain available for release
+  reliability follow-up. No desktop source or tests changed in REC-02.
 
 ### REC-03 — Prepare and verify the frozen local reasoning candidate
 
