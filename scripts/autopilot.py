@@ -9,12 +9,13 @@ import hashlib
 import json
 import os
 import re
-import resource
+import selectors
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -30,6 +31,7 @@ MAX_CARD_BYTES = 24 * 1024
 MAX_FILES = 200
 MAX_FILE_BYTES = 16 * 1024 * 1024
 MAX_CANDIDATE_BYTES = 64 * 1024 * 1024
+MAX_DIAGNOSTIC_BYTES = 2 * 1024 * 1024
 TERMINAL_PHASES = {"failed", "integrated"}
 PROTECTED_FILES = {
     ".gitignore",
@@ -67,35 +69,65 @@ class ProcessResult:
     stderr: bytes
     timed_out: bool = False
     output_exhausted: bool = False
+    launch_error: str | None = None
 
 
 def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
+def signal_name(number: int | None) -> str | None:
+    if number is None:
+        return None
+    try:
+        return signal.Signals(number).name
+    except ValueError:
+        return f"SIG{number}"
+
+
 def atomic_json(path: Path, value: dict[str, Any]) -> None:
+    atomic_bytes(path, json.dumps(value, sort_keys=True).encode())
+
+
+def atomic_bytes(path: Path, value: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
-        with os.fdopen(descriptor, "w") as stream:
-            json.dump(value, stream, sort_keys=True)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(value)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(name, path)
+        directory_descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
     finally:
         Path(name).unlink(missing_ok=True)
 
 
-def read_json(path: Path) -> dict[str, Any]:
+def safe_state_bytes(path: Path) -> bytes:
     if path.is_symlink() or path.stat().st_size > 1024 * 1024:
         raise DispatchError(f"unsafe state file {path.name}")
     try:
-        value = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
+        return path.read_bytes()
+    except OSError as exc:
+        raise DispatchError(f"invalid state file {path.name}") from exc
+
+
+def parse_json_bytes(path: Path, content: bytes) -> dict[str, Any]:
+    try:
+        value = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise DispatchError(f"invalid state file {path.name}") from exc
     if not isinstance(value, dict):
         raise DispatchError(f"invalid state file {path.name}")
     return value
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    return parse_json_bytes(path, safe_state_bytes(path))
 
 
 def clean_environment(*, auth: bool, temporary_home: Path | None = None) -> dict[str, str]:
@@ -221,41 +253,132 @@ def bounded_process(
     stdin: str = "",
     started: Callable[[int | None], None] | None = None,
 ) -> ProcessResult:
-    def limit_files() -> None:
-        limit = 128 * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_FSIZE, (limit, limit))
+    """Run one process while retaining no more than the combined output limit.
 
-    timed_out = False
-    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+    Pipes are drained while the child runs so a verbose child cannot block on a
+    full pipe.  A process group lets the dispatcher stop descendants that keep a
+    pipe open after their parent exits.
+    """
+    try:
         process = subprocess.Popen(
             list(command), cwd=cwd, env=environment, stdin=subprocess.PIPE,
-            stdout=stdout, stderr=stderr, start_new_session=True, preexec_fn=limit_files,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
         )
+    except OSError as exc:
+        return ProcessResult(127, b"", str(exc).encode(errors="replace"), launch_error=str(exc))
+
+    assert process.stdin is not None and process.stdout is not None and process.stderr is not None
+    timed_out = False
+    output_exhausted = False
+    killed = False
+    kill_deadline: float | None = None
+    stdout = bytearray()
+    stderr = bytearray()
+    input_bytes = memoryview(stdin.encode())
+    input_offset = 0
+    selector = selectors.DefaultSelector()
+
+    def register(stream: Any, events: int, name: str) -> None:
+        os.set_blocking(stream.fileno(), False)
+        selector.register(stream, events, name)
+
+    def close(stream: Any) -> None:
+        try:
+            selector.unregister(stream)
+        except (KeyError, ValueError):
+            pass
+        try:
+            stream.close()
+        except OSError:
+            pass
+
+    def kill_group() -> None:
+        nonlocal killed, kill_deadline
+        if killed:
+            return
+        killed = True
+        kill_deadline = time.monotonic() + 1
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    try:
+        register(process.stdout, selectors.EVENT_READ, "stdout")
+        register(process.stderr, selectors.EVENT_READ, "stderr")
+        if input_bytes:
+            register(process.stdin, selectors.EVENT_WRITE, "stdin")
+        else:
+            close(process.stdin)
         if started:
             started(process.pid)
+        deadline = time.monotonic() + timeout_seconds
+        while selector.get_map() or process.poll() is None:
+            current = time.monotonic()
+            remaining = deadline - current
+            if remaining <= 0 and not killed:
+                timed_out = True
+                kill_group()
+            if killed and kill_deadline is not None and current >= kill_deadline:
+                # A detached descendant can retain a copied pipe despite the
+                # process-group kill.  Its output is no longer useful.
+                for stream in (process.stdin, process.stdout, process.stderr):
+                    close(stream)
+            events = selector.select(max(0.01, min(max(remaining, 0), 0.1))) if selector.get_map() else []
+            if not events:
+                if process.poll() is not None and not killed:
+                    # A descendant inherited one of the pipes.  It must not keep
+                    # this invocation alive after its direct parent is reaped.
+                    kill_group()
+                if not selector.get_map() and process.poll() is None:
+                    time.sleep(0.01)
+                continue
+            for key, _ in events:
+                stream = key.fileobj
+                if key.data == "stdin":
+                    try:
+                        written = os.write(stream.fileno(), input_bytes[input_offset:])
+                    except BlockingIOError:
+                        continue
+                    except BrokenPipeError:
+                        close(stream)
+                        continue
+                    input_offset += written
+                    if input_offset == len(input_bytes):
+                        close(stream)
+                    continue
+                room = max_output_bytes - len(stdout) - len(stderr)
+                try:
+                    data = os.read(stream.fileno(), max(1, min(64 * 1024, room + 1)))
+                except BlockingIOError:
+                    continue
+                if not data:
+                    close(stream)
+                    continue
+                destination = stdout if key.data == "stdout" else stderr
+                if len(data) > room:
+                    destination.extend(data[:max(room, 0)])
+                    output_exhausted = True
+                    kill_group()
+                else:
+                    destination.extend(data)
+        process.wait()
+    finally:
         try:
-            process.communicate(stdin.encode(), timeout=timeout_seconds)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.communicate()
+            for stream in (process.stdin, process.stdout, process.stderr):
+                close(stream)
+            selector.close()
+            if process.poll() is None:
+                kill_group()
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
         finally:
             if started:
                 started(None)
-        sizes = stdout.tell(), stderr.tell()
-        stdout.seek(0)
-        stderr.seek(0)
-        exhausted = sum(sizes) > max_output_bytes
-        return ProcessResult(
-            process.returncode,
-            stdout.read(max_output_bytes + 1),
-            stderr.read(max_output_bytes + 1),
-            timed_out,
-            exhausted,
-        )
+    return ProcessResult(process.returncode, bytes(stdout), bytes(stderr), timed_out, output_exhausted)
 
 
 class Lease:
@@ -411,19 +534,26 @@ def event_result(payload: bytes, role: str, task_id: str) -> tuple[dict[str, Any
         events = [json.loads(line) for line in payload.decode().splitlines() if line]
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise DispatchError(f"{role} emitted invalid JSONL") from exc
-    if any(event.get("type") in {"error", "turn.failed"} for event in events if isinstance(event, dict)):
+    if not all(isinstance(event, dict) for event in events):
+        raise DispatchError(f"{role} emitted invalid JSONL")
+    if any(event.get("type") in {"error", "turn.failed"} for event in events):
         raise DispatchError(f"{role} emitted a failed event")
     starts = [event for event in events if event.get("type") == "thread.started"]
     completions = [event for event in events if event.get("type") == "turn.completed"]
-    messages = [
-        event.get("item", {}).get("text")
-        for event in events
-        if event.get("type") == "item.completed"
-        and event.get("item", {}).get("type") == "agent_message"
-    ]
+    messages = []
+    for event in events:
+        if event.get("type") != "item.completed":
+            continue
+        item = event.get("item")
+        if not isinstance(item, dict):
+            raise DispatchError(f"{role} emitted invalid JSONL")
+        if item.get("type") == "agent_message":
+            messages.append(item.get("text"))
     if len(starts) != 1 or len(completions) != 1 or not messages:
         raise DispatchError(f"{role} lacks complete event evidence")
     usage = completions[0].get("usage", {})
+    if not isinstance(usage, dict):
+        raise DispatchError(f"{role} lacks token evidence")
     if not all(isinstance(usage.get(key), int) and usage[key] >= 0 for key in ("input_tokens", "output_tokens")):
         raise DispatchError(f"{role} lacks token evidence")
     try:
@@ -573,11 +703,8 @@ class Dispatcher:
         self.state["updated_at"] = now()
         atomic_json(self.state_path, self.state)
 
-    def create_state(self, task: Task, base: str, config_digest: str) -> None:
-        self.state_path = self.runs / f"{task.task_id}.json"
-        if self.state_path.exists():
-            raise DispatchError(f"task {task.task_id} already has recorded state")
-        self.state = {
+    def state_template(self, task: Task, base: str, config_digest: str) -> dict[str, Any]:
+        return {
             "version": 1,
             "task": task.task_id,
             "task_card_digest": hashlib.sha256(task.card.encode()).hexdigest(),
@@ -596,6 +723,56 @@ class Dispatcher:
             "validator": None,
             "integration": {"authorized": False, "commit": None},
             "created_at": now(),
+        }
+
+    def create_state(self, task: Task, base: str, config_digest: str) -> None:
+        self.state_path = self.runs / f"{task.task_id}.json"
+        if self.state_path.exists():
+            raise DispatchError(f"task {task.task_id} already has recorded state")
+        self.state = self.state_template(task, base, config_digest)
+        self.save()
+
+    def private_directory(self, name: str) -> Path:
+        path = self.state_root / name
+        if path.is_symlink():
+            raise DispatchError(f"private {name} path must not contain symlinks")
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if path.is_symlink() or not path.is_dir():
+            raise DispatchError(f"private {name} path is invalid")
+        os.chmod(path, 0o700)
+        return path
+
+    def record_invocation_failure(self, role: str, invocation_id: str, stage: str, result: ProcessResult) -> None:
+        """Persist bounded private evidence without copying CLI prose into state."""
+        assert self.state is not None
+        diagnostics = self.private_directory("diagnostics")
+        prefix = f"{self.state['task']}-{invocation_id}"
+        stdout_path = diagnostics / f"{prefix}.stdout"
+        stderr_path = diagnostics / f"{prefix}.stderr"
+        for path, content in ((stdout_path, result.stdout), (stderr_path, result.stderr)):
+            if path.is_symlink():
+                raise DispatchError("private diagnostics path must not contain symlinks")
+            retained = content[:MAX_DIAGNOSTIC_BYTES]
+            atomic_bytes(path, retained)
+            os.chmod(path, 0o600)
+        signal_number = -result.code if result.code < 0 else None
+        self.state["failure"] = {
+            "role": role,
+            "stage": stage,
+            "exit_code": result.code if result.code >= 0 else None,
+            "signal": signal_number,
+            "signal_name": signal_name(signal_number),
+            "timed_out": result.timed_out,
+            "output_exhausted": result.output_exhausted,
+            "diagnostics": {
+                "stdout": str(stdout_path.relative_to(self.repo)),
+                "stderr": str(stderr_path.relative_to(self.repo)),
+                "stdout_digest": hashlib.sha256(result.stdout[:MAX_DIAGNOSTIC_BYTES]).hexdigest(),
+                "stderr_digest": hashlib.sha256(result.stderr[:MAX_DIAGNOSTIC_BYTES]).hexdigest(),
+                "stdout_bytes": min(len(result.stdout), MAX_DIAGNOSTIC_BYTES),
+                "stderr_bytes": min(len(result.stderr), MAX_DIAGNOSTIC_BYTES),
+            },
+            "recorded_at": now(),
         }
         self.save()
 
@@ -629,15 +806,239 @@ class Dispatcher:
                 raise DispatchError("repository Git configuration changed")
             raise DispatchError("run state does not match this dispatcher configuration")
 
+    def verify_interrupted_recovery(
+        self, task: Task, selected: dict[str, Any], journal: dict[str, Any], reason_digest: str
+    ) -> None:
+        recovery = selected.get("recovery")
+        if not isinstance(recovery, dict) or hashlib.sha256(str(recovery.get("reason", "")).encode()).hexdigest() != reason_digest:
+            raise DispatchError("recovery reason does not match the authorization")
+        archive_name = recovery.get("archive")
+        archives = self.private_directory("archives")
+        if not isinstance(archive_name, str):
+            raise DispatchError("interrupted recovery archive is invalid")
+        lexical_archive = self.repo / archive_name
+        if lexical_archive.is_symlink():
+            raise DispatchError("interrupted recovery archive is invalid")
+        archive_path = lexical_archive.resolve()
+        try:
+            archive_path.relative_to(archives.resolve())
+        except ValueError as exc:
+            raise DispatchError("interrupted recovery archive is outside private state") from exc
+        if archive_path.is_symlink() or not archive_path.is_file() or archive_path.stat().st_size > 1024 * 1024:
+            raise DispatchError("interrupted recovery archive is invalid")
+        archive_bytes = archive_path.read_bytes()
+        archive_digest = hashlib.sha256(archive_bytes).hexdigest()
+        if archive_digest != journal.get("old_digest") or archive_digest != recovery.get("archive_digest"):
+            raise DispatchError("interrupted recovery archive identity is invalid")
+        archived = parse_json_bytes(archive_path, archive_bytes)
+        old_configuration = archived.get("configuration")
+        selected_configuration = selected.get("configuration")
+        old_tokens = archived.get("tokens_used")
+        old_attempt = archived.get("attempt")
+        pending = archived.get("pending_invocation")
+        reserved = pending.get("reserved_tokens") if isinstance(pending, dict) else 0
+        if (
+            archived.get("phase") != "failed"
+            or archived.get("task") != task.task_id
+            or not isinstance(old_attempt, int)
+            or not isinstance(old_tokens, int)
+            or not isinstance(reserved, int)
+            or old_tokens < reserved
+            or selected.get("attempt") != old_attempt + 1
+            or selected.get("tokens_used") != old_tokens
+            or not isinstance(old_configuration, dict)
+            or not isinstance(selected_configuration, dict)
+            or selected_configuration.get("token_budget") != old_configuration.get("token_budget")
+            or selected_configuration.get("invocation_reserve_tokens") != old_configuration.get("invocation_reserve_tokens")
+            or recovery.get("prior_attempt") != old_attempt
+            or recovery.get("prior_tokens_used") != old_tokens
+        ):
+            raise DispatchError("interrupted recovery accounting is invalid")
+
+    def recover_failed_run(self, task: Task, tasks: list[Task], base: str, config_digest: str) -> dict[str, Any]:
+        """Replace one failed run only after immutable archival and identity checks."""
+        if task.status != "Pending":
+            raise DispatchError(f"task {task.task_id} is {task.status}, not Pending")
+        select_task(tasks, task.task_id, set())
+        assert self.args.recovery_authorization_id and self.args.recovery_reason
+        authorization_id = self.args.recovery_authorization_id
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{7,127}", authorization_id):
+            raise DispatchError("recovery authorization id is invalid")
+        if len(self.args.recovery_reason.encode()) > 1000:
+            raise DispatchError("recovery reason exceeds the byte limit")
+        active = self.active_state(task.task_id)
+        active_recovery = active[1].get("recovery") if active else None
+        if active and (not isinstance(active_recovery, dict) or active_recovery.get("authorization_id") != authorization_id):
+            raise DispatchError("an active run prevents failed-run recovery")
+        state_path = self.runs / f"{task.task_id}.json"
+        if not state_path.is_file() or state_path.is_symlink():
+            raise DispatchError(f"task {task.task_id} has no failed run to recover")
+        raw_state = safe_state_bytes(state_path)
+        old_state = parse_json_bytes(state_path, raw_state)
+        authorization_digest = hashlib.sha256(authorization_id.encode()).hexdigest()
+        reason_digest = hashlib.sha256(self.args.recovery_reason.encode()).hexdigest()
+        old_digest = hashlib.sha256(raw_state).hexdigest()
+        journals = self.private_directory("recoveries")
+        journal_path = journals / f"{authorization_digest}.json"
+        if journal_path.exists():
+            journal = read_json(journal_path)
+            if journal.get("task") != task.task_id:
+                raise DispatchError("recovery authorization id was already used")
+            if journal.get("reason_digest") != reason_digest:
+                raise DispatchError("recovery reason does not match the authorization")
+            if journal.get("complete") is True:
+                raise DispatchError("recovery authorization id was already used")
+            recovery = old_state.get("recovery")
+            if isinstance(recovery, dict) and recovery.get("authorization_id") == authorization_id:
+                self.verify_interrupted_recovery(task, old_state, journal, reason_digest)
+                self.state_path, self.state = state_path, old_state
+                self.verify_state(task, base, config_digest)
+                if self.state.get("phase") != "selected":
+                    raise DispatchError("interrupted recovery state is invalid")
+                journal["complete"] = True
+                journal["completed_at"] = now()
+                atomic_json(journal_path, journal)
+                return {
+                    "task": task.task_id,
+                    "phase": "selected",
+                    "attempt": self.state["attempt"],
+                    "tokens_used": self.state["tokens_used"],
+                    "recovered": True,
+                }
+            if journal.get("old_digest") != old_digest:
+                raise DispatchError("recovery authorization id was already used")
+        else:
+            journal = {
+                "task": task.task_id,
+                "old_digest": old_digest,
+                "authorization_digest": authorization_digest,
+                "reason_digest": reason_digest,
+                "created_at": now(),
+                "complete": False,
+            }
+            atomic_json(journal_path, journal)
+
+        if old_state.get("phase") != "failed" or old_state.get("task") != task.task_id:
+            raise DispatchError(f"task {task.task_id} has no failed run to recover")
+        attempt = old_state.get("attempt")
+        tokens_used = old_state.get("tokens_used")
+        old_configuration = old_state.get("configuration")
+        if not isinstance(attempt, int) or not 1 <= attempt < MAX_ATTEMPTS:
+            raise DispatchError("failed run exhausted its attempt budget")
+        if not isinstance(old_configuration, dict):
+            raise DispatchError("failed run configuration is invalid")
+        old_budget = old_configuration.get("token_budget")
+        old_reserve = old_configuration.get("invocation_reserve_tokens")
+        pending = old_state.get("pending_invocation")
+        pending_reserve = pending.get("reserved_tokens") if isinstance(pending, dict) else 0
+        if not isinstance(old_budget, int) or old_budget <= 0 or not isinstance(old_reserve, int) or old_reserve <= 0:
+            raise DispatchError("failed run configuration is invalid")
+        if self.args.token_budget != old_budget or self.args.invocation_reserve_tokens != old_reserve:
+            raise DispatchError("failed-run recovery requires its original token configuration")
+        if not isinstance(pending_reserve, int) or pending_reserve < 0 or not isinstance(tokens_used, int) or tokens_used < pending_reserve:
+            raise DispatchError("failed run reservation accounting is invalid")
+        if tokens_used + self.args.invocation_reserve_tokens > self.args.token_budget:
+            raise DispatchError("failed run exhausted its token budget")
+        self.verify_failed_candidate(old_state)
+
+        archives = self.private_directory("archives")
+        archive_path = archives / f"{task.task_id}-{old_digest[:16]}-{authorization_digest[:16]}.json"
+        if archive_path.exists():
+            if archive_path.is_symlink() or archive_path.read_bytes() != raw_state:
+                raise DispatchError("failed run archive identity is invalid")
+        else:
+            atomic_bytes(archive_path, raw_state)
+            os.chmod(archive_path, 0o600)
+
+        new_state = self.state_template(task, base, config_digest)
+        new_state.update(
+            {
+                "worktree": str(STATE_DIR / "worktrees" / f"{task.task_id.lower()}-recovery-{base[:12]}-{authorization_digest[:8]}"),
+                "attempt": attempt + 1,
+                "tokens_used": tokens_used,
+                "recovery": {
+                    "authorization_id": authorization_id,
+                    "reason": self.args.recovery_reason,
+                    "archive": str(archive_path.relative_to(self.repo)),
+                    "archive_digest": old_digest,
+                    "prior_attempt": attempt,
+                    "prior_tokens_used": tokens_used,
+                    "prepared_at": now(),
+                },
+            }
+        )
+        existing = read_json(state_path)
+        existing_recovery = existing.get("recovery")
+        if isinstance(existing_recovery, dict) and existing_recovery.get("authorization_id") == authorization_id:
+            self.state_path, self.state = state_path, existing
+        elif safe_state_bytes(state_path) == raw_state:
+            atomic_json(state_path, new_state)
+            self.state_path, self.state = state_path, new_state
+        else:
+            raise DispatchError("failed run state changed during recovery")
+        journal["complete"] = True
+        journal["completed_at"] = now()
+        atomic_json(journal_path, journal)
+        return {
+            "task": task.task_id,
+            "phase": "selected",
+            "attempt": self.state["attempt"],
+            "tokens_used": self.state["tokens_used"],
+            "recovered": True,
+        }
+
     def worktree(self) -> Path:
         assert self.state is not None
-        path = (self.repo / str(self.state["worktree"])).resolve()
+        return self.recorded_worktree(self.state)
+
+    def recorded_worktree(self, state: dict[str, Any]) -> Path:
+        recorded = state.get("worktree")
+        if not isinstance(recorded, str):
+            raise DispatchError("recorded worktree is invalid")
+        path = (self.repo / recorded).resolve()
         expected = (self.state_root / "worktrees").resolve()
         try:
             path.relative_to(expected)
         except ValueError as exc:
             raise DispatchError("recorded worktree is outside local state") from exc
         return path
+
+    def candidate_snapshot(self, worktree: Path, base: str) -> dict[str, Any]:
+        descriptor, name = tempfile.mkstemp(prefix="recovery-index-", dir=self.state_root)
+        os.close(descriptor)
+        Path(name).unlink()
+        environment = {"GIT_INDEX_FILE": name}
+        try:
+            git_bytes(worktree, "read-tree", base, extra_environment=environment)
+            git_bytes(worktree, "add", "-A", "--", ".", extra_environment=environment)
+            tree = git_text(worktree, "write-tree", extra_environment=environment)
+        finally:
+            Path(name).unlink(missing_ok=True)
+        raw_files = git_bytes(worktree, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", base, tree)
+        files = sorted(os.fsdecode(item) for item in raw_files.split(b"\0") if item)
+        diff = git_bytes(worktree, "diff", "--binary", "--no-ext-diff", base, tree)
+        return {"tree": tree, "diff": hashlib.sha256(diff).hexdigest(), "files": files}
+
+    def verify_failed_candidate(self, state: dict[str, Any]) -> None:
+        worktree = self.recorded_worktree(state)
+        base = state.get("base")
+        if not isinstance(base, str) or not worktree.is_dir():
+            raise DispatchError("failed run worktree is missing")
+        if git_text(worktree, "rev-parse", "HEAD") != base:
+            raise DispatchError("failed run worktree history changed")
+        if git_bytes(worktree, "symbolic-ref", "-q", "HEAD", check=False):
+            raise DispatchError("failed run worktree is attached to a branch")
+        ignored = git_text(worktree, "status", "--porcelain=v1", "--ignored=matching")
+        if any(line.startswith("!! ") for line in ignored.splitlines()):
+            raise DispatchError("failed run worktree contains ignored output")
+        current = self.candidate_snapshot(worktree, base)
+        recorded = state.get("candidate")
+        if recorded is None:
+            if current["tree"] != git_text(worktree, "rev-parse", f"{base}^{{tree}}"):
+                raise DispatchError("failed run worktree has an unrecorded candidate")
+            return
+        if current != recorded:
+            raise DispatchError("failed run candidate changed")
 
     def prepare_worktree(self) -> Path:
         assert self.state is not None
@@ -798,13 +1199,26 @@ class Dispatcher:
             )
         finally:
             Path(schema_path).unlink(missing_ok=True)
+        if result.launch_error:
+            self.record_invocation_failure(role, invocation_id, "launch", result)
+            raise DispatchError(f"{role} launch failed")
         if result.timed_out:
+            self.record_invocation_failure(role, invocation_id, "timeout", result)
             raise DispatchError(f"{role} timed out")
         if result.output_exhausted:
+            self.record_invocation_failure(role, invocation_id, "output_limit", result)
             raise DispatchError(f"{role} output limit exhausted")
+        if result.code < 0:
+            self.record_invocation_failure(role, invocation_id, "signal", result)
+            raise DispatchError(f"{role} process terminated by {signal_name(-result.code)}")
         if result.code:
-            raise DispatchError(f"{role} process failed")
-        value, tokens = event_result(result.stdout, role, task.task_id)
+            self.record_invocation_failure(role, invocation_id, "exit", result)
+            raise DispatchError(f"{role} process failed with exit status {result.code}")
+        try:
+            value, tokens = event_result(result.stdout, role, task.task_id)
+        except DispatchError:
+            self.record_invocation_failure(role, invocation_id, "events", result)
+            raise
         self.state["tokens_used"] += tokens - reserve
         self.state["invocations"].append(
             {
@@ -1070,6 +1484,20 @@ class Dispatcher:
             raise DispatchError("timeout and output limits must be positive")
         if self.args.token_budget <= 0 or self.args.invocation_reserve_tokens <= 0:
             raise DispatchError("token limits must be positive")
+        if self.args.recover_failed_run:
+            if self.args.dry_run or self.args.integrate:
+                raise DispatchError("failed-run recovery cannot dry-run or integrate")
+            if not self.args.task or not self.args.recovery_authorization_id or not self.args.recovery_reason:
+                raise DispatchError("failed-run recovery requires --task, --recovery-authorization-id, and --recovery-reason")
+            self.state_root.mkdir(parents=True, exist_ok=True)
+            with Lease(self.state_root, self.args.lease_stale_seconds, self.args.recover_stale_lease) as lease:
+                self.lease = lease
+                base, config_digest = self.clean_base()
+                tasks = parse_plan(self.repo / "PLAN.md")
+                task = next((item for item in tasks if item.task_id == self.args.task), None)
+                if task is None:
+                    raise DispatchError(f"unknown task {self.args.task}")
+                return self.recover_failed_run(task, tasks, base, config_digest)
         self.check_cli()
         base, config_digest = self.clean_base()
         tasks = parse_plan(self.repo / "PLAN.md")
@@ -1110,6 +1538,9 @@ def arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--integrate", action="store_true", help="authorize a local task commit and fast-forward")
     parser.add_argument("--recover-stale-lease", action="store_true")
+    parser.add_argument("--recover-failed-run", action="store_true", help="offline replacement of one selected failed run")
+    parser.add_argument("--recovery-authorization-id")
+    parser.add_argument("--recovery-reason")
     parser.add_argument("--lease-stale-seconds", type=int, default=3600)
     parser.add_argument("--timeout-seconds", type=float, default=1800)
     parser.add_argument("--token-budget", type=int, default=200000)

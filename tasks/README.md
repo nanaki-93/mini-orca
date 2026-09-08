@@ -140,6 +140,45 @@ only with `--recover-stale-lease` after confirming its dispatcher and child are 
 Secure candidate validation currently fails closed unless macOS `sandbox-exec` is
 available; the fake CLI suite remains portable and makes no paid calls.
 
+## Dispatcher failures and explicit recovery
+
+The dispatcher bounds captured stdout/stderr while the child runs and stops its
+process group on timeout or output exhaustion. It does not set a process-global
+file-size limit: Codex may need to append to existing local databases larger than
+the output budget. Worktree validation and sandbox boundaries still apply.
+
+Failed worker/reviewer calls retain bounded private diagnostics outside worker
+worktrees, in mode-0700 storage with mode-0600 files. Treat this output as untrusted
+and potentially sensitive; inspect it locally and do not copy raw output into
+Git, ordinary logs, shared receipts or prompts. Ordinary run state records only
+diagnostic identity and exit/signal information. A missing successful completion
+does not prove that no model request was charged; its reservation stays consumed.
+
+Recovery is a separate explicit coordinator action after diagnosis and accepted
+repairs, never a scheduled automatic retry. First verify the previous worktree is
+unchanged and the dispatcher/child are gone, review and commit any necessary code
+repair, and requeue the task as Pending in the clean integration ledger. Recovery
+archives the old state unchanged, retains its worktree and token charges, consumes
+an attempt from the existing retry allowance, and prepares a fresh run at that
+reviewed base. It does not launch a worker or grant a new token budget. An uncertain
+failure remains recorded even when an offline reproduction explains its cause.
+
+For an explicitly authorized failed task, use a unique authorization ID and a
+short reason describing the accepted repair:
+
+```sh
+./scripts/autopilot.py --task REC-01 --recover-failed-run \
+  --recovery-authorization-id rec01-sigxfsz-recovery-1 \
+  --recovery-reason 'User-authorized recovery after AUTO-03; retain uncertain invocation charge.'
+./scripts/autopilot.py --task REC-01 --dry-run
+```
+
+The recovery operation makes no Codex CLI/model invocation, cannot be combined with
+`--integrate` or `--dry-run`, and does not modify PLAN.md. A later ordinary dispatch
+resumes the selected state. Do not change the committed base between recovery and
+that dispatch; resume identity checks still apply. Do not reuse an authorization
+ID or delete state files to obtain another attempt.
+
 ## Scheduled insight recovery
 
 The 2026-09-08 recovery queue is REC-01 → REC-02 → REC-03 → QUAL-05 → QUAL-06
