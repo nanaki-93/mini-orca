@@ -68,6 +68,7 @@ func runEvaluationMode(args []string) error {
 	configPath := flags.String("config", "config.yaml", "configured local daemon model profile")
 	candidateID := flags.String("candidate-id", "", "selected candidate identity")
 	provider := flags.String("provider", "", "selected provider label without endpoint or credential")
+	model := flags.String("model", "", "selected model identity for a development grant")
 	promptVersion := flags.String("prompt-version", "", "selected prompt identity")
 	corpusID := flags.String("corpus-id", "", "selected corpus identity")
 	baseRevision := flags.String("base-revision", "", "selected base revision")
@@ -79,7 +80,10 @@ func runEvaluationMode(args []string) error {
 		return fmt.Errorf("invalid evaluation command")
 	}
 	if *mode == "grant-development" {
-		return app.GrantEngineeringInsightDevelopmentBudget(*root, *authorizationID, *requests)
+		if *candidateID == "" && *model == "" {
+			return app.GrantEngineeringInsightDevelopmentBudget(*root, *authorizationID, *requests)
+		}
+		return app.GrantEngineeringInsightRecoveryDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model)
 	}
 	if !app.ValidEngineeringInsightEvaluationRunID(*runID) {
 		return fmt.Errorf("evaluation run ID is invalid")

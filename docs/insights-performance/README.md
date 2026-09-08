@@ -67,11 +67,12 @@ destination needs `-confirm-remote-provider`; loopback is the default.
 
 Private campaign state lives under ignored `.mini-orca/autopilot/engineering-insight-evaluation/`.
 It reserves the original 6-development/24-qualification budget before every dispatch.
-An explicit append-only development grant can add exactly six development requests, once,
-with a unique authorization ID; the resulting development cap is 12 and the qualification
-cap remains 24. Grants never happen automatically, cannot reset consumed requests, and a
-duplicate authorization ID is rejected. Advisory locks reject concurrent writers and release
-after crashes; an in-flight reserved attempt remains `unknown` and consumed on resume.
+The existing explicit append-only grant adds exactly six development requests with a
+unique authorization ID, producing a 12-request development cap. One final six-request
+Qwen3.8 recovery grant can raise that cap to 18 only after those 12 slots are consumed;
+the qualification cap remains 24. Grants never happen automatically, cannot reset consumed
+requests, and a duplicate authorization ID is rejected. Advisory locks reject concurrent
+writers and release after crashes; an in-flight reserved attempt remains `unknown` and consumed on resume.
 Source-free receipts and ordinary logs never contain source, endpoint URLs, keys, or response prose.
 
 The receipt records each scheduled case/repetition/attempt, its source-free response
@@ -174,6 +175,21 @@ separate local state mutation and does not contact a provider:
 go run ./cmd/engineering-insight-eval \
   -mode grant-development -root . -authorization-id qual05-extension-1 -requests 6
 ```
+
+After all 12 original and first-recovery development requests are consumed, the
+single approved Qwen3.8 recovery grant may be appended. It remains local state
+only; collection verifies the same candidate and loopback model again before
+reserving any of its six requests:
+
+```sh
+go run ./cmd/engineering-insight-eval \
+  -mode grant-development -root . \
+  -authorization-id qual05-qwen38-recovery-1 -requests 6 \
+  -candidate-id qwen38-v10-recovery-1 -model qwen/qwen3.8-27b
+```
+
+This is the final development extension: the campaign ceiling is 18 requests.
+The qualification campaign and its 24-request ceiling are unchanged.
 
 Private replies are held in mode-0700 storage for an independent scorer. `-mode handoff`
 lists only attempt IDs, `-mode score -scores scores.json -receipt scored.json` writes a
