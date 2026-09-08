@@ -252,7 +252,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | AUTO-02 | Bounded agent dispatcher with review gate | AUTO-01 | M / high | Complete |
 | QUAL-01 | Realistic development/qualification corpus and rubric | LEARN-02 | S / medium | Complete |
 | QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Complete |
-| QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Pending |
+| QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Complete |
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Pending |
 | QUAL-05 | Six-request development pilot and candidate freeze | QUAL-04 | S / high | Pending |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
@@ -1172,6 +1172,18 @@ Use one Terra worker, a fresh reviewer and coordinator-run gates per task, follo
   environment variables. Allow the independent scorer to read selected fixture
   prose privately without requiring a second generation call or source-bearing logs.
 - **Verify:** `go test ./internal/app ./cmd/engineering-insight-eval -count=1`; Q.
+- **Evidence:** accepted after the user-authorized additional repair and fresh
+  independent review. Every scorer/handoff/export entry now uses the shared strict
+  run-ID guard; hostile existing dot-ID manifests cannot trigger state deletion.
+  API and CLI regressions cover campaign preservation, the actual three-case
+  development lifecycle, 6/24 aggregate request caps, consumed crash reservations,
+  private response/score digest binding and explicit export. Production runtime
+  manifest metadata is shared with the runner. Coordinator `make check` and
+  `make quality` passed with `MINI_ORCA_LIVE_INSIGHT_EVAL=1`, plus
+  `git diff --check`; the retired environment-gated collector cannot run.
+  Windows command cross-build passed; evaluation locking there intentionally fails
+  closed at runtime. No real provider requests were made; the 30-call budget is
+  unused. The scheduler remains stopped; QUAL-04 is the next ready task.
 
 ### QUAL-04 — Improve grounded insights using development cases only
 

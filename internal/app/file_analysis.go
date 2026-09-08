@@ -22,6 +22,10 @@ const (
 	maxSemanticAnalysisBytes      = 64 * 1024
 )
 
+// EngineeringInsightPromptVersion returns the production selected-file prompt
+// identity used by evaluation; callers cannot supply an unrelated label.
+func EngineeringInsightPromptVersion() string { return semanticAnalysisPromptVersion }
+
 type semanticAnalysisResponse struct {
 	Purpose            string                      `json:"purpose"`
 	Responsibilities   []string                    `json:"responsibilities"`

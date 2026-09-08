@@ -216,10 +216,12 @@ func (s *Service) AnalysisContextManifest(targetFile string) (project.ContextMan
 }
 
 func (s *Service) contextManifestForRuntime(manifest project.ContextManifest, runtime modelRuntime) project.ContextManifest {
-	manifest.Scope = runtime.effective.Scope
-	manifest.Model = runtime.effective.Model
-	manifest.ProviderOrigin = runtime.effective.ProviderOrigin
-	manifest.RemoteProvider = runtime.effective.RemoteProvider
+	return bindContextManifestModel(manifest, runtime.effective)
+}
+
+func bindContextManifestModel(manifest project.ContextManifest, model EffectiveModel) project.ContextManifest {
+	manifest.Scope, manifest.Model = model.Scope, model.Model
+	manifest.ProviderOrigin, manifest.RemoteProvider = model.ProviderOrigin, model.RemoteProvider
 	return manifest
 }
 

@@ -192,6 +192,11 @@ func TestEngineeringInsightQualificationThresholdBoundaries(t *testing.T) {
 		"critical claim always fails": {want: EngineeringInsightFailedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
 			receipt.Attempts[0].Score.CriticalFalseClaim = true
 		}},
+		"invalid provider metadata always fails": {want: EngineeringInsightFailedOutcome, apply: func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0].InvalidProviderMetadata = true
+			receipt.Attempts[0].OutputTokens = qualificationOutputTokenCap + 1
+			receipt.Consumption.OutputTokens += qualificationOutputTokenCap + 1 - 100
+		}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			receipt := qualificationReceipt()
@@ -209,6 +214,46 @@ func TestEngineeringInsightQualificationThresholdBoundaries(t *testing.T) {
 				t.Fatalf("latency = %+v, want median 12.5 and p95 23", report.Latency)
 			}
 		})
+	}
+}
+
+func TestEngineeringInsightEvaluationPreservesCensoredDeadlineOverhead(t *testing.T) {
+	expected := qualificationExpectation()
+	timeout := qualificationReceipt()
+	timeout.Attempts[0].Outcome = "timeout"
+	timeout.Attempts[0].FinishReason = "timeout"
+	timeout.Attempts[0].EmittedResponse = false
+	timeout.Attempts[0].ResponseDigest = ""
+	timeout.Attempts[0].OutputTokens = 0
+	timeout.Consumption.OutputTokens -= 100
+	timeout.Attempts[0].Score = nil
+	timeout.Attempts[0].OptionalInsight = "not_evaluated"
+	timeout.Attempts[0].UsableSummary = false
+	timeout.Attempts[0].CompleteSummary = false
+	timeout.Attempts[0].ElapsedMilliseconds = float64(qualificationAttemptTimeoutSeconds*1000 + 1)
+	if _, err := ValidateEngineeringInsightEvaluationReceipt(timeout, expected); err != nil {
+		t.Fatalf("censored timeout overhead was rejected: %v", err)
+	}
+	completed := qualificationReceipt()
+	completed.Attempts[0].ElapsedMilliseconds = float64(qualificationAttemptTimeoutSeconds*1000 + 1)
+	if _, err := ValidateEngineeringInsightEvaluationReceipt(completed, expected); err == nil {
+		t.Fatal("overlong completed attempt was accepted")
+	}
+}
+
+func TestDecodeEngineeringInsightScoresIsStrict(t *testing.T) {
+	valid := `{"case":{"response_digest":"` + strings.Repeat("a", 64) + `","correctness":2,"local_relevance":2,"tradeoff_clarity":2,"useful_verification":2,"critical_false_claim":false,"retain_example":false}}`
+	if _, err := DecodeEngineeringInsightScores([]byte(valid)); err != nil {
+		t.Fatal(err)
+	}
+	for _, data := range []string{
+		`{"case":{"response_digest":"` + strings.Repeat("a", 64) + `","correctness":2,"local_relevance":2,"tradeoff_clarity":2,"useful_verification":2,"critical_false_claim":false,"retain_example":false,"extra":true}}`,
+		`{"case":{"response_digest":"` + strings.Repeat("a", 64) + `","response_digest":"` + strings.Repeat("b", 64) + `","correctness":2,"local_relevance":2,"tradeoff_clarity":2,"useful_verification":2,"critical_false_claim":false,"retain_example":false}}`,
+		valid + ` {}`,
+	} {
+		if _, err := DecodeEngineeringInsightScores([]byte(data)); err == nil {
+			t.Fatal("invalid score document accepted")
+		}
 	}
 }
 
