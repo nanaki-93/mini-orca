@@ -1038,9 +1038,24 @@ the full quality gate green. No inherited quality exception applies to final rel
   lifecycle states, and exact-function
   handoff. Fresh review accepted this retained repair diff. Native narrow/wide and
   offline failure inspection closed the changed-surface checks for the declared
-  macOS arm64 and Linux arm64 release scope. Release acceptance is blocked only on
-  live-provider compatibility and insight quality under an explicitly authorized
-  finite budget. No migration is required.
+  macOS arm64 and Linux arm64 release scope. The bounded 2026-09-08 live sample
+  used the configured local OpenAI-compatible provider and
+  `qwen/qwen3-coder-30b` model alias. All three scopes were capped at 800 output
+  tokens with one retry; `analyze` was local, so no external data transfer or
+  remote-provider consent prompt was required. It made exactly two imports and
+  five selected-file analyses. Source-free local provider request metadata recorded
+  exactly seven chat-completion requests matching those persisted operations, which
+  establishes the 7/8 budget and that no retry request occurred. The first run
+  produced one fresh file analysis and two source-free parser failures,
+  `The model returned an unusable file summary.`; the second produced two fresh file
+  analyses. Those parser failures occur after successful transport and outside
+  `s.retry`. The source-free receipt passed `go run ./cmd/engineering-insight-eval`.
+  The fresh cancellation/locking and idempotency insights scored 0/8 and 4/8,
+  respectively, and neither is retainable. This selected local model produced only
+  3/5 contract-valid file analyses, and the two scored fresh insights failed the
+  6/8 threshold. Completing REL-01 requires a newly authorized bounded evaluation
+  with a different model/provider or an explicit product decision to change the
+  acceptance threshold. No migration is required.
 
 ### REL-02 — Finish code/document retirement and handoff
 
