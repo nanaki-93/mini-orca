@@ -95,6 +95,15 @@ freeze is historical and its development allowance is exhausted. The newly
 user-authorized v11 pilot uses a separate `qwen38-v11-schema-1` manifest; do not
 reuse the v10 manifest or replay its grant/collection commands.
 
+The v11 verification pilot also failed promotion: 5/6 usable and complete,
+3/4 useful substantive, both controls omitted, and zero critical false claims.
+Its second locking response contained an invalid JSON escape in a suggestion
+action; both allocation responses passed the repaired nested insight schema.
+All **24 development requests are consumed**, qualification remains at zero,
+and the scheduler is Paused. The v11 manifest is historical evidence, not a
+promoted qualification candidate. See the
+[verified verdict](../RELEASE_ACCEPTANCE.md#v11-verification-result--2026-09-09).
+
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
 bound to that digest. An independent reviewer compares private prose with the case
