@@ -92,11 +92,51 @@ source; no tracked evidence retains fixture source, provider content, or credent
 
 The release scope is the tested macOS arm64 desktop package and the Linux arm64
 container on this Docker Desktop host; no other desktop or container platform is
-claimed. This selected local model produced only 3/5 contract-valid file analyses,
-and the two scored fresh insights did not meet the 6/8 retention threshold. REL-01
-requires a newly authorized bounded evaluation with a different model/provider or
-an explicit product decision to change the acceptance threshold. The Dockerfile is
-portable at build time; other architectures remain outside this tested release scope.
+claimed. REL-01 remains blocked on model-quality qualification.
+
+### Precision repair and larger-budget diagnostic — 2026-09-08
+
+Provider finish metadata shows that the original failures were not truncation:
+all seven replies ended with `stop` at 373–731 completion tokens. Both rejected
+summaries invented parameter/field/type keys in `symbol_explanations`. The v6
+prompt explicitly limits those keys to indexed declarations and asks for conditional,
+source-grounded insights. The parser now omits the whole invalid optional explanation
+map while preserving the useful parent; malformed JSON, invalid risks and target
+validation remain strict. No invalid explanation becomes a navigable declaration.
+
+A second diagnostic used the same local model, eight fixture cases, exactly one
+request per case, 4,096 output tokens and a 300-second deadline. It exercised the
+production prompt/client/parser with deterministic project facts; it did not repeat
+import or desktop acceptance. All eight stopped normally at 345–528 completion
+tokens; observed per-case latency was 4.2–15.8 seconds. Before optional-section
+isolation, 3/8 responses parsed. Offline replay of the identical responses after the
+repair produced 8/8 usable parent summaries: 3 complete and 5 degraded by omitted
+explanations. No further live requests were used for replay. This is a repair check,
+not a fresh 100% reliability result. Generic insights still appeared on trivial
+controls, so larger output budgets alone did not resolve teaching quality.
+
+Qualification now requires a preselected sample of at least 20 attempts, >=95%
+usable first attempts, >=90% complete explanation sections, >=80% qualifying
+insights on substantive cases, zero critical false claims, and omission on every
+trivial control. Retained insights still require >=6/8. Record latency median/p95,
+completion reasons, output tokens, degraded results and retries separately. The
+current eight-case diagnostic does not meet that qualification requirement.
+
+The opt-in collector makes eight local-only requests at 4,096 tokens, 300 seconds
+each, with no retry. It uses the ignored root configuration in memory and writes
+observations to ignored `.mini-orca/autopilot/insight-live-evaluation.json`; it never
+writes credentials, endpoint URLs, source, or raw replies. Observations record only insight presence; evaluate prose separately in the local
+provider/app session and retain only scores in a publication receipt. Normal test runs
+skip it. A passing collector means collection completed, not that quality passed:
+
+```sh
+MINI_ORCA_LIVE_INSIGHT_EVAL=1 go test ./internal/app \
+  -run '^TestEngineeringInsightLiveEvaluation$' -count=1 -timeout=45m -v
+```
+
+Validation after the precision repair: `make check`, `make quality`, focused
+regression tests, and `git diff --check` passed. The live collector is skipped
+by default; no provider request was made by those validation gates.
 
 ## Reproduce acceptance
 

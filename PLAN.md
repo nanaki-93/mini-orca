@@ -1019,7 +1019,19 @@ the full quality gate green. No inherited quality exception applies to final rel
   local/offline/remote scopes and denied consent. Include Security/measurements only
   once in this release's implemented scope. Use no secrets in captures or records.
 - Repeat native checks for surfaces changed since UI-04, not every historical
-  capture. Complete live insight quality/provider checks with a chosen budget.
+  capture. Evaluate the same configured model with 4,096 output tokens and a
+  300-second deadline per attempt; never interpret a larger cap as proof of quality.
+- Freeze cases and criteria before live qualification: at least 20 attempts across
+  substantive mechanisms and trivial/no-insight controls, with repeat runs. Require
+  at least 95% usable first-attempt summaries and 90% complete optional explanation
+  sections. Count omitted invalid explanations separately as degraded, never as
+  fully valid. Record failures, finish reasons, tokens, latency median/p95 and retries.
+  Each retained insight must score at least 6/8 with no critical false claim; at
+  least 80% of substantive cases must produce a qualifying insight. All trivial
+  controls must omit generic lessons. These are sample gates, not population guarantees.
+- Keep live qualification explicitly bounded; the eight-case development run is
+  diagnostic evidence only. Compare parser replays separately from fresh live runs.
+  Passing the receipt validator checks the record, not model quality.
 - Accept: exact release scope, real check results, runtime setup and unresolved
   limitations recorded in `docs/RELEASE_ACCEPTANCE.md`. Missing required native,
   provider or supported-package evidence blocks this release decision.
@@ -1053,9 +1065,18 @@ the full quality gate green. No inherited quality exception applies to final rel
   The fresh cancellation/locking and idempotency insights scored 0/8 and 4/8,
   respectively, and neither is retainable. This selected local model produced only
   3/5 contract-valid file analyses, and the two scored fresh insights failed the
-  6/8 threshold. Completing REL-01 requires a newly authorized bounded evaluation
-  with a different model/provider or an explicit product decision to change the
-  acceptance threshold. No migration is required.
+  6/8 threshold. Follow-up diagnosis found unknown parameter/field keys in
+  optional symbol explanations; all seven responses ended normally below 800 tokens.
+  The repair explicitly constrains prompt keys (file-analysis-v6) and omits the
+  entire invalid optional explanation map, preserving strict parent and target
+  validation. Eight new local single-attempt cases at 4,096 tokens/300 seconds
+  again ended normally (345–528 output tokens). Before omission, 3/8 parsed; replay
+  of those same responses with the repair gave 8/8 usable summaries, comprising
+  3 complete and 5 with omitted explanations. This is offline replay evidence,
+  not an 8/8 fresh-run qualification or proof of insight quality. Trivial controls
+  still generated generic insights. REL-01 remains Blocked on the stronger
+  qualification and useful/appropriately omitted insights. No config migration
+  is needed; the prompt version invalidates prior file-analysis cache entries.
 
 ### REL-02 — Finish code/document retirement and handoff
 

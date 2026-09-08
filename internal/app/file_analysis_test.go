@@ -21,6 +21,34 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
+// Live evaluation returned parameter and field names as declaration explanations.
+// Omit that optional section without losing a valid parent summary.
+func TestSemanticAnalysisOmitsNonDeclarationExplanations(t *testing.T) {
+	target := project.IndexFile{Path: "main.go", Symbols: []project.SymbolInfo{{Name: "Service.Charge"}}}
+	for _, name := range []string{"ctx", "orders", "gateway"} {
+		output := `{"purpose":"Delegates work.","symbol_explanations":{"Service.Charge":"Delegates work.","` + name + `":"Referenced value."}}`
+		parsed, err := parseSemanticAnalysis(output, target, "")
+		if err != nil || parsed.Purpose != "Delegates work." || len(parsed.SymbolExplanations) != 0 {
+			t.Fatalf("invalid optional section %q was not isolated: %+v, %v", name, parsed, err)
+		}
+	}
+	for _, name := range []string{"Service.Charge", "Charge"} {
+		output := `{"purpose":"Delegates work.","symbol_explanations":{"` + name + `":"Delegates work."}}`
+		if _, err := parseSemanticAnalysis(output, target, ""); err != nil {
+			t.Fatalf("rejected known declaration %q: %v", name, err)
+		}
+	}
+	for _, output := range []string{
+		`{"purpose":"Delegates work.","symbol_explanations":{"ctx":"Parameter."},"risks":[{"severity":"invented","summary":"Invalid risk."}]}`,
+		`{"purpose":"","symbol_explanations":{"ctx":"Parameter."}}`,
+		`{"purpose":"Delegates work.","symbol_explanations":{"ctx":"Parameter."},"unexpected":true}`,
+	} {
+		if _, err := parseSemanticAnalysis(output, target, ""); err == nil {
+			t.Fatal("optional explanation omission accepted an invalid parent")
+		}
+	}
+}
+
 func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 	var prompt string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
