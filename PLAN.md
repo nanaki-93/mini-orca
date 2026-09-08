@@ -254,7 +254,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Complete |
 | QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Complete |
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Complete |
-| QUAL-05 | Six-request development pilot and candidate freeze | QUAL-04 | S / high | Pending |
+| QUAL-05 | Six-request development pilot and candidate freeze | QUAL-04 | S / high | Blocked |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1243,6 +1243,23 @@ Use one Terra worker, a fresh reviewer and coordinator-run gates per task, follo
 - **Verify:** run collect and validate with the exact CLI implemented/documented
   by QUAL-03; attach its reproducible command with secret values omitted. Receipt
   validator and `git diff --check`; G if prompt/code changed, fresh review after fixes.
+
+- **Blocked evidence:** the user-authorized source/reference repair passed fresh
+  independent code review and coordinator G, and was committed as `4293799`.
+  The qualification corpus/rubric stayed unchanged. Both three-request pilots used
+  local `qwen/qwen3-coder-30b`, 4,096 output tokens and 300 seconds per attempt.
+  Independent agent scores: v7 locking 5/8, allocation 7/8, control omitted;
+  v8 locking 6/8, allocation 0/8 because its insight was absent, control omitted.
+  No critical false claims were confirmed. All six summaries were usable/complete,
+  but neither candidate meets useful-insight coverage. No candidate is promoted
+  or frozen. The validator's collection verdict is not a qualification pass.
+- Persistent consumption is **6 development / 0 qualification requests**. The
+  development budget is exhausted; all 24 qualification requests remain unused
+  and cannot be substituted for development. Source-free digest-joined receipts
+  and reproducible offline validation are recorded in `docs/RELEASE_ACCEPTANCE.md`.
+  Private response material is discarded after scoring. Further prompt/model
+  development requires a new explicit budget decision; the scheduler remains
+  stopped. No consumed attempt may be replayed or existing budget reset.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 

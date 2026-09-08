@@ -28,6 +28,58 @@ current release waiver. Tasks 149/170/171 are superseded by their plan owners,
 not marked passed. The Security scan/review and optional benchmark comparison
 APIs are implemented; SEC-08 and PERF-03 still own their desktop presentation.
 
+## QUAL-05 development pilot — 2026-09-08
+
+The local `bug` profile remained `qwen/qwen3-coder-30b`. Development collection
+used the shared 6-request cap, 4,096 output-token cap, and 300-second attempt
+cap; all six attempts completed. The campaign records 6 development and 0
+qualification requests, so development collection is exhausted and the 24
+qualification requests remain untouched. Recorded development consumption totals
+2,548 output tokens.
+
+| Candidate / source-free receipt | Independent digest-bound score audit | Collection metadata |
+| --- | --- | --- |
+| Historical `v7-dev1` — ignored `.mini-orca/autopilot/engineering-insight-evaluation/qual05-v7-dev1-receipt.json` | Lock/cancellation 5/8; slice-capacity 7/8; trivial control intentionally omitted; zero critical false claims. | Three completed attempts; 1,320 output tokens. This historical collection was not rerun. |
+| Corrected `v8-dev2` at accepted code `4293799289201c6797e735c60c1e3aa567055206` — ignored `.mini-orca/autopilot/engineering-insight-evaluation/qual05-v8-dev2-receipt.json` | Lock/cancellation 6/8; slice-capacity omitted its insight (0); trivial control intentionally omitted; zero critical false claims. | Three completed attempts; 1,228 output tokens; 4,984ms median and 9,311ms nearest-rank p95 successful latency. |
+
+A fresh independent agent scored each pilot. Scores were joined to source-free
+receipts by response digest and validated. The
+corrected receipt reports 3/3 usable and complete summaries, one useful
+substantive insight, one intentional control omission, and zero critical claims.
+Raw reply material from both pilots was discarded under the evaluation policy; retained scores
+are historical evidence, not a retroactive promotion. The second pilot still
+missed a substantive insight, so no candidate is frozen or promoted and pilot
+quality remains blocked.
+
+The following collection commands are historical evidence only and must not be
+replayed: durable accounting now prevents another development dispatch.
+
+```sh
+go run ./cmd/engineering-insight-eval -mode collect -root . -run-id qual05-v7-dev1 \
+  -receipt .mini-orca/autopilot/engineering-insight-evaluation/qual05-v7-dev1-receipt.json \
+  -cases internal/app/testdata/engineering-insight-eval/cases.json -config config.yaml \
+  -candidate-id v7-dev1 -provider configured-bug -prompt-version file-analysis-v7 \
+  -corpus-id engineering-insight-v1 -base-revision 4f682b04f01474cf36404b173e0591097364eabf
+
+go run ./cmd/engineering-insight-eval -mode collect -root . -run-id qual05-v8-dev2 \
+  -receipt .mini-orca/autopilot/engineering-insight-evaluation/qual05-v8-dev2-receipt.json \
+  -cases internal/app/testdata/engineering-insight-eval/cases.json -config config.yaml \
+  -candidate-id v8-dev2 -provider configured-bug -prompt-version file-analysis-v8 \
+  -corpus-id engineering-insight-v1 -base-revision 4293799289201c6797e735c60c1e3aa567055206
+```
+
+The source-free corrected receipt can be validated without a provider call:
+
+```sh
+go run ./cmd/engineering-insight-eval \
+  -receipt .mini-orca/autopilot/engineering-insight-evaluation/qual05-v8-dev2-receipt.json \
+  -cases internal/app/testdata/engineering-insight-eval/cases.json \
+  -candidate-id v8-dev2 -provider configured-bug -model qwen/qwen3-coder-30b \
+  -prompt-version file-analysis-v8 -corpus-id engineering-insight-v1 \
+  -base-revision 4293799289201c6797e735c60c1e3aa567055206 \
+  -max-requests 6 -max-output-tokens 4096 -attempt-timeout-seconds 300
+```
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
