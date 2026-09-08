@@ -71,12 +71,23 @@ task_id = re.search(r"\b[A-Z][A-Z0-9]*-[0-9]{2}\b", prompt).group(0)
 if role == "worker" and mode == "timeout":
     time.sleep(10)
 if role == "worker" and mode == "crash":
+    print("controlled worker failure", file=sys.stderr)
+    raise SystemExit(75)
+if role == "worker" and mode == "auth_failure":
+    print("authentication failed", file=sys.stderr)
     raise SystemExit(7)
 if role == "worker" and mode == "sigxfsz":
     signal.signal(signal.SIGXFSZ, signal.SIG_DFL)
     os.kill(os.getpid(), signal.SIGXFSZ)
 if role == "worker":
     (worktree / "result.txt").write_text(f"worker {call}\n")
+    if mode == "partial_crash":
+        print("controlled worker failure", file=sys.stderr)
+        raise SystemExit(75)
+    if mode == "unsafe_partial_crash":
+        (worktree / "PLAN.md").write_text("tampered\n")
+        print("controlled worker failure", file=sys.stderr)
+        raise SystemExit(75)
     if mode == "protected":
         (worktree / "PLAN.md").write_text("tampered\n")
     if mode == "validator_control":
@@ -91,7 +102,7 @@ if role == "worker":
         subprocess.run(["git", "commit", "-m", "hostile"], cwd=worktree, check=True, capture_output=True)
     value = {
         "task_id": task_id,
-        "outcome": "completed",
+        "outcome": "blocked" if mode == "blocked" else "completed",
         "changed_files": ["result.txt"],
         "checks": ["fake-focused"],
     }
@@ -110,7 +121,7 @@ if mode == "malformed_event" and role == "worker":
     print("[]")
 print(json.dumps({"type": "thread.started", "thread_id": f"{role}-{call}"}))
 print(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": message}}))
-usage = 1000 if mode == "budget" else 3
+usage = 100001 if mode == "budget" else 3
 completed = {"type": "turn.completed", "usage": {"input_tokens": usage, "output_tokens": usage}}
 if mode == "missing_usage" and role == "worker":
     completed.pop("usage")
@@ -221,8 +232,6 @@ raise SystemExit(1 if failed else 0)
                 str(self.codex),
                 "--timeout-seconds",
                 "2",
-                "--token-budget",
-                "100",
                 "--invocation-reserve-tokens",
                 "20",
                 "--lease-stale-seconds",
@@ -295,37 +304,64 @@ class DispatcherTest(unittest.TestCase):
         self.assertEqual(recovered.returncode, 0, recovered.stderr)
         self.assertEqual(json.loads(recovered.stdout)["phase"], "awaiting_integration")
 
-    def test_crash_timeout_budget_and_output_fail_closed(self) -> None:
+    def test_high_usage_is_reported_without_stopping_integration(self) -> None:
+        fixture = self.fresh("budget")
+        pending = fixture.dispatch()
+        self.assertEqual(pending.returncode, 0, pending.stderr)
+        self.assertGreater(json.loads(pending.stdout)["tokens_used"], 200000)
+        integrated = fixture.dispatch("--integrate")
+        self.assertEqual(integrated.returncode, 0, integrated.stderr)
+        self.assertEqual(fixture.state()["phase"], "integrated")
+
+    def test_controlled_invocation_failures_retry_through_sol_then_stop(self) -> None:
         cases = [
-            ("crash", (), "worker process failed"),
+            ("crash", (), "worker process failed with exit status 75"),
             ("timeout", ("--timeout-seconds", "0.1"), "worker timed out"),
-            ("budget", (), "token budget exhausted"),
-            ("output_exhaust", ("--max-output-bytes", "1024"), "output limit exhausted"),
-            ("missing_usage", (), "lacks token evidence"),
+            ("output_exhaust", ("--max-output-bytes", "1024"), "worker output limit exhausted"),
+            ("missing_usage", (), "worker lacks token evidence"),
             ("invalid", (), "invalid worker structured output"),
-            ("malformed_event", (), "emitted invalid JSONL"),
+            ("malformed_event", (), "worker emitted invalid JSONL"),
         ]
         for mode, options, message in cases:
             with self.subTest(mode=mode):
                 fixture = self.fresh(mode)
                 self.assert_failed(fixture.dispatch(*options), message)
-                self.assertEqual(fixture.state()["phase"], "failed")
+                state = fixture.state()
+                self.assertEqual((state["phase"], state["attempt"]), ("failed", 6))
+                self.assertIsNone(state["pending_invocation"])
+                self.assertEqual(fixture.calls()["worker_calls"], 6)
+                self.assertEqual(
+                    [call[call.index("--model") + 1] for call in fixture.calls()["argv"]],
+                    [autopilot.TERRA_MODEL] * 3 + [autopilot.SOL_MODEL] * 3,
+                )
 
     def test_invocation_failure_keeps_charge_and_private_diagnostics(self) -> None:
         fixture = self.fresh("crash")
-        self.assert_failed(fixture.dispatch(), "exit status 7")
+        self.assert_failed(fixture.dispatch(), "exit status 75")
         state = fixture.state()
-        self.assertEqual(state["tokens_used"], 20)
-        self.assertEqual(state["pending_invocation"]["reserved_tokens"], 20)
+        self.assertEqual(state["tokens_used"], 120)
+        self.assertIsNone(state["pending_invocation"])
         failure = state["failure"]
-        self.assertEqual((failure["stage"], failure["exit_code"], failure["signal"]), ("exit", 7, None))
-        self.assertNotIn("worker process", json.dumps(failure))
+        self.assertEqual((failure["stage"], failure["exit_code"], failure["signal"]), ("exit", 75, None))
+        self.assertTrue(failure["retryable"])
+        self.assertNotIn("controlled worker failure", json.dumps(failure))
         for key in ("stdout", "stderr"):
             path = fixture.repo / failure["diagnostics"][key]
             self.assertTrue(path.is_file())
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         diagnostics = fixture.repo / ".mini-orca" / "autopilot" / "diagnostics"
         self.assertEqual(diagnostics.stat().st_mode & 0o777, 0o700)
+
+    def test_partial_controlled_failure_is_bound_before_the_next_writer(self) -> None:
+        fixture = self.fresh("partial_crash")
+        self.assert_failed(fixture.dispatch(), "exit status 75")
+        state = fixture.state()
+        self.assertEqual(state["failure"]["candidate"]["files"], ["result.txt"])
+        self.assertEqual(state["retry_snapshot"]["files"], ["result.txt"])
+
+        unsafe = self.fresh("unsafe_partial_crash")
+        self.assert_failed(unsafe.dispatch(), "protected control files")
+        self.assertEqual(unsafe.calls()["worker_calls"], 1)
 
     def test_bounded_process_drains_limits_and_never_applies_file_size_limit(self) -> None:
         environment = {"PATH": os.environ["PATH"]}
@@ -377,6 +413,7 @@ class DispatcherTest(unittest.TestCase):
             try:
                 self.assertEqual(escaped_pipe.code, 0)
                 self.assertLess(time.monotonic() - start, 2)
+                self.assertTrue(escaped_pipe.cleanup_incomplete)
             finally:
                 if escaped_pid.exists():
                     try:
@@ -404,7 +441,8 @@ class DispatcherTest(unittest.TestCase):
         self.fixture.codex.unlink()
         with self.assertRaisesRegex(autopilot.DispatchError, "worker launch failed"):
             dispatcher.invoke("worker", task, worktree)
-        self.assertEqual(dispatcher.state["pending_invocation"]["reserved_tokens"], 20000)
+        self.assertIsNone(dispatcher.state["pending_invocation"])
+        self.assertEqual(dispatcher.state["invocations"][-1]["reserved_tokens"], 20000)
         self.assertEqual(dispatcher.state["failure"]["stage"], "launch")
 
     def test_signal_failure_records_its_stable_signal_name(self) -> None:
@@ -452,15 +490,28 @@ class DispatcherTest(unittest.TestCase):
 
     def test_review_and_validation_each_allow_only_two_repairs(self) -> None:
         for mode, message in [
-            ("review_reject", "review rejected after two repairs"),
-            ("validation_fail", "validation failed after two repairs"),
+            ("review_reject", "review rejected after Sol initial attempt and two repairs"),
+            ("validation_fail", "validation failed after Sol initial attempt and two repairs"),
         ]:
             with self.subTest(mode=mode):
                 fixture = self.fresh(mode)
                 self.assert_failed(fixture.dispatch(), message)
                 calls = fixture.calls()
-                self.assertEqual(calls["worker_calls"], 3)
-                self.assertEqual(calls["reviewer_calls"], 3)
+                self.assertEqual(calls["worker_calls"], 6)
+                self.assertEqual(calls["reviewer_calls"], 6)
+                models = [call[call.index("--model") + 1] for call in calls["argv"]]
+                self.assertEqual(models, [autopilot.TERRA_MODEL] * 6 + [autopilot.SOL_MODEL] * 6)
+                escalations = fixture.state()["escalations"]
+                self.assertEqual(len(escalations), 1)
+                self.assertEqual(
+                    {key: escalations[0][key] for key in ("from_model", "to_model", "after_attempt", "reason")},
+                    {
+                        "from_model": autopilot.TERRA_MODEL,
+                        "to_model": autopilot.SOL_MODEL,
+                        "after_attempt": 3,
+                        "reason": message.split(" after ")[0],
+                    },
+                )
 
     def test_repair_receives_fresh_review_and_fixed_validation(self) -> None:
         fixture = self.fresh("validation_fail_once")
@@ -474,6 +525,43 @@ class DispatcherTest(unittest.TestCase):
         self.assertEqual(state["reviewer"]["diff"], state["validator"]["diff"])
         self.assertEqual(state["validator"]["command"], "make check")
         self.assertEqual(state["validator"]["stages"], [{"name": "fake-validation", "outcome": "pass"}])
+
+    def test_resume_replays_persisted_review_and_validation_outcomes(self) -> None:
+        rejected = self.fresh("accept")
+        self.assertEqual(rejected.dispatch().returncode, 0)
+        state = rejected.state()
+        state["phase"] = "review_complete"
+        state["reviewer"] = {
+            "decision": "rejected",
+            "findings": [{"code": "FIX_REQUIRED", "message": "persisted review"}],
+            "finding_codes": ["FIX_REQUIRED"],
+            "diff": state["candidate"]["diff"],
+        }
+        rejected.state_path().write_text(json.dumps(state))
+        resumed = rejected.dispatch()
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        self.assertEqual((rejected.state()["phase"], rejected.state()["attempt"]), ("awaiting_integration", 2))
+
+        failed_validation = self.fresh("accept")
+        self.assertEqual(failed_validation.dispatch().returncode, 0)
+        state = failed_validation.state()
+        state["phase"] = "validation_complete"
+        state["validator"] = {"code": 1, "diff": state["candidate"]["diff"]}
+        failed_validation.state_path().write_text(json.dumps(state))
+        resumed = failed_validation.dispatch()
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        self.assertEqual((failed_validation.state()["phase"], failed_validation.state()["attempt"]), ("awaiting_integration", 2))
+
+        passed_validation = self.fresh("accept")
+        self.assertEqual(passed_validation.dispatch().returncode, 0)
+        state = passed_validation.state()
+        state["phase"] = "validation_complete"
+        state["validator"] = {"code": 0, "diff": state["candidate"]["diff"]}
+        passed_validation.state_path().write_text(json.dumps(state))
+        before = passed_validation.calls()
+        resumed = passed_validation.dispatch()
+        self.assertEqual(resumed.returncode, 0, resumed.stderr)
+        self.assertEqual(passed_validation.calls(), before)
 
     def test_validator_mutation_never_integrates(self) -> None:
         fixture = self.fresh("validator_mutation")
@@ -493,8 +581,20 @@ class DispatcherTest(unittest.TestCase):
         self.assert_failed(resumed, "cannot be retried automatically")
         self.assertEqual(self.fixture.calls()["worker_calls"], before)
 
+    def test_recorded_invocation_is_never_replayed_after_a_crash(self) -> None:
+        first = self.fixture.dispatch()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        before = self.fixture.calls()["worker_calls"]
+        state = self.fixture.state()
+        state["phase"] = "ready"
+        state["pending_invocation"] = None
+        self.fixture.state_path().write_text(json.dumps(state))
+        resumed = self.fixture.dispatch()
+        self.assert_failed(resumed, "recorded invocation cannot be replayed automatically")
+        self.assertEqual(self.fixture.calls()["worker_calls"], before)
+
     def test_offline_failed_run_recovery_archives_exact_state_and_carries_reservation(self) -> None:
-        fixture = self.fresh("crash")
+        fixture = self.fresh("auth_failure")
         self.assert_failed(fixture.dispatch(), "exit status 7")
         original = fixture.state_path().read_bytes()
         calls = fixture.calls()
@@ -503,11 +603,6 @@ class DispatcherTest(unittest.TestCase):
             "--recovery-authorization-id", "authorization-0001",
             "--recovery-reason", "operator confirmed startup diagnosis",
         )
-        for budget in ("99", "101"):
-            with self.subTest(budget=budget):
-                self.assert_failed(fixture.dispatch(*recovery, "--token-budget", budget), "original token configuration")
-                self.assertEqual(fixture.state_path().read_bytes(), original)
-                self.assertEqual(fixture.calls(), calls)
         recovered = fixture.dispatch(
             *recovery,
         )
@@ -525,7 +620,7 @@ class DispatcherTest(unittest.TestCase):
         self.assertEqual(fixture.calls(), calls)
 
     def test_interrupted_recovery_reconciles_without_model_calls(self) -> None:
-        fixture = self.fresh("crash")
+        fixture = self.fresh("auth_failure")
         self.assert_failed(fixture.dispatch(), "exit status 7")
         arguments = (
             "--task", "TST-01", "--recover-failed-run",
@@ -559,7 +654,7 @@ class DispatcherTest(unittest.TestCase):
         self.assertEqual(fixture.calls(), calls)
 
     def test_failed_run_recovery_rejects_exhaustion_and_live_lease(self) -> None:
-        attempts = self.fresh("crash")
+        attempts = self.fresh("auth_failure")
         self.assert_failed(attempts.dispatch(), "exit status 7")
         state = attempts.state()
         state["attempt"] = autopilot.MAX_ATTEMPTS
@@ -570,18 +665,20 @@ class DispatcherTest(unittest.TestCase):
             "--recovery-reason", "attempt budget must remain finite",
         ), "attempt budget")
 
-        tokens = self.fresh("crash")
+        tokens = self.fresh("auth_failure")
         self.assert_failed(tokens.dispatch(), "exit status 7")
         state = tokens.state()
         state["tokens_used"] = 100
         tokens.state_path().write_text(json.dumps(state))
-        self.assert_failed(tokens.dispatch(
+        recovered = tokens.dispatch(
             "--task", "TST-01", "--recover-failed-run",
             "--recovery-authorization-id", "authorization-0008",
-            "--recovery-reason", "token budget must remain finite",
-        ), "token budget")
+            "--recovery-reason", "usage is accounting only",
+        )
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        self.assertEqual(tokens.state()["tokens_used"], 100)
 
-        leased = self.fresh("crash")
+        leased = self.fresh("auth_failure")
         self.assert_failed(leased.dispatch(), "exit status 7")
         lease = leased.repo / ".mini-orca" / "autopilot" / "lease"
         lease.mkdir()
@@ -593,7 +690,7 @@ class DispatcherTest(unittest.TestCase):
         ), "active lease")
 
     def test_failed_run_recovery_rejects_dirty_candidate_or_non_pending_task(self) -> None:
-        dirty = self.fresh("crash")
+        dirty = self.fresh("auth_failure")
         self.assert_failed(dirty.dispatch(), "exit status 7")
         worktree = dirty.repo / dirty.state()["worktree"]
         (worktree / "unrecorded.txt").write_text("candidate changed\n")
@@ -603,7 +700,7 @@ class DispatcherTest(unittest.TestCase):
             "--recovery-reason", "must reject a dirty failed candidate",
         ), "unrecorded candidate")
 
-        blocked = self.fresh("crash")
+        blocked = self.fresh("auth_failure")
         self.assert_failed(blocked.dispatch(), "exit status 7")
         plan = blocked.repo / "PLAN.md"
         plan.write_text(plan.read_text().replace("| TST-01 | Ready task | TST-00 | S / low | Pending |", "| TST-01 | Ready task | TST-00 | S / low | Blocked |"))
@@ -616,7 +713,7 @@ class DispatcherTest(unittest.TestCase):
         ), "not Pending")
 
     def test_failed_run_recovery_requires_completed_dependencies(self) -> None:
-        fixture = self.fresh("crash")
+        fixture = self.fresh("auth_failure")
         self.assert_failed(fixture.dispatch(), "exit status 7")
         original_path = fixture.state_path()
         dependent_path = fixture.state_path("TST-02")
@@ -695,6 +792,7 @@ class DispatcherTest(unittest.TestCase):
         help_result = subprocess.run([sys.executable, str(AUTOPILOT), "--help"], text=True, capture_output=True, check=True)
         self.assertNotIn("--validator", help_result.stdout)
         self.assertNotIn("--sandbox-exec", help_result.stdout)
+        self.assertNotIn("--token-budget", help_result.stdout)
         outside = self.fixture.root / "outside-state"
         (self.fixture.repo / ".mini-orca").symlink_to(outside, target_is_directory=True)
         self.assert_failed(self.fixture.dispatch("--dry-run"), "must not contain symlinks")

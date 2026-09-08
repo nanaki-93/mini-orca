@@ -255,7 +255,8 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Complete |
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Complete |
 | AUTO-03 | Repair dispatcher startup diagnostics and explicit recovery | AUTO-02 | M / high | Complete |
-| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-03 | S / medium | Blocked |
+| AUTO-04 | Report tokens without blocking and escalate Terra repairs to Sol | AUTO-03 | M / high | Complete |
+| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-04 | S / medium | Pending |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Pending |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Pending |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
@@ -1070,13 +1071,71 @@ the full quality gate green. No inherited quality exception applies to final rel
   its unchanged worktree and its uncertain 20,000-token reservation. Verify the
   resulting selection by dry-run before resuming the existing recovery heartbeat.
 
+### AUTO-04 — Report tokens without blocking and escalate Terra repairs to Sol
+
+- **Authorization:** the user explicitly removed the dispatcher token cutoff and
+  authorized autonomous problem resolution with Sol escalation after two Terra
+  retries. This supersedes the old token-stop and Terra-only stopping policy.
+- **Dependencies:** AUTO-03. Target `scripts/autopilot.py`, its fake tests and
+  `tasks/README.md`. One isolated Terra writer, independent review, coordinator
+  validation and reviewed local integration; no model-quality generation.
+- **Execute:** remove token-budget enforcement and its CLI option; retain measured
+  usage and estimates for uncertain calls without resets. Persist the model policy
+  identity and each invocation's model. Attempts 1–3 use `gpt-5.6-terra`, attempts
+  4–6 use `gpt-5.6-sol`, high effort, including a fresh reviewer per candidate.
+  Repair blocked implementations, rejected reviews and failed validation within
+  this finite sequence. Retry known terminated invocation failures only after
+  preserving diagnostic/accounting evidence and checking candidate boundaries.
+  Never replay a still-pending invocation or bypass lease, base, protected-file,
+  credential/model availability, exact-diff review or fixed validation guards.
+- **Accept:** usage above 200,000 proceeds through review/integration; deterministic
+  tests verify Terra → Sol escalation, finite failure, retained uncertain usage,
+  safe resumption and refusal of unsafe retries. Keep 30-minute invocation timeout,
+  bounded output, one writer and existing application-provider request limits.
+- **REC-01 recovery:** explicitly adopt the existing two-file worker-2 draft for
+  fresh review after this repair is integrated. Archive the old failed state
+  unchanged, preserve its worktree, completion digest and 442,015 recorded tokens.
+  Copy only the verified temperature patch to a fresh worktree based on the
+  accepted commit; confirm those source files have unchanged base blobs and bind
+  the new candidate digest. Prepare `worker_complete` at attempt 2, preserving
+  history without rerunning the successful writer. Commit the requeued ledger
+  before creating the new state so its base/card identity remains stable.
+- **Validation prerequisite:** the full gate twice reproduced the existing
+  `TestPerformanceJobRecoveryResumesInterruptedFile` cleanup failure, once for
+  paused and once for running recovery. Its test helper observes completed status
+  before the worker finishes persistence. Repair that synchronization narrowly in
+  `internal/app/performance_job_test.go`, then repeat the focused race test 30 times
+  and rerun the full gate. No production Performance behavior changes are intended.
+- **Verify:** dispatcher fake tests, `make check`, `make quality`,
+  `git diff --check`, independent review, recovery identity checks and dry-run.
+  Resume the existing heartbeat under the new policy after acceptance; its scope
+  remains REC-01 → REC-02 → REC-03 → QUAL-05 → QUAL-06.
+- **Accepted — 2026-09-08:** independent review accepted the final dispatcher
+  and test-only worker-completion synchronization fix. Coordinator `make check`
+  passed (28 dispatcher cases, Go/race/vet and Desktop); final `make quality`
+  and `git diff --check` passed. The previously failing
+  recovery race test passed 30 consecutive runs independently for writer and
+  reviewer. Private adoption rehearsals passed normal execution, interruption
+  before state replacement, interruption after replacement, and unchanged replay.
+  Terra and Sol at high effort are listed in the installed Codex model cache.
+- **Recovery handoff:** after committing this accepted base, run the reviewed
+  private `.mini-orca/autopilot/migrations/rec01-adopt-worker2-policy-1.py`
+  in the canonical checkout with that exact commit.
+  It binds old state SHA-256
+  `815b472bd17e01d49caafe83a25572ef7cf8f108f7740b57ced3dd84d6096ba6`
+  and draft SHA-256
+  `ede77e4bf9b18bc6a53b455edaa43d1b29cc482fda1c34a292a00d6688e65e4e`.
+  Verify the new `worker_complete` state by dry-run, then continue REC-01 through
+  the normal dispatcher review/validation gate and resume the recovery heartbeat.
+
 ## Insight qualification tasks
 
 These cards turn the remaining REL-01 work into one sequential agent queue. Keep
 this ledger authoritative; do not create `docs/tasks.md` or per-task documents.
 The existing v6 prompt and optional-explanation isolation are the starting point,
 not tasks to reimplement. Follow the ledger dependencies; completed LEARN tasks stay complete.
-Use one Terra worker, a fresh reviewer and coordinator-run gates per task, following
+Use one worker under the Terra/Sol policy, a fresh reviewer and coordinator-run
+gates per task, following
 `tasks/README.md`. A worker does not approve its own result or change ledger status.
 
 ### Qualification contract shared by QUAL-01–06
@@ -1283,7 +1342,7 @@ accounting and qualification pass criteria below still apply in full.
 
 ### REC-01 — Preserve explicit zero-temperature provider requests
 
-- **Dependencies:** QUAL-04, AUTO-03. This task makes no live provider requests.
+- **Dependencies:** QUAL-04, AUTO-04. This task makes no live provider requests.
 - **Target files:** `internal/llm/client.go`, `internal/llm/client_test.go`.
 - **Evidence:** `ChatRequest.Temperature` uses `omitempty`; a temporary wire-level
   test reproduced that configured zero disappears from JSON. The current local
@@ -1330,6 +1389,12 @@ accounting and qualification pass criteria below still apply in full.
   The heartbeat is paused pending an explicit budget/recovery decision. No
   application-provider request or recovery grant was used; campaign and grant
   ledger hashes are unchanged at 12 development / 0 qualification.
+- **Superseding policy/recovery — 2026-09-08:** the user authorized AUTO-04 to
+  remove the token cutoff and escalate Terra repairs to Sol. REC-01 is requeued
+  for the explicitly approved adoption of worker-2's existing draft, followed by
+  fresh review and validation; its recorded 442,015 tokens and both historical
+  failures remain preserved. No new implementation call is needed for adoption.
+  The new policy supersedes the budget/recovery decision requirement above.
 
 ### REC-02 — Account for one model-bound six-request recovery grant
 

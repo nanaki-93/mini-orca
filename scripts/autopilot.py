@@ -21,12 +21,15 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 
-MODEL = "gpt-5.6-terra"
+TERRA_MODEL = "gpt-5.6-terra"
+SOL_MODEL = "gpt-5.6-sol"
 EFFORT = "high"
+POLICY_IDENTITY = "AUTO-04"
+POLICY_VERSION = 2
 BRANCH = "codex/autopilot"
 STATE_DIR = Path(".mini-orca/autopilot")
 VALIDATOR = Path("Makefile")
-MAX_ATTEMPTS = 3  # Initial implementation plus two repairs.
+MAX_ATTEMPTS = 6  # Terra initial attempt plus two repairs, then Sol initial attempt plus two repairs.
 MAX_CARD_BYTES = 24 * 1024
 MAX_FILES = 200
 MAX_FILE_BYTES = 16 * 1024 * 1024
@@ -53,6 +56,12 @@ class DispatchError(RuntimeError):
     pass
 
 
+class InvocationFailure(DispatchError):
+    def __init__(self, message: str, *, retryable: bool):
+        super().__init__(message)
+        self.retryable = retryable
+
+
 @dataclass(frozen=True)
 class Task:
     task_id: str
@@ -70,6 +79,7 @@ class ProcessResult:
     timed_out: bool = False
     output_exhausted: bool = False
     launch_error: str | None = None
+    cleanup_incomplete: bool = False
 
 
 def now() -> str:
@@ -270,6 +280,7 @@ def bounded_process(
     assert process.stdin is not None and process.stdout is not None and process.stderr is not None
     timed_out = False
     output_exhausted = False
+    cleanup_incomplete = False
     killed = False
     kill_deadline: float | None = None
     stdout = bytearray()
@@ -324,6 +335,7 @@ def bounded_process(
                 # process-group kill.  Its output is no longer useful.
                 for stream in (process.stdin, process.stdout, process.stderr):
                     close(stream)
+                cleanup_incomplete = True
             events = selector.select(max(0.01, min(max(remaining, 0), 0.1))) if selector.get_map() else []
             if not events:
                 if process.poll() is not None and not killed:
@@ -378,7 +390,10 @@ def bounded_process(
         finally:
             if started:
                 started(None)
-    return ProcessResult(process.returncode, bytes(stdout), bytes(stderr), timed_out, output_exhausted)
+    return ProcessResult(
+        process.returncode, bytes(stdout), bytes(stderr), timed_out, output_exhausted,
+        cleanup_incomplete=cleanup_incomplete,
+    )
 
 
 class Lease:
@@ -623,12 +638,12 @@ class Dispatcher:
     def configuration(self) -> dict[str, Any]:
         stat = self.codex.stat()
         return {
-            "model": MODEL,
+            "policy": {"identity": POLICY_IDENTITY, "version": POLICY_VERSION},
+            "models": {"terra": TERRA_MODEL, "sol": SOL_MODEL},
             "reasoning_effort": EFFORT,
             "codex": str(self.codex),
             "codex_identity": [stat.st_size, stat.st_mtime_ns],
             "timeout_seconds": self.args.timeout_seconds,
-            "token_budget": self.args.token_budget,
             "invocation_reserve_tokens": self.args.invocation_reserve_tokens,
             "max_output_bytes": self.args.max_output_bytes,
         }
@@ -705,7 +720,8 @@ class Dispatcher:
 
     def state_template(self, task: Task, base: str, config_digest: str) -> dict[str, Any]:
         return {
-            "version": 1,
+            "version": POLICY_VERSION,
+            "policy": {"identity": POLICY_IDENTITY, "version": POLICY_VERSION},
             "task": task.task_id,
             "task_card_digest": hashlib.sha256(task.card.encode()).hexdigest(),
             "base": base,
@@ -718,6 +734,8 @@ class Dispatcher:
             "tokens_used": 0,
             "pending_invocation": None,
             "invocations": [],
+            "failures": [],
+            "escalations": [],
             "candidate": None,
             "reviewer": None,
             "validator": None,
@@ -742,7 +760,9 @@ class Dispatcher:
         os.chmod(path, 0o700)
         return path
 
-    def record_invocation_failure(self, role: str, invocation_id: str, stage: str, result: ProcessResult) -> None:
+    def record_invocation_failure(
+        self, role: str, invocation_id: str, model: str, stage: str, result: ProcessResult, *, retryable: bool
+    ) -> None:
         """Persist bounded private evidence without copying CLI prose into state."""
         assert self.state is not None
         diagnostics = self.private_directory("diagnostics")
@@ -758,12 +778,15 @@ class Dispatcher:
         signal_number = -result.code if result.code < 0 else None
         self.state["failure"] = {
             "role": role,
+            "model": model,
             "stage": stage,
+            "retryable": retryable,
             "exit_code": result.code if result.code >= 0 else None,
             "signal": signal_number,
             "signal_name": signal_name(signal_number),
             "timed_out": result.timed_out,
             "output_exhausted": result.output_exhausted,
+            "cleanup_incomplete": result.cleanup_incomplete,
             "diagnostics": {
                 "stdout": str(stdout_path.relative_to(self.repo)),
                 "stderr": str(stderr_path.relative_to(self.repo)),
@@ -774,7 +797,32 @@ class Dispatcher:
             },
             "recorded_at": now(),
         }
+        self.state["failures"].append(self.state["failure"])
+        self.state["invocations"].append(
+            {
+                "id": invocation_id,
+                "role": role,
+                "model": model,
+                "outcome": "failed",
+                "uncertain_usage": True,
+                "reserved_tokens": self.state["pending_invocation"]["reserved_tokens"],
+                "failure_stage": stage,
+                "finished_at": now(),
+            }
+        )
+        self.state["pending_invocation"] = None
         self.save()
+
+    def model_for_attempt(self) -> str:
+        assert self.state is not None
+        return TERRA_MODEL if self.state["attempt"] <= 3 else SOL_MODEL
+
+    @staticmethod
+    def invocation_exit_retryable(result: ProcessResult) -> bool:
+        # EX_TEMPFAIL is the only nonzero exit this dispatcher treats as a
+        # controlled, retryable CLI termination. Other exits can represent
+        # credentials, model availability, or local infrastructure failures.
+        return result.code == 75
 
     def verify_state(self, task: Task, base: str, config_digest: str) -> None:
         assert self.state is not None
@@ -786,7 +834,8 @@ class Dispatcher:
             and integration.get("commit") == base
         )
         valid = (
-            self.state.get("version") == 1
+            self.state.get("version") == POLICY_VERSION
+            and self.state.get("policy") == {"identity": POLICY_IDENTITY, "version": POLICY_VERSION}
             and self.state.get("task") == task.task_id
             and self.state.get("branch") == BRANCH
             and (self.state.get("base") == base or target_already_integrated)
@@ -831,8 +880,6 @@ class Dispatcher:
         if archive_digest != journal.get("old_digest") or archive_digest != recovery.get("archive_digest"):
             raise DispatchError("interrupted recovery archive identity is invalid")
         archived = parse_json_bytes(archive_path, archive_bytes)
-        old_configuration = archived.get("configuration")
-        selected_configuration = selected.get("configuration")
         old_tokens = archived.get("tokens_used")
         old_attempt = archived.get("attempt")
         pending = archived.get("pending_invocation")
@@ -846,10 +893,6 @@ class Dispatcher:
             or old_tokens < reserved
             or selected.get("attempt") != old_attempt + 1
             or selected.get("tokens_used") != old_tokens
-            or not isinstance(old_configuration, dict)
-            or not isinstance(selected_configuration, dict)
-            or selected_configuration.get("token_budget") != old_configuration.get("token_budget")
-            or selected_configuration.get("invocation_reserve_tokens") != old_configuration.get("invocation_reserve_tokens")
             or recovery.get("prior_attempt") != old_attempt
             or recovery.get("prior_tokens_used") != old_tokens
         ):
@@ -922,23 +965,12 @@ class Dispatcher:
             raise DispatchError(f"task {task.task_id} has no failed run to recover")
         attempt = old_state.get("attempt")
         tokens_used = old_state.get("tokens_used")
-        old_configuration = old_state.get("configuration")
         if not isinstance(attempt, int) or not 1 <= attempt < MAX_ATTEMPTS:
             raise DispatchError("failed run exhausted its attempt budget")
-        if not isinstance(old_configuration, dict):
-            raise DispatchError("failed run configuration is invalid")
-        old_budget = old_configuration.get("token_budget")
-        old_reserve = old_configuration.get("invocation_reserve_tokens")
         pending = old_state.get("pending_invocation")
         pending_reserve = pending.get("reserved_tokens") if isinstance(pending, dict) else 0
-        if not isinstance(old_budget, int) or old_budget <= 0 or not isinstance(old_reserve, int) or old_reserve <= 0:
-            raise DispatchError("failed run configuration is invalid")
-        if self.args.token_budget != old_budget or self.args.invocation_reserve_tokens != old_reserve:
-            raise DispatchError("failed-run recovery requires its original token configuration")
         if not isinstance(pending_reserve, int) or pending_reserve < 0 or not isinstance(tokens_used, int) or tokens_used < pending_reserve:
             raise DispatchError("failed run reservation accounting is invalid")
-        if tokens_used + self.args.invocation_reserve_tokens > self.args.token_budget:
-            raise DispatchError("failed run exhausted its token budget")
         self.verify_failed_candidate(old_state)
 
         archives = self.private_directory("archives")
@@ -1060,7 +1092,7 @@ class Dispatcher:
             raise DispatchError("repository Git configuration changed")
         return path
 
-    def candidate(self, worktree: Path, *, allow_plan: bool = False) -> dict[str, Any]:
+    def candidate(self, worktree: Path, *, allow_plan: bool = False, allow_empty: bool = False) -> dict[str, Any]:
         assert self.state is not None
         if self.config_digest() != self.state["repository_config_digest"]:
             raise DispatchError("repository Git configuration changed")
@@ -1082,7 +1114,7 @@ class Dispatcher:
             Path(name).unlink(missing_ok=True)
         raw_files = git_bytes(worktree, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", self.state["base"], tree)
         files = sorted(os.fsdecode(item) for item in raw_files.split(b"\0") if item)
-        if not files:
+        if not files and not allow_empty:
             raise DispatchError("worker produced no reviewable diff")
         if len(files) > MAX_FILES or any("\n" in path or "\r" in path for path in files):
             raise DispatchError("candidate exceeds the changed-file limit")
@@ -1143,13 +1175,15 @@ class Dispatcher:
         if self.state.get("pending_invocation"):
             raise DispatchError("an interrupted paid invocation cannot be retried automatically")
         reserve = self.args.invocation_reserve_tokens
-        if self.state["tokens_used"] + reserve > self.args.token_budget:
-            raise DispatchError("token budget cannot reserve another invocation")
         invocation_id = f"{role}-{self.state['attempt']}"
+        if any(record.get("id") == invocation_id for record in self.state["invocations"]):
+            raise DispatchError("recorded invocation cannot be replayed automatically")
+        model = self.model_for_attempt()
         self.state["tokens_used"] += reserve
         self.state["pending_invocation"] = {
             "id": invocation_id,
             "role": role,
+            "model": model,
             "reserved_tokens": reserve,
             "started_at": now(),
         }
@@ -1176,7 +1210,7 @@ class Dispatcher:
             "-c",
             "shell_environment_policy.inherit=none",
             "--model",
-            MODEL,
+            model,
             "--sandbox",
             sandbox,
             "--ephemeral",
@@ -1200,30 +1234,37 @@ class Dispatcher:
         finally:
             Path(schema_path).unlink(missing_ok=True)
         if result.launch_error:
-            self.record_invocation_failure(role, invocation_id, "launch", result)
-            raise DispatchError(f"{role} launch failed")
+            self.record_invocation_failure(role, invocation_id, model, "launch", result, retryable=False)
+            raise InvocationFailure(f"{role} launch failed", retryable=False)
+        if result.cleanup_incomplete:
+            self.record_invocation_failure(role, invocation_id, model, "cleanup", result, retryable=False)
+            raise InvocationFailure(f"{role} process cleanup was incomplete", retryable=False)
         if result.timed_out:
-            self.record_invocation_failure(role, invocation_id, "timeout", result)
-            raise DispatchError(f"{role} timed out")
+            self.record_invocation_failure(role, invocation_id, model, "timeout", result, retryable=True)
+            raise InvocationFailure(f"{role} timed out", retryable=True)
         if result.output_exhausted:
-            self.record_invocation_failure(role, invocation_id, "output_limit", result)
-            raise DispatchError(f"{role} output limit exhausted")
+            self.record_invocation_failure(role, invocation_id, model, "output_limit", result, retryable=True)
+            raise InvocationFailure(f"{role} output limit exhausted", retryable=True)
         if result.code < 0:
-            self.record_invocation_failure(role, invocation_id, "signal", result)
-            raise DispatchError(f"{role} process terminated by {signal_name(-result.code)}")
+            self.record_invocation_failure(role, invocation_id, model, "signal", result, retryable=False)
+            raise InvocationFailure(f"{role} process terminated by {signal_name(-result.code)}", retryable=False)
         if result.code:
-            self.record_invocation_failure(role, invocation_id, "exit", result)
-            raise DispatchError(f"{role} process failed with exit status {result.code}")
+            retryable = self.invocation_exit_retryable(result)
+            self.record_invocation_failure(role, invocation_id, model, "exit", result, retryable=retryable)
+            raise InvocationFailure(f"{role} process failed with exit status {result.code}", retryable=retryable)
         try:
             value, tokens = event_result(result.stdout, role, task.task_id)
-        except DispatchError:
-            self.record_invocation_failure(role, invocation_id, "events", result)
-            raise
+        except DispatchError as exc:
+            retryable = "failed event" not in str(exc)
+            self.record_invocation_failure(role, invocation_id, model, "events", result, retryable=retryable)
+            raise InvocationFailure(str(exc), retryable=retryable) from None
         self.state["tokens_used"] += tokens - reserve
         self.state["invocations"].append(
             {
                 "id": invocation_id,
                 "role": role,
+                "model": model,
+                "outcome": "completed",
                 "tokens": tokens,
                 "events_digest": hashlib.sha256(result.stdout).hexdigest(),
                 "finished_at": now(),
@@ -1231,8 +1272,6 @@ class Dispatcher:
         )
         self.state["pending_invocation"] = None
         self.save()
-        if self.state["tokens_used"] > self.args.token_budget:
-            raise DispatchError("token budget exhausted")
         return value
 
     def validate(self, worktree: Path, reviewed: dict[str, Any]) -> dict[str, Any]:
@@ -1323,16 +1362,46 @@ class Dispatcher:
         )
         return [str(launcher), "-f", str(profile), *command]
 
-    def repair_or_fail(self, reason: str, findings: list[dict[str, str]]) -> None:
+    def retry_or_fail(self, reason: str, findings: list[dict[str, str]]) -> None:
         assert self.state is not None
         if self.state["attempt"] >= MAX_ATTEMPTS:
-            raise DispatchError(f"{reason} after two repairs")
+            raise DispatchError(f"{reason} after Sol initial attempt and two repairs")
+        previous_attempt = self.state["attempt"]
         self.state["attempt"] += 1
+        if previous_attempt == 3:
+            self.state["escalations"].append(
+                {
+                    "from_model": TERRA_MODEL,
+                    "to_model": SOL_MODEL,
+                    "after_attempt": previous_attempt,
+                    "reason": reason,
+                    "recorded_at": now(),
+                }
+            )
         self.state["repair"] = findings
         self.state["candidate"] = None
         self.state["reviewer"] = None
         self.state["validator"] = None
         self.save("ready")
+
+    def bind_retry_snapshot(self, worktree: Path, reason: str) -> dict[str, Any]:
+        assert self.state is not None
+        snapshot = self.candidate(worktree, allow_empty=True)
+        if self.state.get("candidate") is not None and snapshot != self.state["candidate"]:
+            raise DispatchError("candidate changed during failed invocation")
+        self.state["retry_snapshot"] = {**snapshot, "recorded_at": now()}
+        self.state["retry_reason"] = reason
+        self.save()
+        return snapshot
+
+    def retry_after_invocation_failure(self, worktree: Path, failure: InvocationFailure) -> None:
+        assert self.state is not None
+        snapshot = self.bind_retry_snapshot(worktree, str(failure))
+        self.state["failure"]["candidate"] = snapshot
+        self.state["failure"]["retry_reason"] = str(failure)
+        self.state["invocations"][-1]["candidate"] = snapshot
+        self.save()
+        self.retry_or_fail(str(failure), [{"code": "INVOCATION_FAILED", "message": str(failure)}])
 
     def mark_plan_complete(self, worktree: Path, task: Task) -> None:
         assert self.state is not None
@@ -1428,43 +1497,83 @@ class Dispatcher:
                 self.reconcile_integration(self.worktree())
             worktree = self.prepare_worktree() if self.state["phase"] != "integrated" else self.worktree()
             while self.state["phase"] not in {"awaiting_integration", "integrated"}:
-                if self.state["phase"] == "ready":
-                    worker = self.invoke("worker", task, worktree)
-                    if worker["outcome"] != "completed":
-                        raise DispatchError("worker reported blocked")
-                    self.discard_ignored_worker_output(worktree)
-                    self.state["candidate"] = self.candidate(worktree)
-                    self.state["repair"] = None
-                    self.save("worker_complete")
-                if self.state["phase"] == "worker_complete":
-                    before = self.candidate(worktree)
-                    if before != self.state["candidate"]:
-                        raise DispatchError("candidate changed before review")
-                    review = self.invoke("reviewer", task, worktree)
-                    after = self.candidate(worktree)
-                    if after != before:
-                        raise DispatchError("reviewer changed the candidate")
-                    self.state["reviewer"] = {
-                        "decision": review["decision"],
-                        "finding_codes": [finding["code"] for finding in review["findings"]],
-                        "diff": after["diff"],
-                        "finished_at": now(),
-                    }
-                    self.save("review_complete")
-                    if review["decision"] == "rejected":
-                        self.repair_or_fail("review rejected", review["findings"])
-                        continue
-                if self.state["phase"] == "review_complete":
-                    evidence = self.validate(worktree, self.state["candidate"])
-                    self.state["validator"] = evidence
-                    self.save("validation_complete")
-                    if evidence["code"]:
-                        self.repair_or_fail(
-                            "validation failed",
-                            [{"code": "VALIDATION_FAILED", "message": "The fixed repository validation gate failed."}],
-                        )
-                        continue
-                    self.save("awaiting_integration")
+                try:
+                    if self.state["phase"] == "ready":
+                        retry_snapshot = self.state.get("retry_snapshot")
+                        if retry_snapshot is not None:
+                            expected = {key: retry_snapshot[key] for key in ("tree", "diff", "files")}
+                            if self.candidate(worktree, allow_empty=True) != expected:
+                                raise DispatchError("candidate changed after failed invocation")
+                            self.state["retry_snapshot"] = None
+                            self.save()
+                        worker = self.invoke("worker", task, worktree)
+                        if worker["outcome"] != "completed":
+                            self.bind_retry_snapshot(worktree, "worker reported blocked")
+                            self.retry_or_fail(
+                                "worker reported blocked",
+                                [{"code": "WORKER_BLOCKED", "message": "The worker reported a blocker."}],
+                            )
+                            continue
+                        self.discard_ignored_worker_output(worktree)
+                        self.state["candidate"] = self.candidate(worktree)
+                        self.state["repair"] = None
+                        self.save("worker_complete")
+                    if self.state["phase"] == "worker_complete":
+                        before = self.candidate(worktree)
+                        if before != self.state["candidate"]:
+                            raise DispatchError("candidate changed before review")
+                        review = self.invoke("reviewer", task, worktree)
+                        after = self.candidate(worktree)
+                        if after != before:
+                            raise DispatchError("reviewer changed the candidate")
+                        self.state["reviewer"] = {
+                            "decision": review["decision"],
+                            "findings": review["findings"],
+                            "finding_codes": [finding["code"] for finding in review["findings"]],
+                            "diff": after["diff"],
+                            "finished_at": now(),
+                        }
+                        self.save("review_complete")
+                    if self.state["phase"] == "review_complete":
+                        reviewer = self.state.get("reviewer")
+                        candidate = self.state.get("candidate")
+                        if not isinstance(reviewer, dict) or not isinstance(candidate, dict):
+                            raise DispatchError("review completion lacks candidate evidence")
+                        current = self.candidate(worktree)
+                        if reviewer.get("diff") != candidate.get("diff") or current != candidate:
+                            raise DispatchError("reviewed candidate changed before validation")
+                        if reviewer.get("decision") == "rejected":
+                            self.bind_retry_snapshot(worktree, "review rejected")
+                            findings = reviewer.get("findings")
+                            if not isinstance(findings, list):
+                                raise DispatchError("review completion lacks findings")
+                            self.retry_or_fail("review rejected", findings)
+                            continue
+                        if reviewer.get("decision") != "accepted":
+                            raise DispatchError("review completion has an invalid decision")
+                        evidence = self.validate(worktree, self.state["candidate"])
+                        self.state["validator"] = evidence
+                        self.save("validation_complete")
+                    if self.state["phase"] == "validation_complete":
+                        evidence = self.state.get("validator")
+                        candidate = self.state.get("candidate")
+                        if not isinstance(evidence, dict) or not isinstance(candidate, dict):
+                            raise DispatchError("validation completion lacks candidate evidence")
+                        if evidence.get("diff") != candidate.get("diff") or self.candidate(worktree) != candidate:
+                            raise DispatchError("validated candidate changed before integration")
+                        if evidence["code"]:
+                            self.bind_retry_snapshot(worktree, "validation failed")
+                            self.retry_or_fail(
+                                "validation failed",
+                                [{"code": "VALIDATION_FAILED", "message": "The fixed repository validation gate failed."}],
+                            )
+                            continue
+                        self.save("awaiting_integration")
+                except InvocationFailure as exc:
+                    if not exc.retryable:
+                        raise
+                    self.retry_after_invocation_failure(worktree, exc)
+                    continue
             if self.state["phase"] == "awaiting_integration" and integrate:
                 self.integrate(task, worktree)
             return {
@@ -1482,8 +1591,8 @@ class Dispatcher:
     def dispatch(self) -> dict[str, Any]:
         if self.args.timeout_seconds <= 0 or self.args.max_output_bytes < 1024:
             raise DispatchError("timeout and output limits must be positive")
-        if self.args.token_budget <= 0 or self.args.invocation_reserve_tokens <= 0:
-            raise DispatchError("token limits must be positive")
+        if self.args.invocation_reserve_tokens <= 0:
+            raise DispatchError("invocation reserve must be positive")
         if self.args.recover_failed_run:
             if self.args.dry_run or self.args.integrate:
                 raise DispatchError("failed-run recovery cannot dry-run or integrate")
@@ -1543,7 +1652,6 @@ def arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--recovery-reason")
     parser.add_argument("--lease-stale-seconds", type=int, default=3600)
     parser.add_argument("--timeout-seconds", type=float, default=1800)
-    parser.add_argument("--token-budget", type=int, default=200000)
     parser.add_argument("--invocation-reserve-tokens", type=int, default=20000)
     parser.add_argument("--max-output-bytes", type=int, default=2 * 1024 * 1024)
     parsed = parser.parse_args(argv)

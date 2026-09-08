@@ -23,7 +23,9 @@ Confirm the exact model is available on the runner; do not silently substitute i
 4. A fresh reviewer inspects the exact diff, criteria, callers and tests. Prioritize
    scope, stale state, concurrency, consent, source writes and visible interaction.
 5. The coordinator independently runs the required gates. Fixes invalidate the
-   prior review. Limit repair/review retries to two, then stop with a diagnosis.
+   prior review. Allow the initial Terra attempt plus two repairs; then escalate
+   to GPT-5.6 Sol for an initial attempt plus two repairs. Stop with a diagnosis
+   only after that sequence is exhausted or a required boundary cannot be met.
 6. Integrate only under explicit standing authorization for local task commits and
    integration. Otherwise leave a patch/worktree for review. This document does
    not grant commit permission. Pushes and releases require separate authorization.
@@ -84,8 +86,9 @@ AUTO-02 must persist a task lease, base identity, diff digest, worker/reviewer
 results, validator results and integration state. Use an atomic lock and resumable
 local record; keep generated logs ignored. One coordinator owns plan status.
 Stop on missing prerequisites, changed base, unavailable model, failed checks,
-two failed repairs or exhausted budget. Start with one task per run and configurable
-wall-time/token limits. Budget exhaustion is incomplete work, never success.
+the finite Terra/Sol repair sequence being exhausted. Start with one task per
+run, a configurable wall-time limit and bounded output. Tokens are recorded for
+observability; they do not gate worker, reviewer or integration progress.
 Do not place credentials or full project prompts in run logs.
 
 Before unattended integration, establish one explicit policy: allow local task
@@ -104,8 +107,8 @@ cleanup and repository-external changes. Those actions still require the user.
 One Codex heartbeat coordinates the queue. On each run it resumes the sole
 Running/Review task or selects the first ready Pending task. It uses one GPT-5.6
 Terra writer, waits for completion, uses a fresh reviewer, runs the task's gates,
-allows at most two repair/review cycles, updates the ledger and commits an accepted
-task. It performs at most one task per run and never overlaps writers. A task that
+allows two Terra repairs before escalating to Sol with two repairs, updates the
+ledger and commits an accepted task. It performs at most one task per run and never overlaps writers. A task that
 needs native/provider evidence may remain Blocked while unrelated ready work
 continues. The heartbeat reports only actionable blockers and release readiness.
 
@@ -140,6 +143,31 @@ only with `--recover-stale-lease` after confirming its dispatcher and child are 
 Secure candidate validation currently fails closed unless macOS `sandbox-exec` is
 available; the fake CLI suite remains portable and makes no paid calls.
 
+## Automatic repair and model escalation
+
+The user's 2026-09-08 continuation authorizes removing the dispatcher's token
+cutoff and automatically escalating stuck coding tasks from GPT-5.6 Terra to
+GPT-5.6 Sol. Attempts 1–3 use Terra (initial attempt and two repairs); attempts
+4–6 use Sol (initial attempt and two repairs), all at high reasoning effort. A
+fresh reviewer uses the current attempt's model. Every changed candidate must
+pass that review and the coordinator's fixed validation before integration.
+
+The dispatcher records invocation model, usage, uncertainty and escalation.
+The former `--token-budget` option is removed. The 20,000-token reservation is
+an accounting estimate for uncertain calls, not a permission or spending limit.
+Timeouts remain 30 minutes per invocation, output remains bounded, and one lease
+prevents overlapping workers. Known, fully terminated retryable failures can use
+the finite repair sequence after candidate boundaries are checked. An invocation
+still pending after interruption must be resolved before another call. Missing
+credentials/models, live leases, changed bases and unsafe candidate mutations
+cannot be solved by blindly starting another worker.
+
+This policy applies to development agents only. It does not increase or remove
+the local-model development/qualification request budgets, change the selected
+Qwen candidate, or authorize repeated live evaluation calls. The coordinator may
+resolve routine implementation/test problems within the existing task scope;
+releases, pushes and destructive host changes remain separately authorized.
+
 ## Dispatcher failures and explicit recovery
 
 The dispatcher bounds captured stdout/stderr while the child runs and stops its
@@ -154,13 +182,14 @@ Git, ordinary logs, shared receipts or prompts. Ordinary run state records only
 diagnostic identity and exit/signal information. A missing successful completion
 does not prove that no model request was charged; its reservation stays consumed.
 
-Recovery is a separate explicit coordinator action after diagnosis and accepted
-repairs, never a scheduled automatic retry. First verify the previous worktree is
+Archived recovery of an interrupted or legacy failed run is a separate explicit
+coordinator action after diagnosis and accepted repairs. Normal bounded repairs
+of known terminated failures follow the automatic policy above. First verify the previous worktree is
 unchanged and the dispatcher/child are gone, review and commit any necessary code
 repair, and requeue the task as Pending in the clean integration ledger. Recovery
 archives the old state unchanged, retains its worktree and token charges, consumes
 an attempt from the existing retry allowance, and prepares a fresh run at that
-reviewed base. It does not launch a worker or grant a new token budget. An uncertain
+reviewed base. It does not launch a worker or erase reported/uncertain usage. An uncertain
 failure remains recorded even when an offline reproduction explains its cause.
 
 For an explicitly authorized failed task, use a unique authorization ID and a

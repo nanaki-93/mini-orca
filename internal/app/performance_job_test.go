@@ -813,7 +813,15 @@ func waitForPerformanceJob(t *testing.T, service *Service, want string) *Perform
 			t.Fatal(err)
 		}
 		if job != nil && job.Status == want {
-			return job
+			if want != performanceJobCompleted {
+				return job
+			}
+			service.performance.mu.Lock()
+			workerFinished := service.performance.workerGeneration == ""
+			service.performance.mu.Unlock()
+			if workerFinished {
+				return job
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
