@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v5"
+	semanticAnalysisPromptVersion = "file-analysis-v6"
 	maxSemanticAnalysisBytes      = 64 * 1024
 )
 
@@ -266,6 +266,9 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 	}
 	return "You summarize exactly one selected source file. Return one JSON object only; do not use Markdown or code fences. " +
 		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? ({mechanism,why_it_matters_here,tradeoff_or_failure_mode?,transferable_lesson?}). Keep each array to at most three concise items. " + project.EngineeringInsightPromptInstructions +
+		"For symbol_explanations, copy keys verbatim from TARGET_FACTS.symbols[].name. Do not explain parameters, local variables, fields, imported names, or referenced types unless their exact name appears in that list. An empty object is valid. Risk severity must be low, medium, or high. " +
+		"Before answering, trace what the selected code actually does and distinguish visible behavior from assumptions about unseen callees. A lock alone does not prove thread safety; a context parameter alone does not prove cancellation is handled or ignored; a delegated call alone does not prove authorization or idempotency is missing downstream. State unknowns conditionally. " +
+		"Prefer one file-level engineering insight and omit repeated per-risk or per-suggestion insights. Keep its four fields together under 1,000 characters. Describe an observable mechanism, its workload or failure condition, the trade-off of a proposed change, and a specific test or measurement with an expected observation. Generic advice to use defer, handle errors, or follow best practices is not an insight. For trivial wrappers with no grounded lesson, omit engineering_insight. " +
 		"Usually omit task_spec. If you include one, it must have only these fields: schema_version \"1\", target_path copied exactly from TARGET_FACTS.path, target_symbol copied exactly from one exact atomic TARGET_FACTS.symbols name, target_signature copied exactly from that symbol's TARGET_FACTS signature, acceptance_criteria (array), non_goals (array), and optional go_test_candidate {name,content}. Do not use a symbol field. Never target another file. " +
 		"Treat all interpretations as suggestions. Do not quote source wholesale, invent files, or include source from another file.\n\n" +
 		"PROJECT_FACTS:\n" + string(facts) + "\n\nCONTEXT_MANIFEST:\n" + string(manifestJSON) + "\n\nTARGET_FACTS:\n" + string(targetJSON) + "\n\nTARGET_SOURCE (the only source content supplied):\n```\n" + source + "\n```\n", nil
@@ -305,7 +308,9 @@ func parseSemanticAnalysis(output string, target project.IndexFile, source strin
 	}
 	explanations, err := normalizeSymbolExplanations(wire.SymbolExplanations, target.Symbols)
 	if err != nil {
-		return semanticAnalysisResponse{}, err
+		// Optional explanations cannot grant target authority. Omit the entire
+		// section on an invalid key instead of losing an otherwise valid summary.
+		explanations = map[string]string{}
 	}
 	risks, err := parseSemanticRisks(wire.Risks, target, source)
 	if err != nil {
