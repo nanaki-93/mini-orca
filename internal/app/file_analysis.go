@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v9"
+	semanticAnalysisPromptVersion = "file-analysis-v10"
 	maxSemanticAnalysisBytes      = 64 * 1024
 )
 
@@ -28,7 +28,7 @@ const fileAnalysisInsightGuidance = "Trace what the selected code actually does 
 	"Return engineering_insight only when all four fields can be grounded in TARGET_SOURCE: mechanism names an observable code relationship; why_it_matters_here cites exact local identifiers or control flow and states impact conditionally, with an if, when, or workload condition; tradeoff_or_failure_mode names a constraint of the proposed change; transferable_lesson gives a concrete test or measurement and expected observation. " +
 	"Otherwise omit it, especially for a trivial wrapper. " +
 	"When TARGET_SOURCE shows the same mutex remains held across <-ctx.Done() with no intervening release, say that the mutex spans the cancellation wait and name both operations; do not reduce this to generic blocking. If that mutex is released before the wait, do not claim serialization or a lock-held wait; describe only observed behavior. Mention later state or ownership revalidation only when TARGET_SOURCE shows a later publication or ownership transition. For a Lock, Unlock, <-ctx.Done() sequence with no later state use, say the mutex is released before the wait and do not invent revalidation. Verify the held-lock pattern by canceling one waiter while another attempts that mutex, and expect the second to acquire it only after the first releases it. " +
-	"A visible known-length append loop can support measurement-oriented engineering guidance even when it is not a bug: cite the length, append, and result slice; preallocation retains capacity, so compare representative inputs with -benchmem. " +
+	"A visible known-length append loop can support measurement-oriented engineering guidance even when it is not a bug. When TARGET_SOURCE starts a result slice at zero capacity and appends once per known input item, name the input-length and result-slice identifiers and explain capacity growth. Preallocation changes retained result capacity. If TARGET_SOURCE visibly allocates while formatting items, preallocation does not remove that separately visible cost; otherwise do not infer a formatting allocation. State each only when shown. State allocation impact conditionally for workloads or input sizes where growth matters, and treat retained result capacity as the preallocation trade-off. Verify with before-and-after -benchmem runs at representative input sizes and compare allocations per operation rather than only saying to benchmark. " +
 	"Prefer one file-level insight and omit repeated per-risk or per-suggestion insights. "
 
 // EngineeringInsightPromptVersion returns the production selected-file prompt
