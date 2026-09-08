@@ -75,6 +75,20 @@ requests, and a duplicate authorization ID is rejected. Advisory locks reject co
 writers and release after crashes; an in-flight reserved attempt remains `unknown` and consumed on resume.
 Source-free receipts and ordinary logs never contain source, endpoint URLs, keys, or response prose.
 
+For the frozen local Qwen3.8 recovery candidate, configure the `bug` scope in the
+private ignored evaluation configuration with `temperature: 1`,
+`reasoning_effort: low`, `top_p: 0.95`, `top_k: 20`, `min_p: 0`,
+`presence_penalty: 0`, and `repeat_penalty: 1`. These optional fields are sent as
+OpenAI-compatible request fields only when explicitly configured, including zero;
+the runner fingerprint binds their unset/value state before a run can resume.
+The installed LM Studio runtime maps `reasoning_effort: low` into the selected
+candidate's thinking template. Its MLX sampler accepts the selected `top_p`,
+`top_k`, `min_p`, and `repeat_penalty` values. MLX has no presence-penalty
+processor, so the required neutral `presence_penalty: 0` is the verified fixed
+effective setting; nonzero presence penalties are not supported for this candidate.
+The coordinator keeps the runtime/template read-back and candidate manifest in
+private ignored evaluation storage and verifies them before collection.
+
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
 bound to that digest. An independent reviewer compares private prose with the case

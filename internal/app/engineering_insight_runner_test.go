@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -16,10 +18,11 @@ import (
 )
 
 type fakeEngineeringInsightClient struct {
-	calls  atomic.Int32
-	reply  string
-	err    error
-	prompt string
+	calls    atomic.Int32
+	reply    string
+	response *llm.ChatResponse
+	err      error
+	prompt   string
 }
 
 func (c *fakeEngineeringInsightClient) Chat(_ context.Context, messages []llm.ChatMessage) (*llm.ChatResponse, error) {
@@ -30,6 +33,9 @@ func (c *fakeEngineeringInsightClient) Chat(_ context.Context, messages []llm.Ch
 	c.prompt = messages[0].Content
 	if c.err != nil {
 		return nil, c.err
+	}
+	if c.response != nil {
+		return c.response, nil
 	}
 	return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: c.reply}, FinishReason: "stop"}}, Usage: llm.ChatUsage{CompletionTokens: 7}}, nil
 }
@@ -94,6 +100,130 @@ func TestEngineeringInsightRunnerPersistsSourceFreeSixRequestDevelopmentCampaign
 	_, _, err = RunEngineeringInsightEvaluation(context.Background(), third)
 	if err == nil || !strings.Contains(err.Error(), "budget") || client.calls.Load() != 6 {
 		t.Fatalf("aggregate campaign budget did not block a new run: %v, calls=%d", err, client.calls.Load())
+	}
+}
+
+func TestEngineeringInsightRunnerParsesFinalContentWithoutReasoningPrefix(t *testing.T) {
+	const reasoningContent = "private reasoning_content"
+	const reasoning = "private reasoning"
+	client := &fakeEngineeringInsightClient{response: &llm.ChatResponse{Model: "model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: runnerValidResponse(), ReasoningContent: reasoningContent, Reasoning: reasoning}, FinishReason: "stop"}}, Usage: llm.ChatUsage{CompletionTokens: 7}}}
+	cfg := runnerTestConfig(t, "reasoning-with-final", EngineeringInsightCollectRunMode, 3, client)
+	receipt, handoff, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, attempt := range receipt.Attempts {
+		if attempt.Outcome != "completed" || !attempt.UsableSummary || !attempt.EmittedResponse {
+			t.Fatalf("final JSON was not parsed independently of reasoning: %+v", attempt)
+		}
+	}
+	for _, response := range handoff.Responses {
+		if !strings.Contains(response, reasoningContent) || !strings.Contains(response, reasoning) || !strings.Contains(response, runnerValidResponse()) {
+			t.Fatalf("private scoring handoff omitted emitted material: %q", response)
+		}
+	}
+	manifest, err := os.ReadFile(filepath.Join(cfg.Root, runnerRelativeDirectory, cfg.RunID+".json"))
+	if err != nil || strings.Contains(string(manifest), reasoningContent) || strings.Contains(string(manifest), reasoning) {
+		t.Fatalf("source-free receipt retained reasoning: %s, %v", manifest, err)
+	}
+	handoff.Discard()
+}
+
+func TestEngineeringInsightRunnerRetainsReasoningOnlyLengthResponseForPrivateScoring(t *testing.T) {
+	const reasoning = "private length-limited reasoning"
+	client := &fakeEngineeringInsightClient{response: &llm.ChatResponse{Model: "model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", ReasoningContent: reasoning}, FinishReason: "length"}}, Usage: llm.ChatUsage{CompletionTokens: 31}}}
+	cfg := runnerTestConfig(t, "reasoning-only-length", EngineeringInsightCollectRunMode, 3, client)
+	receipt, handoff, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.calls.Load() != 3 || receipt.Consumption.Requests != 3 || receipt.Consumption.OutputTokens != 93 {
+		t.Fatalf("consumption did not retain reserved attempts and usage: calls=%d receipt=%+v", client.calls.Load(), receipt.Consumption)
+	}
+	for _, attempt := range receipt.Attempts {
+		if attempt.Outcome != "truncated" || attempt.FinishReason != "length" || attempt.OutputTokens != 31 || !attempt.EmittedResponse || attempt.UsableSummary {
+			t.Fatalf("reasoning-only response lost failure metadata: %+v", attempt)
+		}
+	}
+	schedule := make([]EngineeringInsightExpectedAttempt, 0, len(cfg.Cases))
+	for _, item := range cfg.Cases {
+		schedule = append(schedule, item.Expected)
+	}
+	if _, err := ValidateEngineeringInsightEvaluationReceipt(receipt, EngineeringInsightEvaluationExpectation{CandidateID: cfg.CandidateID, Provider: cfg.Provider, Model: cfg.Model, PromptVersion: cfg.PromptVersion, CorpusID: cfg.CorpusID, CorpusDigest: cfg.CorpusDigest, BaseRevision: cfg.BaseRevision, MaxRequests: 6, MaxOutputTokens: qualificationOutputTokenCap, AttemptTimeoutSeconds: qualificationAttemptTimeoutSeconds, Schedule: schedule}); err != nil {
+		t.Fatalf("receipt rejected reasoning-only digest evidence: %v", err)
+	}
+	for _, response := range handoff.Responses {
+		if response != reasoning {
+			t.Fatalf("private scoring material = %q, want reasoning", response)
+		}
+	}
+	manifest, err := os.ReadFile(filepath.Join(cfg.Root, runnerRelativeDirectory, cfg.RunID+".json"))
+	if err != nil || strings.Contains(string(manifest), reasoning) {
+		t.Fatalf("source-free receipt retained private reasoning: %s, %v", manifest, err)
+	}
+	reloaded, err := LoadEngineeringInsightScoringHandoff(cfg.Root, cfg.RunID)
+	if err != nil || len(reloaded.Responses) != 3 {
+		t.Fatalf("reasoning-only private handoff did not reload: %d, %v", len(reloaded.Responses), err)
+	}
+	reloaded.Discard()
+	handoff.Discard()
+}
+
+func TestEngineeringInsightRunnerRetainsReasoningOnlyStoppedResponseForPrivateScoring(t *testing.T) {
+	const reasoning = "private stopped reasoning"
+	client := &fakeEngineeringInsightClient{response: &llm.ChatResponse{Model: "model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Reasoning: reasoning}, FinishReason: "stop"}}, Usage: llm.ChatUsage{CompletionTokens: 29}}}
+	cfg := runnerTestConfig(t, "reasoning-only-stop", EngineeringInsightCollectRunMode, 3, client)
+	receipt, handoff, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.calls.Load() != 3 || receipt.Consumption.Requests != 3 || receipt.Consumption.OutputTokens != 87 {
+		t.Fatalf("stopped reasoning-only response retried or lost consumption: calls=%d receipt=%+v", client.calls.Load(), receipt.Consumption)
+	}
+	digest := sha256.Sum256([]byte(reasoning))
+	wantDigest := hex.EncodeToString(digest[:])
+	for _, attempt := range receipt.Attempts {
+		if attempt.Outcome != "malformed" || attempt.FinishReason != "stop" || attempt.OutputTokens != 29 || !attempt.EmittedResponse || attempt.ResponseDigest != wantDigest || attempt.UsableSummary {
+			t.Fatalf("stopped reasoning-only response lost metadata: %+v", attempt)
+		}
+	}
+	schedule := make([]EngineeringInsightExpectedAttempt, 0, len(cfg.Cases))
+	for _, item := range cfg.Cases {
+		schedule = append(schedule, item.Expected)
+	}
+	if _, err := ValidateEngineeringInsightEvaluationReceipt(receipt, EngineeringInsightEvaluationExpectation{CandidateID: cfg.CandidateID, Provider: cfg.Provider, Model: cfg.Model, PromptVersion: cfg.PromptVersion, CorpusID: cfg.CorpusID, CorpusDigest: cfg.CorpusDigest, BaseRevision: cfg.BaseRevision, MaxRequests: 6, MaxOutputTokens: qualificationOutputTokenCap, AttemptTimeoutSeconds: qualificationAttemptTimeoutSeconds, Schedule: schedule}); err != nil {
+		t.Fatalf("receipt rejected stopped reasoning-only digest evidence: %v", err)
+	}
+	for _, response := range handoff.Responses {
+		if response != reasoning {
+			t.Fatalf("private scoring material = %q, want reasoning", response)
+		}
+	}
+	manifest, err := os.ReadFile(filepath.Join(cfg.Root, runnerRelativeDirectory, cfg.RunID+".json"))
+	if err != nil || strings.Contains(string(manifest), reasoning) {
+		t.Fatalf("source-free receipt retained private reasoning: %s, %v", manifest, err)
+	}
+	handoff.Discard()
+}
+
+func TestEngineeringInsightRunnerFingerprintBindsOptionalSamplingControls(t *testing.T) {
+	cfg := runnerTestConfig(t, "sampling-fingerprint", EngineeringInsightCollectRunMode, 3, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
+	baseline := runnerFingerprint(cfg)
+	topP := float32(0)
+	cfg.Profile.TopP = &topP
+	withTopP := runnerFingerprint(cfg)
+	if baseline == withTopP {
+		t.Fatal("omitted and explicit zero top_p have the same fingerprint")
+	}
+	topP = 0.95
+	changed := runnerFingerprint(cfg)
+	if withTopP == changed {
+		t.Fatal("top_p value change did not change fingerprint")
+	}
+	cloneValue := float32(0.95)
+	cfg.Profile.TopP = &cloneValue
+	if changed == baseline || runnerFingerprint(cfg) != changed {
+		t.Fatal("sampling fingerprint did not deterministically bind the configured value")
 	}
 }
 

@@ -192,6 +192,34 @@ func TestGrantDevelopmentModeRequiresOneUniqueAuthorization(t *testing.T) {
 	}
 }
 
+func TestEvaluationBugProfilePreservesExplicitSamplingControls(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	config := `model_scopes:
+  analyze: {api_base_url: http://127.0.0.1:1234/v1, model: analyze}
+  bug:
+    api_base_url: http://127.0.0.1:1234/v1
+    model: qwen/qwen3.8-27b
+    reasoning_effort: low
+    temperature: 1
+    top_p: 0.95
+    top_k: 20
+    min_p: 0
+    presence_penalty: 0
+    repeat_penalty: 1
+  function: {api_base_url: http://127.0.0.1:1234/v1, model: function}
+`
+	if err := os.WriteFile(path, []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	profile, err := evaluationBugProfile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.MaxTokens != 4096 || profile.ReasoningEffort != "low" || profile.Temperature != 1 || profile.TopP == nil || *profile.TopP != 0.95 || profile.TopK == nil || *profile.TopK != 20 || profile.MinP == nil || *profile.MinP != 0 || profile.PresencePenalty == nil || *profile.PresencePenalty != 0 || profile.RepeatPenalty == nil || *profile.RepeatPenalty != 1 {
+		t.Fatalf("evaluation profile = %+v", profile)
+	}
+}
+
 func lifecycleArgs(root, configPath, casesPath, base, receiptPath string) []string {
 	return []string{"-mode", "collect", "-root", root, "-run-id", "development-one", "-receipt", receiptPath, "-cases", casesPath, "-config", configPath, "-candidate-id", "candidate", "-provider", "fixture", "-prompt-version", app.EngineeringInsightPromptVersion(), "-corpus-id", "corpus", "-base-revision", base}
 }

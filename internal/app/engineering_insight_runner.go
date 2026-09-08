@@ -530,7 +530,7 @@ func runnerReceipt(cfg EngineeringInsightRunnerConfig) EngineeringInsightEvaluat
 func runnerFingerprint(cfg EngineeringInsightRunnerConfig) string {
 	// This private digest binds endpoint, credentials, context limit and the
 	// immutable public identity without ever writing those values to a receipt.
-	values := []string{cfg.Mode, cfg.CandidateID, cfg.Provider, cfg.Model, cfg.PromptVersion, cfg.CorpusID, cfg.CorpusDigest, cfg.BaseRevision, string(cfg.Profile.Scope), cfg.Profile.APIBaseURL, cfg.Profile.APIKey, cfg.Profile.Model, cfg.Profile.ReasoningEffort, fmt.Sprint(cfg.Profile.Temperature), fmt.Sprint(cfg.Profile.ContextMaxTokens)}
+	values := []string{cfg.Mode, cfg.CandidateID, cfg.Provider, cfg.Model, cfg.PromptVersion, cfg.CorpusID, cfg.CorpusDigest, cfg.BaseRevision, string(cfg.Profile.Scope), cfg.Profile.APIBaseURL, cfg.Profile.APIKey, cfg.Profile.Model, cfg.Profile.ReasoningEffort, fmt.Sprint(cfg.Profile.Temperature), fingerprintOptionalFloat(cfg.Profile.TopP), fingerprintOptionalInt(cfg.Profile.TopK), fingerprintOptionalFloat(cfg.Profile.MinP), fingerprintOptionalFloat(cfg.Profile.PresencePenalty), fingerprintOptionalFloat(cfg.Profile.RepeatPenalty), fmt.Sprint(cfg.Profile.ContextMaxTokens)}
 	for _, item := range cfg.Cases {
 		source := sha256.Sum256([]byte(item.Source))
 		values = append(values, expectedAttemptID(item.Expected), hex.EncodeToString(source[:]))
@@ -538,6 +538,20 @@ func runnerFingerprint(cfg EngineeringInsightRunnerConfig) string {
 	value := strings.Join(values, "\x00")
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func fingerprintOptionalFloat(value *float32) string {
+	if value == nil {
+		return "unset"
+	}
+	return fmt.Sprintf("%g", *value)
+}
+
+func fingerprintOptionalInt(value *int) string {
+	if value == nil {
+		return "unset"
+	}
+	return fmt.Sprint(*value)
 }
 
 func reserveRunnerAttempt(directory string, cfg EngineeringInsightRunnerConfig) error {
@@ -731,31 +745,54 @@ func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerCo
 	if err != nil {
 		return failedRunnerAttemptWithElapsed(item.Expected, cfg.CandidateID, err, elapsed), "", nil
 	}
-	content := response.Choices[0].Message.Content
-	digest := sha256.Sum256([]byte(content))
-	attempt := EngineeringInsightEvaluationAttempt{CaseName: item.Expected.CaseName, Partition: item.Expected.Partition, Intent: item.Expected.Intent, Repetition: item.Expected.Repetition, Attempt: item.Expected.Attempt, CandidateID: cfg.CandidateID, EmittedResponse: true, ResponseDigest: hex.EncodeToString(digest[:]), OutputTokens: response.Usage.CompletionTokens, ElapsedMilliseconds: float64(elapsed), OptionalInsight: "not_evaluated"}
+	message := response.Choices[0].Message
+	content := message.Content
+	emitted := evaluationResponseMaterial(message)
+	attempt := EngineeringInsightEvaluationAttempt{CaseName: item.Expected.CaseName, Partition: item.Expected.Partition, Intent: item.Expected.Intent, Repetition: item.Expected.Repetition, Attempt: item.Expected.Attempt, CandidateID: cfg.CandidateID, OutputTokens: response.Usage.CompletionTokens, ElapsedMilliseconds: float64(elapsed), OptionalInsight: "not_evaluated"}
+	if emitted != "" {
+		digest := sha256.Sum256([]byte(emitted))
+		attempt.EmittedResponse = true
+		attempt.ResponseDigest = hex.EncodeToString(digest[:])
+	}
 	if attempt.OutputTokens < 0 || attempt.OutputTokens > qualificationOutputTokenCap || response.Model != "" && response.Model != cfg.Model {
 		attempt.Outcome, attempt.FinishReason = "failed", "error"
 		attempt.InvalidProviderMetadata = true
-		return attempt, content, nil
+		return attempt, emitted, nil
 	}
 	if response.Choices[0].FinishReason == "length" {
 		attempt.Outcome, attempt.FinishReason = "truncated", "length"
-		return attempt, content, nil
+		return attempt, emitted, nil
 	}
 	if response.Choices[0].FinishReason != "" && response.Choices[0].FinishReason != "stop" {
 		attempt.Outcome, attempt.FinishReason = "failed", "error"
-		return attempt, content, nil
+		return attempt, emitted, nil
+	}
+	if strings.TrimSpace(content) == "" {
+		attempt.Outcome, attempt.FinishReason = "malformed", "stop"
+		return attempt, emitted, nil
 	}
 	parsed, parseErr := parseSemanticAnalysis(content, *target, item.Source)
 	if parseErr != nil {
 		attempt.Outcome, attempt.FinishReason = "malformed", "stop"
-		return attempt, content, nil
+		return attempt, emitted, nil
 	}
 	attempt.Outcome, attempt.FinishReason, attempt.UsableSummary = "completed", "stop", true
 	attempt.OptionalInsight, attempt.OptionalSectionDegraded = evaluationOptionalState(content, *target, item.Source, parsed)
 	attempt.CompleteSummary = !attempt.OptionalSectionDegraded
-	return attempt, content, nil
+	return attempt, emitted, nil
+}
+
+// evaluationResponseMaterial retains every non-empty provider response field
+// for private scoring. The semantic parser receives only final content, so
+// separately returned reasoning is never interpreted as a JSON prefix.
+func evaluationResponseMaterial(message llm.ChatMessage) string {
+	parts := make([]string, 0, 3)
+	for _, value := range []string{message.ReasoningContent, message.Reasoning, message.Content} {
+		if strings.TrimSpace(value) != "" {
+			parts = append(parts, value)
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func compileRunnerFixture(root string) error {
