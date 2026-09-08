@@ -70,8 +70,11 @@ It reserves the original 6-development/24-qualification budget before every disp
 The existing explicit append-only grant adds exactly six development requests with a
 unique authorization ID, producing a 12-request development cap. One final six-request
 Qwen3.8 recovery grant can raise that cap to 18 only after those 12 slots are consumed;
-the qualification cap remains 24. Grants never happen automatically, cannot reset consumed
-requests, and a duplicate authorization ID is rejected. Advisory locks reject concurrent
+the qualification cap remains 24. The user-authorized v11 verification adds one
+last bound six-request grant at 18 consumed, reaching a 24-development ceiling.
+It fixes candidate `qwen38-v11-schema-1`, model `qwen/qwen3.8-27b`, and prompt
+`file-analysis-v11` at a loopback destination. Grants never happen automatically,
+cannot reset consumed requests, and a duplicate authorization ID is rejected. Advisory locks reject concurrent
 writers and release after crashes; an in-flight reserved attempt remains `unknown` and consumed on resume.
 Source-free receipts and ordinary logs never contain source, endpoint URLs, keys, or response prose.
 
@@ -88,9 +91,9 @@ processor, so the required neutral `presence_penalty: 0` is the verified fixed
 effective setting; nonzero presence penalties are not supported for this candidate.
 The coordinator keeps the runtime/template read-back and candidate manifest in
 private ignored evaluation storage and verifies them before collection. That v10
-freeze is historical and its development allowance is exhausted. A future v11
-pilot needs a separately authorized allowance and a new verified candidate manifest;
-do not reuse the v10 manifest or replay its grant/collection commands.
+freeze is historical and its development allowance is exhausted. The newly
+user-authorized v11 pilot uses a separate `qwen38-v11-schema-1` manifest; do not
+reuse the v10 manifest or replay its grant/collection commands.
 
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
@@ -179,9 +182,9 @@ go run ./cmd/engineering-insight-eval \
 ```
 
 Collection requires an explicit mode and run identity. The example below describes
-the interface; the current campaign cannot start a fresh development run until a
-new allowance is authorized and implemented. No test or quality target invokes
-this command mode:
+the interface. The active v11 pilot must use its actual frozen identity/run IDs
+from PLAN.md, not these placeholders. No test or quality target invokes this
+command mode:
 
 ```sh
 go run ./cmd/engineering-insight-eval \
@@ -213,10 +216,21 @@ go run ./cmd/engineering-insight-eval \
   -candidate-id qwen38-v10-recovery-1 -model qwen/qwen3.8-27b
 ```
 
-This exhausted the currently implemented 18-request development ceiling. The v11
-schema repair does not add a grant or reset consumption. A future pilot must use
-its separately authorized new candidate/manifest and finite grant. The qualification
-campaign and its conditional 24-request ceiling are unchanged.
+That exhausted the prior 18-request development ceiling. The user then explicitly
+approved six new v11 verification requests. The newly implemented grant below was
+applied once at 18 consumed, raising the development ceiling to 24 without resetting
+consumption. This command is also historical and must not be replayed:
+
+```sh
+go run ./cmd/engineering-insight-eval -mode grant-development -root . \
+  -authorization-id qual05-qwen38-schema-1 -requests 6 \
+  -candidate-id qwen38-v11-schema-1 -model qwen/qwen3.8-27b \
+  -prompt-version file-analysis-v11
+```
+
+The new grant rejects a changed prompt/candidate/model or non-loopback dispatch,
+and no further extension is implemented or authorized. The qualification campaign
+and its conditional 24-request ceiling are unchanged.
 
 Private replies are held in mode-0700 storage for an independent scorer. `-mode handoff`
 lists only attempt IDs, `-mode score -scores scores.json -receipt scored.json` writes a
