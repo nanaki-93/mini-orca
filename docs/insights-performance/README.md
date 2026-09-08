@@ -28,7 +28,7 @@ content quality, queue confirmation/lifecycle UI and native checks remain in
 matrix; LEARN-02 and REL-01 own content quality, provider lifecycle and the listed
 release limitations. No content-quality or measured-speed claim follows from schema tests.
 
-## Opt-in insight evaluation
+## Bounded insight evaluation
 
 The deterministic fixture suite checks the schema, 1,000-rune limit, source anchors,
 offline isolated Go compilation and omission behavior. It does not assess whether an
@@ -45,12 +45,26 @@ not malformed model responses. Parser-malformation coverage is a separate
 deterministic test so an invalid optional section cannot be counted as a successful
 omission.
 
-For a real-provider run, select one candidate, provider, model, prompt, corpus and base
-revision before collecting any result. Qualification schedules every qualification case
-twice in corpus order: 24 single attempts, with eight substantive cases (16 attempts)
-and four omission controls (8 attempts). Each attempt is bounded to 4,096 output tokens
-and 300 seconds, with no automatic retry. Do not include source text, endpoint URLs,
-keys, or raw provider replies in a receipt.
+The command validates receipts by default and never constructs a provider client in that
+mode, even when old opt-in environment variables are inherited. Explicit `collect`,
+`development`, and `qualification` modes use the configured `bug` scope, production
+selected-file prompt, parser, and one isolated fixture per case. This is component-level
+evidence; it does not exercise import or the Desktop client.
+
+For a provider run, select one candidate, provider label, prompt, corpus and base
+revision before collecting any result. First collect the three development cases once;
+only after reviewing that result may one focused correction and one second three-case
+development run use the remaining development budget. Qualification schedules every
+qualification case twice in corpus order: 24 single attempts, with eight substantive
+cases (16 attempts) and four omission controls (8 attempts). Each attempt is bounded to
+4,096 output tokens and 300 seconds, with no automatic retry. A remote configured
+destination needs `-confirm-remote-provider`; loopback is the default.
+
+Private campaign state lives under ignored `.mini-orca/autopilot/engineering-insight-evaluation/`.
+It reserves the aggregate 6-development/24-qualification budget before every dispatch.
+Advisory locks reject concurrent writers and release after crashes; an in-flight reserved
+attempt remains `unknown` and consumed on resume. Source-free receipts and ordinary logs
+never contain source, endpoint URLs, keys, or response prose.
 
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
@@ -131,3 +145,22 @@ go run ./cmd/engineering-insight-eval \
   -max-output-tokens 4096 \
   -attempt-timeout-seconds 300
 ```
+
+Collection requires an explicit mode and run identity. No test or quality target invokes
+this command mode:
+
+```sh
+go run ./cmd/engineering-insight-eval \
+  -mode development -root . -run-id candidate-v1-development \
+  -receipt /safe/local/development-receipt.json \
+  -cases internal/app/testdata/engineering-insight-eval/cases.json \
+  -config config.yaml -candidate-id candidate-v1 -provider configured-bug \
+  -prompt-version file-analysis-v6 -corpus-id engineering-insight-v1 \
+  -base-revision selected-base-revision
+```
+
+Private replies are held in mode-0700 storage for an independent scorer. `-mode handoff`
+lists only attempt IDs, `-mode score -scores scores.json -receipt scored.json` writes a
+source-free digest-bound receipt, `-mode export -receipt receipt.json` exports the current
+receipt without prose, and `-mode discard` deletes private response material. None prints
+response prose.

@@ -25,7 +25,7 @@ const (
 var (
 	receiptJSONFields     = []string{"mode", "run_id", "candidate_id", "provider", "model", "prompt_version", "corpus_id", "corpus_digest", "base_revision", "max_requests", "max_output_tokens", "attempt_timeout_seconds", "consumption", "attempts"}
 	consumptionJSONFields = []string{"requests", "output_tokens"}
-	attemptJSONFields     = []string{"case_name", "partition", "intent", "repetition", "attempt", "candidate_id", "outcome", "usable_summary", "complete_summary", "optional_insight", "optional_section_degraded", "emitted_response", "response_digest", "output_tokens", "finish_reason", "elapsed_milliseconds", "score"}
+	attemptJSONFields     = []string{"case_name", "partition", "intent", "repetition", "attempt", "candidate_id", "outcome", "usable_summary", "complete_summary", "optional_insight", "optional_section_degraded", "emitted_response", "response_digest", "output_tokens", "invalid_provider_metadata", "finish_reason", "elapsed_milliseconds", "score"}
 	scoreJSONFields       = []string{"response_digest", "correctness", "local_relevance", "tradeoff_clarity", "useful_verification", "critical_false_claim", "retain_example"}
 )
 
@@ -83,6 +83,7 @@ type EngineeringInsightEvaluationAttempt struct {
 	EmittedResponse         bool                            `json:"emitted_response"`
 	ResponseDigest          string                          `json:"response_digest"`
 	OutputTokens            int                             `json:"output_tokens"`
+	InvalidProviderMetadata bool                            `json:"invalid_provider_metadata"`
 	FinishReason            string                          `json:"finish_reason"`
 	ElapsedMilliseconds     float64                         `json:"elapsed_milliseconds"`
 	Score                   *EngineeringInsightAttemptScore `json:"score"`
@@ -142,6 +143,7 @@ type EngineeringInsightEvaluationReport struct {
 	UsefulSubstantiveAttempts int
 	OmittedControls           int
 	CriticalFalseClaims       int
+	InvalidProviderMetadata   int
 	OutcomeCounts             map[string]int
 	Latency                   EngineeringInsightLatencyStatistics
 }
@@ -162,6 +164,34 @@ func DecodeEngineeringInsightEvaluationReceipt(data []byte) (EngineeringInsightE
 		return EngineeringInsightEvaluationReceipt{}, fmt.Errorf("invalid evaluation receipt")
 	}
 	return receipt, nil
+}
+
+// DecodeEngineeringInsightScores accepts only digest-bound reviewer scores.
+// It applies the receipt's strict JSON rules before any private handoff is joined.
+func DecodeEngineeringInsightScores(data []byte) (map[string]EngineeringInsightAttemptScore, error) {
+	if rejectDuplicateJSONKeys(data) != nil {
+		return nil, fmt.Errorf("invalid evaluation scores")
+	}
+	var raw map[string]json.RawMessage
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if decoder.Decode(&raw) != nil || requireJSONEOF(decoder) != nil || len(raw) == 0 {
+		return nil, fmt.Errorf("invalid evaluation scores")
+	}
+	result := make(map[string]EngineeringInsightAttemptScore, len(raw))
+	for id, value := range raw {
+		var fields map[string]json.RawMessage
+		if strings.TrimSpace(id) == "" || json.Unmarshal(value, &fields) != nil || !validRequiredJSONObject(fields, scoreJSONFields) {
+			return nil, fmt.Errorf("invalid evaluation scores")
+		}
+		valueDecoder := json.NewDecoder(bytes.NewReader(value))
+		valueDecoder.DisallowUnknownFields()
+		var score EngineeringInsightAttemptScore
+		if valueDecoder.Decode(&score) != nil || requireJSONEOF(valueDecoder) != nil || !validDigest(score.ResponseDigest) || !validScore(score) {
+			return nil, fmt.Errorf("invalid evaluation scores")
+		}
+		result[id] = score
+	}
+	return result, nil
 }
 
 // ValidateStrictJSONDocument rejects duplicate object keys and trailing JSON.
@@ -277,7 +307,7 @@ func ValidateEngineeringInsightEvaluationReceipt(receipt EngineeringInsightEvalu
 		report.Outcome = EngineeringInsightIncompleteOutcome
 		return report, nil
 	}
-	if report.UsableAttempts < minimumUsableQualificationAttempts || report.CompleteAttempts < minimumCompleteQualificationAttempts || report.UsefulSubstantiveAttempts < minimumUsefulSubstantiveAttempts || report.OmittedControls != qualificationControlAttemptCount || report.CriticalFalseClaims != 0 {
+	if report.UsableAttempts < minimumUsableQualificationAttempts || report.CompleteAttempts < minimumCompleteQualificationAttempts || report.UsefulSubstantiveAttempts < minimumUsefulSubstantiveAttempts || report.OmittedControls != qualificationControlAttemptCount || report.CriticalFalseClaims != 0 || report.InvalidProviderMetadata != 0 {
 		report.Outcome = EngineeringInsightFailedOutcome
 		return report, nil
 	}
@@ -289,10 +319,18 @@ func validateEvaluationExpectation(expected EngineeringInsightEvaluationExpectat
 	if !completeExpectationIdentity(expected) {
 		return fmt.Errorf("evaluation expectation is incomplete")
 	}
-	if !hasQualificationLimits(expected) {
+	if hasQualificationLimits(expected) {
+		return validateQualificationSchedule(expected.Schedule)
+	}
+	if expected.MaxRequests <= 0 || expected.MaxRequests > 6 || expected.MaxOutputTokens != qualificationOutputTokenCap || expected.AttemptTimeoutSeconds != qualificationAttemptTimeoutSeconds || len(expected.Schedule) == 0 || len(expected.Schedule) > expected.MaxRequests {
 		return fmt.Errorf("evaluation expectation has invalid limits")
 	}
-	return validateQualificationSchedule(expected.Schedule)
+	for _, attempt := range expected.Schedule {
+		if !validExpectedAttempt(attempt) {
+			return fmt.Errorf("evaluation expectation has an invalid schedule")
+		}
+	}
+	return nil
 }
 
 func completeExpectationIdentity(expected EngineeringInsightEvaluationExpectation) bool {
@@ -375,12 +413,12 @@ func validateReceiptIdentity(receipt EngineeringInsightEvaluationReceipt, expect
 }
 
 func validateReceiptConsumption(receipt EngineeringInsightEvaluationReceipt) error {
-	if receipt.Consumption.Requests != len(receipt.Attempts) || receipt.Consumption.Requests < 0 || receipt.Consumption.Requests > receipt.MaxRequests || receipt.Consumption.OutputTokens < 0 {
+	if receipt.Consumption.Requests != len(receipt.Attempts) || receipt.Consumption.Requests < 0 || receipt.Consumption.Requests > receipt.MaxRequests {
 		return fmt.Errorf("evaluation receipt consumption is invalid")
 	}
 	totalTokens := 0
 	for _, attempt := range receipt.Attempts {
-		if attempt.OutputTokens < 0 || attempt.OutputTokens > receipt.MaxOutputTokens || attempt.ElapsedMilliseconds > float64(receipt.AttemptTimeoutSeconds)*1000 {
+		if !attempt.InvalidProviderMetadata && (attempt.OutputTokens < 0 || attempt.OutputTokens > receipt.MaxOutputTokens) || attempt.ElapsedMilliseconds > float64(receipt.AttemptTimeoutSeconds)*1000 && !censoredAttempt(attempt) {
 			return fmt.Errorf("evaluation attempt consumption is invalid")
 		}
 		totalTokens += attempt.OutputTokens
@@ -389,6 +427,10 @@ func validateReceiptConsumption(receipt EngineeringInsightEvaluationReceipt) err
 		return fmt.Errorf("evaluation receipt consumption is invalid")
 	}
 	return nil
+}
+
+func censoredAttempt(attempt EngineeringInsightEvaluationAttempt) bool {
+	return attempt.Outcome == "timeout" || attempt.Outcome == "failed" && attempt.FinishReason == "canceled" || attempt.Outcome == "unknown"
 }
 
 func validateAttempts(receipt EngineeringInsightEvaluationReceipt, expected EngineeringInsightEvaluationExpectation) (map[string]EngineeringInsightEvaluationAttempt, error) {
@@ -456,6 +498,8 @@ func validOutcomeFinishReason(outcome, finishReason string) bool {
 	case "failed":
 		return finishReason == "error" || finishReason == "canceled"
 	case "budget_exhausted":
+		return finishReason == "unknown"
+	case "unknown":
 		return finishReason == "unknown"
 	default:
 		return false
@@ -536,7 +580,7 @@ func validateResponseDigest(attempt EngineeringInsightEvaluationAttempt) error {
 }
 
 func validOutcome(value string) bool {
-	return value == "completed" || value == "timeout" || value == "malformed" || value == "truncated" || value == "abstained" || value == "failed" || value == "budget_exhausted"
+	return value == "completed" || value == "timeout" || value == "malformed" || value == "truncated" || value == "abstained" || value == "failed" || value == "budget_exhausted" || value == "unknown"
 }
 func validOptionalInsight(value string) bool {
 	return value == "present" || value == "omitted" || value == "rejected" || value == "not_evaluated"
@@ -576,11 +620,14 @@ func evaluationReport(expected EngineeringInsightEvaluationExpectation, recorded
 }
 
 func newEvaluationReport(expected EngineeringInsightEvaluationExpectation, recorded map[string]EngineeringInsightEvaluationAttempt) EngineeringInsightEvaluationReport {
-	return EngineeringInsightEvaluationReport{ScheduledAttempts: len(expected.Schedule), RecordedAttempts: len(recorded), OutcomeCounts: map[string]int{"completed": 0, "timeout": 0, "malformed": 0, "truncated": 0, "abstained": 0, "failed": 0, "budget_exhausted": 0}}
+	return EngineeringInsightEvaluationReport{ScheduledAttempts: len(expected.Schedule), RecordedAttempts: len(recorded), OutcomeCounts: map[string]int{"completed": 0, "timeout": 0, "malformed": 0, "truncated": 0, "abstained": 0, "failed": 0, "budget_exhausted": 0, "unknown": 0}}
 }
 
 func recordEvaluationAttempt(report *EngineeringInsightEvaluationReport, scheduled EngineeringInsightExpectedAttempt, attempt EngineeringInsightEvaluationAttempt, successful []float64) []float64 {
 	report.OutcomeCounts[attempt.Outcome]++
+	if attempt.InvalidProviderMetadata {
+		report.InvalidProviderMetadata++
+	}
 	recordSummaryCounts(report, attempt)
 	recordScoreCounts(report, scheduled, attempt)
 	if attempt.Outcome == "completed" && attempt.UsableSummary {

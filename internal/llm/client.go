@@ -68,8 +68,18 @@ type ChatResponse struct {
 
 // Client owns the one provider-neutral Chat Completions request flow.
 type Client struct {
-	profile   config.ModelProfile
-	transport http.RoundTripper
+	profile               config.ModelProfile
+	transport             http.RoundTripper
+	suppressCompletionLog bool
+}
+
+// NewEvaluationClient creates a client for private evaluation work.  Provider
+// response metadata is untrusted, so evaluation must not put it in ordinary
+// application logs.
+func NewEvaluationClient(profile config.ModelProfile) *Client {
+	client := NewClient(profile)
+	client.suppressCompletionLog = true
+	return client
 }
 
 // NewClient constructs the one LLM client from a validated fixed scope.
@@ -114,7 +124,9 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatRespons
 	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
 		return nil, fmt.Errorf("llm client: chat response has no content")
 	}
-	logging.Info("Chat completed", "model", response.Model, "tokens", response.Usage.TotalTokens)
+	if !c.suppressCompletionLog {
+		logging.Info("Chat completed", "model", response.Model, "tokens", response.Usage.TotalTokens)
+	}
 	return &response, nil
 }
 
