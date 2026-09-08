@@ -259,7 +259,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | AUTO-05 | Isolate validation scratch and preserve failure evidence | AUTO-04 | S / high | Complete |
 | REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
-| REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Pending |
+| REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
@@ -1540,6 +1540,31 @@ accounting and qualification pass criteria below still apply in full.
 - **Verify:** fake-provider/config/CLI tests, G for code changes, independent review
   and `make check`. After integration, coordinator-only read-only runtime checks
   and private configuration preparation establish readiness for QUAL-05.
+- **Accepted 2026-09-08:** code integrated locally as `6156e89` after Terra's initial
+  attempt and two repairs. Fresh review accepted the final diff; coordinator
+  `make quality` and sandboxed `make check` passed. Repairs addressed profile
+  resolver complexity and preservation of `stop` for reasoning-only output.
+  Optional sampler fields preserve explicit zero and are fingerprint-bound.
+  Reasoning remains private; only final content enters the semantic parser.
+- **Host readiness:** installed LM Studio 0.4.23+1 and MLX 1.11.0 loaded the selected
+  4-bit artifact with one lane and no speculative draft. Installed mapping checks
+  and read-only loaded-template rendering verified thinking enabled at `low`.
+  The runtime expands the requested 16,384-token context to **119,552** through
+  its VLM context fitting even with auto-fit disabled. Independent host review
+  accepted this measured, bounded context under the card's initial-target rule.
+  Freeze runtime context **119,552**, application input budget **16,384**, completion
+  cap **4,096 including reasoning**, and timeout **300 seconds**; never describe
+  the runtime as capped at 16K. The effective template removes the `safe` filter
+  from tool-argument serialization; this sole normalization is recorded and the
+  loaded low/default renders match the local template checks.
+- The private manifest, configuration and read-only pre-batch verifier are under
+  `.mini-orca/autopilot/engineering-insight-evaluation/qwen38-v10-recovery-1/`.
+  Run `python3` on that directory's `verify.py` from the clean canonical checkout
+  before each collection batch. It fails on artifact, runtime, template, settings,
+  code, context or lane drift. The input config is mode 0600; downloaded files and
+  saved model preferences are unchanged. Prompt/corpus/rubric are unchanged.
+  Preparation used **zero generation requests**; campaign remains **12 development /
+  0 qualification**, with the REC-02 grant unapplied. QUAL-05 is the next wake's task.
 
 ### QUAL-05 — Run and independently score the bounded development pilot
 
