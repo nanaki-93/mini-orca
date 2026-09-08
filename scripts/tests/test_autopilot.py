@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -40,7 +43,9 @@ PLAN = """# Test plan
 
 FAKE_CODEX = r'''#!/usr/bin/env python3
 import json
+import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -67,6 +72,9 @@ if role == "worker" and mode == "timeout":
     time.sleep(10)
 if role == "worker" and mode == "crash":
     raise SystemExit(7)
+if role == "worker" and mode == "sigxfsz":
+    signal.signal(signal.SIGXFSZ, signal.SIG_DFL)
+    os.kill(os.getpid(), signal.SIGXFSZ)
 if role == "worker":
     (worktree / "result.txt").write_text(f"worker {call}\n")
     if mode == "protected":
@@ -98,6 +106,8 @@ else:
 message = "{" if mode == "invalid" and role == "worker" else json.dumps(value)
 if mode == "output_exhaust" and role == "worker":
     print("x" * 8192)
+if mode == "malformed_event" and role == "worker":
+    print("[]")
 print(json.dumps({"type": "thread.started", "thread_id": f"{role}-{call}"}))
 print(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": message}}))
 usage = 1000 if mode == "budget" else 3
@@ -293,12 +303,135 @@ class DispatcherTest(unittest.TestCase):
             ("output_exhaust", ("--max-output-bytes", "1024"), "output limit exhausted"),
             ("missing_usage", (), "lacks token evidence"),
             ("invalid", (), "invalid worker structured output"),
+            ("malformed_event", (), "emitted invalid JSONL"),
         ]
         for mode, options, message in cases:
             with self.subTest(mode=mode):
                 fixture = self.fresh(mode)
                 self.assert_failed(fixture.dispatch(*options), message)
                 self.assertEqual(fixture.state()["phase"], "failed")
+
+    def test_invocation_failure_keeps_charge_and_private_diagnostics(self) -> None:
+        fixture = self.fresh("crash")
+        self.assert_failed(fixture.dispatch(), "exit status 7")
+        state = fixture.state()
+        self.assertEqual(state["tokens_used"], 20)
+        self.assertEqual(state["pending_invocation"]["reserved_tokens"], 20)
+        failure = state["failure"]
+        self.assertEqual((failure["stage"], failure["exit_code"], failure["signal"]), ("exit", 7, None))
+        self.assertNotIn("worker process", json.dumps(failure))
+        for key in ("stdout", "stderr"):
+            path = fixture.repo / failure["diagnostics"][key]
+            self.assertTrue(path.is_file())
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        diagnostics = fixture.repo / ".mini-orca" / "autopilot" / "diagnostics"
+        self.assertEqual(diagnostics.stat().st_mode & 0o777, 0o700)
+
+    def test_bounded_process_drains_limits_and_never_applies_file_size_limit(self) -> None:
+        environment = {"PATH": os.environ["PATH"]}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            large = root / "already-large"
+            with large.open("wb") as stream:
+                stream.truncate(129 * 1024 * 1024)
+            append = autopilot.bounded_process(
+                [sys.executable, "-c", "from pathlib import Path; import sys; Path(sys.argv[1]).open('ab').write(b'x')", str(large)],
+                root, environment, 2, 1024,
+            )
+            self.assertEqual(append.code, 0, append.stderr)
+            self.assertEqual(large.stat().st_size, 129 * 1024 * 1024 + 1)
+
+            flood = autopilot.bounded_process(
+                [sys.executable, "-c", "import sys; sys.stdout.write('x' * 1048576); sys.stderr.write('y' * 1048576)"],
+                root, environment, 2, 4096,
+            )
+            self.assertTrue(flood.output_exhausted)
+            self.assertLessEqual(len(flood.stdout) + len(flood.stderr), 4096)
+
+            blocked = autopilot.bounded_process(
+                [sys.executable, "-c", "import time; time.sleep(10)"],
+                root, environment, 0.1, 4096, "z" * 1024 * 1024,
+            )
+            self.assertTrue(blocked.timed_out)
+
+            closed_output = autopilot.bounded_process(
+                [sys.executable, "-c", "import os, time; os.close(1); os.close(2); time.sleep(10)"],
+                root, environment, 0.1, 4096,
+            )
+            self.assertTrue(closed_output.timed_out)
+
+            start = time.monotonic()
+            inherited_pipe = autopilot.bounded_process(
+                [sys.executable, "-c", "import subprocess, sys; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(10)'], stdout=sys.stdout, stderr=sys.stderr)"],
+                root, environment, 2, 4096,
+            )
+            self.assertEqual(inherited_pipe.code, 0)
+            self.assertLess(time.monotonic() - start, 2)
+
+            escaped_pid = root / "escaped.pid"
+            start = time.monotonic()
+            escaped_pipe = autopilot.bounded_process(
+                [sys.executable, "-c", "import subprocess, sys; from pathlib import Path; p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(10)'], stdout=sys.stdout, stderr=sys.stderr, start_new_session=True); Path(sys.argv[1]).write_text(str(p.pid))", str(escaped_pid)],
+                root, environment, 2, 4096,
+            )
+            try:
+                self.assertEqual(escaped_pipe.code, 0)
+                self.assertLess(time.monotonic() - start, 2)
+            finally:
+                if escaped_pid.exists():
+                    try:
+                        os.kill(int(escaped_pid.read_text()), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
+            normal = autopilot.bounded_process(
+                [sys.executable, "-c", "import sys; print('out'); print('err', file=sys.stderr); raise SystemExit(9)"],
+                root, environment, 2, 4096,
+            )
+            self.assertEqual(normal.code, 9)
+            self.assertEqual(normal.stdout, b"out\n")
+            self.assertEqual(normal.stderr, b"err\n")
+
+    def test_launch_failure_is_controlled_and_has_diagnostics(self) -> None:
+        dispatcher = autopilot.Dispatcher(
+            autopilot.arguments(["--repo", str(self.fixture.repo), "--codex", str(self.fixture.codex)])
+        )
+        task = autopilot.parse_plan(self.fixture.repo / "PLAN.md")[1]
+        dispatcher.state_root.mkdir(parents=True)
+        base, config = dispatcher.clean_base()
+        dispatcher.create_state(task, base, config)
+        worktree = dispatcher.prepare_worktree()
+        self.fixture.codex.unlink()
+        with self.assertRaisesRegex(autopilot.DispatchError, "worker launch failed"):
+            dispatcher.invoke("worker", task, worktree)
+        self.assertEqual(dispatcher.state["pending_invocation"]["reserved_tokens"], 20000)
+        self.assertEqual(dispatcher.state["failure"]["stage"], "launch")
+
+    def test_signal_failure_records_its_stable_signal_name(self) -> None:
+        fixture = self.fresh("sigxfsz")
+        self.assert_failed(fixture.dispatch(), "SIGXFSZ")
+        failure = fixture.state()["failure"]
+        self.assertEqual((failure["stage"], failure["exit_code"], failure["signal"]), ("signal", None, signal.SIGXFSZ))
+        self.assertEqual(failure["signal_name"], "SIGXFSZ")
+
+    def test_bounded_process_reaps_when_lease_callback_fails(self) -> None:
+        captured: list[int] = []
+
+        def fail_on_start(pid: int | None) -> None:
+            if pid is not None:
+                captured.append(pid)
+                raise RuntimeError("lease persistence failed")
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "lease persistence failed"):
+                autopilot.bounded_process(
+                    [sys.executable, "-c", "import time; time.sleep(10)"],
+                    Path(directory), {"PATH": os.environ["PATH"]}, 2, 4096,
+                    started=fail_on_start,
+                )
+        self.assertEqual(len(captured), 1)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(captured[0], 0)
 
     def test_worker_cannot_change_controls_or_history(self) -> None:
         for mode, message in [
@@ -359,6 +492,157 @@ class DispatcherTest(unittest.TestCase):
         resumed = self.fixture.dispatch()
         self.assert_failed(resumed, "cannot be retried automatically")
         self.assertEqual(self.fixture.calls()["worker_calls"], before)
+
+    def test_offline_failed_run_recovery_archives_exact_state_and_carries_reservation(self) -> None:
+        fixture = self.fresh("crash")
+        self.assert_failed(fixture.dispatch(), "exit status 7")
+        original = fixture.state_path().read_bytes()
+        calls = fixture.calls()
+        recovery = (
+            "--task", "TST-01", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0001",
+            "--recovery-reason", "operator confirmed startup diagnosis",
+        )
+        for budget in ("99", "101"):
+            with self.subTest(budget=budget):
+                self.assert_failed(fixture.dispatch(*recovery, "--token-budget", budget), "original token configuration")
+                self.assertEqual(fixture.state_path().read_bytes(), original)
+                self.assertEqual(fixture.calls(), calls)
+        recovered = fixture.dispatch(
+            *recovery,
+        )
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        self.assertEqual(fixture.calls(), calls)
+        state = fixture.state()
+        self.assertEqual((state["phase"], state["attempt"], state["tokens_used"]), ("selected", 2, 20))
+        self.assertIsNone(state["pending_invocation"])
+        archive = fixture.repo / state["recovery"]["archive"]
+        self.assertEqual(archive.read_bytes(), original)
+        self.assertEqual(archive.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(fixture.dispatch(
+            *recovery,
+        ).returncode, 1)
+        self.assertEqual(fixture.calls(), calls)
+
+    def test_interrupted_recovery_reconciles_without_model_calls(self) -> None:
+        fixture = self.fresh("crash")
+        self.assert_failed(fixture.dispatch(), "exit status 7")
+        arguments = (
+            "--task", "TST-01", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0002",
+            "--recovery-reason", "resume an interrupted archive transaction",
+        )
+        result = fixture.dispatch(*arguments)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        authorization_digest = hashlib.sha256(b"authorization-0002").hexdigest()
+        journal = fixture.repo / ".mini-orca" / "autopilot" / "recoveries" / f"{authorization_digest}.json"
+        value = json.loads(journal.read_text())
+        value["complete"] = False
+        journal.write_text(json.dumps(value))
+        state = fixture.state()
+        archive = fixture.repo / state["recovery"]["archive"]
+        original_archive = archive.read_bytes()
+        archive.write_text("tampered")
+        self.assert_failed(fixture.dispatch(*arguments), "archive identity")
+        archive.write_bytes(original_archive)
+        calls = fixture.calls()
+        changed_reason = fixture.dispatch(
+            "--task", "TST-01", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0002",
+            "--recovery-reason", "a different reason must not resume this transaction",
+        )
+        self.assert_failed(changed_reason, "reason does not match")
+        self.assertFalse(json.loads(journal.read_text())["complete"])
+        reconciled = fixture.dispatch(*arguments)
+        self.assertEqual(reconciled.returncode, 0, reconciled.stderr)
+        self.assertTrue(json.loads(journal.read_text())["complete"])
+        self.assertEqual(fixture.calls(), calls)
+
+    def test_failed_run_recovery_rejects_exhaustion_and_live_lease(self) -> None:
+        attempts = self.fresh("crash")
+        self.assert_failed(attempts.dispatch(), "exit status 7")
+        state = attempts.state()
+        state["attempt"] = autopilot.MAX_ATTEMPTS
+        attempts.state_path().write_text(json.dumps(state))
+        self.assert_failed(attempts.dispatch(
+            "--task", "TST-01", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0007",
+            "--recovery-reason", "attempt budget must remain finite",
+        ), "attempt budget")
+
+        tokens = self.fresh("crash")
+        self.assert_failed(tokens.dispatch(), "exit status 7")
+        state = tokens.state()
+        state["tokens_used"] = 100
+        tokens.state_path().write_text(json.dumps(state))
+        self.assert_failed(tokens.dispatch(
+            "--task", "TST-01", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0008",
+            "--recovery-reason", "token budget must remain finite",
+        ), "token budget")
+
+        leased = self.fresh("crash")
+        self.assert_failed(leased.dispatch(), "exit status 7")
+        lease = leased.repo / ".mini-orca" / "autopilot" / "lease"
+        lease.mkdir()
+        (lease / "owner.json").write_text(json.dumps({"pid": os.getpid(), "child_pid": None, "acquired_at": now_iso()}))
+        self.assert_failed(leased.dispatch(
+            "--task", "TST-01", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0009",
+            "--recovery-reason", "live lease must prevent concurrent recovery",
+        ), "active lease")
+
+    def test_failed_run_recovery_rejects_dirty_candidate_or_non_pending_task(self) -> None:
+        dirty = self.fresh("crash")
+        self.assert_failed(dirty.dispatch(), "exit status 7")
+        worktree = dirty.repo / dirty.state()["worktree"]
+        (worktree / "unrecorded.txt").write_text("candidate changed\n")
+        self.assert_failed(dirty.dispatch(
+            "--task", "TST-01", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0003",
+            "--recovery-reason", "must reject a dirty failed candidate",
+        ), "unrecorded candidate")
+
+        blocked = self.fresh("crash")
+        self.assert_failed(blocked.dispatch(), "exit status 7")
+        plan = blocked.repo / "PLAN.md"
+        plan.write_text(plan.read_text().replace("| TST-01 | Ready task | TST-00 | S / low | Pending |", "| TST-01 | Ready task | TST-00 | S / low | Blocked |"))
+        blocked.run("git", "add", "PLAN.md")
+        blocked.run("git", "commit", "-m", "block task")
+        self.assert_failed(blocked.dispatch(
+            "--task", "TST-01", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0004",
+            "--recovery-reason", "requires a reviewed pending ledger row",
+        ), "not Pending")
+
+    def test_failed_run_recovery_requires_completed_dependencies(self) -> None:
+        fixture = self.fresh("crash")
+        self.assert_failed(fixture.dispatch(), "exit status 7")
+        original_path = fixture.state_path()
+        dependent_path = fixture.state_path("TST-02")
+        dependent = fixture.state()
+        dependent["task"] = "TST-02"
+        dependent_path.write_text(json.dumps(dependent))
+        original_path.unlink()
+        before = dependent_path.read_bytes()
+        calls = fixture.calls()
+        self.assert_failed(fixture.dispatch(
+            "--task", "TST-02", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0005",
+            "--recovery-reason", "dependencies must stay complete before recovery",
+        ), "incomplete dependencies")
+        self.assertEqual(dependent_path.read_bytes(), before)
+        self.assertEqual(fixture.calls(), calls)
+
+    def test_failed_run_recovery_rejects_oversized_state_before_reading_it(self) -> None:
+        oversized = self.fixture.state_path()
+        oversized.parent.mkdir(parents=True, exist_ok=True)
+        oversized.write_bytes(b"{" + b"x" * (1024 * 1024))
+        self.assert_failed(self.fixture.dispatch(
+            "--task", "TST-01", "--recover-failed-run",
+            "--recovery-authorization-id", "authorization-0006",
+            "--recovery-reason", "oversized state must fail closed",
+        ), "unsafe state file")
 
     def test_resume_rejects_changed_base_configuration_and_git_redirects(self) -> None:
         safe = self.fresh("accept")

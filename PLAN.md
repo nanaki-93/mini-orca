@@ -254,7 +254,8 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | QUAL-02 | Strict repeated-run receipts and qualification gates | QUAL-01 | M / high | Complete |
 | QUAL-03 | Resumable provider-budgeted evaluation runner | QUAL-02 | M / high | Complete |
 | QUAL-04 | Grounded insights and intentional omission | QUAL-01, QUAL-03 | S / medium | Complete |
-| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04 | S / medium | Blocked |
+| AUTO-03 | Repair dispatcher startup diagnostics and explicit recovery | AUTO-02 | M / high | Complete |
+| REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-03 | S / medium | Pending |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Pending |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Pending |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Pending |
@@ -1018,6 +1019,57 @@ the full quality gate green. No inherited quality exception applies to final rel
   its unchanged rerun passed. `make quality` retains only the two accepted baseline
   complexity findings. No configuration or source-data migration is required.
 
+### AUTO-03 — Repair dispatcher startup diagnostics and explicit recovery
+
+- **Authorization:** the user's request to start point 1 of the project audit
+  authorizes diagnosing and repairing the dispatcher and resolving the REC-01
+  failed state before retry. The scheduler stays paused during this repair.
+  No REC implementation or model-quality collection is part of this task.
+- **Target files:** `scripts/autopilot.py`, `scripts/tests/test_autopilot.py`,
+  `tasks/README.md` and this ledger. Use an isolated writer, fresh independent
+  review and coordinator validation; this repair necessarily changes dispatcher
+  controls and cannot run through the dispatcher's protected-file worker path.
+- **Evidence:** a harmless installed-CLI startup with OS-denied network access
+  exits with SIGXFSZ under the dispatcher's 128 MiB RLIMIT_FSIZE. This installation
+  has Codex SQLite databases already larger than 400 MiB. The same diagnostic
+  with a larger limit reaches thread startup and then the expected denied-network
+  errors. The historical worker's raw error was discarded, so retain its
+  reservation as uncertain despite this reproduction.
+- **Execute:** replace the process-global file-size limit with live bounded
+  stdout/stderr capture. Stop/reap the process group on output exhaustion or
+  timeout, including blocked input and pipes inherited by descendants. Preserve
+  useful bounded private failure diagnostics with restrictive filesystem modes;
+  ordinary state/log output retains only exit/signal/stage and diagnostic identity.
+- Add an explicit, offline failed-run recovery operation with task, unique
+  authorization and reason. Archive the original state unchanged, preserve its
+  worktree and consumed/reserved token accounting, count recovery against the
+  existing attempt cap, and prepare a fresh run at the reviewed clean base without
+  launching a worker. Reject replay, live/concurrent leases, dirty prior candidates,
+  invalid task state and exhausted budgets; interruptions cannot erase history or
+  create free retries. Never infer that a missing completion means no paid call.
+- **Accept:** fake tests cover large pre-existing child files, bounded output,
+  timeouts, diagnostic privacy, explicit recovery, rejection and interruption
+  paths. A network-denied real-CLI diagnostic gets beyond the prior SIGXFSZ exit
+  without model generation. Preserve the original REC-01 failed-state bytes and
+  20,000-token reservation when explicitly recovering it after code acceptance.
+  REC-01 is merely requeued, not marked implemented; qualification stays 12/0.
+- **Verify:** Python dispatcher tests, `make check`, `make quality`,
+  `git diff --check`, independent review and a dry-run of the recovered selection.
+- **Accepted repair — 2026-09-08:** fresh independent review accepted the final
+  dispatcher and regression tests. Coordinator `make check` passed, including all
+  25 dispatcher tests, Go/race/vet and Desktop tests; `make quality` and
+  `git diff --check` passed. The installed CLI reached `thread.started` and
+  `turn.started` with OS-denied network access using the repaired capture path;
+  the bounded diagnostic then timed out without SIGXFSZ or model generation.
+  One new signal-test fixture initially inherited Python's ignored SIGXFSZ; the
+  fixture now restores the default handler, and the final full gate passed.
+- **Recovery decision:** requeue REC-01 at this accepted commit, then run the
+  documented offline recovery once with `rec01-sigxfsz-recovery-1`. Preserve the
+  prior failed-state digest
+  `06c2f205f6a64b87ce48fb4995fed115178a2b4364572435abf0318aac3bcc2a`,
+  its unchanged worktree and its uncertain 20,000-token reservation. Verify the
+  resulting selection by dry-run before resuming the existing recovery heartbeat.
+
 ## Insight qualification tasks
 
 These cards turn the remaining REL-01 work into one sequential agent queue. Keep
@@ -1231,7 +1283,7 @@ accounting and qualification pass criteria below still apply in full.
 
 ### REC-01 — Preserve explicit zero-temperature provider requests
 
-- **Dependencies:** QUAL-04. This task makes no live provider requests.
+- **Dependencies:** QUAL-04, AUTO-03. This task makes no live provider requests.
 - **Target files:** `internal/llm/client.go`, `internal/llm/client_test.go`.
 - **Evidence:** `ChatRequest.Temperature` uses `omitempty`; a temporary wire-level
   test reproduced that configured zero disappears from JSON. The current local
@@ -1245,7 +1297,7 @@ accounting and qualification pass criteria below still apply in full.
   pass. No prompt, corpus, model configuration or budget changes in this task.
 - **Verify:** focused `internal/llm` tests, G, fresh independent review and the
   dispatcher `make check` gate before local integration.
-- **Blocked execution — 2026-09-08:** the first scheduled dispatch at 12:14 UTC
+- **Historical blocked execution — 2026-09-08:** the first scheduled dispatch at 12:14 UTC
   selected REC-01 from clean base `78058eb` and ran
   `./scripts/autopilot.py --task REC-01 --integrate`. It stopped with `worker
   process failed` before returning worker output. The isolated worktree remains
@@ -1258,6 +1310,12 @@ accounting and qualification pass criteria below still apply in full.
   diagnosing the dispatcher failure and an explicit decision about the uncertain
   invocation. The recovery heartbeat is paused. Application-provider consumption
   remains 12 development / 0 qualification; no recovery grant was applied.
+- **Explicit recovery — 2026-09-08:** AUTO-03 resolves the dispatcher prerequisite
+  and authorizes the offline archived recovery described above. REC-01 returns
+  to Pending for a fresh attempt after that recovery and successful dry-run.
+  This decision supersedes the historical retry block; the old invocation stays
+  uncertain and charged against the existing dispatcher budget. REC-01 code is
+  still unimplemented, and the application-provider campaign remains 12/0.
 
 ### REC-02 — Account for one model-bound six-request recovery grant
 
