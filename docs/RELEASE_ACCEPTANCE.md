@@ -777,6 +777,27 @@ grants and all 12 historical receipt hashes remain intact. Consumption is still
 The loopback runtime handoff and frozen pilot are next; the scheduler is Paused.
 These preparation results do not establish insight quality.
 
+### Thinking-schema pilot freeze
+
+The original LM Studio lane was verified idle, with context 119,552, one parallel
+session and its unchanged thinking-off server-session template. It was unloaded
+before starting the dedicated owned MLX-VLM process on `127.0.0.1:1235`. No saved
+model defaults or artifact files changed. The first handoff check stopped because
+read-only template formatting updated a usage timestamp; all stable settings
+matched, and the launcher correctly refused to load a second resident model.
+The subsequent verified handoff completed without generation.
+
+Frozen manifest SHA-256
+`a9c96b5aa3f37213874a04cecf08aa84b21778b1084db84ad4c9e295d047077b`
+binds accepted code `a72fea8415c88244dcd61631c52cfde542e48102` and the exact
+runtime/configuration/model/proof files. Production configuration loading and
+profile resolution confirmed low effort, temperature 1, top-p 0.95, top-k 20,
+4096 completion tokens and input budget 16,384, with unsupported neutral fields
+omitted. Owned-listener health, empty queues, one lane and all-zero request/raw
+and reported token counters passed the full ready preflight. No smoke inference
+was performed. The fixed pilot run IDs are
+`qual05-qwen38-thinking-schema-dev1` and `qual05-qwen38-thinking-schema-dev2`.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)

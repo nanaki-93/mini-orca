@@ -1703,6 +1703,17 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### QUAL-05 — Run and independently score the bounded development pilot
 
+- **Current run — thinking-schema, 2026-09-09:** REC-04–07 are accepted. The
+  dedicated runtime is ready on loopback 1235 with one model lane; original
+  LM Studio lane was unloaded and rollback settings recorded. Frozen manifest
+  SHA-256 `a9c96b5aa3f37213874a04cecf08aa84b21778b1084db84ad4c9e295d047077b`
+  binds accepted code `a72fea8415c88244dcd61631c52cfde542e48102`, installed
+  runtime/model/configuration, compiled-schema proofs and owned process identity.
+  Full ready preflight passed with zero requests and zero generated tokens.
+  Collect the fixed three cases twice with no tuning, retry or extra probe;
+  existing historical correction allowances below do not apply to this run.
+  Consumption is 36/42 development and 0/24 qualification. Scheduler stays Paused.
+
 - **Shared input:** read the qualification contract above before work; its budgets,
   sample counts, privacy rules and pass criteria apply to this card.
 - **Dependencies:** QUAL-04, REC-03; selected provider/model and the shared 36-request
