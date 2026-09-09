@@ -697,6 +697,30 @@ Coordinator source/hash checks, diff formatting and the ledger parser passed.
 REC-05/06 own installation, lifecycle and offline conformance gates before any
 provider request; runtime readiness remains unverified.
 
+### REC-05 lifecycle acceptance
+
+Reviewed code `220e56ff41e25d0179309fe93218f010126cbdbb` adds the explicit
+`check`, `start` and `stop` launcher and the 54-distribution hash lock. The
+isolated environment imports successfully; its server help and dependency
+checks pass. The integrated read-only preflight verifies the reviewed runtime,
+current model-file hashes, model link, configuration and free loopback port.
+
+Fresh review accepted final diff
+`f6d9889e1de07384d16b78f7c7c0ad958301e90c2e427093e87f372f9b6c49d4`
+after two Terra repairs. Seventeen focused tests cover lifecycle ownership,
+concurrent starts, failure/interrupt cleanup, direct health transport/listener
+ownership, configuration drift and writable-path containment. Coordinator
+`make check` passed, including 327 desktop tests with no failures. A real
+ordinary child-process check independently confirmed termination and reaping;
+it did not start the model server.
+
+No model loading, server startup or generation has occurred in this recovery.
+REC-06 still owns the actual request/schema and channel conformance proof. A
+preliminary in-process ASGI test confirmed HTTP 422 validation rejection with
+zero model access; the client must classify it as permanent before the pilot.
+Campaign consumption remains **36 development / 0 qualification**; the new grant
+is unapplied and the scheduler is Paused.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
