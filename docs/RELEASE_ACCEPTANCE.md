@@ -946,6 +946,87 @@ Following independent score comparison and final evidence review, raw response
 material was disposed; source-free score, digest, receipt, and accounting records
 remain retained.
 
+### Medium-reasoning qualification verdict — 2026-09-09
+
+**QUAL-06 failed.** After explicit scheduler-continuation authorization, the
+coordinator ran `qual06-qwen38-medium-1` on clean base
+`d9c98ca9af47705482833bd5033b962e79fd411e`, a documentation-only transition from
+the accepted pilot. Candidate `qwen38-v12-medium-1`, v12 prompt/schema/corpus,
+model artifacts, dependency pins, medium effort and all request limits remained
+unchanged. Twelve qualification cases ran twice, with no tuning, generation
+probes, retries, code changes or replacement runs.
+
+The original pilot manifest remains immutable. Separate qualification manifest
+SHA-256 `397c30d3d684443d272ef42329e1710f6b1d5b07e9966d1fb038600bb6405031`
+binds that historical identity, the qualification base, exact 24-case schedule,
+command and newly owned runtime. Independent pre-dispatch review caught and fixed
+a private collector command-binding gap before any request: runtime verification
+and dispatch now both bind the exact medium identity. Full offline inventory and
+zero-request readiness passed; postcollection readiness accounted for exactly 24
+completed requests, with zero failures, active work or queue depth.
+
+| Qualification gate | Observed | Required | Result |
+| --- | --- | --- | --- |
+| Usable summaries | 24/24 | At least 23/24 | Pass |
+| Fully complete summaries | 22/24 | At least 22/24 | Pass |
+| Useful substantive insights | 2/16 | At least 13/16 | Fail |
+| Intentional control omissions | 8/8 | 8/8 | Pass |
+| Whole-final critical false claims | 2 | 0 | Fail |
+
+Ten substantive attempts omitted insight, two had rejected optional sections,
+and four retained insights. Repeated-I/O scores **5/8 (2/2/1/0)** twice;
+idempotency scores **6/8 (2/2/2/0)** twice. The verification suggestions expect
+proposed behavior rather than checking the current contract. The other twelve
+substantive attempts receive zero insight credit. Both backpressure finals
+categorically describe successful sending as receiver delivery/readiness, despite
+unknown caller-supplied channel buffering. A send can complete into available
+buffer space without a receiver observing the value. These are the two critical
+claims; a non-nil return from the cancellation branch was not itself flagged.
+
+A fresh agent scorer and separate fresh agent reviewer independently inspected
+all actual terminal JSON, whole-file digests and boundaries before comparison.
+They resolved repeated-I/O verification and the backpressure critical classification;
+initial independent judgments and a source-free adjudication record remain private.
+The final dimensions do not credit reasoning, generic summary text in place of
+an absent insight, or rejected optional sections. Control omissions pass, while
+generic test advice reduces the identity-control dimensions to 1/2/2/1. This is
+agent scoring, not human testing. Both reviewers agree on the failed verdict.
+
+All 24 attempts stopped normally. Raw generated tokens, runtime-reported
+completion tokens and receipt output totals all equal **34,090**. Median latency
+is **89,914 ms**; nearest-rank p95 is **178,788 ms**. No timeout, censored request,
+output exhaustion, runtime failure or uncertain cleanup occurred. Every repetition
+pair is byte-identical: there are only **12 distinct outputs**. Repetitions still
+consume their reserved calls and do not establish independent reliability.
+
+The accepted CLI applied the digest-bound scores. Offline receipt validation
+returned `failed` with 24 usable, 22 complete, 2 useful substantive, 8 omitted
+controls and 2 critical claims. The expected nonzero quality verdict is not a
+receipt-integrity failure. Exact collection, score and validation commands/results
+are retained in `.mini-orca/autopilot/coordinator/QUAL-06-medium.json`; the scored
+receipt and audits remain under the private evaluation root. Fresh
+`go test ./internal/app ./cmd/engineering-insight-eval -count=1` passed. No
+production code changed; final documentation receives whitespace/ledger validation
+and independent review.
+
+The owned qualification runtime was stopped and the original LM Studio session
+restored idle with context 119,552, one lane and thinking off. Stable readback
+matches the captured baseline except process-instance identity and last-use time;
+template hash matches and the dedicated runtime port is free. The private host
+log is retained append-only, with the prior pilot prefix verified unchanged.
+
+The campaign is exhausted at **48 development / 24 qualification requests**, with
+seven grants and all historical receipts preserved. QUAL-05 remains Complete for
+its development result; QUAL-06 is Blocked, REL-01 remains Blocked, and the
+scheduler is Paused. No release step or additional model request ran. The bounded
+next proposal is offline failure analysis and a recovery plan for missing insights,
+rejected optional sections and incorrect delivery guarantees. Any new experiment
+requires an explicit budget and fresh qualification evidence; tuning after seeing
+these qualification cases cannot convert this completed failed run into a pass.
+
+Following final independent evidence review, raw response material was disposed;
+source-free scores, digests, receipts and adjudication records remain retained.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
