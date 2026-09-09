@@ -112,6 +112,18 @@ ceiling is 30 development requests; qualification remains separately capped at
 24. Prior grant forms and receipts remain valid historical evidence. No grant
 resets accounting or authorizes replay of an existing run.
 
+
+The v12 structured pilot also failed: all six requests returned empty final
+content, with generated JSON confined to the provider's reasoning channel.
+Usable/complete coverage was 0/6; reasoning-only material cannot count as a
+successful insight or control omission. All **30 development requests are now
+consumed**, qualification usage remains zero, and the scheduler is Paused.
+Installed runtime inspection found immediate grammar enforcement while the
+thinking channel was open. The proposed next candidate explicitly disables model
+thinking and verifies the effective template before a separately authorized pilot;
+API `reasoning_effort: none` alone has not established compatibility. See the
+[structured pilot verdict](../RELEASE_ACCEPTANCE.md#v12-structured-pilot-verdict--2026-09-09).
+
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
 bound to that digest. An independent reviewer compares private prose with the case

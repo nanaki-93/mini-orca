@@ -471,6 +471,79 @@ The scheduler remains Paused until this pilot's reviewed verdict. Exact commands
 and progress are retained in
 `.mini-orca/autopilot/coordinator/QUAL-05-structured-recovery.json`.
 
+
+## V12 structured pilot verdict — 2026-09-09
+
+**QUAL-05 failed; the scheduler stays Paused.** Both batches completed at frozen
+base `8fffeebc7394d4a0e5b746a2b4bbd5a3781bc259`, after both runtime/manifest
+preflights passed. All six were malformed, unusable and incomplete, with normal
+`stop` completion, valid usage metadata and no timeout. Official coverage is
+**0/6 usable/complete, 0/4 useful substantive insights and 0/2 successful control
+omissions**. A missing final control answer cannot count as intentional omission.
+
+| Batch | Case | Completion tokens | Latency | Final content |
+| --- | --- | ---: | ---: | --- |
+| dev1 | locking | 544 | 43.022 s | empty |
+| dev1 | allocation | 422 | 30.941 s | empty |
+| dev1 | control | 73 | 5.762 s | empty |
+| dev2 | locking | 541 | 41.683 s | empty |
+| dev2 | allocation | 514 | 38.118 s | empty |
+| dev2 | control | 74 | 5.777 s | empty |
+
+This pilot consumed **six requests and 2,168 completion tokens including
+reasoning**. Median latency was 34.530 seconds; maximum 43.022 seconds. Campaign
+usage is **30 development / 0 qualification**, with no remaining development
+slots. All 24 qualification slots remain untouched and conditional on a passing
+pilot. No new request, retry or grant followed the failure.
+
+The coordinator matched every retained response digest to its original LM Studio
+completion envelope. All six envelopes have empty `content` and nonempty
+`reasoning_content`; retained bytes match the reasoning channel exactly. The
+source-free channel audit is
+`.mini-orca/autopilot/engineering-insight-evaluation/qual05-qwen38-v12-scoring/channel-audit.json`.
+This establishes a delivery failure rather than a timeout or JSON escape failure.
+Reasoning-only material is diagnostic and cannot be substituted for final output.
+
+Installed runtime inspection supports the mechanism: the `mlx_engine.generate`
+BatchedVision branch immediately appends `build_json_schema_logits_processor`
+when a schema is supplied. It does not use the installed thinking-aware wrapper,
+while the verified low-thinking template ends in an open `<think>` channel.
+This suggests the schema constrains reasoning before a final answer starts.
+The offline grammar checks were valid but did not exercise this channel boundary.
+
+The next proposed recovery is a **new explicitly thinking-disabled model profile**
+with the same schema and a separately authorized bounded pilot. Read-only
+`applyPromptTemplate` checks show the model's explicit `enableThinking=false`
+override closes the reasoning channel before generation. The installed API
+`none` mapping produces a generic false flag, but skips the model's reasoning
+level field with a warning; testing that generic flag alone did not produce the
+required template. Do not assume `reasoning_effort: none` is sufficient: verify
+the effective model template and all other frozen settings before dispatch.
+Private source-free mapping/template proofs are in the coordinator directory.
+No saved model/runtime preference or frozen candidate setting was changed.
+
+
+Fresh independent Terra scoring confirmed all six whole-response digest joins
+and schema-valid diagnostic JSON. Official dimension scores are **0/0/0/0** for
+every attempt. Diagnostic reasoning-only scores, in correctness / local relevance /
+trade-off clarity / useful verification order, were locking **2/2/1/2** and
+**2/1/1/2**, allocation **2/2/2/2** and **2/2/1/2**; both diagnostic controls
+intentionally omitted insights. No critical false claim was found in the retained
+diagnostic material. These observations do not provide final-output coverage or
+prove that disabling thinking will preserve this quality.
+
+The strict score maps and source-free `audit.json` are in the same private
+scoring directory. The coordinator stored both digest-bound score maps, passed
+both offline receipt validators with exact frozen identities, then discarded
+all six evaluator response files and verified their absence. No example was
+retained. Existing LM Studio server logs were read in place for channel diagnosis;
+this evaluator cleanup does not purge the host application's log retention.
+Both validated receipt reports remain under `.mini-orca/autopilot/diagnostics/`.
+
+The accepted implementation and full prepilot `make check` remain recorded above.
+No code changed during collection or diagnosis. This failed profile is not a
+promoted qualification candidate; QUAL-06 remains Pending and REL-01 Blocked.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
