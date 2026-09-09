@@ -890,6 +890,62 @@ same frozen candidate, with no tuning or retries, 4,096 total completion tokens
 and 300 seconds per attempt. Independent scoring and whole-final-content review
 must precede verdict and response disposal. Scheduler stays Paused.
 
+### Medium-reasoning pilot verdict — 2026-09-09
+
+**Development gate passed; qualification has not run.** Frozen pilot base
+`d1263c6424cbd89d8fd97584ceeab270edd4c4b5` and the preparation manifest above
+were unchanged across both three-case runs. All six attempts produced usable,
+complete final JSON with normal stops; no retries, tuning, timeout, output
+exhaustion, runtime failure or cleanup uncertainty occurred.
+
+| Case | First run | Second run | Whole-final critical false claims |
+| --- | --- | --- | --- |
+| Locking | 7/8 (2/2/1/2) | 7/8 (2/2/1/2) | 0 |
+| Allocation | 7/8 (2/2/1/2) | 7/8 (2/2/1/2) | 0 |
+| Trivial control | Insight omitted | Insight omitted | 0 |
+
+The substantive insights identify the local mechanism and useful verification,
+but miss part of the required trade-off qualification. Both controls score 2/2/2/2
+for intentional omission. Scorer and independent reviewer initially overclassified
+conditional control advice as a critical false claim. Re-adjudication against the
+unchanged frozen anchor distinguished a hypothetical caller expectation from an
+assertion that such downstream behavior exists. Both reviewers and coordinator
+agree the advice is unsupported and low-value, but not a critical false factual
+claim. Initial scores and the correction history are retained privately; no rubric,
+prompt or model change was made to obtain this verdict. Only delivered final JSON
+was scored; reasoning received no credit.
+
+Raw generated and reported completion totals both equal **9,354 tokens**.
+Median latency is **115,054.5 ms**; nearest-rank p95 is **163,879 ms**. All three
+cross-batch pairs are byte-identical: six attempts contain only **three distinct
+outputs**, so this is candidate-selection evidence, not independent reliability
+or release qualification. All four substantive attempts meet the 6/8 threshold,
+both optional insights are intentionally omitted on controls, and all six whole
+final summaries pass the separate zero-critical-claim gate.
+
+Exactly seven grants now account for **48 development requests consumed and zero
+qualification requests**. Historical grants/receipts remain unchanged. QUAL-05 is
+Complete and candidate `qwen38-v12-medium-1` is eligible for subsequent QUAL-06;
+all 24 qualification slots remain untouched. QUAL-06 stays Pending, REL-01 Blocked,
+and the scheduler Paused because this authorization covers only six development
+calls. No further experiment or qualification was dispatched.
+
+The owned standalone runtime was stopped. The original LM Studio lane was restored
+idle at context 119,552, one parallel session and thinking off. Read-only comparison
+matches the original baseline except process-instance identity and last-used time;
+the original template hash matches. The standalone host log remains private.
+Frozen readiness is historical and does not authorize reuse of a stopped host.
+
+Accepted code passed `make check` (327 desktop tests), `make quality`, 19 medium
+and 19 historical-low runtime conformance tests, plus private verifier/collector
+tests. The verdict update is documentation only. Source-free scored receipts,
+channel digests and adjudication audit are retained under the private evaluation
+root; exact score/validation commands and results are in
+`.mini-orca/autopilot/coordinator/QUAL-05-medium.json`.
+Following independent score comparison and final evidence review, raw response
+material was disposed; source-free score, digest, receipt, and accounting records
+remain retained.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
