@@ -30,7 +30,7 @@ Baseline: `f4e044e91c69cab47faaf7bb6e92e5fa1cb722e5`, `codex/autopilot`. QUAL-05
 
 ## RCV-01 — Preserve useful source-free rejection diagnostics
 
-- [ ] RCV-01 accepted
+- [x] RCV-01 accepted
 
 **Target files**
 - `internal/project/engineering_insight.go` — distinguish optional-output rejection categories at the existing parsing boundary.

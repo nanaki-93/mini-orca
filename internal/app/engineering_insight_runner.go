@@ -124,6 +124,28 @@ type engineeringInsightRunManifest struct {
 	Receipt        EngineeringInsightEvaluationReceipt `json:"receipt"`
 }
 
+// engineeringInsightOptionalDiagnostics is private, source-free evidence for
+// one emitted response. It deliberately remains outside the public receipt.
+type engineeringInsightOptionalDiagnostics struct {
+	RunID                       string                                 `json:"run_id"`
+	AttemptID                   string                                 `json:"attempt_id"`
+	ResponseDigest              string                                 `json:"response_digest"`
+	Insights                    []engineeringInsightOptionalDiagnostic `json:"insights"`
+	SymbolExplanationsDegraded  bool                                   `json:"symbol_explanations_degraded"`
+	TaskSpecDegradedRiskIndices []int                                  `json:"task_spec_degraded_risk_indices"`
+}
+
+type engineeringInsightOptionalDiagnostic struct {
+	Location              string                                            `json:"location"`
+	Index                 *int                                              `json:"index,omitempty"`
+	Reason                project.OptionalEngineeringInsightReason          `json:"reason"`
+	Presence              project.OptionalEngineeringInsightPresence        `json:"presence"`
+	Mechanism             project.OptionalEngineeringInsightFieldDiagnostic `json:"mechanism"`
+	WhyItMattersHere      project.OptionalEngineeringInsightFieldDiagnostic `json:"why_it_matters_here"`
+	TradeoffOrFailureMode project.OptionalEngineeringInsightFieldDiagnostic `json:"tradeoff_or_failure_mode"`
+	TransferableLesson    project.OptionalEngineeringInsightFieldDiagnostic `json:"transferable_lesson"`
+}
+
 type engineeringInsightCampaign struct {
 	DevelopmentRequests   int `json:"development_requests"`
 	QualificationRequests int `json:"qualification_requests"`
@@ -446,18 +468,24 @@ func executeRemainingAttempts(ctx context.Context, cfg EngineeringInsightRunnerC
 			return err
 		}
 
-		attempt, response, err := executeRunnerAttempt(ctx, cfg, item)
+		attempt, response, diagnostics, err := executeRunnerAttempt(ctx, cfg, item)
 		permanentRejection := errors.Is(err, llm.ErrStructuredRequestRejected)
 		if err != nil && !permanentRejection {
 			attempt = failedRunnerAttempt(item.Expected, cfg.CandidateID, err)
 		}
-		manifest.Receipt.Attempts[index] = attempt
-		manifest.Receipt.Consumption.OutputTokens += attempt.OutputTokens
 		if response != "" {
+			// Publish the source-free diagnostic before the raw private response.
+			// A failure between either immutable write and the receipt update leaves
+			// the reserved attempt unknown, and resume intentionally never replays it.
+			if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: expectedAttemptID(item.Expected), ResponseDigest: attempt.ResponseDigest, Insights: diagnostics.insights, SymbolExplanationsDegraded: diagnostics.symbolExplanationsDegraded, TaskSpecDegradedRiskIndices: diagnostics.taskSpecDegradedRiskIndices}); err != nil {
+				return err
+			}
 			if err := writePrivateResponse(handoff.privateDir, expectedAttemptID(item.Expected), response); err != nil {
 				return err
 			}
 		}
+		manifest.Receipt.Attempts[index] = attempt
+		manifest.Receipt.Consumption.OutputTokens += attempt.OutputTokens
 		if permanentRejection {
 			manifest.Finished = true
 			manifest.TerminalReason = permanentRequestRejectionReason
@@ -884,10 +912,10 @@ func unknownReservedAttempt(expected EngineeringInsightExpectedAttempt, candidat
 	return EngineeringInsightEvaluationAttempt{CaseName: expected.CaseName, Partition: expected.Partition, Intent: expected.Intent, Repetition: expected.Repetition, Attempt: expected.Attempt, CandidateID: candidate, Outcome: "unknown", OptionalInsight: "not_evaluated", FinishReason: "unknown"}
 }
 
-func executeRunnerAttempt(parent context.Context, cfg EngineeringInsightRunnerConfig, item EngineeringInsightRunnerCase) (EngineeringInsightEvaluationAttempt, string, error) {
+func executeRunnerAttempt(parent context.Context, cfg EngineeringInsightRunnerConfig, item EngineeringInsightRunnerCase) (EngineeringInsightEvaluationAttempt, string, fileAnalysisOptionalDiagnosticsResult, error) {
 	root, prompt, target, err := prepareRunnerPrompt(cfg, item)
 	if err != nil {
-		return EngineeringInsightEvaluationAttempt{}, "", err
+		return EngineeringInsightEvaluationAttempt{}, "", fileAnalysisOptionalDiagnosticsResult{}, err
 	}
 	defer os.RemoveAll(root)
 	return dispatchRunnerPrompt(parent, cfg, item, prompt, target)
@@ -935,7 +963,7 @@ func prepareRunnerPrompt(cfg EngineeringInsightRunnerConfig, item EngineeringIns
 	return root, prompt, target, nil
 }
 
-func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerConfig, item EngineeringInsightRunnerCase, prompt string, target *project.IndexFile) (EngineeringInsightEvaluationAttempt, string, error) {
+func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerConfig, item EngineeringInsightRunnerCase, prompt string, target *project.IndexFile) (EngineeringInsightEvaluationAttempt, string, fileAnalysisOptionalDiagnosticsResult, error) {
 	timed, cancel := context.WithTimeout(parent, qualificationAttemptTimeoutSeconds*time.Second)
 	defer cancel()
 	started := time.Now()
@@ -944,9 +972,9 @@ func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerCo
 	if err != nil {
 		attempt := failedRunnerAttemptWithElapsed(item.Expected, cfg.CandidateID, err, elapsed)
 		if errors.Is(err, llm.ErrStructuredRequestRejected) {
-			return attempt, "", err
+			return attempt, "", fileAnalysisOptionalDiagnosticsResult{}, err
 		}
-		return attempt, "", nil
+		return attempt, "", fileAnalysisOptionalDiagnosticsResult{}, nil
 	}
 	message := response.Choices[0].Message
 	content := message.Content
@@ -960,29 +988,31 @@ func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerCo
 	if attempt.OutputTokens < 0 || attempt.OutputTokens > qualificationOutputTokenCap || response.Model != "" && response.Model != cfg.Model {
 		attempt.Outcome, attempt.FinishReason = "failed", "error"
 		attempt.InvalidProviderMetadata = true
-		return attempt, emitted, nil
+		return attempt, emitted, fileAnalysisOptionalDiagnostics(content, *target, item.Source), nil
 	}
 	if response.Choices[0].FinishReason == "length" {
 		attempt.Outcome, attempt.FinishReason = "truncated", "length"
-		return attempt, emitted, nil
+		return attempt, emitted, fileAnalysisOptionalDiagnostics(content, *target, item.Source), nil
 	}
 	if response.Choices[0].FinishReason != "" && response.Choices[0].FinishReason != "stop" {
 		attempt.Outcome, attempt.FinishReason = "failed", "error"
-		return attempt, emitted, nil
+		return attempt, emitted, fileAnalysisOptionalDiagnostics(content, *target, item.Source), nil
 	}
 	if strings.TrimSpace(content) == "" {
 		attempt.Outcome, attempt.FinishReason = "malformed", "stop"
-		return attempt, emitted, nil
+		return attempt, emitted, fileAnalysisOptionalDiagnosticsResult{}, nil
 	}
 	parsed, parseErr := parseSemanticAnalysis(content, *target, item.Source)
 	if parseErr != nil {
 		attempt.Outcome, attempt.FinishReason = "malformed", "stop"
-		return attempt, emitted, nil
+		return attempt, emitted, fileAnalysisOptionalDiagnostics(content, *target, item.Source), nil
 	}
 	attempt.Outcome, attempt.FinishReason, attempt.UsableSummary = "completed", "stop", true
-	attempt.OptionalInsight, attempt.OptionalSectionDegraded = evaluationOptionalState(content, *target, item.Source, parsed)
+	state := evaluateOptionalState(content, *target, item.Source, parsed)
+	attempt.OptionalInsight = state.insight
+	attempt.OptionalSectionDegraded = state.degraded()
 	attempt.CompleteSummary = !attempt.OptionalSectionDegraded
-	return attempt, emitted, nil
+	return attempt, emitted, fileAnalysisOptionalDiagnostics(content, *target, item.Source), nil
 }
 
 // evaluationResponseMaterial retains every non-empty provider response field
@@ -1025,54 +1055,120 @@ func failedRunnerAttemptWithElapsed(expected EngineeringInsightExpectedAttempt, 
 	return attempt
 }
 
-func evaluationOptionalState(content string, target project.IndexFile, source string, parsed semanticAnalysisResponse) (string, bool) {
-	var wire semanticAnalysisWireResponse
-	if decodeSemanticAnalysis(content, &wire) != nil {
-		return "rejected", true
-	}
-	degraded := false
-	if _, err := normalizeSymbolExplanations(wire.SymbolExplanations, target.Symbols); err != nil {
-		degraded = true
-	}
-	insight, insightError := parseFileAnalysisEngineeringInsight(wire.EngineeringInsight)
-	optional := "omitted"
-	if insightError != "" {
-		optional, degraded = "rejected", true
-	} else if insight != nil || parsed.EngineeringInsight != nil {
-		optional = "present"
-	}
-	for _, risk := range wire.Risks {
-		optional, degraded = mergeOptionalState(optional, degraded, riskOptionalState(risk, target, source))
-	}
-	for _, suggestion := range wire.Suggestions {
-		optional, degraded = mergeOptionalState(optional, degraded, suggestionOptionalState(suggestion))
-	}
-	return optional, degraded
+type evaluatedOptionalState struct {
+	insight                     string
+	insightRejected             bool
+	symbolExplanationsDegraded  bool
+	taskSpecDegradedRiskIndices []int
 }
 
-type optionalState struct{ present, rejected, degraded bool }
+func (state evaluatedOptionalState) degraded() bool {
+	return state.insightRejected || state.nonInsightDegraded()
+}
+
+func (state evaluatedOptionalState) nonInsightDegraded() bool {
+	return state.symbolExplanationsDegraded || len(state.taskSpecDegradedRiskIndices) > 0
+}
+
+func evaluateOptionalState(content string, target project.IndexFile, source string, parsed semanticAnalysisResponse) evaluatedOptionalState {
+	var wire semanticAnalysisWireResponse
+	if decodeSemanticAnalysis(content, &wire) != nil {
+		return evaluatedOptionalState{insight: "rejected", insightRejected: true}
+	}
+	state := evaluatedOptionalState{insight: "omitted"}
+	if _, err := normalizeSymbolExplanations(wire.SymbolExplanations, target.Symbols); err != nil {
+		state.symbolExplanationsDegraded = true
+	}
+	insight, insightError := parseFileAnalysisEngineeringInsight(wire.EngineeringInsight)
+	if insightError != "" {
+		state.insight, state.insightRejected = "rejected", true
+	} else if insight != nil || parsed.EngineeringInsight != nil {
+		state.insight = "present"
+	}
+	for index, risk := range wire.Risks {
+		next := riskOptionalState(risk, target, source)
+		state.merge(next)
+		if next.taskSpecDegraded {
+			state.taskSpecDegradedRiskIndices = append(state.taskSpecDegradedRiskIndices, index)
+		}
+	}
+	for _, suggestion := range wire.Suggestions {
+		state.merge(suggestionOptionalState(suggestion))
+	}
+	return state
+}
+
+type optionalState struct{ present, rejected, taskSpecDegraded bool }
+
+func (state *evaluatedOptionalState) merge(next optionalState) {
+	if next.rejected {
+		state.insight, state.insightRejected = "rejected", true
+	} else if next.present && state.insight != "rejected" {
+		state.insight = "present"
+	}
+}
 
 func riskOptionalState(risk semanticAnalysisFinding, target project.IndexFile, source string) optionalState {
 	state := optionalInsightState(risk.Insight)
-	if len(risk.TaskSpec) > 0 && strings.TrimSpace(string(risk.TaskSpec)) != "null" && parseOptionalBugTaskSpec(risk.TaskSpec, target, source) == nil {
-		state.degraded = true
+	if optionalTaskSpecDegraded(risk.TaskSpec, target, source) {
+		state.taskSpecDegraded = true
 	}
 	return state
+}
+
+func optionalTaskSpecDegraded(raw json.RawMessage, target project.IndexFile, source string) bool {
+	return len(raw) > 0 && strings.TrimSpace(string(raw)) != "null" && parseOptionalBugTaskSpec(raw, target, source) == nil
 }
 func suggestionOptionalState(suggestion semanticAnalysisSuggestion) optionalState {
 	return optionalInsightState(suggestion.Insight)
 }
 func optionalInsightState(raw json.RawMessage) optionalState {
 	insight, reason := parseFileAnalysisEngineeringInsight(raw)
-	return optionalState{present: insight != nil, rejected: reason != "", degraded: reason != ""}
+	return optionalState{present: insight != nil, rejected: reason != ""}
 }
-func mergeOptionalState(optional string, degraded bool, state optionalState) (string, bool) {
-	if state.rejected {
-		optional = "rejected"
-	} else if state.present && optional != "rejected" {
-		optional = "present"
+
+type fileAnalysisOptionalDiagnosticsResult struct {
+	insights                    []engineeringInsightOptionalDiagnostic
+	symbolExplanationsDegraded  bool
+	taskSpecDegradedRiskIndices []int
+}
+
+func fileAnalysisOptionalDiagnostics(content string, target project.IndexFile, source string) fileAnalysisOptionalDiagnosticsResult {
+	var wire semanticAnalysisWireResponse
+	if decodeSemanticAnalysis(content, &wire) != nil {
+		return fileAnalysisOptionalDiagnosticsResult{}
 	}
-	return optional, degraded || state.degraded
+	result := fileAnalysisOptionalDiagnosticsResult{insights: make([]engineeringInsightOptionalDiagnostic, 0, 1+len(wire.Risks)+len(wire.Suggestions))}
+	if _, err := normalizeSymbolExplanations(wire.SymbolExplanations, target.Symbols); err != nil {
+		result.symbolExplanationsDegraded = true
+	}
+	result.insights = append(result.insights, optionalInsightDiagnostic("top_level", nil, wire.EngineeringInsight))
+	for index, risk := range wire.Risks {
+		index := index
+		result.insights = append(result.insights, optionalInsightDiagnostic("risk", &index, risk.Insight))
+		if optionalTaskSpecDegraded(risk.TaskSpec, target, source) {
+			result.taskSpecDegradedRiskIndices = append(result.taskSpecDegradedRiskIndices, index)
+		}
+	}
+	for index, suggestion := range wire.Suggestions {
+		index := index
+		result.insights = append(result.insights, optionalInsightDiagnostic("suggestion", &index, suggestion.Insight))
+	}
+	return result
+}
+
+func optionalInsightDiagnostic(location string, index *int, raw json.RawMessage) engineeringInsightOptionalDiagnostic {
+	_, diagnostic := parseFileAnalysisEngineeringInsightDiagnostic(raw)
+	return engineeringInsightOptionalDiagnostic{
+		Location:              location,
+		Index:                 index,
+		Reason:                diagnostic.Reason,
+		Presence:              diagnostic.Presence,
+		Mechanism:             diagnostic.Mechanism,
+		WhyItMattersHere:      diagnostic.WhyItMattersHere,
+		TradeoffOrFailureMode: diagnostic.TradeoffOrFailureMode,
+		TransferableLesson:    diagnostic.TransferableLesson,
+	}
 }
 
 func loadRunManifest(path string) (engineeringInsightRunManifest, bool, error) {
@@ -1124,19 +1220,119 @@ func privateResponseDirectory(directory, runID string) string {
 	return filepath.Join(directory, "responses", runID)
 }
 
+func privateOptionalDiagnosticsDirectory(directory, runID string) string {
+	return filepath.Join(directory, "optional-diagnostics", runID)
+}
+
 func privateResponsePath(directory, id string) string {
 	sum := sha256.Sum256([]byte(id))
 	return filepath.Join(directory, hex.EncodeToString(sum[:])+".response")
+}
+
+func privateOptionalDiagnosticsPath(directory, id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return filepath.Join(directory, hex.EncodeToString(sum[:])+".json")
 }
 
 func writePrivateResponse(directory, id, response string) error {
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return fmt.Errorf("write private evaluation response")
 	}
-	if err := os.WriteFile(privateResponsePath(directory, id), []byte(response), 0600); err != nil {
+	if err := writePrivateArtifact(privateResponsePath(directory, id), []byte(response)); err != nil {
 		return fmt.Errorf("write private evaluation response")
 	}
 	return nil
+}
+
+func writePrivateOptionalDiagnostics(directory string, diagnostics engineeringInsightOptionalDiagnostics) error {
+	if !validRunnerID(diagnostics.RunID) || diagnostics.AttemptID == "" || !validDigest(diagnostics.ResponseDigest) || !validPrivateOptionalDiagnostics(diagnostics) {
+		return fmt.Errorf("write private optional diagnostics")
+	}
+	privateDirectory := privateOptionalDiagnosticsDirectory(directory, diagnostics.RunID)
+	if err := os.MkdirAll(privateDirectory, 0700); err != nil {
+		return fmt.Errorf("write private optional diagnostics")
+	}
+	data, err := json.Marshal(diagnostics)
+	if err != nil {
+		return fmt.Errorf("write private optional diagnostics")
+	}
+	if err := writePrivateArtifact(privateOptionalDiagnosticsPath(privateDirectory, diagnostics.AttemptID), data); err != nil {
+		return fmt.Errorf("write private optional diagnostics")
+	}
+	return nil
+}
+
+func validPrivateOptionalDiagnostics(record engineeringInsightOptionalDiagnostics) bool {
+	previousIndex := -1
+	for _, index := range record.TaskSpecDegradedRiskIndices {
+		if index < 0 || index <= previousIndex {
+			return false
+		}
+		previousIndex = index
+	}
+	for _, diagnostic := range record.Insights {
+		if !validPrivateOptionalDiagnosticReason(diagnostic.Reason) || !validPrivateOptionalDiagnosticPresence(diagnostic.Presence) || !validPrivateOptionalDiagnosticLocation(diagnostic.Location, diagnostic.Index) {
+			return false
+		}
+		for _, field := range []project.OptionalEngineeringInsightFieldDiagnostic{diagnostic.Mechanism, diagnostic.WhyItMattersHere, diagnostic.TradeoffOrFailureMode, diagnostic.TransferableLesson} {
+			if field.Runes < 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validPrivateOptionalDiagnosticReason(reason project.OptionalEngineeringInsightReason) bool {
+	switch reason {
+	case project.OptionalEngineeringInsightAbsent, project.OptionalEngineeringInsightNull, project.OptionalEngineeringInsightInvalidShape, project.OptionalEngineeringInsightEmptyRequiredField, project.OptionalEngineeringInsightOverLimit, project.OptionalEngineeringInsightAccepted:
+		return true
+	default:
+		return false
+	}
+}
+
+func validPrivateOptionalDiagnosticPresence(presence project.OptionalEngineeringInsightPresence) bool {
+	return presence == project.OptionalEngineeringInsightAbsentPresence || presence == project.OptionalEngineeringInsightNullPresence || presence == project.OptionalEngineeringInsightValuePresence
+}
+
+func validPrivateOptionalDiagnosticLocation(location string, index *int) bool {
+	switch location {
+	case "top_level":
+		return index == nil
+	case "risk", "suggestion":
+		return index != nil && *index >= 0
+	default:
+		return false
+	}
+}
+
+// writePrivateArtifact publishes a complete immutable file. Link creation
+// fails if a resumed or uncertain attempt already owns this artifact, so a
+// later process can never replace evidence from a prior dispatch.
+func writePrivateArtifact(path string, data []byte) error {
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".private-evaluation-*")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(0600); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Link(temporaryName, path)
 }
 
 func readPrivateResponse(directory, id string) (string, error) {

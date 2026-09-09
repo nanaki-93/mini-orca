@@ -1174,6 +1174,159 @@ func TestEngineeringInsightRunnerStoresOnlyDigestBoundScores(t *testing.T) {
 	}
 }
 
+func TestEngineeringInsightRunnerPersistsPrivateOptionalDiagnosticsWithoutOverwrite(t *testing.T) {
+	const privateText = "private optional insight prose"
+	response := `{"purpose":"model reply is private","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"},"engineering_insight":{"mechanism":"` + privateText + `","why_it_matters_here":"local"}}],"suggestions":[],"symbol_explanations":{"unselected":"private symbol explanation"}}`
+	client := &fakeEngineeringInsightClient{reply: response}
+	cfg := runnerTestConfig(t, "optional-diagnostics", EngineeringInsightCollectRunMode, 3, client)
+	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	id := expectedAttemptID(cfg.Cases[0].Expected)
+	path := privateOptionalDiagnosticsPath(privateOptionalDiagnosticsDirectory(directory, cfg.RunID), id)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var artifact engineeringInsightOptionalDiagnostics
+	if err := json.Unmarshal(data, &artifact); err != nil {
+		t.Fatal(err)
+	}
+	if artifact.RunID != cfg.RunID || artifact.AttemptID != id || artifact.ResponseDigest != receipt.Attempts[0].ResponseDigest || len(artifact.Insights) != 2 || !artifact.SymbolExplanationsDegraded || len(artifact.TaskSpecDegradedRiskIndices) != 1 || artifact.TaskSpecDegradedRiskIndices[0] != 0 {
+		t.Fatalf("diagnostic artifact identity = %+v", artifact)
+	}
+	if artifact.Insights[0].Location != "top_level" || artifact.Insights[0].Reason != project.OptionalEngineeringInsightAbsent || artifact.Insights[1].Location != "risk" || artifact.Insights[1].Index == nil || *artifact.Insights[1].Index != 0 || artifact.Insights[1].Reason != project.OptionalEngineeringInsightEmptyRequiredField || !artifact.Insights[1].Mechanism.RuneCountKnown || artifact.Insights[1].Mechanism.Runes != len(privateText) {
+		t.Fatalf("diagnostic artifact details = %+v", artifact.Insights)
+	}
+	for _, forbidden := range []string{privateText, "model reply is private", "fixture-secret", "provider-secret"} {
+		if strings.Contains(string(data), forbidden) {
+			t.Fatalf("diagnostic artifact retained private text %q: %s", forbidden, data)
+		}
+	}
+	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id + "-invalid", ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: []engineeringInsightOptionalDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightReason(privateText), Presence: project.OptionalEngineeringInsightValuePresence}}}); err == nil {
+		t.Fatal("diagnostic artifact accepted arbitrary model text as a reason")
+	}
+	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: nil}); err == nil {
+		t.Fatal("diagnostic artifact overwrite was accepted")
+	}
+	unchanged, err := os.ReadFile(path)
+	if err != nil || string(unchanged) != string(data) {
+		t.Fatalf("diagnostic artifact changed after overwrite: %s, %v", unchanged, err)
+	}
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); !errors.Is(err, ErrEngineeringInsightRunFinished) || client.calls.Load() != 3 {
+		t.Fatalf("completed run dispatched or rewrote diagnostics: calls=%d err=%v", client.calls.Load(), err)
+	}
+}
+
+func TestEngineeringInsightRunnerDoesNotReplaceDiagnosticsForAnInterruptedUnknownReservation(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := runnerTestConfig(t, "diagnostic-resume", EngineeringInsightCollectRunMode, 3, client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	first := cfg.Cases[0].Expected
+	manifest := engineeringInsightRunManifest{Fingerprint: runnerFingerprint(cfg), Receipt: runnerReceipt(cfg)}
+	manifest.Receipt.Attempts = append(manifest.Receipt.Attempts, unknownReservedAttempt(first, cfg.CandidateID))
+	manifest.Receipt.Consumption.Requests = 1
+	if err := writeRunnerJSON(filepath.Join(directory, cfg.RunID+".json"), manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 1}); err != nil {
+		t.Fatal(err)
+	}
+	id := expectedAttemptID(first)
+	priorResponse := "private interrupted response"
+	digest := sha256.Sum256([]byte(priorResponse))
+	responseDirectory := privateResponseDirectory(directory, cfg.RunID)
+	diagnosticsDirectory := privateOptionalDiagnosticsDirectory(directory, cfg.RunID)
+	if err := writePrivateResponse(responseDirectory, id, priorResponse); err != nil {
+		t.Fatal(err)
+	}
+	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []engineeringInsightOptionalDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
+	if err := writePrivateOptionalDiagnostics(directory, prior); err != nil {
+		t.Fatal(err)
+	}
+	diagnosticPath := privateOptionalDiagnosticsPath(diagnosticsDirectory, id)
+	before, err := os.ReadFile(diagnosticPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{responseDirectory, diagnosticsDirectory} {
+		info, err := os.Stat(path)
+		if err != nil || info.Mode().Perm()&0077 != 0 {
+			t.Fatalf("private directory mode %q = %v, %v", path, info.Mode(), err)
+		}
+	}
+	for _, artifactPath := range []string{privateResponsePath(responseDirectory, id), diagnosticPath} {
+		info, err := os.Stat(artifactPath)
+		if err != nil || info.Mode().Perm()&0077 != 0 {
+			t.Fatalf("private artifact mode %q = %v, %v", artifactPath, info.Mode(), err)
+		}
+	}
+
+	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil || client.calls.Load() != 2 || len(receipt.Attempts) != 3 || receipt.Attempts[0].Outcome != "unknown" {
+		t.Fatalf("resume dispatched interrupted attempt: receipt=%+v calls=%d err=%v", receipt, client.calls.Load(), err)
+	}
+	after, err := os.ReadFile(diagnosticPath)
+	if err != nil || string(after) != string(before) || strings.Contains(string(after), priorResponse) {
+		t.Fatalf("resume replaced or exposed interrupted diagnostic: %s, %v", after, err)
+	}
+	storedResponse, err := readPrivateResponse(responseDirectory, id)
+	if err != nil || storedResponse != priorResponse {
+		t.Fatalf("resume replaced interrupted response: %q, %v", storedResponse, err)
+	}
+	var restored engineeringInsightOptionalDiagnostics
+	if err := json.Unmarshal(after, &restored); err != nil || restored.RunID != cfg.RunID || restored.AttemptID != id || restored.ResponseDigest != hex.EncodeToString(digest[:]) {
+		t.Fatalf("interrupted diagnostic binding = %+v, %v", restored, err)
+	}
+}
+
+func TestEngineeringInsightRunnerLeavesAnUnknownReservationWhenDiagnosticPublishingFails(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := runnerTestConfig(t, "diagnostic-first-failure", EngineeringInsightCollectRunMode, 3, client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	first := cfg.Cases[0].Expected
+	id := expectedAttemptID(first)
+	digest := sha256.Sum256([]byte(runnerValidResponse()))
+	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []engineeringInsightOptionalDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
+	if err := writePrivateOptionalDiagnostics(directory, prior); err != nil {
+		t.Fatal(err)
+	}
+	diagnosticPath := privateOptionalDiagnosticsPath(privateOptionalDiagnosticsDirectory(directory, cfg.RunID), id)
+	before, err := os.ReadFile(diagnosticPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err == nil || client.calls.Load() != 1 || len(receipt.Attempts) != 1 || receipt.Attempts[0].Outcome != "unknown" {
+		t.Fatalf("diagnostic write failure did not preserve the unknown reservation: receipt=%+v calls=%d err=%v", receipt, client.calls.Load(), err)
+	}
+	if _, err := os.Stat(privateResponsePath(privateResponseDirectory(directory, cfg.RunID), id)); !os.IsNotExist(err) {
+		t.Fatalf("response was published before its diagnostic: %v", err)
+	}
+	after, err := os.ReadFile(diagnosticPath)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("failed diagnostic publish overwrote evidence: %s, %v", after, err)
+	}
+
+	resumed, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil || client.calls.Load() != 3 || len(resumed.Attempts) != 3 || resumed.Attempts[0].Outcome != "unknown" {
+		t.Fatalf("resume replayed the failed reservation: receipt=%+v calls=%d err=%v", resumed, client.calls.Load(), err)
+	}
+	after, err = os.ReadFile(diagnosticPath)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("resume overwrote failed-reservation diagnostics: %s, %v", after, err)
+	}
+}
+
 func TestEngineeringInsightRunnerRejectsIncompleteFileInsightsAcrossOptionalLocations(t *testing.T) {
 	target := project.IndexFile{Path: "fixture.go", Language: "Go"}
 	source := "package fixture\nfunc Run() {}\n"
@@ -1201,9 +1354,9 @@ func TestEngineeringInsightRunnerRejectsIncompleteFileInsightsAcrossOptionalLoca
 				if err != nil {
 					t.Fatal(err)
 				}
-				optional, degraded := evaluationOptionalState(content, target, source, parsed)
-				if optional != "rejected" || !degraded {
-					t.Fatalf("incomplete %s insight state = %q, degraded=%t", location, optional, degraded)
+				state := evaluateOptionalState(content, target, source, parsed)
+				if state.insight != "rejected" || !state.degraded() {
+					t.Fatalf("incomplete %s insight state = %q, degraded=%t", location, state.insight, state.degraded())
 				}
 			})
 		}
