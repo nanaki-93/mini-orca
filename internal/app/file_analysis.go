@@ -20,6 +20,8 @@ import (
 const (
 	semanticAnalysisPromptVersion = "file-analysis-v12"
 	maxSemanticAnalysisBytes      = 64 * 1024
+	fileAnalysisInsightFieldCount = 4
+	fileAnalysisInsightMaxChars   = 250
 )
 
 const fileAnalysisResponseSchemaName = "file_analysis_response"
@@ -47,12 +49,13 @@ const fileAnalysisResponseSchemaDocument = `{
       "additionalProperties":false,
       "required":["mechanism","why_it_matters_here","tradeoff_or_failure_mode","transferable_lesson"],
       "properties":{
-        "mechanism":{"type":"string","minLength":1},
-        "why_it_matters_here":{"type":"string","minLength":1},
-        "tradeoff_or_failure_mode":{"type":"string","minLength":1},
-        "transferable_lesson":{"type":"string","minLength":1}
+        "mechanism":{"$ref":"#/$defs/insightText"},
+        "why_it_matters_here":{"$ref":"#/$defs/insightText"},
+        "tradeoff_or_failure_mode":{"$ref":"#/$defs/insightText"},
+        "transferable_lesson":{"$ref":"#/$defs/insightText"}
       }
     },
+    "insightText":{"type":"string","minLength":1,"maxLength":250},
     "optionalInsight":{"anyOf":[{"$ref":"#/$defs/insight"},{"type":"null"}]},
     "taskSpec":{
       "type":"object",
@@ -109,7 +112,7 @@ const fileAnalysisInsightGuidance = "Trace what the selected code actually does 
 	"A visible known-length append loop can support measurement-oriented engineering guidance even when it is not a bug. When TARGET_SOURCE starts a result slice at zero capacity and appends once per known input item, name the input-length and result-slice identifiers and explain capacity growth. Preallocation changes retained result capacity. If TARGET_SOURCE visibly allocates while formatting items, preallocation does not remove that separately visible cost; otherwise do not infer a formatting allocation. State each only when shown. State allocation impact conditionally for workloads or input sizes where growth matters, and treat retained result capacity as the preallocation trade-off. Verify with before-and-after -benchmem runs at representative input sizes and compare allocations per operation rather than only saying to benchmark. " +
 	"Prefer one file-level insight. Do not duplicate that lesson in risks or suggestions. "
 
-const fileAnalysisInsightSchema = "At every supported engineering_insight location (the top level, each risks[] item, and each suggestions[] item), either omit engineering_insight or use null, or provide exactly one object with exactly these four non-empty string fields and no other keys: mechanism, why_it_matters_here, tradeoff_or_failure_mode, and transferable_lesson. Shape: {\"mechanism\":\"...\",\"why_it_matters_here\":\"...\",\"tradeoff_or_failure_mode\":\"...\",\"transferable_lesson\":\"...\"}. Never use a string, array, or partial object. "
+const fileAnalysisInsightSchema = "At every supported engineering_insight location (the top level, each risks[] item, and each suggestions[] item), either omit engineering_insight or use null, or provide exactly one object with exactly these four non-empty string fields and no other keys: mechanism, why_it_matters_here, tradeoff_or_failure_mode, and transferable_lesson. Each field is limited to 250 Unicode characters, intentionally keeping generated insight prose concise; the four fields together fit the parser's 1,000-normalized-rune budget. Shape: {\"mechanism\":\"...\",\"why_it_matters_here\":\"...\",\"tradeoff_or_failure_mode\":\"...\",\"transferable_lesson\":\"...\"}. Never use a string, array, or partial object. "
 
 // EngineeringInsightPromptVersion returns the production selected-file prompt
 // identity used by evaluation; callers cannot supply an unrelated label.
@@ -368,7 +371,7 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 		fileAnalysisInsightSchema + project.EngineeringInsightPromptInstructions +
 		"For symbol_explanations, copy keys verbatim from TARGET_FACTS.symbols[].name. Do not explain parameters, local variables, fields, imported names, or referenced types unless their exact name appears in that list. An empty object is valid. Risk severity must be low, medium, or high. " +
 		fileAnalysisInsightGuidance +
-		"Keep all four insight fields together under 1,000 characters. Generic advice to use defer, handle errors, or follow best practices is not an insight. " +
+		"Keep each insight field at or below 250 Unicode characters. Generic advice to use defer, handle errors, or follow best practices is not an insight. " +
 		"Usually omit task_spec. If you include one, it must have only these fields: schema_version \"1\", target_path copied exactly from TARGET_FACTS.path, target_symbol copied exactly from one exact atomic TARGET_FACTS.symbols name, target_signature copied exactly from that symbol's TARGET_FACTS signature, acceptance_criteria (array), non_goals (array), and optional go_test_candidate {name,content}. Do not use a symbol field. Never target another file. " +
 		"Treat all interpretations as suggestions. Do not quote source wholesale, invent files, or include source from another file.\n\n" +
 		"PROJECT_FACTS:\n" + string(facts) + "\n\nCONTEXT_MANIFEST:\n" + string(manifestJSON) + "\n\nTARGET_FACTS:\n" + string(targetJSON) + "\n\nTARGET_SOURCE (the only source content supplied):\n```\n" + source + "\n```\n", nil

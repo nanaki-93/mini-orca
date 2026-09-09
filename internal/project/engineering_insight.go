@@ -8,7 +8,10 @@ import (
 	"unicode/utf8"
 )
 
-const maxEngineeringInsightRunes = 1000
+// MaxEngineeringInsightRunes is the aggregate normalized-text budget shared by
+// every optional engineering insight parser. It intentionally permits uneven
+// field lengths for historically valid responses.
+const MaxEngineeringInsightRunes = 1000
 
 // OptionalEngineeringInsightReason records only the validation category for
 // optional insight prose. It intentionally carries no model-provided text.
@@ -157,7 +160,7 @@ func normalizeAndValidateEngineeringInsight(insight *EngineeringInsight) Optiona
 	if insight.Mechanism == "" || insight.WhyItMattersHere == "" {
 		return OptionalEngineeringInsightEmptyRequiredField
 	}
-	if utf8.RuneCountInString(insight.Mechanism+insight.WhyItMattersHere+insight.TradeoffOrFailureMode+insight.TransferableLesson) > maxEngineeringInsightRunes {
+	if utf8.RuneCountInString(insight.Mechanism+insight.WhyItMattersHere+insight.TradeoffOrFailureMode+insight.TransferableLesson) > MaxEngineeringInsightRunes {
 		return OptionalEngineeringInsightOverLimit
 	}
 	return OptionalEngineeringInsightAccepted

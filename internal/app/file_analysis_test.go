@@ -126,6 +126,83 @@ func TestFileAnalysisResponseSchemaRejectsInvalidOptionalObjects(t *testing.T) {
 	}
 }
 
+func TestFileAnalysisResponseSchemaBoundsInsightFieldsAtEveryLocation(t *testing.T) {
+	compiler := jsonschema.NewCompiler()
+	document, err := jsonschema.UnmarshalJSON(strings.NewReader(fileAnalysisResponseSchemaDocument))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := compiler.AddResource("file-analysis-schema.json", document); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile("file-analysis-schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	insight := func(length int) string {
+		field := strings.Repeat("界", length)
+		return `{"mechanism":"` + field + `","why_it_matters_here":"` + field + `","tradeoff_or_failure_mode":"` + field + `","transferable_lesson":"` + field + `"}`
+	}
+	response := func(topLevel, risk, suggestion string) string {
+		return `{"purpose":"Summarizes one file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional concern.","engineering_insight":` + risk + `}],"suggestions":[{"title":"Clarify behavior","summary":"Keep the call explicit.","engineering_insight":` + suggestion + `}],"symbol_explanations":{},"engineering_insight":` + topLevel + `}`
+	}
+
+	atLimit := insight(fileAnalysisInsightMaxChars)
+	overLimit := insight(fileAnalysisInsightMaxChars + 1)
+	for _, test := range []struct {
+		name     string
+		response string
+		valid    bool
+	}{
+		{name: "exact Unicode boundary", response: response(atLimit, atLimit, atLimit), valid: true},
+		{name: "top level exceeds boundary", response: response(overLimit, atLimit, atLimit)},
+		{name: "risk exceeds boundary", response: response(atLimit, overLimit, atLimit)},
+		{name: "suggestion exceeds boundary", response: response(atLimit, atLimit, overLimit)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			instance, err := jsonschema.UnmarshalJSON(strings.NewReader(test.response))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotValid := schema.Validate(instance) == nil; gotValid != test.valid {
+				t.Fatalf("schema validation = %t, want %t", gotValid, test.valid)
+			}
+		})
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(fileAnalysisResponseSchemaDocument), &raw); err != nil {
+		t.Fatal(err)
+	}
+	defs := raw["$defs"].(map[string]any)
+	insightText := defs["insightText"].(map[string]any)
+	ceiling := int(insightText["maxLength"].(float64))
+	if ceiling != fileAnalysisInsightMaxChars || ceiling*fileAnalysisInsightFieldCount != project.MaxEngineeringInsightRunes {
+		t.Fatalf("insight schema ceiling = %d; aggregate = %d", ceiling, project.MaxEngineeringInsightRunes)
+	}
+	properties := defs["insight"].(map[string]any)["properties"].(map[string]any)
+	for _, field := range []string{"mechanism", "why_it_matters_here", "tradeoff_or_failure_mode", "transferable_lesson"} {
+		if reference := properties[field].(map[string]any)["$ref"]; reference != "#/$defs/insightText" {
+			t.Fatalf("%s schema reference = %q", field, reference)
+		}
+	}
+}
+
+func TestFileAnalysisOverLimitInsightsPreserveParents(t *testing.T) {
+	field := strings.Repeat("界", fileAnalysisInsightMaxChars+1)
+	overAggregateLimit := `{"mechanism":"` + field + `","why_it_matters_here":"` + field + `","tradeoff_or_failure_mode":"` + field + `","transferable_lesson":"` + field + `"}`
+	output := `{"purpose":"Summarizes one file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional concern.","engineering_insight":` + overAggregateLimit + `}],"suggestions":[{"title":"Clarify behavior","summary":"Keep the call explicit.","engineering_insight":` + overAggregateLimit + `}],"symbol_explanations":{},"engineering_insight":` + overAggregateLimit + `}`
+
+	parsed, err := parseSemanticAnalysis(output, project.IndexFile{Path: "main.go"}, "package main")
+	if err != nil || parsed.Purpose != "Summarizes one file." || len(parsed.Risks) != 1 || parsed.Risks[0].Summary != "Conditional concern." || len(parsed.Suggestions) != 1 || parsed.Suggestions[0].Title != "Clarify behavior" {
+		t.Fatalf("over-limit insight changed parent data: %+v, %v", parsed, err)
+	}
+	if parsed.EngineeringInsight != nil || parsed.Risks[0].EngineeringInsight != nil || parsed.Suggestions[0].EngineeringInsight != nil {
+		t.Fatalf("over-limit insights were retained: %+v", parsed)
+	}
+}
+
 func TestAnalyzeFileDoesNotRetryUnsupportedStructuredFormat(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
