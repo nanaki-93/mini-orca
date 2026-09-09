@@ -404,6 +404,73 @@ remain unused; QUAL-06 stays Pending and REL-01 Blocked. The approved failure pa
 keeps the schedule Paused with no further grant or prompt repair. A subsequent
 recovery must address JSON delivery and use a separately authorized finite pilot.
 
+## Structured-output recovery — 2026-09-09
+
+The user authorized schema-constrained file analysis and one fresh six-request
+local pilot after v11's invalid JSON escape. The new candidate is
+`qwen38-v12-structured-1`, prompt/cache identity `file-analysis-v12`, model
+`qwen/qwen3.8-27b`, and provider label `configured-bug`. The new append-only grant
+`authqual05-qwen38-structured-1` extends the development ceiling from 24 to 30 only at
+24 consumed; qualification stays separately capped at 24. Prior grants and
+failed receipts remain historical evidence and must not be replayed.
+
+Production file analysis and evaluation send the same strict
+`response_format: json_schema` contract. Other chat/edit calls keep their normal
+format. The schema constrains the parent, optional four-field insights, risks,
+suggestions and task-spec shapes. Target identity, aggregate insight length and
+semantic correctness still require local parsing/scoring. No returned JSON is
+repaired and unsupported structured requests do not fall back to ordinary chat.
+The response-format identity binds resumable evaluation runs; older cached file
+analysis is stale. Providers used for selected-file analysis must support the
+schema request. [LM Studio documents this interface](https://lmstudio.ai/docs/developer/openai-compat/structured-output).
+
+Offline verification used the installed Qwen tokenizer and the actual MLX VLM
+schema compiler (`llguidance` 1.7.6 / `mlx-vlm` 0.6.5), with no weights loaded,
+network access or generation. The final schema SHA-256 was
+`579712bc61574034acd3fbbfe3bacc0bb5421bcd16d693abedc04ee158c1fa88`.
+All ten synthetic checks passed without compiler warnings: valid omission,
+null/full insights and escaped action strings were accepted; scalar, partial,
+empty and extra-field insights, extra parent fields and invalid action escapes
+were rejected. This verifies local grammar behavior, not live reasoning or
+content quality. The frozen manifest binds the compiler/runtime files as well
+as model artifacts, configuration, prompt/schema and corpus.
+
+The pilot uses `qual05-qwen38-v12-dev1` and `qual05-qwen38-v12-dev2` at one clean
+base, the same three development cases twice. Preserve low thinking, temperature
+1, top-p 0.95, top-k 20, min-p 0, presence penalty 0, repeat penalty 1, application
+input budget 16,384, actual runtime context 119,552, parallelism 1, no speculative
+draft, 4,096 completion tokens including reasoning, and 300 seconds per attempt.
+Verify runtime/manifest before each batch. Collect both before scoring, with no
+probes, retries or tuning; stop on incompatible runtime, drift or uncertainty.
+Require 6/6 usable and complete, 4/4 substantive >=6/8, both intentional control
+omissions and zero critical false claims. Only a passing reviewed pilot can
+promote a qualification candidate and resume the paused scheduler for QUAL-06.
+
+Code `45cc31c6fae87f41370c2f0c3f0180d6e67fc294` passed fresh independent review
+and the full coordinator headless `make check`: Go tests, race, vet, formatting,
+dispatcher checks and all 327 Desktop tests (zero failures/errors/skips). Focused
+Go tests and Go quality also passed. The first review required a durable stop on
+permanent structured-request rejection; one Terra repair added that stop,
+counted/exportable failure evidence and zero-call resume behavior. Both
+production and evaluation preserve ordinary malformed-content accounting.
+
+The first full gate had one assertion failure in the unchanged Desktop test
+`explicitSendMakesOneChatRequestAndPreservesFunctionRemoteConsent`; it passed a
+focused rerun without source changes, then the entire final suite passed. The
+original failed gate remains in private diagnostics. Headless/offscreen tests
+are not native-window acceptance. No Desktop source or production parser was
+changed by this recovery.
+
+The six-request grant has been applied once under the reviewed identifier
+`authqual05-qwen38-structured-1`; campaign usage remains 24 development /
+0 qualification before collection. A coordinator draft initially omitted the
+`auth` prefix; that CLI invocation was rejected before any ledger change or
+request consumption. The final candidate manifest SHA-256 is
+`9d4261b8ec84a1296ee2247269385127bad5e09d8f3dd7ae77e5cffda3f77f64`.
+The scheduler remains Paused until this pilot's reviewed verdict. Exact commands
+and progress are retained in
+`.mini-orca/autopilot/coordinator/QUAL-05-structured-recovery.json`.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
