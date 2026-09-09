@@ -104,6 +104,14 @@ and the scheduler is Paused. The v11 manifest is historical evidence, not a
 promoted qualification candidate. See the
 [verified verdict](../RELEASE_ACCEPTANCE.md#v11-verification-result--2026-09-09).
 
+The user subsequently authorized a structured-output recovery and one fresh
+six-request pilot. After code acceptance, `authqual05-qwen38-structured-1` can append
+six slots at 24 consumed, bound to `qwen38-v12-structured-1`,
+`qwen/qwen3.8-27b`, `file-analysis-v12`, and loopback structured dispatch. The new
+ceiling is 30 development requests; qualification remains separately capped at
+24. Prior grant forms and receipts remain valid historical evidence. No grant
+resets accounting or authorizes replay of an existing run.
+
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
 bound to that digest. An independent reviewer compares private prose with the case
@@ -112,8 +120,13 @@ from 0–2, including every emitted malformed or failed response. A retained exa
 no critical false claim and at least 6/8. Collection receipts may be unscored; a
 qualification receipt with emitted but unscored prose is invalid.
 
-The current file-analysis prompt is `file-analysis-v11`. It explicitly requires
-the same four-field insight object at file, risk and suggestion locations. Earlier
+The structured-output recovery uses `file-analysis-v12`. Selected-file analysis
+and its evaluation runner send the same strict `response_format: json_schema`
+contract; unrelated chat and edit requests keep their existing format. The
+provider must support this request format. An explicit request rejection fails
+without unconstrained fallback or repeated rejected requests. Schema constraints
+do not replace local parsing, target checks, or content scoring. The response
+format identity participates in the evaluation fingerprint, and earlier
 cached analysis becomes stale. Historical receipts keep the prompt version and
 base used for their actual run; updating these examples does not requalify a
 candidate or authorize new model requests.

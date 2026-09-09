@@ -260,7 +260,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Blocked |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Running |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1203,6 +1203,10 @@ subsequent 2026-09-09 user-approved v11 verification adds exactly six more
 local development requests through `qual05-qwen38-schema-1`: **24 development
 requests total and the same conditional 24 qualification requests**. Its detailed
 candidate and protocol are recorded in QUAL-05; all earlier outcomes remain intact.
+The subsequent user-approved structured-output recovery on 2026-09-09 authorizes
+one further six-request development pilot, reaching **30 development requests
+total**, with the same conditional 24 qualification requests. Its exact identity,
+prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 - Proposed application-provider budget: **30 requests total**, split into at most
   **6 development requests + 24 qualification requests**. Each attempt allows
@@ -1780,12 +1784,64 @@ candidate and protocol are recorded in QUAL-05; all earlier outcomes remain inta
   recovery must address reliable JSON delivery, preserve these failed results,
   and receive separate bounded evaluation authorization.
 
+- **Structured-output recovery authorized — 2026-09-09:** the user approved the
+  recommended implementation, offline validation, and a fresh six-request local
+  pilot. This supersedes the preceding failure stop only for this recovery. Use
+  schema-constrained file analysis in production and evaluation, preserving
+  strict parsing, preview/target authority and all quality thresholds. Unrelated
+  chat/edit operations keep their existing response format. Do not silently fall
+  back to unconstrained output or repair returned JSON.
+- One Terra writer implements the smallest complete change, a fresh reviewer
+  reviews it, and the coordinator runs the full gate. Allow two Terra repairs
+  before escalating to Sol with two repairs. Validate schema/parser agreement,
+  request serialization, escaping, optional omission, unsupported-provider
+  failures and schema identity offline. Check the installed local grammar path
+  without model generation before the pilot. No qualification responses may be
+  used for implementation or tuning.
+- After acceptance, append exactly six development slots at 24 consumed through
+  `authqual05-qwen38-structured-1`, bound to `qwen38-v12-structured-1`,
+  `qwen/qwen3.8-27b`, `file-analysis-v12`, the schema-constrained request path and
+  loopback dispatch. The resulting development ceiling is **30**, qualification
+  remains 24, and all historical grants/receipts stay intact. A new private
+  manifest must bind the accepted code, schema, corpus, model/runtime and
+  configuration. Retain the prior low-thinking and sampling settings; verify
+  runtime compatibility and do not alter settings between batches.
+- Collect `qual05-qwen38-v12-dev1` and `qual05-qwen38-v12-dev2`: the same three
+  development cases twice at one clean frozen base, with no additional probes,
+  retries or tuning. Verify manifest/runtime before each batch. Collect both
+  batches before content scoring; stop on incompatible runtime, drift or an
+  uncertain request. Every dispatched attempt consumes a slot.
+- A fresh independent scorer reviews all emitted responses and final summaries,
+  joins scores to whole-response digests, and applies the unchanged **6/6 usable
+  and complete, 4/4 substantive >=6/8, 2/2 intentional omissions, zero critical
+  false claims** gates. Preserve diagnostic scores without granting useful
+  coverage to unusable or aggregate-rejected responses. Validate scored receipts
+  offline, then discard private response text while retaining source-free audits.
+- On success, integrate reviewed evidence, mark QUAL-05 Complete, freeze the clean
+  qualification HEAD after verifying a documentation-only transition from the
+  pilot base, and resume the existing scheduler for QUAL-06 on a subsequent wake.
+  On failure keep QUAL-05 Blocked and the scheduler Paused; no further grant or
+  live retry is included. Expected final accounting is **30 development /
+  0 qualification**. The scheduler remains Paused throughout this manual recovery.
+- **Implementation accepted:** code `45cc31c6fae87f41370c2f0c3f0180d6e67fc294`
+  passed fresh review after one Terra repair and full coordinator headless
+  `make check`, including all 327 Desktop tests, plus Go quality. A permanent
+  structured-request rejection now persists one counted failed attempt, stops
+  the run and prevents resumed dispatch. One unchanged Desktop assertion failed
+  in the first gate, passed its focused rerun, and passed in the full final gate;
+  both gate results remain recorded. No production parsing/threshold was relaxed.
+- The new grant `authqual05-qwen38-structured-1` is applied once; usage is still
+  24 development / 0 qualification before live collection. The fresh manifest
+  SHA-256 is `9d4261b8ec84a1296ee2247269385127bad5e09d8f3dd7ae77e5cffda3f77f64`.
+  Installed grammar/tokenizer checks passed all ten synthetic cases without
+  inference. Collection will freeze the clean documentation commit as pilot base.
+
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
 - **Shared input:** read the qualification contract above before work; its budgets,
   sample counts, privacy rules and pass criteria apply to this card.
 - **Dependencies:** QUAL-05; QUAL-02/03 validation and accounting remain intact.
-- Use only the candidate promoted by a fresh v11 QUAL-05 pilot, its new verified
+- Use only the candidate promoted by the fresh structured-output QUAL-05 pilot, its new verified
   manifest and recorded documentation-only base transition, in the same canonical
   campaign. The failed `qwen38-v10-recovery-1` candidate is not eligible. Before a
   new qualification run, verify development consumption matches that pilot's
