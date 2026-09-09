@@ -544,6 +544,63 @@ The accepted implementation and full prepilot `make check` remain recorded above
 No code changed during collection or diagnosis. This failed profile is not a
 promoted qualification candidate; QUAL-06 remains Pending and REL-01 Blocked.
 
+
+## Thinking-disabled recovery — 2026-09-09
+
+The user authorized exactly six additional development requests for a fresh
+thinking-disabled candidate. The candidate is `qwen38-v12-thinking-off-1`, using
+`qwen/qwen3.8-27b`, provider `configured-bug`, unchanged `file-analysis-v12` and
+unchanged strict response schema. Grant `qual05-qwen38-thinking-off-1` appends six
+slots only at 30 consumed; the development ceiling becomes 36, qualification
+remains 24. The fifth ledger entry requires reasoning effort `none` and exact
+candidate/model/prompt plus loopback dispatch. All earlier results remain intact.
+
+The coordinator switched the loaded model's **Enable Thinking** off through
+LM Studio's server inference settings. Read-only base configuration confirms
+`ext.virtualModel.customField.qwen.qwen3.827b.enableThinking=false`; this is the
+only base-setting change from the v12 pilot. Load configuration, runtime context
+119552, application input budget 16384, single lane, model/runtime artifacts and
+sampling settings remain unchanged. The private evaluation bug profile changes
+only `reasoning_effort: low` to `none`. This is a server-session override, not an
+edited model artifact or saved default; runtime/base drift blocks dispatch.
+
+**Diagnostic correction:** the prior generic-flag probe used an unqualified
+configuration key and did not establish what the actual request does. The
+correct fully qualified key is `llm.prediction.reasoning.enableThinking`.
+The corrected readback merges the effective server base with the mapped request
+flag, and verifies that both base and request templates close the thinking
+channel before generation. An additional isolated readback removes both thinking
+fields from the base, then changes only the full generic boolean: true opens
+the channel and false closes it. This addresses the independent reviewer's
+concern that the explicit custom field could mask the generic flag's effect. The installed `none` mapping still warns that `off`
+is not a reasoning-level enum, but supplies the separate boolean thinking flag.
+This warning does not establish that the boolean is ineffective. These are
+read-only template checks, not generation or proof of content quality.
+
+Collect the three development cases twice, without tuning, automatic retry or
+additional probes. Recheck the frozen manifest and runtime before each batch;
+use 4096 maximum completion tokens and 300 seconds per request. A fresh independent
+scorer must inspect every emitted response and final answer, join exact digests,
+and require 6/6 usable/complete, 4/4 substantive >=6/8, 2/2 intentional control
+omissions and zero critical false claims. Reasoning-only output cannot be counted
+as final output. Validate receipts offline and discard evaluator response files
+when scored, retaining only eligible examples and source-free evidence.
+
+The scheduler stays Paused during collection. A failed pilot leaves QUAL-05
+Blocked with no further development grant or live retry. Only a passing reviewed
+pilot promotes a frozen candidate and resumes the existing 24-request QUAL-06
+schedule; no release is authorized.
+
+Accepted code: `598f516c019065769e826050a5181fb5555b4f73`. Independent
+code review and focused tests passed; coordinator headless `make check` passed
+all Go, race, vet, formatting, dispatcher and 327 Desktop tests, with zero
+failures/errors/skips. No schema, analysis prompt or production output parser
+changed. The fifth grant has been applied once; usage remains 30 development /
+0 qualification before collection. Candidate manifest SHA-256:
+`2c61bdbfdb6b3edded2f1c685d5900b280642f12fa437bf3c1e8116b9e9a47ed`. Exact commands,
+preflights, validation and progress are retained in
+`.mini-orca/autopilot/coordinator/QUAL-05-thinking-off.json`.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)

@@ -260,7 +260,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Blocked |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Running |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1578,7 +1578,7 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 - **Shared input:** read the qualification contract above before work; its budgets,
   sample counts, privacy rules and pass criteria apply to this card.
-- **Dependencies:** QUAL-04, REC-03; selected provider/model and the shared 30-request
+- **Dependencies:** QUAL-04, REC-03; selected provider/model and the shared 36-request
   authorization resolved before any call. Mark Blocked with the missing decision
   only if existing session authorization does not cover the new run.
 - **Target files:** `docs/RELEASE_ACCEPTANCE.md` (sanitized evidence);
@@ -1868,6 +1868,50 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
   QUAL-05 remains Blocked, QUAL-06 Pending, REL-01 Blocked, scheduler Paused.
   No further grant or live retry is included. Full code validation passed before
   the pilot; that does not establish compatibility of this model/runtime profile.
+
+
+- **Thinking-off recovery authorized — 2026-09-09:** the user approved six
+  additional development requests and the proposed thinking-disabled candidate.
+  This supersedes the preceding stop only for this bounded recovery. Preserve
+  `file-analysis-v12`, its schema and all scoring criteria; the change under test
+  is effective thinking configuration, not another insight prompt adjustment.
+- Append exactly one fifth grant `qual05-qwen38-thinking-off-1` at 30 consumed,
+  bound to candidate `qwen38-v12-thinking-off-1`, `qwen/qwen3.8-27b`, literal
+  `file-analysis-v12`, loopback structured dispatch and API reasoning effort
+  `none`. Ceiling becomes **36 development / 24 qualification**; historical
+  grants, counters and receipts cannot be reset or replayed. No sixth grant or
+  37th development request is authorized. A code-only result does not pass QUAL-05.
+- Follow the established isolated Terra writer, two repairs then Sol policy,
+  fresh independent review and coordinator full validation. The coordinator
+  configures explicit model thinking off and verifies the actual effective
+  template before dispatch, using no generation probes. Preserve model/runtime,
+  samplers, schema/corpus, runtime context 119552, application input budget 16384,
+  parallelism 1, maximum 4096 completion tokens and 300 seconds per request.
+- Freeze a new manifest and clean pilot base; collect the same three development
+  cases twice as `qual05-qwen38-thinking-off-dev1` and
+  `qual05-qwen38-thinking-off-dev2`. Recheck runtime/manifest before each batch.
+  Collect both before scoring, with no tuning/retries/additional requests; stop
+  on incompatible runtime, drift, uncertain dispatch or permanent rejection.
+  Every dispatch consumes a slot. Never salvage reasoning as a final answer.
+- A fresh independent scorer joins all six whole-response digests, inspects every
+  emitted response and final summary, and requires **6/6 usable and complete,
+  4/4 substantive >=6/8, 2/2 intentional control omissions, zero critical false
+  claims**. Validate scored receipts offline, then discard evaluator response
+  files and retain only eligible sanitized examples and source-free evidence.
+- Keep the scheduler Paused during the pilot. On failure preserve Blocked QUAL-05,
+  Pending QUAL-06 and Blocked REL-01, with no further grant or live retry. On
+  success integrate reviewed evidence, mark QUAL-05 Complete, freeze a verified
+  documentation-only qualification HEAD and resume the existing scheduler for
+  the conditionally authorized24-request QUAL-06 on a subsequent wake. Stop that
+  schedule after the qualification verdict; no release is authorized.
+
+- Code `598f516c019065769e826050a5181fb5555b4f73` passed independent
+  review and full coordinator headless `make check`, including all 327 Desktop
+  tests with zero failures/errors/skips. The corrected isolated readback proves
+  the full generic thinking flag independently; both effective base and merged
+  request also close reasoning. No generation was used for preparation. The
+  fifth grant is applied once; consumption is still 30 development / 0 qualification.
+  Frozen manifest SHA-256: `2c61bdbfdb6b3edded2f1c685d5900b280642f12fa437bf3c1e8116b9e9a47ed`.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
