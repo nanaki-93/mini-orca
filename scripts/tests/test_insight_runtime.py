@@ -16,6 +16,31 @@ import insight_runtime as runtime  # noqa: E402
 
 
 class InsightRuntimeTest(unittest.TestCase):
+    def test_runtime_conformance_is_explicitly_opt_in(self) -> None:
+        candidate = os.environ.get("MINI_ORCA_INSIGHT_RUNTIME_CANDIDATE")
+        if not candidate:
+            self.skipTest("set MINI_ORCA_INSIGHT_RUNTIME_CANDIDATE to run pinned-runtime conformance")
+        candidate_dir = Path(candidate).resolve()
+        python = candidate_dir / "venv/bin/python"
+        if not python.is_file():
+            self.fail(f"pinned runtime Python is unavailable: {python}")
+        helper = SCRIPTS / "tests/insight_runtime_conformance.py"
+        environment = {"PATH": os.environ.get("PATH", ""), "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "PYTHONDONTWRITEBYTECODE": "1"}
+        try:
+            completed = runtime.subprocess.run(
+                [str(python), str(helper), "--candidate-dir", str(candidate_dir), "--source-root", str(SCRIPTS.parent)],
+                capture_output=True,
+                check=False,
+                text=True,
+                env=environment,
+                timeout=30,
+            )
+        except runtime.subprocess.TimeoutExpired:
+            self.fail("pinned runtime conformance timed out after 30 seconds")
+        if completed.returncode:
+            self.fail(f"pinned runtime conformance failed: {completed.stderr[-1000:]}")
+        self.assertIn('"status": "passed"', completed.stdout)
+
     def config(self, directory: Path) -> runtime.RuntimeConfig:
         return runtime.RuntimeConfig(
             candidate_dir=directory,
