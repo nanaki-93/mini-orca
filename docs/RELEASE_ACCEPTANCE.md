@@ -662,6 +662,41 @@ session. It is not a saved model-default change; a restart or effective-config
 change must be detected by manifest verification before any future dispatch.
 No qualification candidate was promoted and the scheduler must remain Paused.
 
+## Thinking with final-schema recovery preparation — 2026-09-09
+
+The user's “go for it” authorizes the four-stage specification in
+[docs/tasks.md](tasks.md), registered as REC-04–07 and continuations of QUAL-05,
+QUAL-06 and REL-01. Exactly six additional development requests are authorized;
+the new grant is unapplied. Campaign consumption remains **36 development / 0
+qualification** and the scheduler remains **Paused**. No deployment or publication
+is authorized.
+
+The read-only audit rejected bundled MLX-VLM 0.6.5 as the standalone candidate:
+its active sampler ignores requested `top_k=20`, it lacks a hard active-sequence
+limit, and its server import fails on missing `mlx_audio`. Its route also accepts
+but does not use `reasoning_effort` and `repeat_penalty`. These are runtime
+compatibility findings, not model-quality evidence.
+
+The coordinator explicitly selected published MLX-VLM **0.7.0** for independent
+compatibility review. Its wheel SHA-256 is
+`5ea0c2b8182c055068cb0da59cb2503c238c428a07daaa0bebc246e8c666f4d3`.
+The published package includes top-k sampling, a maximum-active-sequence setting
+and template forwarding for reasoning effort. It requires MLX/MLX-Metal 0.32.2;
+a dry-run resolver produced a 54-package dependency inventory without installation.
+Use an isolated environment, preserving the existing LM Studio installation and
+model artifacts. This selection does not establish runtime readiness or a
+passing development pilot.
+
+Private source-free evidence is under
+`.mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-thinking-schema-1/`;
+`runtime-compatibility.json` records the selected route and
+`dependency-resolution.json` records exact distribution hashes. A fresh reviewer
+accepted REC-04 audit SHA-256
+`2b4bef8b6d05aab0d2acce2e852ccdc5a93bc1ec8994f131cb9160da058751c9`.
+Coordinator source/hash checks, diff formatting and the ledger parser passed.
+REC-05/06 own installation, lifecycle and offline conformance gates before any
+provider request; runtime readiness remains unverified.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
