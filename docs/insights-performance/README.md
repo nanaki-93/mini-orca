@@ -3,6 +3,111 @@
 These capabilities already exist. The next work is in
 [PLAN.md](../../PLAN.md#engineering-learning-and-evidence), not another implementation plan.
 
+## Audited standalone thinking runtime
+
+REC-05 uses a private, candidate-local MLX-VLM 0.7.0 environment for the
+`qwen38-v12-thinking-schema-1` recovery candidate. It reuses the existing local
+Qwen weights through `models/qwen38-v12-thinking-schema-1`; the link must resolve
+to the audited LM Studio artifact. It never changes LM Studio's vendor runtime.
+
+The private candidate directory is ignored by Git. Its `runtime.json` is the
+launcher contract and must be mode 0600. The coordinator prepares it only after
+the accepted REC-04 audit and the separately pinned Python 3.11 environment are
+available. It contains no provider credentials and does not replace the private
+application `config.yaml`.
+
+```json
+{
+  "schema_version": 1,
+  "host": "127.0.0.1",
+  "port": 1235,
+  "python": "venv/bin/python",
+  "python_version": "3.11.16",
+  "wire_model": "./models/qwen38-v12-thinking-schema-1",
+  "artifact_realpath": "/Users/.../.lmstudio/models/lmstudio-community/Qwen3.8-27B-MLX-4bit",
+  "artifact_realpath_sha256": "<accepted realpath digest>",
+  "artifact_identity_file": "artifact-identity.json",
+  "artifact_identity_sha256": "<sha256 of that private identity record>",
+  "audit_file": "runtime-compatibility.json",
+  "audit_sha256": "2b4bef8b6d05aab0d2acce2e852ccdc5a93bc1ec8994f131cb9160da058751c9",
+  "requirements_file": "resolved-requirements.txt",
+  "requirements_sha256": "560d232b947d900ac3308c249f2b3bdef4c5136c20fdf680e06b0e528ef4debe",
+  "state_dir": "runtime",
+  "distributions": { "...all pins from resolved-requirements.txt...": "..." },
+  "server_source_sha256": { "...all seven audited server files...": "..." },
+  "environment": {
+    "MAX_KV_SIZE": "119552",
+    "MLX_VLM_MAX_NUM_SEQS": "1",
+    "MLX_VLM_ENABLE_THINKING": "1",
+    "MLX_VLM_MAX_TOKENS": "4096",
+    "MLX_VLM_MODEL_DISCOVERY": "served",
+    "MLX_TRUST_REMOTE_CODE": "false",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "request": {
+    "model": "./models/qwen38-v12-thinking-schema-1",
+    "temperature": 1,
+    "max_tokens": 4096,
+    "reasoning_effort": "low",
+    "top_p": 0.95,
+    "top_k": 20
+  },
+  "max_num_seqs": 1,
+  "thinking": true,
+  "speculative_decoding": false,
+  "apc": false,
+  "readiness_timeout_seconds": 300
+}
+```
+
+`distributions` is the complete 54-package name/version map from the reviewed
+lock, and `server_source_sha256` is copied exactly from the accepted audit.
+`min_p`, `presence_penalty`, and `repeat_penalty` must be absent. The launcher
+rejects any other value for the fixed request and runtime settings. The 300-second
+readiness limit applies only to model loading; the application keeps its distinct
+300-second request deadline and 4,096 total completion-token ceiling.
+
+Before starting, unload the model in LM Studio and verify that `lms ps --json`
+reports an unambiguously empty model list. The launcher does not unload LM Studio
+for you. From the repository root, the bounded lifecycle is:
+
+```sh
+python3 scripts/insight_runtime.py check --candidate-dir .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-thinking-schema-1
+python3 scripts/insight_runtime.py start --candidate-dir .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-thinking-schema-1
+python3 scripts/insight_runtime.py stop --candidate-dir .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-thinking-schema-1
+```
+
+`check` is read-only: it validates the lock, all installed distribution metadata,
+the audited server source hashes, the linked artifact's current file hashes, the
+private artifact record, and port 1235. It does not import MLX-VLM, load a model,
+start a service, install packages, issue HTTP requests, or generate text. `start`
+then launches exactly one process at `127.0.0.1:1235`, with a fresh allowlisted
+environment, fixed working directory, and no draft/KV/APC/preload inheritance.
+It uses a direct no-proxy, no-redirect loopback request only for `/health`.
+Before accepting that response, macOS `lsof` must show the recorded child as the
+only listener on `127.0.0.1:1235`; unknown ownership or a listener mismatch stops
+startup. Readiness requires the one expected loaded model lane, context 119552,
+continuous batching, and APC disabled. It sends no inference request. Every
+startup failure, including an interrupt, terminates and reaps the original child
+and removes state only after that cleanup succeeds.
+
+State, logs, and the lifecycle lock are private mode 0600 under the candidate's
+mode-0700 `runtime/` directory. `start` and `stop` take that nonblocking lock, so
+two launch attempts cannot pass preflight together. `stop` compares both PID and
+`ps` start/command identity before signalling; an inspection failure, stale PID,
+or reused PID is never killed. It removes only confirmed stale coordinator state.
+`state_dir` is always the literal `runtime` value: the launcher rejects a runtime
+directory symlink and symlinks for its lock, log, state, or state temporary file
+before changing modes or writing. The model and venv symlinks remain read-only
+runtime inputs and are not affected by this boundary.
+To roll back, run `stop`, retain the candidate artifacts for audit, and reload the
+previous LM Studio lane through its normal UI. REC-06 must still join the private
+application configuration to this candidate and prove the actual request path;
+this lifecycle check does not claim that the client has sent the configured wire
+request.
+
 Engineering insights are optional, bounded AI interpretation attached to a project,
 file, finding or draft. The four fields explain the mechanism, why it matters here,
 a trade-off/failure mode and a transferable lesson. The file-analysis prompt asks for
