@@ -30,6 +30,7 @@ const (
 	structuredDevelopmentRequestCap          = 30
 	thinkingOffDevelopmentRequestCap         = 36
 	thinkingSchemaDevelopmentRequestCap      = 42
+	mediumDevelopmentRequestCap              = 48
 	developmentGrantRequestCount             = 6
 	recoveryDevelopmentAuthorizationID       = "qual05-qwen38-recovery-1"
 	recoveryDevelopmentCandidateID           = "qwen38-v10-recovery-1"
@@ -52,6 +53,11 @@ const (
 	thinkingSchemaDevelopmentModel           = "./models/qwen38-v12-thinking-schema-1"
 	thinkingSchemaDevelopmentPromptVersion   = "file-analysis-v12"
 	thinkingSchemaDevelopmentReasoningEffort = "low"
+	mediumDevelopmentAuthorizationID         = "qual05-qwen38-medium-1"
+	mediumDevelopmentCandidateID             = "qwen38-v12-medium-1"
+	mediumDevelopmentModel                   = "./models/qwen38-v12-medium-1"
+	mediumDevelopmentPromptVersion           = "file-analysis-v12"
+	mediumDevelopmentReasoningEffort         = "medium"
 )
 
 var (
@@ -150,6 +156,11 @@ type engineeringInsightDevelopmentGrantWindow struct {
 	errorText  string
 }
 
+type engineeringInsightDevelopmentGrantRule struct {
+	valid     func(string, engineeringInsightDevelopmentGrantIdentity) bool
+	errorText string
+}
+
 // GrantEngineeringInsightDevelopmentBudget records the original append-only
 // recovery authorization. It remains unbound because it predates dispatch
 // identity binding.
@@ -187,6 +198,12 @@ func GrantEngineeringInsightThinkingOffDevelopmentBudget(root, authorizationID s
 // identity is checked again before every request from the grant is reserved.
 func GrantEngineeringInsightThinkingSchemaDevelopmentBudget(root, authorizationID string, requests int, candidateID, model, promptVersion string) error {
 	return grantEngineeringInsightDevelopmentBudget(root, authorizationID, requests, engineeringInsightDevelopmentGrantIdentity{CandidateID: candidateID, Model: model, PromptVersion: promptVersion, ReasoningEffort: thinkingSchemaDevelopmentReasoningEffort})
+}
+
+// GrantEngineeringInsightMediumDevelopmentBudget records the one approved
+// medium-reasoning recovery extension with its fixed structured dispatch identity.
+func GrantEngineeringInsightMediumDevelopmentBudget(root, authorizationID string, requests int, candidateID, model, promptVersion string) error {
+	return grantEngineeringInsightDevelopmentBudget(root, authorizationID, requests, engineeringInsightDevelopmentGrantIdentity{CandidateID: candidateID, Model: model, PromptVersion: promptVersion, ReasoningEffort: mediumDevelopmentReasoningEffort})
 }
 
 func grantEngineeringInsightDevelopmentBudget(root, authorizationID string, requests int, dispatchIdentity engineeringInsightDevelopmentGrantIdentity) error {
@@ -240,40 +257,24 @@ func nextDevelopmentGrant(ledger engineeringInsightDevelopmentGrantLedger, autho
 	if hasDevelopmentGrantAuthorization(ledger, authorizationID) {
 		return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development budget grant already exists")
 	}
-	switch len(ledger.Grants) {
-	case 0:
-		if !validOriginalDevelopmentGrant(authorizationID, dispatchIdentity) {
-			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development budget grant identity is invalid")
-		}
-		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests}, nil
-	case 1:
-		if !validRecoveryDevelopmentGrant(authorizationID, dispatchIdentity) {
-			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development recovery grant is invalid")
-		}
-		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests, CandidateID: dispatchIdentity.CandidateID, Model: dispatchIdentity.Model}, nil
-	case 2:
-		if !validV11DevelopmentGrant(authorizationID, dispatchIdentity) {
-			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development v11 grant is invalid")
-		}
-		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests, CandidateID: dispatchIdentity.CandidateID, Model: dispatchIdentity.Model, PromptVersion: dispatchIdentity.PromptVersion}, nil
-	case 3:
-		if !validV12DevelopmentGrant(authorizationID, dispatchIdentity) {
-			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development structured-output grant is invalid")
-		}
-		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests, CandidateID: dispatchIdentity.CandidateID, Model: dispatchIdentity.Model, PromptVersion: dispatchIdentity.PromptVersion}, nil
-	case 4:
-		if !validThinkingOffDevelopmentGrant(authorizationID, dispatchIdentity) {
-			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development thinking-off grant is invalid")
-		}
-		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests, CandidateID: dispatchIdentity.CandidateID, Model: dispatchIdentity.Model, PromptVersion: dispatchIdentity.PromptVersion, ReasoningEffort: dispatchIdentity.ReasoningEffort}, nil
-	case 5:
-		if !validThinkingSchemaDevelopmentGrant(authorizationID, dispatchIdentity) {
-			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development thinking-schema grant is invalid")
-		}
-		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests, CandidateID: dispatchIdentity.CandidateID, Model: dispatchIdentity.Model, PromptVersion: dispatchIdentity.PromptVersion, ReasoningEffort: dispatchIdentity.ReasoningEffort}, nil
-	default:
+	if len(ledger.Grants) >= len(engineeringInsightDevelopmentGrantRules) {
 		return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development request budget extension is exhausted")
 	}
+	rule := engineeringInsightDevelopmentGrantRules[len(ledger.Grants)]
+	if !rule.valid(authorizationID, dispatchIdentity) {
+		return engineeringInsightDevelopmentGrant{}, fmt.Errorf("%s", rule.errorText)
+	}
+	return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests, CandidateID: dispatchIdentity.CandidateID, Model: dispatchIdentity.Model, PromptVersion: dispatchIdentity.PromptVersion, ReasoningEffort: dispatchIdentity.ReasoningEffort}, nil
+}
+
+var engineeringInsightDevelopmentGrantRules = []engineeringInsightDevelopmentGrantRule{
+	{valid: validOriginalDevelopmentGrant, errorText: "development budget grant identity is invalid"},
+	{valid: validRecoveryDevelopmentGrant, errorText: "development recovery grant is invalid"},
+	{valid: validV11DevelopmentGrant, errorText: "development v11 grant is invalid"},
+	{valid: validV12DevelopmentGrant, errorText: "development structured-output grant is invalid"},
+	{valid: validThinkingOffDevelopmentGrant, errorText: "development thinking-off grant is invalid"},
+	{valid: validThinkingSchemaDevelopmentGrant, errorText: "development thinking-schema grant is invalid"},
+	{valid: validMediumDevelopmentGrant, errorText: "development medium-reasoning grant is invalid"},
 }
 
 func hasDevelopmentGrantAuthorization(ledger engineeringInsightDevelopmentGrantLedger, authorizationID string) bool {
@@ -286,7 +287,7 @@ func hasDevelopmentGrantAuthorization(ledger engineeringInsightDevelopmentGrantL
 }
 
 func validOriginalDevelopmentGrant(authorizationID string, dispatchIdentity engineeringInsightDevelopmentGrantIdentity) bool {
-	return authorizationID != recoveryDevelopmentAuthorizationID && authorizationID != v11DevelopmentAuthorizationID && authorizationID != v12DevelopmentAuthorizationID && authorizationID != thinkingOffDevelopmentAuthorizationID && authorizationID != thinkingSchemaDevelopmentAuthorizationID && dispatchIdentity == (engineeringInsightDevelopmentGrantIdentity{})
+	return authorizationID != recoveryDevelopmentAuthorizationID && authorizationID != v11DevelopmentAuthorizationID && authorizationID != v12DevelopmentAuthorizationID && authorizationID != thinkingOffDevelopmentAuthorizationID && authorizationID != thinkingSchemaDevelopmentAuthorizationID && authorizationID != mediumDevelopmentAuthorizationID && dispatchIdentity == (engineeringInsightDevelopmentGrantIdentity{})
 }
 
 func validRecoveryDevelopmentGrant(authorizationID string, dispatchIdentity engineeringInsightDevelopmentGrantIdentity) bool {
@@ -327,6 +328,14 @@ func validThinkingSchemaDevelopmentGrant(authorizationID string, dispatchIdentit
 		dispatchIdentity.Model == thinkingSchemaDevelopmentModel &&
 		dispatchIdentity.PromptVersion == thinkingSchemaDevelopmentPromptVersion &&
 		dispatchIdentity.ReasoningEffort == thinkingSchemaDevelopmentReasoningEffort
+}
+
+func validMediumDevelopmentGrant(authorizationID string, dispatchIdentity engineeringInsightDevelopmentGrantIdentity) bool {
+	return authorizationID == mediumDevelopmentAuthorizationID &&
+		dispatchIdentity.CandidateID == mediumDevelopmentCandidateID &&
+		dispatchIdentity.Model == mediumDevelopmentModel &&
+		dispatchIdentity.PromptVersion == mediumDevelopmentPromptVersion &&
+		dispatchIdentity.ReasoningEffort == mediumDevelopmentReasoningEffort
 }
 
 func developmentGrantCap(ledger engineeringInsightDevelopmentGrantLedger) int {
@@ -760,7 +769,7 @@ func loadEvaluationCampaign(path string) (engineeringInsightCampaign, error) {
 	var campaign engineeringInsightCampaign
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&campaign) != nil || campaign.DevelopmentRequests < 0 || campaign.DevelopmentRequests > thinkingSchemaDevelopmentRequestCap || campaign.QualificationRequests < 0 || campaign.QualificationRequests > qualificationRequestCap {
+	if decoder.Decode(&campaign) != nil || campaign.DevelopmentRequests < 0 || campaign.DevelopmentRequests > mediumDevelopmentRequestCap || campaign.QualificationRequests < 0 || campaign.QualificationRequests > qualificationRequestCap {
 		return engineeringInsightCampaign{}, fmt.Errorf("invalid campaign")
 	}
 	return campaign, nil
@@ -772,7 +781,7 @@ func developmentRequestCap(directory string, consumed int, cfg EngineeringInsigh
 		return 0, err
 	}
 	cap := developmentGrantCap(ledger)
-	if cap > thinkingSchemaDevelopmentRequestCap {
+	if cap > mediumDevelopmentRequestCap {
 		return 0, fmt.Errorf("invalid development grant ledger")
 	}
 	if err := validateDevelopmentGrantDispatch(ledger.Grants, consumed, cfg); err != nil {
@@ -787,7 +796,8 @@ func validateDevelopmentGrantDispatch(grants []engineeringInsightDevelopmentGran
 		{grantIndex: 2, minimum: recoveryDevelopmentRequestCap, maximum: finalDevelopmentRequestCap, errorText: "development v11 grant does not match dispatch identity"},
 		{grantIndex: 3, minimum: finalDevelopmentRequestCap, maximum: structuredDevelopmentRequestCap, errorText: "development structured-output grant does not match dispatch identity"},
 		{grantIndex: 4, minimum: structuredDevelopmentRequestCap, maximum: thinkingOffDevelopmentRequestCap, errorText: "development thinking-off grant does not match dispatch identity"},
-		{grantIndex: 5, minimum: thinkingOffDevelopmentRequestCap, errorText: "development thinking-schema grant does not match dispatch identity"},
+		{grantIndex: 5, minimum: thinkingOffDevelopmentRequestCap, maximum: thinkingSchemaDevelopmentRequestCap, errorText: "development thinking-schema grant does not match dispatch identity"},
+		{grantIndex: 6, minimum: thinkingSchemaDevelopmentRequestCap, errorText: "development medium-reasoning grant does not match dispatch identity"},
 	} {
 		if len(grants) > window.grantIndex && consumed >= window.minimum && (window.maximum == 0 || consumed < window.maximum) && !matchesDevelopmentGrantDispatch(cfg, grants[window.grantIndex]) {
 			return fmt.Errorf("%s", window.errorText)
@@ -832,7 +842,7 @@ func loadDevelopmentGrantLedger(directory string) (engineeringInsightDevelopment
 }
 
 func validDevelopmentGrantLedger(ledger engineeringInsightDevelopmentGrantLedger) bool {
-	if len(ledger.Grants) < 1 || len(ledger.Grants) > 6 {
+	if len(ledger.Grants) < 1 || len(ledger.Grants) > 7 {
 		return false
 	}
 	seen := make(map[string]bool, len(ledger.Grants))
@@ -863,6 +873,8 @@ func validDevelopmentGrantAt(index int, grant engineeringInsightDevelopmentGrant
 		return validThinkingOffDevelopmentGrant(grant.AuthorizationID, identity)
 	case 5:
 		return validThinkingSchemaDevelopmentGrant(grant.AuthorizationID, identity)
+	case 6:
+		return validMediumDevelopmentGrant(grant.AuthorizationID, identity)
 	default:
 		return false
 	}

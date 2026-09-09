@@ -81,6 +81,8 @@ func runEvaluationMode(args []string) error {
 	}
 	if *mode == "grant-development" {
 		switch {
+		case *authorizationID == "qual05-qwen38-medium-1":
+			return app.GrantEngineeringInsightMediumDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
 		case *authorizationID == "qual05-qwen38-thinking-schema-1":
 			return app.GrantEngineeringInsightThinkingSchemaDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
 		case *authorizationID == "qual05-qwen38-thinking-off-1":

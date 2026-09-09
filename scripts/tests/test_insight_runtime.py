@@ -91,6 +91,33 @@ class InsightRuntimeTest(unittest.TestCase):
             with self.assertRaisesRegex(runtime.RuntimeError, "request must exactly"):
                 runtime.read_config(directory)
 
+    def test_read_config_accepts_only_the_fixed_medium_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            required = directory / "resolved-requirements.txt"
+            required.write_text("mlx-vlm==0.7.0 --hash=sha256:abc\n", encoding="utf-8")
+            request = runtime.FIXED_REQUESTS["./models/qwen38-v12-medium-1"]
+            config = {
+                "schema_version": 1, "host": "127.0.0.1", "port": 1235,
+                "python": "venv/bin/python", "python_version": "3.11.16",
+                "wire_model": request["model"], "artifact_realpath": "/tmp/model",
+                "artifact_realpath_sha256": "x", "artifact_identity_file": "artifact-identity.json",
+                "artifact_identity_sha256": "x", "audit_file": "runtime-compatibility.json", "audit_sha256": "x",
+                "requirements_file": "resolved-requirements.txt", "requirements_sha256": "x",
+                "state_dir": "runtime", "distributions": {"mlx-vlm": "0.7.0"},
+                "server_source_sha256": {"app.py": "x"}, "environment": runtime.FIXED_ENVIRONMENT,
+                "max_num_seqs": 1, "thinking": True, "speculative_decoding": False, "apc": False,
+                "request": request,
+            }
+            config_path = directory / "runtime.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            config_path.chmod(0o600)
+            self.assertEqual(request["model"], runtime.read_config(directory).model)
+            config["request"] = {**request, "reasoning_effort": "xhigh"}
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(runtime.RuntimeError, "request must exactly"):
+                runtime.read_config(directory)
+
     def test_read_config_rejects_environment_drift(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

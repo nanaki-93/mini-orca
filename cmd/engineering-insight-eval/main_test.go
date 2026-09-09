@@ -260,12 +260,30 @@ func TestGrantDevelopmentModeRequiresOneUniqueAuthorization(t *testing.T) {
 	if err := runEvaluationMode(thinkingSchema); err == nil {
 		t.Fatal("thinking-schema grant replay was accepted")
 	}
+	if err := os.WriteFile(filepath.Join(state, "campaign.json"), []byte(`{"development_requests":42,"qualification_requests":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	medium := []string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-medium-1", "-requests", "6", "-candidate-id", "qwen38-v12-medium-1", "-model", "./models/qwen38-v12-medium-1", "-prompt-version", "file-analysis-v12"}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-medium-1", "-requests", "6"}); err == nil {
+		t.Fatal("unbound medium CLI grant was accepted")
+	}
+	wrongMediumPrompt := append([]string(nil), medium...)
+	wrongMediumPrompt[len(wrongMediumPrompt)-1] = "wrong-prompt"
+	if err := runEvaluationMode(wrongMediumPrompt); err == nil {
+		t.Fatal("wrong medium prompt was accepted")
+	}
+	if err := runEvaluationMode(medium); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode(medium); err == nil {
+		t.Fatal("medium grant replay was accepted")
+	}
 	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "seventh-grant", "-requests", "6", "-candidate-id", "qwen38-v12-thinking-schema-1", "-model", "./models/qwen38-v12-thinking-schema-1", "-prompt-version", "file-analysis-v12"}); err == nil {
-		t.Fatal("seventh grant fallback was accepted")
+		t.Fatal("eighth grant fallback was accepted")
 	}
 }
 
-func TestRunEvaluationModeUsesThinkingSchemaGrantForExactlySixRequestsAfterValidHistory(t *testing.T) {
+func TestRunEvaluationModeUsesThinkingSchemaAndMediumGrantsForExactlySixRequestsEachAfterValidHistory(t *testing.T) {
 	root := t.TempDir()
 	git(t, root, "init")
 	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".mini-orca/\n"), 0600); err != nil {
@@ -274,7 +292,7 @@ func TestRunEvaluationModeUsesThinkingSchemaGrantForExactlySixRequestsAfterValid
 	git(t, root, "add", ".gitignore")
 	git(t, root, "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-m", "fixture")
 	base := strings.TrimSpace(git(t, root, "rev-parse", "HEAD"))
-	var calls, lowEffortCalls int
+	var calls, lowEffortCalls, mediumEffortCalls int
 	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		calls++
 		var chat llm.ChatRequest
@@ -282,7 +300,7 @@ func TestRunEvaluationModeUsesThinkingSchemaGrantForExactlySixRequestsAfterValid
 			t.Errorf("decode provider request: %v", err)
 			return
 		}
-		if chat.ResponseFormat == nil || (chat.ReasoningEffort != "none" && chat.ReasoningEffort != "low") {
+		if chat.ResponseFormat == nil || (chat.ReasoningEffort != "none" && chat.ReasoningEffort != "low" && chat.ReasoningEffort != "medium") {
 			t.Errorf("structured request = %+v", chat)
 			return
 		}
@@ -290,8 +308,15 @@ func TestRunEvaluationModeUsesThinkingSchemaGrantForExactlySixRequestsAfterValid
 			t.Errorf("thinking-schema model = %q", chat.Model)
 			return
 		}
+		if chat.ReasoningEffort == "medium" && chat.Model != "./models/qwen38-v12-medium-1" {
+			t.Errorf("medium model = %q", chat.Model)
+			return
+		}
 		if chat.ReasoningEffort == "low" {
 			lowEffortCalls++
+		}
+		if chat.ReasoningEffort == "medium" {
+			mediumEffortCalls++
 		}
 		_ = json.NewEncoder(writer).Encode(map[string]any{"model": "qwen/qwen3.8-27b", "choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": `{"purpose":"summary","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`}, "finish_reason": "stop"}}, "usage": map[string]int{"completion_tokens": 7}})
 	}))
@@ -388,6 +413,30 @@ func TestRunEvaluationModeUsesThinkingSchemaGrantForExactlySixRequestsAfterValid
 	campaign, err := os.ReadFile(filepath.Join(state, "campaign.json"))
 	if err != nil || string(campaign) != `{"development_requests":42,"qualification_requests":0}` {
 		t.Fatalf("final campaign = %s, %v", campaign, err)
+	}
+	mediumConfig := strings.ReplaceAll(configText, "model: qwen/qwen3.8-27b", "model: ./models/qwen38-v12-medium-1")
+	mediumConfig = strings.Replace(mediumConfig, "reasoning_effort: none", "reasoning_effort: medium", 1)
+	if err := os.WriteFile(configPath, []byte(mediumConfig), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-medium-1", "-requests", "6", "-candidate-id", "qwen38-v12-medium-1", "-model", "./models/qwen38-v12-medium-1", "-prompt-version", "file-analysis-v12"}); err != nil {
+		t.Fatal(err)
+	}
+	beforeMediumCalls := calls
+	for _, runID := range []string{"campaign-sixteen", "campaign-seventeen"} {
+		if err := run(app.EngineeringInsightDevelopmentRunMode, runID, "qwen38-v12-medium-1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls-beforeMediumCalls != 6 || mediumEffortCalls != 6 {
+		t.Fatalf("medium provider calls = %d after history medium-effort=%d, want 6 and 6", calls-beforeMediumCalls, mediumEffortCalls)
+	}
+	if err := run(app.EngineeringInsightDevelopmentRunMode, "campaign-eighteen", "qwen38-v12-medium-1"); err == nil || calls != beforeMediumCalls+6 {
+		t.Fatalf("forty-ninth campaign request dispatched: %v, calls=%d", err, calls)
+	}
+	campaign, err = os.ReadFile(filepath.Join(state, "campaign.json"))
+	if err != nil || string(campaign) != `{"development_requests":48,"qualification_requests":0}` {
+		t.Fatalf("medium final campaign = %s, %v", campaign, err)
 	}
 }
 

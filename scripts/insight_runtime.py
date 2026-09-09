@@ -48,14 +48,26 @@ FIXED_ENVIRONMENT = {
     "TRANSFORMERS_OFFLINE": "1",
     "PYTHONDONTWRITEBYTECODE": "1",
 }
-REQUIRED_REQUEST = {
-    "model": "./models/qwen38-v12-thinking-schema-1",
-    "temperature": 1,
-    "max_tokens": 4096,
-    "reasoning_effort": "low",
-    "top_p": 0.95,
-    "top_k": 20,
+FIXED_REQUESTS = {
+    "./models/qwen38-v12-thinking-schema-1": {
+        "model": "./models/qwen38-v12-thinking-schema-1",
+        "temperature": 1,
+        "max_tokens": 4096,
+        "reasoning_effort": "low",
+        "top_p": 0.95,
+        "top_k": 20,
+    },
+    "./models/qwen38-v12-medium-1": {
+        "model": "./models/qwen38-v12-medium-1",
+        "temperature": 1,
+        "max_tokens": 4096,
+        "reasoning_effort": "medium",
+        "top_p": 0.95,
+        "top_k": 20,
+    },
 }
+# Kept for tests and tooling that inspect the historical low-reasoning profile.
+REQUIRED_REQUEST = FIXED_REQUESTS["./models/qwen38-v12-thinking-schema-1"]
 FORBIDDEN_REQUEST_KEYS = ("min_p", "presence_penalty", "repeat_penalty")
 TRACKED_REQUIREMENTS_FILE = Path(__file__).with_name("insight-runtime-requirements.txt")
 
@@ -204,12 +216,13 @@ def read_config(candidate_dir: Path) -> RuntimeConfig:
     if port != 1235:
         raise RuntimeError("runtime.json port must be the dedicated loopback port 1235")
     model = require_string(raw, "wire_model")
-    if model != REQUIRED_REQUEST["model"]:
-        raise RuntimeError(f"wire_model must be {REQUIRED_REQUEST['model']!r}")
+    required_request = FIXED_REQUESTS.get(model)
+    if required_request is None:
+        raise RuntimeError("runtime.json wire_model is not an approved fixed candidate")
     if raw.get("host") != "127.0.0.1":
         raise RuntimeError("runtime.json host must be 127.0.0.1")
     request = raw.get("request")
-    if request != REQUIRED_REQUEST:
+    if request != required_request:
         raise RuntimeError("runtime.json request must exactly match the audited wire settings")
     for name in FORBIDDEN_REQUEST_KEYS:
         if name in request:
