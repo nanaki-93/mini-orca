@@ -393,6 +393,19 @@ The new grant rejects a changed prompt/candidate/model or non-loopback dispatch,
 and no further extension is implemented or authorized. The qualification campaign
 and its conditional 24-request ceiling are unchanged.
 
+### Prepared thinking-schema development bound
+
+The next recovery is prepared as one additional, append-only development grant;
+it is not applied by this code change. After the existing 36 development requests
+are consumed, only authorization `qual05-qwen38-thinking-schema-1` may append six
+slots. It binds candidate `qwen38-v12-thinking-schema-1` to
+`./models/qwen38-v12-thinking-schema-1`, prompt `file-analysis-v12`, structured loopback dispatch, and
+`reasoning_effort: low`, raising the development ceiling to 42. The existing five
+grants, all receipts, and the independent 24-request qualification ceiling remain
+unchanged. The coordinator must verify the frozen runtime/template identity before
+applying this one-time grant; a duplicate, a seventh grant, a changed identity, a
+remote destination, or request 43 is rejected before HTTP dispatch.
+
 Private replies are held in mode-0700 storage for an independent scorer. `-mode handoff`
 lists only attempt IDs, `-mode score -scores scores.json -receipt scored.json` writes a
 source-free digest-bound receipt, `-mode export -receipt receipt.json` exports the current

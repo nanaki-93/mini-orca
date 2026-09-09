@@ -658,21 +658,122 @@ func TestEngineeringInsightRunnerAppliesThinkingOffGrantOnlyAtRequestsThirtyThro
 	}
 }
 
+func TestEngineeringInsightRunnerAppliesThinkingSchemaGrantOnlyAtRequestsThirtySixThroughFortyOne(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := thinkingSchemaRunnerTestConfig(t, "thinking-schema-one", client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{
+		{AuthorizationID: "extension-one", Requests: 6},
+		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
+		{AuthorizationID: v11DevelopmentAuthorizationID, Requests: 6, CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion},
+		{AuthorizationID: v12DevelopmentAuthorizationID, Requests: 6, CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion},
+		{AuthorizationID: thinkingOffDevelopmentAuthorizationID, Requests: 6, CandidateID: thinkingOffDevelopmentCandidateID, Model: thinkingOffDevelopmentModel, PromptVersion: thinkingOffDevelopmentPromptVersion, ReasoningEffort: thinkingOffDevelopmentReasoningEffort},
+	}}
+	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: thinkingOffDevelopmentRequestCap}); err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
+		{CandidateID: "wrong-candidate", Model: thinkingSchemaDevelopmentModel, PromptVersion: thinkingSchemaDevelopmentPromptVersion},
+		{CandidateID: thinkingSchemaDevelopmentCandidateID, Model: "wrong-model", PromptVersion: thinkingSchemaDevelopmentPromptVersion},
+		{CandidateID: thinkingSchemaDevelopmentCandidateID, Model: thinkingSchemaDevelopmentModel, PromptVersion: "wrong-prompt"},
+	} {
+		if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, thinkingSchemaDevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
+			t.Fatal("thinking-schema grant accepted the wrong identity")
+		}
+	}
+	if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, thinkingSchemaDevelopmentAuthorizationID, 6, thinkingSchemaDevelopmentCandidateID, thinkingSchemaDevelopmentModel, thinkingSchemaDevelopmentPromptVersion); err == nil {
+		t.Fatal("thinking-schema grant accepted the thinking-off route")
+	}
+	if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, thinkingSchemaDevelopmentAuthorizationID, 6, thinkingSchemaDevelopmentCandidateID, thinkingSchemaDevelopmentModel, thinkingSchemaDevelopmentPromptVersion); err != nil {
+		t.Fatal(err)
+	}
+
+	wrongCandidate := thinkingSchemaRunnerTestConfig(t, "thinking-schema-wrong-candidate", client)
+	wrongCandidate.Root = cfg.Root
+	wrongCandidate.CandidateID = "another-candidate"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong thinking-schema candidate dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongModel := thinkingSchemaRunnerTestConfig(t, "thinking-schema-wrong-model", client)
+	wrongModel.Root = cfg.Root
+	wrongModel.Profile.Model = "another-model"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongModel); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong thinking-schema model dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongReasoning := thinkingSchemaRunnerTestConfig(t, "thinking-schema-wrong-reasoning", client)
+	wrongReasoning.Root = cfg.Root
+	wrongReasoning.Profile.ReasoningEffort = "none"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongReasoning); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong thinking-schema reasoning dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongDestination := thinkingSchemaRunnerTestConfig(t, "thinking-schema-wrong-destination", client)
+	wrongDestination.Root = cfg.Root
+	wrongDestination.Profile.APIBaseURL = "https://provider.example/v1"
+	wrongDestination.ConfirmRemoteProvider = true
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongDestination); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("remote thinking-schema destination dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	for _, runID := range []string{"thinking-schema-one", "thinking-schema-two"} {
+		valid := thinkingSchemaRunnerTestConfig(t, runID, client)
+		valid.Root = cfg.Root
+		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), valid); err != nil {
+			t.Fatalf("thinking-schema run %q: %v", runID, err)
+		}
+	}
+	if client.calls.Load() != 6 {
+		t.Fatalf("thinking-schema grant dispatched %d requests, want 6", client.calls.Load())
+	}
+	replayed := thinkingSchemaRunnerTestConfig(t, "thinking-schema-one", client)
+	replayed.Root = cfg.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), replayed); !errors.Is(err, ErrEngineeringInsightRunFinished) || client.calls.Load() != 6 {
+		t.Fatalf("finished thinking-schema run replayed: %v, calls=%d", err, client.calls.Load())
+	}
+	if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, thinkingSchemaDevelopmentAuthorizationID, 6, thinkingSchemaDevelopmentCandidateID, thinkingSchemaDevelopmentModel, thinkingSchemaDevelopmentPromptVersion); err == nil {
+		t.Fatal("thinking-schema grant replay was accepted")
+	}
+	if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, "seventh-grant", 6, thinkingSchemaDevelopmentCandidateID, thinkingSchemaDevelopmentModel, thinkingSchemaDevelopmentPromptVersion); err == nil {
+		t.Fatal("seventh development grant was accepted")
+	}
+	exhausted := thinkingSchemaRunnerTestConfig(t, "thinking-schema-exhausted", client)
+	exhausted.Root = cfg.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
+		t.Fatalf("forty-third request dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
+	if err != nil || campaign.DevelopmentRequests != thinkingSchemaDevelopmentRequestCap || campaign.QualificationRequests != 0 {
+		t.Fatalf("thinking-schema campaign counters: %+v, %v", campaign, err)
+	}
+	if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(`{"grants":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
+		t.Fatalf("corrupt thinking-schema ledger dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+}
+
 func TestEngineeringInsightRunnerPreservesPersistedDevelopmentCampaignCaps(t *testing.T) {
 	tests := []struct {
-		name       string
-		ledger     string
-		consumed   int
-		wantCap    int
-		wantGrants int
-		recovery   bool
-		v11        bool
+		name           string
+		ledger         string
+		consumed       int
+		wantCap        int
+		wantGrants     int
+		recovery       bool
+		v11            bool
+		thinkingSchema bool
 	}{
 		{name: "original six-request campaign", consumed: 6, wantCap: 6},
 		{name: "legacy twelve-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6}]}`, consumed: 12, wantCap: 12, wantGrants: 1},
 		{name: "bound eighteen-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"}]}`, consumed: 12, wantCap: 18, wantGrants: 2, recovery: true},
 		{name: "v11 ledger retains recovery binding through request seventeen", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`, consumed: 12, wantCap: 24, wantGrants: 3, recovery: true},
 		{name: "bound twenty-four-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`, consumed: 18, wantCap: 24, wantGrants: 3, v11: true},
+		{name: "bound forty-two-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"},{"authorization_id":"authqual05-qwen38-structured-1","requests":6,"candidate_id":"qwen38-v12-structured-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v12"},{"authorization_id":"qual05-qwen38-thinking-off-1","requests":6,"candidate_id":"qwen38-v12-thinking-off-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v12","reasoning_effort":"none"},{"authorization_id":"qual05-qwen38-thinking-schema-1","requests":6,"candidate_id":"qwen38-v12-thinking-schema-1","model":"./models/qwen38-v12-thinking-schema-1","prompt_version":"file-analysis-v12","reasoning_effort":"low"}]}`, consumed: 36, wantCap: 42, wantGrants: 6, thinkingSchema: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -699,6 +800,9 @@ func TestEngineeringInsightRunnerPreservesPersistedDevelopmentCampaignCaps(t *te
 			}
 			if test.v11 {
 				cfg = v11RunnerTestConfig(t, "persisted-cap", &fakeEngineeringInsightClient{})
+			}
+			if test.thinkingSchema {
+				cfg = thinkingSchemaRunnerTestConfig(t, "persisted-cap", &fakeEngineeringInsightClient{})
 			}
 			cap, err := developmentRequestCap(directory, test.consumed, cfg)
 			if err != nil || cap != test.wantCap {
@@ -782,13 +886,14 @@ func TestEngineeringInsightRunnerLocksBoundRecoveryGrantAndDispatchTogether(t *t
 
 func TestEngineeringInsightRunnerRejectsCorruptDevelopmentGrantLedgerBeforeDispatch(t *testing.T) {
 	for name, ledger := range map[string]string{
-		"unknown field":    `{"grants":[{"authorization_id":"extension-one","requests":6}],"unexpected":true}`,
-		"duplicate field":  `{"grants":[],"grants":[{"authorization_id":"extension-one","requests":6}]}`,
-		"empty grants":     `{"grants":[]}`,
-		"wrong requests":   `{"grants":[{"authorization_id":"extension-one","requests":5}]}`,
-		"v11 out of order": `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`,
-		"unbound v11":      `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b"}]}`,
-		"unbound v12":      `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"},{"authorization_id":"authqual05-qwen38-structured-1","requests":6,"candidate_id":"wrong-candidate","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v12"}]}`,
+		"unknown field":           `{"grants":[{"authorization_id":"extension-one","requests":6}],"unexpected":true}`,
+		"duplicate field":         `{"grants":[],"grants":[{"authorization_id":"extension-one","requests":6}]}`,
+		"empty grants":            `{"grants":[]}`,
+		"wrong requests":          `{"grants":[{"authorization_id":"extension-one","requests":5}]}`,
+		"v11 out of order":        `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`,
+		"unbound v11":             `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b"}]}`,
+		"unbound v12":             `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"},{"authorization_id":"authqual05-qwen38-structured-1","requests":6,"candidate_id":"wrong-candidate","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v12"}]}`,
+		"unbound thinking schema": `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"},{"authorization_id":"authqual05-qwen38-structured-1","requests":6,"candidate_id":"qwen38-v12-structured-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v12"},{"authorization_id":"qual05-qwen38-thinking-off-1","requests":6,"candidate_id":"qwen38-v12-thinking-off-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v12","reasoning_effort":"none"},{"authorization_id":"qual05-qwen38-thinking-schema-1","requests":6,"candidate_id":"qwen38-v12-thinking-schema-1","model":"./models/qwen38-v12-thinking-schema-1","prompt_version":"file-analysis-v12"}]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
@@ -1081,6 +1186,15 @@ func thinkingOffRunnerTestConfig(t *testing.T, runID string, client EngineeringI
 	cfg := v12RunnerTestConfig(t, runID, client)
 	cfg.CandidateID = thinkingOffDevelopmentCandidateID
 	cfg.Profile.ReasoningEffort = thinkingOffDevelopmentReasoningEffort
+	return cfg
+}
+
+func thinkingSchemaRunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
+	cfg := v12RunnerTestConfig(t, runID, client)
+	cfg.CandidateID = thinkingSchemaDevelopmentCandidateID
+	cfg.Model = thinkingSchemaDevelopmentModel
+	cfg.Profile.Model = thinkingSchemaDevelopmentModel
+	cfg.Profile.ReasoningEffort = thinkingSchemaDevelopmentReasoningEffort
 	return cfg
 }
 
