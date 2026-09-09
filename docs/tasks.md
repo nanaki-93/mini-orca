@@ -79,12 +79,13 @@ Baseline: `f4e044e91c69cab47faaf7bb6e92e5fa1cb722e5`, `codex/autopilot`. QUAL-05
 - [ ] RCV-03 accepted
 
 **Target files**
-- `internal/app/file_analysis.go` — replace specialized guidance, simplify duplication and bump the selected-file prompt identity once to the final new version.
+- `internal/app/file_analysis.go` — replace specialized guidance and simplify duplication; defer the single final prompt-version bump to RCV-05.
 - `internal/app/engineering_insight_test.go` — replace obsolete phrase-specific expectations with the new contract checks.
 - `internal/app/file_analysis_test.go` — preserve production request/schema/cache-identity behavior.
 
 **Inputs / dependencies**
 - RCV-02; current shared `EngineeringInsightPromptInstructions`, which also serves other producers and must not be broadened accidentally.
+- Sequencing correction from code inspection: historical fixed-grant tests dispatch v12 and the runner rejects any non-current prompt. RCV-03 validates the prompt rewrite at the existing label while all live requests remain disabled; RCV-05 performs the single v13 identity transition with the successor protocol and historical test updates. No intermediate prompt/schema is eligible for collection.
 
 **Implementation rules**
 - Explain an observable relationship or invariant, why it matters locally, a real limitation and a test with expected observations. A proposed change or discovered defect is **not required**: correct locking, existing preallocation, authorization gates and safe delegation can carry useful lessons.
@@ -125,6 +126,7 @@ Baseline: `f4e044e91c69cab47faaf7bb6e92e5fa1cb722e5`, `codex/autopilot`. QUAL-05
 - [ ] RCV-05 accepted
 
 **Target files**
+- `internal/app/file_analysis.go` — bump the final selected-file prompt identity to v13 alongside version-aware runner/test changes.
 - `internal/app/engineering_insight_runner.go` — fixed successor accounting and exact authorized dispatch identity.
 - `internal/app/engineering_insight_runner_test.go` — reservation, exhaustion, migration and resume cases.
 - `internal/app/engineering_insight_evaluation.go` — explicitly versioned v2 schedule/expectation validation.
