@@ -23,14 +23,16 @@ type fakeEngineeringInsightClient struct {
 	response *llm.ChatResponse
 	err      error
 	prompt   string
+	schema   llm.JSONSchema
 }
 
-func (c *fakeEngineeringInsightClient) Chat(_ context.Context, messages []llm.ChatMessage) (*llm.ChatResponse, error) {
+func (c *fakeEngineeringInsightClient) ChatWithJSONSchema(_ context.Context, messages []llm.ChatMessage, schema llm.JSONSchema) (*llm.ChatResponse, error) {
 	c.calls.Add(1)
 	if len(messages) != 1 || !strings.Contains(messages[0].Content, "TARGET_SOURCE") {
 		return nil, errors.New("runner did not use the selected-file production prompt")
 	}
 	c.prompt = messages[0].Content
+	c.schema = schema
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -64,6 +66,14 @@ func TestEngineeringInsightRunnerPersistsSourceFreeSixRequestDevelopmentCampaign
 	}
 	if client.calls.Load() != 3 || receipt.Consumption.Requests != 3 || len(handoff.Responses) != 3 {
 		t.Fatalf("calls=%d receipt=%+v handoff=%d", client.calls.Load(), receipt.Consumption, len(handoff.Responses))
+	}
+	productionSchema, err := FileAnalysisResponseSchema().Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	runnerSchema, err := client.schema.Identity()
+	if err != nil || runnerSchema != productionSchema {
+		t.Fatalf("runner schema identity = %q, %v; want production %q", runnerSchema, err, productionSchema)
 	}
 	promptManifest := runnerPromptContextManifest(t, client.prompt)
 	wantManifest := bindContextManifestModel(project.ContextManifest{ByteLimit: maxSemanticAnalysisBytes, TokenLimit: maxSemanticAnalysisBytes / 4}, EffectiveModel{Scope: string(cfg.Profile.Scope), Model: cfg.Profile.Model, ProviderOrigin: providerOrigin(cfg.Profile.APIBaseURL), RemoteProvider: !isLoopbackURL(cfg.Profile.APIBaseURL), ContextMaxTokens: cfg.Profile.ContextMaxTokens})
@@ -227,6 +237,74 @@ func TestEngineeringInsightRunnerFingerprintBindsOptionalSamplingControls(t *tes
 	}
 }
 
+func TestEngineeringInsightRunnerFingerprintBindsResponseSchemaIdentity(t *testing.T) {
+	cfg := runnerTestConfig(t, "schema-fingerprint", EngineeringInsightCollectRunMode, 3, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
+	identity, err := FileAnalysisResponseSchema().Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runnerFingerprintWithSchemaIdentity(cfg, identity) == runnerFingerprintWithSchemaIdentity(cfg, identity+"-changed") {
+		t.Fatal("response schema identity did not change the resumable-run fingerprint")
+	}
+}
+
+func TestEngineeringInsightRunnerTerminatesAfterPermanentStructuredRequestRejection(t *testing.T) {
+	for _, test := range []struct {
+		name                               string
+		config                             func(*fakeEngineeringInsightClient) EngineeringInsightRunnerConfig
+		wantDevelopment, wantQualification int
+	}{
+		{name: "development", config: func(client *fakeEngineeringInsightClient) EngineeringInsightRunnerConfig {
+			return runnerTestConfig(t, "permanent-development", EngineeringInsightDevelopmentRunMode, 3, client)
+		}, wantDevelopment: 1},
+		{name: "qualification", config: func(client *fakeEngineeringInsightClient) EngineeringInsightRunnerConfig {
+			return qualificationRunnerTestConfig(t, "permanent-qualification", client)
+		}, wantQualification: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := &fakeEngineeringInsightClient{err: llm.ErrStructuredRequestRejected}
+			cfg := test.config(client)
+			receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+			if !errors.Is(err, ErrEngineeringInsightRunTerminated) || client.calls.Load() != 1 || receipt.Consumption.Requests != 1 || len(receipt.Attempts) != 1 || receipt.Attempts[0].Outcome != "failed" || receipt.Attempts[0].FinishReason != "error" {
+				t.Fatalf("permanent rejection result: receipt=%+v calls=%d err=%v", receipt, client.calls.Load(), err)
+			}
+			directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+			campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
+			if err != nil || campaign.DevelopmentRequests != test.wantDevelopment || campaign.QualificationRequests != test.wantQualification {
+				t.Fatalf("campaign after permanent rejection: %+v, %v", campaign, err)
+			}
+			manifest, exists, err := loadRunManifest(filepath.Join(directory, cfg.RunID+".json"))
+			if err != nil || !exists || !manifest.Finished || manifest.TerminalReason != permanentRequestRejectionReason {
+				t.Fatalf("terminal manifest: %+v exists=%t err=%v", manifest, exists, err)
+			}
+			if exported, err := LoadEngineeringInsightEvaluationReceipt(cfg.Root, cfg.RunID); err != nil || exported.Consumption.Requests != 1 {
+				t.Fatalf("terminal receipt export: %+v, %v", exported, err)
+			}
+			if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); !errors.Is(err, ErrEngineeringInsightRunTerminated) || client.calls.Load() != 1 {
+				t.Fatalf("terminal run resumed dispatch: calls=%d err=%v", client.calls.Load(), err)
+			}
+			campaign, err = loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
+			if err != nil || campaign.DevelopmentRequests != test.wantDevelopment || campaign.QualificationRequests != test.wantQualification {
+				t.Fatalf("terminal resume changed campaign: %+v, %v", campaign, err)
+			}
+		})
+	}
+}
+
+func TestEngineeringInsightRunnerContinuesAfterMalformedModelContent(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: "not JSON"}
+	cfg := runnerTestConfig(t, "malformed-content", EngineeringInsightCollectRunMode, 3, client)
+	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil || client.calls.Load() != 3 || len(receipt.Attempts) != 3 {
+		t.Fatalf("malformed content collection: receipt=%+v calls=%d err=%v", receipt, client.calls.Load(), err)
+	}
+	for _, attempt := range receipt.Attempts {
+		if attempt.Outcome != "malformed" {
+			t.Fatalf("malformed content stopped or changed outcome: %+v", attempt)
+		}
+	}
+}
+
 func TestEngineeringInsightRunnerRequiresExplicitDevelopmentBudgetGrantForSecondSixRequests(t *testing.T) {
 	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
 	first := runnerTestConfig(t, "development-one", EngineeringInsightCollectRunMode, 3, client)
@@ -369,9 +447,9 @@ func TestEngineeringInsightRunnerRejectsRecoveryAuthorizationAsFirstGrant(t *tes
 	}
 }
 
-func TestEngineeringInsightRunnerAppliesV11GrantOnlyAtRequestsEighteenThroughTwentyThree(t *testing.T) {
+func TestEngineeringInsightRunnerAppliesStructuredOutputGrantOnlyAtRequestsTwentyFourThroughTwentyNine(t *testing.T) {
 	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
-	cfg := v11RunnerTestConfig(t, "v11-one", client)
+	cfg := v12RunnerTestConfig(t, "v12-one", client)
 	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		t.Fatal(err)
@@ -401,53 +479,68 @@ func TestEngineeringInsightRunnerAppliesV11GrantOnlyAtRequestsEighteenThroughTwe
 	if err := GrantEngineeringInsightV11DevelopmentBudget(cfg.Root, v11DevelopmentAuthorizationID, 6, v11DevelopmentCandidateID, v11DevelopmentModel, v11DevelopmentPromptVersion); err != nil {
 		t.Fatal(err)
 	}
-	if err := GrantEngineeringInsightV11DevelopmentBudget(cfg.Root, "extra-grant", 6, v11DevelopmentCandidateID, v11DevelopmentModel, v11DevelopmentPromptVersion); err == nil {
-		t.Fatal("extra development grant was accepted")
+	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: finalDevelopmentRequestCap}); err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
+		{CandidateID: "wrong-candidate", Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion},
+		{CandidateID: v12DevelopmentCandidateID, Model: "wrong-model", PromptVersion: v12DevelopmentPromptVersion},
+		{CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: "wrong-prompt"},
+	} {
+		if err := GrantEngineeringInsightV12DevelopmentBudget(cfg.Root, v12DevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
+			t.Fatal("structured-output grant accepted the wrong identity")
+		}
+	}
+	if err := GrantEngineeringInsightV12DevelopmentBudget(cfg.Root, v12DevelopmentAuthorizationID, 6, v12DevelopmentCandidateID, v12DevelopmentModel, v12DevelopmentPromptVersion); err != nil {
+		t.Fatal(err)
+	}
+	if err := GrantEngineeringInsightV12DevelopmentBudget(cfg.Root, "extra-grant", 6, v12DevelopmentCandidateID, v12DevelopmentModel, v12DevelopmentPromptVersion); err == nil {
+		t.Fatal("fifth development grant was accepted")
 	}
 
-	wrongCandidate := v11RunnerTestConfig(t, "v11-wrong-candidate", client)
+	wrongCandidate := v12RunnerTestConfig(t, "v12-wrong-candidate", client)
 	wrongCandidate.Root = cfg.Root
 	wrongCandidate.CandidateID = "another-candidate"
 	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 0 {
 		t.Fatalf("wrong v11 candidate dispatched: %v, calls=%d", err, client.calls.Load())
 	}
-	wrongModel := v11RunnerTestConfig(t, "v11-wrong-model", client)
+	wrongModel := v12RunnerTestConfig(t, "v12-wrong-model", client)
 	wrongModel.Root = cfg.Root
 	wrongModel.Model = "another-model"
 	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongModel); err == nil || client.calls.Load() != 0 {
 		t.Fatalf("wrong v11 model dispatched: %v, calls=%d", err, client.calls.Load())
 	}
-	wrongProfile := v11RunnerTestConfig(t, "v11-wrong-profile", client)
+	wrongProfile := v12RunnerTestConfig(t, "v12-wrong-profile", client)
 	wrongProfile.Root = cfg.Root
 	wrongProfile.Profile.Model = "another-model"
 	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongProfile); err == nil || client.calls.Load() != 0 {
 		t.Fatalf("wrong v11 profile model dispatched: %v, calls=%d", err, client.calls.Load())
 	}
-	wrongDestination := v11RunnerTestConfig(t, "v11-wrong-destination", client)
+	wrongDestination := v12RunnerTestConfig(t, "v12-wrong-destination", client)
 	wrongDestination.Root = cfg.Root
 	wrongDestination.Profile.APIBaseURL = "https://provider.example/v1"
 	wrongDestination.ConfirmRemoteProvider = true
 	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongDestination); err == nil || client.calls.Load() != 0 {
 		t.Fatalf("remote v11 destination dispatched: %v, calls=%d", err, client.calls.Load())
 	}
-	for _, runID := range []string{"v11-one", "v11-two"} {
-		valid := v11RunnerTestConfig(t, runID, client)
+	for _, runID := range []string{"v12-one", "v12-two"} {
+		valid := v12RunnerTestConfig(t, runID, client)
 		valid.Root = cfg.Root
 		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), valid); err != nil {
-			t.Fatalf("v11 run %q: %v", runID, err)
+			t.Fatalf("v12 run %q: %v", runID, err)
 		}
 	}
 	if client.calls.Load() != 6 {
-		t.Fatalf("v11 grant dispatched %d requests, want 6", client.calls.Load())
+		t.Fatalf("structured-output grant dispatched %d requests, want 6", client.calls.Load())
 	}
-	exhausted := v11RunnerTestConfig(t, "v11-exhausted", client)
+	exhausted := v12RunnerTestConfig(t, "v12-exhausted", client)
 	exhausted.Root = cfg.Root
 	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
-		t.Fatalf("v11 cap was not exhausted: %v, calls=%d", err, client.calls.Load())
+		t.Fatalf("structured-output cap was not exhausted: %v, calls=%d", err, client.calls.Load())
 	}
 	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
-	if err != nil || campaign.DevelopmentRequests != finalDevelopmentRequestCap || campaign.QualificationRequests != 0 {
-		t.Fatalf("v11 campaign counters: %+v, %v", campaign, err)
+	if err != nil || campaign.DevelopmentRequests != structuredDevelopmentRequestCap || campaign.QualificationRequests != 0 {
+		t.Fatalf("structured-output campaign counters: %+v, %v", campaign, err)
 	}
 }
 
@@ -581,6 +674,7 @@ func TestEngineeringInsightRunnerRejectsCorruptDevelopmentGrantLedgerBeforeDispa
 		"wrong requests":   `{"grants":[{"authorization_id":"extension-one","requests":5}]}`,
 		"v11 out of order": `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`,
 		"unbound v11":      `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b"}]}`,
+		"unbound v12":      `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"},{"authorization_id":"authqual05-qwen38-structured-1","requests":6,"candidate_id":"wrong-candidate","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v12"}]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
@@ -857,6 +951,15 @@ func v11RunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRu
 	cfg.Model = v11DevelopmentModel
 	cfg.Profile.Model = v11DevelopmentModel
 	cfg.PromptVersion = v11DevelopmentPromptVersion
+	return cfg
+}
+
+func v12RunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
+	cfg := runnerTestConfig(t, runID, EngineeringInsightDevelopmentRunMode, 3, client)
+	cfg.CandidateID = v12DevelopmentCandidateID
+	cfg.Model = v12DevelopmentModel
+	cfg.Profile.Model = v12DevelopmentModel
+	cfg.PromptVersion = v12DevelopmentPromptVersion
 	return cfg
 }
 

@@ -27,6 +27,7 @@ const (
 	extendedDevelopmentRequestCap          = 12
 	recoveryDevelopmentRequestCap          = 18
 	finalDevelopmentRequestCap             = 24
+	structuredDevelopmentRequestCap        = 30
 	developmentGrantRequestCount           = 6
 	recoveryDevelopmentAuthorizationID     = "qual05-qwen38-recovery-1"
 	recoveryDevelopmentCandidateID         = "qwen38-v10-recovery-1"
@@ -35,13 +36,20 @@ const (
 	v11DevelopmentCandidateID              = "qwen38-v11-schema-1"
 	v11DevelopmentModel                    = recoveryDevelopmentModel
 	v11DevelopmentPromptVersion            = "file-analysis-v11"
+	v12DevelopmentAuthorizationID          = "authqual05-qwen38-structured-1"
+	v12DevelopmentCandidateID              = "qwen38-v12-structured-1"
+	v12DevelopmentModel                    = recoveryDevelopmentModel
+	v12DevelopmentPromptVersion            = "file-analysis-v12"
 )
 
 var (
-	ErrEngineeringInsightRunLocked    = errors.New("engineering insight evaluation is already running")
-	ErrEngineeringInsightRunFinished  = errors.New("engineering insight evaluation run is already complete")
-	ErrEngineeringInsightRemoteDenied = errors.New("evaluation remote provider requires explicit confirmation")
+	ErrEngineeringInsightRunLocked     = errors.New("engineering insight evaluation is already running")
+	ErrEngineeringInsightRunFinished   = errors.New("engineering insight evaluation run is already complete")
+	ErrEngineeringInsightRunTerminated = errors.New("engineering insight evaluation run stopped after permanent request rejection")
+	ErrEngineeringInsightRemoteDenied  = errors.New("evaluation remote provider requires explicit confirmation")
 )
+
+const permanentRequestRejectionReason = "permanent_request_rejected"
 
 // EngineeringInsightRunnerCase is deliberately source-bearing only in memory.
 // It is never included in a manifest or receipt.
@@ -53,7 +61,7 @@ type EngineeringInsightRunnerCase struct {
 // EngineeringInsightRunnerClient is the single request boundary used by the
 // runner. The production client executes one transport attempt per call.
 type EngineeringInsightRunnerClient interface {
-	Chat(context.Context, []llm.ChatMessage) (*llm.ChatResponse, error)
+	ChatWithJSONSchema(context.Context, []llm.ChatMessage, llm.JSONSchema) (*llm.ChatResponse, error)
 }
 
 type EngineeringInsightRunnerConfig struct {
@@ -92,9 +100,10 @@ func (handoff *EngineeringInsightScoringHandoff) Discard() {
 }
 
 type engineeringInsightRunManifest struct {
-	Fingerprint string                              `json:"fingerprint"`
-	Finished    bool                                `json:"finished"`
-	Receipt     EngineeringInsightEvaluationReceipt `json:"receipt"`
+	Fingerprint    string                              `json:"fingerprint"`
+	Finished       bool                                `json:"finished"`
+	TerminalReason string                              `json:"terminal_reason,omitempty"`
+	Receipt        EngineeringInsightEvaluationReceipt `json:"receipt"`
 }
 
 type engineeringInsightCampaign struct {
@@ -137,6 +146,12 @@ func GrantEngineeringInsightRecoveryDevelopmentBudget(root, authorizationID stri
 // GrantEngineeringInsightV11DevelopmentBudget records the one approved v11
 // model-bound extension. Its prompt identity is checked again at dispatch.
 func GrantEngineeringInsightV11DevelopmentBudget(root, authorizationID string, requests int, candidateID, model, promptVersion string) error {
+	return grantEngineeringInsightDevelopmentBudget(root, authorizationID, requests, engineeringInsightDevelopmentGrantIdentity{CandidateID: candidateID, Model: model, PromptVersion: promptVersion})
+}
+
+// GrantEngineeringInsightV12DevelopmentBudget records the one approved
+// schema-constrained pilot extension with fixed dispatch identity.
+func GrantEngineeringInsightV12DevelopmentBudget(root, authorizationID string, requests int, candidateID, model, promptVersion string) error {
 	return grantEngineeringInsightDevelopmentBudget(root, authorizationID, requests, engineeringInsightDevelopmentGrantIdentity{CandidateID: candidateID, Model: model, PromptVersion: promptVersion})
 }
 
@@ -207,6 +222,11 @@ func nextDevelopmentGrant(ledger engineeringInsightDevelopmentGrantLedger, autho
 			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development v11 grant is invalid")
 		}
 		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests, CandidateID: dispatchIdentity.CandidateID, Model: dispatchIdentity.Model, PromptVersion: dispatchIdentity.PromptVersion}, nil
+	case 3:
+		if !validV12DevelopmentGrant(authorizationID, dispatchIdentity) {
+			return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development structured-output grant is invalid")
+		}
+		return engineeringInsightDevelopmentGrant{AuthorizationID: authorizationID, Requests: requests, CandidateID: dispatchIdentity.CandidateID, Model: dispatchIdentity.Model, PromptVersion: dispatchIdentity.PromptVersion}, nil
 	default:
 		return engineeringInsightDevelopmentGrant{}, fmt.Errorf("development request budget extension is exhausted")
 	}
@@ -222,7 +242,7 @@ func hasDevelopmentGrantAuthorization(ledger engineeringInsightDevelopmentGrantL
 }
 
 func validOriginalDevelopmentGrant(authorizationID string, dispatchIdentity engineeringInsightDevelopmentGrantIdentity) bool {
-	return authorizationID != recoveryDevelopmentAuthorizationID && authorizationID != v11DevelopmentAuthorizationID && dispatchIdentity == (engineeringInsightDevelopmentGrantIdentity{})
+	return authorizationID != recoveryDevelopmentAuthorizationID && authorizationID != v11DevelopmentAuthorizationID && authorizationID != v12DevelopmentAuthorizationID && dispatchIdentity == (engineeringInsightDevelopmentGrantIdentity{})
 }
 
 func validRecoveryDevelopmentGrant(authorizationID string, dispatchIdentity engineeringInsightDevelopmentGrantIdentity) bool {
@@ -237,6 +257,13 @@ func validV11DevelopmentGrant(authorizationID string, dispatchIdentity engineeri
 		dispatchIdentity.CandidateID == v11DevelopmentCandidateID &&
 		dispatchIdentity.Model == v11DevelopmentModel &&
 		dispatchIdentity.PromptVersion == v11DevelopmentPromptVersion
+}
+
+func validV12DevelopmentGrant(authorizationID string, dispatchIdentity engineeringInsightDevelopmentGrantIdentity) bool {
+	return authorizationID == v12DevelopmentAuthorizationID &&
+		dispatchIdentity.CandidateID == v12DevelopmentCandidateID &&
+		dispatchIdentity.Model == v12DevelopmentModel &&
+		dispatchIdentity.PromptVersion == v12DevelopmentPromptVersion
 }
 
 func developmentGrantCap(ledger engineeringInsightDevelopmentGrantLedger) int {
@@ -276,23 +303,12 @@ func RunEngineeringInsightEvaluation(ctx context.Context, cfg EngineeringInsight
 	defer lock.Close()
 
 	manifestPath := filepath.Join(directory, cfg.RunID+".json")
-	fingerprint := runnerFingerprint(cfg)
-	manifest, exists, err := loadRunManifest(manifestPath)
+	manifest, err := loadOrCreateRunnerManifest(manifestPath, cfg)
 	if err != nil {
-		return EngineeringInsightEvaluationReceipt{}, nil, err
-	}
-	if exists {
-		if manifest.Fingerprint != fingerprint || validateRunnerManifest(manifest, cfg) != nil {
-			return EngineeringInsightEvaluationReceipt{}, nil, fmt.Errorf("evaluation run configuration changed")
-		}
 		if manifest.Finished {
-			return manifest.Receipt, nil, ErrEngineeringInsightRunFinished
+			return manifest.Receipt, nil, err
 		}
-	} else {
-		manifest = engineeringInsightRunManifest{Fingerprint: fingerprint, Receipt: runnerReceipt(cfg)}
-		if err := writeRunnerJSON(manifestPath, manifest); err != nil {
-			return EngineeringInsightEvaluationReceipt{}, nil, err
-		}
+		return EngineeringInsightEvaluationReceipt{}, nil, err
 	}
 
 	handoff := &EngineeringInsightScoringHandoff{RunID: cfg.RunID, Responses: make(map[string]string), privateDir: privateResponseDirectory(directory, cfg.RunID)}
@@ -304,6 +320,35 @@ func RunEngineeringInsightEvaluation(ctx context.Context, cfg EngineeringInsight
 		return manifest.Receipt, handoff, err
 	}
 	return manifest.Receipt, handoff, nil
+}
+
+func loadOrCreateRunnerManifest(path string, cfg EngineeringInsightRunnerConfig) (engineeringInsightRunManifest, error) {
+	fingerprint := runnerFingerprint(cfg)
+	manifest, exists, err := loadRunManifest(path)
+	if err != nil {
+		return engineeringInsightRunManifest{}, err
+	}
+	if !exists {
+		manifest = engineeringInsightRunManifest{Fingerprint: fingerprint, Receipt: runnerReceipt(cfg)}
+		if err := writeRunnerJSON(path, manifest); err != nil {
+			return engineeringInsightRunManifest{}, err
+		}
+		return manifest, nil
+	}
+	if manifest.Fingerprint != fingerprint || validateRunnerManifest(manifest, cfg) != nil {
+		return engineeringInsightRunManifest{}, fmt.Errorf("evaluation run configuration changed")
+	}
+	if manifest.Finished {
+		return manifest, completedRunnerManifestError(manifest)
+	}
+	return manifest, nil
+}
+
+func completedRunnerManifestError(manifest engineeringInsightRunManifest) error {
+	if manifest.TerminalReason != "" {
+		return ErrEngineeringInsightRunTerminated
+	}
+	return ErrEngineeringInsightRunFinished
 }
 
 func validateRunnerDestination(cfg EngineeringInsightRunnerConfig) error {
@@ -330,7 +375,8 @@ func executeRemainingAttempts(ctx context.Context, cfg EngineeringInsightRunnerC
 		}
 
 		attempt, response, err := executeRunnerAttempt(ctx, cfg, item)
-		if err != nil {
+		permanentRejection := errors.Is(err, llm.ErrStructuredRequestRejected)
+		if err != nil && !permanentRejection {
 			attempt = failedRunnerAttempt(item.Expected, cfg.CandidateID, err)
 		}
 		manifest.Receipt.Attempts[index] = attempt
@@ -340,11 +386,18 @@ func executeRemainingAttempts(ctx context.Context, cfg EngineeringInsightRunnerC
 				return err
 			}
 		}
+		if permanentRejection {
+			manifest.Finished = true
+			manifest.TerminalReason = permanentRequestRejectionReason
+		}
 		if err := writeRunnerJSON(manifestPath, manifest); err != nil {
 			return err
 		}
 		if response != "" {
 			handoff.Responses[expectedAttemptID(item.Expected)] = response
+		}
+		if permanentRejection {
+			return ErrEngineeringInsightRunTerminated
 		}
 	}
 	return nil
@@ -455,6 +508,9 @@ func validateRunnerConfig(cfg EngineeringInsightRunnerConfig) error {
 	if cfg.PromptVersion != semanticAnalysisPromptVersion {
 		return fmt.Errorf("evaluation runner prompt identity is invalid")
 	}
+	if _, err := FileAnalysisResponseSchema().Identity(); err != nil {
+		return fmt.Errorf("evaluation runner response schema is invalid: %w", err)
+	}
 	if cfg.Mode == EngineeringInsightQualificationRunMode && len(cfg.Cases) != qualificationRequestCap {
 		return fmt.Errorf("qualification runner requires 24 attempts")
 	}
@@ -560,7 +616,14 @@ func runnerReceipt(cfg EngineeringInsightRunnerConfig) EngineeringInsightEvaluat
 func runnerFingerprint(cfg EngineeringInsightRunnerConfig) string {
 	// This private digest binds endpoint, credentials, context limit and the
 	// immutable public identity without ever writing those values to a receipt.
-	values := []string{cfg.Mode, cfg.CandidateID, cfg.Provider, cfg.Model, cfg.PromptVersion, cfg.CorpusID, cfg.CorpusDigest, cfg.BaseRevision, string(cfg.Profile.Scope), cfg.Profile.APIBaseURL, cfg.Profile.APIKey, cfg.Profile.Model, cfg.Profile.ReasoningEffort, fmt.Sprint(cfg.Profile.Temperature), fingerprintOptionalFloat(cfg.Profile.TopP), fingerprintOptionalInt(cfg.Profile.TopK), fingerprintOptionalFloat(cfg.Profile.MinP), fingerprintOptionalFloat(cfg.Profile.PresencePenalty), fingerprintOptionalFloat(cfg.Profile.RepeatPenalty), fmt.Sprint(cfg.Profile.ContextMaxTokens)}
+	// validateRunnerConfig verifies the embedded schema before this digest is
+	// used to create or resume a manifest.
+	schemaIdentity, _ := FileAnalysisResponseSchema().Identity()
+	return runnerFingerprintWithSchemaIdentity(cfg, schemaIdentity)
+}
+
+func runnerFingerprintWithSchemaIdentity(cfg EngineeringInsightRunnerConfig, schemaIdentity string) string {
+	values := []string{cfg.Mode, cfg.CandidateID, cfg.Provider, cfg.Model, cfg.PromptVersion, schemaIdentity, cfg.CorpusID, cfg.CorpusDigest, cfg.BaseRevision, string(cfg.Profile.Scope), cfg.Profile.APIBaseURL, cfg.Profile.APIKey, cfg.Profile.Model, cfg.Profile.ReasoningEffort, fmt.Sprint(cfg.Profile.Temperature), fingerprintOptionalFloat(cfg.Profile.TopP), fingerprintOptionalInt(cfg.Profile.TopK), fingerprintOptionalFloat(cfg.Profile.MinP), fingerprintOptionalFloat(cfg.Profile.PresencePenalty), fingerprintOptionalFloat(cfg.Profile.RepeatPenalty), fmt.Sprint(cfg.Profile.ContextMaxTokens)}
 	for _, item := range cfg.Cases {
 		source := sha256.Sum256([]byte(item.Source))
 		values = append(values, expectedAttemptID(item.Expected), hex.EncodeToString(source[:]))
@@ -634,7 +697,7 @@ func loadEvaluationCampaign(path string) (engineeringInsightCampaign, error) {
 	var campaign engineeringInsightCampaign
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&campaign) != nil || campaign.DevelopmentRequests < 0 || campaign.DevelopmentRequests > finalDevelopmentRequestCap || campaign.QualificationRequests < 0 || campaign.QualificationRequests > qualificationRequestCap {
+	if decoder.Decode(&campaign) != nil || campaign.DevelopmentRequests < 0 || campaign.DevelopmentRequests > structuredDevelopmentRequestCap || campaign.QualificationRequests < 0 || campaign.QualificationRequests > qualificationRequestCap {
 		return engineeringInsightCampaign{}, fmt.Errorf("invalid campaign")
 	}
 	return campaign, nil
@@ -646,14 +709,17 @@ func developmentRequestCap(directory string, consumed int, cfg EngineeringInsigh
 		return 0, err
 	}
 	cap := developmentGrantCap(ledger)
-	if cap > finalDevelopmentRequestCap {
+	if cap > structuredDevelopmentRequestCap {
 		return 0, fmt.Errorf("invalid development grant ledger")
 	}
 	if len(ledger.Grants) >= 2 && consumed >= extendedDevelopmentRequestCap && consumed < recoveryDevelopmentRequestCap && !matchesDevelopmentGrantDispatch(cfg, ledger.Grants[1]) {
 		return 0, fmt.Errorf("development recovery grant does not match dispatch identity")
 	}
-	if len(ledger.Grants) >= 3 && consumed >= recoveryDevelopmentRequestCap && !matchesDevelopmentGrantDispatch(cfg, ledger.Grants[2]) {
+	if len(ledger.Grants) >= 3 && consumed >= recoveryDevelopmentRequestCap && consumed < finalDevelopmentRequestCap && !matchesDevelopmentGrantDispatch(cfg, ledger.Grants[2]) {
 		return 0, fmt.Errorf("development v11 grant does not match dispatch identity")
+	}
+	if len(ledger.Grants) >= 4 && consumed >= finalDevelopmentRequestCap && !matchesDevelopmentGrantDispatch(cfg, ledger.Grants[3]) {
+		return 0, fmt.Errorf("development structured-output grant does not match dispatch identity")
 	}
 	return cap, nil
 }
@@ -693,7 +759,7 @@ func loadDevelopmentGrantLedger(directory string) (engineeringInsightDevelopment
 }
 
 func validDevelopmentGrantLedger(ledger engineeringInsightDevelopmentGrantLedger) bool {
-	if len(ledger.Grants) != 1 && len(ledger.Grants) != 2 && len(ledger.Grants) != 3 {
+	if len(ledger.Grants) < 1 || len(ledger.Grants) > 4 {
 		return false
 	}
 	seen := make(map[string]bool, len(ledger.Grants))
@@ -709,6 +775,9 @@ func validDevelopmentGrantLedger(ledger engineeringInsightDevelopmentGrantLedger
 			return false
 		}
 		if index == 2 && !validV11DevelopmentGrant(grant.AuthorizationID, identity) {
+			return false
+		}
+		if index == 3 && !validV12DevelopmentGrant(grant.AuthorizationID, identity) {
 			return false
 		}
 		seen[grant.AuthorizationID] = true
@@ -775,10 +844,14 @@ func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerCo
 	timed, cancel := context.WithTimeout(parent, qualificationAttemptTimeoutSeconds*time.Second)
 	defer cancel()
 	started := time.Now()
-	response, err := cfg.Client.Chat(timed, []llm.ChatMessage{{Role: "user", Content: prompt}})
+	response, err := cfg.Client.ChatWithJSONSchema(timed, []llm.ChatMessage{{Role: "user", Content: prompt}}, FileAnalysisResponseSchema())
 	elapsed := time.Since(started).Milliseconds()
 	if err != nil {
-		return failedRunnerAttemptWithElapsed(item.Expected, cfg.CandidateID, err, elapsed), "", nil
+		attempt := failedRunnerAttemptWithElapsed(item.Expected, cfg.CandidateID, err, elapsed)
+		if errors.Is(err, llm.ErrStructuredRequestRejected) {
+			return attempt, "", err
+		}
+		return attempt, "", nil
 	}
 	message := response.Choices[0].Message
 	content := message.Content
@@ -925,6 +998,9 @@ func loadRunManifest(path string) (engineeringInsightRunManifest, bool, error) {
 func validateRunnerManifest(manifest engineeringInsightRunManifest, cfg EngineeringInsightRunnerConfig) error {
 	want := runnerReceipt(cfg)
 	if !sameRunnerReceiptIdentity(manifest.Receipt, want) || len(manifest.Receipt.Attempts) > len(cfg.Cases) || manifest.Receipt.Consumption.Requests != len(manifest.Receipt.Attempts) {
+		return fmt.Errorf("invalid evaluation manifest")
+	}
+	if manifest.TerminalReason != "" && (!manifest.Finished || manifest.TerminalReason != permanentRequestRejectionReason || len(manifest.Receipt.Attempts) == 0) {
 		return fmt.Errorf("invalid evaluation manifest")
 	}
 	if !validManifestAttempts(manifest.Receipt, cfg.Cases) {

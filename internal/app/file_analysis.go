@@ -18,9 +18,87 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v11"
+	semanticAnalysisPromptVersion = "file-analysis-v12"
 	maxSemanticAnalysisBytes      = 64 * 1024
 )
+
+const fileAnalysisResponseSchemaName = "file_analysis_response"
+
+// fileAnalysisResponseSchemaDocument mirrors the wire response accepted by
+// parseSemanticAnalysis. Target-specific checks (such as an exact symbol name)
+// remain in the parser because they depend on the selected file.
+const fileAnalysisResponseSchemaDocument = `{
+  "type":"object",
+  "additionalProperties":false,
+  "required":["purpose","responsibilities","dependencies","side_effects","risks","suggestions","symbol_explanations"],
+  "properties":{
+    "purpose":{"type":"string","minLength":1},
+    "responsibilities":{"type":"array","maxItems":3,"items":{"type":"string","minLength":1}},
+    "dependencies":{"type":"array","maxItems":3,"items":{"type":"string","minLength":1}},
+    "side_effects":{"type":"array","maxItems":3,"items":{"type":"string","minLength":1}},
+    "risks":{"type":"array","maxItems":3,"items":{"$ref":"#/$defs/risk"}},
+    "suggestions":{"type":"array","maxItems":3,"items":{"$ref":"#/$defs/suggestion"}},
+    "symbol_explanations":{"type":"object","additionalProperties":{"type":"string","minLength":1}},
+    "engineering_insight":{"$ref":"#/$defs/optionalInsight"}
+  },
+  "$defs":{
+    "insight":{
+      "type":"object",
+      "additionalProperties":false,
+      "required":["mechanism","why_it_matters_here","tradeoff_or_failure_mode","transferable_lesson"],
+      "properties":{
+        "mechanism":{"type":"string","minLength":1},
+        "why_it_matters_here":{"type":"string","minLength":1},
+        "tradeoff_or_failure_mode":{"type":"string","minLength":1},
+        "transferable_lesson":{"type":"string","minLength":1}
+      }
+    },
+    "optionalInsight":{"anyOf":[{"$ref":"#/$defs/insight"},{"type":"null"}]},
+    "taskSpec":{
+      "type":"object",
+      "additionalProperties":false,
+      "required":["schema_version","target_path","target_symbol","target_signature","acceptance_criteria","non_goals"],
+      "properties":{
+        "schema_version":{"enum":["1"]},
+        "target_path":{"type":"string","minLength":1,"maxLength":1024},
+        "target_symbol":{"type":"string","minLength":1,"maxLength":512},
+        "target_signature":{"type":"string","minLength":1,"maxLength":1024},
+        "acceptance_criteria":{"type":"array","minItems":1,"maxItems":8,"items":{"type":"string","minLength":1,"maxLength":512}},
+        "non_goals":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":512}},
+        "go_test_candidate":{"anyOf":[{"$ref":"#/$defs/goTestCandidate"},{"type":"null"}]}
+      }
+    },
+    "goTestCandidate":{
+      "type":"object",
+      "additionalProperties":false,
+      "required":["name","content"],
+      "properties":{"name":{"type":"string","minLength":1,"maxLength":512},"content":{"type":"string","minLength":1,"maxLength":16384}}
+    },
+    "risk":{
+      "type":"object",
+      "additionalProperties":false,
+      "required":["severity","summary"],
+      "properties":{
+        "severity":{"enum":["low","medium","high"]},
+        "summary":{"type":"string","minLength":1},
+        "task_spec":{"anyOf":[{"$ref":"#/$defs/taskSpec"},{"type":"null"}]},
+        "engineering_insight":{"$ref":"#/$defs/optionalInsight"}
+      }
+    },
+    "suggestion":{
+      "type":"object",
+      "additionalProperties":false,
+      "required":["title","summary"],
+      "properties":{
+        "title":{"type":"string","minLength":1},
+        "summary":{"type":"string","minLength":1},
+        "target_symbol":{"type":"string","minLength":1},
+        "action":{"type":"string","minLength":1},
+        "engineering_insight":{"$ref":"#/$defs/optionalInsight"}
+      }
+    }
+  }
+}`
 
 const fileAnalysisInsightGuidance = "Trace what the selected code actually does and distinguish visible behavior from assumptions about unseen callees. " +
 	"A lock alone does not prove thread safety, and a context parameter alone does not prove cancellation is handled or ignored. " +
@@ -36,6 +114,12 @@ const fileAnalysisInsightSchema = "At every supported engineering_insight locati
 // EngineeringInsightPromptVersion returns the production selected-file prompt
 // identity used by evaluation; callers cannot supply an unrelated label.
 func EngineeringInsightPromptVersion() string { return semanticAnalysisPromptVersion }
+
+// FileAnalysisResponseSchema returns the one strict structured-output contract
+// shared by production selected-file analysis and its evaluation runner.
+func FileAnalysisResponseSchema() llm.JSONSchema {
+	return llm.JSONSchema{Name: fileAnalysisResponseSchemaName, Schema: json.RawMessage(fileAnalysisResponseSchemaDocument)}
+}
 
 type semanticAnalysisResponse struct {
 	Purpose            string                      `json:"purpose"`
@@ -154,7 +238,7 @@ func (s *Service) generateFileAnalysis(ctx context.Context, prepared preparedFil
 	}
 	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
 	defer cancel()
-	result, err := s.retry(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}})
+	result, err := s.retryWithJSONSchema(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, FileAnalysisResponseSchema())
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}

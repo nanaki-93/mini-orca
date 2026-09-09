@@ -19,6 +19,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // Live evaluation returned parameter and field names as declaration explanations.
@@ -56,6 +57,10 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Fatal(err)
 		}
+		var gotSchema, wantSchema any
+		if request.ResponseFormat == nil || request.ResponseFormat.Type != "json_schema" || request.ResponseFormat.JSONSchema == nil || !request.ResponseFormat.JSONSchema.Strict || request.ResponseFormat.JSONSchema.Name != fileAnalysisResponseSchemaName || json.Unmarshal(request.ResponseFormat.JSONSchema.Schema, &gotSchema) != nil || json.Unmarshal([]byte(fileAnalysisResponseSchemaDocument), &wantSchema) != nil || !reflect.DeepEqual(gotSchema, wantSchema) {
+			t.Fatalf("file analysis response format = %+v", request.ResponseFormat)
+		}
 		prompt = request.Messages[0].Content
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "fixture-model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs the selected command.","responsibilities":["dispatches work"],"dependencies":["fmt"],"side_effects":["writes stdout"],"risks":[{"severity":"High","summary":"No input validation."}],"suggestions":[{"title":"Validate input","summary":"Reject blank names.","target_symbol":"Run","action":"fix"}],"symbol_explanations":{"Run":"Dispatches the command."}}`}}}})
 	}))
@@ -87,28 +92,84 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 	}
 }
 
-func TestCachedFileAnalysisMarksV10PromptResultsStale(t *testing.T) {
+func TestFileAnalysisResponseSchemaRejectsInvalidOptionalObjects(t *testing.T) {
+	compiler := jsonschema.NewCompiler()
+	document, err := jsonschema.UnmarshalJSON(strings.NewReader(fileAnalysisResponseSchemaDocument))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := compiler.AddResource("file-analysis-schema.json", document); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile("file-analysis-schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := `{"purpose":"Summarizes one file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional concern.","task_spec":{"schema_version":"1","target_path":"main.go","target_symbol":"Run","target_signature":"func Run()","acceptance_criteria":["Keep behavior."],"non_goals":[]},"engineering_insight":null}],"suggestions":[{"title":"Clarify behavior","summary":"Keep the call explicit.","action":"Use \\\"quoted\\\" text.","engineering_insight":{"mechanism":"Run calls one helper.","why_it_matters_here":"Run is the selected entry point.","tradeoff_or_failure_mode":"Changing call order can alter behavior.","transferable_lesson":"Exercise Run and verify call order."}}],"symbol_explanations":{"Run":"Runs the selected operation."}}`
+	invalid := map[string]string{
+		"scalar insight":        strings.Replace(valid, `"engineering_insight":null`, `"engineering_insight":"advice"`, 1),
+		"partial insight":       strings.Replace(valid, `"mechanism":"Run calls one helper.","why_it_matters_here":"Run is the selected entry point.","tradeoff_or_failure_mode":"Changing call order can alter behavior.","transferable_lesson":"Exercise Run and verify call order."`, `"mechanism":"partial"`, 1),
+		"wrong nested type":     strings.Replace(valid, `"action":"Use \\\"quoted\\\" text."`, `"action":false`, 1),
+		"extra nested property": strings.Replace(valid, `"transferable_lesson":"Exercise Run and verify call order."`, `"transferable_lesson":"Exercise Run and verify call order.","extra":"no"`, 1),
+		"empty explanation":     strings.Replace(valid, `"Run":"Runs the selected operation."`, `"Run":""`, 1),
+	}
+	if instance, err := jsonschema.UnmarshalJSON(strings.NewReader(valid)); err != nil || schema.Validate(instance) != nil {
+		t.Fatalf("valid file-analysis schema instance rejected: %v", err)
+	}
+	for name, value := range invalid {
+		t.Run(name, func(t *testing.T) {
+			instance, err := jsonschema.UnmarshalJSON(strings.NewReader(value))
+			if err != nil || schema.Validate(instance) == nil {
+				t.Fatalf("invalid schema instance accepted: decode=%v", err)
+			}
+		})
+	}
+}
+
+func TestAnalyzeFileDoesNotRetryUnsupportedStructuredFormat(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	service.runtimes.bug.effective.MaxRetries = 3
+	result, err := service.AnalyzeFile(context.Background(), "main.go", false, false)
+	if err != nil || result.Status != project.AnalysisStatusFailed || requests != 1 {
+		t.Fatalf("unsupported structured format result=%+v err=%v requests=%d", result, err, requests)
+	}
+}
+
+func TestParseSemanticAnalysisRejectsInvalidJSONEscape(t *testing.T) {
+	output := `{"purpose":"Summary.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[{"title":"Suggestion","summary":"Summary","action":"bad\q"}],"symbol_explanations":{}}`
+	if _, err := parseSemanticAnalysis(output, project.IndexFile{Path: "main.go"}, "package main\n"); err == nil {
+		t.Fatal("invalid JSON escape was accepted")
+	}
+}
+
+func TestCachedFileAnalysisMarksV11PromptResultsStale(t *testing.T) {
 	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	prepared, err := service.prepareFileAnalysis("main.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v11" {
-		t.Fatalf("file analysis prompt version = %q, want file-analysis-v11", got)
+	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v12" {
+		t.Fatalf("file analysis prompt version = %q, want file-analysis-v12", got)
 	}
 	legacy := project.FileAnalysis{
 		SchemaVersion: "1", ProjectID: prepared.input.ProjectID, ProjectRevision: prepared.input.ProjectRevision,
 		Path: prepared.input.Path, ContentHash: prepared.input.ContentHash, Language: prepared.input.Language,
 		Status: project.AnalysisStatusFresh, Model: prepared.input.Model, ConfiguredModel: prepared.input.Model,
 		Profile: prepared.input.Profile, Scope: prepared.input.Scope, ProviderOrigin: prepared.input.ProviderOrigin,
-		ReasoningEffort: prepared.input.ReasoningEffort, PromptVersion: "file-analysis-v10", ContextPolicyVersion: prepared.input.ContextPolicyVersion,
+		ReasoningEffort: prepared.input.ReasoningEffort, PromptVersion: "file-analysis-v11", ContextPolicyVersion: prepared.input.ContextPolicyVersion,
 	}
 	if err := prepared.cache.Store(legacy); err != nil {
 		t.Fatal(err)
 	}
 	cached, err := service.CachedFileAnalysis("main.go")
 	if err != nil || cached.Status != project.AnalysisStatusStale {
-		t.Fatalf("v10 cache = %+v, %v; want stale", cached, err)
+		t.Fatalf("v11 cache = %+v, %v; want stale", cached, err)
 	}
 }
 

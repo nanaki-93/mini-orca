@@ -211,9 +211,24 @@ func TestGrantDevelopmentModeRequiresOneUniqueAuthorization(t *testing.T) {
 	if err := runEvaluationMode(v11); err == nil {
 		t.Fatal("v11 grant replay was accepted")
 	}
+	if err := os.WriteFile(filepath.Join(state, "campaign.json"), []byte(`{"development_requests":24,"qualification_requests":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	v12 := []string{"-mode", "grant-development", "-root", root, "-authorization-id", "authqual05-qwen38-structured-1", "-requests", "6", "-candidate-id", "qwen38-v12-structured-1", "-model", "qwen/qwen3.8-27b", "-prompt-version", "file-analysis-v12"}
+	wrongV12Prompt := append([]string(nil), v12...)
+	wrongV12Prompt[len(wrongV12Prompt)-1] = "file-analysis-v11"
+	if err := runEvaluationMode(wrongV12Prompt); err == nil {
+		t.Fatal("wrong structured-output prompt was accepted")
+	}
+	if err := runEvaluationMode(v12); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode(v12); err == nil {
+		t.Fatal("structured-output grant replay was accepted")
+	}
 }
 
-func TestRunEvaluationModeUsesV11GrantForExactlyFinalSixRequests(t *testing.T) {
+func TestRunEvaluationModeUsesStructuredOutputGrantForExactlyFinalSixRequests(t *testing.T) {
 	root := t.TempDir()
 	git(t, root, "init")
 	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".mini-orca/\n"), 0600); err != nil {
@@ -268,20 +283,26 @@ func TestRunEvaluationModeUsesV11GrantForExactlyFinalSixRequests(t *testing.T) {
 	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-schema-1", "-requests", "6", "-candidate-id", "qwen38-v11-schema-1", "-model", "qwen/qwen3.8-27b", "-prompt-version", "file-analysis-v11"}); err != nil {
 		t.Fatal(err)
 	}
+	state := filepath.Join(root, ".mini-orca", "autopilot", "engineering-insight-evaluation")
+	if err := os.WriteFile(filepath.Join(state, "campaign.json"), []byte(`{"development_requests":24,"qualification_requests":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "authqual05-qwen38-structured-1", "-requests", "6", "-candidate-id", "qwen38-v12-structured-1", "-model", "qwen/qwen3.8-27b", "-prompt-version", "file-analysis-v12"}); err != nil {
+		t.Fatal(err)
+	}
 	for _, runID := range []string{"campaign-seven", "campaign-eight"} {
-		if err := run(app.EngineeringInsightDevelopmentRunMode, runID, "qwen38-v11-schema-1"); err != nil {
+		if err := run(app.EngineeringInsightDevelopmentRunMode, runID, "qwen38-v12-structured-1"); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if calls != 18+6 {
-		t.Fatalf("v11 provider calls = %d, want 24", calls)
+		t.Fatalf("structured-output provider calls = %d, want 24", calls)
 	}
-	if err := run(app.EngineeringInsightDevelopmentRunMode, "campaign-nine", "qwen38-v11-schema-1"); err == nil || calls != 24 {
-		t.Fatalf("twenty-fifth request dispatched: %v, calls=%d", err, calls)
+	if err := run(app.EngineeringInsightDevelopmentRunMode, "campaign-nine", "qwen38-v12-structured-1"); err == nil || calls != 24 {
+		t.Fatalf("thirty-first campaign request dispatched: %v, calls=%d", err, calls)
 	}
-	state := filepath.Join(root, ".mini-orca", "autopilot", "engineering-insight-evaluation")
 	campaign, err := os.ReadFile(filepath.Join(state, "campaign.json"))
-	if err != nil || string(campaign) != `{"development_requests":24,"qualification_requests":0}` {
+	if err != nil || string(campaign) != `{"development_requests":30,"qualification_requests":0}` {
 		t.Fatalf("final campaign = %s, %v", campaign, err)
 	}
 }
