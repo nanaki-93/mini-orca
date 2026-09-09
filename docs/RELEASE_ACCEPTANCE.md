@@ -855,6 +855,41 @@ model generation is authorized by this recovery. Further content-quality recover
 requires a new bounded authorization. Accepted code passed `make check` (including
 327 desktop tests) and `make quality`; this final evidence update changes docs only.
 
+### Medium-reasoning pilot preparation — 2026-09-09
+
+The user authorized six additional development calls changing only Qwen3.8
+reasoning effort from low to medium. Accepted code `5ca2320` binds seventh grant
+`qual05-qwen38-medium-1` to candidate `qwen38-v12-medium-1`, wire identifier
+`./models/qwen38-v12-medium-1`, v12 and medium. All six earlier grants and
+historical receipts remain intact. Consumption is 42 development / 0 qualification,
+with a new development ceiling of 48. No additional model experiment or
+qualification run is included in this request.
+
+The accepted implementation passed fresh independent review, coordinator
+`make check` (327 desktop tests), `make quality`, and 19 explicit installed-runtime
+medium conformance tests. Historical low conformance also passed 19 tests. The
+first review found complexity and template-proof gaps, repaired in the first Terra
+retry. Subsequent corrections changed documentation only; source/test trees remain
+identical to the full validated candidate. Private verifier and collector passed
+8 and 4 synthetic tests and independent review.
+
+The original idle LM Studio model and thinking-off settings were recorded, then
+unloaded before starting the owned standalone runtime. Same artifact hashes,
+54 dependency pins, 19,514 runtime-file inventory and fixed limits were verified.
+Actual local tokenization distinguishes low, medium and xhigh; medium template
+SHA-256 is `494e280281307944033f74025f48cddd84b0d3d0a1d756842e70b861b6f6641b`.
+The installed request route preserves medium effort and the thinking/final-schema
+boundary. No weights were downloaded or generation probes made.
+
+Frozen manifest SHA-256
+`7782ff7b5005675b198a286a94b807e26b277c7b6920e4225a308676289b551f`
+binds the reviewed code, new configuration, proofs and owned process. Readiness
+passed with zero requests/tokens before the two fixed runs
+`qual05-qwen38-medium-dev1` and `qual05-qwen38-medium-dev2`. Both batches use the
+same frozen candidate, with no tuning or retries, 4,096 total completion tokens
+and 300 seconds per attempt. Independent scoring and whole-final-content review
+must precede verdict and response disposal. Scheduler stays Paused.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
