@@ -100,7 +100,7 @@ Baseline: `f4e044e91c69cab47faaf7bb6e92e5fa1cb722e5`, `codex/autopilot`. QUAL-05
 
 ## RCV-04 — Author a broader development corpus and seal fresh qualification cases
 
-- [ ] RCV-04 accepted
+- [x] RCV-04 accepted
 
 **Target files**
 - `internal/app/testdata/engineering-insight-eval/v2-development.json` — new twelve-case development corpus.
