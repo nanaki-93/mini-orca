@@ -266,6 +266,14 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Complete |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Complete |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Blocked |
+| RCV-01 | Source-free optional-output rejection diagnostics | QUAL-05 | S / high | Complete |
+| RCV-02 | Generation field bounds aligned with parser | RCV-01 | S / high | Complete |
+| RCV-03 | General source-grounded explanation contract | RCV-02 | S / high | Complete |
+| RCV-04 | Broader development and sealed fresh qualification | RCV-03 | M / high | Complete |
+| RCV-05 | Fixed successor accounting and v2 gates | RCV-04 | M / high | Complete |
+| RCV-06 | Offline runtime validation and candidate freeze | RCV-05 | M / high | Complete |
+| RCV-07 | Twelve distinct development requests | RCV-06 | M / high | Pending |
+| RCV-08 | Conditional fresh 24-request qualification | RCV-07 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
 
@@ -2073,6 +2081,88 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 - **Verify:** exact collection/scoring/validation commands from QUAL-03, independent
   receipt inspection, `go test ./internal/app ./cmd/engineering-insight-eval -count=1`,
   `git diff --check`. No code changes during a qualification run.
+
+### RCV-01–08 — Approved v2 recovery after failed qualification
+
+The user approved [the recovery specification](docs/tasks.md) with “go for it”
+on 2026-09-09. This supersedes the earlier proposal-only wording for the next
+experiment; it preserves the failed QUAL-06 verdict and its historical receipts.
+`PLAN.md` remains the status ledger. The manual coordinator holds the sole lease;
+the scheduler stays Paused through offline acceptance and stops at the live verdict.
+
+- **RCV-01–05 Complete:** reviewed source-free rejection diagnostics, 250-character
+  generation fields within the unchanged 1,000-rune parser limit, a general
+  source-grounded explanation contract, twelve distinct development cases and
+  separately authored/reviewed sealed 24-case qualification corpus, and one fixed
+  successor accounting period. Terra exhausted its initial plus two repairs on
+  RCV-05; Sol completed the patch, followed by independent review and coordinator
+  test/vet/race acceptance. No live requests were used for these tasks.
+- **RCV-06 Complete:** candidate `qwen38-v13-recovery-1`, prompt
+  `file-analysis-v13`, corpus/protocol `engineering-insight-v2`. Reuse the same
+  Qwen3.8-27B 4-bit artifacts and pinned MLX-VLM 0.7.0 runtime. Offline installed
+  grammar/route checks, full coordinator validation and independent review passed.
+  Freeze the accepted clean HEAD in the private offline manifest; activation and
+  fresh owned-process readiness remain required before collection.
+- **RCV-07 Pending:** exactly twelve new development calls, one per distinct
+  case. All twelve must be usable and complete, all eight substantive insights
+  at least 6/8, all four controls omitted, and no critical whole-final false claim.
+  A failed screen stops the recovery and leaves the conditional allocation unused.
+- **RCV-08 Pending, conditional on RCV-07 passing:** 24 fresh distinct cases,
+  requiring at least 23 usable, 22 complete, 13/16 useful substantive insights,
+  all eight control omissions and no critical whole-final false claim. No tuning
+  or retry after the frozen screen or qualification disclosure.
+
+Exactly **12 development plus conditional 24 qualification requests** are
+approved under `engineering-insight-v2-recovery-1`. The original **48/24 consumed**
+campaign, seven grants and seventeen receipts remain immutable. Successor usage
+is separately reserved and reported cumulatively; full execution would total
+60/48. No unlimited grants, counter reset, generation probes or alternate model.
+Request settings stay medium effort with thinking, temperature 1, top-p .95,
+top-k 20, 4,096 total completion tokens, 300-second timeout, 16,384 input budget,
+119,552 runtime context and one lane. Default seed behavior is unchanged; distinct
+fixtures do not establish independent production reliability. The original host
+session must be restored after collection. REL-01 and publishing remain outside
+this recovery authorization, including after a passing RCV-08 verdict.
+
+### RCV-01 — Preserve source-free rejection diagnostics
+
+- **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-01 target files, implementation rules and exact verification command.
+- **Accepted:** independently reviewed and validated; preserve historical failures and immutable accounting.
+
+### RCV-02 — Constrain generated field lengths
+
+- **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-02 target files, implementation rules and exact verification command.
+- **Accepted:** independently reviewed and validated; preserve historical failures and immutable accounting.
+
+### RCV-03 — Generalize the selected-source explanation contract
+
+- **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-03 target files, implementation rules and exact verification command.
+- **Accepted:** independently reviewed and validated; preserve historical failures and immutable accounting.
+
+### RCV-04 — Broaden development and seal qualification
+
+- **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-04 target files, implementation rules and exact verification command.
+- **Accepted:** independently reviewed and validated; preserve historical failures and immutable accounting.
+
+### RCV-05 — Bind a fixed successor evaluation period
+
+- **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-05 target files, implementation rules and exact verification command.
+- **Accepted:** independently reviewed and validated; preserve historical failures and immutable accounting.
+
+### RCV-06 — Validate and freeze the replacement candidate offline
+
+- **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-06 target files, implementation rules and exact verification command.
+- **Coordinator only:** keep scheduler Paused. Finish full offline checks and independent review; freeze a clean base and private manifest before activating the 12/conditional24 period. No generation probes.
+
+### RCV-07 — Run twelve distinct development requests
+
+- **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-07 target files, implementation rules and exact verification command.
+- **Coordinator only:** require RCV-06 accepted, live lease, fixed successor authorization and fresh owned runtime readiness. Run twelve once, score every whole final independently, and stop on any screen failure. Do not start qualification unless all development gates pass.
+
+### RCV-08 — Run conditional fresh qualification and stop
+
+- **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-08 target files, implementation rules and exact verification command.
+- **Coordinator only:** require a passing RCV-07 receipt and unchanged frozen candidate. Use the sealed distinct 24-case holdout once; independently score/review, restore the host session and pause at the verdict. No REL-01 dispatch.
 
 ### REL-01 — Validate the selected release end to end
 

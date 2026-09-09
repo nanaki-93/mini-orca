@@ -39,8 +39,27 @@ FIXED_REQUESTS = {
         "top_p": 0.95,
         "top_k": 20,
     },
+    "qwen38-v13-recovery-1": {
+        "model": "./models/qwen38-v13-recovery-1",
+        "temperature": 1.0,
+        "max_tokens": 4096,
+        "reasoning_effort": "medium",
+        "top_p": 0.95,
+        "top_k": 20,
+    },
 }
 FORBIDDEN_REQUEST_FIELDS = {"min_p", "presence_penalty", "repeat_penalty"}
+FIXED_ENVIRONMENT = {
+    "MAX_KV_SIZE": "119552",
+    "MLX_VLM_MAX_NUM_SEQS": "1",
+    "MLX_VLM_ENABLE_THINKING": "1",
+    "MLX_VLM_MAX_TOKENS": "4096",
+    "MLX_VLM_MODEL_DISCOVERY": "served",
+    "MLX_TRUST_REMOTE_CODE": "false",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+}
 
 
 def require_candidate(path: Path) -> dict[str, Any]:
@@ -50,15 +69,15 @@ def require_candidate(path: Path) -> dict[str, Any]:
         raise AssertionError("candidate is not an approved fixed runtime profile")
     if runtime.get("wire_model") != required_request["model"] or runtime.get("request") != required_request:
         raise AssertionError("runtime request differs from the audited wire contract")
-    if runtime.get("max_num_seqs") != 1:
-        raise AssertionError("runtime does not pin one admission lane")
     environment = runtime.get("environment")
-    if not isinstance(environment, dict) or environment.get("MAX_KV_SIZE") != "119552":
-        raise AssertionError("runtime does not pin the required context limit")
-    if environment.get("MLX_VLM_MAX_NUM_SEQS") != "1":
-        raise AssertionError("runtime does not pin one server sequence")
-    if environment.get("MLX_VLM_ENABLE_THINKING") != "1":
-        raise AssertionError("runtime does not enable thinking")
+    if environment != FIXED_ENVIRONMENT:
+        raise AssertionError("runtime environment differs from the audited recovery settings")
+    if runtime.get("readiness_timeout_seconds") != 300:
+        raise AssertionError("runtime does not pin the 300-second readiness limit")
+    if runtime.get("max_num_seqs") != 1 or runtime.get("thinking") is not True:
+        raise AssertionError("runtime does not pin thinking to one admission lane")
+    if runtime.get("speculative_decoding") is not False or runtime.get("apc") is not False:
+        raise AssertionError("runtime enables an unapproved decoding or cache route")
     return runtime
 
 
@@ -114,18 +133,51 @@ def schema_checks(schema_text: str, tokenizer: Any) -> None:
         "responsibilities": [], "dependencies": [], "side_effects": [],
         "risks": [], "suggestions": [], "symbol_explanations": {},
     }
-    insight = {
-        "mechanism": "Synthetic mechanism.",
-        "why_it_matters_here": "Synthetic local evidence.",
-        "tradeoff_or_failure_mode": "Synthetic constraint.",
-        "transferable_lesson": "Synthetic measurement.",
-    }
-    cases: list[tuple[str, object, bool]] = [("omitted", base, True)]
-    value = copy.deepcopy(base); value["engineering_insight"] = None; cases.append(("null", value, True))
-    value = copy.deepcopy(base); value["engineering_insight"] = insight; cases.append(("full", value, True))
-    value = copy.deepcopy(base); value["suggestions"] = [{"title": "Title", "summary": "Summary", "action": "Use \\\"quoted\\\" text at C:\\\\tmp\\\\x.\nThen check.", "engineering_insight": insight}]; cases.append(("escaped nested", value, True))
+    def insight(text: str) -> dict[str, str]:
+        return {
+            "mechanism": text,
+            "why_it_matters_here": text,
+            "tradeoff_or_failure_mode": text,
+            "transferable_lesson": text,
+        }
+
+    def nested_response() -> dict[str, Any]:
+        response = copy.deepcopy(base)
+        response["risks"] = [{"severity": "low", "summary": "Summary"}]
+        response["suggestions"] = [{"title": "Title", "summary": "Summary"}]
+        return response
+
+    def all_insight_locations(value: object) -> dict[str, Any]:
+        response = nested_response()
+        response["engineering_insight"] = copy.deepcopy(value)
+        response["risks"][0]["engineering_insight"] = copy.deepcopy(value)
+        response["suggestions"][0]["engineering_insight"] = copy.deepcopy(value)
+        return response
+
+    def insight_at(response: dict[str, Any], location: str) -> dict[str, str]:
+        if location == "top level":
+            return response["engineering_insight"]
+        if location == "risk item":
+            return response["risks"][0]["engineering_insight"]
+        return response["suggestions"][0]["engineering_insight"]
+
+    normal_insight = insight("Synthetic insight.")
+    unicode_limit = "é" * 250
+    unicode_over_limit = "é" * 251
+    cases: list[tuple[str, object, bool]] = [("omitted", base, True), ("nested omitted", nested_response(), True)]
+    cases.append(("null at every location", all_insight_locations(None), True))
+    cases.append(("full at every location", all_insight_locations(normal_insight), True))
+    cases.append(("unicode 250 at every location", all_insight_locations(insight(unicode_limit)), True))
+    for location in ("top level", "risk item", "suggestion item"):
+        for field in ("mechanism", "why_it_matters_here", "tradeoff_or_failure_mode", "transferable_lesson"):
+            value = all_insight_locations(insight(unicode_limit))
+            if len({id(insight_at(value, name)) for name in ("top level", "risk item", "suggestion item")}) != 3:
+                raise AssertionError("unicode boundary fixture shares insight objects between locations")
+            insight_at(value, location)[field] = unicode_over_limit
+            cases.append((f"unicode 251 {field} at {location}", value, False))
+    value = copy.deepcopy(base); value["suggestions"] = [{"title": "Title", "summary": "Summary", "action": "Use \\\"quoted\\\" text at C:\\\\tmp\\\\x.\nThen check.", "engineering_insight": normal_insight}]; cases.append(("escaped nested", value, True))
     value = copy.deepcopy(base); value["engineering_insight"] = {"mechanism": "partial"}; cases.append(("partial", value, False))
-    value = copy.deepcopy(base); value["engineering_insight"] = {**insight, "extra": "x"}; cases.append(("extra", value, False))
+    value = copy.deepcopy(base); value["engineering_insight"] = {**normal_insight, "extra": "x"}; cases.append(("extra", value, False))
     value = copy.deepcopy(base); value["engineering_insight"] = "wrong"; cases.append(("malformed type", value, False))
     value = copy.deepcopy(base); value["suggestions"] = [{"title": "Title", "summary": "Summary", "action": "BAD_ESCAPE"}]; cases.append(("malformed escape", json.dumps(value).replace("BAD_ESCAPE", r"\q"), False))
     for name, instance, expected in cases:
