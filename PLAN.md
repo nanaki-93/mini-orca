@@ -272,8 +272,8 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | RCV-04 | Broader development and sealed fresh qualification | RCV-03 | M / high | Complete |
 | RCV-05 | Fixed successor accounting and v2 gates | RCV-04 | M / high | Complete |
 | RCV-06 | Offline runtime validation and candidate freeze | RCV-05 | M / high | Complete |
-| RCV-07 | Twelve distinct development requests | RCV-06 | M / high | Pending |
-| RCV-08 | Conditional fresh 24-request qualification | RCV-07 | M / high | Pending |
+| RCV-07 | Twelve distinct development requests | RCV-06 | M / high | Blocked |
+| RCV-08 | Conditional fresh 24-request qualification | RCV-07 | M / high | Blocked |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
 
@@ -2103,14 +2103,15 @@ the scheduler stays Paused through offline acceptance and stops at the live verd
   grammar/route checks, full coordinator validation and independent review passed.
   Freeze the accepted clean HEAD in the private offline manifest; activation and
   fresh owned-process readiness remain required before collection.
-- **RCV-07 Pending:** exactly twelve new development calls, one per distinct
-  case. All twelve must be usable and complete, all eight substantive insights
-  at least 6/8, all four controls omitted, and no critical whole-final false claim.
-  A failed screen stops the recovery and leaves the conditional allocation unused.
-- **RCV-08 Pending, conditional on RCV-07 passing:** 24 fresh distinct cases,
-  requiring at least 23 usable, 22 complete, 13/16 useful substantive insights,
-  all eight control omissions and no critical whole-final false claim. No tuning
-  or retry after the frozen screen or qualification disclosure.
+- **RCV-07 Blocked (development screen failed):** the twelve distinct calls
+  completed once at frozen `9da9cd9`: 12/12 usable and complete, only 2/8
+  substantive insights at least 6/8, 0/4 control omissions, and five critical
+  whole-final false claims. Independent agent scoring/review reached an explicit
+  consensus; receipt integrity passed and the production development gate
+  returned false. No retry or tuning followed the result.
+- **RCV-08 Blocked by RCV-07:** all twenty-four fresh qualification slots remain
+  unused and the separately sealed source/anchors remain undisclosed to tuning.
+  Historical QUAL-06 remains a failed, exhausted run; this screen does not alter it.
 
 Exactly **12 development plus conditional 24 qualification requests** are
 approved under `engineering-insight-v2-recovery-1`. The original **48/24 consumed**
@@ -2156,13 +2157,21 @@ this recovery authorization, including after a passing RCV-08 verdict.
 
 ### RCV-07 — Run twelve distinct development requests
 
+- **Final verdict — 2026-09-09: Blocked.** All twelve responses were complete, but only two substantive insights were useful; every control emitted an insight and five finals contained critical false claims. The owned runtime is stopped and the original LM Studio session is restored. See [the scored evidence](docs/RELEASE_ACCEPTANCE.md#v2-development-screen-verdict--2026-09-09).
 - **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-07 target files, implementation rules and exact verification command.
 - **Coordinator only:** require RCV-06 accepted, live lease, fixed successor authorization and fresh owned runtime readiness. Run twelve once, score every whole final independently, and stop on any screen failure. Do not start qualification unless all development gates pass.
 
 ### RCV-08 — Run conditional fresh qualification and stop
 
+- **Current state: Blocked, not run.** The development gate failed. Its conditional 24-call allocation remains untouched; no release, new model, further prompt pass or replacement run is authorized.
 - **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-08 target files, implementation rules and exact verification command.
 - **Coordinator only:** require a passing RCV-07 receipt and unchanged frozen candidate. Use the sealed distinct 24-case holdout once; independently score/review, restore the host session and pause at the verdict. No REL-01 dispatch.
+
+Recovery stop: successor consumption is **12 development /0 qualification**;
+cumulative historical plus successor consumption is **60/24**. All earlier
+receipts and seven grants remain unchanged. The scheduler remains Paused. Any
+further experiment requires a separate model/task-design decision and budget;
+the failed screen cannot be repaired by rerunning or weakening its gates.
 
 ### REL-01 — Validate the selected release end to end
 

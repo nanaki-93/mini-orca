@@ -1112,6 +1112,101 @@ nor the offline freeze are overwritten. Fresh owned-process readiness is a
 separate gate; a stopped runtime's historical manifest does not establish it.
 The scheduler remains Paused and REL-01 remains outside this recovery approval.
 
+## V2 development screen verdict — 2026-09-09
+
+**RCV-07 failed; RCV-08 did not run.** The reviewed candidate
+`qwen38-v13-recovery-1` ran twelve distinct development cases once at clean base
+`9da9cd96583175e84093de42f71907db5c480a5d`, with unchanged frozen prompt, schema,
+corpus, model artifacts, runtime and medium settings. No generation probes,
+retries, replacement run, mid-run tuning or qualification requests occurred.
+
+Final pre-dispatch review found a missing enforced link between the private
+runtime-ready and offline manifests. The coordinator added the digest/shared-field
+join and zero-counter/owner checks, with nine passing synthetic preflight tests.
+Independent review accepted it before dispatch. The rejected, unused envelopes
+and verifier versions remain preserved in `pre-dispatch-rejected-1`; no public
+application code or authorization identity changed. Final offline manifest SHA-256:
+`f548a8848b137cde64de54ef8dc36a7c062ea922c417ab8c7fa76d9b10bcb525`.
+Final ready manifest SHA-256:
+`71afe69041f67bbc5424cdf687852ddbe4c2ff53856f4191ee89d4bcb17b1bc6`.
+Fresh owned-process verification passed at zero requests before the first call.
+
+| Development gate | Observed | Required | Result |
+| --- | --- | --- | --- |
+| Usable summaries | 12/12 | 12/12 | Pass |
+| Fully complete summaries | 12/12 | 12/12 | Pass |
+| Useful substantive insights | 2/8 | 8/8 at least 6/8 | Fail |
+| Intentional control omissions | 0/4 | 4/4 | Fail |
+| Whole-final critical false claims | 5 | 0 | Fail |
+
+All twelve responses contain accepted insights. No optional field was rejected
+or degraded, so the new schema/parser bounds worked for this sample. The
+failure shifted to unwanted insights, missed case mechanisms, inadequate
+current-behavior verification and incorrect factual claims. The different corpus
+prevents interpreting these counts as a controlled improvement over v1.
+
+| Substantive case | Correctness / relevance / trade-off / verification | Total | Critical claim |
+| --- | --- | --- | --- |
+| Snapshot read lock | 2 /2 /2 /1 | 7/8 | No |
+| Cancellation before loop | 2 /2 /1 /0 | 5/8 | Yes |
+| Filtered output capacity | 1 /1 /1 /1 | 4/8 | No |
+| Bounded opaque refresh | 1 /2 /1 /2 | 6/8 | No |
+| Local idempotency admission | 1 /2 /1 /0 | 4/8 | No |
+| Read authorization boundary | 1 /1 /1 /1 | 4/8 | No |
+| Delegated token verification | 1 /2 /0 /2 | 5/8 | Yes |
+| Buffered send contrast | 1 /2 /0 /1 | 4/8 | Yes |
+
+All four controls receive zero insight credit under their omission anchors.
+Two also contain critical claims. The five critical classifications are: an
+explicitly current cancellation test expectation opposite to the shown behavior;
+unestablished security guarantees assigned to an opaque delegate; an incorrect
+blocked-send cancellation limitation; a return-value claim for an invalid helper
+invocation; and a constructor defect invented despite the correct assignment
+being visible. Conditional concerns or clearly proposed tests alone were not
+classified as critical. Several other insights are locally plausible but miss
+the frozen allocation, authorization or retained-on-failure mechanisms.
+
+A fresh agent scorer and independent fresh reviewer inspected every whole
+terminal final and its accepted insight locations against the frozen sources and
+anchors, verifying all twelve full-response digests. Both initial judgments were
+preserved. They explicitly reconciled off-anchor lessons, proposed versus current
+verification, omission-control credit, and critical claims; the final score maps
+match exactly with no unresolved differences. Reasoning text received no credit.
+This is agent evaluation, not human testing or a production reliability guarantee.
+
+The accepted score/export CLI commands completed successfully. The exact offline
+receipt-validator command returned `collection` with 12 usable, 12 complete,
+2 useful substantive, 0 omitted controls and 5 critical claims (exit 0 means
+collection integrity passed). A separate read-only invocation of the production
+`DevelopmentGatePassed()` method returned **false**. The coordinator did not
+attempt a qualification dispatch to demonstrate that rejection. Exact commands,
+proof hashes and source-free adjudication remain in the private coordinator record.
+
+Postcollection owned-runtime verification accounts for exactly twelve completed
+requests, zero failures/active work/queued work and **21,804 raw and reported
+completion tokens**, matching the receipt. All stops were normal; all twelve
+outputs are distinct. Median latency was **117.55 seconds**; nearest-rank p95
+was **163.64 seconds**, with zero timeout/censored attempts. Source-free rejection
+diagnostics, scores, receipts and accounting remain retained. Following final independent evidence review, the reviewed discard CLI removed
+raw development responses and the coordinator verified their absence.
+
+The owned runtime was stopped. The original LM Studio model is restored idle
+with context 119,552, one lane and thinking off. All stable readback fields and
+the template digest match the captured baseline, excluding only process-instance
+identity and last-use time. Fresh `go test ./internal/app
+./cmd/engineering-insight-eval -count=1` and `git diff --check` passed; the accepted
+RCV-06 full `make check` and `make quality` results remain applicable to unchanged
+production code.
+
+Successor consumption is **12 development /0 qualification**, cumulative
+**60 development /24 qualification**. The original 48/24 campaign, all seven
+grants and seventeen receipts remain unchanged. The fresh 24-case qualification
+corpus remains sealed and its conditional requests unused. RCV-07 and RCV-08 are
+Blocked, the scheduler remains Paused, and REL-01 remains Blocked. No further
+model, prompt-only adjustment, budget grant or release action is authorized.
+The next decision is a separately bounded model/task-design experiment; this
+failed screen cannot be turned into a pass by retrying or changing its gates.
+
 ## FND-01 reconciliation
 
 FND-01 started at `d0a7cc9`. The only pre-existing worktree edit was the coordinator's
