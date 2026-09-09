@@ -239,14 +239,22 @@ func isLoopbackURL(rawURL string) bool {
 }
 
 func (s *Service) retry(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage) (modelOutput, error) {
+	return s.retryRequest(ctx, runtime, messages, nil)
+}
+
+func (s *Service) retryWithJSONSchema(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema llm.JSONSchema) (modelOutput, error) {
+	return s.retryRequest(ctx, runtime, messages, &schema)
+}
+
+func (s *Service) retryRequest(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema *llm.JSONSchema) (modelOutput, error) {
 	var lastErr error
 	for attempt := 0; attempt <= runtime.effective.MaxRetries; attempt++ {
-		result, err := runtime.execute(ctx, messages)
+		result, err := runtime.execute(ctx, messages, schema)
 		if err == nil {
 			return result, nil
 		}
 		lastErr = err
-		if ctx.Err() != nil || errors.Is(err, llm.ErrRedirectRejected) || attempt == runtime.effective.MaxRetries {
+		if ctx.Err() != nil || errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) || attempt == runtime.effective.MaxRetries {
 			break
 		}
 		wait := s.retryBase << attempt
@@ -267,14 +275,20 @@ func (s *Service) retry(ctx context.Context, runtime modelRuntime, messages []ll
 	return modelOutput{}, lastErr
 }
 
-func (r modelRuntime) execute(ctx context.Context, messages []llm.ChatMessage) (modelOutput, error) {
+func (r modelRuntime) execute(ctx context.Context, messages []llm.ChatMessage, schema *llm.JSONSchema) (modelOutput, error) {
 	if r.client == nil {
 		return modelOutput{}, fmt.Errorf("model client is not configured")
 	}
 	if len(messages) == 0 || strings.TrimSpace(messages[0].Content) == "" {
 		return modelOutput{}, fmt.Errorf("model request is required")
 	}
-	response, err := r.client.Chat(ctx, messages)
+	var response *llm.ChatResponse
+	var err error
+	if schema == nil {
+		response, err = r.client.Chat(ctx, messages)
+	} else {
+		response, err = r.client.ChatWithJSONSchema(ctx, messages, *schema)
+	}
 	if err != nil {
 		return modelOutput{}, fmt.Errorf("model request failed: %w", err)
 	}

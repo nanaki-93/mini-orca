@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +27,17 @@ const (
 // can change the destination that receives source context and credentials.
 var ErrRedirectRejected = errors.New("provider redirect rejected")
 
+// ErrRequestRejected reports a provider-side request validation failure. It is
+// intentionally distinct from transient transport and server failures so a
+// caller cannot turn an unsupported request format into repeated attempts.
+var ErrRequestRejected = errors.New("provider rejected request")
+
+// ErrStructuredRequestRejected reports a non-retryable 400 response to a
+// request that included a strict schema. The response does not identify which
+// request field the provider rejected, so callers must not infer that it was
+// specifically the response format.
+var ErrStructuredRequestRejected = errors.New("provider rejected structured request")
+
 // ErrUnusableResponse reports a provider response that an ordinary application
 // caller cannot use as final assistant output.
 var ErrUnusableResponse = errors.New("provider response is unusable")
@@ -40,17 +52,71 @@ type ChatMessage struct {
 
 // ChatRequest is the OpenAI-compatible chat-completions request payload.
 type ChatRequest struct {
-	Model           string        `json:"model"`
-	Messages        []ChatMessage `json:"messages"`
-	Temperature     float32       `json:"temperature"`
-	MaxTokens       int           `json:"max_tokens,omitempty"`
-	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
-	TopP            *float32      `json:"top_p,omitempty"`
-	TopK            *int          `json:"top_k,omitempty"`
-	MinP            *float32      `json:"min_p,omitempty"`
-	PresencePenalty *float32      `json:"presence_penalty,omitempty"`
-	RepeatPenalty   *float32      `json:"repeat_penalty,omitempty"`
-	Stream          bool          `json:"stream,omitempty"`
+	Model           string          `json:"model"`
+	Messages        []ChatMessage   `json:"messages"`
+	Temperature     float32         `json:"temperature"`
+	MaxTokens       int             `json:"max_tokens,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	TopP            *float32        `json:"top_p,omitempty"`
+	TopK            *int            `json:"top_k,omitempty"`
+	MinP            *float32        `json:"min_p,omitempty"`
+	PresencePenalty *float32        `json:"presence_penalty,omitempty"`
+	RepeatPenalty   *float32        `json:"repeat_penalty,omitempty"`
+	ResponseFormat  *ResponseFormat `json:"response_format,omitempty"`
+	Stream          bool            `json:"stream,omitempty"`
+}
+
+// JSONSchema defines one strict structured-output contract for a chat request.
+// Schema is raw JSON because JSON Schema has open-ended keywords, while this
+// boundary still validates that callers provide one object before transport.
+type JSONSchema struct {
+	Name   string
+	Schema json.RawMessage
+}
+
+// Identity binds a resumable caller to the exact strict schema it sent.
+func (schema JSONSchema) Identity() (string, error) {
+	format, err := schema.responseFormat()
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(format)
+	if err != nil {
+		return "", fmt.Errorf("llm client: marshal response format identity: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", sum[:]), nil
+}
+
+func (schema JSONSchema) responseFormat() (*ResponseFormat, error) {
+	if strings.TrimSpace(schema.Name) == "" {
+		return nil, fmt.Errorf("llm client: JSON schema name is required")
+	}
+	if len(schema.Schema) == 0 || !json.Valid(schema.Schema) {
+		return nil, fmt.Errorf("llm client: JSON schema must be valid JSON")
+	}
+	var document any
+	if err := json.Unmarshal(schema.Schema, &document); err != nil {
+		return nil, fmt.Errorf("llm client: decode JSON schema: %w", err)
+	}
+	if _, ok := document.(map[string]any); !ok {
+		return nil, fmt.Errorf("llm client: JSON schema must be an object")
+	}
+	return &ResponseFormat{Type: "json_schema", JSONSchema: &ResponseFormatJSONSchema{Name: schema.Name, Strict: true, Schema: schema.Schema}}, nil
+}
+
+// ResponseFormat is the OpenAI-compatible response-format request object.
+type ResponseFormat struct {
+	Type       string                    `json:"type"`
+	JSONSchema *ResponseFormatJSONSchema `json:"json_schema,omitempty"`
+}
+
+// ResponseFormatJSONSchema is the strict JSON Schema payload accepted by
+// OpenAI-compatible chat-completions providers.
+type ResponseFormatJSONSchema struct {
+	Name   string          `json:"name"`
+	Strict bool            `json:"strict"`
+	Schema json.RawMessage `json:"schema"`
 }
 
 // ChatChoice represents a single choice in a response.
@@ -106,6 +172,20 @@ func NewClient(profile config.ModelProfile) *Client {
 // Chat sends one OpenAI-compatible Chat Completions request and validates the
 // provider result before application code receives it.
 func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatResponse, error) {
+	return c.chat(ctx, messages, nil)
+}
+
+// ChatWithJSONSchema sends one request with a strict JSON Schema response
+// contract. It shares the ordinary Chat transport and response validation path.
+func (c *Client) ChatWithJSONSchema(ctx context.Context, messages []ChatMessage, schema JSONSchema) (*ChatResponse, error) {
+	format, err := schema.responseFormat()
+	if err != nil {
+		return nil, err
+	}
+	return c.chat(ctx, messages, format)
+}
+
+func (c *Client) chat(ctx context.Context, messages []ChatMessage, responseFormat *ResponseFormat) (*ChatResponse, error) {
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("llm client: messages are required")
 	}
@@ -120,6 +200,7 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatRespons
 		MinP:            c.profile.MinP,
 		PresencePenalty: c.profile.PresencePenalty,
 		RepeatPenalty:   c.profile.RepeatPenalty,
+		ResponseFormat:  responseFormat,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("llm client: marshal chat request: %w", err)
@@ -132,6 +213,9 @@ func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatRespons
 	request.Header.Set("Content-Type", "application/json")
 	responseBody, err := c.do(request)
 	if err != nil {
+		if responseFormat != nil && errors.Is(err, ErrRequestRejected) {
+			return nil, fmt.Errorf("llm client: %w: %v", ErrStructuredRequestRejected, err)
+		}
 		return nil, err
 	}
 
@@ -206,6 +290,9 @@ func joinAPIURL(apiBaseURL, path string) (string, error) {
 }
 
 func providerStatusError(status int) error {
+	if status == http.StatusBadRequest {
+		return fmt.Errorf("llm client: %w (status %d)", ErrRequestRejected, status)
+	}
 	return fmt.Errorf("llm client: provider returned status %d", status)
 }
 

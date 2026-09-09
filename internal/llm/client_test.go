@@ -160,7 +160,7 @@ func TestClientPreservesConfiguredCompatibilityPrefixAndRequestContract(t *testi
 				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 					t.Fatalf("decode request: %v", err)
 				}
-				if request.Model != "compatible-model" || request.Temperature != 0.2 || request.MaxTokens != 1234 || request.ReasoningEffort != "" || request.TopP != nil || request.TopK != nil || request.MinP != nil || request.PresencePenalty != nil || request.RepeatPenalty != nil || len(request.Messages) != 1 {
+				if request.Model != "compatible-model" || request.Temperature != 0.2 || request.MaxTokens != 1234 || request.ReasoningEffort != "" || request.TopP != nil || request.TopK != nil || request.MinP != nil || request.PresencePenalty != nil || request.RepeatPenalty != nil || request.ResponseFormat != nil || len(request.Messages) != 1 {
 					t.Fatalf("request = %+v", request)
 				}
 				_ = json.NewEncoder(w).Encode(ChatResponse{Model: "compatible-model", Choices: []ChatChoice{{Message: ChatMessage{Role: "assistant", Content: "ok"}}}})
@@ -216,6 +216,41 @@ func TestClientSendsConfiguredTemperatureIncludingZero(t *testing.T) {
 				t.Fatalf("Chat() error = %v", err)
 			}
 		})
+	}
+}
+
+func TestChatWithJSONSchemaSerializesStrictFormatAndEscapedSchema(t *testing.T) {
+	schema := JSONSchema{Name: "file_analysis", Schema: json.RawMessage(`{"type":"object","properties":{"note":{"type":"string","description":"quoted \\\"text\\\""}},"required":["note"],"additionalProperties":false}`)}
+	client := NewClient(testProfile("https://provider.example/v1", ""))
+	client.transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		var payload map[string]json.RawMessage
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		var format ResponseFormat
+		if err := json.Unmarshal(payload["response_format"], &format); err != nil {
+			t.Fatalf("decode response_format: %v", err)
+		}
+		if format.Type != "json_schema" || format.JSONSchema == nil || !format.JSONSchema.Strict || format.JSONSchema.Name != schema.Name || string(format.JSONSchema.Schema) != string(schema.Schema) {
+			t.Fatalf("response_format = %+v", format)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"model":"fixture","choices":[{"message":{"role":"assistant","content":"{}"}}]}`)), Request: request}, nil
+	})
+	if _, err := client.ChatWithJSONSchema(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}, schema); err != nil {
+		t.Fatalf("ChatWithJSONSchema() error = %v", err)
+	}
+}
+
+func TestChatWithJSONSchemaRejectsProviderBadRequestWithoutRetry(t *testing.T) {
+	var requests atomic.Int32
+	client := NewClient(testProfile("https://provider.example/v1", ""))
+	client.transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		requests.Add(1)
+		return &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(strings.NewReader(`{"error":"unsupported format"}`)), Request: request}, nil
+	})
+	_, err := client.ChatWithJSONSchema(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}, JSONSchema{Name: "answer", Schema: json.RawMessage(`{"type":"object"}`)})
+	if !errors.Is(err, ErrStructuredRequestRejected) || requests.Load() != 1 || strings.Contains(err.Error(), "unsupported format") {
+		t.Fatalf("schema rejection = %v, requests=%d", err, requests.Load())
 	}
 }
 

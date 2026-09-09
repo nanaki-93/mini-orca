@@ -80,13 +80,18 @@ func runEvaluationMode(args []string) error {
 		return fmt.Errorf("invalid evaluation command")
 	}
 	if *mode == "grant-development" {
-		if *candidateID == "" && *model == "" && *promptVersion == "" {
-			return app.GrantEngineeringInsightDevelopmentBudget(*root, *authorizationID, *requests)
-		}
-		if *promptVersion != "" {
+		switch {
+		case *authorizationID == "authqual05-qwen38-structured-1":
+			return app.GrantEngineeringInsightV12DevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
+		case *authorizationID == "qual05-qwen38-schema-1":
 			return app.GrantEngineeringInsightV11DevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
+		case *authorizationID == "qual05-qwen38-recovery-1":
+			return app.GrantEngineeringInsightRecoveryDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model)
+		case *candidateID == "" && *model == "" && *promptVersion == "":
+			return app.GrantEngineeringInsightDevelopmentBudget(*root, *authorizationID, *requests)
+		default:
+			return fmt.Errorf("development budget grant identity is invalid")
 		}
-		return app.GrantEngineeringInsightRecoveryDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model)
 	}
 	if !app.ValidEngineeringInsightEvaluationRunID(*runID) {
 		return fmt.Errorf("evaluation run ID is invalid")
