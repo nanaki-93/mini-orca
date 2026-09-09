@@ -73,7 +73,7 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 	if result.Status != project.AnalysisStatusFresh || result.Purpose == "" || len(result.Symbols) != 1 || result.SymbolExplanations["Run"] == "" || result.Model != "fixture-model" || len(result.Risks) != 1 || result.Risks[0].Severity != "high" {
 		t.Fatalf("analysis = %+v", result)
 	}
-	if strings.Contains(prompt, "helper secret") || !strings.Contains(prompt, "func Run") || !strings.Contains(prompt, "TARGET_SOURCE (the only source content supplied)") || !strings.Contains(prompt, "target_path copied exactly") || !strings.Contains(prompt, "target_symbol copied exactly") || !strings.Contains(prompt, "target_signature copied exactly") || !strings.Contains(prompt, "Do not use a symbol field") {
+	if strings.Contains(prompt, "helper secret") || !strings.Contains(prompt, "func Run") || !strings.Contains(prompt, "TARGET_SOURCE (the only source content supplied)") || !strings.Contains(prompt, "target_path copied exactly") || !strings.Contains(prompt, "target_symbol copied exactly") || !strings.Contains(prompt, "target_signature copied exactly") || !strings.Contains(prompt, "Do not use a symbol field") || !strings.Contains(prompt, "Ground selected-file behavior and engineering insights in TARGET_SOURCE") || !strings.Contains(prompt, "Default to tests that characterize current behavior") {
 		t.Fatalf("semantic prompt was not one-file scoped: %s", prompt)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".mini-orca", "file-analysis")); err != nil {

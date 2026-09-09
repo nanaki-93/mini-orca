@@ -115,21 +115,23 @@ func TestEngineeringInsightPromptsRequireUsefulGroundedContentOrOmission(t *test
 		}
 	}
 	for _, requirement := range []string{
-		"describe that behavior as unknown unless TARGET_SOURCE demonstrates it",
-		"states impact conditionally, with an if, when, or workload condition",
-		"Otherwise omit it, especially for a trivial wrapper",
-		"same mutex remains held across <-ctx.Done() with no intervening release",
-		"Mention later state or ownership revalidation only when TARGET_SOURCE shows a later publication or ownership transition",
-		"say the mutex is released before the wait and do not invent revalidation",
-		"expect the second to acquire it only after the first releases it",
-		"starts a result slice at zero capacity and appends once per known input item",
-		"name the input-length and result-slice identifiers and explain capacity growth",
-		"Preallocation changes retained result capacity. If TARGET_SOURCE visibly allocates while formatting items, preallocation does not remove that separately visible cost; otherwise do not infer a formatting allocation",
-		"State allocation impact conditionally for workloads or input sizes where growth matters, and treat retained result capacity as the preallocation trade-off",
-		"before-and-after -benchmem runs at representative input sizes and compare allocations per operation",
+		"Ground selected-file behavior and engineering insights in TARGET_SOURCE",
+		"TARGET_FACTS, PROJECT_FACTS, and CONTEXT_MANIFEST only for the identity and context they supply",
+		"Apply these factual boundaries to the whole final response",
+		"State visible behavior as fact only when TARGET_SOURCE demonstrates it",
+		"Separate local guarantees from downstream behavior that this file cannot establish",
+		"consequences demonstrated by visible local control or data flow",
+		"Do not infer unshown downstream safeguards, callers, implementations, or consequences",
+		"explain an observable relationship or invariant, why it matters locally, a real limitation or failure mode, and a concrete test with expected observations",
+		"An engineering insight can describe a correct existing behavior",
+		"does not require a proposed change or discovered defect",
+		"Default to tests that characterize current behavior",
+		"label it proposed-change and first state the current behavior it would change",
+		"do not portray a failing proposed expectation as a present contract",
+		"Intentionally omit it for trivial code without a meaningful observable relationship",
 	} {
 		if !strings.Contains(semantic, requirement) {
-			t.Fatalf("file analysis prompt is missing grounded-insight guidance %q", requirement)
+			t.Fatalf("file analysis prompt is missing explanation contract %q", requirement)
 		}
 	}
 }
