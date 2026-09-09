@@ -265,7 +265,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-06 | Verify reasoning and final-schema boundary offline | REC-05 | M / high | Complete |
 | REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Complete |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Complete |
-| QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
+| QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Blocked |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
 
@@ -1708,9 +1708,9 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
   locking and allocation each 7/8 twice, both controls omit insight, zero critical
   false claims after recorded independent adjudication. Conditional control advice
   remains low-value; identical repetition pairs give only three distinct outputs.
-  Consumption is **48 development / 0 qualification**; all 24 qualification slots
-  remain untouched. QUAL-06 is Pending, REL-01 Blocked, scheduler Paused. This
-  six-call authorization does not include qualification or another experiment.
+  Subsequent authorized QUAL-06 failed; consumption is now **48 development /
+  24 qualification**. QUAL-06 and REL-01 are Blocked, scheduler Paused. The
+  development result remains valid history, not release qualification.
   Accepted code and frozen manifest, scores, timing, review and restoration evidence
   are recorded in `docs/RELEASE_ACCEPTANCE.md`; historical failed pilots remain there.
 
@@ -2028,6 +2028,22 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
+- **Current verdict — 2026-09-09: Blocked (qualification failed).** The authorized
+  `qual06-qwen38-medium-1` run used the unchanged passing medium candidate at
+  `d9c98ca9af47705482833bd5033b962e79fd411e`. All 24 attempts completed without
+  retry/timeout: 24 usable, 22 fully complete, **2/16 useful substantive insights**
+  against 13 required, 8/8 controls omitted, **2 critical false claims**. Both
+  backpressure repetitions falsely guarantee receiver delivery despite unknown
+  buffering. Independent scorers adjudicated the whole delivered finals; the
+  validator returned `failed`. Twelve distinct outputs across 24 identical-pair
+  attempts limit reliability interpretation. Campaign is **48 development / 24
+  qualification consumed**, scheduler Paused, REL-01 Blocked. QUAL-05 remains
+  Complete as historical development evidence, not qualification acceptance.
+  Original LM Studio session restored; full source-free evidence is in
+  `docs/RELEASE_ACCEPTANCE.md`. Next proposal: offline failure analysis and a
+  bounded recovery plan; no new generation or reuse of this failed qualification
+  as a passing run is authorized.
+
 - **Shared input:** read the qualification contract above before work; its budgets,
   sample counts, privacy rules and pass criteria apply to this card.
 - **Dependencies:** QUAL-05; QUAL-02/03 validation and accounting remain intact.
@@ -2037,7 +2053,8 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
   new qualification run, verify development consumption matches that pilot's
   accepted grant/receipt ledger and qualification consumption is still zero. On
   resume use durable reservation state instead of requiring zero or constructing
-  a new run. No v11 candidate is promoted yet; the existing gates below remain.
+  a new run. The medium candidate completed the failed run recorded above; the
+  existing gates below remain unchanged.
 - **Target files:** `docs/RELEASE_ACCEPTANCE.md`,
   `docs/insights-performance/README.md` (tested scope/limitations only).
 - **Execute:** twelve qualification cases twice, exactly 24 reserved single
