@@ -22,20 +22,33 @@ from types import SimpleNamespace
 from typing import Any
 
 
-REQUIRED_REQUEST = {
-    "model": "./models/qwen38-v12-thinking-schema-1",
-    "temperature": 1.0,
-    "max_tokens": 4096,
-    "reasoning_effort": "low",
-    "top_p": 0.95,
-    "top_k": 20,
+FIXED_REQUESTS = {
+    "qwen38-v12-thinking-schema-1": {
+        "model": "./models/qwen38-v12-thinking-schema-1",
+        "temperature": 1.0,
+        "max_tokens": 4096,
+        "reasoning_effort": "low",
+        "top_p": 0.95,
+        "top_k": 20,
+    },
+    "qwen38-v12-medium-1": {
+        "model": "./models/qwen38-v12-medium-1",
+        "temperature": 1.0,
+        "max_tokens": 4096,
+        "reasoning_effort": "medium",
+        "top_p": 0.95,
+        "top_k": 20,
+    },
 }
 FORBIDDEN_REQUEST_FIELDS = {"min_p", "presence_penalty", "repeat_penalty"}
 
 
 def require_candidate(path: Path) -> dict[str, Any]:
     runtime = json.loads((path / "runtime.json").read_text(encoding="utf-8"))
-    if runtime.get("request") != REQUIRED_REQUEST:
+    required_request = FIXED_REQUESTS.get(path.name)
+    if required_request is None:
+        raise AssertionError("candidate is not an approved fixed runtime profile")
+    if runtime.get("wire_model") != required_request["model"] or runtime.get("request") != required_request:
         raise AssertionError("runtime request differs from the audited wire contract")
     if runtime.get("max_num_seqs") != 1:
         raise AssertionError("runtime does not pin one admission lane")
@@ -213,43 +226,42 @@ def thinking_processor_checks(tokenizer: Any, schema_text: str) -> None:
         raise AssertionError("thinking budget did not force a close marker")
 
 
-def engine_checks(tokenizer: Any) -> None:
+def engine_checks(tokenizer: Any, request: dict[str, Any]) -> None:
     from queue import Queue
 
     import mlx.core as mx
     from mlx_vlm.generate.ar import GenerationBatch
     from mlx_vlm.server import generation
 
-    template_args = generation.GenerationArguments(
-        max_tokens=REQUIRED_REQUEST["max_tokens"],
-        temperature=REQUIRED_REQUEST["temperature"],
-        top_p=REQUIRED_REQUEST["top_p"],
-        top_k=REQUIRED_REQUEST["top_k"],
-        enable_thinking=True,
-        reasoning_effort=REQUIRED_REQUEST["reasoning_effort"],
-    )
-    prompt = tokenizer.apply_chat_template(
-        [{"role": "user", "content": "synthetic"}],
-        tokenize=False,
-        add_generation_prompt=True,
-        **template_args.to_template_kwargs(),
-    )
-    if "moving directly to the conclusion without unnecessary elaboration." not in prompt or not prompt.endswith("<think>\n"):
-        raise AssertionError("local tokenizer template did not apply the low-effort thinking prompt")
+    template_args = generation.GenerationArguments(max_tokens=request["max_tokens"], temperature=request["temperature"], top_p=request["top_p"], top_k=request["top_k"], enable_thinking=True, reasoning_effort=request["reasoning_effort"])
+    rendered: dict[str, str] = {}
+    for effort in ("low", "medium", "xhigh"):
+        arguments = generation.GenerationArguments(max_tokens=request["max_tokens"], temperature=request["temperature"], top_p=request["top_p"], top_k=request["top_k"], enable_thinking=True, reasoning_effort=effort)
+        kwargs = arguments.to_template_kwargs()
+        if kwargs.get("reasoning_effort") != effort:
+            raise AssertionError(f"local tokenizer arguments did not preserve {effort!r} reasoning")
+        rendered[effort] = tokenizer.apply_chat_template([{"role": "user", "content": "synthetic"}], tokenize=False, add_generation_prompt=True, **kwargs)
+    prompt = rendered[request["reasoning_effort"]]
+    if not prompt.endswith("<think>\n"):
+        raise AssertionError("local tokenizer template did not apply the selected thinking prompt")
+    if request["reasoning_effort"] == "low" and "moving directly to the conclusion without unnecessary elaboration." not in prompt:
+        raise AssertionError("local tokenizer template did not apply the historical low-effort thinking prompt")
+    if request["reasoning_effort"] == "medium" and (hashlib.sha256(prompt.encode()).hexdigest() != "494e280281307944033f74025f48cddd84b0d3d0a1d756842e70b861b6f6641b" or len(set(rendered.values())) != 3):
+        raise AssertionError("local tokenizer did not apply the fixed medium-reasoning template distinct from low and xhigh")
 
     sampler_owner = generation.ResponseGenerator.__new__(generation.ResponseGenerator)
     sampler = sampler_owner._make_sampler(template_args)
     logits = mx.arange(32, dtype=mx.float32)
     top_k_logits = sampler._apply_top_k(logits)
-    if mx.sum(mx.isfinite(top_k_logits)).item() != REQUIRED_REQUEST["top_k"] or mx.isfinite(top_k_logits[0]).item() or not mx.isfinite(top_k_logits[-1]).item():
+    if mx.sum(mx.isfinite(top_k_logits)).item() != request["top_k"] or mx.isfinite(top_k_logits[0]).item() or not mx.isfinite(top_k_logits[-1]).item():
         raise AssertionError("installed top-k sampler did not mask all but the configured 20 candidates")
     if generation.get_max_num_seqs() != 1:
         raise AssertionError("installed server did not read the configured one-sequence limit")
 
     raw_batch = GenerationBatch.__new__(GenerationBatch)
     raw_batch.uids = ["synthetic"]
-    raw_batch.max_tokens = [REQUIRED_REQUEST["max_tokens"]]
-    raw_batch._num_tokens = [REQUIRED_REQUEST["max_tokens"] - 1]
+    raw_batch.max_tokens = [request["max_tokens"]]
+    raw_batch._num_tokens = [request["max_tokens"] - 1]
     raw_batch.stop_criteria = lambda _token: False
     raw_batch.thinking_budget_criteria = []
     raw_batch.token_context = []
@@ -287,7 +299,7 @@ def engine_checks(tokenizer: Any) -> None:
 
         def next(self, **_kwargs):
             self.steps += 1
-            finish_reason = "length" if self.steps == REQUIRED_REQUEST["max_tokens"] else None
+            finish_reason = "length" if self.steps == request["max_tokens"] else None
             if finish_reason:
                 engine._stop = True
             response = SimpleNamespace(uid="synthetic", token=1, token_logprob=0.0, finish_reason=finish_reason)
@@ -349,14 +361,14 @@ def engine_checks(tokenizer: Any) -> None:
         generation.BatchGenerator = original_batch_generator
         generation._ServerTokenStreamer = original_streamer
         generation.make_streaming_detokenizer = original_detokenizer
-    if len(FakeBatchGenerator.instances) != 1 or FakeBatchGenerator.instances[0].max_tokens != REQUIRED_REQUEST["max_tokens"]:
+    if len(FakeBatchGenerator.instances) != 1 or FakeBatchGenerator.instances[0].max_tokens != request["max_tokens"]:
         raise AssertionError("actual engine did not pass the raw 4096-token cap to its batch generator")
     chunks = []
     while not output.empty():
         item = output.get_nowait()
         if isinstance(item, generation.StreamingToken):
             chunks.append(item)
-    if len(chunks) != REQUIRED_REQUEST["max_tokens"] or chunks[-1].finish_reason != "length" or sum(chunk.token_count for chunk in chunks) != REQUIRED_REQUEST["max_tokens"]:
+    if len(chunks) != request["max_tokens"] or chunks[-1].finish_reason != "length" or sum(chunk.token_count for chunk in chunks) != request["max_tokens"]:
         raise AssertionError("actual engine did not stop the synthetic raw stream at the 4096-token boundary")
 
     admission = generation.ResponseGenerator.__new__(generation.ResponseGenerator)
@@ -368,7 +380,7 @@ def engine_checks(tokenizer: Any) -> None:
         raise AssertionError("configured one-sequence admission did not retain the second request")
 
 
-def route_checks(schema_text: str, tokenizer: Any) -> None:
+def route_checks(schema_text: str, tokenizer: Any, fixed_request: dict[str, Any]) -> None:
     from queue import Queue
     from fastapi.testclient import TestClient
     server = importlib.import_module("mlx_vlm.server.app")
@@ -407,7 +419,7 @@ def route_checks(schema_text: str, tokenizer: Any) -> None:
     openai.get_cached_model = lambda *_args, **_kwargs: (object(), processor, SimpleNamespace())
     openai.apply_chat_template = lambda *_args, **_kwargs: "<think>"
     request = {
-        **REQUIRED_REQUEST,
+        **fixed_request,
         "messages": [{"role": "user", "content": "synthetic"}],
         "response_format": {"type": "json_schema", "json_schema": {"name": "file_analysis", "strict": True, "schema": json.loads(schema_text)}},
     }
@@ -419,7 +431,7 @@ def route_checks(schema_text: str, tokenizer: Any) -> None:
     if len(fake.calls) != 1:
         raise AssertionError("actual route did not reach the stubbed generator exactly once")
     args = fake.calls[0]
-    if args.max_tokens != 4096 or args.temperature != 1.0 or args.reasoning_effort != "low" or args.top_p != 0.95 or args.top_k != 20:
+    if args.max_tokens != fixed_request["max_tokens"] or args.temperature != fixed_request["temperature"] or args.reasoning_effort != fixed_request["reasoning_effort"] or args.top_p != fixed_request["top_p"] or args.top_k != fixed_request["top_k"]:
         raise AssertionError("actual route did not preserve audited sampling arguments")
     if not args.enable_thinking or len(args.logits_processors or []) != 1 or not isinstance(fake.active_processors[0], ThinkingAwareLogitsProcessor):
         raise AssertionError(f"actual route/generation did not wrap the compiled schema grammar for thinking: enabled={args.enable_thinking!r}, route_processors={[type(value).__name__ for value in args.logits_processors or []]}, active_processors={[type(value).__name__ for value in fake.active_processors]}")
@@ -473,13 +485,14 @@ def main() -> None:
     installed_runtime_checks(candidate_dir, runtime_config)
     from transformers import AutoTokenizer
 
-    model = candidate_dir / REQUIRED_REQUEST["model"]
+    request = FIXED_REQUESTS[candidate_dir.name]
+    model = candidate_dir / request["model"]
     tokenizer = AutoTokenizer.from_pretrained(model, local_files_only=True, trust_remote_code=False)
     schema_text = production_schema(args.source_root.resolve())
     schema_checks(schema_text, tokenizer)
     thinking_processor_checks(tokenizer, schema_text)
-    engine_checks(tokenizer)
-    route_checks(schema_text, tokenizer)
+    engine_checks(tokenizer, request)
+    route_checks(schema_text, tokenizer, request)
     print(json.dumps({"status": "passed", "generation_requests": 0, "model_weights_loaded": False, "route": "/v1/chat/completions"}, sort_keys=True))
 
 

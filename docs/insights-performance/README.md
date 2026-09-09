@@ -5,9 +5,9 @@ These capabilities already exist. The next work is in
 
 ## Audited standalone thinking runtime
 
-REC-05 uses a private, candidate-local MLX-VLM 0.7.0 environment for the
-`qwen38-v12-thinking-schema-1` recovery candidate. It reuses the existing local
-Qwen weights through `models/qwen38-v12-thinking-schema-1`; the link must resolve
+The medium recovery reuses the REC-05 pinned MLX-VLM 0.7.0 environment for the
+`qwen38-v12-medium-1` recovery candidate. It reuses the existing local
+Qwen weights through `models/qwen38-v12-medium-1`; the link must resolve
 to the audited LM Studio artifact. It never changes LM Studio's vendor runtime.
 
 The private candidate directory is ignored by Git. Its `runtime.json` is the
@@ -23,7 +23,7 @@ application `config.yaml`.
   "port": 1235,
   "python": "venv/bin/python",
   "python_version": "3.11.16",
-  "wire_model": "./models/qwen38-v12-thinking-schema-1",
+  "wire_model": "./models/qwen38-v12-medium-1",
   "artifact_realpath": "/Users/.../.lmstudio/models/lmstudio-community/Qwen3.8-27B-MLX-4bit",
   "artifact_realpath_sha256": "<accepted realpath digest>",
   "artifact_identity_file": "artifact-identity.json",
@@ -47,10 +47,10 @@ application `config.yaml`.
     "PYTHONDONTWRITEBYTECODE": "1"
   },
   "request": {
-    "model": "./models/qwen38-v12-thinking-schema-1",
+    "model": "./models/qwen38-v12-medium-1",
     "temperature": 1,
     "max_tokens": 4096,
-    "reasoning_effort": "low",
+    "reasoning_effort": "medium",
     "top_p": 0.95,
     "top_k": 20
   },
@@ -74,10 +74,14 @@ reports an unambiguously empty model list. The launcher does not unload LM Studi
 for you. From the repository root, the bounded lifecycle is:
 
 ```sh
-python3 scripts/insight_runtime.py check --candidate-dir .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-thinking-schema-1
-python3 scripts/insight_runtime.py start --candidate-dir .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-thinking-schema-1
-python3 scripts/insight_runtime.py stop --candidate-dir .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-thinking-schema-1
+python3 scripts/insight_runtime.py check --candidate-dir .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-medium-1
+python3 scripts/insight_runtime.py start --candidate-dir .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-medium-1
+python3 scripts/insight_runtime.py stop --candidate-dir .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v12-medium-1
 ```
+
+These commands are for the authorized medium candidate. The preceding
+`qwen38-v12-thinking-schema-1` identity is historical; use its candidate path
+only when checking its retained low-reasoning evidence.
 
 `check` is read-only: it validates the lock, all installed distribution metadata,
 the audited server source hashes, the linked artifact's current file hashes, the
@@ -162,17 +166,18 @@ selected-file prompt, parser, and one isolated fixture per case. This is compone
 evidence; it does not exercise import or the Desktop client.
 
 For a provider run, select one candidate, provider label, prompt, corpus and base
-revision before collecting any result. First collect the three development cases once;
-only after reviewing that result may one focused correction and one second three-case
-development run use the remaining development budget. Qualification schedules every
+revision before collecting any result. For the authorized medium pilot, collect
+the three development cases twice using the same frozen candidate and settings.
+Do not tune between batches or retry an attempt. Qualification schedules every
 qualification case twice in corpus order: 24 single attempts, with eight substantive
 cases (16 attempts) and four omission controls (8 attempts). Each attempt is bounded to
 4,096 output tokens and 300 seconds, with no automatic retry. A remote configured
 destination needs `-confirm-remote-provider`; loopback is the default.
 
 Private campaign state lives under ignored `.mini-orca/autopilot/engineering-insight-evaluation/`.
-It reserves the original 6-development/24-qualification budget before every dispatch.
-The existing explicit append-only grant adds exactly six development requests with a
+Requests are durably reserved before dispatch. Historically, the campaign began
+with 6 development and 24 qualification slots. The first append-only grant added
+exactly six development requests with a
 unique authorization ID, producing a 12-request development cap. One final six-request
 Qwen3.8 recovery grant can raise that cap to 18 only after those 12 slots are consumed;
 the qualification cap remains 24. The user-authorized v11 verification adds one
@@ -250,6 +255,18 @@ All **36 development requests are consumed / 0 qualification**, and the schedule
 remains Paused. The final-delivery failure did not recur; insight coverage is now
 the remaining pilot blocker. See the
 [thinking-disabled verdict](../RELEASE_ACCEPTANCE.md#thinking-disabled-pilot-verdict--2026-09-09).
+
+The user authorized one final bounded recovery: grant `qual05-qwen38-medium-1`,
+candidate `qwen38-v12-medium-1`, and wire model
+`./models/qwen38-v12-medium-1`. It uses the same audited Qwen3.8 4-bit weights,
+MLX-VLM 0.7.0 runtime, `file-analysis-v12` schema, sampler, 119,552-token
+context, 4,096-token output ceiling, 300-second request deadline, and one-lane
+runtime as the installed low-reasoning candidate. The only changed request field
+is `reasoning_effort: medium`. The seventh fixed six-request grant applies only
+after 42 development requests are consumed, raises the development ceiling to 48,
+and leaves qualification capped at 24. The existing six grants, receipts, and
+the low-reasoning runtime remain historical evidence; the runtime launcher and
+offline conformance accept only those two fixed profiles.
 
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
@@ -343,8 +360,8 @@ go run ./cmd/engineering-insight-eval \
 ```
 
 Collection requires an explicit mode and run identity. The example below describes
-the interface. The active v11 pilot must use its actual frozen identity/run IDs
-from PLAN.md, not these placeholders. No test or quality target invokes this
+the interface. The medium pilot must use its actual frozen identity/run IDs
+from PLAN.md and its private manifest, not these placeholders. No test or quality target invokes this
 command mode:
 
 ```sh
@@ -389,22 +406,20 @@ go run ./cmd/engineering-insight-eval -mode grant-development -root . \
   -prompt-version file-analysis-v11
 ```
 
-The new grant rejects a changed prompt/candidate/model or non-loopback dispatch,
-and no further extension is implemented or authorized. The qualification campaign
-and its conditional 24-request ceiling are unchanged.
+Those historical grants reject a changed prompt/candidate/model or non-loopback
+dispatch. The qualification campaign and its conditional 24-request ceiling remain
+unchanged.
 
-### Prepared thinking-schema development bound
+### Historical thinking-schema development bound
 
-The next recovery is prepared as one additional, append-only development grant;
-it is not applied by this code change. After the existing 36 development requests
-are consumed, only authorization `qual05-qwen38-thinking-schema-1` may append six
-slots. It binds candidate `qwen38-v12-thinking-schema-1` to
+After 36 development requests were consumed, authorization
+`qual05-qwen38-thinking-schema-1` appended the sixth six-request slot. It bound
+candidate `qwen38-v12-thinking-schema-1` to
 `./models/qwen38-v12-thinking-schema-1`, prompt `file-analysis-v12`, structured loopback dispatch, and
-`reasoning_effort: low`, raising the development ceiling to 42. The existing five
-grants, all receipts, and the independent 24-request qualification ceiling remain
-unchanged. The coordinator must verify the frozen runtime/template identity before
-applying this one-time grant; a duplicate, a seventh grant, a changed identity, a
-remote destination, or request 43 is rejected before HTTP dispatch.
+`reasoning_effort: low`, raising the development ceiling to 42. Its six requests
+are consumed. The seventh grant adds only the fixed medium profile described above;
+a duplicate, changed identity, remote destination, or request 49 is rejected before
+HTTP dispatch.
 
 Private replies are held in mode-0700 storage for an independent scorer. `-mode handoff`
 lists only attempt IDs, `-mode score -scores scores.json -receipt scored.json` writes a

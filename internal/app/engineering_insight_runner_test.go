@@ -757,6 +757,90 @@ func TestEngineeringInsightRunnerAppliesThinkingSchemaGrantOnlyAtRequestsThirtyS
 	}
 }
 
+func TestEngineeringInsightRunnerAppliesMediumGrantOnlyAtRequestsFortyTwoThroughFortySeven(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := mediumRunnerTestConfig(t, "medium-one", client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{
+		{AuthorizationID: "extension-one", Requests: 6},
+		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
+		{AuthorizationID: v11DevelopmentAuthorizationID, Requests: 6, CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion},
+		{AuthorizationID: v12DevelopmentAuthorizationID, Requests: 6, CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion},
+		{AuthorizationID: thinkingOffDevelopmentAuthorizationID, Requests: 6, CandidateID: thinkingOffDevelopmentCandidateID, Model: thinkingOffDevelopmentModel, PromptVersion: thinkingOffDevelopmentPromptVersion, ReasoningEffort: thinkingOffDevelopmentReasoningEffort},
+		{AuthorizationID: thinkingSchemaDevelopmentAuthorizationID, Requests: 6, CandidateID: thinkingSchemaDevelopmentCandidateID, Model: thinkingSchemaDevelopmentModel, PromptVersion: thinkingSchemaDevelopmentPromptVersion, ReasoningEffort: thinkingSchemaDevelopmentReasoningEffort},
+	}}
+	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: thinkingSchemaDevelopmentRequestCap}); err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
+		{CandidateID: "wrong-candidate", Model: mediumDevelopmentModel, PromptVersion: mediumDevelopmentPromptVersion},
+		{CandidateID: mediumDevelopmentCandidateID, Model: "wrong-model", PromptVersion: mediumDevelopmentPromptVersion},
+		{CandidateID: mediumDevelopmentCandidateID, Model: mediumDevelopmentModel, PromptVersion: "wrong-prompt"},
+	} {
+		if err := GrantEngineeringInsightMediumDevelopmentBudget(cfg.Root, mediumDevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
+			t.Fatal("medium grant accepted the wrong identity")
+		}
+	}
+	if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, mediumDevelopmentAuthorizationID, 6, mediumDevelopmentCandidateID, mediumDevelopmentModel, mediumDevelopmentPromptVersion); err == nil {
+		t.Fatal("medium grant accepted the low-reasoning route")
+	}
+	if err := GrantEngineeringInsightMediumDevelopmentBudget(cfg.Root, mediumDevelopmentAuthorizationID, 6, mediumDevelopmentCandidateID, mediumDevelopmentModel, mediumDevelopmentPromptVersion); err != nil {
+		t.Fatal(err)
+	}
+	for _, reasoning := range []string{"low", "none", "xhigh"} {
+		wrong := mediumRunnerTestConfig(t, "medium-wrong-"+reasoning, client)
+		wrong.Root = cfg.Root
+		wrong.Profile.ReasoningEffort = reasoning
+		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrong); err == nil || client.calls.Load() != 0 {
+			t.Fatalf("%s-reasoning medium request dispatched: %v, calls=%d", reasoning, err, client.calls.Load())
+		}
+	}
+	wrongCandidate := mediumRunnerTestConfig(t, "medium-wrong-candidate", client)
+	wrongCandidate.Root = cfg.Root
+	wrongCandidate.CandidateID = "another-candidate"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong medium candidate dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	remote := mediumRunnerTestConfig(t, "medium-remote", client)
+	remote.Root = cfg.Root
+	remote.Profile.APIBaseURL = "https://provider.example/v1"
+	remote.ConfirmRemoteProvider = true
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), remote); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("remote medium destination dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	for _, runID := range []string{"medium-one", "medium-two"} {
+		valid := mediumRunnerTestConfig(t, runID, client)
+		valid.Root = cfg.Root
+		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), valid); err != nil {
+			t.Fatalf("medium run %q: %v", runID, err)
+		}
+	}
+	if client.calls.Load() != 6 {
+		t.Fatalf("medium grant dispatched %d requests, want 6", client.calls.Load())
+	}
+	exhausted := mediumRunnerTestConfig(t, "medium-exhausted", client)
+	exhausted.Root = cfg.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
+		t.Fatalf("forty-ninth request dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
+	if err != nil || campaign.DevelopmentRequests != mediumDevelopmentRequestCap || campaign.QualificationRequests != 0 {
+		t.Fatalf("medium campaign counters: %+v, %v", campaign, err)
+	}
+	if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(`{"grants":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
+		t.Fatalf("corrupt medium ledger dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+}
+
 func TestEngineeringInsightRunnerPreservesPersistedDevelopmentCampaignCaps(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1195,6 +1279,15 @@ func thinkingSchemaRunnerTestConfig(t *testing.T, runID string, client Engineeri
 	cfg.Model = thinkingSchemaDevelopmentModel
 	cfg.Profile.Model = thinkingSchemaDevelopmentModel
 	cfg.Profile.ReasoningEffort = thinkingSchemaDevelopmentReasoningEffort
+	return cfg
+}
+
+func mediumRunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
+	cfg := thinkingSchemaRunnerTestConfig(t, runID, client)
+	cfg.CandidateID = mediumDevelopmentCandidateID
+	cfg.Model = mediumDevelopmentModel
+	cfg.Profile.Model = mediumDevelopmentModel
+	cfg.Profile.ReasoningEffort = mediumDevelopmentReasoningEffort
 	return cfg
 }
 
