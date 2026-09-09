@@ -1,0 +1,218 @@
+[
+  {
+    "name": "v2-development-snapshot-read-lock",
+    "partition": "development",
+    "intent": "substantive",
+    "reference_mechanisms": ["Snapshot holds an RLock while reading the shared count, so the read is synchronized with Add."],
+    "permitted_uncertainty": ["The source does not show the caller mix or whether reader contention matters."],
+    "critical_false_claim_examples": ["Snapshot makes every Counter operation lock-free.", "The read lock prevents callers from changing the returned integer."],
+    "scoring_anchors": {
+      "correctness": {"0": "Misses synchronization.", "1": "Claims the counter is safe without naming the boundary.", "2": "Explains that RLock spans the count read."},
+      "local_relevance": {"0": "No source evidence.", "1": "Mentions mutexes generally.", "2": "Cites c.mu and c.count."},
+      "tradeoff_clarity": {"0": "Invents a defect.", "1": "Gives generic lock advice.", "2": "Limits contention claims to the unshown workload."},
+      "useful_verification": {"0": "Proposes a different contract.", "1": "Says to test concurrency.", "2": "Runs Add and Snapshot concurrently under the race detector and expects no race report."}
+    },
+    "source": "package fixture\n\nimport \"sync\"\n\ntype Counter struct {\n\tmu    sync.RWMutex\n\tcount int\n}\n\nfunc (c *Counter) Add() {\n\tc.mu.Lock()\n\tc.count++\n\tc.mu.Unlock()\n}\n\nfunc (c *Counter) Snapshot() int {\n\tc.mu.RLock()\n\tdefer c.mu.RUnlock()\n\treturn c.count\n}\n",
+    "anchor": {"start_line": 16, "end_line": 19, "evidence": "return c.count"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Returns the synchronized counter value.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Snapshot holds c.mu's read lock while reading c.count.\",\"why_it_matters_here\":\"Add writes the same field under c.mu, so the read shares that local synchronization boundary.\",\"tradeoff_or_failure_mode\":\"The source does not show reader and writer contention, so it cannot establish whether this lock is a bottleneck.\",\"transferable_lesson\":\"Run Add and Snapshot concurrently with the race detector; current behavior should produce no race report.\"}}"
+  },
+  {
+    "name": "v2-development-cancellation-before-loop",
+    "partition": "development",
+    "intent": "substantive",
+    "reference_mechanisms": ["Process checks cancellation once before its loop, so cancellation raised by an earlier callback does not stop later callbacks."],
+    "permitted_uncertainty": ["The cost and blocking behavior of the callback are opaque."],
+    "critical_false_claim_examples": ["Process observes cancellation before every callback.", "Canceling the context interrupts a callback already running."],
+    "scoring_anchors": {
+      "correctness": {"0": "Claims per-item cancellation.", "1": "Notes context without its placement.", "2": "Explains that the check is before, not inside, the loop."},
+      "local_relevance": {"0": "No source evidence.", "1": "Mentions cancellation generally.", "2": "Cites ctx.Err and the values loop."},
+      "tradeoff_clarity": {"0": "Claims the callback is cancellable.", "1": "Gives generic cancellation advice.", "2": "Separates local loop behavior from opaque callback behavior."},
+      "useful_verification": {"0": "Tests a proposed rewrite only.", "1": "Says to cancel a context.", "2": "Cancels in the first callback and expects remaining callbacks to run under current behavior."}
+    },
+    "source": "package fixture\n\nimport \"context\"\n\nfunc Process(ctx context.Context, values []string, visit func(string)) error {\n\tif err := ctx.Err(); err != nil {\n\t\treturn err\n\t}\n\tfor _, value := range values {\n\t\tvisit(value)\n\t}\n\treturn nil\n}\n",
+    "anchor": {"start_line": 6, "end_line": 10, "evidence": "for _, value := range values"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Visits values after an initial cancellation check.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Process reads ctx.Err before entering its values loop and never checks it again.\",\"why_it_matters_here\":\"If visit cancels ctx for the first value, the local loop still invokes visit for later values.\",\"tradeoff_or_failure_mode\":\"This establishes only the loop's behavior; whether visit blocks or handles cancellation is not shown.\",\"transferable_lesson\":\"Cancel ctx in the first callback and expect every remaining callback to run under the current implementation.\"}}"
+  },
+  {
+    "name": "v2-development-filtered-output-capacity",
+    "partition": "development",
+    "intent": "substantive",
+    "reference_mechanisms": ["VisibleNames preallocates an output slice to the input upper bound before filtering blank names."],
+    "permitted_uncertainty": ["The source does not show whether this capacity or string conversion is material for real inputs."],
+    "critical_false_claim_examples": ["VisibleNames performs no allocations.", "Every reserved slot becomes an output element."],
+    "scoring_anchors": {
+      "correctness": {"0": "Claims allocation-free output.", "1": "Mentions append without capacity.", "2": "Explains the input-length capacity upper bound."},
+      "local_relevance": {"0": "No source evidence.", "1": "Mentions filtering generally.", "2": "Cites len(names), make, and the blank-name continue."},
+      "tradeoff_clarity": {"0": "Invents a performance result.", "1": "Gives generic optimization advice.", "2": "Distinguishes reserved capacity from retained names and other allocations."},
+      "useful_verification": {"0": "Tests a proposed optimization only.", "1": "Says to benchmark it.", "2": "Checks that three inputs with one blank return two names while capacity remains three."}
+    },
+    "source": "package fixture\n\nimport \"strings\"\n\nfunc VisibleNames(names []string) []string {\n\tvisible := make([]string, 0, len(names))\n\tfor _, name := range names {\n\t\tif strings.TrimSpace(name) == \"\" {\n\t\t\tcontinue\n\t\t}\n\t\tvisible = append(visible, name)\n\t}\n\treturn visible\n}\n",
+    "anchor": {"start_line": 6, "end_line": 10, "evidence": "make([]string, 0, len(names))"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Returns nonblank names.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"VisibleNames reserves capacity for len(names) before filtering and appending.\",\"why_it_matters_here\":\"The result can contain fewer names, but its initial capacity matches the known input upper bound.\",\"tradeoff_or_failure_mode\":\"That reservation does not prove a net performance gain or remove allocations from string handling.\",\"transferable_lesson\":\"With three inputs and one blank, expect two results and capacity three before deciding whether capacity matters.\"}}"
+  },
+  {
+    "name": "v2-development-bounded-opaque-refresh",
+    "partition": "development",
+    "intent": "substantive",
+    "reference_mechanisms": ["Refresh reaches at most maxAttempts opaque Client.Fetch calls, returning early on its first successful result."],
+    "permitted_uncertainty": ["Fetch may be local, cached, or remote; its latency and side effects are not shown."],
+    "critical_false_claim_examples": ["Every Fetch call is a network request.", "Refresh always reaches maxAttempts calls even after a successful Fetch."],
+    "scoring_anchors": {
+      "correctness": {"0": "Calls Fetch a network request.", "1": "Notes retries without their bound or early success return.", "2": "States the bounded opaque calls and first-success return."},
+      "local_relevance": {"0": "No source evidence.", "1": "Mentions retries generally.", "2": "Cites maxAttempts, client.Fetch, and the nil-error return."},
+      "tradeoff_clarity": {"0": "Invents Fetch behavior.", "1": "Gives generic retry advice.", "2": "Keeps Fetch cost and side effects uncertain."},
+      "useful_verification": {"0": "Tests an imagined backend.", "1": "Says to count calls.", "2": "Makes a fake fail once then succeed and expects two calls; all failures reach the configured bound."}
+    },
+    "source": "package fixture\n\nimport (\n\t\"context\"\n\t\"errors\"\n)\n\ntype Client interface {\n\tFetch(context.Context, string) (string, error)\n}\n\nfunc Refresh(ctx context.Context, client Client, key string, maxAttempts int) (string, error) {\n\tif maxAttempts < 1 {\n\t\treturn \"\", errors.New(\"no attempts\")\n\t}\n\tvar lastErr error\n\tfor attempt := 0; attempt < maxAttempts; attempt++ {\n\t\tvalue, err := client.Fetch(ctx, key)\n\t\tif err == nil {\n\t\t\treturn value, nil\n\t\t}\n\t\tlastErr = err\n\t}\n\treturn \"\", lastErr\n}\n",
+    "anchor": {"start_line": 17, "end_line": 24, "evidence": "attempt < maxAttempts"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Refreshes one key through a bounded client retry loop.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Refresh calls the opaque Client.Fetch at most maxAttempts times and returns on its first nil error.\",\"why_it_matters_here\":\"A success stops later attempts, while repeated failures return the last error after the configured bound.\",\"tradeoff_or_failure_mode\":\"Fetch cost, side effects, and whether retrying is safe remain unknown at this caller.\",\"transferable_lesson\":\"Make a fake fail once then succeed and expect two calls; all failures should reach the current attempt bound.\"}}"
+  },
+  {
+    "name": "v2-development-sync-map-idempotency",
+    "partition": "development",
+    "intent": "substantive",
+    "reference_mechanisms": ["Submit uses sync.Map.LoadOrStore to admit one request ID locally, and a sender failure still leaves that ID admitted."],
+    "permitted_uncertainty": ["This source does not demonstrate durable, expiring, or cross-process idempotency."],
+    "critical_false_claim_examples": ["Submit provides exactly-once delivery across processes.", "A sender error removes the request ID for retry."],
+    "scoring_anchors": {
+      "correctness": {"0": "Claims retries always call Send.", "1": "Mentions request IDs without LoadOrStore.", "2": "Explains local duplicate admission and consumed-on-error behavior."},
+      "local_relevance": {"0": "No source evidence.", "1": "Mentions maps generally.", "2": "Cites LoadOrStore and sender.Send."},
+      "tradeoff_clarity": {"0": "Claims durable exactly-once behavior.", "1": "Gives generic retry advice.", "2": "Names local process scope or the retained failure decision."},
+      "useful_verification": {"0": "Tests a different retry policy.", "1": "Says to retry a request.", "2": "Makes Send fail once, retries the ID, and expects one Send call."}
+    },
+    "source": "package fixture\n\nimport (\n\t\"errors\"\n\t\"sync\"\n)\n\ntype Sender interface {\n\tSend(string) error\n}\n\ntype Submitter struct {\n\tseen   sync.Map\n\tsender Sender\n}\n\nfunc (s *Submitter) Submit(requestID string) error {\n\tif _, loaded := s.seen.LoadOrStore(requestID, struct{}{}); loaded {\n\t\treturn errors.New(\"duplicate request\")\n\t}\n\treturn s.sender.Send(requestID)\n}\n",
+    "anchor": {"start_line": 17, "end_line": 20, "evidence": "LoadOrStore(requestID, struct{}{})"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Sends one locally admitted request ID.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Submit admits requestID with sync.Map.LoadOrStore before calling Sender.Send.\",\"why_it_matters_here\":\"A repeated ID returns before Send, and an error from Send does not remove the admitted ID.\",\"tradeoff_or_failure_mode\":\"This is an in-process guard only; durability, expiry, and cross-process behavior are not shown.\",\"transferable_lesson\":\"Make Send fail once, retry the same ID, and expect exactly one local Send call.\"}}"
+  },
+  {
+    "name": "v2-development-read-authorization-boundary",
+    "partition": "development",
+    "intent": "substantive",
+    "reference_mechanisms": ["Read checks Policy.Allows before opening a document, so a local denial prevents the repository call."],
+    "permitted_uncertainty": ["The policy's decision rules and protections for other repository callers are opaque."],
+    "critical_false_claim_examples": ["Policy.Allows proves the repository is protected everywhere.", "Read knows how Policy decides authorization."],
+    "scoring_anchors": {
+      "correctness": {"0": "Claims there is no authorization check.", "1": "Mentions policy without its gate.", "2": "Explains denial returns before Repository.Open."},
+      "local_relevance": {"0": "No source evidence.", "1": "Mentions reading generally.", "2": "Cites policy.Allows and repository.Open."},
+      "tradeoff_clarity": {"0": "Invents the policy rules.", "1": "Gives generic security advice.", "2": "Limits the guarantee to this local call boundary."},
+      "useful_verification": {"0": "Tests an unshown policy engine.", "1": "Says to test denial.", "2": "Uses a denying policy and expects Repository.Open to receive no call."}
+    },
+    "source": "package fixture\n\nimport \"context\"\n\ntype Policy interface {\n\tAllows(context.Context, string, string) (bool, error)\n}\n\ntype Repository interface {\n\tOpen(context.Context, string) ([]byte, error)\n}\n\nfunc Read(ctx context.Context, policy Policy, repository Repository, actor, documentID string) ([]byte, error) {\n\tallowed, err := policy.Allows(ctx, actor, documentID)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif !allowed {\n\t\treturn nil, nil\n\t}\n\treturn repository.Open(ctx, documentID)\n}\n",
+    "anchor": {"start_line": 17, "end_line": 20, "evidence": "if !allowed"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Opens a document after local policy approval.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Read calls Policy.Allows and returns before Repository.Open when allowed is false.\",\"why_it_matters_here\":\"A denial at this service boundary prevents this function from opening the requested document.\",\"tradeoff_or_failure_mode\":\"The policy rules and safeguards for other repository callers remain outside this source.\",\"transferable_lesson\":\"Use a denying policy and expect Repository.Open to receive no call from Read.\"}}"
+  },
+  {
+    "name": "v2-development-delegated-token-verification",
+    "partition": "development",
+    "intent": "substantive",
+    "reference_mechanisms": ["Authenticate delegates token verification to Verifier and only requires a nonempty returned subject locally."],
+    "permitted_uncertainty": ["Signature, expiry, revocation, and verifier policy are not visible in this source."],
+    "critical_false_claim_examples": ["Authenticate verifies token signatures itself.", "A nonempty subject proves the token is unexpired."],
+    "scoring_anchors": {
+      "correctness": {"0": "Claims local signature verification.", "1": "Mentions a verifier without the local subject check.", "2": "Separates delegated Verify from the local empty-subject rejection."},
+      "local_relevance": {"0": "No source evidence.", "1": "Mentions tokens generally.", "2": "Cites verifier.Verify and claims.Subject."},
+      "tradeoff_clarity": {"0": "Invents verifier guarantees.", "1": "Gives generic auth advice.", "2": "Keeps signature and expiry policy explicitly unknown."},
+      "useful_verification": {"0": "Tests a made-up cryptographic path.", "1": "Says to fake verification.", "2": "Returns an empty subject from a fake verifier and expects Authenticate to reject it."}
+    },
+    "source": "package fixture\n\nimport (\n\t\"context\"\n\t\"errors\"\n)\n\ntype Claims struct {\n\tSubject string\n}\n\ntype Verifier interface {\n\tVerify(context.Context, string) (Claims, error)\n}\n\nfunc Authenticate(ctx context.Context, verifier Verifier, token string) (Claims, error) {\n\tclaims, err := verifier.Verify(ctx, token)\n\tif err != nil {\n\t\treturn Claims{}, err\n\t}\n\tif claims.Subject == \"\" {\n\t\treturn Claims{}, errors.New(\"missing subject\")\n\t}\n\treturn claims, nil\n}\n",
+    "anchor": {"start_line": 17, "end_line": 22, "evidence": "claims.Subject == \"\""},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Returns verified claims with a subject.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Authenticate delegates token handling to Verifier.Verify, then rejects an empty Claims.Subject locally.\",\"why_it_matters_here\":\"The local contract prevents callers from receiving claims without a subject after verification succeeds.\",\"tradeoff_or_failure_mode\":\"Signature, expiry, revocation, and verifier policy are not established by this caller.\",\"transferable_lesson\":\"Return an empty subject from a fake verifier and expect Authenticate to reject the current result.\"}}"
+  },
+  {
+    "name": "v2-development-buffered-send-contrast",
+    "partition": "development",
+    "intent": "substantive",
+    "reference_mechanisms": ["Publish selects between each channel send and cancellation; channel capacity changes whether an absent receiver can accept a value."],
+    "permitted_uncertainty": ["A successful send proves channel acceptance, not downstream processing or receiver timing."],
+    "critical_false_claim_examples": ["A successful Publish means a receiver processed the value.", "Publish never blocks when the channel is buffered."],
+    "scoring_anchors": {
+      "correctness": {"0": "Claims receiver processing is guaranteed.", "1": "Mentions cancellation without send behavior.", "2": "Explains per-send select and buffered versus unbuffered acceptance."},
+      "local_relevance": {"0": "No source evidence.", "1": "Mentions channels generally.", "2": "Cites out <- value and ctx.Done in the loop."},
+      "tradeoff_clarity": {"0": "Claims buffering removes all blocking.", "1": "Gives generic channel advice.", "2": "Distinguishes channel acceptance from receiver processing."},
+      "useful_verification": {"0": "Tests an unshown receiver contract.", "1": "Says to test channels.", "2": "Expects one buffered send without a receiver, while an unbuffered send returns after cancellation."}
+    },
+    "source": "package fixture\n\nimport \"context\"\n\nfunc Publish(ctx context.Context, out chan<- string, values []string) error {\n\tfor _, value := range values {\n\t\tselect {\n\t\tcase out <- value:\n\t\tcase <-ctx.Done():\n\t\t\treturn ctx.Err()\n\t\t}\n\t}\n\treturn nil\n}\n",
+    "anchor": {"start_line": 7, "end_line": 11, "evidence": "case out <- value"},
+    "expect_insight": true,
+    "sanitized_output": "{\"purpose\":\"Publishes values until cancellation.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Publish selects between each out send and ctx cancellation inside its values loop.\",\"why_it_matters_here\":\"A buffer can accept one value without a receiver, while an unbuffered channel waits for a receiver or cancellation.\",\"tradeoff_or_failure_mode\":\"A successful send proves channel acceptance only; receiver processing and later backpressure are not shown.\",\"transferable_lesson\":\"Expect one buffered send without a receiver, then cancel an unbuffered send and expect ctx.Err.\"}}"
+  },
+  {
+    "name": "v2-development-control-display-name",
+    "partition": "development",
+    "intent": "control",
+    "reference_mechanisms": ["DisplayName combines already supplied first and last name fields for presentation."],
+    "permitted_uncertainty": ["Caller validation and presentation requirements are not shown."],
+    "critical_false_claim_examples": ["DisplayName verifies an identity.", "DisplayName persists a profile change."],
+    "scoring_anchors": {
+      "correctness": {"0": "Invents behavior.", "1": "Adds generic advice.", "2": "Omits the optional insight."},
+      "local_relevance": {"0": "No source basis.", "1": "Restates the helper.", "2": "Does not add a lesson."},
+      "tradeoff_clarity": {"0": "Invents a trade-off.", "1": "Gives a generic caveat.", "2": "Does not add a lesson."},
+      "useful_verification": {"0": "Invents a test need.", "1": "Gives generic test advice.", "2": "Does not add a lesson."}
+    },
+    "source": "package fixture\n\nimport \"strings\"\n\ntype Person struct {\n\tFirst string\n\tLast  string\n}\n\nfunc DisplayName(person Person) string {\n\treturn strings.TrimSpace(person.First + \" \" + person.Last)\n}\n",
+    "anchor": {"start_line": 11, "end_line": 11, "evidence": "strings.TrimSpace"},
+    "expect_insight": false,
+    "sanitized_output": "{\"purpose\":\"Formats a supplied name.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+  },
+  {
+    "name": "v2-development-control-status-label",
+    "partition": "development",
+    "intent": "control",
+    "reference_mechanisms": ["StatusLabel maps a local enum to a display string."],
+    "permitted_uncertainty": ["The meaning of these labels to callers is not shown."],
+    "critical_false_claim_examples": ["StatusLabel changes workflow state.", "The default label means processing failed."],
+    "scoring_anchors": {
+      "correctness": {"0": "Invents behavior.", "1": "Adds generic advice.", "2": "Omits the optional insight."},
+      "local_relevance": {"0": "No source basis.", "1": "Restates the helper.", "2": "Does not add a lesson."},
+      "tradeoff_clarity": {"0": "Invents a trade-off.", "1": "Gives a generic caveat.", "2": "Does not add a lesson."},
+      "useful_verification": {"0": "Invents a test need.", "1": "Gives generic test advice.", "2": "Does not add a lesson."}
+    },
+    "source": "package fixture\n\ntype Status int\n\nconst (\n\tStatusQueued Status = iota\n\tStatusDone\n)\n\nfunc StatusLabel(status Status) string {\n\tswitch status {\n\tcase StatusQueued:\n\t\treturn \"queued\"\n\tcase StatusDone:\n\t\treturn \"done\"\n\tdefault:\n\t\treturn \"unknown\"\n\t}\n}\n",
+    "anchor": {"start_line": 10, "end_line": 18, "evidence": "switch status"},
+    "expect_insight": false,
+    "sanitized_output": "{\"purpose\":\"Returns a local status label.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+  },
+  {
+    "name": "v2-development-control-url-title",
+    "partition": "development",
+    "intent": "control",
+    "reference_mechanisms": ["Title returns a supplied title when present and otherwise uses the URL path basename."],
+    "permitted_uncertainty": ["URL validation and user-facing title requirements are outside this helper."],
+    "critical_false_claim_examples": ["Title validates URLs.", "Title fetches remote page metadata."],
+    "scoring_anchors": {
+      "correctness": {"0": "Invents behavior.", "1": "Adds generic advice.", "2": "Omits the optional insight."},
+      "local_relevance": {"0": "No source basis.", "1": "Restates the helper.", "2": "Does not add a lesson."},
+      "tradeoff_clarity": {"0": "Invents a trade-off.", "1": "Gives a generic caveat.", "2": "Does not add a lesson."},
+      "useful_verification": {"0": "Invents a test need.", "1": "Gives generic test advice.", "2": "Does not add a lesson."}
+    },
+    "source": "package fixture\n\nimport (\n\t\"path\"\n\t\"strings\"\n)\n\nfunc Title(rawURL, supplied string) string {\n\tif strings.TrimSpace(supplied) != \"\" {\n\t\treturn supplied\n\t}\n\treturn path.Base(rawURL)\n}\n",
+    "anchor": {"start_line": 9, "end_line": 12, "evidence": "strings.TrimSpace(supplied)"},
+    "expect_insight": false,
+    "sanitized_output": "{\"purpose\":\"Selects a display title.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+  },
+  {
+    "name": "v2-development-control-size-pair",
+    "partition": "development",
+    "intent": "control",
+    "reference_mechanisms": ["NewSize constructs a typed pair from its supplied width and height."],
+    "permitted_uncertainty": ["No caller-specific constraints are shown."],
+    "critical_false_claim_examples": ["NewSize validates dimensions.", "NewSize changes the supplied dimensions."],
+    "scoring_anchors": {
+      "correctness": {"0": "Invents behavior.", "1": "Adds generic advice.", "2": "Omits the optional insight."},
+      "local_relevance": {"0": "No source basis.", "1": "Restates the helper.", "2": "Does not add a lesson."},
+      "tradeoff_clarity": {"0": "Invents a trade-off.", "1": "Gives a generic caveat.", "2": "Does not add a lesson."},
+      "useful_verification": {"0": "Invents a test need.", "1": "Gives generic test advice.", "2": "Does not add a lesson."}
+    },
+    "source": "package fixture\n\ntype Size struct {\n\tWidth  int\n\tHeight int\n}\n\nfunc NewSize(width, height int) Size {\n\treturn Size{Width: width, Height: height}\n}\n",
+    "anchor": {"start_line": 9, "end_line": 9, "evidence": "return Size{Width: width, Height: height}"},
+    "expect_insight": false,
+    "sanitized_output": "{\"purpose\":\"Constructs a size from supplied dimensions.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+  }
+]

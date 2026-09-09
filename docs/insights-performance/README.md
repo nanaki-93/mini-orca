@@ -159,6 +159,27 @@ not malformed model responses. Parser-malformation coverage is a separate
 deterministic test so an invalid optional section cannot be counted as a successful
 omission.
 
+The historical v1 corpus and results remain unchanged. The proposed
+`engineering-insight-v2` successor has a separate public development corpus at
+`internal/app/testdata/engineering-insight-eval/v2-development.json`: twelve
+distinct one-attempt cases, with eight substantive source mechanisms and four
+intentional-omission controls. Its reference examples are source anchored, compile
+in isolated offline Go modules, retain the same four 0–2 dimensions, and keep each
+insight field within the 250-character generation ceiling. They characterize
+current behavior and expected observations; they do not prescribe a replacement
+implementation.
+
+The 24-case v2 qualification corpus is evaluator-owned while tuning remains
+possible. Its eventual public target is
+`internal/app/testdata/engineering-insight-eval/v2-qualification.json`; before it
+is published, structural tests record only that the target is sealed and absent.
+They do not read private evaluator storage or emit holdout source, anchors, or
+digests. Publication checks require sixteen substantive cases and eight controls,
+but corpus structure, parser acceptance, and compilation are not evidence that a
+model explanation is useful or factually accurate. Only the separately authorized
+one-pass development and conditional qualification screens can provide that
+evidence.
+
 The command validates receipts by default and never constructs a provider client in that
 mode, even when old opt-in environment variables are inherited. Explicit `collect`,
 `development`, and `qualification` modes use the configured `bug` scope, production
