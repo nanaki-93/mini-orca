@@ -261,8 +261,8 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
 | REC-04 | Establish standalone runtime compatibility | REC-03, QUAL-03 | S / high | Complete |
-| REC-05 | Prepare bounded standalone runtime lifecycle | REC-04 | M / high | Running |
-| REC-06 | Verify reasoning and final-schema boundary offline | REC-05 | M / high | Pending |
+| REC-05 | Prepare bounded standalone runtime lifecycle | REC-04 | M / high | Complete |
+| REC-06 | Verify reasoning and final-schema boundary offline | REC-05 | M / high | Running |
 | REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Pending |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Blocked |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
@@ -1620,7 +1620,14 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### REC-05 — Prepare bounded standalone runtime lifecycle
 
-- **Status:** Running; REC-04 independently accepted.
+- **Status:** Complete. Reviewed code `220e56ff41e25d0179309fe93218f010126cbdbb`
+  provides the pinned launcher and lifecycle checks. Terra completed the initial
+  implementation and two repairs; a fresh final reviewer accepted diff
+  `f6d9889e1de07384d16b78f7c7c0ad958301e90c2e427093e87f372f9b6c49d4`.
+  All 17 focused tests and coordinator `make check` passed, including 327 desktop
+  tests with zero failures. The integrated read-only preflight passed against
+  54 package versions, seven server hashes and nine current artifact hashes.
+  No server/model was started and campaign consumption remains 36/0.
 - **Specification:** [REC-05](docs/tasks.md#rec-05--prepare-a-bounded-standalone-runtime-and-lifecycle-checks-stage-1).
 - **Target files:** `scripts/insight_runtime.py`, `scripts/tests/test_insight_runtime.py`,
   dependency pins if needed, `docs/insights-performance/README.md`, private candidate config.
@@ -1632,7 +1639,10 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### REC-06 — Verify thinking and structured final output offline
 
-- **Status:** Pending; depends on accepted REC-05.
+- **Status:** Running; REC-05 independently accepted. An in-process ASGI check
+  confirmed HTTP 422 for invalid parameters with model access disabled; the
+  production client currently treats only HTTP 400 as permanent rejection.
+  REC-06 must cover 422 without dispatching further cases or retries.
 - **Specification:** [REC-06](docs/tasks.md#rec-06--verify-the-production-request-and-channel-boundary-offline-stage-2).
 - **Target files:** runtime conformance tests, only demonstrated typed client/config
   compatibility changes and their tests, private `verify.py`, release evidence.
