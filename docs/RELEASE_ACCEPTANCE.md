@@ -752,6 +752,31 @@ synthetic engine-test processes were reaped; the opt-in test now has a bounded
 quality. Campaign remains **36 development / 0 qualification**, the sixth grant
 is unapplied, and the scheduler remains Paused while REC-07 is prepared.
 
+### REC-07 grant acceptance and pilot preparation
+
+Reviewed code `a72fea8415c88244dcd61631c52cfde542e48102` adds only the sixth
+fixed grant for `qual05-qwen38-thinking-schema-1`, candidate
+`qwen38-v12-thinking-schema-1`, wire model
+`./models/qwen38-v12-thinking-schema-1`, unchanged v12 and low reasoning effort.
+Fake HTTP confirms exactly six additional calls after 36 consumed, with rejection
+of request 43, a seventh/duplicate grant, wrong identity, remote dispatch,
+corrupt history and replay. Qualification remains capped at 24.
+
+After one Terra complexity repair, fresh review accepted diff
+`2237701ddf0dbdb4246e8d5dc40b035c1821ce93993554784aab2cb394f38718`.
+Coordinator `make check` passed with 327 desktop tests, and `make quality` passed
+static analysis, reachability, complexity, clone detection and desktop checks.
+The initial quality run also exposed a coordinator cache-copy symlink issue;
+the isolated cache copy was corrected and the unchanged clone check then passed.
+Four synthetic collector tests and fresh review cover fixed batches, fail-closed
+preflight, no replay and preservation of the child PID on uncertain cleanup.
+
+The coordinator applied the grant once without generating. The original five
+grants and all 12 historical receipt hashes remain intact. Consumption is still
+**36 development / 0 qualification**, with a development ceiling of **42**.
+The loopback runtime handoff and frozen pilot are next; the scheduler is Paused.
+These preparation results do not establish insight quality.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)

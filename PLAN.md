@@ -263,8 +263,8 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-04 | Establish standalone runtime compatibility | REC-03, QUAL-03 | S / high | Complete |
 | REC-05 | Prepare bounded standalone runtime lifecycle | REC-04 | M / high | Complete |
 | REC-06 | Verify reasoning and final-schema boundary offline | REC-05 | M / high | Complete |
-| REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Running |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Blocked |
+| REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Complete |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Running |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1659,9 +1659,15 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### REC-07 — Prepare one runtime-bound six-request grant
 
-- **Status:** Running; REC-06 independently accepted. Grant remains unapplied.
-  Wire model is `./models/qwen38-v12-thinking-schema-1`, mapped to the same
-  audited local artifacts; thinking is enabled with low reasoning effort.
+- **Status:** Complete. Reviewed code `a72fea8415c88244dcd61631c52cfde542e48102`
+  passed fresh review, focused fake HTTP tests, full `make check` (327 desktop
+  tests) and `make quality`. One Terra repair simplified ledger validation
+  without changing historical windows or grant order. The coordinator applied
+  the sixth grant exactly once; all five previous grants and 12 receipt hashes
+  are preserved. Ceiling is 42; consumption remains 36 development / 0 qualification.
+  Wire model `./models/qwen38-v12-thinking-schema-1` uses the same audited
+  artifacts with thinking enabled and low reasoning effort. QUAL-05 runtime
+  handoff and frozen pilot collection are now in progress; scheduler stays Paused.
 - **Specification:** [REC-07](docs/tasks.md#rec-07--prepare-exactly-six-additional-development-slots-stage-3).
 - **Target files:** `internal/app/engineering_insight_runner.go` and tests,
   `cmd/engineering-insight-eval/main.go` and tests, PLAN and evaluation documentation.
