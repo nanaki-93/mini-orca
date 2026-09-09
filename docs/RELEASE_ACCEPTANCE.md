@@ -798,6 +798,63 @@ and reported token counters passed the full ready preflight. No smoke inference
 was performed. The fixed pilot run IDs are
 `qual05-qwen38-thinking-schema-dev1` and `qual05-qwen38-thinking-schema-dev2`.
 
+### Thinking-schema pilot verdict — 2026-09-09
+
+**QUAL-05 remains Blocked; the scheduler remains Paused.** At frozen base
+`23c5cebc84bfe8b86dcb9a5a8bc406da572932fa`, the two fixed batches above consumed
+exactly six additional requests, with no retry, error, timeout or extra probe.
+All six responses delivered usable, complete final JSON with normal stops.
+
+| Development case | dev1 | dev2 | Whole-final-content critical claims |
+| --- | --- | --- | --- |
+| Locking/cancellation | 2 / 2 / 1 / 1 = 6/8 | 2 / 2 / 1 / 1 = 6/8 | Both final summaries falsely guarantee FIFO mutex service. |
+| Allocation | 2 / 2 / 2 / 2 = 8/8 | 2 / 2 / 2 / 2 = 8/8 | None |
+| Trivial control | 8/8 intentional omission | 8/8 intentional omission | None |
+
+All four substantive attempts meet the numeric >=6/8 threshold. The two critical
+false claims independently fail the zero-critical-claim gate. The runtime repair
+establishes final delivery for this candidate, but the content-quality gate still
+fails. No candidate is promoted and no qualification base is frozen.
+
+Runtime accounting shows six started/completed requests, zero failed requests,
+and **7,592 raw generated / 7,592 reported completion tokens**. Successful latency
+median is **97,753ms** and nearest-rank p95 is **103,060ms**, with no timeout or
+censored attempts. Corresponding repetitions are byte-identical: only three
+outputs are distinct. This is development evidence, not an independent repeated
+reliability estimate. Raw/reported token equality is not a reasoning-token count.
+
+A fresh scorer and second independent reviewer checked the delivered final
+summaries against the development fixtures and confirmed all six SHA-256 joins.
+Private response material concatenates reasoning aliases and final content; it
+is not an HTTP envelope. The duplicated reasoning aliases were not credited as
+final answers. Both scored receipts passed offline identity/schema validation;
+receipt integrity does not imply passing quality. All twelve earlier receipt
+hashes and the earlier grant history remain unchanged.
+
+After both reviews, the two private response directories were discarded and
+absence verified. No examples were retained. Source-free scoring, channel audit,
+receipts and runtime accounting remain in the private evaluation directory and
+`.mini-orca/autopilot/coordinator/QUAL-05-thinking-schema.json`. The separate
+private runtime log remains retained (1,719 bytes, SHA-256
+`69450d792bcdcc835202c3360769033d7ee6d719bd0f808dc06b5b2b8319b8ed`).
+
+The owned standalone runtime was stopped and port 1235 released. The original
+LM Studio model was reloaded with context 119,552 and one lane, then its
+server-session thinking-off setting restored and read back. All stable settings
+match the prior session; only the new instance reference and usage timestamp
+are excluded from comparison. Restored effective-template SHA-256 is
+`0dab809e785300d543255f76649e8124b5e8ec15df4ecdd837898936f17490fe`.
+Saved defaults and model artifacts remain unchanged; the frozen pilot manifest
+is retained unchanged as historical evidence, not current runtime readiness.
+
+REC-04–07 are Complete. All **42 development requests are consumed; qualification
+usage remains zero**, with its 24 slots untouched. QUAL-06 remains Pending and
+REL-01 Blocked: their conditional execution gate did not pass. The scheduler
+handoff records this result and stays Paused. No further grant, tuning, replay or
+model generation is authorized by this recovery. Further content-quality recovery
+requires a new bounded authorization. Accepted code passed `make check` (including
+327 desktop tests) and `make quality`; this final evidence update changes docs only.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)

@@ -264,7 +264,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-05 | Prepare bounded standalone runtime lifecycle | REC-04 | M / high | Complete |
 | REC-06 | Verify reasoning and final-schema boundary offline | REC-05 | M / high | Complete |
 | REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Complete |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Running |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Blocked |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1703,16 +1703,17 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### QUAL-05 — Run and independently score the bounded development pilot
 
-- **Current run — thinking-schema, 2026-09-09:** REC-04–07 are accepted. The
-  dedicated runtime is ready on loopback 1235 with one model lane; original
-  LM Studio lane was unloaded and rollback settings recorded. Frozen manifest
-  SHA-256 `a9c96b5aa3f37213874a04cecf08aa84b21778b1084db84ad4c9e295d047077b`
-  binds accepted code `a72fea8415c88244dcd61631c52cfde542e48102`, installed
-  runtime/model/configuration, compiled-schema proofs and owned process identity.
-  Full ready preflight passed with zero requests and zero generated tokens.
-  Collect the fixed three cases twice with no tuning, retry or extra probe;
-  existing historical correction allowances below do not apply to this run.
-  Consumption is 36/42 development and 0/24 qualification. Scheduler stays Paused.
+- **Current verdict — thinking-schema, 2026-09-09: Blocked.** REC-04–07 Complete;
+  six fixed requests delivered complete final answers. Locking scored 6/8 twice,
+  allocation 8/8 twice; both controls omitted insights. Both locking summaries
+  falsely guarantee FIFO mutex service: the numeric gate passes but the separate
+  zero-critical-claim gate fails. Two independent reviews verified the evidence;
+  responses were discarded. **42/42 development, 0/24 qualification**; QUAL-06
+  Pending, REL-01 Blocked, scheduler Paused. Runtime stopped and original LM Studio
+  thinking-off settings restored. No further generation, replay or historical
+  correction allowance applies; recovery needs new bounded authorization. Full
+  frozen identity, scores, timing, duplicate-output limits, privacy and rollback
+  evidence: `docs/RELEASE_ACCEPTANCE.md`, thinking-schema pilot verdict.
 
 - **Shared input:** read the qualification contract above before work; its budgets,
   sample counts, privacy rules and pass criteria apply to this card.
