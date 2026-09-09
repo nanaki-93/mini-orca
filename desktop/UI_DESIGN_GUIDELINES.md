@@ -77,7 +77,7 @@ visual change. Check wide views, 1000/999dp, 800×650, 1280×600, large text, lo
 paths/errors and affected empty/stale/populated states. Check alignment, clipping,
 action reachability, separators, keyboard focus and names/states.
 
-Use [VISUAL_REVIEW.md](VISUAL_REVIEW.md) for fixture reproduction and the retained
+Use [component reproduction](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks) for fixture reproduction and the retained
 [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) for native checks. Offscreen
 Compose renders cannot prove OS focus, popup placement or screen-reader behavior.
 Record those separately in [release acceptance](../docs/RELEASE_ACCEPTANCE.md).

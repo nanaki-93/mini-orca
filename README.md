@@ -21,8 +21,8 @@ a fresh Security-specific Analyze confirmation.
 
 Mini-Orca does not automatically edit source, run scans, write tests to your
 project, commit or push. Exact declaration editing is currently Go-first; other
-languages have conservative analysis and symbol information. Remaining delivery
-and release work is tracked in [PLAN.md](PLAN.md).
+languages have conservative analysis and symbol information. Completed delivery,
+accepted scope and insight deferrals are tracked in [PLAN.md](PLAN.md).
 
 ## Run
 

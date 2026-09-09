@@ -1,5 +1,12 @@
 # Recovery after the failed medium-reasoning qualification
 
+> **Standby — user decision, 2026-09-09.** This recovery specification is retained
+> as history, not the active queue. RCV-07 failed and RCV-08 remains unrun; unchecked
+> acceptance boxes do not authorize continuation. Follow the current scope decision
+> and REL-01 → REL-02 sequence in [PLAN.md](../PLAN.md). The scheduler stays Paused;
+> preserve all budgets, receipts and the sealed holdout. No new model calls.
+
+
 Analyze and repair explanation coverage, bounded optional output and factual precision, then evaluate one frozen candidate on broader development cases and fresh qualification cases. The user approved execution with “go for it” on 2026-09-09, including 12 development calls and conditional 24 qualification calls. `PLAN.md` remains the sole execution/status ledger; the scheduler stays Paused during coordinated implementation and no release is authorized.
 
 ## Evidence and diagnosis

@@ -1,5 +1,12 @@
 # Engineering insights and Performance
 
+> **Current status — 2026-09-09:** insight improvement and qualification are on
+> standby. Historical runtime/evaluation commands below are reference material,
+> not an active execution queue or new call authorization. Preserve failed results,
+> budgets and the sealed holdout. [PLAN.md](../../PLAN.md) owns reopening decisions;
+> [release acceptance](../RELEASE_ACCEPTANCE.md) owns current evidence and limits.
+
+
 These capabilities already exist. The next work is in
 [PLAN.md](../../PLAN.md#engineering-learning-and-evidence), not another implementation plan.
 

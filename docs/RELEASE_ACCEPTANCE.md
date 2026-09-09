@@ -1,32 +1,71 @@
 # Release acceptance
 
-**Current state: incomplete.** UI-04 establishes the attainable native/accessibility
-checks on the supported macOS host. Provider, lifecycle and distribution acceptance
-remain open. [PLAN.md](../PLAN.md) is the task/status source; this document owns
-release evidence and open validation obligations.
+**Current state: REL-01 and REL-02 accepted for the limited scope below.** Insight qualification is user-deferred. This ledger owns
+release evidence and limitations; [PLAN.md](../PLAN.md) owns task status.
 
-## Evidence and open work
+## Current scope deferral — 2026-09-09
 
-| Evidence | Result / boundary | Plan owner |
-| --- | --- | --- |
-| Fresh `go test ./...` on 2026-09-06 | Passed, including daemon route/version contracts; some packages cached | Foundation |
-| Final Desktop gate on 2026-09-07 | 291 tests passed with zero failures; Spotless and Detekt passed on the documented Java 21/JBR 25 split | UI-04 complete |
-| Post-cleanup daemon/config tests (`-count=1`) | Passed, including maintained documentation/version contracts | Foundation |
-| Fresh `make quality` on 2026-09-08 | Static analysis, reachability, clone detection, Go complexity, and Desktop static checks passed | REL-01 |
-| Final focused UI matrix | Forced 24 visual-layout, 8 accessibility and 7 keyboard-navigation tests passed; 70 ignored PNGs | UI-04 complete |
-| Task 170 production render additions | Historical component/test evidence is tracked; generated images remain ignored build output | UI-04 complete |
-| FND-01 production fixture baseline | Current 1440×900 and 999×760 Editor, Analysis, populated Review, and populated Performance component captures; JBR 25.0.4.1 rerun, not native acceptance | UI-04 complete |
-| Saved fixture inspection during planning | Editor at 1000dp, Analysis at 150% text and ready Review inspected; concrete UI corrections recorded in PLAN | UI-01–03 |
-| Native window/edge popup/OS focus/reader | Material supported-host checks passed at 1000×760, 999×760, 800×650 and 1280×600; VoiceOver 10 services active while names/states were inspected; unsupported combinations are recorded separately | UI-04 complete; remaining release combinations REL-01 |
-| Desktop `run` runtime | Fixed Java 22-bytecode startup on a Java 21 Gradle launcher; direct and scripted runs launched the app with JBR 25, confirmed by `jcmd` | UI-04 complete |
-| Real local/remote/mixed model scopes | Manual compatibility and end-to-end checks not recorded as passed | REL-01 |
-| Insight usefulness and Performance lifecycle UI | Manual content-quality/consent follow-ups outstanding | LEARN-02, REL-01 |
-| Final packages / supported Docker image | Earlier macOS startup smoke is not final acceptance; Docker release evidence outstanding | REL-01 |
+The user placed engineering-insight improvement and qualification on standby.
+QUAL-06 failed, RCV-07 failed and RCV-08 did not run; these outcomes remain unchanged.
+Earlier dated statements that REL-01 is blocked on insight qualification are
+superseded by this explicit scope decision and the current [plan](../PLAN.md).
+Insight usefulness and appropriate omission are deferred acceptance criteria;
+existing insight content remains unqualified. This does not establish broader AI
+factual reliability or disable the implemented feature.
 
-The exact quality diagnostics are in the plan. An old quality deferral is not a
-current release waiver. Tasks 149/170/171 are superseded by their plan owners,
-not marked passed. The Security scan/review and optional benchmark comparison
-APIs are implemented; SEC-08 and PERF-03 still own their desktop presentation.
+REL-01 has completed the remaining source-safety, consent, local provider contract,
+native and distribution acceptance for the limited scope below; REL-02 owns handoff. The scheduler stays
+Paused; no new live calls or publishing are authorized. All historical budgets,
+receipts and sealed qualification material remain preserved.
+
+## REL-01 final acceptance — 2026-09-09
+
+Candidate: `0a6260b` plus the `.dockerignore` exclusion and scope documentation
+shown in the final local diff. No Go or production Desktop implementation changed.
+The exclusion keeps `.mini-orca/` project metadata, agent worktrees, model artifacts
+and evaluation records out of the Docker build context. The first build was stopped
+when it began transferring those ignored artifacts; the corrected build passed.
+
+| Final check | Result |
+| --- | --- |
+| `make check` | Passed: Go formatting/tests/race/vet, dispatcher tests and 327 Desktop tests (zero failures, errors or skips). The first invocation stopped on an unformatted ignored recovery scratch helper; that helper was preserved unchanged outside the source tree before the successful rerun. |
+| `make quality` | Passed: Go static/reachability/complexity/clone checks and Desktop Spotless/Detekt. |
+| Desktop packaging | `scripts/desktop-gradle.sh createDistributable` passed with Temurin 21.0.11 launcher and pinned JBR `25.0.4+1-b508.27` toolchain. |
+| Packaged native startup | Launched the rebuilt `Mini-Orca.app` with isolated preferences against the disposable loopback container. Native accessibility exposed the Mini-Orca window and named Open project control. `jcmd VM.version` confirmed JBR 25.0.4; the embedded runtime contains `java.net.http` and `jdk.unsupported`. The owned smoke process was stopped. |
+| Container | Fresh `mini-orca:rel01-final-20260909` built as Linux arm64, image `sha256:c945c957e6f872edd64ef2dd6287cf097bc00e60411aabe1ee92b9bc04a86d1c`. Container `mini-orca-rel01-final-20260909` reached healthy and loopback `/health` returned version 4.4.0. The owned test container was stopped after verification; its image/container remain available. No destructive cleanup was performed. |
+| Workflow and native evidence reuse | The 2026-09-08 disposable replace/create → validation → trusted checks → Apply → Undo evidence and UI-04 native observations below remain applicable. No production Desktop changes occurred since that baseline; current automated checks cover stale identity, cancellation, consent denial and source-write boundaries. |
+
+Local provider compatibility is limited to the frozen Qwen3.8-27B medium-reasoning
+MLX runtime exercised by RCV-07 with the v13 prompt: twelve complete usable responses
+through the production structured client/parser. Its failed content-quality verdict
+is retained. This demonstrates the tested request/response path, not model factual
+reliability. Real external providers and remote/mixed end-to-end compatibility are
+unclaimed; consent routing and denied requests have deterministic test coverage.
+This is component-level evidence; the evaluator bypasses service retry/cache and
+does not exercise Desktop/import flow. The workflow evidence is separately recorded
+above. Independent review accepted this boundary. No additional inference request
+was made for this release closure.
+
+Supported acceptance scope is macOS arm64 Desktop and the Linux arm64 container
+on this Docker Desktop host. Retain the native matrix limits below: other platforms,
+exact external-display/scaled native combinations and spoken screen-reader output
+are unclaimed. Existing JBR native-access/Unsafe warnings remain upstream runtime
+limitations. No configuration migration, project reset, provider change or automatic
+source application is required. Acceptance does not publish or deploy a release.
+
+## Evidence ownership and limitations
+
+| Area | Current disposition |
+| --- | --- |
+| Integrated gates, package and Docker | Passed in final REL-01 acceptance above. |
+| Native UI/accessibility | Attainable UI-04 observations and REL-01 changed-surface checks accepted; exact unsupported combinations remain in the consolidated UI evidence below. |
+| Real provider | Only the exact RCV-07 loopback selected-file request contract is verified; no live remote/mixed compatibility claim. |
+| Source safety, consent and lifecycle | Current automated gates plus separately recorded disposable workflow/native local evidence. |
+| Insight usefulness/omission | User-deferred; QUAL-06 and RCV-07 failed, RCV-08 unrun. |
+| Publishing and other platforms | Outside this local acceptance; no publication or additional-platform acceptance performed. |
+
+Dated run records below preserve failures, budgets and evidence without redefining
+the current scope. Use the final acceptance section for the current disposition.
 
 ## Historical QUAL-05 development pilots — 2026-09-08
 
@@ -1027,17 +1066,10 @@ these qualification cases cannot convert this completed failed run into a pass.
 Following final independent evidence review, raw response material was disposed;
 source-free scores, digests, receipts and adjudication records remain retained.
 
-Retained working evidence, including pre-existing user edits:
-
-- [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
-- [UI precision evidence](../desktop/UI_PRECISION_ACCEPTANCE.md)
-- [Visual fixture reproduction](../desktop/VISUAL_REVIEW.md)
-- [Keyboard/native checklist](../desktop/KEYBOARD_SMOKE_CHECKLIST.md)
-- [Current contrast measurements](../desktop/UI_CONTRAST.md)
-
-These files are temporarily retained to preserve ongoing work. Their dated
-baseline sections describe history. REL-02 consolidates current reproduction and
-remaining checks here before retiring redundant history.
+Maintained UI references are the [keyboard operator checklist](../desktop/KEYBOARD_SMOKE_CHECKLIST.md),
+[current contrast measurements](../desktop/UI_CONTRAST.md), and the reproduction
+and consolidated observations in this ledger. REL-02 retired the separate Task 170,
+visual-history and precision-acceptance files after preserving their current evidence.
 
 ## V2 recovery offline preparation — 2026-09-09
 
@@ -1213,7 +1245,7 @@ FND-01 started at `d0a7cc9`. The only pre-existing worktree edit was the coordin
 `PLAN.md` status transition for FND-01; it is not part of the evidence change. The preserved Task
 170 source/test record was already tracked in that baseline, while all rendered PNGs are ignored.
 The current eight-fixture matrix, command, runtime identity, scale, artifact names, and native
-limitation are recorded in [UI precision evidence](../desktop/UI_PRECISION_ACCEPTANCE.md).
+limitation are recorded in [UI precision evidence](RELEASE_ACCEPTANCE.md#consolidated-ui-precision-evidence).
 
 UI-04 closed the attainable native window, edge popup, operating-system focus and screen-reader
 name/state inspection inherited from Tasks 149/170. REL-01 owns provider, lifecycle, package,
@@ -1318,19 +1350,21 @@ excluded; never use a real user project or credentials in screenshots/test recor
 2. Start from an empty desktop preference profile; open/cancel/retry, restore after
    restart, navigate workspaces/files/symbols and inspect the real relative path.
    Restore/navigation must not cause a model request.
-3. Replace fixture `Run`, and separately create absent `ReleaseNote`: send, edit
+3. Using a deterministic loopback fixture provider, replace `Run`, and separately
+   create absent `ReleaseNote`: send, edit
    only the draft, validate, check, review, explicitly Apply and Undo. Verify one
    source file changes; stale selection/source/draft/check evidence blocks Apply.
 4. Exercise failed required checks, explicit repair limits, cancellation, source
    changes during requests, denied remote confirmation and provider offline errors.
    Temporary proposed tests never appear in the imported project.
-5. Test all-local, one online-compatible and mixed `analyze`/`bug`/`function` scope
-   configurations with explicit request consent. Record provider type/model/version
-   and results, not keys/prompts. Use an agreed finite request budget.
+5. For the current scope, use deterministic loopback fixtures for scope routing and
+   denied consent, and retain the bounded local request-contract evidence above.
+   Live online/mixed-provider checks are future work requiring separate user
+   authorization and an explicit finite request budget; do not run them for this closure.
 6. Exercise Analyze-all and Performance preview/start/pause/resume/cancel/restart,
    honest empty/partial/budget-limited/stale/failed states and exact-function handoff.
-   Inspect real insights for local relevance, trade-offs and useful verification;
-   simple valid JSON alone does not pass content-quality review.
+   Insight usefulness review is on standby and is not a current acceptance step.
+   Reopening it requires separate authorization; valid JSON is not evidence of quality.
 7. Run native views at 1440×900, 1920×1080, 1000×760, 999×760, 800×650 and 1280×600;
    check 100/125/150% text and 1×/2× density where supported. Include long content,
    drawers, splitters, menus/dialogs at window edges, errors and populated Review.
@@ -1346,3 +1380,343 @@ A release is accepted only when all required checks for its explicitly named sco
 pass with evidence. Record operator/date, platform/runtime, fixture, candidate
 identity, artifact locations and remaining limitations. Missing required evidence
 keeps the release incomplete; independent implementation work can continue.
+
+## Consolidated UI precision evidence
+
+Retired from `desktop/UI_PRECISION_ACCEPTANCE.md` by REL-02. Dated attempts below
+are historical observations; the final acceptance scope above is authoritative.
+
+### Task 170 status
+
+Superseded by UI-04. UI-04 closed the attainable inherited native and assistive-technology
+checks on 2026-09-07 and records unsupported combinations below. This record keeps deterministic
+production-component evidence separate from native evidence. An offscreen render is never used
+as evidence for native menu, dialog, window-edge, or screen-reader behavior.
+
+### Environment
+
+- Host: macOS 26.6.2 (25G83), arm64.
+- Desktop runtime: JBR 25.0.4+1-b508.27-nomod.
+- Deterministic UI data: only the production test fixture (`go-shop · fixture`, `Visual fixture · no
+  backend`) was rendered; no fixture capture includes a daemon, provider, user project,
+  credential, or live provider data. The resumed UI-04 run below used a separate disposable native
+  fixture and loopback daemon.
+
+### FND-01 baseline reconciliation — 2026-09-06
+
+The starting repository identity was `d0a7cc9` (`docs: establish Mini-Orca improvement
+autopilot`). Before this task began, the coordinator had changed only the FND-01 status in
+`PLAN.md` from Pending to Running. That status edit is not FND-01 evidence. The Task 170 test
+source and retained execution record are tracked at that baseline; its generated PNGs are ignored
+build output. This task adds no product or configuration behavior.
+
+The current reproduction used the existing `DesktopVisualLayoutTest` production-component
+renderer with local fixture data. It ran with JBR `25.0.4.1+1-583.48-jcef`, which is JBR 25 but
+not the exact historical Task 170 `25.0.4+1-b508.27-nomod` SDK. The runtime difference is
+recorded here rather than treated as equivalent native acceptance.
+
+| View | 1440×900, font/density scale 1.0 | 999×760, font/density scale 1.0 | Source and classification |
+| --- | --- | --- | --- |
+| Editor | `editor-1440.png` | `editor-999.png` | `EditorVisualFixture`; offscreen production-component render |
+| Analysis | `analysis-1440-1.0.png` | `analysis-999-1.0.png` | `AnalysisVisualFixture`; offscreen production-component render |
+| Review, ready to apply | `review-ready-1440-900-1.0.png` | `review-ready-999-760-1.0.png` | `ReviewToolWindow` with a current passed required check; offscreen production-component render |
+| Performance, populated | `performance-populated-1440-900-1.0.png` | `performance-populated-999-760-1.0.png` | `PerformanceWorkspacePane` with a populated source hypothesis; offscreen production-component render |
+
+All eight artifacts were written to the ignored
+`desktop/build/reports/ui-precision/fnd-01/` directory by:
+
+```sh
+./desktop/gradlew -p desktop test \
+  --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' \
+  --tests 'io.miniorca.desktop.DesktopAccessibilityTest' \
+  --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' \
+  -PvisualOutput="$PWD/desktop/build/reports/ui-precision/fnd-01"
+```
+
+The run passed: 22 visual-layout, 7 accessibility, and 7 keyboard-navigation tests. PNG
+dimensions were checked with `sips`; representative Editor, Analysis, Review, and Performance
+renders were visually inspected. The renderer does not open a native window, so this reproduction
+does not update native, popup-placement, operating-system focus, or screen-reader evidence.
+
+### UI-04 execution attempt — 2026-09-07
+
+The candidate was `0f1362efa32bc5ec5290ff9542f39b8f9dfef83e`. Before the attempt, the only
+worktree change was the coordinator's UI-04 Pending-to-Running transition in `PLAN.md`; it is not
+UI evidence. The host was macOS 26.6.2 (25G83), arm64. The Gradle launcher was Temurin
+21.0.11+10 and the downloaded, ignored toolchain was the exact documented JBR
+25.0.4+1-b508.27-nomod.
+
+The full Desktop gate passed with the documented launcher/toolchain split:
+
+```sh
+MINI_ORCA_JDK21_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem \
+MINI_ORCA_JBR25_HOME="$PWD/desktop/build/ui-04/toolchains/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home" \
+  ./scripts/desktop-gradle.sh spotlessCheck detekt test
+```
+
+A forced focused run then passed 22 visual-layout, 8 accessibility, and 7
+keyboard-navigation tests with no skipped, failed, or errored cases. It generated 66 PNGs under
+the ignored `desktop/build/reports/ui-precision/ui-04/` directory:
+
+```sh
+MINI_ORCA_JDK21_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem \
+MINI_ORCA_JBR25_HOME="$PWD/desktop/build/ui-04/toolchains/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home" \
+  ./scripts/desktop-gradle.sh test --rerun-tasks \
+  --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' \
+  --tests 'io.miniorca.desktop.DesktopAccessibilityTest' \
+  --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' \
+  -PvisualOutput="$PWD/desktop/build/reports/ui-precision/ui-04"
+```
+
+`sips` confirmed the expected pixels for the component Analysis matrix: 1440×900, 1920×1080,
+1000×760, 999×760, 800×650, and 1280×600 at 100%, 125%, and 150% text plus the 100% 2×
+density case. `analysis-1280-600-150-1x.png`, `editor-1000.png`, and
+`review-ready-800-700-1.3.png` were visually inspected. Their named actions and state remained
+readable, but these are offscreen production-component renders only. The rendered
+`project-menu-open.png` cannot paint the Desktop scene popup layer, so it supplies no native menu
+placement evidence.
+
+For the native attempt, a disposable copy of `internal/project/testdata/release-fixture/` and an
+isolated desktop preference root were created only under ignored `desktop/build/ui-04/`. A
+loopback daemon used that copied project and local unreachable fixture model destinations; no
+provider, credential, or user project was used. The distributable was rebuilt by Gradle running
+on the exact JBR and launched from its `.app` executable. `jcmd` directly reported the live
+Mini-Orca VM as `OpenJDK 64-Bit Server VM version 25.0.4+1-b508.27`, and the computer-use
+inventory reported the running bundle as `Mini-Orca` (`io.miniorca.desktop`).
+
+The automation surface could not bind to that app by either display name or bundle identifier.
+Both attempts returned that macOS Accessibility and Screen Recording permissions were still
+pending. Those permissions were not granted or reconfigured. Consequently no native screenshot,
+window size, edge popup/dialog placement, operating-system focus order, keyboard traversal,
+selection, Escape/focus restoration, splitter/drawer resize, text/density scaling, or preference
+recovery result is claimed. VoiceOver was not running, and the blocked accessibility surface could
+not expose another reader, so no reader name/state observation is claimed. The temporary app and
+daemon were stopped after the attempt.
+
+That attempt remained blocked on the complete native and assistive-technology operator matrix
+below.
+
+### UI-04 resumed native execution — 2026-09-07
+
+The resumed starting identity was `df426547dd6f35888658d203c4914e8cef7f1630`. The only
+pre-existing worktree change was the coordinator's UI-04 status update in `PLAN.md` to
+`Running — native permissions restored`; it is not UI evidence. The same exact ignored JBR,
+disposable fixture, loopback daemon, and unreachable local fixture-model destinations from the
+attempt above were reused. No real provider, credential, or user project was used. A small
+ignored `java.util.prefs` test harness stored application preferences only in
+`desktop/build/ui-04/prefs/ui-04.properties`; it did not alter macOS preferences.
+
+Accessibility and Screen Recording access worked through the computer-use surface. It exposed
+the running `Mini-Orca` window, its accessibility tree, keyboard and pointer input, and
+window-only JPEG captures. Capture dimensions were parsed directly from those buffers. The
+surface did not provide a file-export API. A targeted `screencapture -l 2615` attempt from the
+terminal returned `could not create image from window`, so no native screenshot file is claimed.
+The directly observed facts are also summarized in the ignored
+`desktop/build/ui-04/logs/native-observations.json` execution artifact.
+
+| Requested native window | Direct result |
+| --- | --- |
+| 1000×760 | Exact capture; populated/error Summary and docked Editor were readable with no observed clipping. |
+| 999×760 | Exact capture; populated/error Summary and compact Editor drawer/bottom-overlay arrangement were readable with no observed clipping. |
+| 800×650 | Exact Summary capture; the compact Summary remained readable with the failed-AI state and bottom-tools opener visible. |
+| 1280×600 | Exact capture; Summary and docked bottom tabs remained readable with no observed clipping. |
+| 1440×900 | Unsupported by the available host work area; the direct resize attempt was clamped to 1361×768. |
+| 1920×1080 | Unsupported by the available host work area; the direct resize attempt was clamped to 1383×768. |
+
+The native fixture exposed a populated factual inventory of 10 indexed files and 45 lines plus an
+explicit failed AI-analysis state with 10 missing analyses. In Editor, selecting `main.go`
+displayed its full read-only source and accessibility descriptions for the file, relative path,
+and each source line. A pointer drag visibly selected `Run` source text without selecting a
+declaration or changing the file. At compact width, longer fixture names were visually ellipsized
+while their complete relative paths remained present in the accessibility names.
+
+The project menu, command palette, macOS project chooser, Files drawer, Context drawer, and
+bottom-tools overlay were opened in the native app. Their labels and available/selected states
+were present in the accessibility tree and the visible surfaces stayed within the window. Escape
+closed one of those transient layers at a time without changing the workspace or selected file.
+Tab visibly focused the Project and Search controls, and Return activated the focused control.
+Project-menu and Files-drawer dismissal returned activation to their openers.
+
+Direct native inspection found three defects. The Summary dashboard initially exposed Editor as
+the selected rail destination; the rail now derives selection from the rendered workspace. The
+command palette and compact bottom-tools overlay initially returned focus only to their broad
+regions; their actual opener controls now receive focus. In the rebuilt JBR application, Escape
+followed by Return reopened each corrected trigger. Deterministic assertions cover the complete
+workspace-to-rail mapping and prove that the exact Search and Open tools triggers can receive
+focus. The dismissal and trigger-restoration sequence is direct native evidence only.
+
+After the final fixes and launcher correction, the full Desktop run passed 291 tests with zero
+Detekt findings:
+
+```sh
+MINI_ORCA_JDK21_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem \
+MINI_ORCA_JBR25_HOME="$PWD/desktop/build/ui-04/toolchains/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home" \
+  ./scripts/desktop-gradle.sh spotlessCheck detekt test
+```
+
+The final forced focused run passed 24 visual-layout, 8 accessibility, and 7 keyboard-navigation
+tests with no skipped, failed, or errored cases. It generated 70 PNGs under the ignored
+`desktop/build/reports/ui-precision/ui-04-resumed/` directory:
+
+```sh
+MINI_ORCA_JDK21_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem \
+MINI_ORCA_JBR25_HOME="$PWD/desktop/build/ui-04/toolchains/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home" \
+  ./scripts/desktop-gradle.sh test --rerun-tasks \
+  --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' \
+  --tests 'io.miniorca.desktop.DesktopAccessibilityTest' \
+  --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' \
+  -PvisualOutput="$PWD/desktop/build/reports/ui-precision/ui-04-resumed"
+```
+
+The Compose `run` task had launched the Java 22-bytecode application on Gradle's Java 21 runtime,
+causing `UnsupportedClassVersionError`. The application now resolves `javaHome` from the Java 25
+toolchain, and `scripts/desktop-gradle.sh` restricts discovery to an explicitly supplied JBR 25.
+A direct Java 21 Gradle launch started `MainKt` on the discovered SDKMAN JBR 25; the documented
+script started it on the exact ignored `25.0.4+1-b508.27` JBR confirmed by `jcmd`. The repository
+`make check` gate passed with that launcher/toolchain split.
+
+The native pane splitters were then resized from the keyboard. The isolated preferences recorded
+an Explorer width of `520.0` and bottom-pane height of `220.0`; a restart restored both dimensions
+with the disposable project. The stored layout named Editor, while the restarted workspace
+correctly opened and announced Summary under the current navigation-restoration policy. The
+restart also exposed the empty Editor state before a file was selected.
+
+The connected Q2789 was detected as a non-mirrored 2560×1440 1× display. The user placed the
+Gradle-run `MainKt` window there, but that unbundled Java application was not bindable by either
+its display name or `com.jetbrains.jbr.java` identifier. The bindable packaged fixture remained
+on the main Retina display: attempts to drag its title bar returned `noWindowsAvailable`, and the
+display picker treated Q2789 as an offscreen accessibility element because the external display
+has a negative origin. No native wide-display visual result is inferred from the connected
+monitor or the unbindable process.
+
+VoiceOver 10 (build 993) was enabled through System Settings, and its Essentials collection was
+completed so the `scrod` output service and Braille translation service were active. With those
+services running, the packaged Mini-Orca accessibility tree exposed explicit names and state for
+the project menu, search, daemon status, rail selection, Analyze-all control, analysis coverage,
+failed AI interpretation, source metadata, bottom tabs and pane-resize control. Control-Option
+navigation commands were sent through the automation surface, but that surface did not expose a
+reader cursor or speech transcript; no spoken wording or reader focus sequence is claimed.
+
+The host's text scale and density were not changed; 125%, 150%, and alternate-density coverage
+remains deterministic component evidence only. Loading, stale, generated-diff, consent/discard,
+provider-confirmation and guarded-Review states were not produced by this native disposable
+fixture and are not claimed as native observations. Those combinations are explicit limitations,
+while their layout and semantics remain covered by deterministic production-component tests.
+
+### Deterministic component evidence
+
+`DesktopVisualLayoutTest`, `DesktopAccessibilityTest`, and
+`DesktopKeyboardNavigationTest` pass with output in the ignored
+`desktop/build/reports/ui-precision/task-170/` directory.
+
+| Coverage | Viewports / scales | Evidence classification |
+| --- | --- | --- |
+| Shell and Analysis hierarchy | 1440×900, 1920×1080, 1000×760, 999×760, 800×650 | Offscreen production-component render |
+| Compact short window | 1280×600 at 100%, 125%, 150% text; 100% at 1× and 2× density | Offscreen production-component render |
+| Errors, stale/empty/populated evidence | Problems, Checks, Output, Analysis, Context, Assistant, Review, Performance fixtures | Offscreen production-component render and semantics assertions |
+| Keyboard / state semantics | Rail/tab navigation and selected state, command-palette arrow/Enter interaction, disclosure state, responsive region policy, provider confirmation, and Search/Open tools opener focusability | Deterministic Compose keyboard and semantics tests; exact dismissal/restoration is native evidence above |
+| Contrast | Primary, secondary, selected, focus, disabled, diff success, and diff error pairs | `DesktopThemeTest` and `DiffViewerTest` token assertions |
+
+The FND-01 table above is the current minimum baseline for the four principal populated views.
+The broader Task 170 matrix remains historical component evidence, with its native limitations
+unchanged.
+
+Reviewed Task 170 captures include
+`analysis-1280-600-100-1x.png`, `analysis-1280-600-125-1x.png`,
+`analysis-1280-600-150-1x.png`, and `analysis-1280-600-100-2x.png`. The 150% and
+2× captures retain named Preview/Pause/Cancel controls, their textual state, and the layered
+pane boundaries without action overlap. These images are not native-window screenshots.
+
+### Prior blocked native and assistive-technology evidence
+
+The app was launched with the pinned JBR runtime and a live
+`io.miniorca.desktop.MainKt` process was observed. The available computer-use inventory reported
+no native applications both before and while the app was running, so this environment cannot
+inspect the window, capture native menus/dialogs, resize it, drive OS focus behavior, or read its
+accessibility tree. The temporary process was stopped after that launch check.
+
+No supported screen reader was running or exposed to the automation surface. `AccessibilityUIServer`
+alone is an operating-system service, not evidence that VoiceOver or another reader has exercised
+Mini-Orca. No screen-reader result is claimed.
+
+### Recorded limitations and release follow-up
+
+UI-04 is complete because the material native checks available to the operator surface passed,
+the three defects they exposed were fixed, and unsupported combinations are explicit. It closes
+the attainable native-window, popup, operating-system focus and reader-name/state requirements
+inherited from Tasks 149 and 170.
+
+The following are unclaimed release limitations rather than inferred passes:
+
+1. Exact native 1440×900 and 1920×1080 captures on Q2789; the component matrix covers both sizes,
+   while the bindable native fixture could not cross the negative-origin display boundary.
+2. Native 125%/150% text and alternate-density runs; deterministic production-component coverage
+   exists for those combinations.
+3. Native loading, stale, generated-diff, consent/discard, provider-confirmation and guarded-Review
+   states; deterministic layout, semantics and interaction tests cover them.
+4. A VoiceOver speech transcript and observable reader-cursor focus sequence; VoiceOver services
+   were active and native names/states were inspected, but the computer-use surface exposed
+   neither speech output nor the reader cursor.
+
+REL-01 owns any release-level provider, lifecycle, package and distribution checks that require
+those states or a different operator surface. The canonical status remains in
+[release acceptance](RELEASE_ACCEPTANCE.md).
+
+## Retained Task 170 execution provenance
+
+The following is the original execution record, superseded by UI-04 and REL-01.
+Its references to incomplete acceptance describe that historical attempt.
+
+
+- Expanded the production-component matrix to render the compact `1280x600` shell at 100%, 125%, and 150% text and at 1×/2× density. The fixture asserts the named Preview, Pause, and Cancel controls remain readable at every added scale; generated evidence is ignored under `desktop/build/reports/ui-precision/task-170/`.
+- Passed `env JAVA_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem ./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' --tests 'io.miniorca.desktop.DesktopAccessibilityTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' -PvisualOutput=/Users/marcoandreose/DEV/lab/mini-orca/desktop/build/reports/ui-precision/task-170 -Porg.gradle.java.installations.paths=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home`; inspected the 150% and 2× compact captures.
+- Passed `env JAVA_HOME=/Users/marcoandreose/.sdkman/candidates/java/21.0.11-tem ./desktop/gradlew -p desktop spotlessCheck detekt test -Porg.gradle.java.installations.paths=/private/tmp/mini-orca-jbr-TP5kFo/jbrsdk-25.0.4-osx-aarch64-b508.27/Contents/Home` and `git diff --check`. JBR emitted its known restricted-native-access and Jewel `Unsafe` deprecation warnings; no runtime or configuration change was made.
+- Launched the actual desktop app with JBR 25.0.4 on macOS 26.6.2 and observed the live `io.miniorca.desktop.MainKt` process. The available computer-use inventory exposed no native applications while it ran, preventing native screenshots, window-edge popup/dialog inspection, OS focus traversal, resizing, or an accessibility-tree read; the temporary process was stopped.
+- No supported screen reader was running or exposed to this environment. Native and assistive-technology evidence is therefore incomplete. Task 170 remains In Progress, no passing acceptance commit has been created, and the required operator matrix is now retained in the [consolidated UI precision evidence](#consolidated-ui-precision-evidence).
+
+## Reproduce UI component checks
+
+Use the JDK 21/JBR 25 setup in [Desktop runtime instructions](../desktop/README.md).
+From the repository root:
+
+```sh
+MINI_ORCA_JDK21_HOME=/path/to/jdk-21 \
+MINI_ORCA_JBR25_HOME=/path/to/jbr-25 \
+  ./scripts/desktop-gradle.sh test --rerun-tasks \
+  --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' \
+  --tests 'io.miniorca.desktop.DesktopAccessibilityTest' \
+  --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' \
+  -PvisualOutput="$PWD/desktop/build/reports/ui-precision/current"
+```
+
+The production Compose/Skia fixtures use labeled local data without a daemon or
+provider. Coverage includes Summary, Analysis, Editor/Review, Performance, Problems,
+Assistant, menus/disclosures, responsive drawers, bottom overlays and keyboard
+semantics; empty, failed, stale, populated and disabled states remain represented.
+The compact matrix includes 1280×600 at 100%, 125%, 150% text and 1×/2× density.
+Popup/dialog scene layers cannot be inferred from an offscreen image; the
+[keyboard operator checklist](../desktop/KEYBOARD_SMOKE_CHECKLIST.md) owns native
+reproduction. Historical Task 159 captures used `desktop/build/reports/ui-refinement/after`;
+Task 170 used `desktop/build/reports/ui-precision/task-170`. Generated files remain
+ignored, and Git retains the retired visual correction history.
+
+## REL-02 final handoff — 2026-09-09
+
+Independent review accepted the exact documentation and Docker-context changes.
+The original scope-deferral edits in PLAN, this ledger, the historical recovery
+specification and execution guide were preserved. No Go/Kotlin production code,
+API schema, dependencies or configuration fields changed during closure; existing
+rejection/source-safety tests remain intact. Current `make quality` found no dead
+code, duplication or other static-gate failure requiring a speculative cleanup.
+
+The separate Task 170 note, UI precision acceptance file and visual-history file
+were retired after preserving unique evidence and current reproduction here. The
+keyboard checklist now contains the maintained operator procedure. Local Markdown
+files/heading anchors, plan parser/dependencies and `git diff --check` passed.
+Tracked files decreased from 265 to 262; Markdown files from 20 to 17. The final
+ledger has 52 Complete tasks and three user-approved insight standby deferrals.
+
+The scheduler remains Paused with no ready task. Runtime smoke processes are
+stopped; the test image/container are retained. No migration, reset, new local-model
+evaluation, push, publishing or deployment was performed. Future insight recovery
+and live external-provider acceptance require their own scope and call budget.

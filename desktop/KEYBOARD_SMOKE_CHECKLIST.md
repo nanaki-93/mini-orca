@@ -1,27 +1,13 @@
 # Desktop keyboard smoke checklist
 
-Start Mini-Orca with no project open, then use a Go project for the remaining steps.
+Use a disposable Go fixture and isolated preferences. This is an operator procedure,
+not a list of passing results; [release acceptance](../docs/RELEASE_ACCEPTANCE.md)
+owns all observations and supported-host limitations.
 
-## Task 118 baseline viewport matrix
-
-The following is the pre-IDE-shell baseline recorded from the current Compose
-implementation. The interactive Desktop application is not available in this
-execution environment (the connected computer inventory contains no running
-Mini-Orca application), so no screenshots were captured and none are claimed as
-passing evidence. A release operator must repeat this matrix with the maintained
-fixture before the redesigned shell is released.
-
-| Viewport | Expected baseline | Evidence |
-| --- | --- | --- |
-| Approximately `1440x900` | The project workspace shows the `176dp` workspace rail. In Editor, the `270dp` Explorer and `390dp` Context panes are docked beside the source/review canvas; the widths clamp to `180–520dp` and `280–560dp` respectively. | Static implementation inventory only; interactive screenshot unavailable. |
-| Approximately `1100x760` | The same wide Editor arrangement remains docked. Long source/diff lines scroll horizontally and source/review remain selectable and read-only. | Static implementation inventory only; interactive screenshot unavailable. |
-| Exactly `1000dp` wide | This is still the wide layout: the Explorer and Context panes remain docked in Editor. | Covered by `useNarrowLayout(1000f) == false`; interactive screenshot unavailable. |
-| Below `1000dp` wide | Only Editor exposes labeled `Files` and `Context` modal drawers; leaving Editor closes an open drawer while retaining the selected file. | Covered by `editorDrawerActionsVisible`; interactive screenshot unavailable. |
-
-The current footer is `30dp` and appears only for loading or actionable errors.
-Summary, Analysis, and Bugs currently occupy the full content canvas; source/review
-and the draft/Apply/Undo workflow live in Editor. The subsequent tasks intentionally
-replace these layout details while retaining the safety and keyboard behavior below.
+Follow [UI design guidelines](UI_DESIGN_GUIDELINES.md) for current dimensions and
+labels. Check wide windows, exactly 1000dp, 999dp and compact 800×650/1280×600
+windows where the host permits. Repeat at supported text/density settings; record
+unsupported combinations instead of treating component renders as native proof.
 
 1. Confirm the landing state contains only product identity, **Open project**, and contextual progress or retry feedback. Press `Cmd/Ctrl+O`, cancel the chooser, and confirm the landing state is unchanged. Repeat with a failed open if available; confirm **Open project** remains available for retry. Before a project opens, verify `Cmd/Ctrl+1`–`4`, `Cmd/Ctrl+P`, `Cmd/Ctrl+Shift+O`, `Cmd/Ctrl+K`, and `Cmd/Ctrl+Tab` have no project action.
 2. Press `Cmd/Ctrl+O` and import the fixture. Confirm the full workspace replaces the landing state with no remaining landing content.
@@ -45,132 +31,7 @@ scope label and any **Outdated — source changed** label are textual, and **Clo
 returns focus to the opener. Repeat at exactly `1000dp`, below `1000dp`, and at supported text
 scaling; confirm no drawer, modal, provider request, check, or source mutation occurs.
 
-## Task 130 responsive and accessibility verification
 
-The interactive Desktop application remains unavailable in this execution environment, so the
-operator-only checks below are intentionally not marked as visually verified. The automated
-contracts listed here passed with `./desktop/gradlew -p desktop spotlessCheck detekt test`.
-
-| Area | Automated evidence | Interactive follow-up |
-| --- | --- | --- |
-| Responsive layout | `DesktopKeyboardNavigationTest` verifies that exactly `1000dp` keeps left/right/bottom regions docked, while `999dp` uses Files and Context drawers plus a bounded bottom-tools overlay. | At `1440dp`, `1100dp`, `1000dp`, and `999dp`, confirm the editor remains the primary surface and no essential label clips. |
-| Keyboard and focus | `DesktopKeyboardNavigationTest` verifies wrapping arrow navigation moves tab-group focus without activation, Escape selects one topmost transient surface, and leaving Editor closes only its incompatible drawer. Explorer tree arrow behavior remains covered by its existing tests. | Tab through toolbar, tool-window bar, Files tree, editor tabs, source, right tabs, bottom tabs, and status. Verify the cyan focus indication, Enter/Space activation, and return focus after each drawer or dialog closes. |
-| Text scaling | The toolbar policy switches project operations to its labeled menu below the expanded width, and editor/project labels use bounded ellipsis; the long-breadcrumb policy is covered by `DesktopKeyboardNavigationTest`. | Repeat the viewport matrix at the supported platform text scale. Verify paths, findings, bottom summaries, and status labels remain readable through wrapping, scrolling, or ellipsis without horizontal clipping. |
-| Semantics and non-color states | The new test verifies focused left/right/bottom tab descriptions retain text labels and selected state. Explorer freshness now always renders a textual badge, and source/review labels remain explicitly read-only. | Use the supported screen reader to confirm names for tool windows, active tabs, selected files and symbols, status details, source, and review surfaces. |
-
-## Task 131 workspace presentation comparison
-
-The interactive Desktop application is still unavailable in this execution environment, so no
-live screenshots or focus observations are claimed. The Summary, Analysis, Bugs, and shared
-Problems presentation contracts were validated with the focused desktop state tests and the
-unchanged Focus Flow palette-token test.
-
-Before release, compare the supported viewport matrix against the Task 118 baseline. Confirm that
-Summary facts, Analysis progress/errors, Bugs filters/scan state, compact finding rows, and the
-selected finding details region retain readable labels and scroll rather than clipping; confirm
-the shared palette, focus treatment, disabled controls, and verified/advisory labels remain
-recognizable.
-
-## Task 132 final acceptance record
-
-Automated acceptance completed in this environment. The desktop unit/presentation suite covers
-landing and restore state, workspace navigation, long-path and duplicate-basename identity,
-tree and tab keyboard behavior, stale analysis and responses, filtered findings, remote-provider
-confirmation gates, validation/check identity, cancellation, daemon status, and Apply/Undo
-receipt refresh. The repository quality gate also covers the daemon and workflow contracts.
-
-Commit-history audit: each required Task 118–132 implementation commit appears
-once and in numeric order. The only additional commit is the explicitly
-user-authorized metadata-only Task 119 record (`133bf0a`); it did not replace,
-combine, amend, tag, or push any required implementation commit.
-
-The following live checks remain release-operator work because no Mini-Orca desktop window or
-provider-backed fixture is available here:
-
-- Capture the final `1440x900`, `1100x760`, `1000dp`, and `<1000dp` screenshot matrix for
-  landing, Source, Review, Analysis, and Bugs, including long paths and compact bottom details.
-- Perform the numbered keyboard checklist with mouse-only, keyboard-only, and mixed input;
-  confirm dialog/drawer focus restoration and the cyan focus treatment.
-- Check supported platform text scaling and screen-reader output for paths, selected symbols,
-  provider destination, workflow states, source, and diff read-only labels.
-- Exercise local and remote provider flows, disconnect/reconnect behavior, and a real
-  provider-backed draft/validation/check/Apply/Undo fixture.
-
-## Task 148 dark UI responsive and accessibility matrix
-
-The historical `176dp` rail and transient footer are superseded by the dark shell: the rail is
-`88dp`, the default Explorer/AI widths are `256dp`/`344dp`, the initial bottom height is `220dp`,
-and the persistent status bar is `30dp`. The exact `1000dp` boundary remains unchanged.
-
-| Viewport | Required operator check | Automated source evidence |
-| --- | --- | --- |
-| `1440x900`, `1280x800`, `1100x760` | Labeled rail, three-region editor, current-draft candidate summary, full-height AI Context, and Problems/Checks/Output/Terminal-preview tabs remain reachable. | `dockedPaneWidths` keeps preferred dimensions at wide widths. |
-| Exactly `1000dp` | Explorer shrinks before AI Context and the source retains at least `360dp`; stored widths must not be rewritten. | `DesktopLayoutStateTest` covers clamping and restoration. |
-| `999dp`, `800x650`, short windows | Files/AI Context drawers and bounded bottom overlay remain labeled; no Preview or candidate panel hides review evidence. | `DesktopKeyboardNavigationTest` retains the boundary/drawer contract. |
-| Enlarged text and screen reader | Paths, targets, daemon/provider labels, Preview badges, selected state, source/diff read-only state, and finding provenance remain intelligible. | Unit tests cover textual semantics only; native assistive-technology verification remains unavailable. |
-
-Preview dialogs close with Escape or Close and return focus to their trigger. They are local-only:
-verify no provider request, process launch, source write, selection change, evidence update, or
-Apply eligibility change follows activation. Native screenshots and screen-reader observations
-remain outstanding in this environment.
-
-## Follow-up visual correction
-
-The toolbar and editor group unsupported controls in a **Preview** menu. Check opening it,
-choosing a preview, closing the dialog with Escape/Close, and returning focus to the menu trigger.
-The Problems table first expands details; Open source, Prepare fix, and lifecycle actions remain
-separate explicit controls. Rail items grow with enlarged text; Performance uses the visible
-abbreviation `Perf.` at larger scales while retaining its full accessible name.
-
-The production-component render matrix and interaction checks are recorded in
-[VISUAL_REVIEW.md](VISUAL_REVIEW.md). Native window and screen-reader checks remain separate.
-
-## Task 159 refined UI release check
-
-Task 159 added production-component evidence for the refined Summary, Analysis,
-Editor/Review, Performance, Problems, Assistant, menus, disclosures, drawers,
-bottom overlay, and command palette. It exercised the `1440x900`, `1920x1080`,
-`1000x760`, `999x760`, and `800x650` responsive matrix plus affected surfaces at
-130% text scale. The Compose scene also sends real arrow/Enter events through the
-rail and command palette, and Enter/Space/Escape through disclosure and menu paths.
-
-The same native limitation remains: this environment has no running Mini-Orca
-window or screen-reader surface. Do not mark the following operator checks as
-passed until they are performed in a native build:
-
-- Repeat the viewport and 130% text-scale matrix with long project, file, model,
-  diagnostic, and command-output values. Include the open project and Preview
-  menus, command palette, Preview dialog, files/context drawers, and bottom overlay.
-- Tab through each retained rail workspace, toolbar, explorer, editor tabs,
-  source/review, right and bottom tabs, and status. Use arrows then Enter/Space;
-  test Escape one surface at a time and verify focus returns to its trigger.
-- Resize across exactly `1000dp` and `999dp`, switch workspaces with a drawer
-  open, resize docked panes, restart, and confirm saved pane dimensions and the
-  current valid navigation selection recover.
-- With the supported screen reader, confirm tool-window, menu, disclosure,
-  disabled action, stale/error, source, and diff names and textual state. Confirm
-  focus and selected state are visible without relying on color alone.
-
-See [release acceptance](../docs/RELEASE_ACCEPTANCE.md) for the evidence
-matrix and release follow-ups. These are native-release checks, not fixture passes.
-
-## Task 170 native operator matrix
-
-Task 170 is superseded by UI-04. The final deterministic suite covers navigation shortcuts, the
-responsive 1000dp boundary, rail/tab selection, command-palette arrows, popup dismissal/focus
-return, disclosures, provider confirmation and topmost transient-surface policy. The final forced
-run passed 24 visual-layout, 8 accessibility and 7 keyboard-navigation tests and generated 70
-ignored PNGs.
-
-The packaged JBR 25 fixture directly covered `1000x760`, `999x760`, `800x650` and `1280x600`.
-Keyboard inspection covered native traversal, one-layer Escape, trigger focus restoration, source
-selection, drawer/menu/overlay placement, splitter resizing and preference recovery. VoiceOver 10
-services were active while the app exposed its control names and selected/error states through the
-native accessibility tree. The operator surface could not capture VoiceOver speech or its reader
-cursor.
-
-Exact native `1440x900`/`1920x1080`, 125%/150% text, alternate density and provider/Review state
-combinations remain explicitly unclaimed. Their deterministic coverage is not presented as native
-evidence. Full observations and the external-display limitation are recorded in
-[UI_PRECISION_ACCEPTANCE.md](UI_PRECISION_ACCEPTANCE.md); release-level follow-up belongs to
-[RELEASE_ACCEPTANCE.md](../docs/RELEASE_ACCEPTANCE.md).
+Record runtime, viewport, scaling, input method and actual observations in the
+acceptance ledger. Screen-reader names/states, spoken output and reader cursor
+behavior are distinct evidence; claim only what was observed.

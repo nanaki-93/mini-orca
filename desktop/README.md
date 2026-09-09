@@ -32,7 +32,7 @@ Java 21 `JAVA_HOME` and no discoverable Java 25 toolchain cannot start the app.
 Packaged images include `java.net.http` for the daemon client and `jdk.unsupported`
 for Jewel's native bridge. Package with the JBR launcher, not the Detekt launcher.
 The macOS arm64 startup and attainable UI-04 native/accessibility checks passed;
-unsupported combinations and final package acceptance remain in
+unsupported combinations and final package acceptance are recorded in
 [acceptance](../docs/RELEASE_ACCEPTANCE.md).
 
 Pinned dependency provenance from the completed migration:
@@ -76,9 +76,8 @@ that a provider is connected. Non-loopback scopes require their own confirmation
 | Escape | Dismiss the top transient surface or cancel the active operation |
 
 Use arrows and Enter/Space for tree/tab/disclosure navigation. Native keyboard and
-reader results plus their explicit limitations remain in the retained
-[keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md); its dated baseline sections are
-history, not current dimensions. [Visual reproduction](VISUAL_REVIEW.md) describes
+reader observations and limits are in [acceptance](../docs/RELEASE_ACCEPTANCE.md);
+the [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) owns the operator procedure. [Visual reproduction](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks) describes
 fixture captures; these are not native-window evidence.
 
 Security entry, filtering and selection stay local. Scan checks the selected Go
