@@ -60,7 +60,7 @@ func evaluationRunModeRequested(args []string) bool {
 func runEvaluationMode(args []string) error {
 	flags := flag.NewFlagSet("engineering-insight-eval", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	mode := flags.String("mode", "", "collect, development, qualification, grant-development, handoff, score, export, or discard")
+	mode := flags.String("mode", "", "collect, development, qualification, authorize-recovery-v2, grant-development, handoff, score, export, or discard")
 	root := flags.String("root", ".", "project root containing private evaluation state")
 	runID := flags.String("run-id", "", "new or resumable evaluation run identity")
 	receiptPath := flags.String("receipt", "", "source-free receipt destination")
@@ -79,25 +79,11 @@ func runEvaluationMode(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("invalid evaluation command")
 	}
-	if *mode == "grant-development" {
-		switch {
-		case *authorizationID == "qual05-qwen38-medium-1":
-			return app.GrantEngineeringInsightMediumDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
-		case *authorizationID == "qual05-qwen38-thinking-schema-1":
-			return app.GrantEngineeringInsightThinkingSchemaDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
-		case *authorizationID == "qual05-qwen38-thinking-off-1":
-			return app.GrantEngineeringInsightThinkingOffDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
-		case *authorizationID == "authqual05-qwen38-structured-1":
-			return app.GrantEngineeringInsightV12DevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
-		case *authorizationID == "qual05-qwen38-schema-1":
-			return app.GrantEngineeringInsightV11DevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model, *promptVersion)
-		case *authorizationID == "qual05-qwen38-recovery-1":
-			return app.GrantEngineeringInsightRecoveryDevelopmentBudget(*root, *authorizationID, *requests, *candidateID, *model)
-		case *candidateID == "" && *model == "" && *promptVersion == "":
-			return app.GrantEngineeringInsightDevelopmentBudget(*root, *authorizationID, *requests)
-		default:
-			return fmt.Errorf("development budget grant identity is invalid")
-		}
+	if *mode == "authorize-recovery-v2" && !onlyRecoveryAuthorizationFlags(flags) {
+		return fmt.Errorf("recovery authorization accepts only mode and root")
+	}
+	if handled, err := runAuthorizationMode(*mode, *root, *runID, *receiptPath, *casesPath, *candidateID, *provider, *model, *promptVersion, *corpusID, *baseRevision, *authorizationID, *requests); handled {
+		return err
 	}
 	if !app.ValidEngineeringInsightEvaluationRunID(*runID) {
 		return fmt.Errorf("evaluation run ID is invalid")
@@ -106,6 +92,54 @@ func runEvaluationMode(args []string) error {
 		return err
 	}
 	return runProviderEvaluation(providerEvaluationOptions{mode: *mode, root: *root, runID: *runID, receiptPath: *receiptPath, casesPath: *casesPath, configPath: *configPath, candidateID: *candidateID, provider: *provider, promptVersion: *promptVersion, corpusID: *corpusID, baseRevision: *baseRevision, confirmRemote: *confirmRemote})
+}
+
+func onlyRecoveryAuthorizationFlags(flags *flag.FlagSet) bool {
+	seenRoot := false
+	valid := true
+	flags.Visit(func(item *flag.Flag) {
+		if item.Name == "root" {
+			seenRoot = true
+		} else if item.Name != "mode" {
+			valid = false
+		}
+	})
+	return valid && seenRoot && flags.NArg() == 0
+}
+
+func runAuthorizationMode(mode, root, runID, receiptPath, casesPath, candidateID, provider, model, promptVersion, corpusID, baseRevision, authorizationID string, requests int) (bool, error) {
+	if mode == "authorize-recovery-v2" {
+		if root == "" || runID != "" || receiptPath != "" || casesPath != "" || candidateID != "" || provider != "" || model != "" || promptVersion != "" || corpusID != "" || baseRevision != "" || authorizationID != "" || requests != 0 {
+			return true, fmt.Errorf("recovery authorization accepts only root")
+		}
+		return true, app.AuthorizeEngineeringInsightRecoveryV2(root)
+	}
+	if mode != "grant-development" {
+		return false, nil
+	}
+	return true, grantDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+}
+
+func grantDevelopmentBudget(root, authorizationID string, requests int, candidateID, model, promptVersion string) error {
+	switch authorizationID {
+	case "qual05-qwen38-medium-1":
+		return app.GrantEngineeringInsightMediumDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+	case "qual05-qwen38-thinking-schema-1":
+		return app.GrantEngineeringInsightThinkingSchemaDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+	case "qual05-qwen38-thinking-off-1":
+		return app.GrantEngineeringInsightThinkingOffDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+	case "authqual05-qwen38-structured-1":
+		return app.GrantEngineeringInsightV12DevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+	case "qual05-qwen38-schema-1":
+		return app.GrantEngineeringInsightV11DevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+	case "qual05-qwen38-recovery-1":
+		return app.GrantEngineeringInsightRecoveryDevelopmentBudget(root, authorizationID, requests, candidateID, model)
+	default:
+		if candidateID == "" && model == "" && promptVersion == "" {
+			return app.GrantEngineeringInsightDevelopmentBudget(root, authorizationID, requests)
+		}
+		return fmt.Errorf("development budget grant identity is invalid")
+	}
 }
 
 type providerEvaluationOptions struct {
@@ -129,12 +163,12 @@ func runProviderEvaluation(options providerEvaluationOptions) error {
 	if err != nil {
 		return fmt.Errorf("read evaluation cases")
 	}
-	runnerCases, err := runnerCasesForMode(casesData, options.mode)
+	runnerCases, err := runnerCasesForMode(casesData, options.mode, options.corpusID)
 	if err != nil {
 		return err
 	}
 	digest := sha256.Sum256(casesData)
-	receipt, _, err := app.RunEngineeringInsightEvaluation(context.Background(), app.EngineeringInsightRunnerConfig{Root: options.root, RunID: options.runID, Mode: options.mode, CandidateID: options.candidateID, Provider: options.provider, Model: profile.Model, PromptVersion: options.promptVersion, CorpusID: options.corpusID, CorpusDigest: hex.EncodeToString(digest[:]), BaseRevision: options.baseRevision, Profile: profile, ConfirmRemoteProvider: options.confirmRemote, Cases: runnerCases, Client: llm.NewEvaluationClient(profile)})
+	receipt, _, err := app.RunEngineeringInsightEvaluation(context.Background(), app.EngineeringInsightRunnerConfig{Root: options.root, RunID: options.runID, Mode: options.mode, CandidateID: options.candidateID, Provider: options.provider, Model: profile.Model, PromptVersion: options.promptVersion, CorpusID: options.corpusID, CorpusDigest: hex.EncodeToString(digest[:]), CorpusJSON: casesData, BaseRevision: options.baseRevision, Profile: profile, ConfirmRemoteProvider: options.confirmRemote, Cases: runnerCases, Client: llm.NewEvaluationClient(profile)})
 	if err != nil {
 		return err
 	}
@@ -267,7 +301,7 @@ type runnerCaseDocument struct {
 	Source    string `json:"source"`
 }
 
-func runnerCasesForMode(data []byte, mode string) ([]app.EngineeringInsightRunnerCase, error) {
+func runnerCasesForMode(data []byte, mode, corpusID string) ([]app.EngineeringInsightRunnerCase, error) {
 	if err := app.ValidateStrictJSONDocument(data); err != nil {
 		return nil, fmt.Errorf("invalid evaluation cases")
 	}
@@ -283,6 +317,18 @@ func runnerCasesForMode(data []byte, mode string) ([]app.EngineeringInsightRunne
 		if selectsRunnerCase(mode, item.Partition) {
 			selected = append(selected, item)
 		}
+	}
+	if corpusID == "engineering-insight-v2" {
+		if mode == app.EngineeringInsightQualificationRunMode {
+			if len(selected) != 24 {
+				return nil, fmt.Errorf("evaluation cases do not define v2 qualification")
+			}
+			return repeatedRunnerCases(selected, 1), nil
+		}
+		if len(selected) != 12 {
+			return nil, fmt.Errorf("evaluation cases do not define v2 development")
+		}
+		return repeatedRunnerCases(selected, 1), nil
 	}
 	if mode == app.EngineeringInsightQualificationRunMode {
 		if len(selected) != 12 {
@@ -370,11 +416,51 @@ func (options evaluationOptions) expectationFor(mode app.EngineeringInsightEvalu
 	if mode == app.EngineeringInsightCollectionMode {
 		schedule, err = developmentSchedule(data)
 	}
+	if options.corpusID == "engineering-insight-v2" {
+		if mode == app.EngineeringInsightCollectionMode {
+			schedule, err = uniqueSchedule(data, "development", 12, 8)
+		} else {
+			schedule, err = uniqueSchedule(data, "qualification", 24, 16)
+		}
+	}
 	if err != nil {
 		return app.EngineeringInsightEvaluationExpectation{}, err
 	}
 	digest := sha256.Sum256(data)
-	return app.EngineeringInsightEvaluationExpectation{CandidateID: options.candidateID, Provider: options.provider, Model: options.model, PromptVersion: options.promptVersion, CorpusID: options.corpusID, CorpusDigest: hex.EncodeToString(digest[:]), BaseRevision: options.baseRevision, MaxRequests: options.maxRequests, MaxOutputTokens: options.maxOutputTokens, AttemptTimeoutSeconds: options.attemptTimeoutSeconds, Schedule: schedule}, nil
+	protocolVersion := ""
+	if options.corpusID == "engineering-insight-v2" {
+		protocolVersion = "v2"
+	}
+	return app.EngineeringInsightEvaluationExpectation{ProtocolVersion: protocolVersion, CandidateID: options.candidateID, Provider: options.provider, Model: options.model, PromptVersion: options.promptVersion, CorpusID: options.corpusID, CorpusDigest: hex.EncodeToString(digest[:]), BaseRevision: options.baseRevision, MaxRequests: options.maxRequests, MaxOutputTokens: options.maxOutputTokens, AttemptTimeoutSeconds: options.attemptTimeoutSeconds, Schedule: schedule}, nil
+}
+
+func uniqueSchedule(data []byte, partition string, count, substantive int) ([]app.EngineeringInsightExpectedAttempt, error) {
+	if err := app.ValidateStrictJSONDocument(data); err != nil {
+		return nil, fmt.Errorf("invalid evaluation cases")
+	}
+	cases, err := decodeEvaluationCases(data)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]app.EngineeringInsightExpectedAttempt, 0, count)
+	seen := make(map[string]bool, count)
+	actualSubstantive := 0
+	for _, item := range cases {
+		if !validEvaluationCase(item, seen) {
+			return nil, fmt.Errorf("invalid evaluation cases")
+		}
+		seen[item.Name] = true
+		if item.Partition == partition {
+			result = append(result, app.EngineeringInsightExpectedAttempt{CaseName: item.Name, Partition: item.Partition, Intent: item.Intent, Repetition: 1, Attempt: 1})
+			if item.Intent == "substantive" {
+				actualSubstantive++
+			}
+		}
+	}
+	if len(result) != count || actualSubstantive != substantive {
+		return nil, fmt.Errorf("evaluation cases do not define v2 schedule")
+	}
+	return result, nil
 }
 
 func developmentSchedule(data []byte) ([]app.EngineeringInsightExpectedAttempt, error) {

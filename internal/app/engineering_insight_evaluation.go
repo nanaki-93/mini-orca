@@ -47,6 +47,7 @@ const (
 
 // EngineeringInsightEvaluationReceipt stores source-free, reviewer-scored evidence.
 type EngineeringInsightEvaluationReceipt struct {
+	ProtocolVersion       string                                  `json:"protocol_version,omitempty"`
 	Mode                  EngineeringInsightEvaluationMode        `json:"mode"`
 	RunID                 string                                  `json:"run_id"`
 	CandidateID           string                                  `json:"candidate_id"`
@@ -104,6 +105,58 @@ func (score EngineeringInsightAttemptScore) Total() int {
 	return score.Correctness + score.LocalRelevance + score.TradeoffClarity + score.UsefulVerification
 }
 
+// DevelopmentGatePassed is deliberately stricter than historical collection
+// validation. The v2 promotion gate needs an independent whole-final verdict
+// for every emitted response, including intentional omission controls.
+func (receipt EngineeringInsightEvaluationReceipt) DevelopmentGatePassed() bool {
+	if receipt.ProtocolVersion != "v2" || receipt.Mode != EngineeringInsightCollectionMode || len(receipt.Attempts) != 12 || receipt.Consumption.Requests != 12 {
+		return false
+	}
+	seen := make(map[string]bool, 12)
+	counts := developmentGateCounts{}
+	for _, attempt := range receipt.Attempts {
+		if !counts.record(attempt, seen) {
+			return false
+		}
+	}
+	return counts.valid(len(seen))
+}
+
+type developmentGateCounts struct{ usable, complete, useful, omitted, substantive, controls int }
+
+func (counts *developmentGateCounts) record(attempt EngineeringInsightEvaluationAttempt, seen map[string]bool) bool {
+	id := attemptScoreID(attempt)
+	if seen[id] || !validDevelopmentGateAttempt(attempt) {
+		return false
+	}
+	seen[id] = true
+	counts.usable++
+	counts.complete++
+	if attempt.Intent == "substantive" {
+		counts.substantive++
+		if attempt.OptionalInsight == "present" && attempt.Score.Total() >= minimumRetainedEngineeringInsightScore {
+			counts.useful++
+		}
+		return true
+	}
+	if attempt.Intent == "control" {
+		counts.controls++
+		if attempt.OptionalInsight == "omitted" {
+			counts.omitted++
+		}
+		return true
+	}
+	return false
+}
+
+func (counts developmentGateCounts) valid(unique int) bool {
+	return unique == 12 && counts.usable == 12 && counts.complete == 12 && counts.substantive == 8 && counts.controls == 4 && counts.useful == 8 && counts.omitted == 4
+}
+
+func validDevelopmentGateAttempt(attempt EngineeringInsightEvaluationAttempt) bool {
+	return attempt.Partition == "development" && attempt.Repetition == 1 && attempt.Attempt == 1 && attempt.EmittedResponse && attempt.UsableSummary && attempt.CompleteSummary && attempt.Score != nil && !attempt.Score.CriticalFalseClaim
+}
+
 // EngineeringInsightExpectedAttempt is selected outside the receipt.
 type EngineeringInsightExpectedAttempt struct {
 	CaseName   string
@@ -114,6 +167,7 @@ type EngineeringInsightExpectedAttempt struct {
 }
 
 type EngineeringInsightEvaluationExpectation struct {
+	ProtocolVersion       string
 	CandidateID           string
 	Provider              string
 	Model                 string
@@ -202,8 +256,16 @@ func ValidateStrictJSONDocument(data []byte) error {
 
 func requireReceiptFields(data []byte) error {
 	var receipt map[string]json.RawMessage
-	if err := json.Unmarshal(data, &receipt); err != nil || !validRequiredJSONObject(receipt, receiptJSONFields) {
+	if err := json.Unmarshal(data, &receipt); err != nil || !hasJSONFields(receipt, receiptJSONFields...) || !nonNullJSONFields(receipt, receiptJSONFields...) {
 		return fmt.Errorf("missing receipt field")
+	}
+	version, versioned := receipt["protocol_version"]
+	if !versioned {
+		if !onlyJSONFields(receipt, receiptJSONFields...) {
+			return fmt.Errorf("invalid receipt field")
+		}
+	} else if string(version) != `"v2"` || !onlyJSONFields(receipt, append(receiptJSONFields, "protocol_version")...) {
+		return fmt.Errorf("invalid protocol version")
 	}
 	if err := requireConsumptionFields(receipt["consumption"]); err != nil {
 		return err
@@ -319,6 +381,12 @@ func validateEvaluationExpectation(expected EngineeringInsightEvaluationExpectat
 	if !completeExpectationIdentity(expected) {
 		return fmt.Errorf("evaluation expectation is incomplete")
 	}
+	if expected.ProtocolVersion == "v2" {
+		return validateV2EvaluationExpectation(expected)
+	}
+	if expected.ProtocolVersion != "" {
+		return fmt.Errorf("evaluation expectation has an invalid protocol version")
+	}
 	if hasQualificationLimits(expected) {
 		return validateQualificationSchedule(expected.Schedule)
 	}
@@ -329,6 +397,44 @@ func validateEvaluationExpectation(expected EngineeringInsightEvaluationExpectat
 		if !validExpectedAttempt(attempt) {
 			return fmt.Errorf("evaluation expectation has an invalid schedule")
 		}
+	}
+	return nil
+}
+
+func validateV2EvaluationExpectation(expected EngineeringInsightEvaluationExpectation) error {
+	if expected.CorpusID != recoveryV2CorpusID || expected.CandidateID != recoveryV2CandidateID || expected.Provider != recoveryV2Provider || expected.Model != recoveryV2Model || expected.PromptVersion != recoveryV2PromptVersion || !validRecoveryV2BaseRevision(expected.BaseRevision) || expected.MaxOutputTokens != qualificationOutputTokenCap || expected.AttemptTimeoutSeconds != qualificationAttemptTimeoutSeconds {
+		return fmt.Errorf("evaluation expectation has an invalid v2 identity")
+	}
+	if expected.MaxRequests == recoveryV2DevelopmentRequests && expected.CorpusDigest == recoveryV2DevelopmentDigest {
+		return validateV2Schedule(expected.Schedule, "development", 12, 8, 4)
+	}
+	if expected.MaxRequests == recoveryV2QualificationRequests && expected.CorpusDigest == recoveryV2QualificationDigest {
+		return validateV2Schedule(expected.Schedule, "qualification", 24, 16, 8)
+	}
+	return fmt.Errorf("evaluation expectation has an invalid v2 schedule")
+}
+
+func validateV2Schedule(schedule []EngineeringInsightExpectedAttempt, partition string, count, substantive, controls int) error {
+	if len(schedule) != count {
+		return fmt.Errorf("evaluation expectation has an invalid schedule")
+	}
+	seen := make(map[string]bool, count)
+	actualSubstantive, actualControls := 0, 0
+	for _, attempt := range schedule {
+		if strings.TrimSpace(attempt.CaseName) == "" || seen[attempt.CaseName] || attempt.Partition != partition || attempt.Repetition != 1 || attempt.Attempt != 1 {
+			return fmt.Errorf("evaluation expectation has an invalid schedule")
+		}
+		seen[attempt.CaseName] = true
+		if attempt.Intent == "substantive" {
+			actualSubstantive++
+		} else if attempt.Intent == "control" {
+			actualControls++
+		} else {
+			return fmt.Errorf("evaluation expectation has an invalid schedule")
+		}
+	}
+	if actualSubstantive != substantive || actualControls != controls {
+		return fmt.Errorf("evaluation expectation has an invalid schedule")
 	}
 	return nil
 }
@@ -403,7 +509,7 @@ func validateReceiptIdentity(receipt EngineeringInsightEvaluationReceipt, expect
 	if receipt.Mode != EngineeringInsightCollectionMode && receipt.Mode != EngineeringInsightQualificationMode {
 		return fmt.Errorf("evaluation receipt has invalid mode")
 	}
-	if strings.TrimSpace(receipt.RunID) == "" || receipt.CandidateID != expected.CandidateID || receipt.Provider != expected.Provider || receipt.Model != expected.Model || receipt.PromptVersion != expected.PromptVersion || receipt.CorpusID != expected.CorpusID || receipt.CorpusDigest != expected.CorpusDigest || receipt.BaseRevision != expected.BaseRevision {
+	if receipt.ProtocolVersion != expected.ProtocolVersion || strings.TrimSpace(receipt.RunID) == "" || receipt.CandidateID != expected.CandidateID || receipt.Provider != expected.Provider || receipt.Model != expected.Model || receipt.PromptVersion != expected.PromptVersion || receipt.CorpusID != expected.CorpusID || receipt.CorpusDigest != expected.CorpusDigest || receipt.BaseRevision != expected.BaseRevision {
 		return fmt.Errorf("evaluation receipt identity does not match the selected candidate")
 	}
 	if receipt.MaxRequests != expected.MaxRequests || receipt.MaxOutputTokens != expected.MaxOutputTokens || receipt.AttemptTimeoutSeconds != expected.AttemptTimeoutSeconds {

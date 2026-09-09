@@ -404,6 +404,130 @@ func TestDecodeEngineeringInsightEvaluationReceiptRejectsNullAndCaseAliasFields(
 	}
 }
 
+func TestEngineeringInsightEvaluationV2ReceiptSchemaAndDevelopmentGate(t *testing.T) {
+	expected := v2DevelopmentExpectation()
+	valid := v2Receipt(expected, EngineeringInsightCollectionMode)
+	data, err := json.Marshal(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeEngineeringInsightEvaluationReceipt(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateEngineeringInsightEvaluationReceipt(decoded, expected); err != nil || !decoded.DevelopmentGatePassed() {
+		t.Fatalf("valid v2 development receipt rejected: %v", err)
+	}
+
+	for name, mutate := range map[string]func(*EngineeringInsightEvaluationReceipt){
+		"one score of five": func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0].Score.Correctness = 1
+			receipt.Attempts[0].Score.LocalRelevance = 0
+		},
+		"one unscored control": func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[11].Score = nil
+		},
+		"one emitted control": func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[8].OptionalInsight = "present"
+		},
+		"critical whole-final claim": func(receipt *EngineeringInsightEvaluationReceipt) {
+			receipt.Attempts[0].Score.CriticalFalseClaim = true
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			receipt := v2Receipt(expected, EngineeringInsightCollectionMode)
+			mutate(&receipt)
+			if receipt.DevelopmentGatePassed() {
+				t.Fatal("invalid v2 development evidence passed")
+			}
+		})
+	}
+	seven := v2Receipt(expected, EngineeringInsightCollectionMode)
+	seven.Attempts[0].Score.Correctness = 1
+	if !seven.DevelopmentGatePassed() {
+		t.Fatal("substantive score of seven did not satisfy the >=6 gate")
+	}
+}
+
+func TestEngineeringInsightEvaluationV2QualificationUsesDistinctThresholds(t *testing.T) {
+	expected := v2QualificationExpectation()
+	receipt := v2Receipt(expected, EngineeringInsightQualificationMode)
+	report, err := ValidateEngineeringInsightEvaluationReceipt(receipt, expected)
+	if err != nil || report.Outcome != EngineeringInsightPassedOutcome {
+		t.Fatalf("valid v2 qualification receipt = %+v, %v", report, err)
+	}
+	receipt.Attempts[0].Score.Correctness = 0
+	receipt.Attempts[0].Score.LocalRelevance = 0
+	receipt.Attempts[0].Score.TradeoffClarity = 0
+	for index := 1; index < 4; index++ {
+		receipt.Attempts[index].Score.Correctness = 0
+		receipt.Attempts[index].Score.LocalRelevance = 0
+		receipt.Attempts[index].Score.TradeoffClarity = 0
+	}
+	report, err = ValidateEngineeringInsightEvaluationReceipt(receipt, expected)
+	if err != nil || report.Outcome != EngineeringInsightFailedOutcome || report.UsefulSubstantiveAttempts != 12 {
+		t.Fatalf("v2 qualification useful threshold = %+v, %v", report, err)
+	}
+}
+
+func TestDecodeEngineeringInsightEvaluationReceiptKeepsV1AndV2SchemasSeparate(t *testing.T) {
+	v1, err := json.Marshal(qualificationReceipt())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeEngineeringInsightEvaluationReceipt(v1); err != nil {
+		t.Fatalf("historical v1 receipt changed: %v", err)
+	}
+	for _, version := range []string{"null", `""`, `"v1"`, `"v3"`} {
+		candidate := strings.Replace(string(v1), `{"mode"`, `{"protocol_version":`+version+`,"mode"`, 1)
+		if _, err := DecodeEngineeringInsightEvaluationReceipt([]byte(candidate)); err == nil {
+			t.Fatalf("v1 receipt accepted protocol_version %s", version)
+		}
+	}
+	v2, err := json.Marshal(v2Receipt(v2DevelopmentExpectation(), EngineeringInsightCollectionMode))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded, err := DecodeEngineeringInsightEvaluationReceipt(v2); err != nil || decoded.ProtocolVersion != "v2" {
+		t.Fatalf("valid v2 receipt = %+v, %v", decoded, err)
+	}
+}
+
+func v2DevelopmentExpectation() EngineeringInsightEvaluationExpectation {
+	return v2Expectation("development", recoveryV2DevelopmentRequests, 8, recoveryV2DevelopmentDigest)
+}
+
+func v2QualificationExpectation() EngineeringInsightEvaluationExpectation {
+	return v2Expectation("qualification", recoveryV2QualificationRequests, 16, recoveryV2QualificationDigest)
+}
+
+func v2Expectation(partition string, count, substantive int, digest string) EngineeringInsightEvaluationExpectation {
+	schedule := make([]EngineeringInsightExpectedAttempt, 0, count)
+	for index := 0; index < count; index++ {
+		intent := controlIntent
+		if index < substantive {
+			intent = substantiveIntent
+		}
+		schedule = append(schedule, EngineeringInsightExpectedAttempt{CaseName: fmt.Sprintf("v2-%s-%02d", partition, index), Partition: partition, Intent: intent, Repetition: 1, Attempt: 1})
+	}
+	return EngineeringInsightEvaluationExpectation{ProtocolVersion: "v2", CandidateID: recoveryV2CandidateID, Provider: recoveryV2Provider, Model: recoveryV2Model, PromptVersion: recoveryV2PromptVersion, CorpusID: recoveryV2CorpusID, CorpusDigest: digest, BaseRevision: strings.Repeat("a", 40), MaxRequests: count, MaxOutputTokens: qualificationOutputTokenCap, AttemptTimeoutSeconds: qualificationAttemptTimeoutSeconds, Schedule: schedule}
+}
+
+func v2Receipt(expected EngineeringInsightEvaluationExpectation, mode EngineeringInsightEvaluationMode) EngineeringInsightEvaluationReceipt {
+	receipt := EngineeringInsightEvaluationReceipt{ProtocolVersion: "v2", Mode: mode, RunID: "v2-run", CandidateID: expected.CandidateID, Provider: expected.Provider, Model: expected.Model, PromptVersion: expected.PromptVersion, CorpusID: expected.CorpusID, CorpusDigest: expected.CorpusDigest, BaseRevision: expected.BaseRevision, MaxRequests: expected.MaxRequests, MaxOutputTokens: expected.MaxOutputTokens, AttemptTimeoutSeconds: expected.AttemptTimeoutSeconds}
+	for index, scheduled := range expected.Schedule {
+		digest := fmt.Sprintf("%064x", index+1)
+		optional := "present"
+		if scheduled.Intent == controlIntent {
+			optional = "omitted"
+		}
+		score := &EngineeringInsightAttemptScore{ResponseDigest: digest, Correctness: 2, LocalRelevance: 2, TradeoffClarity: 2, UsefulVerification: 2}
+		receipt.Attempts = append(receipt.Attempts, EngineeringInsightEvaluationAttempt{CaseName: scheduled.CaseName, Partition: scheduled.Partition, Intent: scheduled.Intent, Repetition: 1, Attempt: 1, CandidateID: expected.CandidateID, Outcome: "completed", UsableSummary: true, CompleteSummary: true, OptionalInsight: optional, EmittedResponse: true, ResponseDigest: digest, OutputTokens: 100, FinishReason: "stop", ElapsedMilliseconds: float64(index + 1), Score: score})
+	}
+	receipt.Consumption = EngineeringInsightEvaluationConsumption{Requests: len(receipt.Attempts), OutputTokens: len(receipt.Attempts) * 100}
+	return receipt
+}
+
 func qualificationExpectation() EngineeringInsightEvaluationExpectation {
 	schedule := make([]EngineeringInsightExpectedAttempt, 0, 24)
 	for repetition := 1; repetition <= 2; repetition++ {

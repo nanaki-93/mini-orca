@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -469,430 +470,6 @@ func TestEngineeringInsightRunnerRejectsRecoveryAuthorizationAsFirstGrant(t *tes
 	}
 	if _, exists, err := loadDevelopmentGrantLedger(directory); err != nil || exists {
 		t.Fatalf("recovery authorization created a ledger: exists=%t err=%v", exists, err)
-	}
-}
-
-func TestEngineeringInsightRunnerAppliesStructuredOutputGrantOnlyAtRequestsTwentyFourThroughTwentyNine(t *testing.T) {
-	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
-	cfg := v12RunnerTestConfig(t, "v12-one", client)
-	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
-	if err := os.MkdirAll(directory, 0700); err != nil {
-		t.Fatal(err)
-	}
-	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{
-		{AuthorizationID: "extension-one", Requests: 6},
-		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
-	}}
-	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: recoveryDevelopmentRequestCap}); err != nil {
-		t.Fatal(err)
-	}
-	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
-		{CandidateID: "wrong-candidate", Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion},
-		{CandidateID: v11DevelopmentCandidateID, Model: "wrong-model", PromptVersion: v11DevelopmentPromptVersion},
-		{CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: "wrong-prompt"},
-	} {
-		if err := GrantEngineeringInsightV11DevelopmentBudget(cfg.Root, v11DevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
-			t.Fatal("v11 grant accepted the wrong identity")
-		}
-	}
-	if err := GrantEngineeringInsightRecoveryDevelopmentBudget(cfg.Root, v11DevelopmentAuthorizationID, 6, v11DevelopmentCandidateID, v11DevelopmentModel); err == nil {
-		t.Fatal("unbound v11 grant was accepted")
-	}
-	if err := GrantEngineeringInsightV11DevelopmentBudget(cfg.Root, v11DevelopmentAuthorizationID, 6, v11DevelopmentCandidateID, v11DevelopmentModel, v11DevelopmentPromptVersion); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: finalDevelopmentRequestCap}); err != nil {
-		t.Fatal(err)
-	}
-	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
-		{CandidateID: "wrong-candidate", Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion},
-		{CandidateID: v12DevelopmentCandidateID, Model: "wrong-model", PromptVersion: v12DevelopmentPromptVersion},
-		{CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: "wrong-prompt"},
-	} {
-		if err := GrantEngineeringInsightV12DevelopmentBudget(cfg.Root, v12DevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
-			t.Fatal("structured-output grant accepted the wrong identity")
-		}
-	}
-	if err := GrantEngineeringInsightV12DevelopmentBudget(cfg.Root, v12DevelopmentAuthorizationID, 6, v12DevelopmentCandidateID, v12DevelopmentModel, v12DevelopmentPromptVersion); err != nil {
-		t.Fatal(err)
-	}
-	wrongCandidate := v12RunnerTestConfig(t, "v12-wrong-candidate", client)
-	wrongCandidate.Root = cfg.Root
-	wrongCandidate.CandidateID = "another-candidate"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong v11 candidate dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	wrongModel := v12RunnerTestConfig(t, "v12-wrong-model", client)
-	wrongModel.Root = cfg.Root
-	wrongModel.Model = "another-model"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongModel); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong v11 model dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	wrongProfile := v12RunnerTestConfig(t, "v12-wrong-profile", client)
-	wrongProfile.Root = cfg.Root
-	wrongProfile.Profile.Model = "another-model"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongProfile); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong v11 profile model dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	wrongDestination := v12RunnerTestConfig(t, "v12-wrong-destination", client)
-	wrongDestination.Root = cfg.Root
-	wrongDestination.Profile.APIBaseURL = "https://provider.example/v1"
-	wrongDestination.ConfirmRemoteProvider = true
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongDestination); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("remote v11 destination dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	for _, runID := range []string{"v12-one", "v12-two"} {
-		valid := v12RunnerTestConfig(t, runID, client)
-		valid.Root = cfg.Root
-		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), valid); err != nil {
-			t.Fatalf("v12 run %q: %v", runID, err)
-		}
-	}
-	if client.calls.Load() != 6 {
-		t.Fatalf("structured-output grant dispatched %d requests, want 6", client.calls.Load())
-	}
-	exhausted := v12RunnerTestConfig(t, "v12-exhausted", client)
-	exhausted.Root = cfg.Root
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
-		t.Fatalf("structured-output cap was not exhausted: %v, calls=%d", err, client.calls.Load())
-	}
-	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
-	if err != nil || campaign.DevelopmentRequests != structuredDevelopmentRequestCap || campaign.QualificationRequests != 0 {
-		t.Fatalf("structured-output campaign counters: %+v, %v", campaign, err)
-	}
-}
-
-func TestEngineeringInsightRunnerAppliesThinkingOffGrantOnlyAtRequestsThirtyThroughThirtyFive(t *testing.T) {
-	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
-	cfg := thinkingOffRunnerTestConfig(t, "thinking-off-one", client)
-	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
-	if err := os.MkdirAll(directory, 0700); err != nil {
-		t.Fatal(err)
-	}
-	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{
-		{AuthorizationID: "extension-one", Requests: 6},
-		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
-		{AuthorizationID: v11DevelopmentAuthorizationID, Requests: 6, CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion},
-		{AuthorizationID: v12DevelopmentAuthorizationID, Requests: 6, CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion},
-	}}
-	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: structuredDevelopmentRequestCap}); err != nil {
-		t.Fatal(err)
-	}
-	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
-		{CandidateID: "wrong-candidate", Model: thinkingOffDevelopmentModel, PromptVersion: thinkingOffDevelopmentPromptVersion},
-		{CandidateID: thinkingOffDevelopmentCandidateID, Model: "wrong-model", PromptVersion: thinkingOffDevelopmentPromptVersion},
-		{CandidateID: thinkingOffDevelopmentCandidateID, Model: thinkingOffDevelopmentModel, PromptVersion: "wrong-prompt"},
-	} {
-		if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, thinkingOffDevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
-			t.Fatal("thinking-off grant accepted the wrong identity")
-		}
-	}
-	if err := GrantEngineeringInsightV12DevelopmentBudget(cfg.Root, thinkingOffDevelopmentAuthorizationID, 6, thinkingOffDevelopmentCandidateID, thinkingOffDevelopmentModel, thinkingOffDevelopmentPromptVersion); err == nil {
-		t.Fatal("thinking-off grant accepted the v12 route")
-	}
-	if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, thinkingOffDevelopmentAuthorizationID, 6, thinkingOffDevelopmentCandidateID, thinkingOffDevelopmentModel, thinkingOffDevelopmentPromptVersion); err != nil {
-		t.Fatal(err)
-	}
-
-	wrongCandidate := thinkingOffRunnerTestConfig(t, "thinking-off-wrong-candidate", client)
-	wrongCandidate.Root = cfg.Root
-	wrongCandidate.CandidateID = "another-candidate"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong thinking-off candidate dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	wrongModel := thinkingOffRunnerTestConfig(t, "thinking-off-wrong-model", client)
-	wrongModel.Root = cfg.Root
-	wrongModel.Profile.Model = "another-model"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongModel); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong thinking-off model dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	wrongReasoning := thinkingOffRunnerTestConfig(t, "thinking-off-wrong-reasoning", client)
-	wrongReasoning.Root = cfg.Root
-	wrongReasoning.Profile.ReasoningEffort = "low"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongReasoning); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong thinking-off reasoning dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	wrongDestination := thinkingOffRunnerTestConfig(t, "thinking-off-wrong-destination", client)
-	wrongDestination.Root = cfg.Root
-	wrongDestination.Profile.APIBaseURL = "https://provider.example/v1"
-	wrongDestination.ConfirmRemoteProvider = true
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongDestination); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("remote thinking-off destination dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	for _, runID := range []string{"thinking-off-one", "thinking-off-two"} {
-		valid := thinkingOffRunnerTestConfig(t, runID, client)
-		valid.Root = cfg.Root
-		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), valid); err != nil {
-			t.Fatalf("thinking-off run %q: %v", runID, err)
-		}
-	}
-	if client.calls.Load() != 6 {
-		t.Fatalf("thinking-off grant dispatched %d requests, want 6", client.calls.Load())
-	}
-	if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, thinkingOffDevelopmentAuthorizationID, 6, thinkingOffDevelopmentCandidateID, thinkingOffDevelopmentModel, thinkingOffDevelopmentPromptVersion); err == nil {
-		t.Fatal("thinking-off grant replay was accepted")
-	}
-	if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, "sixth-grant", 6, thinkingOffDevelopmentCandidateID, thinkingOffDevelopmentModel, thinkingOffDevelopmentPromptVersion); err == nil {
-		t.Fatal("sixth development grant was accepted")
-	}
-	exhausted := thinkingOffRunnerTestConfig(t, "thinking-off-exhausted", client)
-	exhausted.Root = cfg.Root
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
-		t.Fatalf("thirty-seventh request dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
-	if err != nil || campaign.DevelopmentRequests != thinkingOffDevelopmentRequestCap || campaign.QualificationRequests != 0 {
-		t.Fatalf("thinking-off campaign counters: %+v, %v", campaign, err)
-	}
-	if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(`{"grants":[]}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
-		t.Fatalf("corrupt thinking-off ledger dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-}
-
-func TestEngineeringInsightRunnerAppliesThinkingSchemaGrantOnlyAtRequestsThirtySixThroughFortyOne(t *testing.T) {
-	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
-	cfg := thinkingSchemaRunnerTestConfig(t, "thinking-schema-one", client)
-	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
-	if err := os.MkdirAll(directory, 0700); err != nil {
-		t.Fatal(err)
-	}
-	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{
-		{AuthorizationID: "extension-one", Requests: 6},
-		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
-		{AuthorizationID: v11DevelopmentAuthorizationID, Requests: 6, CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion},
-		{AuthorizationID: v12DevelopmentAuthorizationID, Requests: 6, CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion},
-		{AuthorizationID: thinkingOffDevelopmentAuthorizationID, Requests: 6, CandidateID: thinkingOffDevelopmentCandidateID, Model: thinkingOffDevelopmentModel, PromptVersion: thinkingOffDevelopmentPromptVersion, ReasoningEffort: thinkingOffDevelopmentReasoningEffort},
-	}}
-	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: thinkingOffDevelopmentRequestCap}); err != nil {
-		t.Fatal(err)
-	}
-	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
-		{CandidateID: "wrong-candidate", Model: thinkingSchemaDevelopmentModel, PromptVersion: thinkingSchemaDevelopmentPromptVersion},
-		{CandidateID: thinkingSchemaDevelopmentCandidateID, Model: "wrong-model", PromptVersion: thinkingSchemaDevelopmentPromptVersion},
-		{CandidateID: thinkingSchemaDevelopmentCandidateID, Model: thinkingSchemaDevelopmentModel, PromptVersion: "wrong-prompt"},
-	} {
-		if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, thinkingSchemaDevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
-			t.Fatal("thinking-schema grant accepted the wrong identity")
-		}
-	}
-	if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, thinkingSchemaDevelopmentAuthorizationID, 6, thinkingSchemaDevelopmentCandidateID, thinkingSchemaDevelopmentModel, thinkingSchemaDevelopmentPromptVersion); err == nil {
-		t.Fatal("thinking-schema grant accepted the thinking-off route")
-	}
-	if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, thinkingSchemaDevelopmentAuthorizationID, 6, thinkingSchemaDevelopmentCandidateID, thinkingSchemaDevelopmentModel, thinkingSchemaDevelopmentPromptVersion); err != nil {
-		t.Fatal(err)
-	}
-
-	wrongCandidate := thinkingSchemaRunnerTestConfig(t, "thinking-schema-wrong-candidate", client)
-	wrongCandidate.Root = cfg.Root
-	wrongCandidate.CandidateID = "another-candidate"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong thinking-schema candidate dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	wrongModel := thinkingSchemaRunnerTestConfig(t, "thinking-schema-wrong-model", client)
-	wrongModel.Root = cfg.Root
-	wrongModel.Profile.Model = "another-model"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongModel); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong thinking-schema model dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	wrongReasoning := thinkingSchemaRunnerTestConfig(t, "thinking-schema-wrong-reasoning", client)
-	wrongReasoning.Root = cfg.Root
-	wrongReasoning.Profile.ReasoningEffort = "none"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongReasoning); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong thinking-schema reasoning dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	wrongDestination := thinkingSchemaRunnerTestConfig(t, "thinking-schema-wrong-destination", client)
-	wrongDestination.Root = cfg.Root
-	wrongDestination.Profile.APIBaseURL = "https://provider.example/v1"
-	wrongDestination.ConfirmRemoteProvider = true
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongDestination); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("remote thinking-schema destination dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	for _, runID := range []string{"thinking-schema-one", "thinking-schema-two"} {
-		valid := thinkingSchemaRunnerTestConfig(t, runID, client)
-		valid.Root = cfg.Root
-		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), valid); err != nil {
-			t.Fatalf("thinking-schema run %q: %v", runID, err)
-		}
-	}
-	if client.calls.Load() != 6 {
-		t.Fatalf("thinking-schema grant dispatched %d requests, want 6", client.calls.Load())
-	}
-	replayed := thinkingSchemaRunnerTestConfig(t, "thinking-schema-one", client)
-	replayed.Root = cfg.Root
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), replayed); !errors.Is(err, ErrEngineeringInsightRunFinished) || client.calls.Load() != 6 {
-		t.Fatalf("finished thinking-schema run replayed: %v, calls=%d", err, client.calls.Load())
-	}
-	if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, thinkingSchemaDevelopmentAuthorizationID, 6, thinkingSchemaDevelopmentCandidateID, thinkingSchemaDevelopmentModel, thinkingSchemaDevelopmentPromptVersion); err == nil {
-		t.Fatal("thinking-schema grant replay was accepted")
-	}
-	if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, "seventh-grant", 6, thinkingSchemaDevelopmentCandidateID, thinkingSchemaDevelopmentModel, thinkingSchemaDevelopmentPromptVersion); err == nil {
-		t.Fatal("seventh development grant was accepted")
-	}
-	exhausted := thinkingSchemaRunnerTestConfig(t, "thinking-schema-exhausted", client)
-	exhausted.Root = cfg.Root
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
-		t.Fatalf("forty-third request dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
-	if err != nil || campaign.DevelopmentRequests != thinkingSchemaDevelopmentRequestCap || campaign.QualificationRequests != 0 {
-		t.Fatalf("thinking-schema campaign counters: %+v, %v", campaign, err)
-	}
-	if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(`{"grants":[]}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
-		t.Fatalf("corrupt thinking-schema ledger dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-}
-
-func TestEngineeringInsightRunnerAppliesMediumGrantOnlyAtRequestsFortyTwoThroughFortySeven(t *testing.T) {
-	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
-	cfg := mediumRunnerTestConfig(t, "medium-one", client)
-	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
-	if err := os.MkdirAll(directory, 0700); err != nil {
-		t.Fatal(err)
-	}
-	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{
-		{AuthorizationID: "extension-one", Requests: 6},
-		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
-		{AuthorizationID: v11DevelopmentAuthorizationID, Requests: 6, CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion},
-		{AuthorizationID: v12DevelopmentAuthorizationID, Requests: 6, CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion},
-		{AuthorizationID: thinkingOffDevelopmentAuthorizationID, Requests: 6, CandidateID: thinkingOffDevelopmentCandidateID, Model: thinkingOffDevelopmentModel, PromptVersion: thinkingOffDevelopmentPromptVersion, ReasoningEffort: thinkingOffDevelopmentReasoningEffort},
-		{AuthorizationID: thinkingSchemaDevelopmentAuthorizationID, Requests: 6, CandidateID: thinkingSchemaDevelopmentCandidateID, Model: thinkingSchemaDevelopmentModel, PromptVersion: thinkingSchemaDevelopmentPromptVersion, ReasoningEffort: thinkingSchemaDevelopmentReasoningEffort},
-	}}
-	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: thinkingSchemaDevelopmentRequestCap}); err != nil {
-		t.Fatal(err)
-	}
-	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
-		{CandidateID: "wrong-candidate", Model: mediumDevelopmentModel, PromptVersion: mediumDevelopmentPromptVersion},
-		{CandidateID: mediumDevelopmentCandidateID, Model: "wrong-model", PromptVersion: mediumDevelopmentPromptVersion},
-		{CandidateID: mediumDevelopmentCandidateID, Model: mediumDevelopmentModel, PromptVersion: "wrong-prompt"},
-	} {
-		if err := GrantEngineeringInsightMediumDevelopmentBudget(cfg.Root, mediumDevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
-			t.Fatal("medium grant accepted the wrong identity")
-		}
-	}
-	if err := GrantEngineeringInsightThinkingSchemaDevelopmentBudget(cfg.Root, mediumDevelopmentAuthorizationID, 6, mediumDevelopmentCandidateID, mediumDevelopmentModel, mediumDevelopmentPromptVersion); err == nil {
-		t.Fatal("medium grant accepted the low-reasoning route")
-	}
-	if err := GrantEngineeringInsightMediumDevelopmentBudget(cfg.Root, mediumDevelopmentAuthorizationID, 6, mediumDevelopmentCandidateID, mediumDevelopmentModel, mediumDevelopmentPromptVersion); err != nil {
-		t.Fatal(err)
-	}
-	for _, reasoning := range []string{"low", "none", "xhigh"} {
-		wrong := mediumRunnerTestConfig(t, "medium-wrong-"+reasoning, client)
-		wrong.Root = cfg.Root
-		wrong.Profile.ReasoningEffort = reasoning
-		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrong); err == nil || client.calls.Load() != 0 {
-			t.Fatalf("%s-reasoning medium request dispatched: %v, calls=%d", reasoning, err, client.calls.Load())
-		}
-	}
-	wrongCandidate := mediumRunnerTestConfig(t, "medium-wrong-candidate", client)
-	wrongCandidate.Root = cfg.Root
-	wrongCandidate.CandidateID = "another-candidate"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("wrong medium candidate dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	remote := mediumRunnerTestConfig(t, "medium-remote", client)
-	remote.Root = cfg.Root
-	remote.Profile.APIBaseURL = "https://provider.example/v1"
-	remote.ConfirmRemoteProvider = true
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), remote); err == nil || client.calls.Load() != 0 {
-		t.Fatalf("remote medium destination dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	for _, runID := range []string{"medium-one", "medium-two"} {
-		valid := mediumRunnerTestConfig(t, runID, client)
-		valid.Root = cfg.Root
-		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), valid); err != nil {
-			t.Fatalf("medium run %q: %v", runID, err)
-		}
-	}
-	if client.calls.Load() != 6 {
-		t.Fatalf("medium grant dispatched %d requests, want 6", client.calls.Load())
-	}
-	exhausted := mediumRunnerTestConfig(t, "medium-exhausted", client)
-	exhausted.Root = cfg.Root
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
-		t.Fatalf("forty-ninth request dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
-	if err != nil || campaign.DevelopmentRequests != mediumDevelopmentRequestCap || campaign.QualificationRequests != 0 {
-		t.Fatalf("medium campaign counters: %+v, %v", campaign, err)
-	}
-	if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(`{"grants":[]}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
-		t.Fatalf("corrupt medium ledger dispatched: %v, calls=%d", err, client.calls.Load())
-	}
-}
-
-func TestEngineeringInsightRunnerPreservesPersistedDevelopmentCampaignCaps(t *testing.T) {
-	tests := []struct {
-		name           string
-		ledger         string
-		consumed       int
-		wantCap        int
-		wantGrants     int
-		recovery       bool
-		v11            bool
-		thinkingSchema bool
-	}{
-		{name: "original six-request campaign", consumed: 6, wantCap: 6},
-		{name: "legacy twelve-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6}]}`, consumed: 12, wantCap: 12, wantGrants: 1},
-		{name: "bound eighteen-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"}]}`, consumed: 12, wantCap: 18, wantGrants: 2, recovery: true},
-		{name: "v11 ledger retains recovery binding through request seventeen", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`, consumed: 12, wantCap: 24, wantGrants: 3, recovery: true},
-		{name: "bound twenty-four-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"}]}`, consumed: 18, wantCap: 24, wantGrants: 3, v11: true},
-		{name: "bound forty-two-request ledger", ledger: `{"grants":[{"authorization_id":"extension-one","requests":6},{"authorization_id":"qual05-qwen38-recovery-1","requests":6,"candidate_id":"qwen38-v10-recovery-1","model":"qwen/qwen3.8-27b"},{"authorization_id":"qual05-qwen38-schema-1","requests":6,"candidate_id":"qwen38-v11-schema-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v11"},{"authorization_id":"authqual05-qwen38-structured-1","requests":6,"candidate_id":"qwen38-v12-structured-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v12"},{"authorization_id":"qual05-qwen38-thinking-off-1","requests":6,"candidate_id":"qwen38-v12-thinking-off-1","model":"qwen/qwen3.8-27b","prompt_version":"file-analysis-v12","reasoning_effort":"none"},{"authorization_id":"qual05-qwen38-thinking-schema-1","requests":6,"candidate_id":"qwen38-v12-thinking-schema-1","model":"./models/qwen38-v12-thinking-schema-1","prompt_version":"file-analysis-v12","reasoning_effort":"low"}]}`, consumed: 36, wantCap: 42, wantGrants: 6, thinkingSchema: true},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			directory := t.TempDir()
-			if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: test.consumed}); err != nil {
-				t.Fatal(err)
-			}
-			if test.ledger != "" {
-				if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(test.ledger), 0600); err != nil {
-					t.Fatal(err)
-				}
-			}
-			loaded, exists, err := loadDevelopmentGrantLedger(directory)
-			if err != nil || exists != (test.ledger != "") || len(loaded.Grants) != test.wantGrants {
-				t.Fatalf("load persisted ledger: %+v, %t, %v", loaded, exists, err)
-			}
-			campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
-			if err != nil || campaign.DevelopmentRequests != test.consumed || campaign.QualificationRequests != 0 {
-				t.Fatalf("load persisted campaign: %+v, %v", campaign, err)
-			}
-			cfg := runnerTestConfig(t, "persisted-cap", EngineeringInsightDevelopmentRunMode, 3, &fakeEngineeringInsightClient{})
-			if test.recovery {
-				cfg = recoveryRunnerTestConfig(t, "persisted-cap", &fakeEngineeringInsightClient{})
-			}
-			if test.v11 {
-				cfg = v11RunnerTestConfig(t, "persisted-cap", &fakeEngineeringInsightClient{})
-			}
-			if test.thinkingSchema {
-				cfg = thinkingSchemaRunnerTestConfig(t, "persisted-cap", &fakeEngineeringInsightClient{})
-			}
-			cap, err := developmentRequestCap(directory, test.consumed, cfg)
-			if err != nil || cap != test.wantCap {
-				t.Fatalf("development cap = %d, want %d: %v", cap, test.wantCap, err)
-			}
-		})
 	}
 }
 
@@ -1461,4 +1038,392 @@ func qualificationRunnerTestConfig(t *testing.T, runID string, client Engineerin
 
 func runnerValidResponse() string {
 	return `{"purpose":"model reply is private","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`
+}
+
+func TestEngineeringInsightRunnerRejectsHistoricalPromptDispatch(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := v12RunnerTestConfig(t, "historical-v12-readonly", client)
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("historical v12 prompt dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{{AuthorizationID: "extension-one", Requests: 6}, {AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel}, {AuthorizationID: v11DevelopmentAuthorizationID, Requests: 6, CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion}, {AuthorizationID: v12DevelopmentAuthorizationID, Requests: 6, CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion}}}
+	if !validDevelopmentGrantLedger(ledger) {
+		t.Fatal("historical grant ledger no longer validates")
+	}
+}
+
+func TestEngineeringInsightRecoveryV2BindsCompleteHistoricalEvidenceSet(t *testing.T) {
+	if len(recoveryV2PredecessorFiles) != 19 {
+		t.Fatalf("predecessor evidence count = %d, want campaign, grant ledger, and 17 receipts", len(recoveryV2PredecessorFiles))
+	}
+	for name, digest := range recoveryV2PredecessorFiles {
+		if !validDigest(digest) {
+			t.Fatalf("predecessor %q has invalid digest %q", name, digest)
+		}
+	}
+}
+
+func TestEngineeringInsightRecoveryV2RunsExactlyTwelveVerifiedDevelopmentCases(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := recoveryV2DevelopmentTestConfig(t, client)
+	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.calls.Load() != 12 || receipt.ProtocolVersion != "v2" || receipt.Consumption.Requests != 12 || len(receipt.Attempts) != 12 {
+		t.Fatalf("v2 development calls=%d receipt=%+v", client.calls.Load(), receipt)
+	}
+	period, err := loadRecoveryV2Period(filepath.Join(cfg.Root, runnerRelativeDirectory), cfg.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if period.DevelopmentRequests != 12 || period.CumulativeDevelopmentRequests != 60 || len(period.DevelopmentSchedule) != 12 || len(period.Reservations) != 12 {
+		t.Fatalf("v2 period accounting = %+v", period)
+	}
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); !errors.Is(err, ErrEngineeringInsightRunFinished) || client.calls.Load() != 12 {
+		t.Fatalf("finished v2 run was replayed: %v, calls=%d", err, client.calls.Load())
+	}
+	manifestPath := filepath.Join(cfg.Root, runnerRelativeDirectory, cfg.RunID+".json")
+	manifest, exists, err := loadRunManifest(manifestPath)
+	if err != nil || !exists {
+		t.Fatalf("load v2 manifest: %v", err)
+	}
+	manifest.Receipt.ProtocolVersion = ""
+	if err := writeRunnerJSON(manifestPath, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 12 {
+		t.Fatalf("v2 manifest resumed with historical protocol identity: %v, calls=%d", err, client.calls.Load())
+	}
+}
+
+func TestEngineeringInsightRecoveryV2RejectsConcurrentReservationOwner(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := recoveryV2DevelopmentTestConfig(t, client)
+	lock, err := lockRunnerFile(filepath.Join(cfg.Root, runnerRelativeDirectory, "campaign.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); !errors.Is(err, ErrEngineeringInsightRunLocked) || client.calls.Load() != 0 {
+		t.Fatalf("concurrent v2 reservation owner = %v, calls=%d", err, client.calls.Load())
+	}
+}
+
+func TestEngineeringInsightRecoveryV2ResumesChargedUnknownWithoutReplacement(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := recoveryV2DevelopmentTestConfig(t, client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	period, err := loadRecoveryV2Period(directory, cfg.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	period.DevelopmentSchedule = recoveryV2ScheduleIDs(cfg.Cases)
+	period.DevelopmentRequests = 1
+	period.CumulativeDevelopmentRequests = 49
+	period.Reservations[period.DevelopmentSchedule[0]] = true
+	if err := writeRunnerJSON(recoveryV2PeriodPath(directory), period); err != nil {
+		t.Fatal(err)
+	}
+	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.calls.Load() != 11 || receipt.Consumption.Requests != 12 || receipt.Attempts[0].Outcome != "unknown" {
+		t.Fatalf("charged resume calls=%d receipt=%+v", client.calls.Load(), receipt)
+	}
+	replacement := cfg
+	replacement.RunID = "replacement-run"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), replacement); err == nil || client.calls.Load() != 11 {
+		t.Fatalf("replacement run dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+}
+
+func TestEngineeringInsightRecoveryV2RejectsIdentityCorpusAndScheduleDrift(t *testing.T) {
+	base := recoveryV2DevelopmentTestConfig(t, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
+	for name, mutate := range map[string]func(*EngineeringInsightRunnerConfig){
+		"candidate": func(cfg *EngineeringInsightRunnerConfig) { cfg.CandidateID = "wrong" },
+		"model":     func(cfg *EngineeringInsightRunnerConfig) { cfg.Model = "wrong" },
+		"provider":  func(cfg *EngineeringInsightRunnerConfig) { cfg.Provider = "wrong" },
+		"endpoint":  func(cfg *EngineeringInsightRunnerConfig) { cfg.Profile.APIBaseURL = "http://127.0.0.1:1234/v1" },
+		"reasoning": func(cfg *EngineeringInsightRunnerConfig) { cfg.Profile.ReasoningEffort = "low" },
+		"base":      func(cfg *EngineeringInsightRunnerConfig) { cfg.BaseRevision = strings.Repeat("b", 40) },
+		"run":       func(cfg *EngineeringInsightRunnerConfig) { cfg.RunID = "replacement" },
+		"source":    func(cfg *EngineeringInsightRunnerConfig) { cfg.Cases[0].Source += "\n// drift" },
+		"name":      func(cfg *EngineeringInsightRunnerConfig) { cfg.Cases[0].Expected.CaseName = "other" },
+		"intent":    func(cfg *EngineeringInsightRunnerConfig) { cfg.Cases[0].Expected.Intent = "control" },
+		"repeat":    func(cfg *EngineeringInsightRunnerConfig) { cfg.Cases[0].Expected.Repetition = 2 },
+		"bytes": func(cfg *EngineeringInsightRunnerConfig) {
+			cfg.CorpusJSON = append(append([]byte(nil), cfg.CorpusJSON...), '\n')
+		},
+		"extra sampler": func(cfg *EngineeringInsightRunnerConfig) {
+			value := float32(0)
+			cfg.Profile.MinP = &value
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := base
+			cfg.Cases = append([]EngineeringInsightRunnerCase(nil), base.Cases...)
+			cfg.CorpusJSON = append([]byte(nil), base.CorpusJSON...)
+			mutate(&cfg)
+			client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+			cfg.Client = client
+			if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
+				t.Fatalf("drift dispatched: %v, calls=%d", err, client.calls.Load())
+			}
+		})
+	}
+}
+
+func TestEngineeringInsightRecoveryV2RejectsPredecessorAndCleanHeadDrift(t *testing.T) {
+	for name, mutate := range map[string]func(*testing.T, EngineeringInsightRunnerConfig){
+		"predecessor": func(t *testing.T, cfg EngineeringInsightRunnerConfig) {
+			if err := os.WriteFile(filepath.Join(cfg.Root, runnerRelativeDirectory, "campaign.json"), []byte(`{"development_requests":47,"qualification_requests":24}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"head": func(t *testing.T, cfg EngineeringInsightRunnerConfig) {
+			path := filepath.Join(cfg.Root, "changed.txt")
+			if err := os.WriteFile(path, []byte("changed"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			command := exec.Command("git", "-C", cfg.Root, "add", "changed.txt")
+			if output, err := command.CombinedOutput(); err != nil {
+				t.Fatalf("stage changed head: %v: %s", err, output)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+			cfg := recoveryV2DevelopmentTestConfig(t, client)
+			mutate(t, cfg)
+			if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
+				t.Fatalf("%s drift dispatched: %v, calls=%d", name, err, client.calls.Load())
+			}
+		})
+	}
+}
+
+func TestEngineeringInsightRecoveryV2PeriodRejectsUnboundAndMalformedReservations(t *testing.T) {
+	cfg := recoveryV2DevelopmentTestConfig(t, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	period, err := loadRecoveryV2Period(directory, cfg.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	period.DevelopmentSchedule = recoveryV2ScheduleIDs(cfg.Cases)
+	period.DevelopmentRequests = 1
+	period.CumulativeDevelopmentRequests = 49
+	period.Reservations["junk\x00development\x00junk\x001\x001"] = true
+	if validRecoveryV2Period(period, cfg.Root) {
+		t.Fatal("unbound reservation ID was accepted")
+	}
+	period.Reservations = map[string]bool{period.DevelopmentSchedule[0]: true}
+	if !validRecoveryV2Period(period, cfg.Root) {
+		t.Fatal("bound reservation ID was rejected")
+	}
+	period.DevelopmentSchedule[0] = "junk\x00development\x00substantive\x001\x001"
+	if validRecoveryV2Period(period, cfg.Root) {
+		t.Fatal("schedule with a reservation outside the verified corpus was accepted")
+	}
+}
+
+func TestEngineeringInsightRecoveryV2ReservesFixedQualificationScheduleOnce(t *testing.T) {
+	cfg := recoveryV2DevelopmentTestConfig(t, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	period, err := loadRecoveryV2Period(directory, cfg.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	development := v2DevelopmentExpectation()
+	period.DevelopmentSchedule = make([]string, len(development.Schedule))
+	period.DevelopmentRequests = recoveryV2DevelopmentRequests
+	period.CumulativeDevelopmentRequests = recoveryV2DevelopmentLimit
+	for index, attempt := range development.Schedule {
+		id := expectedAttemptID(attempt)
+		period.DevelopmentSchedule[index] = id
+		period.Reservations[id] = true
+	}
+	if err := writeRunnerJSON(recoveryV2PeriodPath(directory), period); err != nil {
+		t.Fatal(err)
+	}
+	manifest := engineeringInsightRunManifest{Finished: true, Receipt: v2Receipt(development, EngineeringInsightCollectionMode)}
+	manifest.Receipt.RunID = recoveryV2DevelopmentRunID
+	manifest.Receipt.BaseRevision = period.BaseRevision
+	qualification := v2QualificationExpectation()
+	cfg.Mode = EngineeringInsightQualificationRunMode
+	cfg.RunID = recoveryV2QualificationRunID
+	cfg.CorpusDigest = recoveryV2QualificationDigest
+	cfg.Cases = make([]EngineeringInsightRunnerCase, len(qualification.Schedule))
+	for index, attempt := range qualification.Schedule {
+		cfg.Cases[index] = EngineeringInsightRunnerCase{Expected: attempt, Source: "package fixture\n"}
+	}
+	manifestPath := filepath.Join(directory, recoveryV2DevelopmentRunID+".json")
+	manifest.Receipt.Attempts[0].Score = nil
+	if err := writeRunnerJSON(manifestPath, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if dispatch, err := reserveRecoveryV2Attempt(directory, cfg, qualification.Schedule[0]); err == nil || dispatch {
+		t.Fatalf("qualification reserved against unscored development: dispatch=%v err=%v", dispatch, err)
+	}
+	manifest.Receipt.Attempts[0].Score = &EngineeringInsightAttemptScore{ResponseDigest: manifest.Receipt.Attempts[0].ResponseDigest, Correctness: 2, LocalRelevance: 2, TradeoffClarity: 2, UsefulVerification: 2, CriticalFalseClaim: true}
+	if err := writeRunnerJSON(manifestPath, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if dispatch, err := reserveRecoveryV2Attempt(directory, cfg, qualification.Schedule[0]); err == nil || dispatch {
+		t.Fatalf("qualification reserved against failed development: dispatch=%v err=%v", dispatch, err)
+	}
+	manifest.Receipt.Attempts[0].Score.CriticalFalseClaim = false
+	if err := writeRunnerJSON(manifestPath, manifest); err != nil {
+		t.Fatal(err)
+	}
+	for index, attempt := range qualification.Schedule {
+		dispatch, err := reserveRecoveryV2Attempt(directory, cfg, attempt)
+		if err != nil || !dispatch {
+			t.Fatalf("qualification reservation %d: dispatch=%v err=%v", index, dispatch, err)
+		}
+	}
+	dispatch, err := reserveRecoveryV2Attempt(directory, cfg, qualification.Schedule[0])
+	if err != nil || dispatch {
+		t.Fatalf("qualification replay reserved again: dispatch=%v err=%v", dispatch, err)
+	}
+	period, err = loadRecoveryV2Period(directory, cfg.Root)
+	if err != nil || period.QualificationRequests != 24 || period.CumulativeQualificationRequests != 48 || len(period.QualificationSchedule) != 24 {
+		t.Fatalf("qualification accounting = %+v, %v", period, err)
+	}
+}
+
+func TestEngineeringInsightRecoveryV2PeriodJSONIsStrict(t *testing.T) {
+	cfg := recoveryV2DevelopmentTestConfig(t, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	path := recoveryV2PeriodPath(directory)
+	valid, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string][]byte{
+		"malformed":         []byte(`{"version":`),
+		"extra key":         []byte(strings.Replace(string(valid), `{"version"`, `{"extra":true,"version"`, 1)),
+		"null journal":      []byte(strings.Replace(string(valid), `"reservations":{}`, `"reservations":null`, 1)),
+		"negative counter":  []byte(strings.Replace(string(valid), `"development_requests":0`, `"development_requests":-1`, 1)),
+		"wrong schema":      []byte(strings.Replace(string(valid), `"schema_identity":"`, `"schema_identity":"wrong-`, 1)),
+		"wrong runtime cap": []byte(strings.Replace(string(valid), `"runtime_context_tokens":119552`, `"runtime_context_tokens":119551`, 1)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(path, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := loadRecoveryV2Period(directory, cfg.Root); err == nil {
+				t.Fatal("invalid period JSON was accepted")
+			}
+			if err := os.WriteFile(path, valid, 0600); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestEngineeringInsightRecoveryV2CoordinatorBoundaryIsExact(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, ".mini-orca", "autopilot", "coordinator")
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	tasks := `"RCV-01":{"phase":"complete"},"RCV-02":{"phase":"complete"},"RCV-03":{"phase":"complete"},"RCV-04":{"phase":"complete"},"RCV-05":{"phase":"complete"},"RCV-06":{"phase":"complete"}`
+	path := filepath.Join(directory, "RCV-recovery.json")
+	for name, document := range map[string]string{
+		"valid":         `{"phase":"RCV-07","scheduler_status":"PAUSED","tasks":{` + tasks + `}}`,
+		"wrong phase":   `{"phase":"RCV-06","scheduler_status":"PAUSED","tasks":{` + tasks + `}}`,
+		"active":        `{"phase":"RCV-07","scheduler_status":"ACTIVE","tasks":{` + tasks + `}}`,
+		"incomplete":    `{"phase":"RCV-07","scheduler_status":"PAUSED","tasks":{"RCV-01":{"phase":"complete"}}}`,
+		"duplicate key": `{"phase":"RCV-07","phase":"RCV-06","scheduler_status":"PAUSED","tasks":{` + tasks + `}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(document), 0600); err != nil {
+				t.Fatal(err)
+			}
+			err := validateRecoveryCoordinatorBoundary(root)
+			if name == "valid" && err != nil {
+				t.Fatalf("valid coordinator boundary: %v", err)
+			}
+			if name != "valid" && err == nil {
+				t.Fatal("invalid coordinator boundary was accepted")
+			}
+		})
+	}
+}
+
+func recoveryV2DevelopmentTestConfig(t *testing.T, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
+	t.Helper()
+	root, base := recoveryV2TestRoot(t)
+	data, err := os.ReadFile("testdata/engineering-insight-eval/v2-development.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	corpus, ok := decodeRecoveryV2Corpus(data)
+	if !ok {
+		t.Fatal("decode v2 development corpus")
+	}
+	cases := make([]EngineeringInsightRunnerCase, len(corpus))
+	for index, item := range corpus {
+		cases[index] = EngineeringInsightRunnerCase{Expected: EngineeringInsightExpectedAttempt{CaseName: item.Name, Partition: item.Partition, Intent: item.Intent, Repetition: 1, Attempt: 1}, Source: item.Source}
+	}
+	topP := float32(.95)
+	topK := 20
+	return EngineeringInsightRunnerConfig{Root: root, RunID: recoveryV2DevelopmentRunID, Mode: EngineeringInsightDevelopmentRunMode, CandidateID: recoveryV2CandidateID, Provider: recoveryV2Provider, Model: recoveryV2Model, PromptVersion: recoveryV2PromptVersion, CorpusID: recoveryV2CorpusID, CorpusDigest: recoveryV2DevelopmentDigest, CorpusJSON: data, BaseRevision: base, Profile: config.ModelProfile{Scope: config.BugModelScope, APIBaseURL: recoveryV2Endpoint, Model: recoveryV2Model, ReasoningEffort: mediumDevelopmentReasoningEffort, Temperature: 1, TopP: &topP, TopK: &topK, MaxTokens: qualificationOutputTokenCap, ContextMaxTokens: 16384}, Cases: cases, Client: client}
+}
+
+func recoveryV2TestRoot(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	initCommand := exec.Command("git", "-C", root, "init")
+	if output, err := initCommand.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, output)
+	}
+	rootCommand := exec.Command("git", "-C", root, "rev-parse", "--show-toplevel")
+	output, err := rootCommand.CombinedOutput()
+	if err != nil {
+		t.Fatalf("resolve git root: %v: %s", err, output)
+	}
+	root = strings.TrimSpace(string(output))
+	gitCommand := func(args ...string) string {
+		command := exec.Command("git", append([]string{"-C", root}, args...)...)
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	gitCommand("checkout", "-b", "codex/autopilot")
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".mini-orca/\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	gitCommand("add", ".gitignore")
+	gitCommand("-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-m", "fixture")
+	base := gitCommand("rev-parse", "HEAD")
+	directory := filepath.Join(root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	campaign := []byte(`{"development_requests":48,"qualification_requests":24}`)
+	if err := os.WriteFile(filepath.Join(directory, "campaign.json"), campaign, 0600); err != nil {
+		t.Fatal(err)
+	}
+	originalPredecessors := recoveryV2PredecessorFiles
+	sum := sha256.Sum256(campaign)
+	recoveryV2PredecessorFiles = map[string]string{"campaign.json": hex.EncodeToString(sum[:])}
+	t.Cleanup(func() { recoveryV2PredecessorFiles = originalPredecessors })
+	schema, err := FileAnalysisResponseSchema().Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	period := engineeringInsightRecoveryV2Period{Version: "v2", PeriodID: recoveryV2PeriodID, CanonicalRoot: root, Provider: recoveryV2Provider, Endpoint: recoveryV2Endpoint, CandidateID: recoveryV2CandidateID, Model: recoveryV2Model, PromptVersion: recoveryV2PromptVersion, CorpusID: recoveryV2CorpusID, DevelopmentCorpusDigest: recoveryV2DevelopmentDigest, QualificationCorpusDigest: recoveryV2QualificationDigest, BaseRevision: base, SchemaIdentity: schema, MaxOutputTokens: qualificationOutputTokenCap, InputContextTokens: 16384, RuntimeContextTokens: recoveryV2RuntimeContextTokens, AttemptTimeoutSeconds: qualificationAttemptTimeoutSeconds, ReasoningEffort: mediumDevelopmentReasoningEffort, Temperature: 1, TopP: .95, TopK: 20, Lanes: 1, CumulativeDevelopmentRequests: 48, CumulativeQualificationRequests: 24, DevelopmentLimit: recoveryV2DevelopmentLimit, QualificationLimit: recoveryV2QualificationLimit, PredecessorFiles: cloneRecoveryV2PredecessorFiles(), DevelopmentSchedule: []string{}, QualificationSchedule: []string{}, Reservations: map[string]bool{}}
+	if !validRecoveryV2Period(period, root) {
+		canonical, _ := canonicalEvaluationRoot(root)
+		t.Fatalf("invalid test period: root=%q canonical=%q identity=%v canonicalIdentity=%v profile=%v accounting=%v predecessors=%+v", root, canonical, sameRecoveryV2PeriodIdentity(period, root), sameRecoveryV2PeriodIdentity(period, canonical), sameRecoveryV2PeriodProfile(period, schema), validRecoveryV2PeriodAccounting(period), period.PredecessorFiles)
+	}
+	if err := writeRunnerJSON(recoveryV2PeriodPath(directory), period); err != nil {
+		t.Fatal(err)
+	}
+	return root, base
 }

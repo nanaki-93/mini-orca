@@ -231,8 +231,8 @@ func TestCachedFileAnalysisMarksV11PromptResultsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v12" {
-		t.Fatalf("file analysis prompt version = %q, want file-analysis-v12", got)
+	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v13" {
+		t.Fatalf("file analysis prompt version = %q, want file-analysis-v13", got)
 	}
 	legacy := project.FileAnalysis{
 		SchemaVersion: "1", ProjectID: prepared.input.ProjectID, ProjectRevision: prepared.input.ProjectRevision,
