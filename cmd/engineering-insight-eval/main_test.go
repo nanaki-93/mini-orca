@@ -242,9 +242,30 @@ func TestGrantDevelopmentModeRequiresOneUniqueAuthorization(t *testing.T) {
 	if err := runEvaluationMode(thinkingOff); err == nil {
 		t.Fatal("thinking-off grant replay was accepted")
 	}
+	if err := os.WriteFile(filepath.Join(state, "campaign.json"), []byte(`{"development_requests":36,"qualification_requests":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	thinkingSchema := []string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-thinking-schema-1", "-requests", "6", "-candidate-id", "qwen38-v12-thinking-schema-1", "-model", "./models/qwen38-v12-thinking-schema-1", "-prompt-version", "file-analysis-v12"}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-thinking-schema-1", "-requests", "6"}); err == nil {
+		t.Fatal("unbound thinking-schema CLI grant was accepted")
+	}
+	wrongThinkingSchemaPrompt := append([]string(nil), thinkingSchema...)
+	wrongThinkingSchemaPrompt[len(wrongThinkingSchemaPrompt)-1] = "wrong-prompt"
+	if err := runEvaluationMode(wrongThinkingSchemaPrompt); err == nil {
+		t.Fatal("wrong thinking-schema prompt was accepted")
+	}
+	if err := runEvaluationMode(thinkingSchema); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode(thinkingSchema); err == nil {
+		t.Fatal("thinking-schema grant replay was accepted")
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "seventh-grant", "-requests", "6", "-candidate-id", "qwen38-v12-thinking-schema-1", "-model", "./models/qwen38-v12-thinking-schema-1", "-prompt-version", "file-analysis-v12"}); err == nil {
+		t.Fatal("seventh grant fallback was accepted")
+	}
 }
 
-func TestRunEvaluationModeUsesThinkingOffGrantForExactlyFinalSixRequests(t *testing.T) {
+func TestRunEvaluationModeUsesThinkingSchemaGrantForExactlySixRequestsAfterValidHistory(t *testing.T) {
 	root := t.TempDir()
 	git(t, root, "init")
 	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".mini-orca/\n"), 0600); err != nil {
@@ -253,7 +274,7 @@ func TestRunEvaluationModeUsesThinkingOffGrantForExactlyFinalSixRequests(t *test
 	git(t, root, "add", ".gitignore")
 	git(t, root, "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-m", "fixture")
 	base := strings.TrimSpace(git(t, root, "rev-parse", "HEAD"))
-	var calls int
+	var calls, lowEffortCalls int
 	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		calls++
 		var chat llm.ChatRequest
@@ -261,9 +282,16 @@ func TestRunEvaluationModeUsesThinkingOffGrantForExactlyFinalSixRequests(t *test
 			t.Errorf("decode provider request: %v", err)
 			return
 		}
-		if chat.ReasoningEffort != "none" || chat.ResponseFormat == nil {
-			t.Errorf("thinking-off request = %+v", chat)
+		if chat.ResponseFormat == nil || (chat.ReasoningEffort != "none" && chat.ReasoningEffort != "low") {
+			t.Errorf("structured request = %+v", chat)
 			return
+		}
+		if chat.ReasoningEffort == "low" && chat.Model != "./models/qwen38-v12-thinking-schema-1" {
+			t.Errorf("thinking-schema model = %q", chat.Model)
+			return
+		}
+		if chat.ReasoningEffort == "low" {
+			lowEffortCalls++
 		}
 		_ = json.NewEncoder(writer).Encode(map[string]any{"model": "qwen/qwen3.8-27b", "choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": `{"purpose":"summary","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`}, "finish_reason": "stop"}}, "usage": map[string]int{"completion_tokens": 7}})
 	}))
@@ -320,7 +348,7 @@ func TestRunEvaluationModeUsesThinkingOffGrantForExactlyFinalSixRequests(t *test
 			t.Fatal(err)
 		}
 	}
-	if calls != 18+6 {
+	if calls != 24 {
 		t.Fatalf("structured-output provider calls = %d, want 24", calls)
 	}
 	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-thinking-off-1", "-requests", "6", "-candidate-id", "qwen38-v12-thinking-off-1", "-model", "qwen/qwen3.8-27b", "-prompt-version", "file-analysis-v12"}); err != nil {
@@ -331,14 +359,34 @@ func TestRunEvaluationModeUsesThinkingOffGrantForExactlyFinalSixRequests(t *test
 			t.Fatal(err)
 		}
 	}
-	if calls != 24+6 {
+	if calls != 30 {
 		t.Fatalf("thinking-off provider calls = %d, want 30", calls)
 	}
-	if err := run(app.EngineeringInsightDevelopmentRunMode, "campaign-eleven", "qwen38-v12-thinking-off-1"); err == nil || calls != 30 {
-		t.Fatalf("thirty-seventh campaign request dispatched: %v, calls=%d", err, calls)
+	if err := os.WriteFile(filepath.Join(state, "campaign.json"), []byte(`{"development_requests":36,"qualification_requests":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	thinkingSchemaConfig := strings.ReplaceAll(configText, "model: qwen/qwen3.8-27b", "model: ./models/qwen38-v12-thinking-schema-1")
+	thinkingSchemaConfig = strings.Replace(thinkingSchemaConfig, "reasoning_effort: none", "reasoning_effort: low", 1)
+	if err := os.WriteFile(configPath, []byte(thinkingSchemaConfig), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-thinking-schema-1", "-requests", "6", "-candidate-id", "qwen38-v12-thinking-schema-1", "-model", "./models/qwen38-v12-thinking-schema-1", "-prompt-version", "file-analysis-v12"}); err != nil {
+		t.Fatal(err)
+	}
+	beforeThinkingSchemaCalls := calls
+	for _, runID := range []string{"campaign-thirteen", "campaign-fourteen"} {
+		if err := run(app.EngineeringInsightDevelopmentRunMode, runID, "qwen38-v12-thinking-schema-1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls-beforeThinkingSchemaCalls != 6 || lowEffortCalls != 6 {
+		t.Fatalf("thinking-schema provider calls = %d after history low-effort=%d, want 6 and 6", calls-beforeThinkingSchemaCalls, lowEffortCalls)
+	}
+	if err := run(app.EngineeringInsightDevelopmentRunMode, "campaign-fifteen", "qwen38-v12-thinking-schema-1"); err == nil || calls != beforeThinkingSchemaCalls+6 {
+		t.Fatalf("forty-third campaign request dispatched: %v, calls=%d", err, calls)
 	}
 	campaign, err := os.ReadFile(filepath.Join(state, "campaign.json"))
-	if err != nil || string(campaign) != `{"development_requests":36,"qualification_requests":0}` {
+	if err != nil || string(campaign) != `{"development_requests":42,"qualification_requests":0}` {
 		t.Fatalf("final campaign = %s, %v", campaign, err)
 	}
 }
