@@ -123,7 +123,7 @@ Baseline: `f4e044e91c69cab47faaf7bb6e92e5fa1cb722e5`, `codex/autopilot`. QUAL-05
 
 ## RCV-05 — Support one explicitly bounded successor evaluation period
 
-- [ ] RCV-05 accepted
+- [x] RCV-05 accepted
 
 **Target files**
 - `internal/app/file_analysis.go` — bump the final selected-file prompt identity to v13 alongside version-aware runner/test changes.

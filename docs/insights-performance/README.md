@@ -180,13 +180,72 @@ model explanation is useful or factually accurate. Only the separately authorize
 one-pass development and conditional qualification screens can provide that
 evidence.
 
+### Frozen v2 successor period
+
+`engineering-insight-v2-recovery-1` is the sole successor period. It leaves
+the historical v1 48/24 counters, seven-grant ledger, and receipts unchanged.
+The source-free period record binds the predecessor file hashes, canonical
+clean checkout revision, current schema identity, v13 candidate and wire model,
+both corpus digests, and the fixed 4,096-token / 300-second / 16,384-input /
+119,552-runtime-context / medium / temperature-1 / top-p-.95 / top-k-20 /
+one-lane profile. It has independent 12 development and 24 qualification
+counters with cumulative
+limits of 60 and 48.
+
+After RCV-06 completes the offline freeze and the coordinator advances to
+RCV-07 with RCV-01 through RCV-06 accepted and the scheduler still Paused, the
+coordinator authorizes it once from the canonical checkout containing the
+unchanged predecessor evidence:
+
+```sh
+go run ./cmd/engineering-insight-eval -mode authorize-recovery-v2 -root "$(pwd)"
+```
+
+That command accepts no candidate, budget, corpus, or schedule override and
+does not activate a runtime. Before every reservation the runner rechecks the
+same root, predecessor hashes, schema, period identity, and fixed profile. The
+reservation journal and its counter are one durable write before provider
+dispatch; a resumed run preserves a charged missing result as `unknown`.
+
+After RCV-06 freezes the candidate, collection uses these exact identities:
+
+```sh
+go run ./cmd/engineering-insight-eval -mode development -root "$(pwd)" -run-id rcv07-qwen38-v13-dev-1 -receipt .mini-orca/autopilot/engineering-insight-evaluation/rcv07-qwen38-v13-dev-1-receipt.json -cases internal/app/testdata/engineering-insight-eval/v2-development.json -config .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v13-recovery-1/config.yaml -candidate-id qwen38-v13-recovery-1 -provider configured-bug -prompt-version file-analysis-v13 -corpus-id engineering-insight-v2 -base-revision "$(git rev-parse HEAD)"
+go run ./cmd/engineering-insight-eval -mode qualification -root "$(pwd)" -run-id rcv08-qwen38-v13-qual-1 -receipt .mini-orca/autopilot/engineering-insight-evaluation/rcv08-qwen38-v13-qual-1-receipt.json -cases .mini-orca/autopilot/coordinator/rcv-v2-sealed/qualification.json -config .mini-orca/autopilot/engineering-insight-evaluation/qwen38-v13-recovery-1/config.yaml -candidate-id qwen38-v13-recovery-1 -provider configured-bug -prompt-version file-analysis-v13 -corpus-id engineering-insight-v2 -base-revision "$(git rev-parse HEAD)"
+```
+
+After each collection finishes, the independent scorer writes one digest-bound
+score for every response, including all controls. The reviewed score, export,
+and offline validation commands are:
+
+```sh
+go run ./cmd/engineering-insight-eval -mode score -root "$(pwd)" -run-id rcv07-qwen38-v13-dev-1 -scores .mini-orca/autopilot/engineering-insight-evaluation/rcv07-qwen38-v13-dev-1-scores.json -receipt .mini-orca/autopilot/engineering-insight-evaluation/rcv07-qwen38-v13-dev-1-receipt.json
+go run ./cmd/engineering-insight-eval -mode export -root "$(pwd)" -run-id rcv07-qwen38-v13-dev-1 -receipt .mini-orca/autopilot/engineering-insight-evaluation/rcv07-qwen38-v13-dev-1-receipt.json
+go run ./cmd/engineering-insight-eval -receipt .mini-orca/autopilot/engineering-insight-evaluation/rcv07-qwen38-v13-dev-1-receipt.json -cases internal/app/testdata/engineering-insight-eval/v2-development.json -candidate-id qwen38-v13-recovery-1 -provider configured-bug -model ./models/qwen38-v13-recovery-1 -prompt-version file-analysis-v13 -corpus-id engineering-insight-v2 -base-revision "$(git rev-parse HEAD)" -max-requests 12 -max-output-tokens 4096 -attempt-timeout-seconds 300
+
+go run ./cmd/engineering-insight-eval -mode score -root "$(pwd)" -run-id rcv08-qwen38-v13-qual-1 -scores .mini-orca/autopilot/engineering-insight-evaluation/rcv08-qwen38-v13-qual-1-scores.json -receipt .mini-orca/autopilot/engineering-insight-evaluation/rcv08-qwen38-v13-qual-1-receipt.json
+go run ./cmd/engineering-insight-eval -mode export -root "$(pwd)" -run-id rcv08-qwen38-v13-qual-1 -receipt .mini-orca/autopilot/engineering-insight-evaluation/rcv08-qwen38-v13-qual-1-receipt.json
+go run ./cmd/engineering-insight-eval -receipt .mini-orca/autopilot/engineering-insight-evaluation/rcv08-qwen38-v13-qual-1-receipt.json -cases .mini-orca/autopilot/coordinator/rcv-v2-sealed/qualification.json -candidate-id qwen38-v13-recovery-1 -provider configured-bug -model ./models/qwen38-v13-recovery-1 -prompt-version file-analysis-v13 -corpus-id engineering-insight-v2 -base-revision "$(git rev-parse HEAD)" -max-requests 24 -max-output-tokens 4096 -attempt-timeout-seconds 300
+```
+
+Qualification remains sealed until the candidate is frozen and cannot reserve
+until twelve development finals are independently scored: all twelve are usable
+and complete, all eight substantive insights score at least 6/8, all four
+controls omit the insight, and all twelve whole finals have zero critical false
+claims. V1 receipt validation is retained unchanged; v2
+receipts carry `protocol_version: "v2"` and use twelve or twenty-four unique,
+single-attempt schedule entries.
+
 The command validates receipts by default and never constructs a provider client in that
 mode, even when old opt-in environment variables are inherited. Explicit `collect`,
 `development`, and `qualification` modes use the configured `bug` scope, production
 selected-file prompt, parser, and one isolated fixture per case. This is component-level
 evidence; it does not exercise import or the Desktop client.
 
-For a provider run, select one candidate, provider label, prompt, corpus and base
+### Historical v1 operation
+
+The commands and accounting below describe the exhausted v1 campaign only. For
+a historical provider run, select one candidate, provider label, prompt, corpus and base
 revision before collecting any result. For the authorized medium pilot, collect
 the three development cases twice using the same frozen candidate and settings.
 Do not tune between batches or retry an attempt. Qualification schedules every
