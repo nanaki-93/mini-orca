@@ -16,7 +16,7 @@ func TestOptionalEngineeringInsightIsBoundedAndIndependent(t *testing.T) {
 		json.RawMessage(`{"mechanism":"only one required field"}`),
 		json.RawMessage(`{"mechanism":"x","why_it_matters_here":"y","unknown":"z"}`),
 		json.RawMessage(`{"mechanism":3,"why_it_matters_here":"y"}`),
-		json.RawMessage(`{"mechanism":"` + strings.Repeat("界", maxEngineeringInsightRunes) + `","why_it_matters_here":"y"}`),
+		json.RawMessage(`{"mechanism":"` + strings.Repeat("界", MaxEngineeringInsightRunes) + `","why_it_matters_here":"y"}`),
 	} {
 		if insight, diagnostic := ParseOptionalEngineeringInsight(raw); insight != nil || diagnostic != "optional engineering insight omitted" {
 			t.Fatalf("invalid insight = %+v, %q", insight, diagnostic)
@@ -41,6 +41,17 @@ func TestOptionalEngineeringInsightCountsUnicodeRunesAcrossAllFields(t *testing.
 	}
 }
 
+func TestOptionalEngineeringInsightKeepsHistoricalUnevenFieldLengthsWithinAggregateLimit(t *testing.T) {
+	raw := json.RawMessage(`{"mechanism":"` + strings.Repeat("界", MaxEngineeringInsightRunes-1) + `","why_it_matters_here":" y "}`)
+	insight, diagnostic := ParseOptionalEngineeringInsight(raw)
+	if diagnostic != "" || insight == nil {
+		t.Fatalf("historical uneven insight = %+v, %q", insight, diagnostic)
+	}
+	if got, want := insight.Mechanism, strings.Repeat("界", MaxEngineeringInsightRunes-1); got != want || insight.WhyItMattersHere != "y" {
+		t.Fatalf("historical uneven insight normalized to %+v", insight)
+	}
+}
+
 func TestOptionalEngineeringInsightDiagnosticIsSourceFreeAndKeepsParserCompatibility(t *testing.T) {
 	for _, test := range []struct {
 		name         string
@@ -59,7 +70,7 @@ func TestOptionalEngineeringInsightDiagnosticIsSourceFreeAndKeepsParserCompatibi
 		{name: "malformed JSON", raw: json.RawMessage(`{"mechanism":"x",`), wantReason: OptionalEngineeringInsightInvalidShape, wantPresence: OptionalEngineeringInsightValuePresence},
 		{name: "whitespace is invalid JSON", raw: json.RawMessage(" \t "), wantReason: OptionalEngineeringInsightInvalidShape, wantPresence: OptionalEngineeringInsightValuePresence},
 		{name: "empty normalized field", raw: json.RawMessage(`{"mechanism":" \t ","why_it_matters_here":"y"}`), wantReason: OptionalEngineeringInsightEmptyRequiredField, wantPresence: OptionalEngineeringInsightValuePresence, mechanism: OptionalEngineeringInsightFieldDiagnostic{Present: true, RuneCountKnown: true}, why: OptionalEngineeringInsightFieldDiagnostic{Present: true, RuneCountKnown: true, Runes: 1}},
-		{name: "over limit", raw: json.RawMessage(`{"mechanism":"` + strings.Repeat("界", maxEngineeringInsightRunes) + `","why_it_matters_here":"y"}`), wantReason: OptionalEngineeringInsightOverLimit, wantPresence: OptionalEngineeringInsightValuePresence, mechanism: OptionalEngineeringInsightFieldDiagnostic{Present: true, RuneCountKnown: true, Runes: maxEngineeringInsightRunes}, why: OptionalEngineeringInsightFieldDiagnostic{Present: true, RuneCountKnown: true, Runes: 1}},
+		{name: "over limit", raw: json.RawMessage(`{"mechanism":"` + strings.Repeat("界", MaxEngineeringInsightRunes) + `","why_it_matters_here":"y"}`), wantReason: OptionalEngineeringInsightOverLimit, wantPresence: OptionalEngineeringInsightValuePresence, mechanism: OptionalEngineeringInsightFieldDiagnostic{Present: true, RuneCountKnown: true, Runes: MaxEngineeringInsightRunes}, why: OptionalEngineeringInsightFieldDiagnostic{Present: true, RuneCountKnown: true, Runes: 1}},
 		{name: "accepted normalized", raw: json.RawMessage(`{"mechanism":"  alpha\n beta ","why_it_matters_here":"gamma","tradeoff_or_failure_mode":null}`), wantReason: OptionalEngineeringInsightAccepted, wantPresence: OptionalEngineeringInsightValuePresence, wantInsight: true, mechanism: OptionalEngineeringInsightFieldDiagnostic{Present: true, RuneCountKnown: true, Runes: len("alpha beta")}, why: OptionalEngineeringInsightFieldDiagnostic{Present: true, RuneCountKnown: true, Runes: len("gamma")}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

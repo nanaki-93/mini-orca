@@ -54,7 +54,7 @@ Baseline: `f4e044e91c69cab47faaf7bb6e92e5fa1cb722e5`, `codex/autopilot`. QUAL-05
 
 ## RCV-02 — Constrain generated insight lengths to the parser budget
 
-- [ ] RCV-02 accepted
+- [x] RCV-02 accepted
 
 **Target files**
 - `internal/app/file_analysis.go` — add schema bounds at the shared insight definition and align selected-file instructions.
