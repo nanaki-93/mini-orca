@@ -1,12 +1,34 @@
 # Mini-Orca improvement plan
 
-Prepared 2026-09-06 against `7147ab7`, including the existing uncommitted Task 170
-evidence. **Implementation status: planned.** This change analyzes the project and
-consolidates documentation; it does not implement the backlog or authorize commits.
+Originally prepared 2026-09-06 against `7147ab7`. **Current status: delivery complete for the
+accepted scope; REL-01 and REL-02 are Complete.** The retained Task 170 evidence has been
+consolidated into the acceptance ledger. Insight qualification is user-deferred.
 
 This is the single product plan and task ledger. Task instructions are below;
 [tasks/README.md](tasks/README.md) defines agent execution and automation. Everyday
 documentation stays short; this plan is the deliberate exception.
+
+## Current scope decision — 2026-09-09
+
+The user placed engineering-insight improvement and qualification on **standby**.
+QUAL-06, RCV-07 and RCV-08 are deferred, not passed; their historical failed or
+unrun verdicts below remain intact. This decision supersedes earlier instructions
+that make insight qualification a prerequisite for REL-01 or resume recovery.
+Completed insight implementation remains available, with content quality explicitly
+unqualified; this documentation change does not disable the feature.
+
+The user subsequently requested closure of **REL-01 → REL-02**. REL-01 accepted
+the documented limited release scope, preserving source safety, consent, provider integration,
+native UI and distribution requirements. Insight usefulness/omission qualification
+is excluded from this release acceptance scope; neither insight quality nor broader
+AI factual reliability may be claimed validated by this deferral. REL-01 records
+local acceptance separately; publishing remains outside this work.
+
+The scheduler remains **Paused**. No additional model calls or recovery attempts
+are authorized. Preserve cumulative consumption of **60 development / 24
+qualification requests**, all receipts and grants, and the sealed, unused conditional
+24-case holdout. Reopening insight work requires a new user decision and explicit
+experiment scope/budget; do not replay the failed runs or weaken their gates.
 
 ## Product decision
 
@@ -265,17 +287,17 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-06 | Verify reasoning and final-schema boundary offline | REC-05 | M / high | Complete |
 | REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Complete |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Complete |
-| QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Blocked |
+| QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Blocked (standby) |
 | RCV-01 | Source-free optional-output rejection diagnostics | QUAL-05 | S / high | Complete |
 | RCV-02 | Generation field bounds aligned with parser | RCV-01 | S / high | Complete |
 | RCV-03 | General source-grounded explanation contract | RCV-02 | S / high | Complete |
 | RCV-04 | Broader development and sealed fresh qualification | RCV-03 | M / high | Complete |
 | RCV-05 | Fixed successor accounting and v2 gates | RCV-04 | M / high | Complete |
 | RCV-06 | Offline runtime validation and candidate freeze | RCV-05 | M / high | Complete |
-| RCV-07 | Twelve distinct development requests | RCV-06 | M / high | Blocked |
-| RCV-08 | Conditional fresh 24-request qualification | RCV-07 | M / high | Blocked |
-| REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
-| REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
+| RCV-07 | Twelve distinct development requests | RCV-06 | M / high | Blocked (standby) |
+| RCV-08 | Conditional fresh 24-request qualification | RCV-07 | M / high | Blocked (standby) |
+| REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03 | M / high | Complete |
+| REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Complete |
 
 Recommended first delivery: FND-01–06, AUTO-01, UI-01–04, FLOW-01, SEC-01–04.
 This yields a smaller, clearer and better bounded existing app before new breadth.
@@ -1595,7 +1617,8 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
   runtime setup, one new six-request development pilot, conditional qualification
   and release validation. It does not authorize publication, deployment or a
   further recovery after a failed pilot.
-- **Specification:** [REC-04](docs/tasks.md#rec-04--register-recovery-and-establish-runtime-compatibility-stage-1).
+- **Historical specification:** the completed runtime requirements and evidence
+  are retained in this card; `docs/tasks.md` now holds the later RCV recovery.
   Trace the installed standalone MLX-VLM route, dependencies, model identity,
   request fields, effective thinking/template, lane/context limits and total-token
   accounting without generation. Preserve existing runtime files and failed evidence.
@@ -1636,7 +1659,8 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
   tests with zero failures. The integrated read-only preflight passed against
   54 package versions, seven server hashes and nine current artifact hashes.
   No server/model was started and campaign consumption remains 36/0.
-- **Specification:** [REC-05](docs/tasks.md#rec-05--prepare-a-bounded-standalone-runtime-and-lifecycle-checks-stage-1).
+- **Historical specification:** the completed runtime requirements and evidence
+  are retained in this card; `docs/tasks.md` now holds the later RCV recovery.
 - **Target files:** `scripts/insight_runtime.py`, `scripts/tests/test_insight_runtime.py`,
   dependency pins if needed, `docs/insights-performance/README.md`, private candidate config.
 - **Accept:** explicit read-only check and owned start/stop, pinned dependencies,
@@ -1655,7 +1679,8 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
   template, top-k, raw 4096-token cap, one-lane admission, compiled grammar
   thinking transitions and ASGI final/reasoning accounting are covered offline.
   No model load/server start/generation occurred; campaign remains 36/0.
-- **Specification:** [REC-06](docs/tasks.md#rec-06--verify-the-production-request-and-channel-boundary-offline-stage-2).
+- **Historical specification:** the completed runtime requirements and evidence
+  are retained in this card; `docs/tasks.md` now holds the later RCV recovery.
 - **Target files:** runtime conformance tests, only demonstrated typed client/config
   compatibility changes and their tests, private `verify.py`, release evidence.
 - **Accept:** actual route uses the thinking-aware grammar processor; synthetic
@@ -1676,7 +1701,8 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
   Wire model `./models/qwen38-v12-thinking-schema-1` uses the same audited
   artifacts with thinking enabled and low reasoning effort. QUAL-05 runtime
   handoff and frozen pilot collection are now in progress; scheduler stays Paused.
-- **Specification:** [REC-07](docs/tasks.md#rec-07--prepare-exactly-six-additional-development-slots-stage-3).
+- **Historical specification:** the completed runtime requirements and evidence
+  are retained in this card; `docs/tasks.md` now holds the later RCV recovery.
 - **Target files:** `internal/app/engineering_insight_runner.go` and tests,
   `cmd/engineering-insight-eval/main.go` and tests, PLAN and evaluation documentation.
 - **Authorization:** exactly one sixth grant `qual05-qwen38-thinking-schema-1`,
@@ -2036,6 +2062,9 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
+- **Current disposition — 2026-09-09: user-deferred, on standby.** Preserve the
+  execution history below; do not dispatch or retry this task.
+
 - **Current verdict — 2026-09-09: Blocked (qualification failed).** The authorized
   `qual06-qwen38-medium-1` run used the unchanged passing medium candidate at
   `d9c98ca9af47705482833bd5033b962e79fd411e`. All 24 attempts completed without
@@ -2157,11 +2186,17 @@ this recovery authorization, including after a passing RCV-08 verdict.
 
 ### RCV-07 — Run twelve distinct development requests
 
+- **Current disposition — 2026-09-09: user-deferred, on standby.** Preserve the
+  execution history below; do not dispatch or retry this task.
+
 - **Final verdict — 2026-09-09: Blocked.** All twelve responses were complete, but only two substantive insights were useful; every control emitted an insight and five finals contained critical false claims. The owned runtime is stopped and the original LM Studio session is restored. See [the scored evidence](docs/RELEASE_ACCEPTANCE.md#v2-development-screen-verdict--2026-09-09).
 - **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-07 target files, implementation rules and exact verification command.
 - **Coordinator only:** require RCV-06 accepted, live lease, fixed successor authorization and fresh owned runtime readiness. Run twelve once, score every whole final independently, and stop on any screen failure. Do not start qualification unless all development gates pass.
 
 ### RCV-08 — Run conditional fresh qualification and stop
+
+- **Current disposition — 2026-09-09: user-deferred, on standby.** Preserve the
+  execution history below; do not dispatch or retry this task.
 
 - **Current state: Blocked, not run.** The development gate failed. Its conditional 24-call allocation remains untouched; no release, new model, further prompt pass or replacement run is authorized.
 - **Specification:** [approved recovery task](docs/tasks.md); follow the RCV-08 target files, implementation rules and exact verification command.
@@ -2175,6 +2210,11 @@ the failed screen cannot be repaired by rerunning or weakening its gates.
 
 ### REL-01 — Validate the selected release end to end
 
+- **Accepted — 2026-09-09.** Fresh Q, JBR 25 package/native startup and Linux arm64
+  image/health checks passed with independent review. The final acceptance record
+  limits live-provider evidence to the RCV-07 local selected-file request contract;
+  remote/mixed live compatibility and insight quality remain unclaimed.
+
 - Run Q on the integrated candidate, then desktop packaging with JBR 25. Smoke the
   actual bundle and its required `java.net.http`/`jdk.unsupported` modules. Claim only
   platforms tested; if Docker remains supported, build/health-check it separately.
@@ -2183,8 +2223,10 @@ the failed screen cannot be repaired by rerunning or weakening its gates.
   local/offline/remote scopes and denied consent. Include Security/measurements only
   once in this release's implemented scope. Use no secrets in captures or records.
 - Repeat native checks for surfaces changed since UI-04, not every historical
-  capture. Resume after QUAL-06 passes the frozen qualification contract above;
-  reuse its provider/quality evidence instead of spending another live budget.
+  capture. Proceed under the user-approved scope deferral above; QUAL-06 is no
+  longer a dependency. Reuse applicable recorded provider integration evidence,
+  without treating failed insight qualification as a pass. Any additional live
+  provider requests require explicit scope and budget authorization.
   Run Q on the final integrated candidate and rebuild/smoke affected distributions
   if implementation changes invalidated their prior evidence. QUAL-06 does not
   replace end-to-end source-safety and native/package acceptance.
@@ -2230,11 +2272,20 @@ the failed screen cannot be repaired by rerunning or weakening its gates.
   of those same responses with the repair gave 8/8 usable summaries, comprising
   3 complete and 5 with omitted explanations. This is offline replay evidence,
   not an 8/8 fresh-run qualification or proof of insight quality. Trivial controls
-  still generated generic insights. REL-01 remains Blocked pending QUAL-01–06,
-  which own the repair, bounded runs and useful/appropriately omitted insights. No config migration
+  still generated generic insights. At that historical checkpoint, REL-01 was
+  Blocked pending QUAL-01–06. The current scope decision above supersedes that
+  dependency while retaining the failed quality evidence. No config migration
   is needed; the prompt version invalidates prior file-analysis cache entries.
 
 ### REL-02 — Finish code/document retirement and handoff
+
+- **Accepted — 2026-09-09.** Independent review accepted the final documentation
+  consolidation and Docker-context fix. Unique UI/Task 170 evidence is in the
+  acceptance ledger; three superseded files retired (265 → 262 tracked files,
+  20 → 17 Markdown files). Local links/anchors, plan dependencies and whitespace
+  checks passed. Q passed for the final code/config candidate; no source-code
+  change followed. No migration or project reset is required. All 52 required
+  tasks are Complete; three insight tasks remain user-approved standby deferrals.
 
 - Review integrated diff/dependencies for dead helpers, duplicate rules, leftover
   preview state, unused compatibility readers, misleading docs and debug output.
@@ -2255,8 +2306,8 @@ the failed screen cannot be repaired by rerunning or weakening its gates.
 
 This cleanup removes completed task files, duplicate plans/prompts, obsolete UI
 baselines and superseded release prose after carrying open obligations above.
-It retains the existing uncommitted Task 170 evidence, current contrast results,
-and test-consumed API/version artifacts. The detailed old code is in Git history;
+It consolidates the preserved Task 170 execution provenance in the acceptance
+ledger and retains current contrast results and test-consumed API/version artifacts. The detailed old code is in Git history;
 runtime compatibility is not maintained by keeping an archive in the repository.
 
 Keep README for use, CONFIG for supported fields, desktop README for runtime and

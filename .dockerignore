@@ -7,3 +7,6 @@ desktop/.kotlin/
 desktop/build/
 config.yaml
 .env
+
+# Local project metadata, agent worktrees, model artifacts and evaluation records.
+.mini-orca/

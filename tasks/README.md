@@ -2,8 +2,8 @@
 
 [PLAN.md](../PLAN.md) is the only backlog/status ledger. Each task card includes
 entry points, dependencies, acceptance and tests. Do not create one file per task.
-The retained [Task 170 note](170_ui_precision_accessibility.md) is working evidence,
-not a second execution queue; old execution prompts are superseded.
+The [retained Task 170 provenance](../docs/RELEASE_ACCEPTANCE.md#retained-task-170-execution-provenance)
+is consolidated historical evidence, not a second execution queue.
 
 ## Recommended workflow
 
@@ -218,7 +218,18 @@ resumes the selected state. Do not change the committed base between recovery an
 that dispatch; resume identity checks still apply. Do not reuse an authorization
 ID or delete state files to obtain another attempt.
 
-## Scheduled insight recovery
+## Current scheduling scope — 2026-09-09
+
+The user deferred engineering-insight recovery and qualification. Follow the current
+scope decision in `PLAN.md`: QUAL-06, RCV-07 and RCV-08 remain Blocked (standby),
+REL-01 and REL-02 are Complete; no active delivery task remains. The scheduler
+stays Paused. A future wake must not reopen completed or deferred work. The historical recovery instructions below and unchecked
+items in `docs/tasks.md` must not trigger work. Preserve durable failed-run state,
+receipts, budgets and the sealed holdout; no new provider calls are authorized.
+When resumed, reconcile existing task state before dispatch and retain the normal
+review/validation gates. This scope decision does not authorize publishing.
+
+## Historical scheduled insight recovery
 
 The 2026-09-08 recovery queue is REC-01 → REC-02 → REC-03 → QUAL-05 → QUAL-06
 in `PLAN.md`. The user's request to prepare and schedule this recovery covers the
