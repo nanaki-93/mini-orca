@@ -978,46 +978,12 @@ func recoveryRunnerTestConfig(t *testing.T, runID string, client EngineeringInsi
 	return cfg
 }
 
-func v11RunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
-	cfg := runnerTestConfig(t, runID, EngineeringInsightDevelopmentRunMode, 3, client)
-	cfg.CandidateID = v11DevelopmentCandidateID
-	cfg.Model = v11DevelopmentModel
-	cfg.Profile.Model = v11DevelopmentModel
-	cfg.PromptVersion = v11DevelopmentPromptVersion
-	return cfg
-}
-
 func v12RunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
 	cfg := runnerTestConfig(t, runID, EngineeringInsightDevelopmentRunMode, 3, client)
 	cfg.CandidateID = v12DevelopmentCandidateID
 	cfg.Model = v12DevelopmentModel
 	cfg.Profile.Model = v12DevelopmentModel
 	cfg.PromptVersion = v12DevelopmentPromptVersion
-	return cfg
-}
-
-func thinkingOffRunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
-	cfg := v12RunnerTestConfig(t, runID, client)
-	cfg.CandidateID = thinkingOffDevelopmentCandidateID
-	cfg.Profile.ReasoningEffort = thinkingOffDevelopmentReasoningEffort
-	return cfg
-}
-
-func thinkingSchemaRunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
-	cfg := v12RunnerTestConfig(t, runID, client)
-	cfg.CandidateID = thinkingSchemaDevelopmentCandidateID
-	cfg.Model = thinkingSchemaDevelopmentModel
-	cfg.Profile.Model = thinkingSchemaDevelopmentModel
-	cfg.Profile.ReasoningEffort = thinkingSchemaDevelopmentReasoningEffort
-	return cfg
-}
-
-func mediumRunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
-	cfg := thinkingSchemaRunnerTestConfig(t, runID, client)
-	cfg.CandidateID = mediumDevelopmentCandidateID
-	cfg.Model = mediumDevelopmentModel
-	cfg.Profile.Model = mediumDevelopmentModel
-	cfg.Profile.ReasoningEffort = mediumDevelopmentReasoningEffort
 	return cfg
 }
 
