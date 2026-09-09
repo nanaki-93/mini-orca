@@ -136,6 +136,16 @@ prior probe used an incomplete key. Sampling, schema and all quality gates stay
 unchanged; no qualification starts before a passing reviewed pilot. See
 [thinking-disabled recovery](../RELEASE_ACCEPTANCE.md#thinking-disabled-recovery--2026-09-09).
 
+
+The thinking-disabled pilot delivered **6/6 usable, complete final answers**, but
+only **1/4 substantive attempts supplied a useful insight** (7/8). Both controls
+intentionally omitted insights and no critical false claims were found. Both locking repetitions
+and one allocation repetition omitted insights, so QUAL-05 remains Blocked.
+All **36 development requests are consumed / 0 qualification**, and the scheduler
+remains Paused. The final-delivery failure did not recur; insight coverage is now
+the remaining pilot blocker. See the
+[thinking-disabled verdict](../RELEASE_ACCEPTANCE.md#thinking-disabled-pilot-verdict--2026-09-09).
+
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
 bound to that digest. An independent reviewer compares private prose with the case

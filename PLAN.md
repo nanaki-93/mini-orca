@@ -260,7 +260,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Running |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Blocked |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1912,6 +1912,29 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
   request also close reasoning. No generation was used for preparation. The
   fifth grant is applied once; consumption is still 30 development / 0 qualification.
   Frozen manifest SHA-256: `2c61bdbfdb6b3edded2f1c685d5900b280642f12fa437bf3c1e8116b9e9a47ed`.
+
+
+- **Thinking-off pilot result — 2026-09-09:** both frozen batches completed at
+  `157bdbe0c187826d288b4e137d3036c675b6f9b0`. All **6/6 answers are usable and
+  complete**, with normal stop, valid usage metadata and no timeout. Exact digest
+  joins to the original provider envelopes confirm nonempty final content and
+  empty reasoning channels in all six. This candidate resolves the previously
+  observed final-delivery failure in this pilot.
+- Insight coverage still fails: both locking repetitions and the second
+  allocation repetition omit insights. Only the first allocation repetition
+  includes one, so the four-substantive-insight gate cannot pass. Do not conflate
+  successful JSON delivery with substantive insight coverage or relax the gate.
+- Fresh independent whole-prose scoring found the first allocation insight at
+  **7/8 (2/2/1/2)**, the three substantive omissions at **0/8**, both controls
+  intentionally omitted and **zero critical false claims**. Official useful
+  coverage is **1/4**, below the unchanged 4/4 gate. Both scored receipts passed
+  exact-identity offline validation; all six evaluator response files were then
+  discarded and absence verified. No examples were retained. Source-free audit
+  and detailed dimensions are recorded in release acceptance.
+- This pilot consumed exactly six requests and 1,723 completion tokens. All
+  **36 development requests are consumed / 0 qualification**. Keep QUAL-05
+  Blocked, QUAL-06 Pending, REL-01 Blocked and the scheduler Paused. No additional
+  request, grant, model switch or runtime experiment is included in this approval.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
