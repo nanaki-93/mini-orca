@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 func TestRunEvaluationModeCompletesOfflineDevelopmentLifecycle(t *testing.T) {
@@ -226,9 +227,24 @@ func TestGrantDevelopmentModeRequiresOneUniqueAuthorization(t *testing.T) {
 	if err := runEvaluationMode(v12); err == nil {
 		t.Fatal("structured-output grant replay was accepted")
 	}
+	if err := os.WriteFile(filepath.Join(state, "campaign.json"), []byte(`{"development_requests":30,"qualification_requests":0}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	thinkingOff := []string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-thinking-off-1", "-requests", "6", "-candidate-id", "qwen38-v12-thinking-off-1", "-model", "qwen/qwen3.8-27b", "-prompt-version", "file-analysis-v12"}
+	wrongThinkingOffPrompt := append([]string(nil), thinkingOff...)
+	wrongThinkingOffPrompt[len(wrongThinkingOffPrompt)-1] = "wrong-prompt"
+	if err := runEvaluationMode(wrongThinkingOffPrompt); err == nil {
+		t.Fatal("wrong thinking-off prompt was accepted")
+	}
+	if err := runEvaluationMode(thinkingOff); err != nil {
+		t.Fatal(err)
+	}
+	if err := runEvaluationMode(thinkingOff); err == nil {
+		t.Fatal("thinking-off grant replay was accepted")
+	}
 }
 
-func TestRunEvaluationModeUsesStructuredOutputGrantForExactlyFinalSixRequests(t *testing.T) {
+func TestRunEvaluationModeUsesThinkingOffGrantForExactlyFinalSixRequests(t *testing.T) {
 	root := t.TempDir()
 	git(t, root, "init")
 	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".mini-orca/\n"), 0600); err != nil {
@@ -240,11 +256,20 @@ func TestRunEvaluationModeUsesStructuredOutputGrantForExactlyFinalSixRequests(t 
 	var calls int
 	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		calls++
+		var chat llm.ChatRequest
+		if err := json.NewDecoder(request.Body).Decode(&chat); err != nil {
+			t.Errorf("decode provider request: %v", err)
+			return
+		}
+		if chat.ReasoningEffort != "none" || chat.ResponseFormat == nil {
+			t.Errorf("thinking-off request = %+v", chat)
+			return
+		}
 		_ = json.NewEncoder(writer).Encode(map[string]any{"model": "qwen/qwen3.8-27b", "choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": `{"purpose":"summary","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`}, "finish_reason": "stop"}}, "usage": map[string]int{"completion_tokens": 7}})
 	}))
 	defer provider.Close()
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	configText := "model_scopes:\n  analyze: {api_base_url: " + provider.URL + ", model: qwen/qwen3.8-27b}\n  bug: {api_base_url: " + provider.URL + ", model: qwen/qwen3.8-27b}\n  function: {api_base_url: " + provider.URL + ", model: qwen/qwen3.8-27b}\n"
+	configText := "model_scopes:\n  analyze: {api_base_url: " + provider.URL + ", model: qwen/qwen3.8-27b}\n  bug: {api_base_url: " + provider.URL + ", model: qwen/qwen3.8-27b, reasoning_effort: none}\n  function: {api_base_url: " + provider.URL + ", model: qwen/qwen3.8-27b}\n"
 	if err := os.WriteFile(configPath, []byte(configText), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -298,11 +323,22 @@ func TestRunEvaluationModeUsesStructuredOutputGrantForExactlyFinalSixRequests(t 
 	if calls != 18+6 {
 		t.Fatalf("structured-output provider calls = %d, want 24", calls)
 	}
-	if err := run(app.EngineeringInsightDevelopmentRunMode, "campaign-nine", "qwen38-v12-structured-1"); err == nil || calls != 24 {
-		t.Fatalf("thirty-first campaign request dispatched: %v, calls=%d", err, calls)
+	if err := runEvaluationMode([]string{"-mode", "grant-development", "-root", root, "-authorization-id", "qual05-qwen38-thinking-off-1", "-requests", "6", "-candidate-id", "qwen38-v12-thinking-off-1", "-model", "qwen/qwen3.8-27b", "-prompt-version", "file-analysis-v12"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, runID := range []string{"campaign-nine", "campaign-ten"} {
+		if err := run(app.EngineeringInsightDevelopmentRunMode, runID, "qwen38-v12-thinking-off-1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 24+6 {
+		t.Fatalf("thinking-off provider calls = %d, want 30", calls)
+	}
+	if err := run(app.EngineeringInsightDevelopmentRunMode, "campaign-eleven", "qwen38-v12-thinking-off-1"); err == nil || calls != 30 {
+		t.Fatalf("thirty-seventh campaign request dispatched: %v, calls=%d", err, calls)
 	}
 	campaign, err := os.ReadFile(filepath.Join(state, "campaign.json"))
-	if err != nil || string(campaign) != `{"development_requests":30,"qualification_requests":0}` {
+	if err != nil || string(campaign) != `{"development_requests":36,"qualification_requests":0}` {
 		t.Fatalf("final campaign = %s, %v", campaign, err)
 	}
 }
