@@ -494,10 +494,6 @@ func TestEngineeringInsightRunnerAppliesStructuredOutputGrantOnlyAtRequestsTwent
 	if err := GrantEngineeringInsightV12DevelopmentBudget(cfg.Root, v12DevelopmentAuthorizationID, 6, v12DevelopmentCandidateID, v12DevelopmentModel, v12DevelopmentPromptVersion); err != nil {
 		t.Fatal(err)
 	}
-	if err := GrantEngineeringInsightV12DevelopmentBudget(cfg.Root, "extra-grant", 6, v12DevelopmentCandidateID, v12DevelopmentModel, v12DevelopmentPromptVersion); err == nil {
-		t.Fatal("fifth development grant was accepted")
-	}
-
 	wrongCandidate := v12RunnerTestConfig(t, "v12-wrong-candidate", client)
 	wrongCandidate.Root = cfg.Root
 	wrongCandidate.CandidateID = "another-candidate"
@@ -541,6 +537,99 @@ func TestEngineeringInsightRunnerAppliesStructuredOutputGrantOnlyAtRequestsTwent
 	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
 	if err != nil || campaign.DevelopmentRequests != structuredDevelopmentRequestCap || campaign.QualificationRequests != 0 {
 		t.Fatalf("structured-output campaign counters: %+v, %v", campaign, err)
+	}
+}
+
+func TestEngineeringInsightRunnerAppliesThinkingOffGrantOnlyAtRequestsThirtyThroughThirtyFive(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := thinkingOffRunnerTestConfig(t, "thinking-off-one", client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{
+		{AuthorizationID: "extension-one", Requests: 6},
+		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
+		{AuthorizationID: v11DevelopmentAuthorizationID, Requests: 6, CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion},
+		{AuthorizationID: v12DevelopmentAuthorizationID, Requests: 6, CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion},
+	}}
+	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: structuredDevelopmentRequestCap}); err != nil {
+		t.Fatal(err)
+	}
+	for _, identity := range []engineeringInsightDevelopmentGrantIdentity{
+		{CandidateID: "wrong-candidate", Model: thinkingOffDevelopmentModel, PromptVersion: thinkingOffDevelopmentPromptVersion},
+		{CandidateID: thinkingOffDevelopmentCandidateID, Model: "wrong-model", PromptVersion: thinkingOffDevelopmentPromptVersion},
+		{CandidateID: thinkingOffDevelopmentCandidateID, Model: thinkingOffDevelopmentModel, PromptVersion: "wrong-prompt"},
+	} {
+		if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, thinkingOffDevelopmentAuthorizationID, 6, identity.CandidateID, identity.Model, identity.PromptVersion); err == nil {
+			t.Fatal("thinking-off grant accepted the wrong identity")
+		}
+	}
+	if err := GrantEngineeringInsightV12DevelopmentBudget(cfg.Root, thinkingOffDevelopmentAuthorizationID, 6, thinkingOffDevelopmentCandidateID, thinkingOffDevelopmentModel, thinkingOffDevelopmentPromptVersion); err == nil {
+		t.Fatal("thinking-off grant accepted the v12 route")
+	}
+	if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, thinkingOffDevelopmentAuthorizationID, 6, thinkingOffDevelopmentCandidateID, thinkingOffDevelopmentModel, thinkingOffDevelopmentPromptVersion); err != nil {
+		t.Fatal(err)
+	}
+
+	wrongCandidate := thinkingOffRunnerTestConfig(t, "thinking-off-wrong-candidate", client)
+	wrongCandidate.Root = cfg.Root
+	wrongCandidate.CandidateID = "another-candidate"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongCandidate); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong thinking-off candidate dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongModel := thinkingOffRunnerTestConfig(t, "thinking-off-wrong-model", client)
+	wrongModel.Root = cfg.Root
+	wrongModel.Profile.Model = "another-model"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongModel); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong thinking-off model dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongReasoning := thinkingOffRunnerTestConfig(t, "thinking-off-wrong-reasoning", client)
+	wrongReasoning.Root = cfg.Root
+	wrongReasoning.Profile.ReasoningEffort = "low"
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongReasoning); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("wrong thinking-off reasoning dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	wrongDestination := thinkingOffRunnerTestConfig(t, "thinking-off-wrong-destination", client)
+	wrongDestination.Root = cfg.Root
+	wrongDestination.Profile.APIBaseURL = "https://provider.example/v1"
+	wrongDestination.ConfirmRemoteProvider = true
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), wrongDestination); err == nil || client.calls.Load() != 0 {
+		t.Fatalf("remote thinking-off destination dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	for _, runID := range []string{"thinking-off-one", "thinking-off-two"} {
+		valid := thinkingOffRunnerTestConfig(t, runID, client)
+		valid.Root = cfg.Root
+		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), valid); err != nil {
+			t.Fatalf("thinking-off run %q: %v", runID, err)
+		}
+	}
+	if client.calls.Load() != 6 {
+		t.Fatalf("thinking-off grant dispatched %d requests, want 6", client.calls.Load())
+	}
+	if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, thinkingOffDevelopmentAuthorizationID, 6, thinkingOffDevelopmentCandidateID, thinkingOffDevelopmentModel, thinkingOffDevelopmentPromptVersion); err == nil {
+		t.Fatal("thinking-off grant replay was accepted")
+	}
+	if err := GrantEngineeringInsightThinkingOffDevelopmentBudget(cfg.Root, "sixth-grant", 6, thinkingOffDevelopmentCandidateID, thinkingOffDevelopmentModel, thinkingOffDevelopmentPromptVersion); err == nil {
+		t.Fatal("sixth development grant was accepted")
+	}
+	exhausted := thinkingOffRunnerTestConfig(t, "thinking-off-exhausted", client)
+	exhausted.Root = cfg.Root
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
+		t.Fatalf("thirty-seventh request dispatched: %v, calls=%d", err, client.calls.Load())
+	}
+	campaign, err := loadEvaluationCampaign(filepath.Join(directory, "campaign.json"))
+	if err != nil || campaign.DevelopmentRequests != thinkingOffDevelopmentRequestCap || campaign.QualificationRequests != 0 {
+		t.Fatalf("thinking-off campaign counters: %+v, %v", campaign, err)
+	}
+	if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(`{"grants":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), exhausted); err == nil || client.calls.Load() != 6 {
+		t.Fatalf("corrupt thinking-off ledger dispatched: %v, calls=%d", err, client.calls.Load())
 	}
 }
 
@@ -960,6 +1049,13 @@ func v12RunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRu
 	cfg.Model = v12DevelopmentModel
 	cfg.Profile.Model = v12DevelopmentModel
 	cfg.PromptVersion = v12DevelopmentPromptVersion
+	return cfg
+}
+
+func thinkingOffRunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
+	cfg := v12RunnerTestConfig(t, runID, client)
+	cfg.CandidateID = thinkingOffDevelopmentCandidateID
+	cfg.Profile.ReasoningEffort = thinkingOffDevelopmentReasoningEffort
 	return cfg
 }
 
