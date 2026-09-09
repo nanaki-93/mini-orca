@@ -39,6 +39,46 @@ func TestFileAnalysisInsightUsesCompleteGroundedAdviceOrOmission(t *testing.T) {
 	}
 }
 
+func TestFileAnalysisInsightDiagnosticsKeepRejectionsIsolatedByLocation(t *testing.T) {
+	target := project.IndexFile{Path: "main.go", Language: "Go"}
+	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional.","engineering_insight":{"mechanism":"risk","why_it_matters_here":"local"}}],"suggestions":[{"title":"Keep behavior","summary":"No change.","engineering_insight":{"mechanism":"  ","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}],"symbol_explanations":{},"engineering_insight":{"mechanism":"top","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}`
+	parsed, err := parseSemanticAnalysis(output, target, "package main\nfunc Run() {}")
+	if err != nil || parsed.Purpose != "Explains." || parsed.EngineeringInsight == nil || parsed.Risks[0].EngineeringInsight != nil || parsed.Suggestions[0].EngineeringInsight != nil {
+		t.Fatalf("optional rejection changed parent data: %+v, %v", parsed, err)
+	}
+	diagnosticRecord := fileAnalysisOptionalDiagnostics(output, target, "package main\nfunc Run() {}")
+	diagnostics := diagnosticRecord.insights
+	if len(diagnostics) != 3 {
+		t.Fatalf("diagnostic count = %d", len(diagnostics))
+	}
+	if diagnostics[0].Location != "top_level" || diagnostics[0].Index != nil || diagnostics[0].Reason != project.OptionalEngineeringInsightAccepted || diagnostics[0].Mechanism.Runes != 3 {
+		t.Fatalf("top-level diagnostic = %+v", diagnostics[0])
+	}
+	if diagnostics[1].Location != "risk" || diagnostics[1].Index == nil || *diagnostics[1].Index != 0 || diagnostics[1].Reason != project.OptionalEngineeringInsightEmptyRequiredField || !diagnostics[1].Mechanism.Present || diagnostics[1].TradeoffOrFailureMode.Present {
+		t.Fatalf("risk diagnostic = %+v", diagnostics[1])
+	}
+	if diagnostics[2].Location != "suggestion" || diagnostics[2].Index == nil || *diagnostics[2].Index != 0 || diagnostics[2].Reason != project.OptionalEngineeringInsightEmptyRequiredField || !diagnostics[2].Mechanism.Present || diagnostics[2].Mechanism.Runes != 0 {
+		t.Fatalf("suggestion diagnostic = %+v", diagnostics[2])
+	}
+	state := evaluateOptionalState(output, target, "package main\nfunc Run() {}", parsed)
+	if !state.insightRejected || state.nonInsightDegraded() {
+		t.Fatalf("insight rejection was not isolated: %+v", state)
+	}
+}
+
+func TestEvaluationOptionalStateSeparatesSymbolAndTaskSpecDegradation(t *testing.T) {
+	target := project.IndexFile{Path: "main.go", Language: "Go"}
+	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"}}],"suggestions":[],"symbol_explanations":{"unselected":"Not a declaration."}}`
+	parsed, err := parseSemanticAnalysis(output, target, "package main\nfunc Run() {}")
+	if err != nil || len(parsed.Risks) != 1 || parsed.Risks[0].TaskSpec != nil || len(parsed.SymbolExplanations) != 0 {
+		t.Fatalf("parent optional data was not isolated: %+v, %v", parsed, err)
+	}
+	state := evaluateOptionalState(output, target, "package main\nfunc Run() {}", parsed)
+	if state.insight != "omitted" || state.insightRejected || !state.degraded() || !state.symbolExplanationsDegraded || len(state.taskSpecDegradedRiskIndices) != 1 || state.taskSpecDegradedRiskIndices[0] != 0 {
+		t.Fatalf("non-insight degradation was merged into insight rejection: %+v", state)
+	}
+}
+
 func TestFileAnalysisInsightPreservesQualifiedUnknownCalleeBehavior(t *testing.T) {
 	target := project.IndexFile{Path: "verify.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Verify", Signature: "func Verify(ctx context.Context, verifier Verifier, user string) error", Confidence: "exact", AtomicTarget: true}}}
 	source := "package cases\n\nimport \"context\"\n\ntype Verifier interface { Check(context.Context, string) error }\n\nfunc Verify(ctx context.Context, verifier Verifier, user string) error {\n\treturn verifier.Check(ctx, user)\n}\n"
@@ -162,9 +202,9 @@ func TestFileAnalysisNestedInsightSchemaPreservesParentAndCompleteness(t *testin
 			if (actual != nil) != test.nestedRetained {
 				t.Fatalf("nested insight retained=%t, want %t", actual != nil, test.nestedRetained)
 			}
-			optional, degraded := evaluationOptionalState(content, target, source, parsed)
-			if optional != test.optional || (!degraded) != test.complete {
-				t.Fatalf("optional=%q degraded=%t, want optional=%q complete=%t", optional, degraded, test.optional, test.complete)
+			state := evaluateOptionalState(content, target, source, parsed)
+			if state.insight != test.optional || (!state.degraded()) != test.complete {
+				t.Fatalf("optional=%q degraded=%t, want optional=%q complete=%t", state.insight, state.degraded(), test.optional, test.complete)
 			}
 		})
 	}

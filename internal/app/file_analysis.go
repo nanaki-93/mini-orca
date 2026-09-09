@@ -513,14 +513,30 @@ func parseSemanticSuggestions(suggestions []semanticAnalysisSuggestion) []projec
 // Its diagnostic lets the evaluation runner distinguish omitted prose from a
 // supplied insight that production would drop.
 func parseFileAnalysisEngineeringInsight(raw json.RawMessage) (*project.EngineeringInsight, string) {
-	insight, diagnostic := project.ParseOptionalEngineeringInsight(raw)
-	if diagnostic != "" || insight == nil {
-		return insight, diagnostic
+	insight, diagnostic := parseFileAnalysisEngineeringInsightDiagnostic(raw)
+	if diagnostic.Reason == project.OptionalEngineeringInsightAbsent || diagnostic.Reason == project.OptionalEngineeringInsightNull {
+		return nil, ""
 	}
-	if insight.TradeoffOrFailureMode == "" || insight.TransferableLesson == "" {
+	if diagnostic.Reason != project.OptionalEngineeringInsightAccepted {
 		return nil, "optional engineering insight omitted"
 	}
 	return insight, ""
+}
+
+// parseFileAnalysisEngineeringInsightDiagnostic applies the selected-file
+// requirement that all four insight fields be present and non-empty. The
+// shared project parser remains the single source for JSON shape,
+// normalization, and aggregate-size validation.
+func parseFileAnalysisEngineeringInsightDiagnostic(raw json.RawMessage) (*project.EngineeringInsight, project.OptionalEngineeringInsightDiagnostic) {
+	insight, diagnostic := project.ParseOptionalEngineeringInsightDiagnostic(raw)
+	if diagnostic.Reason != project.OptionalEngineeringInsightAccepted {
+		return nil, diagnostic
+	}
+	if !diagnostic.TradeoffOrFailureMode.Present || !diagnostic.TradeoffOrFailureMode.RuneCountKnown || diagnostic.TradeoffOrFailureMode.Runes == 0 || !diagnostic.TransferableLesson.Present || !diagnostic.TransferableLesson.RuneCountKnown || diagnostic.TransferableLesson.Runes == 0 {
+		diagnostic.Reason = project.OptionalEngineeringInsightEmptyRequiredField
+		return nil, diagnostic
+	}
+	return insight, diagnostic
 }
 
 func limitFileAnalysisInsights(report **project.EngineeringInsight, risks []project.Finding, suggestions []project.Suggestion) {
