@@ -32,7 +32,7 @@ var ErrRedirectRejected = errors.New("provider redirect rejected")
 // caller cannot turn an unsupported request format into repeated attempts.
 var ErrRequestRejected = errors.New("provider rejected request")
 
-// ErrStructuredRequestRejected reports a non-retryable 400 response to a
+// ErrStructuredRequestRejected reports a non-retryable 400 or 422 response to a
 // request that included a strict schema. The response does not identify which
 // request field the provider rejected, so callers must not infer that it was
 // specifically the response format.
@@ -290,7 +290,7 @@ func joinAPIURL(apiBaseURL, path string) (string, error) {
 }
 
 func providerStatusError(status int) error {
-	if status == http.StatusBadRequest {
+	if status == http.StatusBadRequest || status == http.StatusUnprocessableEntity {
 		return fmt.Errorf("llm client: %w (status %d)", ErrRequestRejected, status)
 	}
 	return fmt.Errorf("llm client: provider returned status %d", status)

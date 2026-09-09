@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -288,6 +290,29 @@ func TestEngineeringInsightRunnerTerminatesAfterPermanentStructuredRequestReject
 				t.Fatalf("terminal resume changed campaign: %+v, %v", campaign, err)
 			}
 		})
+	}
+}
+
+func TestEngineeringInsightRunnerTerminatesAfterBackendValidationRejection(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests.Add(1)
+		writer.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = writer.Write([]byte(`{"detail":"invalid max_tokens"}`))
+	}))
+	defer server.Close()
+	cfg := runnerTestConfig(t, "backend-validation-rejection", EngineeringInsightDevelopmentRunMode, 3, nil)
+	cfg.Profile.APIBaseURL = server.URL
+	cfg.Client = llm.NewEvaluationClient(cfg.Profile)
+	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
+	if !errors.Is(err, ErrEngineeringInsightRunTerminated) || requests.Load() != 1 || receipt.Consumption.Requests != 1 || len(receipt.Attempts) != 1 {
+		t.Fatalf("backend validation result: receipt=%+v requests=%d err=%v", receipt, requests.Load(), err)
+	}
+	if receipt.Attempts[0].Outcome != "failed" || receipt.Attempts[0].FinishReason != "error" {
+		t.Fatalf("backend validation attempt = %+v", receipt.Attempts[0])
+	}
+	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); !errors.Is(err, ErrEngineeringInsightRunTerminated) || requests.Load() != 1 {
+		t.Fatalf("backend validation rejection replayed: requests=%d err=%v", requests.Load(), err)
 	}
 }
 

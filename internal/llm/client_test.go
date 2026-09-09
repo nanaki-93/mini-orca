@@ -241,16 +241,31 @@ func TestChatWithJSONSchemaSerializesStrictFormatAndEscapedSchema(t *testing.T) 
 	}
 }
 
-func TestChatWithJSONSchemaRejectsProviderBadRequestWithoutRetry(t *testing.T) {
-	var requests atomic.Int32
-	client := NewClient(testProfile("https://provider.example/v1", ""))
-	client.transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
-		requests.Add(1)
-		return &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(strings.NewReader(`{"error":"unsupported format"}`)), Request: request}, nil
+func TestChatWithJSONSchemaRejectsProviderValidationWithoutRetry(t *testing.T) {
+	for _, status := range []int{http.StatusBadRequest, http.StatusUnprocessableEntity} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			var requests atomic.Int32
+			client := NewClient(testProfile("https://provider.example/v1", ""))
+			client.transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+				requests.Add(1)
+				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(`{"error":"unsupported format"}`)), Request: request}, nil
+			})
+			_, err := client.ChatWithJSONSchema(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}, JSONSchema{Name: "answer", Schema: json.RawMessage(`{"type":"object"}`)})
+			if !errors.Is(err, ErrStructuredRequestRejected) || requests.Load() != 1 || strings.Contains(err.Error(), "unsupported format") {
+				t.Fatalf("schema rejection = %v, requests=%d", err, requests.Load())
+			}
+		})
+	}
+
+	var ordinaryRequests atomic.Int32
+	ordinary := NewClient(testProfile("https://provider.example/v1", ""))
+	ordinary.transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		ordinaryRequests.Add(1)
+		return &http.Response{StatusCode: http.StatusUnprocessableEntity, Body: io.NopCloser(strings.NewReader(`{"detail":"invalid request"}`)), Request: request}, nil
 	})
-	_, err := client.ChatWithJSONSchema(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}}, JSONSchema{Name: "answer", Schema: json.RawMessage(`{"type":"object"}`)})
-	if !errors.Is(err, ErrStructuredRequestRejected) || requests.Load() != 1 || strings.Contains(err.Error(), "unsupported format") {
-		t.Fatalf("schema rejection = %v, requests=%d", err, requests.Load())
+	_, err := ordinary.Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}})
+	if !errors.Is(err, ErrRequestRejected) || errors.Is(err, ErrStructuredRequestRejected) || ordinaryRequests.Load() != 1 || strings.Contains(err.Error(), "invalid request") {
+		t.Fatalf("ordinary validation rejection = %v, requests=%d", err, ordinaryRequests.Load())
 	}
 }
 
