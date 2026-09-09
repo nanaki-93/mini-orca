@@ -601,6 +601,67 @@ changed. The fifth grant has been applied once; usage remains 30 development /
 preflights, validation and progress are retained in
 `.mini-orca/autopilot/coordinator/QUAL-05-thinking-off.json`.
 
+
+## Thinking-disabled pilot verdict — 2026-09-09
+
+**QUAL-05 remains Blocked; the scheduler stays Paused.** Both batches completed
+at frozen base `157bdbe0c187826d288b4e137d3036c675b6f9b0`, following successful
+per-batch runtime/manifest verification. All **6/6 final answers were usable and
+complete**, with normal stop, valid usage metadata and no timeout. Exact
+whole-response digest joins to the original LM Studio completion envelopes
+confirm nonempty `content` and empty reasoning channels in all six responses.
+The earlier empty-final failure did not recur with this frozen candidate.
+
+| Batch | Case | Insight state | Completion tokens | Latency |
+| --- | --- | --- | ---: | ---: |
+| dev1 | locking | omitted | 260 | 19.594 s |
+| dev1 | allocation | present | 459 | 29.233 s |
+| dev1 | control | omitted | 237 | 16.267 s |
+| dev2 | locking | omitted | 464 | 27.786 s |
+| dev2 | allocation | omitted | 230 | 13.722 s |
+| dev2 | control | omitted | 73 | 4.344 s |
+
+The pilot consumed exactly **six requests and 1,723 completion tokens**. Median
+latency was 17.931 seconds and maximum 29.233 seconds. All **36 development
+requests are consumed / 0 qualification**. There were no additional probes,
+retries, tuning or model calls after collection. The 24 qualification slots
+remain untouched and conditional on a passing development pilot.
+
+Insight coverage fails independently of delivery: only one of four substantive
+attempts contains an insight. Both locking repetitions and the second allocation
+repetition omit it. The frozen quality threshold requires all four substantive
+attempts to provide eligible insights scoring at least 6/8. Usable parent summaries
+cannot substitute for those missing insights, and control cases must still omit
+insights intentionally.
+
+
+Fresh independent Terra scoring reviewed all six delivered final summaries and
+verified all whole-response digest joins. The first allocation insight scores
+**2/2/1/2 = 7/8** for correctness / local relevance / trade-off clarity / useful
+verification. It identifies locally relevant slice growth and useful allocation
+measurement, but incompletely describes the allocation trade-offs. Both locking
+attempts and the second allocation attempt score **0/0/0/0** because no insight
+was delivered. Both controls intentionally omit insights and score **2/2/2/2**
+under their omission rubric. No critical false claims were found in any final
+summary. Final gates: **6/6 usable, 6/6 complete, 1/4 useful substantive,
+2/2 intentional controls, zero critical false claims**. The substantive gate
+fails; no best-of selection or threshold relaxation is applied.
+
+The coordinator stored both strict digest-bound score maps and passed both
+offline receipt validators with the exact frozen identities. All six evaluator
+response files were then discarded and their absence verified. No prose example
+was retained. Source-free receipts, audits and validator reports remain; existing
+LM Studio logs were inspected in place for channel joins and were not purged.
+
+The channel audit and independently validated score maps/audit are retained under
+`.mini-orca/autopilot/engineering-insight-evaluation/qual05-qwen38-thinking-off-scoring/`.
+The accepted grant code and full validation are unchanged from the prepilot
+record above; successful code validation does not qualify model insight quality.
+The model's explicit thinking-off setting remains in the current LM Studio server
+session. It is not a saved model-default change; a restart or effective-config
+change must be detected by manifest verification before any future dispatch.
+No qualification candidate was promoted and the scheduler must remain Paused.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)
