@@ -65,6 +65,14 @@ FIXED_REQUESTS = {
         "top_p": 0.95,
         "top_k": 20,
     },
+    "./models/qwen38-v13-recovery-1": {
+        "model": "./models/qwen38-v13-recovery-1",
+        "temperature": 1,
+        "max_tokens": 4096,
+        "reasoning_effort": "medium",
+        "top_p": 0.95,
+        "top_k": 20,
+    },
 }
 # Kept for tests and tooling that inspect the historical low-reasoning profile.
 REQUIRED_REQUEST = FIXED_REQUESTS["./models/qwen38-v12-thinking-schema-1"]

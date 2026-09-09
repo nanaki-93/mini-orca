@@ -1039,6 +1039,79 @@ These files are temporarily retained to preserve ongoing work. Their dated
 baseline sections describe history. REL-02 consolidates current reproduction and
 remaining checks here before retiring redundant history.
 
+## V2 recovery offline preparation — 2026-09-09
+
+The user approved RCV-01–08 with “go for it”: **twelve new development requests
+and conditional twenty-four fresh qualification requests**, with no probes,
+retries or further model/prompt experiment. The failed medium qualification above
+remains unchanged. Historical consumption is 48 development /24 qualification;
+the original campaign, seven grants and seventeen scored receipts are immutable.
+No new local-model request has been issued during implementation.
+
+RCV-01–05 are independently reviewed and integrated through `2a59918`. The
+selected-file prompt now explains visible mechanisms and current-behavior tests
+without pilot-specific lock/append paragraphs. Optional diagnostics retain only
+reason enums, locations, presence and normalized rune counts, bound to response
+digests; no source or generated prose enters them. All four generated insight
+fields use a shared 250-character schema limit. The parser keeps its existing
+1,000-normalized-rune aggregate limit and does not truncate rejected text.
+
+The new fixed identity is `qwen38-v13-recovery-1`, prompt `file-analysis-v13`,
+corpus/protocol `engineering-insight-v2`, successor period
+`engineering-insight-v2-recovery-1`. Production schema SHA-256 is
+`63a92e42e57607a002a0f4ca4fdb4ccc3080fe38293a72a0647c33181a4d1cba`.
+Development corpus SHA-256 is
+`2370397f665af4aefa0ab8db0dab7e0a0e961930b63594e0fc894fabed6a2431`;
+separately authored/reviewed sealed qualification SHA-256 is
+`7cb16ac34b337e172e97a14aa639ef00bec77fbc77085028c01e6e1fe4183229`.
+The twelve development cases contain eight substantive cases and four controls;
+the twenty-four held-out cases contain sixteen substantive cases and eight
+controls. The tuning coordinator has not read qualification source or anchors.
+
+The candidate uses an independent filesystem clone of the unchanged pinned
+Python 3.11.16 / MLX-VLM 0.7.0 / MLX 0.32.2 / LLguidance 1.7.6 environment,
+with the same local Qwen3.8-27B 4-bit model artifacts. The full retained runtime
+file inventory matches; production profile resolution and tokenizer-only template
+checks pass without loading weights. Medium thinking template digest remains
+`494e280281307944033f74025f48cddd84b0d3d0a1d756842e70b861b6f6641b`.
+Limits remain 4,096 total generated tokens, 300 seconds per attempt, 16,384 input,
+119,552 runtime context, one lane, temperature 1, top-p .95 and top-k 20.
+Default seed behavior is unchanged. Distinct cases and duplicate reporting avoid
+claiming that repeated identical samples establish independent reliability.
+
+RCV-06 offline checks passed: `make check` (including Go race/vet/dispatcher
+checks and all 327 desktop tests), `make quality`, runtime unit discovery
+(18 passed, one opt-in installed-runtime skip), and `git diff HEAD --check`.
+The opt-in installed-runtime check was executed separately and passed with the
+actual pinned interpreter and tokenizer, zero generation requests and no loaded
+weights. It proves omission/null, exact 250/251 multibyte Unicode field limits
+independently at every supported insight location, thinking-before-schema,
+top-k, total completion cap and one-lane admission. The unchanged runtime emitted
+only a Starlette TestClient deprecation warning; no dependencies were upgraded.
+
+Review caught shared mutable objects in the per-location negative test; the
+repaired test uses independent objects and passed installed conformance again.
+The first full quality gate caught four unused historical test helpers from
+RCV-05. They were removed in reviewed `2a59918`; both full gates then passed on
+source diff `d7f2d8e4d327d8e3dc2c11a3970a2bcdb8251f769c5edd50e55bedbbc7e3d371`.
+The final documentation/status update changes no validated code.
+
+Exact installed conformance command, from the RCV-06 worktree:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 /Users/marcoandreose/DEV/lab/mini-orca/.mini-orca/autopilot/engineering-insight-evaluation/qwen38-v13-recovery-1/venv/bin/python scripts/tests/insight_runtime_conformance.py --candidate-dir /Users/marcoandreose/DEV/lab/mini-orca/.mini-orca/autopilot/engineering-insight-evaluation/qwen38-v13-recovery-1 --source-root /Users/marcoandreose/DEV/lab/mini-orca/.mini-orca/autopilot/worktrees/rcv-06
+```
+
+After integrating the reviewed documentation, the coordinator records that exact
+clean HEAD in immutable private `offline-manifest.json`, with source, schema,
+corpus, artifact, dependency, configuration and proof hashes and the fixed CLI
+commands from `docs/insights-performance/README.md`. The successor authorization
+must bind the same HEAD. A separate immutable readiness manifest adds the fresh
+owned PID and zero-request readback before dispatch. Neither earlier manifests
+nor the offline freeze are overwritten. Fresh owned-process readiness is a
+separate gate; a stopped runtime's historical manifest does not establish it.
+The scheduler remains Paused and REL-01 remains outside this recovery approval.
+
 ## FND-01 reconciliation
 
 FND-01 started at `d0a7cc9`. The only pre-existing worktree edit was the coordinator's

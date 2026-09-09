@@ -91,12 +91,12 @@ class InsightRuntimeTest(unittest.TestCase):
             with self.assertRaisesRegex(runtime.RuntimeError, "request must exactly"):
                 runtime.read_config(directory)
 
-    def test_read_config_accepts_only_the_fixed_medium_profile(self) -> None:
+    def test_read_config_accepts_only_the_fixed_recovery_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             required = directory / "resolved-requirements.txt"
             required.write_text("mlx-vlm==0.7.0 --hash=sha256:abc\n", encoding="utf-8")
-            request = runtime.FIXED_REQUESTS["./models/qwen38-v12-medium-1"]
+            request = runtime.FIXED_REQUESTS["./models/qwen38-v13-recovery-1"]
             config = {
                 "schema_version": 1, "host": "127.0.0.1", "port": 1235,
                 "python": "venv/bin/python", "python_version": "3.11.16",
@@ -116,6 +116,15 @@ class InsightRuntimeTest(unittest.TestCase):
             config["request"] = {**request, "reasoning_effort": "xhigh"}
             config_path.write_text(json.dumps(config), encoding="utf-8")
             with self.assertRaisesRegex(runtime.RuntimeError, "request must exactly"):
+                runtime.read_config(directory)
+            config["request"] = {**request, "max_tokens": 4095}
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(runtime.RuntimeError, "request must exactly"):
+                runtime.read_config(directory)
+            config["wire_model"] = "./models/qwen38-unapproved-1"
+            config["request"] = {**request, "model": config["wire_model"]}
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            with self.assertRaisesRegex(runtime.RuntimeError, "approved fixed candidate"):
                 runtime.read_config(directory)
 
     def test_read_config_rejects_environment_drift(self) -> None:

@@ -152,7 +152,7 @@ Baseline: `f4e044e91c69cab47faaf7bb6e92e5fa1cb722e5`, `codex/autopilot`. QUAL-05
 
 ## RCV-06 — Review, validate and freeze the replacement candidate offline
 
-- [ ] RCV-06 accepted
+- [x] RCV-06 accepted
 
 **Target files**
 - `scripts/insight_runtime.py` — bind only the approved replacement identity if the existing fixed profile table requires it.
