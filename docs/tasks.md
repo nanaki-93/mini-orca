@@ -127,6 +127,7 @@ Baseline: `f4e044e91c69cab47faaf7bb6e92e5fa1cb722e5`, `codex/autopilot`. QUAL-05
 
 **Target files**
 - `internal/app/file_analysis.go` — bump the final selected-file prompt identity to v13 alongside version-aware runner/test changes.
+- `internal/app/file_analysis_test.go` — advance the current prompt/cache-version assertion with the v13 identity.
 - `internal/app/engineering_insight_runner.go` — fixed successor accounting and exact authorized dispatch identity.
 - `internal/app/engineering_insight_runner_test.go` — reservation, exhaustion, migration and resume cases.
 - `internal/app/engineering_insight_evaluation.go` — explicitly versioned v2 schedule/expectation validation.
