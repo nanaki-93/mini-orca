@@ -266,3 +266,25 @@ git diff --check
 ```
 
 Native bundle startup and review/Apply/Undo smoke checks are additional manual acceptance steps; passing shell commands alone cannot satisfy them.
+
+## Medium-reasoning recovery — 2026-09-09
+
+The user authorized option 1: six development calls using the accepted Qwen3.8
+4-bit artifacts and pinned MLX-VLM runtime, changing reasoning effort from low
+to medium. New candidate `qwen38-v12-medium-1`, wire identifier
+`./models/qwen38-v12-medium-1`, grant `qual05-qwen38-medium-1`. Preserve all
+historical receipts and six grants; append exactly six slots at consumption 42,
+ceiling 48. Qualification remains untouched. Keep v12 prompt/schema/corpus,
+temperature 1, top-p 0.95, top-k 20, input 16,384, context 119,552, completion
+4,096 including reasoning, 300 seconds, one lane and no retries.
+
+Review and validate grant, runtime profile selection and installed-runtime
+medium-template/ASGI conformance offline before applying the grant. Freeze new
+private identity/proofs; retain previous candidate unchanged. Collect three cases
+twice with no tuning, then independent scoring and verdict review, receipt
+validation and response disposal. All substantive attempts must reach 6/8, both
+controls omit insight, and the whole final response must contain zero critical
+false claims. Restore the original model session after collection. Keep scheduler
+Paused; do not start another model experiment or qualification as part of this
+six-call request. On pass record an eligible candidate for a subsequent
+qualification continuation; on failure preserve Blocked with exact evidence.

@@ -264,7 +264,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-05 | Prepare bounded standalone runtime lifecycle | REC-04 | M / high | Complete |
 | REC-06 | Verify reasoning and final-schema boundary offline | REC-05 | M / high | Complete |
 | REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Complete |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Blocked |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Running |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1703,17 +1703,16 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### QUAL-05 — Run and independently score the bounded development pilot
 
-- **Current verdict — thinking-schema, 2026-09-09: Blocked.** REC-04–07 Complete;
-  six fixed requests delivered complete final answers. Locking scored 6/8 twice,
-  allocation 8/8 twice; both controls omitted insights. Both locking summaries
-  falsely guarantee FIFO mutex service: the numeric gate passes but the separate
-  zero-critical-claim gate fails. Two independent reviews verified the evidence;
-  responses were discarded. **42/42 development, 0/24 qualification**; QUAL-06
-  Pending, REL-01 Blocked, scheduler Paused. Runtime stopped and original LM Studio
-  thinking-off settings restored. No further generation, replay or historical
-  correction allowance applies; recovery needs new bounded authorization. Full
-  frozen identity, scores, timing, duplicate-output limits, privacy and rollback
-  evidence: `docs/RELEASE_ACCEPTANCE.md`, thinking-schema pilot verdict.
+- **Current recovery — medium reasoning, 2026-09-09: Running.** User authorized
+  six new requests for `qwen38-v12-medium-1`, grant `qual05-qwen38-medium-1`.
+  Change only low → medium effort; retain accepted Qwen3.8 4-bit weights, pinned
+  runtime, v12 prompt/schema/corpus and all limits. Implement/review the fixed
+  seventh grant (42 → 48) and offline medium-template/route proof before collection.
+  Run three development cases twice, no tuning/retry/probe; fresh scoring and
+  independent verdict review. No alternate model or further grant is authorized.
+  Scheduler remains Paused. Current consumption 42 development / 0 qualification.
+  The preceding low-effort pilot failed on two false FIFO guarantees despite 6/6
+  complete responses; full historical evidence remains in release acceptance.
 
 - **Shared input:** read the qualification contract above before work; its budgets,
   sample counts, privacy rules and pass criteria apply to this card.
