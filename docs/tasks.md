@@ -76,7 +76,7 @@ Baseline: `f4e044e91c69cab47faaf7bb6e92e5fa1cb722e5`, `codex/autopilot`. QUAL-05
 
 ## RCV-03 — Replace pilot-specific instructions with a general explanation contract
 
-- [ ] RCV-03 accepted
+- [x] RCV-03 accepted
 
 **Target files**
 - `internal/app/file_analysis.go` — replace specialized guidance and simplify duplication; defer the single final prompt-version bump to RCV-05.
