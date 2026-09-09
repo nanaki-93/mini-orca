@@ -721,6 +721,37 @@ zero model access; the client must classify it as permanent before the pilot.
 Campaign consumption remains **36 development / 0 qualification**; the new grant
 is unapplied and the scheduler is Paused.
 
+### REC-06 offline conformance acceptance
+
+Reviewed code `4b6fd63407863126f12e809ab3f2202a427abb24` classifies the
+installed backend's HTTP 422 validation response as permanent. Fake HTTP proves
+one durable reservation, immediate termination and no replay; ordinary chat
+retains its separate rejection type and provider body privacy.
+
+After one Terra repair, fresh review accepted exact diff
+`b34f4f2c7bb606d095fc28169bf8ed678c7d61ced91919af3adb65f678cbec21`.
+The 18 explicit offline runtime tests passed without skips; eight private
+preflight tests and full coordinator `make check` also passed, including 327
+desktop tests. The portable suite skips only the explicitly opt-in installed
+runtime check; that check was run separately against the pinned environment.
+
+Conformance imports the installed runtime, verifies module identities, compiles
+the production schema, exercises its thinking-aware masks and reset, and checks
+the actual local low-effort template, top-k mask, one-lane admission and raw
+4096-token stopping boundary. The actual in-process ASGI route separates reasoning
+from final content and preserves length termination. Reported completion usage
+includes reasoning text but subtracts recognized thinking delimiters; raw timing
+and metrics include those delimiters. Keep those token totals distinct.
+
+The coordinator also verified all 19,514 installed runtime files and all nine
+model-artifact files. A synthetic low-effort template render has SHA-256
+`2742d9d57edd31554803dc27273d278fb0f64bbf80492ad6ca7423c96690b791`.
+No weights, live generation or server startup were used. Two early failed
+synthetic engine-test processes were reaped; the opt-in test now has a bounded
+30-second timeout. These offline results establish compatibility, not model
+quality. Campaign remains **36 development / 0 qualification**, the sixth grant
+is unapplied, and the scheduler remains Paused while REC-07 is prepared.
+
 Retained working evidence, including pre-existing user edits:
 
 - [Task 170 execution record](../tasks/170_ui_precision_accessibility.md)

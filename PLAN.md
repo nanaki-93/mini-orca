@@ -262,8 +262,8 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
 | REC-04 | Establish standalone runtime compatibility | REC-03, QUAL-03 | S / high | Complete |
 | REC-05 | Prepare bounded standalone runtime lifecycle | REC-04 | M / high | Complete |
-| REC-06 | Verify reasoning and final-schema boundary offline | REC-05 | M / high | Running |
-| REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Pending |
+| REC-06 | Verify reasoning and final-schema boundary offline | REC-05 | M / high | Complete |
+| REC-07 | Authorize six runtime-bound development slots | REC-06 | M / high | Running |
 | QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-07 | S / high | Blocked |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
@@ -1639,10 +1639,14 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### REC-06 — Verify thinking and structured final output offline
 
-- **Status:** Running; REC-05 independently accepted. An in-process ASGI check
-  confirmed HTTP 422 for invalid parameters with model access disabled; the
-  production client currently treats only HTTP 400 as permanent rejection.
-  REC-06 must cover 422 without dispatching further cases or retries.
+- **Status:** Complete. Reviewed code `4b6fd63407863126f12e809ab3f2202a427abb24`
+  classifies HTTP 422 as permanent rejection and proves one reservation/no replay.
+  After one Terra repair, fresh review accepted installed-runtime conformance:
+  18 explicit tests with no skips, eight private preflight tests, and full
+  coordinator `make check` including 327 desktop tests passed. Actual local
+  template, top-k, raw 4096-token cap, one-lane admission, compiled grammar
+  thinking transitions and ASGI final/reasoning accounting are covered offline.
+  No model load/server start/generation occurred; campaign remains 36/0.
 - **Specification:** [REC-06](docs/tasks.md#rec-06--verify-the-production-request-and-channel-boundary-offline-stage-2).
 - **Target files:** runtime conformance tests, only demonstrated typed client/config
   compatibility changes and their tests, private `verify.py`, release evidence.
@@ -1655,7 +1659,9 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
 
 ### REC-07 — Prepare one runtime-bound six-request grant
 
-- **Status:** Pending; depends on accepted REC-06.
+- **Status:** Running; REC-06 independently accepted. Grant remains unapplied.
+  Wire model is `./models/qwen38-v12-thinking-schema-1`, mapped to the same
+  audited local artifacts; thinking is enabled with low reasoning effort.
 - **Specification:** [REC-07](docs/tasks.md#rec-07--prepare-exactly-six-additional-development-slots-stage-3).
 - **Target files:** `internal/app/engineering_insight_runner.go` and tests,
   `cmd/engineering-insight-eval/main.go` and tests, PLAN and evaluation documentation.
