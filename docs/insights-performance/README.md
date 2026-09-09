@@ -124,6 +124,18 @@ thinking and verifies the effective template before a separately authorized pilo
 API `reasoning_effort: none` alone has not established compatibility. See the
 [structured pilot verdict](../RELEASE_ACCEPTANCE.md#v12-structured-pilot-verdict--2026-09-09).
 
+
+The user then authorized exactly six thinking-disabled development requests.
+Grant `qual05-qwen38-thinking-off-1`, candidate `qwen38-v12-thinking-off-1`, model
+`qwen/qwen3.8-27b`, unchanged `file-analysis-v12`, reasoning effort `none` and
+loopback structured dispatch extend the ceiling to **36**, only after 30 consumed.
+Historical grants/receipts remain intact; no sixth grant or 37th request is
+permitted. Explicit model thinking is off, and corrected read-only checks verify
+both the effective template and the isolated full generic thinking flag. The
+prior probe used an incomplete key. Sampling, schema and all quality gates stay
+unchanged; no qualification starts before a passing reviewed pilot. See
+[thinking-disabled recovery](../RELEASE_ACCEPTANCE.md#thinking-disabled-recovery--2026-09-09).
+
 The receipt records each scheduled case/repetition/attempt, its source-free response
 digest, outcome, token consumption, finish reason, elapsed time and score. A score is
 bound to that digest. An independent reviewer compares private prose with the case
