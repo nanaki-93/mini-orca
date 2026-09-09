@@ -260,7 +260,7 @@ ledger before implementation. The default is one writer, even for ready tasks.
 | REC-01 | Preserve explicit zero-temperature provider requests | QUAL-04, AUTO-05 | S / medium | Complete |
 | REC-02 | Account for one model-bound six-request recovery grant | REC-01, QUAL-03 | M / high | Complete |
 | REC-03 | Prepare and verify the frozen local reasoning candidate | REC-02 | M / high | Complete |
-| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Running |
+| QUAL-05 | Repeated six-request recovery pilot and candidate freeze | QUAL-04, REC-03 | S / high | Blocked |
 | QUAL-06 | Independent 24-request qualification verdict | QUAL-05 | M / high | Pending |
 | REL-01 | End-to-end, native and distribution acceptance | AUTO-01, UI-04, LEARN-02, SEC-01, SEC-08, PERF-03, QUAL-06 | M / high | Blocked |
 | REL-02 | Final code/doc retirement and handoff | REL-01, AUTO-02 | S / medium | Pending |
@@ -1835,6 +1835,39 @@ prerequisites and unchanged pass criteria are recorded in QUAL-05 below.
   SHA-256 is `9d4261b8ec84a1296ee2247269385127bad5e09d8f3dd7ae77e5cffda3f77f64`.
   Installed grammar/tokenizer checks passed all ten synthetic cases without
   inference. Collection will freeze the clean documentation commit as pilot base.
+
+
+- **Structured pilot result — 2026-09-09:** both frozen batches finished at
+  `8fffeebc7394d4a0e5b746a2b4bbd5a3781bc259`; all six responses were malformed
+  with normal `stop`, no timeouts and valid usage metadata. Exact whole-response
+  digest joins to the original LM Studio envelopes establish **empty final
+  content in all six**, with generated material only in `reasoning_content`.
+  Therefore usable/complete coverage is **0/6**, substantive useful coverage
+  **0/4**, and successful control omissions **0/2**. No reasoning-only material
+  may be promoted as a final answer or retained as a successful example.
+- Installed runtime inspection supports a likely failure mechanism: the BatchedVision path
+  applies its JSON grammar immediately, while the verified low-thinking prompt
+  ends in an open `<think>` channel. The installed path does not use the
+  thinking-aware grammar wrapper. This strongly indicates a runtime/format
+  compatibility problem; the observed empty final delivery motivates testing
+  channel configuration before another insight-prompt adjustment.
+- The proposed next recovery is a new candidate with **explicit model thinking
+  disabled**, the same schema, and a fresh bounded pilot after authorization.
+  A read-only synthetic template check closes reasoning before generation with
+  the model's `enableThinking=false` override. Merely mapping API
+  `reasoning_effort: none` to generic false did not establish this effective
+  template; verify the actual template before dispatch. No saved setting was
+  changed, and no additional provider request was made for this diagnosis.
+- Fresh independent scoring confirmed all six diagnostic payloads are schema
+  JSON, with no critical false claims; all official dimensions remain zero.
+  Both scored receipts passed offline validation, then all six evaluator response
+  files were discarded and absence verified. Source-free audits and historical
+  receipts remain. Full verdict and diagnostic scores are in release acceptance.
+- All **30 development requests are consumed / 0 qualification**; this pilot
+  consumed six requests and 2,168 completion tokens including reasoning.
+  QUAL-05 remains Blocked, QUAL-06 Pending, REL-01 Blocked, scheduler Paused.
+  No further grant or live retry is included. Full code validation passed before
+  the pilot; that does not establish compatibility of this model/runtime profile.
 
 ### QUAL-06 — Qualify the frozen candidate and issue the release verdict
 
