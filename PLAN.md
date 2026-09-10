@@ -19,7 +19,7 @@ Use the current checkout on codex/autopilot and preserve unrelated edits. On 202
 | CLN-01 | Make the reachability gate enforce its result | Complete |
 | CLN-02 | Remove confirmed unused desktop methods | Complete |
 | CLN-03 | Reuse durable storage for evaluation metadata | Complete |
-| CLN-04 | Handle Analyze-all persistence failures explicitly | Pending |
+| CLN-04 | Handle Analyze-all persistence failures explicitly | Complete |
 | CLN-05 | Handle Performance persistence failures explicitly | Pending |
 | CLN-06 | Preserve asynchronous scan failure diagnostics | Pending |
 | CLN-07 | Share file-analysis validation and evaluation diagnostics | Pending |
@@ -29,7 +29,9 @@ Use the current checkout on codex/autopilot and preserve unrelated edits. On 202
 | CLN-11 | Separate current documentation from historical execution records | Pending |
 | CLN-12 | Validate the cleanup as one release-preserving change | Pending |
 
-**Next:** CLN-04. **Active agents:** none. **Accepted 2026-09-10:** CLN-03 reused shared atomic storage for evaluation metadata, preserving sanitized errors and immutable evidence. Fresh review found no actionable issues; coordinator passed exact focused tests, all Go tests, race tests, formatting, vet, Go quality, and diff checks. No repairs, migrations, or live evaluation calls; accepted before the later batch-commit authorization. Candidate SHA-256: 6267407558d67a09c17753e26526274c205343bdbcd7fed52336e7958b6ae9a8. Evidence: .mini-orca/autopilot/cleanup/CLN-03/acceptance.json.
+**Next:** CLN-05. **Active agents:** none. **Accepted 2026-09-10:** CLN-04 stops Analyze-all dispatch on persistence failure, retains sanitized progress errors and completed reports, and requires durable explicit recovery while preserving attempt budgets and replacement identity. Fresh review found no actionable issues; coordinator passed exact Analyze-all race tests, all Go tests, race tests, formatting, vet, Go quality, and diff checks. Two focused preparation corrections; no migrations or live evaluation calls. Candidate SHA-256: 79efd26ba3059477fe28f5ce3e9c275bea26aa2cd6041a618b597af5c9d6ff7a. Evidence: .mini-orca/autopilot/cleanup/CLN-04/acceptance.json.
+
+**Accepted 2026-09-10:** CLN-03 reused shared atomic storage for evaluation metadata, preserving sanitized errors and immutable evidence. Fresh review found no actionable issues; coordinator passed exact focused tests, all Go tests, race tests, formatting, vet, Go quality, and diff checks. No repairs, migrations, or live evaluation calls; accepted before the later batch-commit authorization. Candidate SHA-256: 6267407558d67a09c17753e26526274c205343bdbcd7fed52336e7958b6ae9a8. Evidence: .mini-orca/autopilot/cleanup/CLN-03/acceptance.json.
 
 **Accepted 2026-09-10:** CLN-02 removed four unreferenced desktop methods and redundant nullable test operations. Fresh review found no actionable issues. Writer executed desktop tests (327 passing) and quality; coordinator reran both exact commands successfully (up-to-date) and verified test XML and diff checks. No repairs; accepted before the later batch-commit authorization. Candidate SHA-256: 1713a9ddcb438a3e21037d8d47b8e8b163740c4955156535ef09422c0acd5817. Evidence: .mini-orca/autopilot/cleanup/CLN-02/acceptance.json.
 

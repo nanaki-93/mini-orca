@@ -13,12 +13,14 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -1047,7 +1049,10 @@ func TestPersistAnalyzeAllJobKeepsNewerStaleState(t *testing.T) {
 
 	delayed := cloneAnalyzeAllJob(running)
 	service.invalidateAnalyzeAll()
-	if err := service.persistAnalyzeAllJob(delayed); err != nil {
+	finished := service.analysisAll.beginPersist()
+	err := service.persistAnalyzeAllJobSerialized(delayed, false)
+	finished()
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -1366,4 +1371,309 @@ func newSemanticAnalysisServiceFixture(t *testing.T, baseURL string, analysisSec
 		t.Fatal(err)
 	}
 	return service, root
+}
+
+func TestAnalyzeAllPersistenceFailureStopsUntilExplicitRecovery(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		failedWrite  int32
+		wantRequests int32
+	}{
+		{"first admission", 2, 0},
+		{"first result", 3, 1},
+		{"second admission", 4, 1},
+		{"completion", 6, 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var requests, writes atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
+			}))
+			defer server.Close()
+			service, root := newSemanticAnalysisService(t, server.URL, 0)
+			if err := os.WriteFile(filepath.Join(root, "second.go"), []byte("package main\nfunc Second() {}\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.Reindex(); err != nil {
+				t.Fatal(err)
+			}
+			failed, release := make(chan struct{}), make(chan struct{})
+			var releaseOnce sync.Once
+			releaseWrite := func() { releaseOnce.Do(func() { close(release) }) }
+			defer releaseWrite()
+			var rejectRecovery atomic.Bool
+			privateCause := errors.New("private filesystem path and provider/source detail")
+			service.writeAnalyzeAllJob = func(path string, data []byte, mode os.FileMode) error {
+				if writes.Add(1) == test.failedWrite {
+					close(failed)
+					<-release
+					return privateCause
+				}
+				if rejectRecovery.Load() {
+					return privateCause
+				}
+				return storage.WriteFile(path, data, mode)
+			}
+			if _, err := service.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{MaxFiles: 2}, false); err != nil {
+				t.Fatal(err)
+			}
+			waitForTestSignal(t, failed, "injected analyze-all write failure")
+			service.analysisAll.mu.Lock()
+			done := service.analysisAll.workerDone
+			service.analysisAll.mu.Unlock()
+			if done == nil {
+				t.Fatal("worker exited before its blocked write")
+			}
+			before, err := os.ReadFile(filepath.Join(root, ".mini-orca", "sessions", "analyze-all.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			releaseWrite()
+			waitForTestSignal(t, done, "faulted analyze-all worker exit")
+			if requests.Load() != test.wantRequests {
+				t.Fatalf("requests after failed write = %d, want %d", requests.Load(), test.wantRequests)
+			}
+			for i := 0; i < 2; i++ {
+				if job, err := service.AnalyzeAllJob(); job != nil || err != errAnalyzeAllPersistence {
+					t.Fatalf("progress after failed write = %+v, %v", job, err)
+				}
+			}
+			service.analysisAll.mu.Lock()
+			volatile := cloneAnalyzeAllJob(service.analysisAll.job)
+			fault := service.analysisAll.persistenceFault
+			service.analysisAll.mu.Unlock()
+			if volatile.Status != analysisAllStatePaused || !errors.Is(fault, privateCause) {
+				t.Fatalf("failure was not retained: status=%s fault=%v", volatile.Status, fault)
+			}
+			for i, file := range volatile.Files {
+				if int32(i) < test.wantRequests {
+					if file.Status != analysisAllFileCompleted || file.Attempts != 1 {
+						t.Fatalf("completed file lost: %+v", file)
+					}
+					cached, err := service.CachedFileAnalysis(file.Path)
+					if err != nil || cached.Status != project.AnalysisStatusFresh {
+						t.Fatalf("completed report unavailable: %+v, %v", cached, err)
+					}
+				} else if file.Status != analysisAllFilePending || file.Attempts != 0 {
+					t.Fatalf("undispatched file charged: %+v", file)
+				}
+			}
+			if _, err := service.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{}, false); err != errAnalyzeAllPersistence {
+				t.Fatalf("start bypassed persistence fault: %v", err)
+			}
+			after, err := os.ReadFile(filepath.Join(root, ".mini-orca", "sessions", "analyze-all.json"))
+			if err != nil || string(after) != string(before) {
+				t.Fatalf("failed write replaced durable progress: %v", err)
+			}
+			rejectRecovery.Store(true)
+			if _, err := service.ResumeAnalyzeAll(context.Background(), false); err != errAnalyzeAllPersistence {
+				t.Fatalf("failed recovery = %v", err)
+			}
+			if requests.Load() != test.wantRequests {
+				t.Fatal("failed recovery dispatched another request")
+			}
+			rejectRecovery.Store(false)
+			if _, err := service.ResumeAnalyzeAll(context.Background(), false); err != nil {
+				t.Fatal(err)
+			}
+			job := completedAnalyzeAllWorker(t, service)
+			if requests.Load() != 2 || job.Files[0].Attempts != 1 || job.Files[1].Attempts != 1 {
+				t.Fatalf("recovery replayed or skipped work: requests=%d job=%+v", requests.Load(), job)
+			}
+			persisted, err := loadAnalyzeAllJob(root)
+			if err != nil || persisted.Status != analysisAllStateCompleted {
+				t.Fatalf("recovered completion is not durable: %+v, %v", persisted, err)
+			}
+		})
+	}
+}
+
+func TestAnalyzeAllObsoletePersistenceCannotFaultReplacement(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := &AnalyzeAllJob{root: root, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Status: analysisAllStateRunning, CreatedAt: time.Now().UTC()}
+	service.analysisAll.job = old
+	failed, release := make(chan struct{}), make(chan struct{})
+	service.writeAnalyzeAllJob = func(string, []byte, os.FileMode) error {
+		close(failed)
+		<-release
+		return errors.New("private old-project storage failure")
+	}
+	result := make(chan error, 1)
+	go func() {
+		finished := service.analysisAll.beginPersist()
+		defer finished()
+		result <- service.persistAnalyzeAllJobSerialized(cloneAnalyzeAllJob(old), false)
+	}()
+	waitForTestSignal(t, failed, "old job persistence")
+	// Deliberately replace the pointer even with identical wire identity, as an
+	// obsolete writer must never attribute its storage failure to a new job.
+	replacement := cloneAnalyzeAllJob(old)
+	service.analysisAll.mu.Lock()
+	service.analysisAll.job = replacement
+	service.analysisAll.mu.Unlock()
+	close(release)
+	if err := <-result; !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("obsolete persistence = %v", err)
+	}
+	service.analysisAll.mu.Lock()
+	fault, status := service.analysisAll.persistenceFault, service.analysisAll.job.Status
+	service.analysisAll.mu.Unlock()
+	if fault != nil || status != analysisAllStateRunning {
+		t.Fatalf("old writer poisoned replacement: status=%s fault=%v", status, fault)
+	}
+}
+
+func TestAnalyzeAllExplicitResumeAfterRestartPreservesAttemptBudget(t *testing.T) {
+	for _, attempts := range []int{1, 2} {
+		t.Run(fmt.Sprint(attempts), func(t *testing.T) {
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
+			}))
+			defer server.Close()
+			service, root := newSemanticAnalysisService(t, server.URL, 0)
+			analysis, err := service.manager.Analysis()
+			if err != nil {
+				t.Fatal(err)
+			}
+			job := &AnalyzeAllJob{root: root, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Status: analysisAllStateRunning, MaxRetries: 1, Files: []AnalyzeAllFileJob{{Path: "main.go", Status: analysisAllFileRunning, Attempts: attempts}}}
+			if err := service.storeAnalyzeAllJob(job); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := service.AnalyzeAllJob()
+			if err != nil || loaded.Files[0].Attempts != attempts || requests.Load() != 0 {
+				t.Fatalf("restart changed progress or dispatched: %+v, %v", loaded, err)
+			}
+			if _, err := service.ResumeAnalyzeAll(context.Background(), false); err != nil {
+				t.Fatal(err)
+			}
+			completed := completedAnalyzeAllWorker(t, service)
+			wantRequests := int32(2 - attempts)
+			if requests.Load() != wantRequests || completed.Files[0].Attempts != 2 {
+				t.Fatalf("restart accounting = %+v requests=%d, want %d", completed, requests.Load(), wantRequests)
+			}
+		})
+	}
+}
+
+func completedAnalyzeAllWorker(t *testing.T, service *Service) *AnalyzeAllJob {
+	t.Helper()
+	service.analysisAll.mu.Lock()
+	done := service.analysisAll.workerDone
+	service.analysisAll.mu.Unlock()
+	if done != nil {
+		waitForTestSignal(t, done, "analyze-all worker completion")
+	}
+	job, err := service.AnalyzeAllJob()
+	if err != nil || job == nil || job.Status != analysisAllStateCompleted {
+		t.Fatalf("completed job = %+v, %v", job, err)
+	}
+	return job
+}
+
+func TestAnalyzeAllInvalidationFailureDoesNotPoisonNewProject(t *testing.T) {
+	started := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, err := analyzeAllRequestPath(r)
+		if err != nil {
+			http.Error(w, "invalid test request", http.StatusBadRequest)
+			return
+		}
+		if path == "main.go" {
+			started <- struct{}{}
+			<-r.Context().Done()
+			return
+		}
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
+	}))
+	defer server.Close()
+	service, oldRoot := newSemanticAnalysisService(t, server.URL, 0)
+	service.writeAnalyzeAllJob = func(path string, data []byte, mode os.FileMode) error {
+		var job AnalyzeAllJob
+		if err := json.Unmarshal(data, &job); err != nil {
+			return err
+		}
+		if job.Status == analysisAllStateStale {
+			return errors.New("private old-project persistence failure")
+		}
+		return storage.WriteFile(path, data, mode)
+	}
+	if _, err := service.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{MaxFiles: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "old-project analysis")
+	service.analysisAll.mu.Lock()
+	oldDone := service.analysisAll.workerDone
+	service.analysisAll.mu.Unlock()
+	newRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(newRoot, "next.go"), []byte("package next\nfunc Next() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ActivateProject(newRoot, &project.Analysis{Name: "next", Path: newRoot}); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, oldDone, "invalidated worker exit")
+	if job, err := service.AnalyzeAllJob(); job != nil || err != errAnalyzeAllPersistence {
+		t.Fatalf("invalidation failure was hidden: %+v, %v", job, err)
+	}
+	if _, err := service.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{MaxFiles: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	job := completedAnalyzeAllWorker(t, service)
+	if len(job.Files) != 1 || job.Files[0].Path != "next.go" || job.Files[0].Attempts != 1 {
+		t.Fatalf("replacement progress = %+v", job)
+	}
+	old, err := loadAnalyzeAllJob(oldRoot)
+	if err != nil || old.Status != analysisAllStateRunning || old.Files[0].Attempts != 1 {
+		t.Fatalf("old project durability/accounting changed: %+v, %v", old, err)
+	}
+	current, err := loadAnalyzeAllJob(newRoot)
+	if err != nil || current.Status != analysisAllStateCompleted || current.ProjectID == old.ProjectID {
+		t.Fatalf("replacement durability = %+v, %v", current, err)
+	}
+}
+
+func TestAnalyzeAllRecoveryWaitsForFailedAdmission(t *testing.T) {
+	var requests, writes atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
+	}))
+	defer server.Close()
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	blocked, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	releaseWrite := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseWrite()
+	service.writeAnalyzeAllJob = func(path string, data []byte, mode os.FileMode) error {
+		if writes.Add(1) == 2 {
+			close(blocked)
+			<-release
+			return errors.New("injected admission failure")
+		}
+		return storage.WriteFile(path, data, mode)
+	}
+	if _, err := service.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{MaxFiles: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, blocked, "blocked admission write")
+	recovered := make(chan error, 1)
+	go func() {
+		_, err := service.ResumeAnalyzeAll(context.Background(), false)
+		recovered <- err
+	}()
+	releaseWrite()
+	if err := <-recovered; err != nil {
+		t.Fatal(err)
+	}
+	job := completedAnalyzeAllWorker(t, service)
+	if requests.Load() != 1 || job.Files[0].Attempts != 1 {
+		t.Fatalf("recovery stranded or replayed work: %+v requests=%d", job, requests.Load())
+	}
 }
