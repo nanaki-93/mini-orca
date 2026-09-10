@@ -101,14 +101,25 @@ type PerformanceReport struct {
 	Findings        []project.PerformanceFinding `json:"findings"`
 }
 
+var errPerformancePersistence = errors.New("performance progress could not be saved; resume the job to recover")
+
+type detachedPerformanceFault struct {
+	job   *PerformanceJob
+	cause error
+}
+
 type performanceController struct {
 	mu               sync.Mutex
 	job              *PerformanceJob
+	durableJob       *PerformanceJob
 	cancel           context.CancelFunc
 	workerGeneration string
 	requestStarted   time.Time
 	persistMu        sync.Mutex
 	beforeRead       func()
+	workerDone       chan struct{}
+	persistenceFault error
+	detachedFaults   map[string]detachedPerformanceFault
 }
 
 func newPerformanceController() *performanceController { return &performanceController{} }
@@ -216,6 +227,8 @@ func (s *Service) activatePerformanceStart(ctx context.Context, input performanc
 		return copy, nil
 	}
 	s.performance.job = job
+	s.performance.durableJob = nil
+	s.performance.persistenceFault = nil
 	s.performance.mu.Unlock()
 	if err := s.persistPerformanceJob(job); err != nil {
 		s.clearPerformanceJob(job)
@@ -280,30 +293,49 @@ func (s *Service) performanceJobLocked() (*PerformanceJob, error) {
 	if beforeRead != nil {
 		beforeRead()
 	}
-	s.performance.mu.Lock()
-	job := clonePerformanceJob(s.performance.job)
-	s.performance.mu.Unlock()
+	job, err := s.performance.progressSnapshot(s.manager.Root())
+	if err != nil {
+		return nil, err
+	}
 	if job == nil {
 		job, err = loadPerformanceJob(s.manager.Root())
 		if err != nil || job == nil {
 			return job, err
 		}
-		if job.ProjectID == analysis.ProjectID && job.ProjectRevision == analysis.ProjectRevision && recoverPersistedPerformanceJob(job, time.Now().UTC()) {
+		recovered := job.ProjectID == analysis.ProjectID && job.ProjectRevision == analysis.ProjectRevision && recoverPersistedPerformanceJob(job, time.Now().UTC())
+		s.performance.mu.Lock()
+		s.performance.job = clonePerformanceJob(job)
+		s.performance.durableJob = clonePerformanceJob(job)
+		s.performance.mu.Unlock()
+		if recovered {
 			if err := s.persistPerformanceJob(job); err != nil {
 				return nil, err
 			}
 		}
-		s.performance.mu.Lock()
-		if s.performance.job == nil {
-			s.performance.job = clonePerformanceJob(job)
-		}
-		job = clonePerformanceJob(s.performance.job)
-		s.performance.mu.Unlock()
 	}
 	if job.ProjectID != analysis.ProjectID || job.ProjectRevision != analysis.ProjectRevision {
 		return s.markPerformanceStale(job)
 	}
 	return job, nil
+}
+
+// progressSnapshot exposes only a successfully saved state while a write is
+// pending. The fault takes precedence once a save has failed.
+func (c *performanceController) progressSnapshot(root string) (*PerformanceJob, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if detached, ok := c.detachedFaults[root]; c.job == nil && ok {
+		c.job = clonePerformanceJob(detached.job)
+		c.persistenceFault = detached.cause
+		delete(c.detachedFaults, root)
+	}
+	if c.persistenceFault != nil {
+		return nil, errPerformancePersistence
+	}
+	if c.durableJob != nil {
+		return clonePerformanceJob(c.durableJob), nil
+	}
+	return clonePerformanceJob(c.job), nil
 }
 
 // PausePerformanceJob lets the active single-file request finish, then stops the queue.
@@ -321,38 +353,66 @@ func (s *Service) ResumePerformanceJob(ctx context.Context, expectedID string, c
 	if err := s.RequireRemoteConfirmation(config.AnalyzeModelScope, confirmRemoteProvider); err != nil {
 		return nil, err
 	}
-	if active, _ := s.AnalyzeAllJob(); active != nil && (active.Status == analysisAllStateRunning || active.Status == analysisAllStatePaused) {
+	if _, err := s.AnalyzeAllJob(); err != nil {
+		return nil, err
+	}
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	if s.activeAnalyzeAllJob() {
 		return nil, fmt.Errorf("analyze-all is already active")
 	}
-	job, err := s.PerformanceJob()
+	job, fault, finish, err := s.beginPerformanceRecoveryLocked()
 	if err != nil {
 		return nil, err
 	}
-	if job == nil || job.Status != performanceJobPaused || (expectedID != "" && expectedID != job.ID) {
+	defer finish()
+	if job == nil || (expectedID != "" && expectedID != job.ID) {
 		return nil, fmt.Errorf("performance job is not paused")
 	}
-	if err := s.verifyPerformanceJob(job); err != nil {
+	published, dispatch, err := s.preparePerformanceResume(job, fault)
+	if err != nil {
 		return nil, err
 	}
-	if job.Elapsed >= job.RunBudget {
-		return nil, fmt.Errorf("performance job budget is exhausted")
+	if err := s.persistPerformanceJobSerialized(published, true); err != nil {
+		return nil, err
+	}
+	if dispatch {
+		s.startPerformanceWorker(ctx)
+	}
+	return published, nil
+}
+
+func (s *Service) preparePerformanceResume(job *PerformanceJob, fault bool) (*PerformanceJob, bool, error) {
+	// Detached and canceled jobs can only be durably finalized. A new explicit
+	// start may follow successful recovery, but this action dispatches no work.
+	if fault && (job.Status == performanceJobStale || job.Status == performanceJobCanceled) {
+		return job, false, nil
+	}
+	if job.Status != performanceJobPaused {
+		return nil, false, fmt.Errorf("performance job is not paused")
+	}
+	if err := s.verifyPerformanceJob(job); err != nil {
+		return nil, false, err
+	}
+	exhausted := job.Elapsed >= job.RunBudget
+	if exhausted && !fault {
+		return nil, false, fmt.Errorf("performance job budget is exhausted")
 	}
 	published, err := s.updatePerformanceJob(job, func(current *PerformanceJob) error {
 		if current.Status != performanceJobPaused {
 			return fmt.Errorf("performance job is not paused")
 		}
+		if fault {
+			recoverPersistedPerformanceJob(current, time.Now().UTC())
+		}
 		current.Status = performanceJobRunning
+		if exhausted {
+			current.Status = performanceJobCompleted
+		}
 		current.UpdatedAt = time.Now().UTC()
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	if err := s.persistPerformanceJob(published); err != nil {
-		return nil, err
-	}
-	s.startPerformanceWorker(ctx)
-	return published, nil
+	return published, !exhausted, err
 }
 
 // PerformanceProjectReport aggregates only reports matching the captured queue identity.
@@ -400,7 +460,7 @@ func performanceFileContributesCoverage(status string) bool {
 
 func (s *Service) startPerformanceWorker(parent context.Context) {
 	s.performance.mu.Lock()
-	if s.performance.job == nil || s.performance.job.Status != performanceJobRunning {
+	if s.performance.persistenceFault != nil || s.performance.job == nil || s.performance.job.Status != performanceJobRunning {
 		s.performance.mu.Unlock()
 		return
 	}
@@ -412,8 +472,13 @@ func (s *Service) startPerformanceWorker(parent context.Context) {
 	ctx, cancel := context.WithCancel(parent)
 	s.performance.cancel = cancel
 	s.performance.workerGeneration = generation
+	done := make(chan struct{})
+	s.performance.workerDone = done
 	s.performance.mu.Unlock()
-	go s.runPerformanceJob(ctx, generation)
+	go func() {
+		defer close(done)
+		s.runPerformanceJob(ctx, generation)
+	}()
 }
 
 func (s *Service) runPerformanceJob(ctx context.Context, generation string) {
@@ -429,8 +494,7 @@ func (s *Service) runPerformanceJob(ctx context.Context, generation string) {
 			return s.authorizePerformancePublication(job, index.Path, index.ContentHash, publish)
 		})
 		cancel()
-		s.recordPerformanceResult(job, index.Path, err)
-		if ctx.Err() != nil {
+		if !s.recordPerformanceResult(job, index.Path, err) || ctx.Err() != nil {
 			return
 		}
 	}
@@ -442,6 +506,7 @@ func (s *Service) clearPerformanceWorker(generation string) {
 	if s.performance.workerGeneration == generation {
 		s.performance.cancel = nil
 		s.performance.workerGeneration = ""
+		s.performance.workerDone = nil
 	}
 }
 
@@ -466,27 +531,19 @@ func (s *Service) nextPerformanceFile(generation string) (*PerformanceJob, proje
 	}
 	s.performance.mu.Lock()
 	current := s.performance.job
-	if !samePerformanceJob(current, job) || current.Status != performanceJobRunning {
+	if !samePerformanceJob(current, job) || s.performance.persistenceFault != nil || current.Status != performanceJobRunning {
 		s.performance.mu.Unlock()
 		return nil, project.IndexFile{}, false
 	}
-	for i := range current.Files {
-		if current.Files[i].Status != performanceFilePending {
-			continue
-		}
-		for _, file := range index.Files {
-			if file.Path == current.Files[i].Path && file.ContentHash == current.Files[i].ContentHash {
-				current.Files[i].Status = performanceFileRunning
-				current.Files[i].Attempts++
-				current.UpdatedAt = time.Now().UTC()
-				current.ActiveStartedAt = current.UpdatedAt
-				s.performance.requestStarted = current.UpdatedAt
-				published := clonePerformanceJob(current)
-				s.performance.mu.Unlock()
-				_ = s.persistPerformanceJob(published)
-				return published, file, true
-			}
-		}
+	if i, file, found := pendingPerformanceFile(current, index); found {
+		current.Files[i].Status = performanceFileRunning
+		current.Files[i].Attempts++
+		current.UpdatedAt = time.Now().UTC()
+		current.ActiveStartedAt = current.UpdatedAt
+		s.performance.requestStarted = current.UpdatedAt
+		published := clonePerformanceJob(current)
+		s.performance.mu.Unlock()
+		return published, file, s.persistPerformanceAdmission(published, file.Path)
 	}
 	current.Status = performanceJobCompleted
 	current.UpdatedAt = time.Now().UTC()
@@ -494,6 +551,20 @@ func (s *Service) nextPerformanceFile(generation string) (*PerformanceJob, proje
 	s.performance.mu.Unlock()
 	_ = s.persistPerformanceJob(published)
 	return nil, project.IndexFile{}, false
+}
+
+func pendingPerformanceFile(job *PerformanceJob, index *project.ProjectIndex) (int, project.IndexFile, bool) {
+	for i, queued := range job.Files {
+		if queued.Status != performanceFilePending {
+			continue
+		}
+		for _, file := range index.Files {
+			if file.Path == queued.Path && file.ContentHash == queued.ContentHash {
+				return i, file, true
+			}
+		}
+	}
+	return 0, project.IndexFile{}, false
 }
 
 func (s *Service) completePerformanceJob(expected *PerformanceJob) (*PerformanceJob, error) {
@@ -514,12 +585,12 @@ func (s *Service) completePerformanceJob(expected *PerformanceJob) (*Performance
 	return published, nil
 }
 
-func (s *Service) recordPerformanceResult(expected *PerformanceJob, path string, cause error) {
+func (s *Service) recordPerformanceResult(expected *PerformanceJob, path string, cause error) bool {
 	s.performance.mu.Lock()
 	current := s.performance.job
 	if !samePerformanceJob(current, expected) || current.Status == performanceJobCanceled || current.Status == performanceJobStale {
 		s.performance.mu.Unlock()
-		return
+		return false
 	}
 	s.accountPerformanceElapsedLocked(time.Now().UTC())
 	for i := range current.Files {
@@ -537,41 +608,64 @@ func (s *Service) recordPerformanceResult(expected *PerformanceJob, path string,
 		current.UpdatedAt = time.Now().UTC()
 		published := clonePerformanceJob(current)
 		s.performance.mu.Unlock()
-		_ = s.persistPerformanceJob(published)
-		return
+		return s.persistPerformanceJob(published) == nil
 	}
 	s.performance.mu.Unlock()
+	return false
+}
+
+// beginPerformanceRecoveryLocked acquires persistence authority for an explicit
+// action after loading the active job. The caller holds jobLifecycleMu and must
+// call finish after preparing and saving its state. A faulted worker is joined
+// without persistMu held so its final result can finish before recovery begins.
+func (s *Service) beginPerformanceRecoveryLocked() (job *PerformanceJob, fault bool, finish func(), err error) {
+	if _, err := s.performanceJobLocked(); err != nil && !errors.Is(err, errPerformancePersistence) {
+		return nil, false, nil, err
+	}
+	for {
+		s.performance.persistMu.Lock()
+		s.performance.mu.Lock()
+		job := clonePerformanceJob(s.performance.job)
+		fault := s.performance.persistenceFault != nil
+		done := s.performance.workerDone
+		s.performance.mu.Unlock()
+		if !fault || done == nil {
+			return job, fault, s.performance.persistMu.Unlock, nil
+		}
+		s.performance.persistMu.Unlock()
+		<-done
+	}
 }
 
 func (s *Service) changePerformanceState(next string, cancelWorker bool) (*PerformanceJob, error) {
-	job, err := s.PerformanceJob()
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	job, fault, finish, err := s.beginPerformanceRecoveryLocked()
 	if err != nil {
 		return nil, err
 	}
-	if job == nil || job.Status != performanceJobRunning {
+	defer finish()
+	if job == nil || (!fault && job.Status != performanceJobRunning) {
 		return nil, fmt.Errorf("performance job is not running")
 	}
 	published, err := s.updatePerformanceJob(job, func(current *PerformanceJob) error {
-		if current.Status != performanceJobRunning {
+		if !fault && current.Status != performanceJobRunning {
 			return fmt.Errorf("performance job is not running")
 		}
 		current.Status = next
 		current.UpdatedAt = time.Now().UTC()
+		if cancelWorker {
+			s.accountPerformanceElapsedLocked(current.UpdatedAt)
+			if s.performance.cancel != nil {
+				s.performance.cancel()
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	if cancelWorker {
-		s.performance.mu.Lock()
-		s.accountPerformanceElapsedLocked(time.Now().UTC())
-		cancel := s.performance.cancel
-		s.performance.mu.Unlock()
-		if cancel != nil {
-			cancel()
-		}
-	}
-	if err := s.persistPerformanceJob(published); err != nil {
+	if err := s.persistPerformanceJobSerialized(published, true); err != nil {
 		return nil, err
 	}
 	return published, nil
@@ -594,7 +688,7 @@ func (s *Service) authorizePerformancePublication(expected *PerformanceJob, path
 	s.performance.mu.Lock()
 	defer s.performance.mu.Unlock()
 	current := s.performance.job
-	if !samePerformanceJob(current, expected) || (current.Status != performanceJobRunning && current.Status != performanceJobPaused) {
+	if !samePerformanceJob(current, expected) || s.performance.persistenceFault != nil || (current.Status != performanceJobRunning && current.Status != performanceJobPaused) {
 		return context.Canceled
 	}
 	for _, file := range current.Files {
@@ -755,13 +849,16 @@ func (s *Service) detachPerformanceJobForProjectChange() {
 	}
 	cancel := s.performance.cancel
 	var published *PerformanceJob
-	if activePerformanceJob(current) {
+	if activePerformanceJob(current) || s.performance.persistenceFault != nil {
 		current.Status = performanceJobStale
 		current.UpdatedAt = time.Now().UTC()
 		s.accountPerformanceElapsedLocked(current.UpdatedAt)
 		published = clonePerformanceJob(current)
 	}
 	s.performance.job = nil
+	s.performance.durableJob = nil
+	s.performance.persistenceFault = nil
+	s.performance.workerDone = nil
 	s.performance.cancel = nil
 	s.performance.workerGeneration = ""
 	s.performance.requestStarted = time.Time{}
@@ -771,7 +868,14 @@ func (s *Service) detachPerformanceJobForProjectChange() {
 		cancel()
 	}
 	if published != nil {
-		_ = s.storePerformanceJob(published)
+		if err := s.storePerformanceJob(published); err != nil {
+			s.performance.mu.Lock()
+			if s.performance.detachedFaults == nil {
+				s.performance.detachedFaults = make(map[string]detachedPerformanceFault)
+			}
+			s.performance.detachedFaults[s.manager.Root()] = detachedPerformanceFault{job: published, cause: err}
+			s.performance.mu.Unlock()
+		}
 	}
 }
 
@@ -779,6 +883,8 @@ func (s *Service) clearPerformanceJob(job *PerformanceJob) {
 	s.performance.mu.Lock()
 	if s.performance.job == job {
 		s.performance.job = nil
+		s.performance.durableJob = nil
+		s.performance.persistenceFault = nil
 		s.performance.requestStarted = time.Time{}
 		cancel := s.performance.cancel
 		s.performance.cancel = nil
@@ -860,47 +966,95 @@ func (s *Service) storePerformanceJob(job *PerformanceJob) error {
 		return fmt.Errorf("encode performance job: %w", err)
 	}
 	path := filepath.Join(job.Root, ".mini-orca", "sessions", "performance-job.json")
-	if err := storage.WriteFile(path, data, 0600); err != nil {
+	write := s.writePerformanceJob
+	if write == nil {
+		write = storage.WriteFile
+	}
+	if err := write(path, data, 0600); err != nil {
 		return fmt.Errorf("store performance job: %w", err)
 	}
 	return nil
 }
 
 func (s *Service) persistPerformanceJob(job *PerformanceJob) error {
-	canonical, err := canonicalPerformanceJob(job)
-	if err != nil {
-		return err
-	}
 	s.performance.persistMu.Lock()
 	defer s.performance.persistMu.Unlock()
-
-	job, err = s.currentPerformanceJobForPersistence(canonical)
-	if err != nil {
-		return err
-	}
-	if job == nil {
-		return nil
-	}
-	return s.storePerformanceJob(job)
+	return s.persistPerformanceJobSerialized(job, false)
 }
 
-// currentPerformanceJobForPersistence makes the controller's newest state
-// authoritative after a caller has waited for the persistence writer. A result
-// from a stale worker must never overwrite an invalidated or replacement job.
-func (s *Service) currentPerformanceJobForPersistence(requested *PerformanceJob) (*PerformanceJob, error) {
+func (s *Service) persistPerformanceJobSerialized(requested *PerformanceJob, recoverFault bool) error {
+	s.performance.mu.Lock()
+	current := s.performance.job
+	if !samePerformanceJob(current, requested) {
+		s.performance.mu.Unlock()
+		return nil // Obsolete and detached workers have no persistence authority.
+	}
+	if s.performance.persistenceFault != nil && !recoverFault {
+		s.performance.mu.Unlock()
+		return errPerformancePersistence
+	}
+	job := clonePerformanceJob(current)
+	s.performance.mu.Unlock()
+	err := s.storePerformanceJob(job)
 	s.performance.mu.Lock()
 	defer s.performance.mu.Unlock()
-	if s.performance.job != nil {
-		current, err := canonicalPerformanceJob(s.performance.job)
-		if err != nil {
-			return nil, err
-		}
-		if current.Root != requested.Root {
-			return nil, nil
-		}
-		return current, nil
+	if s.performance.job != current {
+		return nil
 	}
-	return clonePerformanceJob(requested), nil
+	if err != nil {
+		// Retain useful internal context without returning private filesystem text.
+		s.performance.persistenceFault = err
+		if s.performance.cancel != nil {
+			s.performance.cancel()
+		}
+		if current.Status == performanceJobRunning || current.Status == performanceJobCompleted {
+			current.Status = performanceJobPaused
+		}
+		return errPerformancePersistence
+	}
+	s.performance.durableJob = clonePerformanceJob(job)
+	if recoverFault {
+		s.performance.persistenceFault = nil
+	}
+	return nil
+}
+
+// Keep a failed admission and its rollback atomic with respect to detachment.
+// No request was dispatched, so neither an attempt nor elapsed time is charged.
+func (s *Service) persistPerformanceAdmission(job *PerformanceJob, path string) bool {
+	s.performance.persistMu.Lock()
+	defer s.performance.persistMu.Unlock()
+	if err := s.persistPerformanceJobSerialized(job, false); err != nil {
+		s.rollbackPerformanceAdmission(job, path)
+		return false
+	}
+	return s.performanceAdmissionCurrent(job)
+}
+
+func (s *Service) rollbackPerformanceAdmission(expected *PerformanceJob, path string) {
+	s.performance.mu.Lock()
+	defer s.performance.mu.Unlock()
+	current := s.performance.job
+	if !samePerformanceJob(current, expected) {
+		return
+	}
+	for i := range current.Files {
+		file := &current.Files[i]
+		if file.Path == path && file.Status == performanceFileRunning {
+			file.Status = performanceFilePending
+			file.Attempts--
+			current.Elapsed = expected.Elapsed
+			current.ActiveStartedAt = time.Time{}
+			s.performance.requestStarted = time.Time{}
+			return
+		}
+	}
+}
+
+func (s *Service) performanceAdmissionCurrent(expected *PerformanceJob) bool {
+	s.performance.mu.Lock()
+	defer s.performance.mu.Unlock()
+	return samePerformanceJob(s.performance.job, expected) && s.performance.persistenceFault == nil && activePerformanceJob(s.performance.job)
 }
 
 func loadPerformanceJob(root string) (*PerformanceJob, error) {

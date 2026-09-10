@@ -1,0 +1,11 @@
+
+CLN-05 — 2026-09-10T11:00:07.491539+00:00 — Blocked after two focused correction attempts
+Verification: go test -race ./internal/app -run 'PerformanceJob|PerformanceReports|ReviewPerformanceFile' -count=1
+Coordinator checks: focused race, all Go tests, full race, fmt, vet, Go-only quality, diff check all passed.
+Preparation failures: canonical-path mismatch in new detachment test; complexity over threshold. Correction 1 fixed injection/refactored transitions; correction 2 extracted progress snapshot and serialized rollback. Final candidate passed checks.
+Independent review: P2: Resume can clear a concurrent result-write persistence fault and return running while the controller remains paused with no worker. A paused worker blocks saving its result; Resume reads durable paused state and prepares running; the failed save then pauses/cancels the worker; Resume saves that paused state with recovery enabled, clears the new fault, and returns its earlier running snapshot. Serialize fault detection/state preparation with persistence or recheck/join/reprepare under persistence authority. Add a channel-controlled overlap test.
+Location: internal/app/performance_job.go:375. Candidate SHA-256: 03f29267dc24555ee8a423aab152a6894a57969bad2a83344f317754edf74848.
+Disposition: patch retained uncommitted, task incomplete, cleanup automation paused; no later task started. Evidence: .mini-orca/autopilot/cleanup/CLN-05/blocked.json.
+
+CLN-05 — 2026-09-10T11:15:01.699460+00:00 — Resolved after user-authorized continuation
+Concurrent Resume/result-write failure fixed by retaining persistence authority from fresh state read through preparation/save, releasing it before faulted-worker join. Writer reproduced prior failure; one repair in the renewed round passed fresh independent review and coordinator focused/full Go/race/format/vet/quality/diff checks. Original blocked record retained above. Candidate SHA-256: d7f76368f095939c4dd049b0d92aaf6b1855b9963e2fc182d39b5b9296c290a8. Evidence: .mini-orca/autopilot/cleanup/CLN-05/acceptance.json.
