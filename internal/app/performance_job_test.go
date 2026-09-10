@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -827,4 +828,546 @@ func waitForPerformanceJob(t *testing.T, service *Service, want string) *Perform
 	}
 	t.Fatalf("performance job did not reach %q", want)
 	return nil
+}
+
+func TestPerformanceJobPersistenceFailuresRequireDurableRecovery(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		failedWrite  int64
+		wantRequests int64
+	}{
+		{"admission", 2, 0},
+		{"result", 3, 1},
+		{"between files", 4, 1},
+		{"completion", 6, 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var requests, writes atomic.Int64
+			var fail atomic.Bool
+			fail.Store(true)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"findings":[]}`}}}})
+			}))
+			defer server.Close()
+			service, root := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
+			cause := errors.New("private path and provider response must stay internal")
+			service.writePerformanceJob = func(path string, data []byte, mode os.FileMode) error {
+				if writes.Add(1) >= test.failedWrite && fail.Load() {
+					return cause
+				}
+				return storage.WriteFile(path, data, mode)
+			}
+			started, err := service.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 2}, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			waitForPerformanceWorkerExit(t, service)
+			assertPerformancePersistenceFault(t, service)
+			if got := requests.Load(); got != test.wantRequests {
+				t.Fatalf("provider requests = %d, want %d", got, test.wantRequests)
+			}
+			service.performance.mu.Lock()
+			faulted := clonePerformanceJob(service.performance.job)
+			internalCause := service.performance.persistenceFault
+			service.performance.mu.Unlock()
+			if !errors.Is(internalCause, cause) || faulted.Status != performanceJobPaused || !faulted.ActiveStartedAt.IsZero() {
+				t.Fatalf("faulted state = %+v, cause = %v", faulted, internalCause)
+			}
+			attempts := 0
+			for _, file := range faulted.Files {
+				attempts += file.Attempts
+			}
+			if int64(attempts) != test.wantRequests || (test.wantRequests == 0 && faulted.Elapsed != 0) || (test.wantRequests > 0 && faulted.Elapsed <= 0) {
+				t.Fatalf("attempts/elapsed after fault = %+v", faulted)
+			}
+			policy, err := project.NewContextPolicy(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, file := range faulted.Files {
+				if file.Status != performanceFileCompleted {
+					continue
+				}
+				report, err := project.LoadPerformanceFileReport(root, file.Path, file.ContentHash, policy)
+				if err != nil || report == nil || report.Status != performanceJobCompleted {
+					t.Fatalf("completed report lost: %+v, %v", report, err)
+				}
+			}
+			// A separate controller reconstructs only durable progress. Interrupted
+			// admissions stay charged and become pending without automatic dispatch.
+			restarted := &Service{manager: service.manager, performance: newPerformanceController()}
+			recovered, err := restarted.PerformanceJob()
+			if err != nil || recovered == nil || recovered.Status != performanceJobPaused || !recovered.ActiveStartedAt.IsZero() {
+				t.Fatalf("restart recovery = %+v, %v", recovered, err)
+			}
+			for _, file := range recovered.Files {
+				if file.Status == performanceFileRunning {
+					t.Fatalf("restart retained running file: %+v", recovered)
+				}
+			}
+			if _, err := service.ResumePerformanceJob(context.Background(), started.ID, false); !errors.Is(err, errPerformancePersistence) {
+				t.Fatalf("failed recovery = %v", err)
+			}
+			if requests.Load() != test.wantRequests {
+				t.Fatal("failed recovery dispatched another request")
+			}
+			fail.Store(false)
+			assertPerformancePersistenceFault(t, service)
+			if _, err := service.ResumePerformanceJob(context.Background(), started.ID, false); err != nil {
+				t.Fatal(err)
+			}
+			waitForPerformanceWorkerExit(t, service)
+			completed, err := service.PerformanceJob()
+			if err != nil || completed.Status != performanceJobCompleted || requests.Load() != 2 || completed.Elapsed < faulted.Elapsed {
+				t.Fatalf("completed recovery = %+v, requests = %d, error = %v", completed, requests.Load(), err)
+			}
+			for _, file := range completed.Files {
+				if file.Status != performanceFileCompleted || file.Attempts != 1 {
+					t.Fatalf("recovery repeated or lost work: %+v", completed)
+				}
+			}
+			durable, err := loadPerformanceJob(root)
+			if err != nil || durable.Status != performanceJobCompleted || durable.Elapsed != completed.Elapsed {
+				t.Fatalf("durable recovery = %+v, %v", durable, err)
+			}
+		})
+	}
+}
+
+func TestPerformanceJobDetachmentFailureIsScopedToCapturedRoot(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := performanceJobFixture(root, analysis, "detached-fault")
+	old.Files[0].Status = performanceFileRunning
+	old.Files[0].Attempts = 1
+	old.ActiveStartedAt = time.Now().Add(-time.Second)
+	service.performance.job = old
+	service.performance.requestStarted = old.ActiveStartedAt
+	if err := service.storePerformanceJob(old); err != nil {
+		t.Fatal(err)
+	}
+	nextRoot, nextAnalysis := newPerformanceProject(t, "next")
+	next := performanceJobFixture(nextRoot, nextAnalysis, "replacement")
+	next.Status = performanceJobCompleted
+	if err := service.storePerformanceJob(next); err != nil {
+		t.Fatal(err)
+	}
+	canonicalRoot, err := canonicalPerformanceJobRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fail atomic.Bool
+	fail.Store(true)
+	var writes atomic.Int64
+	service.writePerformanceJob = func(path string, data []byte, mode os.FileMode) error {
+		writes.Add(1)
+		if filepath.Dir(filepath.Dir(filepath.Dir(path))) == canonicalRoot && fail.Load() {
+			return errors.New("private detachment failure")
+		}
+		return storage.WriteFile(path, data, mode)
+	}
+	if err := service.ActivateProject(nextRoot, nextAnalysis); err != nil {
+		t.Fatal(err)
+	}
+	current, err := service.PerformanceJob()
+	if err != nil || current.ID != next.ID {
+		t.Fatalf("replacement inherited old fault: %+v, %v", current, err)
+	}
+	before := writes.Load()
+	service.recordPerformanceResult(old, old.Files[0].Path, nil)
+	if err := service.persistPerformanceJob(old); err != nil {
+		t.Fatal(err)
+	}
+	service.clearPerformanceWorker(old.Generation)
+	if writes.Load() != before {
+		t.Fatal("detached worker wrote progress")
+	}
+	current, err = service.PerformanceJob()
+	if err != nil || current.Elapsed != next.Elapsed || current.Files[0].Attempts != 0 {
+		t.Fatalf("replacement accounting changed: %+v, %v", current, err)
+	}
+	if err := service.ActivateProject(root, analysis); err != nil {
+		t.Fatal(err)
+	}
+	assertPerformancePersistenceFault(t, service)
+	if _, err := service.ResumePerformanceJob(context.Background(), old.ID, false); !errors.Is(err, errPerformancePersistence) {
+		t.Fatalf("failed detached recovery = %v", err)
+	}
+	fail.Store(false)
+	recovered, err := service.ResumePerformanceJob(context.Background(), old.ID, false)
+	if err != nil || recovered.Status != performanceJobStale || recovered.Elapsed <= 0 || !recovered.ActiveStartedAt.IsZero() || recovered.Files[0].Attempts != 1 {
+		t.Fatalf("detached recovery = %+v, %v", recovered, err)
+	}
+	service.performance.mu.Lock()
+	active := service.performance.workerGeneration
+	retained := len(service.performance.detachedFaults)
+	service.performance.mu.Unlock()
+	if active != "" || retained != 0 {
+		t.Fatalf("detached recovery dispatched or retained fault: worker = %q, faults = %d", active, retained)
+	}
+	durable, err := loadPerformanceJob(root)
+	if err != nil || durable.Status != performanceJobStale || durable.Elapsed != recovered.Elapsed {
+		t.Fatalf("detached durable recovery = %+v, %v", durable, err)
+	}
+}
+
+func TestPerformanceJobObsoleteSaveCannotFaultSameRootReplacement(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := performanceJobFixture(root, analysis, "old")
+	next := performanceJobFixture(root, analysis, "next")
+	service.performance.job = next
+	service.writePerformanceJob = func(string, []byte, os.FileMode) error {
+		t.Fatal("obsolete worker attempted to save replacement")
+		return errors.New("unexpected write")
+	}
+	if err := service.persistPerformanceJob(old); err != nil {
+		t.Fatal(err)
+	}
+	current, err := service.PerformanceJob()
+	if err != nil || current.ID != next.ID || current.Status != performanceJobRunning {
+		t.Fatalf("replacement after obsolete save = %+v, %v", current, err)
+	}
+}
+
+func assertPerformancePersistenceFault(t *testing.T, service *Service) {
+	t.Helper()
+	if job, err := service.PerformanceJob(); job != nil || !errors.Is(err, errPerformancePersistence) || strings.Contains(err.Error(), "private") {
+		t.Fatalf("progress fault = %+v, %v", job, err)
+	}
+	if report, err := service.PerformanceProjectReport(); report != nil || !errors.Is(err, errPerformancePersistence) {
+		t.Fatalf("report fault = %+v, %v", report, err)
+	}
+	if _, err := service.StartPerformanceJob(context.Background(), PerformanceJobOptions{}, false); !errors.Is(err, errPerformancePersistence) {
+		t.Fatalf("start bypassed fault: %v", err)
+	}
+}
+
+func waitForPerformanceWorkerExit(t *testing.T, service *Service) {
+	t.Helper()
+	service.performance.mu.Lock()
+	done := service.performance.workerDone
+	service.performance.mu.Unlock()
+	if done != nil {
+		waitForTestSignal(t, done, "performance worker exit")
+	}
+}
+
+func TestPerformanceJobDoesNotPublishCompletionBeforeSave(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"findings":[]}`}}}})
+	}))
+	defer server.Close()
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+	service.writePerformanceJob = func(path string, data []byte, mode os.FileMode) error {
+		var job PerformanceJob
+		if err := json.Unmarshal(data, &job); err != nil {
+			return err
+		}
+		if job.Status == performanceJobCompleted {
+			close(entered)
+			<-release
+			return errors.New("private completion error")
+		}
+		return storage.WriteFile(path, data, mode)
+	}
+	if _, err := service.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, entered, "blocked completion save")
+	job, err := service.PerformanceJob()
+	if err != nil || job.Status != performanceJobRunning || job.Files[0].Status != performanceFileCompleted {
+		t.Fatalf("progress claimed unpersisted completion: %+v, %v", job, err)
+	}
+	report, err := service.PerformanceProjectReport()
+	if err != nil || report.Status == performanceJobCompleted {
+		t.Fatalf("report claimed unpersisted completion: %+v, %v", report, err)
+	}
+	releaseOnce.Do(func() { close(release) })
+	waitForPerformanceWorkerExit(t, service)
+	assertPerformancePersistenceFault(t, service)
+}
+
+func TestPerformanceJobExhaustedCompletionFaultCanBeFinalized(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	preview, err := service.PreviewPerformanceQueue(PerformanceJobOptions{MaxFiles: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := performanceJobFixture(service.manager.Root(), analysis, "exhausted")
+	job.PolicyFingerprint, job.QueueID, job.Files = preview.PolicyFingerprint, preview.QueueID, preview.Files
+	job.Elapsed = job.RunBudget
+	service.performance.job = job
+	if err := service.persistPerformanceJob(job); err != nil {
+		t.Fatal(err)
+	}
+	fail := true
+	service.writePerformanceJob = func(path string, data []byte, mode os.FileMode) error {
+		if fail {
+			return errors.New("completion failure")
+		}
+		return storage.WriteFile(path, data, mode)
+	}
+	service.runPerformanceJob(context.Background(), job.Generation)
+	assertPerformancePersistenceFault(t, service)
+	if _, err := service.ResumePerformanceJob(context.Background(), job.ID, false); !errors.Is(err, errPerformancePersistence) {
+		t.Fatalf("exhausted recovery failure = %v", err)
+	}
+	fail = false
+	final, err := service.ResumePerformanceJob(context.Background(), job.ID, false)
+	if err != nil || final.Status != performanceJobCompleted || final.Elapsed != final.RunBudget || final.Files[0].Attempts != 0 || final.Files[0].Status != performanceFilePending {
+		t.Fatalf("exhausted recovery = %+v, %v", final, err)
+	}
+	if service.performance.workerGeneration != "" {
+		t.Fatal("exhausted recovery dispatched work")
+	}
+	durable, err := loadPerformanceJob(root)
+	if err != nil || durable.Status != performanceJobCompleted || durable.Elapsed != job.RunBudget {
+		t.Fatalf("exhausted durable recovery = %+v, %v", durable, err)
+	}
+}
+
+func TestPerformanceJobCanceledSaveFailureRetainsAccounting(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer server.Close()
+	defer releaseOnce.Do(func() { close(release) })
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	var fail atomic.Bool
+	service.writePerformanceJob = func(path string, data []byte, mode os.FileMode) error {
+		if fail.Load() {
+			return errors.New("canceled save failure")
+		}
+		return storage.WriteFile(path, data, mode)
+	}
+	job, err := service.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 1}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "cancelable performance request")
+	fail.Store(true)
+	if _, err := service.CancelPerformanceJob(); !errors.Is(err, errPerformancePersistence) {
+		t.Fatalf("cancel failure = %v", err)
+	}
+	waitForPerformanceWorkerExit(t, service)
+	assertPerformancePersistenceFault(t, service)
+	fail.Store(false)
+	canceled, err := service.ResumePerformanceJob(context.Background(), job.ID, false)
+	if err != nil || canceled.Status != performanceJobCanceled || canceled.Elapsed <= 0 || !canceled.ActiveStartedAt.IsZero() || canceled.Files[0].Attempts != 1 {
+		t.Fatalf("canceled recovery = %+v, %v", canceled, err)
+	}
+	durable, err := loadPerformanceJob(root)
+	if err != nil || durable.Elapsed != canceled.Elapsed || durable.Status != performanceJobCanceled {
+		t.Fatalf("canceled durable recovery = %+v, %v", durable, err)
+	}
+}
+
+func TestPerformanceJobFailedAdmissionDetachesWithoutChargingRequest(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	nextRoot, nextAnalysis := newPerformanceProject(t, "next")
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+	service.writePerformanceJob = func(path string, data []byte, mode os.FileMode) error {
+		var job PerformanceJob
+		if err := json.Unmarshal(data, &job); err != nil {
+			return err
+		}
+		if job.Status == performanceJobRunning && job.Files[0].Status == performanceFileRunning {
+			close(entered)
+			<-release
+			return errors.New("admission failure")
+		}
+		return storage.WriteFile(path, data, mode)
+	}
+	if _, err := service.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, entered, "blocked admission save")
+	if service.performance.persistMu.TryLock() {
+		service.performance.persistMu.Unlock()
+		t.Fatal("admission did not hold persistence serialization")
+	}
+	transition := make(chan error, 1)
+	go func() { transition <- service.ActivateProject(nextRoot, nextAnalysis) }()
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case err := <-transition:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("detachment did not complete")
+	}
+	old, err := loadPerformanceJob(root)
+	if err != nil || old.Status != performanceJobStale || old.Files[0].Attempts != 0 || old.Files[0].Status != performanceFilePending || old.Elapsed != 0 || !old.ActiveStartedAt.IsZero() {
+		t.Fatalf("detached failed admission = %+v, %v", old, err)
+	}
+	if current, err := service.PerformanceJob(); err != nil || current != nil {
+		t.Fatalf("replacement inherited failed admission: %+v, %v", current, err)
+	}
+}
+
+func TestPerformanceJobResumeRejectsFaultedAnalyzeAll(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := performanceJobFixture(root, analysis, "paused")
+	job.Status = performanceJobPaused
+	service.performance.job = job
+	service.analysisAll.job = &AnalyzeAllJob{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Status: analysisAllStatePaused, root: service.manager.Root()}
+	service.analysisAll.persistenceFault = errors.New("analyze-all save failure")
+	service.writePerformanceJob = func(string, []byte, os.FileMode) error {
+		t.Fatal("performance recovery wrote while analyze-all was faulted")
+		return nil
+	}
+	if _, err := service.ResumePerformanceJob(context.Background(), job.ID, false); !errors.Is(err, errAnalyzeAllPersistence) {
+		t.Fatalf("resume with faulted analyze-all = %v", err)
+	}
+}
+
+func TestPerformanceJobRecoveryWaitsForConcurrentResultFailure(t *testing.T) {
+	for _, test := range []struct {
+		name, initial, returned, final string
+		action                         func(*Service, string) (*PerformanceJob, error)
+	}{
+		{"resume", performanceJobPaused, performanceJobRunning, performanceJobCompleted, func(s *Service, id string) (*PerformanceJob, error) {
+			return s.ResumePerformanceJob(context.Background(), id, false)
+		}},
+		{"pause", performanceJobRunning, performanceJobPaused, performanceJobPaused, func(s *Service, _ string) (*PerformanceJob, error) { return s.PausePerformanceJob() }},
+		{"cancel", performanceJobRunning, performanceJobCanceled, performanceJobCanceled, func(s *Service, _ string) (*PerformanceJob, error) { return s.CancelPerformanceJob() }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service, job := performanceJobWithInFlightFile(t, test.initial)
+			entered, release, workerDone := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			var releaseOnce sync.Once
+			defer releaseOnce.Do(func() { close(release) })
+			var writes atomic.Int64
+			service.writePerformanceJob = func(path string, data []byte, mode os.FileMode) error {
+				if writes.Add(1) == 1 {
+					close(entered)
+					<-release
+					return errors.New("result save failed during recovery")
+				}
+				return storage.WriteFile(path, data, mode)
+			}
+			service.performance.cancel = func() {}
+			service.performance.workerGeneration = job.Generation
+			service.performance.workerDone = workerDone
+			go func() {
+				defer close(workerDone)
+				defer service.clearPerformanceWorker(job.Generation)
+				service.recordPerformanceResult(job, job.Files[0].Path, nil)
+			}()
+			waitForTestSignal(t, entered, "blocked worker result save")
+			actionRead := make(chan struct{})
+			var readOnce sync.Once
+			service.performance.mu.Lock()
+			service.performance.beforeRead = func() { readOnce.Do(func() { close(actionRead) }) }
+			service.performance.mu.Unlock()
+			type actionResult struct {
+				job *PerformanceJob
+				err error
+			}
+			result := make(chan actionResult, 1)
+			go func() {
+				published, err := test.action(service, job.ID)
+				result <- actionResult{published, err}
+			}()
+			waitForTestSignal(t, actionRead, "recovery reading pending progress")
+			releaseOnce.Do(func() { close(release) })
+			select {
+			case result := <-result:
+				if result.err != nil || result.job.Status != test.returned {
+					t.Fatalf("recovery result = %+v, %v", result.job, result.err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("recovery did not finish after result persistence failed")
+			}
+			waitForTestSignal(t, workerDone, "faulted worker exit")
+			waitForPerformanceWorkerExit(t, service)
+			current, err := service.PerformanceJob()
+			if err != nil || current.Status != test.final || current.Files[0].Status != performanceFileCompleted || current.Files[0].Attempts != 1 || current.Elapsed <= 0 || !current.ActiveStartedAt.IsZero() {
+				t.Fatalf("recovered progress = %+v, %v", current, err)
+			}
+			durable, err := loadPerformanceJob(job.Root)
+			if err != nil || durable.Status != current.Status || durable.Elapsed != current.Elapsed {
+				t.Fatalf("durable recovery = %+v, %v", durable, err)
+			}
+		})
+	}
+}
+
+func TestPerformanceJobRecoveryRetainsPersistenceAuthority(t *testing.T) {
+	service, _ := performanceJobWithInFlightFile(t, performanceJobPaused)
+	service.jobLifecycleMu.Lock()
+	defer service.jobLifecycleMu.Unlock()
+	job, fault, finish, err := service.beginPerformanceRecoveryLocked()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer finish()
+	if service.performance.persistMu.TryLock() {
+		service.performance.persistMu.Unlock()
+		t.Fatal("recovery released persistence authority before preparing and saving state")
+	}
+	published, _, err := service.preparePerformanceResume(job, fault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.persistPerformanceJobSerialized(published, true); err != nil {
+		t.Fatal(err)
+	}
+	durable, err := loadPerformanceJob(job.Root)
+	if err != nil || durable.Status != published.Status {
+		t.Fatalf("recovery publication differs from durable state: %+v, %v", durable, err)
+	}
+}
+
+func performanceJobWithInFlightFile(t *testing.T, status string) (*Service, *PerformanceJob) {
+	t.Helper()
+	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := service.PreviewPerformanceQueue(PerformanceJobOptions{MaxFiles: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := performanceJobFixture(service.manager.Root(), analysis, "recovery-result-race")
+	job.PolicyFingerprint, job.QueueID, job.Files = preview.PolicyFingerprint, preview.QueueID, preview.Files
+	job.Status = status
+	job.Files[0].Status, job.Files[0].Attempts = performanceFileRunning, 1
+	job.ActiveStartedAt = time.Now().Add(-time.Second)
+	service.performance.job = job
+	service.performance.requestStarted = job.ActiveStartedAt
+	if err := service.persistPerformanceJob(job); err != nil {
+		t.Fatal(err)
+	}
+	return service, clonePerformanceJob(job)
 }

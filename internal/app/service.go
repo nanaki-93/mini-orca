@@ -60,6 +60,7 @@ type Service struct {
 	jobLifecycleMu                  sync.Mutex
 	analysisAll                     *analysisAllController
 	writeAnalyzeAllJob              func(string, []byte, os.FileMode) error
+	writePerformanceJob             func(string, []byte, os.FileMode) error
 	goScan                          *goScanController
 	drafts                          *draftStore
 	chatSessions                    *chatSessionStore
