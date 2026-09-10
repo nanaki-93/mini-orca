@@ -704,7 +704,7 @@ No qualification candidate was promoted and the scheduler must remain Paused.
 ## Thinking with final-schema recovery preparation — 2026-09-09
 
 The user's “go for it” authorizes the four-stage specification in
-[docs/tasks.md](tasks.md), registered as REC-04–07 and continuations of QUAL-05,
+[retained REC-04–07 specification](history/improvement-plan-2026-09.md#rec-04--establish-standalone-runtime-compatibility), registered as REC-04–07 and continuations of QUAL-05,
 QUAL-06 and REL-01. Exactly six additional development requests are authorized;
 the new grant is unapplied. Campaign consumption remains **36 development / 0
 qualification** and the scheduler remains **Paused**. No deployment or publication
@@ -1137,7 +1137,7 @@ PYTHONDONTWRITEBYTECODE=1 /Users/marcoandreose/DEV/lab/mini-orca/.mini-orca/auto
 After integrating the reviewed documentation, the coordinator records that exact
 clean HEAD in immutable private `offline-manifest.json`, with source, schema,
 corpus, artifact, dependency, configuration and proof hashes and the fixed CLI
-commands from `docs/insights-performance/README.md`. The successor authorization
+commands from [the retained evaluation instructions](history/insight-evaluation-2026-09.md#frozen-v2-successor-period). The successor authorization
 must bind the same HEAD. A separate immutable readiness manifest adds the fresh
 owned PID and zero-request readback before dispatch. Neither earlier manifests
 nor the offline freeze are overwritten. Fresh owned-process readiness is a

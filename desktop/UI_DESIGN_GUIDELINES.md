@@ -65,8 +65,8 @@ Keep empty, loading, stale, failed, partial, canceled and unavailable states
 explicit. Unknown metrics are not zero. Daemon connectivity is not provider
 connectivity. No fabricated findings, project facts or scores in normal usage.
 
-UI-01 removes current inert Preview utilities. Until that task is implemented,
-any retained Preview stays labeled and local-only. No navigation, disclosure,
+UI-01 removed the inert Preview utilities. Keep unsupported controls out of the
+current interface. No navigation, disclosure,
 preview or preset may send a provider request, execute code or mutate source.
 Fresh AI requests require explicit scope-specific consent where applicable.
 

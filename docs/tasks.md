@@ -4,13 +4,13 @@ Audit the existing Go daemon, Compose desktop client, tooling, and operational d
 
 ## Background execution — authorized 2026-09-10
 
-Automation: **Mini-Orca cleanup agents** (ID: mini-orca-cleanup-agents), attached to this Codex task, active every 20 minutes. Each wake handles at most one ordered cleanup task with one implementation agent, a fresh independent reviewer, and coordinator-run checks. Scheduler setup accepted no implementation. CLN-01 through CLN-10 are accepted; CLN-11 is next. PLAN.md owns current status.
+Automation: **Mini-Orca cleanup agents** (ID: mini-orca-cleanup-agents), attached to this Codex task, active every 20 minutes. Each wake handles at most one ordered cleanup task with one implementation agent, a fresh independent reviewer, and coordinator-run checks. Scheduler setup accepted no implementation. CLN-01 through CLN-11 are accepted; CLN-12 is next. PLAN.md owns current status.
 
 PLAN.md owns status and concise acceptance evidence; the checkboxes below mirror accepted work. The user authorized local commits on 2026-09-10: commit the first three accepted tasks together, then commit every later accepted task separately after independent review and coordinator checks. The coordinator stages only that task and its ledger/checklist updates; workers and reviewers do not commit. Preserve earlier accepted changes and unrelated user edits. Pause the cleanup automation after exhausted repairs or final completion. The historical dispatcher and insight qualification stay paused. This authorization excludes pushes, releases, and live Mini-Orca model evaluation.
 
 ## Audit baseline — 2026-09-10
 
-Reviewed clean commit **fe4cdad**. Only this file changed during the audit; scheduler setup subsequently registered the cleanup queue in PLAN.md. The previous recovery specification is retained in Git at **fe4cdad:docs/tasks.md**; PLAN.md and docs/RELEASE_ACCEPTANCE.md retain the current standby decisions and historical verdicts.
+Reviewed clean commit **fe4cdad**. Only this file changed during the audit; scheduler setup subsequently registered the cleanup queue in PLAN.md. The previous recovery specification at **fe4cdad:docs/tasks.md** is retained in [insight evaluation history](history/insight-evaluation-2026-09.md#recovery-after-the-failed-medium-reasoning-qualification); PLAN.md owns current standby decisions and docs/RELEASE_ACCEPTANCE.md preserves historical verdicts.
 
 **Assessment:** the codebase has useful package boundaries, substantial behavioral tests, shared storage/context/UI primitives, and little detected copy-paste duplication. Its main maintainability problems are concentrated workflow ownership, campaign-specific code mixed into the application package, silent background persistence failures, and a few unused desktop methods. A rewrite or arbitrary line-count reduction is not justified.
 
@@ -299,7 +299,24 @@ Accepted 2026-09-10: shared atomic metadata writes now preserve cleanup on failu
 
 ## Task CLN-11 — Separate current documentation from historical execution records
 
-- [ ] CLN-11 accepted after independent review and coordinator verification.
+- [x] CLN-11 accepted after independent review and coordinator verification.
+
+**Accepted documentation mapping**
+
+- PLAN.md retains current cleanup state, every accepted cleanup evidence record,
+  released-task status and standby decisions. Detailed prior instructions are in
+  [improvement history](history/improvement-plan-2026-09.md).
+- Former insights/runtime/campaign instructions and the complete recovery
+  specification from **fe4cdad:docs/tasks.md** are in
+  [insight history](history/insight-evaluation-2026-09.md).
+- The complete [old-to-new heading map](history/improvement-plan-2026-09.md#old-to-new-anchor-map)
+  covers prior PLAN.md, tasks/README.md, insights README and recovery anchors.
+  Root links continue to current docs. Release acceptance edits update navigation only.
+- UI-01 guidance describes the completed removal; its prior wording is retained in
+  history. The historical dispatcher remains paused; only cleanup scheduling is active.
+- QUAL-06/RCV-07 remain failed and RCV-08 unrun; consumption remains 60 development
+  / 24 qualification with the sealed unused conditional 24-case holdout preserved.
+
 
 **Target files**
 - PLAN.md — concise current status and cleanup task ledger.
