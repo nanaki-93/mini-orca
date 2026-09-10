@@ -1,10 +1,10 @@
 # Codebase cleanup and maintainability audit
 
-Audit the existing Go daemon, Compose desktop client, tooling, and operational documentation; reduce avoidable complexity while preserving behavior. The user authorized background implementation of CLN-01 through CLN-12 with agents on 2026-09-10. Only the cleanup scheduler is active; model evaluations and the historical autopilot remain on standby.
+Audit the existing Go daemon, Compose desktop client, tooling, and operational documentation; reduce avoidable complexity while preserving behavior. The user authorized background implementation of CLN-01 through CLN-12 with agents on 2026-09-10. All twelve cleanup tasks are complete and the cleanup scheduler is paused; model evaluations and the historical autopilot remain on standby.
 
 ## Background execution — authorized 2026-09-10
 
-Automation: **Mini-Orca cleanup agents** (ID: mini-orca-cleanup-agents), attached to this Codex task, active every 20 minutes. Each wake handles at most one ordered cleanup task with one implementation agent, a fresh independent reviewer, and coordinator-run checks. Scheduler setup accepted no implementation. CLN-01 through CLN-11 are accepted; CLN-12 is next. PLAN.md owns current status.
+Automation: **Mini-Orca cleanup agents** (ID: mini-orca-cleanup-agents), attached to this Codex task, now **Paused** after completion (previously every 20 minutes). Each wake handled at most one ordered cleanup task with one implementation agent, a fresh independent reviewer, and coordinator-run checks. Scheduler setup accepted no implementation. CLN-01 through CLN-12 are accepted; no cleanup task remains. PLAN.md owns current status.
 
 PLAN.md owns status and concise acceptance evidence; the checkboxes below mirror accepted work. The user authorized local commits on 2026-09-10: commit the first three accepted tasks together, then commit every later accepted task separately after independent review and coordinator checks. The coordinator stages only that task and its ledger/checklist updates; workers and reviewers do not commit. Preserve earlier accepted changes and unrelated user edits. Pause the cleanup automation after exhausted repairs or final completion. The historical dispatcher and insight qualification stay paused. This authorization excludes pushes, releases, and live Mini-Orca model evaluation.
 
@@ -313,7 +313,7 @@ Accepted 2026-09-10: shared atomic metadata writes now preserve cleanup on failu
   covers prior PLAN.md, tasks/README.md, insights README and recovery anchors.
   Root links continue to current docs. Release acceptance edits update navigation only.
 - UI-01 guidance describes the completed removal; its prior wording is retained in
-  history. The historical dispatcher remains paused; only cleanup scheduling is active.
+  history. At CLN-11 acceptance only cleanup scheduling was active; both schedulers are now paused.
 - QUAL-06/RCV-07 remain failed and RCV-08 unrun; consumption remains 60 development
   / 24 qualification with the sealed unused conditional 24-case holdout preserved.
 
@@ -347,7 +347,7 @@ Also manually verify moved Markdown links and retained historical status referen
 
 ## Task CLN-12 — Validate the cleanup as one release-preserving change
 
-- [ ] CLN-12 accepted after independent review and coordinator verification.
+- [x] CLN-12 accepted after independent review and coordinator verification.
 
 **Target files**
 - docs/tasks.md — final results, remaining limitations, and completed task status.
@@ -367,3 +367,49 @@ Also manually verify moved Markdown links and retained historical status referen
 
     ./scripts/validate.sh
     git diff --check
+
+### Final cleanup review and validation — 2026-09-10
+
+The aggregate review covers **fe4cdad → 4c1c904**, including all accepted CLN-01–11 changes. No actionable code issue was found. Cleanup repairs silent persistence failures and the reachability gate, consolidates shared semantic assessment and metadata storage, and moves evaluation, benchmark and Security responsibilities to explicit owners. API routes/JSON, prompt/schema identity, source policy, consent, one-file preview/Apply, evaluation grants/receipts and dependency configuration remain intact. No configuration or data migration is required.
+
+Responsibility moves are distinct from actual deletion:
+
+| Change | Measured result |
+| --- | --- |
+| Desktop ownership | Presenter 1,952 → 1,616 physical lines; new benchmark/security owners 279/178 lines. This is a responsibility move, with 121 more lines across the three files. |
+| Evaluation ownership | Evaluator/runner/platform locks move from app to insighteval: 2,859 → 2,738 lines. Evaluator and both locks differ only in package name. |
+| Removed duplication | Four unused desktop methods, the duplicate replaceable-metadata write sequence, and the 116-line duplicate optional-state/diagnostic runner block are removed. Shared assessment adds a 96-line app adapter; immutable artifact publication remains separate. |
+| Documentation ownership | PLAN 2,332 → 158 lines, feature guide 515 → 53, execution guide 257 → 43 at accepted CLN-11; historical files retain 2,732/775 lines and recovered specification. No verdict or budget history was deleted. |
+| Test preservation | Go Test functions 374 → 400; desktop tests 327 → 351. All 56 baseline evaluation tests survive, with seven additions. The storage failure test was renamed and expanded; no baseline desktop test names were removed. |
+
+Physical-line and test inventories describe scope; they are not quality scores or a deletion quota. Current app imports and duplicate helper references were checked; historical/audit paths remain intentionally retained. CLN-11's independent preservation review checked all 103 anchor mappings. The combined per-file analysis proposal remains a separate product decision and is not implemented by cleanup.
+
+The writer and coordinator each ran exact `./scripts/validate.sh`; both exited zero with all nine gates passing. The writer also ran exact `git diff --check`, which passed. No production correction was needed.
+
+| Gate | Writer | Coordinator |
+| --- | --- | --- |
+| Go suite | 11 packages passed: seven executed, four cached | All 11 packages cached |
+| Go race | All 11 tested packages cached | All 11 tested packages cached |
+| Daemon documentation/route contracts | One package freshly executed | Cached |
+| Python | 55 discovered, 54 executed, one opt-in runtime skip; 51.458 seconds | 55 discovered, 54 executed, one opt-in runtime skip; 57.174 seconds |
+| Formatting, vet, Go quality | Commands executed and passed | Commands executed and passed |
+| Desktop static / tests | Six / eight actionable Gradle tasks up-to-date | Six / eight actionable Gradle tasks up-to-date |
+
+The version package has no tests. The Go suite explicitly skipped the evaluator-sealed v2 qualification-fixture test; the coordinator's cached output repeats that skip. Retained desktop XML contains 40 suites/351 tests with zero failures/errors/skips. No fresh race or desktop test execution is claimed for these CLN-12 runs; compiler/tool caches may also be reused internally.
+
+A subsequent coordinator validation after native smoke failed only `go-format`: the formatting target also scanned the ignored synthetic `native/fixture/main.go`, whose original source used spaces. The other eight gates passed. The stopped fixture was archived as `main.go.fixture` with identical bytes and the recorded source hash preserved; no production file or check was changed. The failed run is retained in `coordinator-final-validate.log` / `coordinator-final-validation.json`, and the scratch correction in `scratch-repair.json`. The full repaired rerun in `coordinator-final-retry-validate.log` / `coordinator-final-retry-validation.json` passed all nine gates. A final run on the refrozen documentation candidate also passed (`coordinator-frozen-validate.log` / `coordinator-frozen-validation.json`): Go/race/daemon results were cached, desktop static/test tasks up-to-date, and Python executed 54 of 55 discovered tests with one opt-in skip in 55.174 seconds. The existing sealed-fixture Go skip remains.
+
+The coordinator additionally built `createDistributable` successfully (three tasks executed, five up-to-date) and launched the current normal macOS arm64 app bundle with JBR 25 against a synthetic loopback HTTP service and in-memory preferences. Native observations establish the following limited UI smoke:
+
+- An initial 800 × 600 window exposed compact Files/Context drawers and a source view labeled read-only. Native zoom exposed a 1,336 × 768 layout with docked Files and right tools.
+- Ctrl+P/Enter selected a file, Ctrl+Shift+O/Enter selected an exact symbol, Ctrl+4 opened Editor, Ctrl+K opened the composer, and Ctrl+Shift+V validated the synthetic draft. The candidate view exposed read-only diff accessibility labels and BEFORE / PROPOSED labels.
+- Security Review was disabled before confirmation, enabled after checking consent, and disabled again after the synthetic attempt consumed it. Both deterministic and AI report labels remained visible.
+- Benchmark listing sent GET only; selection displayed the fixed argv. The explicit Trust and run action sent trust GET/POST followed by benchmark POST, then displayed the fixture's “Not measured · unavailable” result and explanation.
+
+The source fixture hash remained unchanged, Apply/Undo were not invoked, and no real provider, benchmark or project code ran. Both owned app and fixture service were stopped. This is client behavior against a synthetic service, not production-daemon end-to-end validation or measured benchmark evidence.
+
+Native tooling had limits: direct Java attachment failed before the rebuilt normal bundle worked; the launch guard rejected an obsolete jar selection before launch, and the fixture was adjusted to follow the validated draft revision. Intermittent CUA scroll/window errors and a final ScreenCaptureKit invalid-parameter error prevented additional viewport checks. Cmd-specific shortcuts, exact 1000/999dp boundaries, other scaling combinations, editing resistance and spoken VoiceOver output were not established by this smoke. The synthetic overview endpoint was intentionally absent; its optional unavailable status is not evidence of a production daemon failure.
+
+Evidence: `.mini-orca/autopilot/cleanup/CLN-12/writer/`, `coordinator-validation.json`, `native/smoke.json` and `native/requests.jsonl` under the same CLN-12 directory. Fresh independent review approved the frozen candidate with no actionable findings; coordinator validation, diff checks and all 19 Markdown link checks passed. CLN-12 is accepted and all twelve cleanup tasks are complete. The cleanup scheduler is now Paused, with no next task. Candidate SHA-256: `70652874d9b6981aed0eac2c859f64974b3117f469f32968d5f937c75a38231b`; acceptance and local commit identity are recorded in `acceptance.json`.
+
+Live providers/evaluation, pinned-runtime conformance, distribution signing/installation, non-host runtime execution and broader accessibility were not revalidated. Historical release limits remain in force. Insight usefulness/omission remains unqualified, with QUAL-06/RCV-07 failed and RCV-08 unrun; cumulative 60 development / 24 qualification requests and the sealed unused conditional 24-case holdout are unchanged.
