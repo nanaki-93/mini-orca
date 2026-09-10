@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -913,7 +914,7 @@ func TestEngineeringInsightRunnerPersistsPrivateOptionalDiagnosticsWithoutOverwr
 			t.Fatalf("diagnostic artifact retained private text %q: %s", forbidden, data)
 		}
 	}
-	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id + "-invalid", ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: []engineeringInsightOptionalDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightReason(privateText), Presence: project.OptionalEngineeringInsightValuePresence}}}); err == nil {
+	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id + "-invalid", ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: []FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightReason(privateText), Presence: project.OptionalEngineeringInsightValuePresence}}}); err == nil {
 		t.Fatal("diagnostic artifact accepted arbitrary model text as a reason")
 	}
 	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: nil}); err == nil {
@@ -953,7 +954,7 @@ func TestEngineeringInsightRunnerDoesNotReplaceDiagnosticsForAnInterruptedUnknow
 	if err := writePrivateResponse(responseDirectory, id, priorResponse); err != nil {
 		t.Fatal(err)
 	}
-	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []engineeringInsightOptionalDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
+	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
 	if err := writePrivateOptionalDiagnostics(directory, prior); err != nil {
 		t.Fatal(err)
 	}
@@ -1003,7 +1004,7 @@ func TestEngineeringInsightRunnerLeavesAnUnknownReservationWhenDiagnosticPublish
 	first := cfg.Cases[0].Expected
 	id := expectedAttemptID(first)
 	digest := sha256.Sum256([]byte(runnerValidResponse()))
-	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []engineeringInsightOptionalDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
+	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
 	if err := writePrivateOptionalDiagnostics(directory, prior); err != nil {
 		t.Fatal(err)
 	}
@@ -1062,9 +1063,9 @@ func TestEngineeringInsightRunnerRejectsIncompleteFileInsightsAcrossOptionalLoca
 				if err != nil {
 					t.Fatal(err)
 				}
-				state := evaluateOptionalState(content, target, source, parsed)
-				if state.insight != "rejected" || !state.degraded() {
-					t.Fatalf("incomplete %s insight state = %q, degraded=%t", location, state.insight, state.degraded())
+				state := parsed.Diagnostics
+				if state.OptionalInsight() != "rejected" || !state.Degraded() {
+					t.Fatalf("incomplete %s insight state = %q, degraded=%t", location, state.OptionalInsight(), state.Degraded())
 				}
 			})
 		}
@@ -1523,4 +1524,89 @@ func recoveryV2TestRoot(t *testing.T) (string, string) {
 		t.Fatal(err)
 	}
 	return root, base
+}
+
+func TestFileAnalysisEvaluationAdapterMatchesProductionPromptAndProvider(t *testing.T) {
+	source := "package fixture\nfunc Run() {}\n"
+	target := project.IndexFile{Path: "sample.go", Language: "Go", SizeBytes: int64(len(source)), ContentHash: "source-hash", Symbols: []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "exact", AtomicTarget: true}}}
+	analysis := project.Analysis{Name: "fixture", Type: "go", Summary: "Synthetic project."}
+	index := &project.ProjectIndex{Files: []project.IndexFile{target}}
+	for _, test := range []struct {
+		endpoint, origin string
+		remote           bool
+	}{
+		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false},
+		{"http://localhost:1234/v1", "http://localhost:1234", false},
+		{"http://[::1]:1234/v1", "http://[::1]:1234", false},
+		{"http://127.25.0.1/v1", "http://127.25.0.1", false},
+		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true},
+		{"http://localhost.example/v1", "http://localhost.example", true},
+		{"invalid endpoint", "", true},
+	} {
+		t.Run(test.endpoint, func(t *testing.T) {
+			profile := config.ModelProfile{Scope: config.BugModelScope, Model: "fixture-model", APIBaseURL: test.endpoint, APIKey: "private-api-key", ContextMaxTokens: 16384}
+			provider := FileAnalysisEvaluationProvider(profile)
+			if provider.ProviderOrigin != test.origin || provider.RemoteProvider != test.remote {
+				t.Fatalf("provider=%+v, want origin=%q remote=%t", provider, test.origin, test.remote)
+			}
+			encoded, err := json.Marshal(provider)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, secret := range []string{"credential", "private-path", "token=secret", "private-fragment", "private-api-key"} {
+				if strings.Contains(string(encoded), secret) {
+					t.Fatalf("provider metadata leaked %q", secret)
+				}
+			}
+			runtime := newModelRuntime(profile, 0, 0)
+			want, err := semanticPrompt(source, analysis, index, target, bindContextManifestModel(semanticManifest(target), runtime.effective))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := PrepareFileAnalysisEvaluation(source, analysis, index, target, profile)
+			if err != nil || got != want {
+				t.Fatalf("evaluation prompt differs from production: %v", err)
+			}
+		})
+	}
+	if _, err := PrepareFileAnalysisEvaluation(strings.Repeat("x", maxSemanticAnalysisBytes+1), analysis, index, target, config.ModelProfile{}); err == nil {
+		t.Fatal("evaluation prompt bypassed production source limit")
+	}
+}
+
+func TestFileAnalysisEvaluationAssessmentMatchesProductionAndRunner(t *testing.T) {
+	target := project.IndexFile{Path: "sample.go", Language: "Go"}
+	for _, test := range []struct {
+		name, content, optional string
+		usable, degraded        bool
+	}{
+		{"omission", `{"purpose":"Explains."}`, "omitted", true, false},
+		{"explicit null", `{"purpose":"Explains.","engineering_insight":null}`, "omitted", true, false},
+		{"accepted", `{"purpose":"Explains.","engineering_insight":{"mechanism":"One operation.","why_it_matters_here":"A local call.","tradeoff_or_failure_mode":"Changes its result.","transferable_lesson":"Verify its result."}}`, "present", true, false},
+		{"rejected", `{"purpose":"Explains.","engineering_insight":false}`, "rejected", true, true},
+		{"symbol degradation", `{"purpose":"Explains.","symbol_explanations":{"missing":"Explanation"}}`, "omitted", true, true},
+		{"task degradation", `{"purpose":"Explains.","risks":[{"severity":"low","summary":"Risk.","task_spec":{}}]}`, "omitted", true, true},
+		{"parent rejected", `{"purpose":"","engineering_insight":false}`, "rejected", false, true},
+		{"not JSON", `private response`, "omitted", false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parsed, err := parseSemanticAnalysis(test.content, target, "package fixture")
+			assessment := AssessFileAnalysisEvaluation(test.content, target, "package fixture")
+			if assessment.UsableSummary != (err == nil) || assessment.UsableSummary != test.usable || (test.usable && !reflect.DeepEqual(assessment.Diagnostics, parsed.Diagnostics)) || assessment.Diagnostics.OptionalInsight() != test.optional || assessment.Diagnostics.Degraded() != test.degraded {
+				t.Fatalf("assessment=%+v, parser error=%v", assessment, err)
+			}
+			cfg := EngineeringInsightRunnerConfig{Model: "fixture", CandidateID: "synthetic", Client: &fakeEngineeringInsightClient{reply: test.content}}
+			prompt, promptErr := PrepareFileAnalysisEvaluation("package fixture", project.Analysis{}, &project.ProjectIndex{}, target, cfg.Profile)
+			if promptErr != nil {
+				t.Fatal(promptErr)
+			}
+			attempt, _, diagnostics, dispatchErr := dispatchRunnerPrompt(context.Background(), cfg, EngineeringInsightRunnerCase{Source: "package fixture"}, prompt, &target)
+			if dispatchErr != nil || !reflect.DeepEqual(diagnostics, assessment.Diagnostics) || attempt.UsableSummary != test.usable {
+				t.Fatalf("runner differs from assessment: attempt=%+v diagnostics=%+v err=%v", attempt, diagnostics, dispatchErr)
+			}
+			if test.usable && (attempt.OptionalInsight != test.optional || attempt.OptionalSectionDegraded != test.degraded || attempt.CompleteSummary == test.degraded) {
+				t.Fatalf("runner classification changed: %+v", attempt)
+			}
+		})
+	}
 }

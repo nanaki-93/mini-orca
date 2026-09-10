@@ -1677,3 +1677,61 @@ func TestAnalyzeAllRecoveryWaitsForFailedAdmission(t *testing.T) {
 		t.Fatalf("recovery stranded or replayed work: %+v requests=%d", job, requests.Load())
 	}
 }
+
+func TestSemanticDiagnosticsPreserveRejectedParentClassifications(t *testing.T) {
+	target := project.IndexFile{Path: "main.go", Language: "Go"}
+	base := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional.","task_spec":{},"engineering_insight":"private insight"}],"suggestions":[],"symbol_explanations":{"unknown":"private explanation"},"engineering_insight":null}`
+	for _, test := range []struct {
+		name, output, wantError string
+		count                   int
+	}{
+		{"missing purpose", strings.Replace(base, `"Explains."`, `""`, 1), "incomplete or exceeds limits", 2},
+		{"invalid risk", strings.Replace(base, `"low"`, `"critical"`, 1), "invalid risk", 2},
+		{"oversized parent", strings.Replace(base, `"Explains."`, `"`+strings.Repeat("x", maxSemanticAnalysisBytes)+`"`, 1), "empty or too large", 2},
+		{"excess risks", strings.Replace(base, `"risks":[`, `"risks":[`+strings.Repeat(`{"severity":"low","summary":"risk"},`, 32), 1), "incomplete or exceeds limits", 34},
+		{"invalid JSON", base + ` trailing`, "must contain one object", 0},
+		{"unknown parent field", strings.Replace(base, `"purpose":`, `"unknown":true,"purpose":`, 1), "unknown field", 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parsed, err := parseSemanticAnalysis(test.output, target, "package main")
+			if err == nil || !strings.Contains(err.Error(), test.wantError) || parsed.Purpose != "" || len(parsed.Risks) != 0 {
+				t.Fatalf("parent failure changed: parsed=%+v error=%v", parsed, err)
+			}
+			assessment := AssessFileAnalysisEvaluation(test.output, target, "package main")
+			if assessment.UsableSummary {
+				t.Fatal("evaluation accepted rejected parent")
+			}
+			diagnostics := assessment.Diagnostics
+			if len(diagnostics.Insights) != test.count {
+				t.Fatalf("diagnostic count=%d, want %d", len(diagnostics.Insights), test.count)
+			}
+			if test.count > 0 {
+				last := diagnostics.Insights[test.count-1]
+				if diagnostics.Insights[0].Reason != project.OptionalEngineeringInsightNull || last.Reason != project.OptionalEngineeringInsightInvalidShape || last.Index == nil || *last.Index != test.count-2 || !diagnostics.SymbolExplanationsDegraded || !reflect.DeepEqual(diagnostics.TaskSpecDegradedRiskIndices, []int{test.count - 2}) {
+					t.Fatalf("decoded parent diagnostics changed: %+v", diagnostics)
+				}
+			}
+			encoded, err := json.Marshal(diagnostics)
+			if err != nil || strings.Contains(string(encoded), "private") || strings.Contains(string(encoded), "Explains") {
+				t.Fatalf("diagnostics contain response text: %s, %v", encoded, err)
+			}
+		})
+	}
+}
+
+func TestSemanticDiagnosticsKeepAcceptedInsightsBeyondDisplayLimit(t *testing.T) {
+	insight := `{"mechanism":"One operation.","why_it_matters_here":"A local call.","tradeoff_or_failure_mode":"Changes its result.","transferable_lesson":"Verify its result."}`
+	output := `{"purpose":"Explains.","risks":[{"severity":"low","summary":"First.","engineering_insight":` + insight + `},{"severity":"low","summary":"Second.","engineering_insight":` + insight + `}],"suggestions":[{"title":"Keep behavior","engineering_insight":` + insight + `}],"engineering_insight":` + insight + `}`
+	parsed, err := parseSemanticAnalysis(output, project.IndexFile{}, "")
+	if err != nil || parsed.EngineeringInsight == nil || parsed.Risks[0].EngineeringInsight == nil || parsed.Risks[1].EngineeringInsight == nil || parsed.Suggestions[0].EngineeringInsight != nil {
+		t.Fatalf("display retention changed: %+v, %v", parsed, err)
+	}
+	if len(parsed.Diagnostics.Insights) != 4 || parsed.Diagnostics.OptionalInsight() != "present" || parsed.Diagnostics.Degraded() {
+		t.Fatalf("display omission changed assessment: %+v", parsed.Diagnostics)
+	}
+	for _, diagnostic := range parsed.Diagnostics.Insights {
+		if diagnostic.Reason != project.OptionalEngineeringInsightAccepted {
+			t.Fatalf("accepted raw insight was reclassified: %+v", diagnostic)
+		}
+	}
+}

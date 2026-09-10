@@ -46,8 +46,8 @@ func TestFileAnalysisInsightDiagnosticsKeepRejectionsIsolatedByLocation(t *testi
 	if err != nil || parsed.Purpose != "Explains." || parsed.EngineeringInsight == nil || parsed.Risks[0].EngineeringInsight != nil || parsed.Suggestions[0].EngineeringInsight != nil {
 		t.Fatalf("optional rejection changed parent data: %+v, %v", parsed, err)
 	}
-	diagnosticRecord := fileAnalysisOptionalDiagnostics(output, target, "package main\nfunc Run() {}")
-	diagnostics := diagnosticRecord.insights
+	diagnosticRecord := parsed.Diagnostics
+	diagnostics := diagnosticRecord.Insights
 	if len(diagnostics) != 3 {
 		t.Fatalf("diagnostic count = %d", len(diagnostics))
 	}
@@ -60,8 +60,8 @@ func TestFileAnalysisInsightDiagnosticsKeepRejectionsIsolatedByLocation(t *testi
 	if diagnostics[2].Location != "suggestion" || diagnostics[2].Index == nil || *diagnostics[2].Index != 0 || diagnostics[2].Reason != project.OptionalEngineeringInsightEmptyRequiredField || !diagnostics[2].Mechanism.Present || diagnostics[2].Mechanism.Runes != 0 {
 		t.Fatalf("suggestion diagnostic = %+v", diagnostics[2])
 	}
-	state := evaluateOptionalState(output, target, "package main\nfunc Run() {}", parsed)
-	if !state.insightRejected || state.nonInsightDegraded() {
+	state := parsed.Diagnostics
+	if state.OptionalInsight() != "rejected" || state.SymbolExplanationsDegraded || len(state.TaskSpecDegradedRiskIndices) > 0 {
 		t.Fatalf("insight rejection was not isolated: %+v", state)
 	}
 }
@@ -73,8 +73,8 @@ func TestEvaluationOptionalStateSeparatesSymbolAndTaskSpecDegradation(t *testing
 	if err != nil || len(parsed.Risks) != 1 || parsed.Risks[0].TaskSpec != nil || len(parsed.SymbolExplanations) != 0 {
 		t.Fatalf("parent optional data was not isolated: %+v, %v", parsed, err)
 	}
-	state := evaluateOptionalState(output, target, "package main\nfunc Run() {}", parsed)
-	if state.insight != "omitted" || state.insightRejected || !state.degraded() || !state.symbolExplanationsDegraded || len(state.taskSpecDegradedRiskIndices) != 1 || state.taskSpecDegradedRiskIndices[0] != 0 {
+	state := parsed.Diagnostics
+	if state.OptionalInsight() != "omitted" || !state.Degraded() || !state.SymbolExplanationsDegraded || len(state.TaskSpecDegradedRiskIndices) != 1 || state.TaskSpecDegradedRiskIndices[0] != 0 {
 		t.Fatalf("non-insight degradation was merged into insight rejection: %+v", state)
 	}
 }
@@ -204,9 +204,9 @@ func TestFileAnalysisNestedInsightSchemaPreservesParentAndCompleteness(t *testin
 			if (actual != nil) != test.nestedRetained {
 				t.Fatalf("nested insight retained=%t, want %t", actual != nil, test.nestedRetained)
 			}
-			state := evaluateOptionalState(content, target, source, parsed)
-			if state.insight != test.optional || (!state.degraded()) != test.complete {
-				t.Fatalf("optional=%q degraded=%t, want optional=%q complete=%t", state.insight, state.degraded(), test.optional, test.complete)
+			state := parsed.Diagnostics
+			if state.OptionalInsight() != test.optional || (!state.Degraded()) != test.complete {
+				t.Fatalf("optional=%q degraded=%t, want optional=%q complete=%t", state.OptionalInsight(), state.Degraded(), test.optional, test.complete)
 			}
 		})
 	}
