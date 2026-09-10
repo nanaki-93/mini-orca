@@ -122,6 +122,7 @@ func FileAnalysisResponseSchema() llm.JSONSchema {
 }
 
 type semanticAnalysisResponse struct {
+	Diagnostics        FileAnalysisDiagnostics     `json:"-"`
 	Purpose            string                      `json:"purpose"`
 	Responsibilities   []string                    `json:"responsibilities"`
 	Dependencies       []string                    `json:"dependencies"`
@@ -396,39 +397,67 @@ func boundedSignatures(index *project.ProjectIndex, targetPath string) []string 
 }
 
 func parseSemanticAnalysis(output string, target project.IndexFile, source string) (semanticAnalysisResponse, error) {
-	var wire semanticAnalysisWireResponse
+	return validateSemanticAnalysisResponse(output, target, source, false)
+}
+
+func validateSemanticAnalysisResponse(output string, target project.IndexFile, source string, collectRejectedParentDiagnostics bool) (semanticAnalysisResponse, error) {
+	var sizeErr error
 	if len(output) == 0 || len(output) > maxSemanticAnalysisBytes {
-		return semanticAnalysisResponse{}, fmt.Errorf("semantic analysis response is empty or too large")
+		sizeErr = fmt.Errorf("semantic analysis response is empty or too large")
+		if !collectRejectedParentDiagnostics {
+			return semanticAnalysisResponse{}, sizeErr
+		}
 	}
-	if err := decodeSemanticAnalysis(output, &wire); err != nil {
-		return semanticAnalysisResponse{}, err
+	var wire semanticAnalysisWireResponse
+	decodeErr := decodeSemanticAnalysis(output, &wire)
+	if decodeErr != nil {
+		if sizeErr != nil {
+			return semanticAnalysisResponse{}, sizeErr
+		}
+		return semanticAnalysisResponse{}, decodeErr
 	}
-	if err := validateSemanticAnalysisLimits(wire); err != nil {
-		return semanticAnalysisResponse{}, err
+	parentErr := sizeErr
+	if parentErr == nil {
+		parentErr = validateSemanticAnalysisLimits(wire)
 	}
-	explanations, err := normalizeSymbolExplanations(wire.SymbolExplanations, target.Symbols)
+	if parentErr != nil && !collectRejectedParentDiagnostics {
+		return semanticAnalysisResponse{}, parentErr
+	}
+	// Evaluation historically records bounded field metadata for any decoded
+	// parent, including parents rejected by size or collection limits. Normal
+	// production requests retain their cheap rejection before section parsing.
+	parsed := parseSemanticSections(wire, target, source)
+	if parentErr != nil {
+		return semanticAnalysisResponse{Diagnostics: parsed.Diagnostics}, parentErr
+	}
+
+	for _, risk := range parsed.Risks {
+		if risk.Severity != "low" && risk.Severity != "medium" && risk.Severity != "high" || risk.Summary == "" {
+			return semanticAnalysisResponse{Diagnostics: parsed.Diagnostics}, fmt.Errorf("semantic analysis contains an invalid risk")
+		}
+	}
+	limitFileAnalysisInsights(&parsed.EngineeringInsight, parsed.Risks, parsed.Suggestions)
+	return parsed, nil
+}
+
+func parseSemanticSections(wire semanticAnalysisWireResponse, target project.IndexFile, source string) semanticAnalysisResponse {
+	parsed := semanticAnalysisResponse{
+		Purpose: wire.Purpose, Responsibilities: wire.Responsibilities,
+		Dependencies: wire.Dependencies, SideEffects: wire.SideEffects,
+		Diagnostics: FileAnalysisDiagnostics{Insights: make([]FileAnalysisInsightDiagnostic, 0, 1+len(wire.Risks)+len(wire.Suggestions))},
+	}
+	var err error
+	parsed.SymbolExplanations, err = normalizeSymbolExplanations(wire.SymbolExplanations, target.Symbols)
 	if err != nil {
 		// Optional explanations cannot grant target authority. Omit the entire
 		// section on an invalid key instead of losing an otherwise valid summary.
-		explanations = map[string]string{}
+		parsed.SymbolExplanations = map[string]string{}
+		parsed.Diagnostics.SymbolExplanationsDegraded = true
 	}
-	risks, err := parseSemanticRisks(wire.Risks, target, source)
-	if err != nil {
-		return semanticAnalysisResponse{}, err
-	}
-	suggestions := parseSemanticSuggestions(wire.Suggestions)
-	insight, _ := parseFileAnalysisEngineeringInsight(wire.EngineeringInsight)
-	limitFileAnalysisInsights(&insight, risks, suggestions)
-	return semanticAnalysisResponse{
-		Purpose:            wire.Purpose,
-		Responsibilities:   wire.Responsibilities,
-		Dependencies:       wire.Dependencies,
-		SideEffects:        wire.SideEffects,
-		Risks:              risks,
-		Suggestions:        suggestions,
-		SymbolExplanations: explanations,
-		EngineeringInsight: insight,
-	}, nil
+	parsed.EngineeringInsight = parsed.Diagnostics.parseInsight("top_level", nil, wire.EngineeringInsight)
+	parsed.Risks = parseSemanticRisks(wire.Risks, target, source, &parsed.Diagnostics)
+	parsed.Suggestions = parseSemanticSuggestions(wire.Suggestions, &parsed.Diagnostics)
+	return parsed
 }
 
 func decodeSemanticAnalysis(output string, parsed *semanticAnalysisWireResponse) error {
@@ -482,45 +511,30 @@ func normalizeSymbolExplanations(explanations map[string]string, symbols []proje
 	return normalizedExplanations, nil
 }
 
-func parseSemanticRisks(risks []semanticAnalysisFinding, target project.IndexFile, source string) ([]project.Finding, error) {
+func parseSemanticRisks(risks []semanticAnalysisFinding, target project.IndexFile, source string, diagnostics *FileAnalysisDiagnostics) []project.Finding {
 	parsed := make([]project.Finding, 0, len(risks))
-	for _, risk := range risks {
+	for index, risk := range risks {
 		finding := project.Finding{
-			Severity: strings.ToLower(strings.TrimSpace(risk.Severity)),
-			Summary:  strings.TrimSpace(risk.Summary),
+			Severity:           strings.ToLower(strings.TrimSpace(risk.Severity)),
+			Summary:            strings.TrimSpace(risk.Summary),
+			TaskSpec:           parseOptionalBugTaskSpec(risk.TaskSpec, target, source),
+			EngineeringInsight: diagnostics.parseInsight("risk", &index, risk.Insight),
 		}
-		if finding.Severity != "low" && finding.Severity != "medium" && finding.Severity != "high" || finding.Summary == "" {
-			return nil, fmt.Errorf("semantic analysis contains an invalid risk")
+		if len(risk.TaskSpec) > 0 && strings.TrimSpace(string(risk.TaskSpec)) != "null" && finding.TaskSpec == nil {
+			diagnostics.TaskSpecDegradedRiskIndices = append(diagnostics.TaskSpecDegradedRiskIndices, index)
 		}
-		finding.TaskSpec = parseOptionalBugTaskSpec(risk.TaskSpec, target, source)
-		finding.EngineeringInsight, _ = parseFileAnalysisEngineeringInsight(risk.Insight)
 		parsed = append(parsed, finding)
-	}
-	return parsed, nil
-}
-
-func parseSemanticSuggestions(suggestions []semanticAnalysisSuggestion) []project.Suggestion {
-	parsed := make([]project.Suggestion, 0, len(suggestions))
-	for _, suggestion := range suggestions {
-		insight, _ := parseFileAnalysisEngineeringInsight(suggestion.Insight)
-		parsed = append(parsed, project.Suggestion{Title: suggestion.Title, Summary: suggestion.Summary, TargetSymbol: suggestion.TargetSymbol, Action: suggestion.Action, EngineeringInsight: insight})
 	}
 	return parsed
 }
 
-// parseFileAnalysisEngineeringInsight keeps advisory prose isolated from a
-// strict file summary while requiring the complete four-part file guidance.
-// Its diagnostic lets the evaluation runner distinguish omitted prose from a
-// supplied insight that production would drop.
-func parseFileAnalysisEngineeringInsight(raw json.RawMessage) (*project.EngineeringInsight, string) {
-	insight, diagnostic := parseFileAnalysisEngineeringInsightDiagnostic(raw)
-	if diagnostic.Reason == project.OptionalEngineeringInsightAbsent || diagnostic.Reason == project.OptionalEngineeringInsightNull {
-		return nil, ""
+func parseSemanticSuggestions(suggestions []semanticAnalysisSuggestion, diagnostics *FileAnalysisDiagnostics) []project.Suggestion {
+	parsed := make([]project.Suggestion, 0, len(suggestions))
+	for index, suggestion := range suggestions {
+		insight := diagnostics.parseInsight("suggestion", &index, suggestion.Insight)
+		parsed = append(parsed, project.Suggestion{Title: suggestion.Title, Summary: suggestion.Summary, TargetSymbol: suggestion.TargetSymbol, Action: suggestion.Action, EngineeringInsight: insight})
 	}
-	if diagnostic.Reason != project.OptionalEngineeringInsightAccepted {
-		return nil, "optional engineering insight omitted"
-	}
-	return insight, ""
+	return parsed
 }
 
 // parseFileAnalysisEngineeringInsightDiagnostic applies the selected-file
