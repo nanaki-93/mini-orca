@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/insighteval"
 )
 
 func TestRunEvaluationModeCompletesOfflineDevelopmentLifecycle(t *testing.T) {
@@ -63,14 +64,14 @@ func TestRunEvaluationModeCompletesOfflineDevelopmentLifecycle(t *testing.T) {
 	if calls != 3 {
 		t.Fatal("handoff made a provider call")
 	}
-	handoff, err := app.LoadEngineeringInsightScoringHandoff(root, "development-one")
+	handoff, err := insighteval.LoadEngineeringInsightScoringHandoff(root, "development-one")
 	if err != nil {
 		t.Fatal(err)
 	}
-	scores := map[string]app.EngineeringInsightAttemptScore{}
+	scores := map[string]insighteval.EngineeringInsightAttemptScore{}
 	for id, response := range handoff.Responses {
 		digest := sha256.Sum256([]byte(response))
-		scores[id] = app.EngineeringInsightAttemptScore{ResponseDigest: hex.EncodeToString(digest[:]), Correctness: 2, LocalRelevance: 2, TradeoffClarity: 2, UsefulVerification: 2}
+		scores[id] = insighteval.EngineeringInsightAttemptScore{ResponseDigest: hex.EncodeToString(digest[:]), Correctness: 2, LocalRelevance: 2, TradeoffClarity: 2, UsefulVerification: 2}
 	}
 	scoresPath := filepath.Join(t.TempDir(), "scores.json")
 	data, _ := json.Marshal(scores)
@@ -96,7 +97,7 @@ func TestRunEvaluationModeCompletesOfflineDevelopmentLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.ValidateEngineeringInsightEvaluationReceipt(receipt, expected); err != nil {
+	if _, err := insighteval.ValidateEngineeringInsightEvaluationReceipt(receipt, expected); err != nil {
 		t.Fatal(err)
 	}
 	badBase := append([]string(nil), args...)
@@ -344,7 +345,7 @@ func TestRunnerUsesActualDevelopmentCorpusOnceWithItsControl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cases, err := runnerCasesForMode(data, app.EngineeringInsightDevelopmentRunMode, "engineering-insight-v1")
+	cases, err := runnerCasesForMode(data, insighteval.EngineeringInsightDevelopmentRunMode, "engineering-insight-v1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,11 +393,11 @@ func TestQualificationScheduleRejectsDuplicateAndTrailingJSON(t *testing.T) {
 }
 
 func TestEvaluationExitStatusSeparatesValidCollectionIncompleteFailureAndPass(t *testing.T) {
-	for outcome, want := range map[app.EngineeringInsightEvaluationOutcome]int{
-		app.EngineeringInsightCollectionOutcome: 0,
-		app.EngineeringInsightPassedOutcome:     0,
-		app.EngineeringInsightIncompleteOutcome: 2,
-		app.EngineeringInsightFailedOutcome:     1,
+	for outcome, want := range map[insighteval.EngineeringInsightEvaluationOutcome]int{
+		insighteval.EngineeringInsightCollectionOutcome: 0,
+		insighteval.EngineeringInsightPassedOutcome:     0,
+		insighteval.EngineeringInsightIncompleteOutcome: 2,
+		insighteval.EngineeringInsightFailedOutcome:     1,
 	} {
 		if got := evaluationExitStatus(outcome); got != want {
 			t.Fatalf("exit status for %s = %d, want %d", outcome, got, want)
@@ -408,16 +409,16 @@ func TestEvaluationOptionsBindReceiptToExternallySelectedIdentity(t *testing.T) 
 	options := evaluationOptions{candidateID: "candidate", provider: "provider", model: "model", promptVersion: "prompt", corpusID: "corpus", baseRevision: "base", maxRequests: 24, maxOutputTokens: 4096, attemptTimeoutSeconds: 300}
 	path := writeCases(t, testCasesJSON())
 	options.caseSetPath = path
-	expected, err := options.expectationFor(app.EngineeringInsightQualificationMode)
+	expected, err := options.expectationFor(insighteval.EngineeringInsightQualificationMode)
 	if err != nil {
 		t.Fatal(err)
 	}
 	receipt := receiptFor(expected)
-	if report, err := app.ValidateEngineeringInsightEvaluationReceipt(receipt, expected); err != nil || report.Outcome != app.EngineeringInsightPassedOutcome {
+	if report, err := insighteval.ValidateEngineeringInsightEvaluationReceipt(receipt, expected); err != nil || report.Outcome != insighteval.EngineeringInsightPassedOutcome {
 		t.Fatalf("externally selected receipt = %+v, %v", report, err)
 	}
 	receipt.CorpusDigest = strings.Repeat("b", 64)
-	if _, err := app.ValidateEngineeringInsightEvaluationReceipt(receipt, expected); err == nil {
+	if _, err := insighteval.ValidateEngineeringInsightEvaluationReceipt(receipt, expected); err == nil {
 		t.Fatal("self-asserted corpus identity was accepted")
 	}
 }
@@ -447,7 +448,7 @@ func TestRecoveryV2CommandSelectsUniqueDevelopmentAndQualificationSchedules(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	development, err := runnerCasesForMode(developmentData, app.EngineeringInsightDevelopmentRunMode, "engineering-insight-v2")
+	development, err := runnerCasesForMode(developmentData, insighteval.EngineeringInsightDevelopmentRunMode, "engineering-insight-v2")
 	if err != nil || len(development) != 12 {
 		t.Fatalf("v2 development schedule = %d, %v", len(development), err)
 	}
@@ -468,7 +469,7 @@ func TestRecoveryV2CommandSelectsUniqueDevelopmentAndQualificationSchedules(t *t
 		qualificationDocuments[index] = fmt.Sprintf(`{"name":"qualification-%02d","partition":"qualification","intent":"%s","source":"package fixture\n"}`, index, intent)
 	}
 	qualificationData := []byte("[" + strings.Join(qualificationDocuments, ",") + "]")
-	qualification, err := runnerCasesForMode(qualificationData, app.EngineeringInsightQualificationRunMode, "engineering-insight-v2")
+	qualification, err := runnerCasesForMode(qualificationData, insighteval.EngineeringInsightQualificationRunMode, "engineering-insight-v2")
 	if err != nil || len(qualification) != 24 {
 		t.Fatalf("v2 qualification schedule = %d, %v", len(qualification), err)
 	}
@@ -505,16 +506,16 @@ func writeCases(t *testing.T, data string) string {
 	return path
 }
 
-func receiptFor(expected app.EngineeringInsightEvaluationExpectation) app.EngineeringInsightEvaluationReceipt {
-	receipt := app.EngineeringInsightEvaluationReceipt{Mode: app.EngineeringInsightQualificationMode, RunID: "run", CandidateID: expected.CandidateID, Provider: expected.Provider, Model: expected.Model, PromptVersion: expected.PromptVersion, CorpusID: expected.CorpusID, CorpusDigest: expected.CorpusDigest, BaseRevision: expected.BaseRevision, MaxRequests: expected.MaxRequests, MaxOutputTokens: expected.MaxOutputTokens, AttemptTimeoutSeconds: expected.AttemptTimeoutSeconds}
+func receiptFor(expected insighteval.EngineeringInsightEvaluationExpectation) insighteval.EngineeringInsightEvaluationReceipt {
+	receipt := insighteval.EngineeringInsightEvaluationReceipt{Mode: insighteval.EngineeringInsightQualificationMode, RunID: "run", CandidateID: expected.CandidateID, Provider: expected.Provider, Model: expected.Model, PromptVersion: expected.PromptVersion, CorpusID: expected.CorpusID, CorpusDigest: expected.CorpusDigest, BaseRevision: expected.BaseRevision, MaxRequests: expected.MaxRequests, MaxOutputTokens: expected.MaxOutputTokens, AttemptTimeoutSeconds: expected.AttemptTimeoutSeconds}
 	for index, scheduled := range expected.Schedule {
 		digest := fmt.Sprintf("%064x", index+1)
 		optional := "present"
 		if scheduled.Intent == "control" {
 			optional = "omitted"
 		}
-		receipt.Attempts = append(receipt.Attempts, app.EngineeringInsightEvaluationAttempt{CaseName: scheduled.CaseName, Partition: scheduled.Partition, Intent: scheduled.Intent, Repetition: scheduled.Repetition, Attempt: scheduled.Attempt, CandidateID: expected.CandidateID, Outcome: "completed", UsableSummary: true, CompleteSummary: true, OptionalInsight: optional, EmittedResponse: true, ResponseDigest: digest, OutputTokens: 100, FinishReason: "stop", ElapsedMilliseconds: float64(index + 1), Score: &app.EngineeringInsightAttemptScore{ResponseDigest: digest, Correctness: 2, LocalRelevance: 2, TradeoffClarity: 2, UsefulVerification: 2}})
+		receipt.Attempts = append(receipt.Attempts, insighteval.EngineeringInsightEvaluationAttempt{CaseName: scheduled.CaseName, Partition: scheduled.Partition, Intent: scheduled.Intent, Repetition: scheduled.Repetition, Attempt: scheduled.Attempt, CandidateID: expected.CandidateID, Outcome: "completed", UsableSummary: true, CompleteSummary: true, OptionalInsight: optional, EmittedResponse: true, ResponseDigest: digest, OutputTokens: 100, FinishReason: "stop", ElapsedMilliseconds: float64(index + 1), Score: &insighteval.EngineeringInsightAttemptScore{ResponseDigest: digest, Correctness: 2, LocalRelevance: 2, TradeoffClarity: 2, UsefulVerification: 2}})
 	}
-	receipt.Consumption = app.EngineeringInsightEvaluationConsumption{Requests: len(receipt.Attempts), OutputTokens: len(receipt.Attempts) * 100}
+	receipt.Consumption = insighteval.EngineeringInsightEvaluationConsumption{Requests: len(receipt.Attempts), OutputTokens: len(receipt.Attempts) * 100}
 	return receipt
 }
