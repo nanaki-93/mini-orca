@@ -4,7 +4,7 @@ Audit the existing Go daemon, Compose desktop client, tooling, and operational d
 
 ## Background execution — authorized 2026-09-10
 
-Automation: **Mini-Orca cleanup agents** (ID: mini-orca-cleanup-agents), attached to this Codex task, active every 20 minutes. Each wake handles at most one ordered cleanup task with one implementation agent, a fresh independent reviewer, and coordinator-run checks. Scheduler setup accepted no implementation. CLN-01 through CLN-07 are accepted; CLN-08 is next. PLAN.md owns current status.
+Automation: **Mini-Orca cleanup agents** (ID: mini-orca-cleanup-agents), attached to this Codex task, active every 20 minutes. Each wake handles at most one ordered cleanup task with one implementation agent, a fresh independent reviewer, and coordinator-run checks. Scheduler setup accepted no implementation. CLN-01 through CLN-08 are accepted; CLN-09 is next. PLAN.md owns current status.
 
 PLAN.md owns status and concise acceptance evidence; the checkboxes below mirror accepted work. The user authorized local commits on 2026-09-10: commit the first three accepted tasks together, then commit every later accepted task separately after independent review and coordinator checks. The coordinator stages only that task and its ledger/checklist updates; workers and reviewers do not commit. Preserve earlier accepted changes and unrelated user edits. Pause the cleanup automation after exhausted repairs or final completion. The historical dispatcher and insight qualification stay paused. This authorization excludes pushes, releases, and live Mini-Orca model evaluation.
 
@@ -222,7 +222,7 @@ Accepted 2026-09-10: shared atomic metadata writes now preserve cleanup on failu
 
 ## Task CLN-08 — Move evaluation tooling out of package app
 
-- [ ] CLN-08 accepted after independent review and coordinator verification.
+- [x] CLN-08 accepted after independent review and coordinator verification.
 
 **Target files**
 - internal/app/engineering_insight_runner.go → internal/insighteval/runner.go — move collection/campaign ownership.

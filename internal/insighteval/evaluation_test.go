@@ -1,4 +1,4 @@
-package app
+package insighteval
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -152,7 +153,7 @@ func TestEngineeringInsightEvaluationMalformedOutputIsSeparateFromControls(t *te
 		"trailing JSON":        validParent + `}{}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := parseSemanticAnalysis(output, target, "package fixture\n"); err == nil {
+			if app.AssessFileAnalysisEvaluation(output, target, "package fixture\n").UsableSummary {
 				t.Fatal("strict parent validation accepted malformed output")
 			}
 		})
@@ -164,11 +165,11 @@ func TestEngineeringInsightEvaluationMalformedOutputIsSeparateFromControls(t *te
 	} {
 		t.Run(name, func(t *testing.T) {
 			output := validParent + `,"engineering_insight":` + insight + `}`
-			parsed, err := parseSemanticAnalysis(output, target, "package fixture\n")
-			if err != nil {
-				t.Fatalf("valid parent with optional malformed insight = %v", err)
+			assessment := app.AssessFileAnalysisEvaluation(output, target, "package fixture\n")
+			if !assessment.UsableSummary {
+				t.Fatal("valid parent with optional malformed insight was rejected")
 			}
-			if parsed.EngineeringInsight != nil {
+			if assessment.Diagnostics.OptionalInsight() != "rejected" || !assessment.Diagnostics.Degraded() {
 				t.Fatal("invalid optional insight was retained")
 			}
 		})
@@ -539,7 +540,7 @@ func qualificationExpectation() EngineeringInsightEvaluationExpectation {
 			schedule = append(schedule, EngineeringInsightExpectedAttempt{CaseName: fmt.Sprintf("qualification-%02d", index), Partition: qualificationPartition, Intent: intent, Repetition: repetition, Attempt: 1})
 		}
 	}
-	return EngineeringInsightEvaluationExpectation{CandidateID: "candidate-v1", Provider: "provider", Model: "model", PromptVersion: semanticAnalysisPromptVersion, CorpusID: "engineering-insight-v1", CorpusDigest: strings.Repeat("a", 64), BaseRevision: "base6a14c01", MaxRequests: 24, MaxOutputTokens: 4096, AttemptTimeoutSeconds: 300, Schedule: schedule}
+	return EngineeringInsightEvaluationExpectation{CandidateID: "candidate-v1", Provider: "provider", Model: "model", PromptVersion: app.EngineeringInsightPromptVersion(), CorpusID: "engineering-insight-v1", CorpusDigest: strings.Repeat("a", 64), BaseRevision: "base6a14c01", MaxRequests: 24, MaxOutputTokens: 4096, AttemptTimeoutSeconds: 300, Schedule: schedule}
 }
 
 func qualificationReceipt() EngineeringInsightEvaluationReceipt {
@@ -660,20 +661,20 @@ func assertFixtureSemanticOutput(t *testing.T, fixture engineeringInsightFixture
 	if err := json.Unmarshal([]byte(fixture.SanitizedOutput), &wire); err != nil {
 		t.Fatalf("sanitized output is not JSON: %v", err)
 	}
-	parsed, err := parseSemanticAnalysis(fixture.SanitizedOutput, project.IndexFile{Path: "fixture.go", Language: "Go"}, fixture.Source)
-	if err != nil {
-		t.Fatalf("sanitized output rejected its valid parent: %v", err)
+	assessment := app.AssessFileAnalysisEvaluation(fixture.SanitizedOutput, project.IndexFile{Path: "fixture.go", Language: "Go"}, fixture.Source)
+	if !assessment.UsableSummary || assessment.Diagnostics.Degraded() {
+		t.Fatalf("sanitized output rejected or degraded: %+v", assessment)
 	}
 	if !fixture.ExpectInsight {
 		if _, present := wire["engineering_insight"]; present {
 			t.Fatal("control contains an engineering insight instead of intentionally omitting it")
 		}
-		if parsed.EngineeringInsight != nil {
-			t.Fatalf("control retained an insight: %+v", parsed.EngineeringInsight)
+		if assessment.Diagnostics.OptionalInsight() != "omitted" {
+			t.Fatalf("control retained an insight: %+v", assessment.Diagnostics)
 		}
 		return
 	}
-	if parsed.EngineeringInsight == nil {
+	if assessment.Diagnostics.OptionalInsight() != "present" {
 		t.Fatal("grounded insight was omitted")
 	}
 	insight := wire["engineering_insight"]
@@ -686,14 +687,11 @@ func assertFixtureSemanticOutput(t *testing.T, fixture engineeringInsightFixture
 			t.Fatalf("insight is missing %q: %s", field, insight)
 		}
 	}
-	if !project.ValidEngineeringInsight(parsed.EngineeringInsight) {
-		t.Fatalf("insight schema or 1,000-rune bound is invalid: %+v", parsed.EngineeringInsight)
-	}
 }
 
 func loadEngineeringInsightFixtures(t *testing.T, fileName string) []engineeringInsightFixture {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testdata", "engineering-insight-eval", fileName))
+	data, err := os.ReadFile(filepath.Join("..", "app", "testdata", "engineering-insight-eval", fileName))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -737,7 +735,7 @@ func decodeEngineeringInsightFixtures(data []byte) ([]engineeringInsightFixture,
 
 func loadPublishedV2QualificationFixtures(t *testing.T) ([]engineeringInsightFixture, bool) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testdata", "engineering-insight-eval", "v2-qualification.json"))
+	data, err := os.ReadFile(filepath.Join("..", "app", "testdata", "engineering-insight-eval", "v2-qualification.json"))
 	if os.IsNotExist(err) {
 		return nil, false
 	}

@@ -1,6 +1,6 @@
 //go:build windows
 
-package app
+package insighteval
 
 // Windows support fails closed until it has an equivalent process-scoped lock.
 // This keeps evaluation from dispatching without crash-safe serialization.

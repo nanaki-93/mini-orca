@@ -1,4 +1,4 @@
-package app
+package insighteval
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -202,7 +203,7 @@ func TestEngineeringInsightRunnerPersistsSourceFreeSixRequestDevelopmentCampaign
 	if client.calls.Load() != 3 || receipt.Consumption.Requests != 3 || len(handoff.Responses) != 3 {
 		t.Fatalf("calls=%d receipt=%+v handoff=%d", client.calls.Load(), receipt.Consumption, len(handoff.Responses))
 	}
-	productionSchema, err := FileAnalysisResponseSchema().Identity()
+	productionSchema, err := app.FileAnalysisResponseSchema().Identity()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +212,7 @@ func TestEngineeringInsightRunnerPersistsSourceFreeSixRequestDevelopmentCampaign
 		t.Fatalf("runner schema identity = %q, %v; want production %q", runnerSchema, err, productionSchema)
 	}
 	promptManifest := runnerPromptContextManifest(t, client.prompt)
-	wantManifest := bindContextManifestModel(project.ContextManifest{ByteLimit: maxSemanticAnalysisBytes, TokenLimit: maxSemanticAnalysisBytes / 4}, EffectiveModel{Scope: string(cfg.Profile.Scope), Model: cfg.Profile.Model, ProviderOrigin: providerOrigin(cfg.Profile.APIBaseURL), RemoteProvider: !isLoopbackURL(cfg.Profile.APIBaseURL), ContextMaxTokens: cfg.Profile.ContextMaxTokens})
+	wantManifest := project.ContextManifest{Scope: "bug", Model: "model", ProviderOrigin: "http://127.0.0.1:9999", RemoteProvider: false, ByteLimit: 64 * 1024, TokenLimit: 16 * 1024}
 	if promptManifest.Scope != wantManifest.Scope || promptManifest.Model != wantManifest.Model || promptManifest.ProviderOrigin != wantManifest.ProviderOrigin || promptManifest.RemoteProvider != wantManifest.RemoteProvider || promptManifest.ByteLimit != wantManifest.ByteLimit || promptManifest.TokenLimit != wantManifest.TokenLimit {
 		t.Fatalf("runner prompt manifest = %+v, want production binding %+v", promptManifest, wantManifest)
 	}
@@ -374,7 +375,7 @@ func TestEngineeringInsightRunnerFingerprintBindsOptionalSamplingControls(t *tes
 
 func TestEngineeringInsightRunnerFingerprintBindsResponseSchemaIdentity(t *testing.T) {
 	cfg := runnerTestConfig(t, "schema-fingerprint", EngineeringInsightCollectRunMode, 3, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
-	identity, err := FileAnalysisResponseSchema().Identity()
+	identity, err := app.FileAnalysisResponseSchema().Identity()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -914,7 +915,7 @@ func TestEngineeringInsightRunnerPersistsPrivateOptionalDiagnosticsWithoutOverwr
 			t.Fatalf("diagnostic artifact retained private text %q: %s", forbidden, data)
 		}
 	}
-	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id + "-invalid", ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: []FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightReason(privateText), Presence: project.OptionalEngineeringInsightValuePresence}}}); err == nil {
+	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id + "-invalid", ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: []app.FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightReason(privateText), Presence: project.OptionalEngineeringInsightValuePresence}}}); err == nil {
 		t.Fatal("diagnostic artifact accepted arbitrary model text as a reason")
 	}
 	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: nil}); err == nil {
@@ -954,7 +955,7 @@ func TestEngineeringInsightRunnerDoesNotReplaceDiagnosticsForAnInterruptedUnknow
 	if err := writePrivateResponse(responseDirectory, id, priorResponse); err != nil {
 		t.Fatal(err)
 	}
-	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
+	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []app.FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
 	if err := writePrivateOptionalDiagnostics(directory, prior); err != nil {
 		t.Fatal(err)
 	}
@@ -1004,7 +1005,7 @@ func TestEngineeringInsightRunnerLeavesAnUnknownReservationWhenDiagnosticPublish
 	first := cfg.Cases[0].Expected
 	id := expectedAttemptID(first)
 	digest := sha256.Sum256([]byte(runnerValidResponse()))
-	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
+	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []app.FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
 	if err := writePrivateOptionalDiagnostics(directory, prior); err != nil {
 		t.Fatal(err)
 	}
@@ -1059,11 +1060,11 @@ func TestEngineeringInsightRunnerRejectsIncompleteFileInsightsAcrossOptionalLoca
 		for _, location := range []string{"top-level", "risk", "suggestion"} {
 			t.Run(name+"/"+location, func(t *testing.T) {
 				content := response(location, insight)
-				parsed, err := parseSemanticAnalysis(content, target, source)
-				if err != nil {
-					t.Fatal(err)
+				assessment := app.AssessFileAnalysisEvaluation(content, target, source)
+				if !assessment.UsableSummary {
+					t.Fatal("valid parent rejected")
 				}
-				state := parsed.Diagnostics
+				state := assessment.Diagnostics
 				if state.OptionalInsight() != "rejected" || !state.Degraded() {
 					t.Fatalf("incomplete %s insight state = %q, degraded=%t", location, state.OptionalInsight(), state.Degraded())
 				}
@@ -1099,7 +1100,7 @@ func runnerTestConfig(t *testing.T, runID, mode string, count int, client Engine
 		}
 		cases = append(cases, EngineeringInsightRunnerCase{Expected: EngineeringInsightExpectedAttempt{CaseName: "case-" + string(rune('a'+caseIndex)), Partition: "development", Intent: intent, Repetition: index/3 + 1, Attempt: 1}, Source: "package fixture\n\n// fixture-secret\nfunc Run() {}\n"})
 	}
-	return EngineeringInsightRunnerConfig{Root: t.TempDir(), RunID: runID, Mode: mode, CandidateID: "candidate", Provider: "configured", Model: "model", PromptVersion: semanticAnalysisPromptVersion, CorpusID: "corpus", CorpusDigest: strings.Repeat("a", 64), BaseRevision: "base", Profile: config.ModelProfile{Scope: config.BugModelScope, APIBaseURL: "http://127.0.0.1:9999", APIKey: "provider-secret", Model: "model", ContextMaxTokens: 32000}, Cases: cases, Client: client}
+	return EngineeringInsightRunnerConfig{Root: t.TempDir(), RunID: runID, Mode: mode, CandidateID: "candidate", Provider: "configured", Model: "model", PromptVersion: app.EngineeringInsightPromptVersion(), CorpusID: "corpus", CorpusDigest: strings.Repeat("a", 64), BaseRevision: "base", Profile: config.ModelProfile{Scope: config.BugModelScope, APIBaseURL: "http://127.0.0.1:9999", APIKey: "provider-secret", Model: "model", ContextMaxTokens: 32000}, Cases: cases, Client: client}
 }
 
 func recoveryRunnerTestConfig(t *testing.T, runID string, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
@@ -1131,7 +1132,7 @@ func qualificationRunnerTestConfig(t *testing.T, runID string, client Engineerin
 			cases = append(cases, EngineeringInsightRunnerCase{Expected: EngineeringInsightExpectedAttempt{CaseName: "qualification-" + string(rune('a'+index)), Partition: "qualification", Intent: intent, Repetition: repetition, Attempt: 1}, Source: "package fixture\nfunc Run() {}\n"})
 		}
 	}
-	return EngineeringInsightRunnerConfig{Root: t.TempDir(), RunID: runID, Mode: EngineeringInsightQualificationRunMode, CandidateID: "candidate", Provider: "configured", Model: "model", PromptVersion: semanticAnalysisPromptVersion, CorpusID: "corpus", CorpusDigest: strings.Repeat("a", 64), BaseRevision: "base", Profile: config.ModelProfile{Scope: config.BugModelScope, APIBaseURL: "http://127.0.0.1:9999", Model: "model", ContextMaxTokens: 32000}, Cases: cases, Client: client}
+	return EngineeringInsightRunnerConfig{Root: t.TempDir(), RunID: runID, Mode: EngineeringInsightQualificationRunMode, CandidateID: "candidate", Provider: "configured", Model: "model", PromptVersion: app.EngineeringInsightPromptVersion(), CorpusID: "corpus", CorpusDigest: strings.Repeat("a", 64), BaseRevision: "base", Profile: config.ModelProfile{Scope: config.BugModelScope, APIBaseURL: "http://127.0.0.1:9999", Model: "model", ContextMaxTokens: 32000}, Cases: cases, Client: client}
 }
 
 func runnerValidResponse() string {
@@ -1454,7 +1455,7 @@ func TestEngineeringInsightRecoveryV2CoordinatorBoundaryIsExact(t *testing.T) {
 func recoveryV2DevelopmentTestConfig(t *testing.T, client EngineeringInsightRunnerClient) EngineeringInsightRunnerConfig {
 	t.Helper()
 	root, base := recoveryV2TestRoot(t)
-	data, err := os.ReadFile("testdata/engineering-insight-eval/v2-development.json")
+	data, err := os.ReadFile("../app/testdata/engineering-insight-eval/v2-development.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1511,7 +1512,7 @@ func recoveryV2TestRoot(t *testing.T) (string, string) {
 	sum := sha256.Sum256(campaign)
 	recoveryV2PredecessorFiles = map[string]string{"campaign.json": hex.EncodeToString(sum[:])}
 	t.Cleanup(func() { recoveryV2PredecessorFiles = originalPredecessors })
-	schema, err := FileAnalysisResponseSchema().Identity()
+	schema, err := app.FileAnalysisResponseSchema().Identity()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1526,7 +1527,8 @@ func recoveryV2TestRoot(t *testing.T) (string, string) {
 	return root, base
 }
 
-func TestFileAnalysisEvaluationAdapterMatchesProductionPromptAndProvider(t *testing.T) {
+// Prompt digests were captured from the production prompt before extraction.
+func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 	source := "package fixture\nfunc Run() {}\n"
 	target := project.IndexFile{Path: "sample.go", Language: "Go", SizeBytes: int64(len(source)), ContentHash: "source-hash", Symbols: []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "exact", AtomicTarget: true}}}
 	analysis := project.Analysis{Name: "fixture", Type: "go", Summary: "Synthetic project."}
@@ -1534,18 +1536,19 @@ func TestFileAnalysisEvaluationAdapterMatchesProductionPromptAndProvider(t *test
 	for _, test := range []struct {
 		endpoint, origin string
 		remote           bool
+		promptDigest     string
 	}{
-		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false},
-		{"http://localhost:1234/v1", "http://localhost:1234", false},
-		{"http://[::1]:1234/v1", "http://[::1]:1234", false},
-		{"http://127.25.0.1/v1", "http://127.25.0.1", false},
-		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true},
-		{"http://localhost.example/v1", "http://localhost.example", true},
-		{"invalid endpoint", "", true},
+		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false, "0992e3761823c6a7c543c3ead08fec1885c34ee935b5988391c20abc918d58db"},
+		{"http://localhost:1234/v1", "http://localhost:1234", false, "d74c6f5ebb26cc1ad72f24d4d1534d0637f7284abc5338a16273cf0a9d81807e"},
+		{"http://[::1]:1234/v1", "http://[::1]:1234", false, "ffd2671edd136725578e1a4d28f7ebdd305beaa5ff3806a92bf4cc1989258a80"},
+		{"http://127.25.0.1/v1", "http://127.25.0.1", false, "b69910273ae2479a61c11d42137f81f101956298e4cd3f51a3d6a61b11596de9"},
+		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true, "26cbeb6c3b83c1fd9637a12f7c033c4e8afffad865035c7e18095a2bfdbd3a44"},
+		{"http://localhost.example/v1", "http://localhost.example", true, "4e5d8a7d9104b64302b524083e8b092d8b851db4d7b56dafa7947ed0cfb8fdd3"},
+		{"invalid endpoint", "", true, "769121c99c9578fc290b12d45d4227ef9aace04ef110c180715446dcd5f04d13"},
 	} {
 		t.Run(test.endpoint, func(t *testing.T) {
 			profile := config.ModelProfile{Scope: config.BugModelScope, Model: "fixture-model", APIBaseURL: test.endpoint, APIKey: "private-api-key", ContextMaxTokens: 16384}
-			provider := FileAnalysisEvaluationProvider(profile)
+			provider := app.FileAnalysisEvaluationProvider(profile)
 			if provider.ProviderOrigin != test.origin || provider.RemoteProvider != test.remote {
 				t.Fatalf("provider=%+v, want origin=%q remote=%t", provider, test.origin, test.remote)
 			}
@@ -1558,23 +1561,18 @@ func TestFileAnalysisEvaluationAdapterMatchesProductionPromptAndProvider(t *test
 					t.Fatalf("provider metadata leaked %q", secret)
 				}
 			}
-			runtime := newModelRuntime(profile, 0, 0)
-			want, err := semanticPrompt(source, analysis, index, target, bindContextManifestModel(semanticManifest(target), runtime.effective))
-			if err != nil {
-				t.Fatal(err)
-			}
-			got, err := PrepareFileAnalysisEvaluation(source, analysis, index, target, profile)
-			if err != nil || got != want {
-				t.Fatalf("evaluation prompt differs from production: %v", err)
+			got, err := app.PrepareFileAnalysisEvaluation(source, analysis, index, target, profile)
+			if err != nil || fmt.Sprintf("%x", sha256.Sum256([]byte(got))) != test.promptDigest {
+				t.Fatalf("evaluation prompt differs from pre-extraction bytes: %v", err)
 			}
 		})
 	}
-	if _, err := PrepareFileAnalysisEvaluation(strings.Repeat("x", maxSemanticAnalysisBytes+1), analysis, index, target, config.ModelProfile{}); err == nil {
+	if _, err := app.PrepareFileAnalysisEvaluation(strings.Repeat("x", 64*1024+1), analysis, index, target, config.ModelProfile{}); err == nil {
 		t.Fatal("evaluation prompt bypassed production source limit")
 	}
 }
 
-func TestFileAnalysisEvaluationAssessmentMatchesProductionAndRunner(t *testing.T) {
+func TestFileAnalysisEvaluationAssessmentMatchesRunner(t *testing.T) {
 	target := project.IndexFile{Path: "sample.go", Language: "Go"}
 	for _, test := range []struct {
 		name, content, optional string
@@ -1590,13 +1588,12 @@ func TestFileAnalysisEvaluationAssessmentMatchesProductionAndRunner(t *testing.T
 		{"not JSON", `private response`, "omitted", false, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			parsed, err := parseSemanticAnalysis(test.content, target, "package fixture")
-			assessment := AssessFileAnalysisEvaluation(test.content, target, "package fixture")
-			if assessment.UsableSummary != (err == nil) || assessment.UsableSummary != test.usable || (test.usable && !reflect.DeepEqual(assessment.Diagnostics, parsed.Diagnostics)) || assessment.Diagnostics.OptionalInsight() != test.optional || assessment.Diagnostics.Degraded() != test.degraded {
-				t.Fatalf("assessment=%+v, parser error=%v", assessment, err)
+			assessment := app.AssessFileAnalysisEvaluation(test.content, target, "package fixture")
+			if assessment.UsableSummary != test.usable || assessment.Diagnostics.OptionalInsight() != test.optional || assessment.Diagnostics.Degraded() != test.degraded {
+				t.Fatalf("unexpected assessment=%+v", assessment)
 			}
 			cfg := EngineeringInsightRunnerConfig{Model: "fixture", CandidateID: "synthetic", Client: &fakeEngineeringInsightClient{reply: test.content}}
-			prompt, promptErr := PrepareFileAnalysisEvaluation("package fixture", project.Analysis{}, &project.ProjectIndex{}, target, cfg.Profile)
+			prompt, promptErr := app.PrepareFileAnalysisEvaluation("package fixture", project.Analysis{}, &project.ProjectIndex{}, target, cfg.Profile)
 			if promptErr != nil {
 				t.Fatal(promptErr)
 			}

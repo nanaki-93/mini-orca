@@ -30,6 +30,7 @@ run_stage() {
 }
 
 run_go_reachability() {
+  # Keep both roots: evaluation campaigns are owned by internal/insighteval.
   # deadcode reports findings on stdout but exits successfully when it finds any.
   reachability_output=$(go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval)
   reachability_status=$?

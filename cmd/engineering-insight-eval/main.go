@@ -18,6 +18,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/insighteval"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
@@ -40,7 +41,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	report, err := app.ValidateEngineeringInsightEvaluationReceipt(receipt, expected)
+	report, err := insighteval.ValidateEngineeringInsightEvaluationReceipt(receipt, expected)
 	if err != nil {
 		fail(err)
 	}
@@ -85,7 +86,7 @@ func runEvaluationMode(args []string) error {
 	if handled, err := runAuthorizationMode(*mode, *root, *runID, *receiptPath, *casesPath, *candidateID, *provider, *model, *promptVersion, *corpusID, *baseRevision, *authorizationID, *requests); handled {
 		return err
 	}
-	if !app.ValidEngineeringInsightEvaluationRunID(*runID) {
+	if !insighteval.ValidEngineeringInsightEvaluationRunID(*runID) {
 		return fmt.Errorf("evaluation run ID is invalid")
 	}
 	if handled, err := runAuxiliaryEvaluationMode(*mode, *root, *runID, *receiptPath, *scoresPath); handled {
@@ -112,7 +113,7 @@ func runAuthorizationMode(mode, root, runID, receiptPath, casesPath, candidateID
 		if root == "" || runID != "" || receiptPath != "" || casesPath != "" || candidateID != "" || provider != "" || model != "" || promptVersion != "" || corpusID != "" || baseRevision != "" || authorizationID != "" || requests != 0 {
 			return true, fmt.Errorf("recovery authorization accepts only root")
 		}
-		return true, app.AuthorizeEngineeringInsightRecoveryV2(root)
+		return true, insighteval.AuthorizeEngineeringInsightRecoveryV2(root)
 	}
 	if mode != "grant-development" {
 		return false, nil
@@ -123,20 +124,20 @@ func runAuthorizationMode(mode, root, runID, receiptPath, casesPath, candidateID
 func grantDevelopmentBudget(root, authorizationID string, requests int, candidateID, model, promptVersion string) error {
 	switch authorizationID {
 	case "qual05-qwen38-medium-1":
-		return app.GrantEngineeringInsightMediumDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+		return insighteval.GrantEngineeringInsightMediumDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
 	case "qual05-qwen38-thinking-schema-1":
-		return app.GrantEngineeringInsightThinkingSchemaDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+		return insighteval.GrantEngineeringInsightThinkingSchemaDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
 	case "qual05-qwen38-thinking-off-1":
-		return app.GrantEngineeringInsightThinkingOffDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+		return insighteval.GrantEngineeringInsightThinkingOffDevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
 	case "authqual05-qwen38-structured-1":
-		return app.GrantEngineeringInsightV12DevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+		return insighteval.GrantEngineeringInsightV12DevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
 	case "qual05-qwen38-schema-1":
-		return app.GrantEngineeringInsightV11DevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
+		return insighteval.GrantEngineeringInsightV11DevelopmentBudget(root, authorizationID, requests, candidateID, model, promptVersion)
 	case "qual05-qwen38-recovery-1":
-		return app.GrantEngineeringInsightRecoveryDevelopmentBudget(root, authorizationID, requests, candidateID, model)
+		return insighteval.GrantEngineeringInsightRecoveryDevelopmentBudget(root, authorizationID, requests, candidateID, model)
 	default:
 		if candidateID == "" && model == "" && promptVersion == "" {
-			return app.GrantEngineeringInsightDevelopmentBudget(root, authorizationID, requests)
+			return insighteval.GrantEngineeringInsightDevelopmentBudget(root, authorizationID, requests)
 		}
 		return fmt.Errorf("development budget grant identity is invalid")
 	}
@@ -168,7 +169,7 @@ func runProviderEvaluation(options providerEvaluationOptions) error {
 		return err
 	}
 	digest := sha256.Sum256(casesData)
-	receipt, _, err := app.RunEngineeringInsightEvaluation(context.Background(), app.EngineeringInsightRunnerConfig{Root: options.root, RunID: options.runID, Mode: options.mode, CandidateID: options.candidateID, Provider: options.provider, Model: profile.Model, PromptVersion: options.promptVersion, CorpusID: options.corpusID, CorpusDigest: hex.EncodeToString(digest[:]), CorpusJSON: casesData, BaseRevision: options.baseRevision, Profile: profile, ConfirmRemoteProvider: options.confirmRemote, Cases: runnerCases, Client: llm.NewEvaluationClient(profile)})
+	receipt, _, err := insighteval.RunEngineeringInsightEvaluation(context.Background(), insighteval.EngineeringInsightRunnerConfig{Root: options.root, RunID: options.runID, Mode: options.mode, CandidateID: options.candidateID, Provider: options.provider, Model: profile.Model, PromptVersion: options.promptVersion, CorpusID: options.corpusID, CorpusDigest: hex.EncodeToString(digest[:]), CorpusJSON: casesData, BaseRevision: options.baseRevision, Profile: profile, ConfirmRemoteProvider: options.confirmRemote, Cases: runnerCases, Client: llm.NewEvaluationClient(profile)})
 	if err != nil {
 		return err
 	}
@@ -187,7 +188,7 @@ func validProviderEvaluationOptions(options providerEvaluationOptions) bool {
 	return true
 }
 func validRunnerModeForCommand(mode string) bool {
-	return mode == app.EngineeringInsightCollectRunMode || mode == app.EngineeringInsightDevelopmentRunMode || mode == app.EngineeringInsightQualificationRunMode
+	return mode == insighteval.EngineeringInsightCollectRunMode || mode == insighteval.EngineeringInsightDevelopmentRunMode || mode == insighteval.EngineeringInsightQualificationRunMode
 }
 
 func runAuxiliaryEvaluationMode(mode, root, runID, receiptPath, scoresPath string) (bool, error) {
@@ -203,7 +204,7 @@ func runAuxiliaryEvaluationMode(mode, root, runID, receiptPath, scoresPath strin
 	if runID == "" {
 		return true, fmt.Errorf("run-id is required")
 	}
-	handoff, err := app.LoadEngineeringInsightScoringHandoff(root, runID)
+	handoff, err := insighteval.LoadEngineeringInsightScoringHandoff(root, runID)
 	if err != nil {
 		return true, err
 	}
@@ -225,11 +226,11 @@ func scoreEvaluationRun(root, runID, receiptPath, scoresPath string) error {
 	if err != nil {
 		return fmt.Errorf("read evaluation scores")
 	}
-	scores, err := app.DecodeEngineeringInsightScores(data)
+	scores, err := insighteval.DecodeEngineeringInsightScores(data)
 	if err != nil {
 		return err
 	}
-	receipt, err := app.StoreEngineeringInsightScores(root, runID, scores)
+	receipt, err := insighteval.StoreEngineeringInsightScores(root, runID, scores)
 	if err != nil {
 		return err
 	}
@@ -240,7 +241,7 @@ func exportEvaluationRun(root, runID, receiptPath string) error {
 	if runID == "" || receiptPath == "" {
 		return fmt.Errorf("run-id and receipt are required")
 	}
-	receipt, err := app.LoadEngineeringInsightEvaluationReceipt(root, runID)
+	receipt, err := insighteval.LoadEngineeringInsightEvaluationReceipt(root, runID)
 	if err != nil {
 		return err
 	}
@@ -266,7 +267,7 @@ func permittedEvaluationDirtyState(status string) bool {
 	return status == "" || status == "M PLAN.md" || status == " M PLAN.md"
 }
 
-func writeEvaluationReceipt(path string, receipt app.EngineeringInsightEvaluationReceipt) error {
+func writeEvaluationReceipt(path string, receipt insighteval.EngineeringInsightEvaluationReceipt) error {
 	data, err := json.Marshal(receipt)
 	if err != nil {
 		return fmt.Errorf("write evaluation receipt")
@@ -301,8 +302,8 @@ type runnerCaseDocument struct {
 	Source    string `json:"source"`
 }
 
-func runnerCasesForMode(data []byte, mode, corpusID string) ([]app.EngineeringInsightRunnerCase, error) {
-	if err := app.ValidateStrictJSONDocument(data); err != nil {
+func runnerCasesForMode(data []byte, mode, corpusID string) ([]insighteval.EngineeringInsightRunnerCase, error) {
+	if err := insighteval.ValidateStrictJSONDocument(data); err != nil {
 		return nil, fmt.Errorf("invalid evaluation cases")
 	}
 	var document []runnerCaseDocument
@@ -319,7 +320,7 @@ func runnerCasesForMode(data []byte, mode, corpusID string) ([]app.EngineeringIn
 		}
 	}
 	if corpusID == "engineering-insight-v2" {
-		if mode == app.EngineeringInsightQualificationRunMode {
+		if mode == insighteval.EngineeringInsightQualificationRunMode {
 			if len(selected) != 24 {
 				return nil, fmt.Errorf("evaluation cases do not define v2 qualification")
 			}
@@ -330,7 +331,7 @@ func runnerCasesForMode(data []byte, mode, corpusID string) ([]app.EngineeringIn
 		}
 		return repeatedRunnerCases(selected, 1), nil
 	}
-	if mode == app.EngineeringInsightQualificationRunMode {
+	if mode == insighteval.EngineeringInsightQualificationRunMode {
 		if len(selected) != 12 {
 			return nil, fmt.Errorf("evaluation cases do not define qualification")
 		}
@@ -346,17 +347,17 @@ func validRunnerCaseDocument(item runnerCaseDocument) bool {
 	return item.Name != "" && item.Source != "" && validCasePartition(item.Partition) && validCaseIntent(item.Intent)
 }
 func selectsRunnerCase(mode, partition string) bool {
-	if mode == app.EngineeringInsightQualificationRunMode {
+	if mode == insighteval.EngineeringInsightQualificationRunMode {
 		return partition == "qualification"
 	}
 	return partition == "development"
 }
 
-func repeatedRunnerCases(cases []runnerCaseDocument, repetitions int) []app.EngineeringInsightRunnerCase {
-	result := make([]app.EngineeringInsightRunnerCase, 0, len(cases)*repetitions)
+func repeatedRunnerCases(cases []runnerCaseDocument, repetitions int) []insighteval.EngineeringInsightRunnerCase {
+	result := make([]insighteval.EngineeringInsightRunnerCase, 0, len(cases)*repetitions)
 	for repetition := 1; repetition <= repetitions; repetition++ {
 		for _, item := range cases {
-			result = append(result, app.EngineeringInsightRunnerCase{Expected: app.EngineeringInsightExpectedAttempt{CaseName: item.Name, Partition: item.Partition, Intent: item.Intent, Repetition: repetition, Attempt: 1}, Source: item.Source})
+			result = append(result, insighteval.EngineeringInsightRunnerCase{Expected: insighteval.EngineeringInsightExpectedAttempt{CaseName: item.Name, Partition: item.Partition, Intent: item.Intent, Repetition: repetition, Attempt: 1}, Source: item.Source})
 		}
 	}
 	return result
@@ -395,54 +396,54 @@ func evaluationOptionsFromFlags() (evaluationOptions, error) {
 	return evaluationOptions{receiptPath: *receiptPath, caseSetPath: *caseSetPath, candidateID: *candidateID, provider: *provider, model: *model, promptVersion: *promptVersion, corpusID: *corpusID, baseRevision: *baseRevision, maxRequests: *maxRequests, maxOutputTokens: *maxOutputTokens, attemptTimeoutSeconds: *attemptTimeoutSeconds}, nil
 }
 
-func loadReceipt(path string) (app.EngineeringInsightEvaluationReceipt, error) {
+func loadReceipt(path string) (insighteval.EngineeringInsightEvaluationReceipt, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return app.EngineeringInsightEvaluationReceipt{}, fmt.Errorf("read evaluation receipt")
+		return insighteval.EngineeringInsightEvaluationReceipt{}, fmt.Errorf("read evaluation receipt")
 	}
-	receipt, err := app.DecodeEngineeringInsightEvaluationReceipt(data)
+	receipt, err := insighteval.DecodeEngineeringInsightEvaluationReceipt(data)
 	if err != nil {
-		return app.EngineeringInsightEvaluationReceipt{}, err
+		return insighteval.EngineeringInsightEvaluationReceipt{}, err
 	}
 	return receipt, nil
 }
 
-func (options evaluationOptions) expectationFor(mode app.EngineeringInsightEvaluationMode) (app.EngineeringInsightEvaluationExpectation, error) {
+func (options evaluationOptions) expectationFor(mode insighteval.EngineeringInsightEvaluationMode) (insighteval.EngineeringInsightEvaluationExpectation, error) {
 	data, err := os.ReadFile(options.caseSetPath)
 	if err != nil {
-		return app.EngineeringInsightEvaluationExpectation{}, fmt.Errorf("read evaluation cases")
+		return insighteval.EngineeringInsightEvaluationExpectation{}, fmt.Errorf("read evaluation cases")
 	}
 	schedule, err := qualificationSchedule(data)
-	if mode == app.EngineeringInsightCollectionMode {
+	if mode == insighteval.EngineeringInsightCollectionMode {
 		schedule, err = developmentSchedule(data)
 	}
 	if options.corpusID == "engineering-insight-v2" {
-		if mode == app.EngineeringInsightCollectionMode {
+		if mode == insighteval.EngineeringInsightCollectionMode {
 			schedule, err = uniqueSchedule(data, "development", 12, 8)
 		} else {
 			schedule, err = uniqueSchedule(data, "qualification", 24, 16)
 		}
 	}
 	if err != nil {
-		return app.EngineeringInsightEvaluationExpectation{}, err
+		return insighteval.EngineeringInsightEvaluationExpectation{}, err
 	}
 	digest := sha256.Sum256(data)
 	protocolVersion := ""
 	if options.corpusID == "engineering-insight-v2" {
 		protocolVersion = "v2"
 	}
-	return app.EngineeringInsightEvaluationExpectation{ProtocolVersion: protocolVersion, CandidateID: options.candidateID, Provider: options.provider, Model: options.model, PromptVersion: options.promptVersion, CorpusID: options.corpusID, CorpusDigest: hex.EncodeToString(digest[:]), BaseRevision: options.baseRevision, MaxRequests: options.maxRequests, MaxOutputTokens: options.maxOutputTokens, AttemptTimeoutSeconds: options.attemptTimeoutSeconds, Schedule: schedule}, nil
+	return insighteval.EngineeringInsightEvaluationExpectation{ProtocolVersion: protocolVersion, CandidateID: options.candidateID, Provider: options.provider, Model: options.model, PromptVersion: options.promptVersion, CorpusID: options.corpusID, CorpusDigest: hex.EncodeToString(digest[:]), BaseRevision: options.baseRevision, MaxRequests: options.maxRequests, MaxOutputTokens: options.maxOutputTokens, AttemptTimeoutSeconds: options.attemptTimeoutSeconds, Schedule: schedule}, nil
 }
 
-func uniqueSchedule(data []byte, partition string, count, substantive int) ([]app.EngineeringInsightExpectedAttempt, error) {
-	if err := app.ValidateStrictJSONDocument(data); err != nil {
+func uniqueSchedule(data []byte, partition string, count, substantive int) ([]insighteval.EngineeringInsightExpectedAttempt, error) {
+	if err := insighteval.ValidateStrictJSONDocument(data); err != nil {
 		return nil, fmt.Errorf("invalid evaluation cases")
 	}
 	cases, err := decodeEvaluationCases(data)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]app.EngineeringInsightExpectedAttempt, 0, count)
+	result := make([]insighteval.EngineeringInsightExpectedAttempt, 0, count)
 	seen := make(map[string]bool, count)
 	actualSubstantive := 0
 	for _, item := range cases {
@@ -451,7 +452,7 @@ func uniqueSchedule(data []byte, partition string, count, substantive int) ([]ap
 		}
 		seen[item.Name] = true
 		if item.Partition == partition {
-			result = append(result, app.EngineeringInsightExpectedAttempt{CaseName: item.Name, Partition: item.Partition, Intent: item.Intent, Repetition: 1, Attempt: 1})
+			result = append(result, insighteval.EngineeringInsightExpectedAttempt{CaseName: item.Name, Partition: item.Partition, Intent: item.Intent, Repetition: 1, Attempt: 1})
 			if item.Intent == "substantive" {
 				actualSubstantive++
 			}
@@ -463,15 +464,15 @@ func uniqueSchedule(data []byte, partition string, count, substantive int) ([]ap
 	return result, nil
 }
 
-func developmentSchedule(data []byte) ([]app.EngineeringInsightExpectedAttempt, error) {
-	if err := app.ValidateStrictJSONDocument(data); err != nil {
+func developmentSchedule(data []byte) ([]insighteval.EngineeringInsightExpectedAttempt, error) {
+	if err := insighteval.ValidateStrictJSONDocument(data); err != nil {
 		return nil, fmt.Errorf("invalid evaluation cases")
 	}
 	cases, err := decodeEvaluationCases(data)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]app.EngineeringInsightExpectedAttempt, 0, 3)
+	result := make([]insighteval.EngineeringInsightExpectedAttempt, 0, 3)
 	seen := map[string]bool{}
 	for _, item := range cases {
 		if !validEvaluationCase(item, seen) {
@@ -479,7 +480,7 @@ func developmentSchedule(data []byte) ([]app.EngineeringInsightExpectedAttempt, 
 		}
 		seen[item.Name] = true
 		if item.Partition == "development" {
-			result = append(result, app.EngineeringInsightExpectedAttempt{CaseName: item.Name, Partition: item.Partition, Intent: item.Intent, Repetition: 1, Attempt: 1})
+			result = append(result, insighteval.EngineeringInsightExpectedAttempt{CaseName: item.Name, Partition: item.Partition, Intent: item.Intent, Repetition: 1, Attempt: 1})
 		}
 	}
 	if len(result) != 3 {
@@ -488,8 +489,8 @@ func developmentSchedule(data []byte) ([]app.EngineeringInsightExpectedAttempt, 
 	return result, nil
 }
 
-func qualificationSchedule(data []byte) ([]app.EngineeringInsightExpectedAttempt, error) {
-	if err := app.ValidateStrictJSONDocument(data); err != nil {
+func qualificationSchedule(data []byte) ([]insighteval.EngineeringInsightExpectedAttempt, error) {
+	if err := insighteval.ValidateStrictJSONDocument(data); err != nil {
 		return nil, fmt.Errorf("invalid evaluation cases")
 	}
 	cases, err := decodeEvaluationCases(data)
@@ -560,21 +561,21 @@ func hasQualificationCaseBalance(cases []qualificationCase) bool {
 	return len(cases) == 12 && substantive == 8
 }
 
-func repeatQualificationCases(cases []qualificationCase) []app.EngineeringInsightExpectedAttempt {
-	schedule := make([]app.EngineeringInsightExpectedAttempt, 0, 24)
+func repeatQualificationCases(cases []qualificationCase) []insighteval.EngineeringInsightExpectedAttempt {
+	schedule := make([]insighteval.EngineeringInsightExpectedAttempt, 0, 24)
 	for repetition := 1; repetition <= 2; repetition++ {
 		for _, evaluationCase := range cases {
-			schedule = append(schedule, app.EngineeringInsightExpectedAttempt{CaseName: evaluationCase.name, Partition: "qualification", Intent: evaluationCase.intent, Repetition: repetition, Attempt: 1})
+			schedule = append(schedule, insighteval.EngineeringInsightExpectedAttempt{CaseName: evaluationCase.name, Partition: "qualification", Intent: evaluationCase.intent, Repetition: repetition, Attempt: 1})
 		}
 	}
 	return schedule
 }
 
-func evaluationExitStatus(outcome app.EngineeringInsightEvaluationOutcome) int {
-	if outcome == app.EngineeringInsightCollectionOutcome || outcome == app.EngineeringInsightPassedOutcome {
+func evaluationExitStatus(outcome insighteval.EngineeringInsightEvaluationOutcome) int {
+	if outcome == insighteval.EngineeringInsightCollectionOutcome || outcome == insighteval.EngineeringInsightPassedOutcome {
 		return 0
 	}
-	if outcome == app.EngineeringInsightIncompleteOutcome {
+	if outcome == insighteval.EngineeringInsightIncompleteOutcome {
 		return 2
 	}
 	return 1

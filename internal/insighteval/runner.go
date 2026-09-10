@@ -1,4 +1,4 @@
-package app
+package insighteval
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -145,12 +146,12 @@ type engineeringInsightRunManifest struct {
 // engineeringInsightOptionalDiagnostics is private, source-free evidence for
 // one emitted response. It deliberately remains outside the public receipt.
 type engineeringInsightOptionalDiagnostics struct {
-	RunID                       string                          `json:"run_id"`
-	AttemptID                   string                          `json:"attempt_id"`
-	ResponseDigest              string                          `json:"response_digest"`
-	Insights                    []FileAnalysisInsightDiagnostic `json:"insights"`
-	SymbolExplanationsDegraded  bool                            `json:"symbol_explanations_degraded"`
-	TaskSpecDegradedRiskIndices []int                           `json:"task_spec_degraded_risk_indices"`
+	RunID                       string                              `json:"run_id"`
+	AttemptID                   string                              `json:"attempt_id"`
+	ResponseDigest              string                              `json:"response_digest"`
+	Insights                    []app.FileAnalysisInsightDiagnostic `json:"insights"`
+	SymbolExplanationsDegraded  bool                                `json:"symbol_explanations_degraded"`
+	TaskSpecDegradedRiskIndices []int                               `json:"task_spec_degraded_risk_indices"`
 }
 
 type engineeringInsightCampaign struct {
@@ -224,7 +225,7 @@ func AuthorizeEngineeringInsightRecoveryV2(root string) error {
 	if err := validateRecoveryCoordinatorBoundary(canonicalRoot); err != nil {
 		return err
 	}
-	schemaIdentity, err := FileAnalysisResponseSchema().Identity()
+	schemaIdentity, err := app.FileAnalysisResponseSchema().Identity()
 	if err != nil {
 		return fmt.Errorf("recovery response schema is invalid")
 	}
@@ -650,7 +651,7 @@ func completedRunnerManifestError(manifest engineeringInsightRunManifest) error 
 }
 
 func validateRunnerDestination(cfg EngineeringInsightRunnerConfig) error {
-	if FileAnalysisEvaluationProvider(cfg.Profile).RemoteProvider && !cfg.ConfirmRemoteProvider {
+	if app.FileAnalysisEvaluationProvider(cfg.Profile).RemoteProvider && !cfg.ConfirmRemoteProvider {
 		return ErrEngineeringInsightRemoteDenied
 	}
 	return nil
@@ -816,10 +817,10 @@ func validateRunnerConfig(cfg EngineeringInsightRunnerConfig) error {
 	if !validRunnerMode(cfg.Mode) {
 		return fmt.Errorf("evaluation runner mode is invalid")
 	}
-	if cfg.PromptVersion != semanticAnalysisPromptVersion {
+	if cfg.PromptVersion != app.EngineeringInsightPromptVersion() {
 		return fmt.Errorf("evaluation runner prompt identity is invalid")
 	}
-	if _, err := FileAnalysisResponseSchema().Identity(); err != nil {
+	if _, err := app.FileAnalysisResponseSchema().Identity(); err != nil {
 		return fmt.Errorf("evaluation runner response schema is invalid: %w", err)
 	}
 	if recoveryV2RunnerConfig(cfg) {
@@ -1070,7 +1071,7 @@ func runnerFingerprint(cfg EngineeringInsightRunnerConfig) string {
 	// immutable public identity without ever writing those values to a receipt.
 	// validateRunnerConfig verifies the embedded schema before this digest is
 	// used to create or resume a manifest.
-	schemaIdentity, _ := FileAnalysisResponseSchema().Identity()
+	schemaIdentity, _ := app.FileAnalysisResponseSchema().Identity()
 	return runnerFingerprintWithSchemaIdentity(cfg, schemaIdentity)
 }
 
@@ -1226,7 +1227,7 @@ func validRecoveryV2PeriodFields(fields map[string]json.RawMessage) bool {
 
 func validRecoveryV2Period(period engineeringInsightRecoveryV2Period, root string) bool {
 	canonicalRoot, err := canonicalEvaluationRoot(root)
-	schemaIdentity, schemaErr := FileAnalysisResponseSchema().Identity()
+	schemaIdentity, schemaErr := app.FileAnalysisResponseSchema().Identity()
 	if err != nil || schemaErr != nil || !sameRecoveryV2PeriodIdentity(period, canonicalRoot) || !sameRecoveryV2PeriodProfile(period, schemaIdentity) || !validRecoveryV2PeriodAccounting(period) {
 		return false
 	}
@@ -1430,7 +1431,7 @@ func matchesDevelopmentGrantDispatch(cfg EngineeringInsightRunnerConfig, grant e
 		cfg.Profile.Model == grant.Model &&
 		(grant.PromptVersion == "" || cfg.PromptVersion == grant.PromptVersion) &&
 		(grant.ReasoningEffort == "" || cfg.Profile.ReasoningEffort == grant.ReasoningEffort) &&
-		!FileAnalysisEvaluationProvider(cfg.Profile).RemoteProvider
+		!app.FileAnalysisEvaluationProvider(cfg.Profile).RemoteProvider
 }
 
 func developmentGrantLedgerPath(directory string) string {
@@ -1502,10 +1503,10 @@ func unknownReservedAttempt(expected EngineeringInsightExpectedAttempt, candidat
 	return EngineeringInsightEvaluationAttempt{CaseName: expected.CaseName, Partition: expected.Partition, Intent: expected.Intent, Repetition: expected.Repetition, Attempt: expected.Attempt, CandidateID: candidate, Outcome: "unknown", OptionalInsight: "not_evaluated", FinishReason: "unknown"}
 }
 
-func executeRunnerAttempt(parent context.Context, cfg EngineeringInsightRunnerConfig, item EngineeringInsightRunnerCase) (EngineeringInsightEvaluationAttempt, string, FileAnalysisDiagnostics, error) {
+func executeRunnerAttempt(parent context.Context, cfg EngineeringInsightRunnerConfig, item EngineeringInsightRunnerCase) (EngineeringInsightEvaluationAttempt, string, app.FileAnalysisDiagnostics, error) {
 	root, prompt, target, err := prepareRunnerPrompt(cfg, item)
 	if err != nil {
-		return EngineeringInsightEvaluationAttempt{}, "", FileAnalysisDiagnostics{}, err
+		return EngineeringInsightEvaluationAttempt{}, "", app.FileAnalysisDiagnostics{}, err
 	}
 	defer os.RemoveAll(root)
 	return dispatchRunnerPrompt(parent, cfg, item, prompt, target)
@@ -1545,25 +1546,25 @@ func prepareRunnerPrompt(cfg EngineeringInsightRunnerConfig, item EngineeringIns
 	if err != nil {
 		return fail(err)
 	}
-	prompt, err := PrepareFileAnalysisEvaluation(item.Source, analysis, index, *target, cfg.Profile)
+	prompt, err := app.PrepareFileAnalysisEvaluation(item.Source, analysis, index, *target, cfg.Profile)
 	if err != nil {
 		return fail(err)
 	}
 	return root, prompt, target, nil
 }
 
-func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerConfig, item EngineeringInsightRunnerCase, prompt string, target *project.IndexFile) (EngineeringInsightEvaluationAttempt, string, FileAnalysisDiagnostics, error) {
+func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerConfig, item EngineeringInsightRunnerCase, prompt string, target *project.IndexFile) (EngineeringInsightEvaluationAttempt, string, app.FileAnalysisDiagnostics, error) {
 	timed, cancel := context.WithTimeout(parent, qualificationAttemptTimeoutSeconds*time.Second)
 	defer cancel()
 	started := time.Now()
-	response, err := cfg.Client.ChatWithJSONSchema(timed, []llm.ChatMessage{{Role: "user", Content: prompt}}, FileAnalysisResponseSchema())
+	response, err := cfg.Client.ChatWithJSONSchema(timed, []llm.ChatMessage{{Role: "user", Content: prompt}}, app.FileAnalysisResponseSchema())
 	elapsed := time.Since(started).Milliseconds()
 	if err != nil {
 		attempt := failedRunnerAttemptWithElapsed(item.Expected, cfg.CandidateID, err, elapsed)
 		if errors.Is(err, llm.ErrStructuredRequestRejected) {
-			return attempt, "", FileAnalysisDiagnostics{}, err
+			return attempt, "", app.FileAnalysisDiagnostics{}, err
 		}
-		return attempt, "", FileAnalysisDiagnostics{}, nil
+		return attempt, "", app.FileAnalysisDiagnostics{}, nil
 	}
 	message := response.Choices[0].Message
 	content := message.Content
@@ -1574,7 +1575,7 @@ func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerCo
 		attempt.EmittedResponse = true
 		attempt.ResponseDigest = hex.EncodeToString(digest[:])
 	}
-	assessment := AssessFileAnalysisEvaluation(content, *target, item.Source)
+	assessment := app.AssessFileAnalysisEvaluation(content, *target, item.Source)
 	if attempt.OutputTokens < 0 || attempt.OutputTokens > qualificationOutputTokenCap || response.Model != "" && response.Model != cfg.Model {
 		attempt.Outcome, attempt.FinishReason = "failed", "error"
 		attempt.InvalidProviderMetadata = true
@@ -1590,7 +1591,7 @@ func dispatchRunnerPrompt(parent context.Context, cfg EngineeringInsightRunnerCo
 	}
 	if strings.TrimSpace(content) == "" {
 		attempt.Outcome, attempt.FinishReason = "malformed", "stop"
-		return attempt, emitted, FileAnalysisDiagnostics{}, nil
+		return attempt, emitted, app.FileAnalysisDiagnostics{}, nil
 	}
 	if !assessment.UsableSummary {
 		attempt.Outcome, attempt.FinishReason = "malformed", "stop"
