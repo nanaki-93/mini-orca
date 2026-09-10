@@ -8,7 +8,7 @@ The current cleanup specification is [docs/tasks.md](docs/tasks.md); the
 
 ## Cleanup execution — authorized 2026-09-10
 
-The user authorized background implementation of the cleanup specification in [docs/tasks.md](docs/tasks.md). **Mini-Orca cleanup agents** (mini-orca-cleanup-agents) wakes this Codex task every 20 minutes and processes at most one task per wake, sequentially, with one writer, fresh independent review, and coordinator-run verification. This is separate from the historical dispatcher and supersedes planning-only wording for CLN tasks only.
+The user authorized background implementation of the cleanup specification in [docs/tasks.md](docs/tasks.md). **Mini-Orca cleanup agents** (mini-orca-cleanup-agents) is now **Paused** after completing all twelve tasks; it ran every 20 minutes and processed at most one task per wake, sequentially, with one writer, fresh independent review, and coordinator-run verification. This is separate from the historical dispatcher and supersedes planning-only wording for CLN tasks only.
 
 Use the current checkout on codex/autopilot and preserve unrelated edits. On 2026-09-10 the user explicitly authorized committing CLN-01 through CLN-03 together, then one local commit per accepted task. The coordinator alone commits after independent review and validation, including only the task changes and its ledger/checklist updates. This supersedes the initial no-commit policy; resets, stashes, pushes, releases, and live Mini-Orca evaluation calls remain outside scope. Historical insight qualification remains on standby and its budgets/evidence are unchanged. Pause the cleanup automation on an unresolved blocker or when the queue is complete.
 
@@ -25,9 +25,19 @@ Use the current checkout on codex/autopilot and preserve unrelated edits. On 202
 | CLN-09 | Give benchmark operations one desktop owner | Complete |
 | CLN-10 | Give security operations one desktop owner | Complete |
 | CLN-11 | Separate current documentation from historical execution records | Complete |
-| CLN-12 | Validate the cleanup as one release-preserving change | Pending |
+| CLN-12 | Validate the cleanup as one release-preserving change | Complete |
 
-**Current:** CLN-11 Complete; CLN-12 is next. **Active writer:** none. Cleanup automation Active.
+**Current:** CLN-01 through CLN-12 Complete. **Active writer:** none. **Next task:** none. Cleanup automation **Paused** after final acceptance.
+
+**Accepted CLN-12 — 2026-09-10:** Aggregate writer review of fe4cdad → 4c1c904 found no actionable code issue, removed test coverage, accidental external API, or source/privacy regression. Ownership moves are distinguished from removal: presenter 1,952 → 1,616 lines with 457 lines in two owners; evaluation/locks moved from app to insighteval; four unused methods and duplicate assessment/replaceable-metadata mechanics removed. Go Test functions 374 → 400 and desktop tests 327 → 351; all baseline evaluation tests remain. No production corrections or configuration/data migration.
+
+Writer and coordinator exact supported validation passed all nine gates; writer diff check passed. Writer Go packages: seven executed/four cached; coordinator: all 11 cached. Race packages were all cached in both runs; daemon contracts were fresh for writer, cached for coordinator. Each Python run discovered 55 tests, executed 54 and skipped opt-in runtime conformance; the sealed-fixture Go skip remains. Desktop static/test tasks were up-to-date, with retained 351 passing tests. `createDistributable` passed with three executed/five up-to-date tasks.
+
+Coordinator native smoke used the current macOS arm64 app bundle/JBR 25 with a synthetic loopback service and in-memory preferences. It observed compact 800 × 600 drawers and wide 1,336 × 768 docked panes, Ctrl keyboard navigation/validation, read-only source/diff labels, one-attempt Security consent with both reports retained, and benchmark GET-only listing followed by explicit trust/run requests and an unavailable synthetic result. Source hash was unchanged; no Apply/Undo, real provider, project execution or benchmark measurement occurred. Both owned processes stopped. Direct Java attachment and intermittent CUA window/capture operations failed; the normal bundle worked. Cmd mappings, exact 1000/999dp/scaling boundaries, editing resistance and spoken VoiceOver remain unverified. This does not establish production-daemon end-to-end behavior or expand release acceptance. Evidence: `.mini-orca/autopilot/cleanup/CLN-12/` (`writer/`, `coordinator-validation.json`, `native/smoke.json`, `native/requests.jsonl`). Fresh independent review approved the frozen candidate with no actionable findings; coordinator acceptance is complete.
+
+The post-smoke validation rerun failed only formatting of the ignored synthetic Go fixture; all other gates passed. The stopped fixture was archived under a fixture extension without changing its source bytes/hash. No production correction or gate change was needed. Failed-run and scratch-repair evidence is retained. Both the repaired rerun and the final frozen-candidate run passed all nine gates. The final run used cached Go/race/daemon results and up-to-date desktop tasks; Python executed 54 of 55 discovered tests with one opt-in skip in 55.174 seconds. Diff and all 19 Markdown link checks passed. Candidate SHA-256: 70652874d9b6981aed0eac2c859f64974b3117f469f32968d5f937c75a38231b. Evidence: .mini-orca/autopilot/cleanup/CLN-12/acceptance.json.
+
+The proposed combined per-file analysis contract remains a separate product decision. Cleanup does not reopen insight qualification, expand release claims, consume grants or expose sealed holdout material. All twelve cleanup tasks are accepted and the cleanup scheduler is Paused; the historical dispatcher and model evaluation remain on standby.
 
 **Accepted 2026-09-10:** CLN-11 separates current plan/feature/agent guidance from inactive improvement and evaluation history, retaining complete prior instructions, recovered fe4cdad:docs/tasks.md provenance, accepted evidence, status rows, failed/unrun verdicts, budgets and holdout limits. Fresh review found no issues and independently verified all 103 anchor mappings. Coordinator passed exact Go documentation checks, 55 Python tests (one opt-in runtime conformance skip), diff checks, all 19 Markdown link checks and mechanical historical preservation. No repairs, configuration/data migration or live evaluation; release edits are navigation-only. Candidate SHA-256: ec33a5d8468e7776685eba02267f42269c686c153c50877abe5e2ca095478c50. Evidence: .mini-orca/autopilot/cleanup/CLN-11/acceptance.json. Full supported validation remains CLN-12.
 
@@ -67,7 +77,7 @@ is excluded from this release acceptance scope; neither insight quality nor broa
 AI factual reliability may be claimed validated by this deferral. REL-01 records
 local acceptance separately; publishing remains outside this work.
 
-The historical dispatcher remains **Paused**; the cleanup scheduler above is active. No additional model calls or recovery attempts
+The historical dispatcher remains **Paused**; the cleanup scheduler above is also **Paused** after completion. No additional model calls or recovery attempts
 are authorized. Preserve cumulative consumption of **60 development / 24
 qualification requests**, all receipts and grants, and the sealed, unused conditional
 24-case holdout. Reopening insight work requires a new user decision and explicit
