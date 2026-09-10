@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
@@ -37,9 +38,10 @@ type GoScanReport struct {
 }
 
 type goScanController struct {
-	mu     sync.Mutex
-	report *GoScanReport
-	cancel context.CancelFunc
+	mu                 sync.Mutex
+	report             *GoScanReport
+	cancel             context.CancelFunc
+	writeFailureReport func(string, []byte) error
 }
 
 type preparedGoScan struct {
@@ -50,7 +52,9 @@ type preparedGoScan struct {
 	findings   []project.UnifiedFinding
 }
 
-func newGoScanController() *goScanController { return &goScanController{} }
+func newGoScanController() *goScanController {
+	return &goScanController{writeFailureReport: writeGoScanReport}
+}
 
 // ScanGoProject performs parser, vet, and test phases only after an explicit
 // request for the active revision. Tool commands run in a copied workspace.
@@ -253,8 +257,14 @@ func (s *Service) runStartedGoScan(ctx context.Context, projectID, revision stri
 	if err != nil {
 		if active, activeErr := s.manager.Analysis(); activeErr == nil && active.ProjectID == projectID && active.ProjectRevision == revision {
 			report = failedGoScanReport(projectID, revision, active.Path, err)
-			if data, marshalErr := marshalGoScanReport(report); marshalErr == nil {
-				_ = writeGoScanReport(active.Path, data)
+			data, persistErr := marshalGoScanReport(report)
+			if persistErr == nil {
+				persistErr = s.goScan.writeFailureReport(active.Path, data)
+			}
+			if persistErr != nil {
+				logging.Error("Failed to persist Go scan failure report",
+					"project_id", projectID, "project_revision", revision,
+					"error", sanitizeCheckOutput(persistErr.Error(), false, "", active.Path))
 			}
 		} else {
 			report = failedGoScanReport(projectID, revision, "", err)
