@@ -110,15 +110,8 @@ private data class PerformanceReportPublication(
     val generation: Long,
 )
 
-private data class BenchmarkActionRequest(
-    val project: WorkflowProjectIdentity,
-    val draft: WorkflowDraftIdentity,
-    val choice: GoBenchmarkChoice,
-    val generation: Long,
-)
-
 /**
- * Owns daemon interaction and every workflow coroutine for the desktop app. Its state flow contains
+ * Coordinates daemon interactions and workflow owners for the desktop app. Its state flow contains
  * only immutable snapshots; visual-only Compose state remains with the composables that render it.
  */
 class DesktopWorkflowPresenter(
@@ -133,6 +126,8 @@ class DesktopWorkflowPresenter(
   private val controller = DesktopWorkflowController()
   private val jobCoordinator = DesktopJobCoordinator(scope, pollingIntervalMillis)
   private val mutableSnapshot = MutableStateFlow(DesktopWorkflowSnapshot())
+  private val benchmarkWorkflow =
+      DesktopBenchmarkWorkflow(api, scope, ioDispatcher, { controller.state }, ::dispatch)
 
   private var connectionJob: Job? = null
   private var projectJob: Job? = null
@@ -143,8 +138,6 @@ class DesktopWorkflowPresenter(
   private var chatJob: Job? = null
   private var draftValidationJob: Job? = null
   private var draftChecksJob: Job? = null
-  private var benchmarkCatalogJob: Job? = null
-  private var benchmarkJob: Job? = null
   private var securityJob: Job? = null
   private var analysisGeneration = 0L
   private var declarationExplanationGeneration = 0L
@@ -152,7 +145,6 @@ class DesktopWorkflowPresenter(
   private var performanceActionGeneration = 0L
   private var performanceReportPublicationGeneration = 0L
   private var verifiedScanActionGeneration = 0L
-  private var benchmarkActionGeneration = 0L
   private var activeTask: WorkflowTaskIdentity? = null
   private var activeDraft: WorkflowDraftIdentity? = null
 
@@ -165,20 +157,7 @@ class DesktopWorkflowPresenter(
 
   fun dispatch(event: DesktopEvent) {
     val before = selectedDeclarationTarget(controller.state)
-    val indexChanged =
-        event is DesktopEvent.IndexRefreshed &&
-            controller.state.project?.projectRevision != event.index.projectRevision
-    if (event is DesktopEvent.DraftEdited ||
-        event is DesktopEvent.ChatProposalLoaded ||
-        event is DesktopEvent.DraftLoaded ||
-        event == DesktopEvent.DraftMarkedStale ||
-        event == DesktopEvent.DraftDiscarded ||
-        event is DesktopEvent.FileLoaded ||
-        indexChanged) {
-      benchmarkActionGeneration++
-      benchmarkCatalogJob?.cancel()
-      benchmarkJob?.cancel()
-    }
+    benchmarkWorkflow.beforeEvent(event)
     if (event is DesktopEvent.ProjectLoaded) {
       invalidateJobActions()
       jobCoordinator.projectOpened(event.project.identity())
@@ -327,9 +306,7 @@ class DesktopWorkflowPresenter(
       preparedTaskSpec: BugTaskSpec? = null,
   ) {
     clearSecurityReviewRemoteConfirmation()
-    benchmarkActionGeneration++
-    benchmarkCatalogJob?.cancel()
-    benchmarkJob?.cancel()
+    benchmarkWorkflow.invalidate()
     if (mutableSnapshot.value.declarationExplanation.status !=
         DeclarationExplanationStatus.Unavailable) {
       invalidateDeclarationExplanation(
@@ -885,7 +862,7 @@ class DesktopWorkflowPresenter(
       dispatch(DesktopEvent.Failed("The draft no longer matches the open file."))
       return
     }
-    stopBenchmarkComparison()
+    benchmarkWorkflow.stopComparison()
     val (request, fileRequest) = controller.beginDraftLoad() ?: return
     val identity = editor.serverDraft.identity(file.identity(project))
     activeDraft = identity
@@ -992,126 +969,11 @@ class DesktopWorkflowPresenter(
         }
   }
 
-  /** Lists trusted daemon-built benchmark choices. This GET never executes project code. */
-  fun loadGoBenchmarks() {
-    val (draft, project, file) = currentBenchmarkDraft() ?: return
-    val identity = draft.identity(file.identity(project))
-    val generation = ++benchmarkActionGeneration
-    benchmarkCatalogJob?.cancel()
-    benchmarkJob?.cancel()
-    if (snapshot.value.state.review.benchmark.running)
-        dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
-    benchmarkCatalogJob =
-        scope.launch {
-          try {
-            val catalog = io {
-              api.goBenchmarkCatalog(draft.id, project.projectRevision, draft.revision, draft.hash)
-            }
-            if (isCurrentBenchmarkCatalogAction(identity, generation) && catalog.matches(draft)) {
-              dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
-              dispatch(
-                  DesktopEvent.Status(
-                      if (catalog.available) "Select a benchmark to compare."
-                      else catalog.reason.ifBlank { "No compatible benchmark is available." }))
-            }
-          } catch (_: CancellationException) {
-            throw CancellationException()
-          } catch (error: ApiException) {
-            if (!isCurrentBenchmarkCatalogAction(identity, generation)) return@launch
-            if (error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
-            dispatch(DesktopEvent.Failed(error.message ?: "Benchmark lookup failed"))
-          } catch (error: Exception) {
-            if (isCurrentBenchmarkCatalogAction(identity, generation))
-                dispatch(DesktopEvent.Failed(error.message ?: "Benchmark lookup failed"))
-          }
-        }
-  }
+  fun loadGoBenchmarks() = benchmarkWorkflow.loadGoBenchmarks()
 
-  fun selectGoBenchmark(choice: GoBenchmarkChoice) {
-    val state = snapshot.value.state
-    val catalog = state.review.benchmark.catalog ?: return
-    val draft = state.review.draft ?: return
-    if (!catalog.matches(draft) || choice !in catalog.benchmarks) return
-    if (state.review.benchmark.selected == choice) return
-    benchmarkActionGeneration++
-    benchmarkJob?.cancel()
-    dispatch(DesktopEvent.GoBenchmarkSelected(choice))
-  }
+  fun selectGoBenchmark(choice: GoBenchmarkChoice) = benchmarkWorkflow.selectGoBenchmark(choice)
 
-  /**
-   * The explicit action may trust local execution only after the displayed fixed argv is selected.
-   */
-  fun compareSelectedGoBenchmark() {
-    val (draft, project, file) = currentBenchmarkDraft() ?: return
-    val catalog = snapshot.value.state.review.benchmark.catalog ?: return
-    val choice = snapshot.value.state.review.benchmark.selected ?: return
-    if (!catalog.available || !catalog.matches(draft) || choice !in catalog.benchmarks) {
-      dispatch(
-          DesktopEvent.Failed("Benchmark selection is stale; list compatible benchmarks again."))
-      return
-    }
-    val request =
-        BenchmarkActionRequest(
-            project.identity(),
-            draft.identity(file.identity(project)),
-            choice,
-            ++benchmarkActionGeneration,
-        )
-    benchmarkJob?.cancel()
-    dispatch(DesktopEvent.GoBenchmarkComparisonStarted)
-    dispatch(
-        DesktopEvent.Status(
-            if (catalog.trusted) "Comparing ${choice.name} in isolated copies…"
-            else "Trusting local execution, then comparing ${choice.name} in isolated copies…"))
-    benchmarkJob =
-        scope.launch {
-          try {
-            val comparison = io {
-              if (!catalog.trusted) {
-                val trust = api.executionTrust(project.projectRevision)
-                if (trust.projectId != project.projectId ||
-                    trust.projectRevision != project.projectRevision ||
-                    trust.commands != listOf(listOf("go", "test", "./...")))
-                    throw IllegalStateException(
-                        "Local execution trust scope changed; review the benchmark command again.")
-                api.trustProjectExecution(project.projectRevision)
-              }
-              api.compareGoBenchmark(
-                  draft.id, project.projectRevision, draft.revision, draft.hash, choice)
-            }
-            if (!isCurrentBenchmarkAction(request)) return@launch
-            val responseMismatch = benchmarkResponseMismatch(comparison, draft, choice)
-            if (responseMismatch != null) {
-              dispatch(
-                  DesktopEvent.GoBenchmarkComparisonLoaded(
-                      comparison.copy(status = "unavailable", reason = responseMismatch)))
-              dispatch(DesktopEvent.Status(responseMismatch))
-              return@launch
-            }
-            dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
-            dispatch(
-                DesktopEvent.Status(
-                    if (comparison.status == "completed") "Benchmark evidence is ready for review."
-                    else
-                        comparison.reason.ifBlank {
-                          "Benchmark comparison did not produce measurements."
-                        }))
-          } catch (_: CancellationException) {
-            if (isCurrentBenchmarkAction(request))
-                dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
-            throw CancellationException()
-          } catch (error: ApiException) {
-            if (!isCurrentBenchmarkAction(request)) return@launch
-            if (error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
-            dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
-            dispatch(DesktopEvent.Failed(error.message ?: "Benchmark comparison failed"))
-          } catch (error: Exception) {
-            if (!isCurrentBenchmarkAction(request)) return@launch
-            dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
-            dispatch(DesktopEvent.Failed(error.message ?: "Benchmark comparison failed"))
-          }
-        }
-  }
+  fun compareSelectedGoBenchmark() = benchmarkWorkflow.compareSelectedGoBenchmark()
 
   fun applyEditableDraft() {
     val state = snapshot.value.state
@@ -1315,12 +1177,10 @@ class DesktopWorkflowPresenter(
 
   private fun cancelAll() {
     invalidateJobActions()
-    if (snapshot.value.state.review.benchmark.running)
-        dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
+    benchmarkWorkflow.cancel()
     cancelAnalysis()
     cancelGeneration()
     cancelDraftValidation()
-    benchmarkJob?.cancel()
     if (mutableSnapshot.value.declarationExplanation.status ==
         DeclarationExplanationStatus.Loading) {
       cancelDeclarationExplanation()
@@ -1338,7 +1198,6 @@ class DesktopWorkflowPresenter(
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
     securityJob?.cancel()
-    benchmarkJob?.cancel()
     jobCoordinator.close()
     lifetime.cancel()
   }
@@ -1692,16 +1551,6 @@ class DesktopWorkflowPresenter(
     analyzeAllActionGeneration++
     performanceActionGeneration++
     verifiedScanActionGeneration++
-    benchmarkActionGeneration++
-    benchmarkCatalogJob?.cancel()
-    benchmarkJob?.cancel()
-  }
-
-  private fun stopBenchmarkComparison() {
-    benchmarkActionGeneration++
-    benchmarkCatalogJob?.cancel()
-    benchmarkJob?.cancel()
-    controller.dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
   }
 
   private fun isCurrentVerifiedScanAction(
@@ -1733,34 +1582,6 @@ class DesktopWorkflowPresenter(
       isCurrentVerifiedScanAction(request.project, request.generation) &&
           (!request.requiresExpectedScan ||
               snapshot.value.state.findings.scan == request.expectedScan)
-
-  private fun isCurrentBenchmarkAction(request: BenchmarkActionRequest): Boolean =
-      request.generation == benchmarkActionGeneration &&
-          matchesProject(request.project) &&
-          currentBenchmarkDraftIdentity() == request.draft &&
-          snapshot.value.state.review.benchmark.catalog?.matches(request.draft) == true &&
-          snapshot.value.state.review.benchmark.selected == request.choice
-
-  private fun isCurrentBenchmarkCatalogAction(
-      identity: WorkflowDraftIdentity,
-      generation: Long,
-  ): Boolean =
-      generation == benchmarkActionGeneration && currentBenchmarkDraftIdentity() == identity
-
-  private fun benchmarkResponseMismatch(
-      comparison: GoBenchmarkComparison,
-      draft: DeclarationDraft,
-      choice: GoBenchmarkChoice,
-  ): String? =
-      when {
-        !comparison.matches(draft) ->
-            "Benchmark response is stale because the reviewed candidate identity changed."
-        comparison.benchmark != choice.name ->
-            "Benchmark response is stale because the selected benchmark changed."
-        comparison.scope != choice.scope ->
-            "Benchmark response is unavailable because the displayed benchmark scope changed."
-        else -> null
-      }
 
   private fun modelRequestFailed(error: Exception, scope: ModelScope, fallback: String) {
     val staleConfirmation = staleRemoteConfirmationMessage(error, scope)
@@ -1824,27 +1645,6 @@ class DesktopWorkflowPresenter(
     return draft.identity(file.identity(project))
   }
 
-  private fun currentBenchmarkDraft(): Triple<DeclarationDraft, ProjectAnalysis, ProjectFileInfo>? {
-    val state = snapshot.value.state
-    val draft = state.review.draft ?: return null
-    val project = state.project ?: return null
-    val file = state.selectedFile ?: return null
-    if (state.review.editor?.status != DraftEditorStatus.Valid ||
-        draft.validation?.applicable != true ||
-        !draftEditorMatchesOpenFile(state.review.editor, file, project)) {
-      dispatch(DesktopEvent.Failed("Validate the current draft before comparing a benchmark."))
-      return null
-    }
-    return Triple(draft, project, file)
-  }
-
-  private fun currentBenchmarkDraftIdentity(): WorkflowDraftIdentity? =
-      currentDraftIdentity()?.takeIf {
-        val draft = snapshot.value.state.review.draft
-        snapshot.value.state.review.editor?.status == DraftEditorStatus.Valid &&
-            draft?.validation?.applicable == true
-      }
-
   private suspend fun <T> io(block: () -> T): T =
       withContext(ioDispatcher) { runInterruptible { block() } }
 }
@@ -1854,27 +1654,6 @@ private fun ProjectAnalysis.identity(): WorkflowProjectIdentity =
 
 private fun ProjectFileInfo.identity(project: ProjectAnalysis): WorkflowFileIdentity =
     WorkflowFileIdentity(project.identity(), path, contentHash)
-
-private fun GoBenchmarkCatalog.matches(draft: DeclarationDraft): Boolean =
-    draftId == draft.id &&
-        draftRevision == draft.revision &&
-        draftHash == draft.hash &&
-        projectId == draft.projectId &&
-        projectRevision == draft.projectRevision &&
-        baseFileHash == draft.baseFileHash &&
-        targetPath == draft.targetPath
-
-private fun GoBenchmarkCatalog.matches(identity: WorkflowDraftIdentity): Boolean =
-    draftId == identity.id && draftRevision == identity.revision && draftHash == identity.hash
-
-private fun GoBenchmarkComparison.matches(draft: DeclarationDraft): Boolean =
-    draftId == draft.id &&
-        draftRevision == draft.revision &&
-        draftHash == draft.hash &&
-        projectId == draft.projectId &&
-        projectRevision == draft.projectRevision &&
-        baseFileHash == draft.baseFileHash &&
-        targetPath == draft.targetPath
 
 private fun securityReportMatchesFile(
     report: SecurityFileReport,

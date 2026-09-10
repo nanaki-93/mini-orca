@@ -150,6 +150,54 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun projectSwitchAndCloseCancelBothBenchmarkRequestKinds() {
+    for (comparing in listOf(false, true)) {
+      for (closing in listOf(false, true)) {
+        val started = CountDownLatch(1)
+        val interrupted = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val presenter = presenter { method, path, _ ->
+          check(path.contains("/benchmarks"))
+          if (comparing && method == "GET") {
+            response(benchmarkCatalogJson(trusted = true))
+          } else {
+            started.countDown()
+            try {
+              release.await(2, TimeUnit.SECONDS)
+            } catch (error: InterruptedException) {
+              interrupted.countDown()
+              throw error
+            }
+            response(if (comparing) benchmarkComparisonJson() else benchmarkCatalogJson())
+          }
+        }
+        try {
+          loadFile(presenter)
+          presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+          presenter.loadGoBenchmarks()
+          if (comparing) {
+            eventually { presenter.snapshot.value.state.review.benchmark.catalog != null }
+            presenter.selectGoBenchmark(
+                presenter.snapshot.value.state.review.benchmark.catalog!!.benchmarks.single())
+            presenter.compareSelectedGoBenchmark()
+          }
+          assertTrue(started.await(1, TimeUnit.SECONDS))
+          if (closing) presenter.close()
+          else
+              presenter.dispatch(
+                  DesktopEvent.ProjectLoaded(project("other", "new"), ProjectIndex("other", "new")))
+          assertTrue(interrupted.await(1, TimeUnit.SECONDS))
+          assertFalse(presenter.snapshot.value.state.review.benchmark.running)
+          assertNull(presenter.snapshot.value.state.review.benchmark.comparison)
+        } finally {
+          release.countDown()
+          presenter.close()
+        }
+      }
+    }
+  }
+
+  @Test
   fun failedReanalysisDoesNotLeaveBenchmarkComparisonRunning() {
     val presenter = presenter { method, path, _ ->
       if (method == "POST" && path == "/api/projects/current/reindex")
