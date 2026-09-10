@@ -128,6 +128,14 @@ class DesktopWorkflowPresenter(
   private val mutableSnapshot = MutableStateFlow(DesktopWorkflowSnapshot())
   private val benchmarkWorkflow =
       DesktopBenchmarkWorkflow(api, scope, ioDispatcher, { controller.state }, ::dispatch)
+  private val securityWorkflow =
+      DesktopSecurityWorkflow(
+          api,
+          scope,
+          ioDispatcher,
+          { controller.state },
+          ::dispatch,
+          ::clearSecurityReviewRemoteConfirmation)
 
   private var connectionJob: Job? = null
   private var projectJob: Job? = null
@@ -138,7 +146,6 @@ class DesktopWorkflowPresenter(
   private var chatJob: Job? = null
   private var draftValidationJob: Job? = null
   private var draftChecksJob: Job? = null
-  private var securityJob: Job? = null
   private var analysisGeneration = 0L
   private var declarationExplanationGeneration = 0L
   private var analyzeAllActionGeneration = 0L
@@ -158,12 +165,12 @@ class DesktopWorkflowPresenter(
   fun dispatch(event: DesktopEvent) {
     val before = selectedDeclarationTarget(controller.state)
     benchmarkWorkflow.beforeEvent(event)
+    securityWorkflow.beforeEvent(event)
     if (event is DesktopEvent.ProjectLoaded) {
       invalidateJobActions()
       jobCoordinator.projectOpened(event.project.identity())
     }
     controller.dispatch(event)
-    if (event is DesktopEvent.ProjectLoaded) clearSecurityReviewRemoteConfirmation()
     val after = selectedDeclarationTarget(controller.state)
     if (before != after &&
         mutableSnapshot.value.declarationExplanation.status !=
@@ -315,7 +322,7 @@ class DesktopWorkflowPresenter(
     chatJob?.cancel()
     draftValidationJob?.cancel()
     draftChecksJob?.cancel()
-    cancelSecurityAction()
+    securityWorkflow.cancel()
     activeTask = null
     activeDraft = null
     val request = controller.beginFileLoad(path) ?: return
@@ -392,117 +399,12 @@ class DesktopWorkflowPresenter(
     openFileInEditor(target.path, target, requirement, finding.taskSpec)
   }
 
-  fun scanSecurity() {
-    val state = snapshot.value.state
-    val project = state.project ?: return
-    val file =
-        state.selectedFile
-            ?: run {
-              dispatch(
-                  DesktopEvent.SecurityActionFailed(
-                      "scan", "Open one indexed Go file before scanning."))
-              return
-            }
-    if (file.language != "Go") {
-      dispatch(
-          DesktopEvent.SecurityActionFailed(
-              "scan", "Security scanning currently supports one indexed Go file."))
-      return
-    }
-    securityJob?.cancel()
-    val identity = file.identity(project)
-    dispatch(DesktopEvent.SecurityActionStarted("scan"))
-    securityJob =
-        scope.launch {
-          try {
-            val report = io { api.securityScan(file.path, project.projectRevision) }
-            if (isCurrentFile(identity)) {
-              if (securityReportMatchesFile(report, identity, "deterministic"))
-                  dispatch(DesktopEvent.SecurityReportLoaded(report))
-              else
-                  dispatch(
-                      DesktopEvent.SecurityActionFailed(
-                          "scan", "The returned scan no longer matches the selected file."))
-            }
-          } catch (_: CancellationException) {
-            throw CancellationException()
-          } catch (error: Exception) {
-            if (isCurrentFile(identity))
-                dispatch(
-                    DesktopEvent.SecurityActionFailed(
-                        "scan", error.message ?: "Security scan failed"))
-          }
-        }
-  }
+  fun scanSecurity() = securityWorkflow.scanSecurity()
 
-  fun reviewSecurity() {
-    val state = snapshot.value.state
-    val project = state.project ?: return
-    val file =
-        state.selectedFile
-            ?: run {
-              dispatch(
-                  DesktopEvent.SecurityActionFailed(
-                      "review", "Open one indexed file before reviewing."))
-              return
-            }
-    if (file.binary) {
-      dispatch(
-          DesktopEvent.SecurityActionFailed(
-              "review", "Security review requires one eligible non-binary text file."))
-      return
-    }
-    val model = snapshot.value.model(ModelScope.Analyze)
-    val remoteConfirmed = snapshot.value.securityReviewRemoteConfirmed
-    if (model.remoteProvider && !remoteConfirmed) {
-      dispatch(
-          DesktopEvent.SecurityActionFailed(
-              "review", "Confirm the remote Analyze destination for this Security review."))
-      return
-    }
-    val exactSymbol =
-        state.selectedSymbol
-            ?.takeIf { file.language == "Go" && it.atomicTarget && it.confidence == "exact" }
-            ?.name
-            .orEmpty()
-    securityJob?.cancel()
-    val identity = file.identity(project)
-    // Fresh confirmation is consumed by every review attempt, including an unsuccessful one.
-    clearSecurityReviewRemoteConfirmation()
-    dispatch(DesktopEvent.SecurityActionStarted("review"))
-    securityJob =
-        scope.launch {
-          try {
-            val report = io {
-              api.securityReview(
-                  project.projectId,
-                  project.projectRevision,
-                  file.contentHash,
-                  file.path,
-                  exactSymbol,
-                  remoteConfirmed)
-            }
-            if (isCurrentFile(identity)) {
-              if (securityReportMatchesFile(report, identity, "ai"))
-                  dispatch(DesktopEvent.SecurityReportLoaded(report))
-              else
-                  dispatch(
-                      DesktopEvent.SecurityActionFailed(
-                          "review", "The returned review no longer matches the selected file."))
-            }
-          } catch (_: CancellationException) {
-            throw CancellationException()
-          } catch (error: Exception) {
-            if (isCurrentFile(identity)) {
-              val message = staleRemoteConfirmationMessage(error, ModelScope.Analyze)
-              if (message != null) clearSecurityReviewRemoteConfirmation()
-              dispatch(
-                  DesktopEvent.SecurityActionFailed(
-                      "review", message ?: error.message ?: "Security review failed"))
-            }
-          }
-        }
-  }
+  fun reviewSecurity() =
+      securityWorkflow.reviewSecurity(
+          snapshot.value.model(ModelScope.Analyze).remoteProvider,
+          snapshot.value.securityReviewRemoteConfirmed)
 
   fun openSecurityFinding(finding: SecurityFinding) {
     val state = snapshot.value.state
@@ -1197,7 +1099,7 @@ class DesktopWorkflowPresenter(
     projectJob?.cancel()
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
-    securityJob?.cancel()
+    securityWorkflow.cancel()
     jobCoordinator.close()
     lifetime.cancel()
   }
@@ -1486,7 +1388,7 @@ class DesktopWorkflowPresenter(
     jobCoordinator.projectClosed()
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
-    cancelSecurityAction()
+    securityWorkflow.cancel()
     cancelAll()
   }
 
@@ -1594,12 +1496,6 @@ class DesktopWorkflowPresenter(
         mutableSnapshot.value = mutableSnapshot.value.copy(securityReviewRemoteConfirmed = false)
   }
 
-  private fun cancelSecurityAction() {
-    securityJob?.cancel()
-    if (snapshot.value.state.security.action.isNotBlank())
-        dispatch(DesktopEvent.SecurityActionCanceled)
-  }
-
   private fun publish() {
     mutableSnapshot.value = mutableSnapshot.value.copy(state = controller.state)
   }
@@ -1654,17 +1550,6 @@ private fun ProjectAnalysis.identity(): WorkflowProjectIdentity =
 
 private fun ProjectFileInfo.identity(project: ProjectAnalysis): WorkflowFileIdentity =
     WorkflowFileIdentity(project.identity(), path, contentHash)
-
-private fun securityReportMatchesFile(
-    report: SecurityFileReport,
-    file: WorkflowFileIdentity,
-    expectedSource: String,
-): Boolean =
-    report.projectId == file.project.id &&
-        report.projectRevision == file.project.revision &&
-        report.path == file.path &&
-        report.contentHash == file.contentHash &&
-        report.source == expectedSource
 
 private fun selectedDeclarationTarget(state: DesktopState): DeclarationExplanationTarget? {
   val project = state.project ?: return null

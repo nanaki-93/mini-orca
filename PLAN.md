@@ -25,11 +25,13 @@ Use the current checkout on codex/autopilot and preserve unrelated edits. On 202
 | CLN-07 | Share file-analysis validation and evaluation diagnostics | Complete |
 | CLN-08 | Move evaluation tooling out of package app | Complete |
 | CLN-09 | Give benchmark operations one desktop owner | Complete |
-| CLN-10 | Give security operations one desktop owner | Pending |
+| CLN-10 | Give security operations one desktop owner | Complete |
 | CLN-11 | Separate current documentation from historical execution records | Pending |
 | CLN-12 | Validate the cleanup as one release-preserving change | Pending |
 
-**Current:** CLN-09 Complete; CLN-10 is next. **Active writer:** none. Cleanup automation Active.
+**Current:** CLN-10 Complete; CLN-11 is next. **Active writer:** none. Cleanup automation Active.
+
+**Accepted 2026-09-10:** CLN-10 moves security request ownership into DesktopSecurityWorkflow with live controller state, generation checks, per-attempt consent, report/source validation, and lifecycle cancellation. Replacement cancels the prior section while retaining evidence; presenter navigation and benchmark ownership remain intact. Fresh final review found no actionable issues; coordinator executed 68 focused and 351 full desktop tests with no failures/errors/skips, passed desktop quality (up-to-date after writer execution), and verified frozen hashes and unchanged outside-scope files. Two test corrections: structured error fixtures, then deterministic scheduling and endpoint fixture repair for an existing chat-consent test that failed the first coordinator full run. All consent assertions retained; failed-run evidence preserved. No configuration/migration or native/live execution claims; Go checks not run for desktop-only changes. Candidate SHA-256: 2fef2844a5546f776b7a794a105e4c069c8fcd171ec69772477f0e2e9f1b27b8. Evidence: .mini-orca/autopilot/cleanup/CLN-10/acceptance.json.
 
 **Accepted 2026-09-10:** CLN-09 moves benchmark request jobs, generation/identity checks, consent, and lifecycle cancellation into DesktopBenchmarkWorkflow, using the existing authoritative controller state and event sink. Presenter entry points remain delegates. Fresh review found no actionable issues; coordinator executed 70 focused and 337 full desktop tests with no failures/errors/skips, passed desktop quality (up-to-date after writer execution), and verified the frozen candidate and unchanged outside-scope files. No repairs, configuration changes, or migrations. No live benchmark/provider execution or native visual acceptance; Go checks not run for desktop-only changes. Candidate SHA-256: fb4d5e68d11a0cdacb268aa4dbe250d41938d9311f340429839015241a2e585a. Evidence: .mini-orca/autopilot/cleanup/CLN-09/acceptance.json.
 
