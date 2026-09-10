@@ -21,7 +21,7 @@ Use the current checkout on codex/autopilot and preserve unrelated edits. On 202
 | CLN-03 | Reuse durable storage for evaluation metadata | Complete |
 | CLN-04 | Handle Analyze-all persistence failures explicitly | Complete |
 | CLN-05 | Handle Performance persistence failures explicitly | Complete |
-| CLN-06 | Preserve asynchronous scan failure diagnostics | Pending |
+| CLN-06 | Preserve asynchronous scan failure diagnostics | Complete |
 | CLN-07 | Share file-analysis validation and evaluation diagnostics | Pending |
 | CLN-08 | Move evaluation tooling out of package app | Pending |
 | CLN-09 | Give benchmark operations one desktop owner | Pending |
@@ -29,7 +29,9 @@ Use the current checkout on codex/autopilot and preserve unrelated edits. On 202
 | CLN-11 | Separate current documentation from historical execution records | Pending |
 | CLN-12 | Validate the cleanup as one release-preserving change | Pending |
 
-**Next:** CLN-06. **Active agents:** none. Cleanup automation Active. **Accepted 2026-09-10:** CLN-05 stops Performance work on save failures, exposes durable progress, preserves reports/accounting, and supports explicit recovery with project-scoped detached failures. Following user-authorized continuation, one repair resolved the concurrent Resume/result-write fault by retaining persistence authority through recovery and releasing it for worker join. Fresh review found no findings; coordinator passed focused and full Go tests, race tests, formatting, vet, Go quality, and diff checks. Historical blocked evidence and two earlier preparation corrections remain recorded; no migrations or live evaluation calls. Candidate SHA-256: d7f76368f095939c4dd049b0d92aaf6b1855b9963e2fc182d39b5b9296c290a8. Evidence: .mini-orca/autopilot/cleanup/CLN-05/acceptance.json.
+**Next:** CLN-07. **Active agents:** none. Cleanup automation Active. **Accepted 2026-09-10:** CLN-06 logs bounded, sanitized secondary failure-report persistence errors while retaining the original scan failure in memory and existing durable progress. Tests verify unchanged disk bytes, secret/path redaction, and replacement project/revision isolation. Fresh review found no actionable issues; coordinator passed focused GoScan race tests, all Go tests, full race, formatting, vet, Go quality, and diff checks. One test-fixture correction; no migration or live evaluation calls. Candidate SHA-256: 91b144d8d0512d240445c7b525d842041fa63d61e1432af408956f75381a6ae6. Evidence: .mini-orca/autopilot/cleanup/CLN-06/acceptance.json.
+
+**Accepted 2026-09-10:** CLN-05 stops Performance work on save failures, exposes durable progress, preserves reports/accounting, and supports explicit recovery with project-scoped detached failures. Following user-authorized continuation, one repair resolved the concurrent Resume/result-write fault by retaining persistence authority through recovery and releasing it for worker join. Fresh review found no findings; coordinator passed focused and full Go tests, race tests, formatting, vet, Go quality, and diff checks. Historical blocked evidence and two earlier preparation corrections remain recorded; no migrations or live evaluation calls. Candidate SHA-256: d7f76368f095939c4dd049b0d92aaf6b1855b9963e2fc182d39b5b9296c290a8. Evidence: .mini-orca/autopilot/cleanup/CLN-05/acceptance.json.
 
 **Accepted 2026-09-10:** CLN-04 stops Analyze-all dispatch on persistence failure, retains sanitized progress errors and completed reports, and requires durable explicit recovery while preserving attempt budgets and replacement identity. Fresh review found no actionable issues; coordinator passed exact Analyze-all race tests, all Go tests, race tests, formatting, vet, Go quality, and diff checks. Two focused preparation corrections; no migrations or live evaluation calls. Candidate SHA-256: 79efd26ba3059477fe28f5ce3e9c275bea26aa2cd6041a618b597af5c9d6ff7a. Evidence: .mini-orca/autopilot/cleanup/CLN-04/acceptance.json.
 
