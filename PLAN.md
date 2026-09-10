@@ -8,6 +8,33 @@ This is the single product plan and task ledger. Task instructions are below;
 [tasks/README.md](tasks/README.md) defines agent execution and automation. Everyday
 documentation stays short; this plan is the deliberate exception.
 
+## Cleanup execution — authorized 2026-09-10
+
+The user authorized background implementation of the cleanup specification in [docs/tasks.md](docs/tasks.md). **Mini-Orca cleanup agents** (mini-orca-cleanup-agents) wakes this Codex task every 20 minutes and processes at most one task per wake, sequentially, with one writer, fresh independent review, and coordinator-run verification. This is separate from the historical dispatcher and supersedes planning-only wording for CLN tasks only.
+
+Use the current checkout on codex/autopilot and preserve unrelated edits. On 2026-09-10 the user explicitly authorized committing CLN-01 through CLN-03 together, then one local commit per accepted task. The coordinator alone commits after independent review and validation, including only the task changes and its ledger/checklist updates. This supersedes the initial no-commit policy; resets, stashes, pushes, releases, and live Mini-Orca evaluation calls remain outside scope. Historical insight qualification remains on standby and its budgets/evidence are unchanged. Pause the cleanup automation on an unresolved blocker or when the queue is complete.
+
+| ID | Task | Status |
+| --- | --- | --- |
+| CLN-01 | Make the reachability gate enforce its result | Complete |
+| CLN-02 | Remove confirmed unused desktop methods | Complete |
+| CLN-03 | Reuse durable storage for evaluation metadata | Complete |
+| CLN-04 | Handle Analyze-all persistence failures explicitly | Pending |
+| CLN-05 | Handle Performance persistence failures explicitly | Pending |
+| CLN-06 | Preserve asynchronous scan failure diagnostics | Pending |
+| CLN-07 | Share file-analysis validation and evaluation diagnostics | Pending |
+| CLN-08 | Move evaluation tooling out of package app | Pending |
+| CLN-09 | Give benchmark operations one desktop owner | Pending |
+| CLN-10 | Give security operations one desktop owner | Pending |
+| CLN-11 | Separate current documentation from historical execution records | Pending |
+| CLN-12 | Validate the cleanup as one release-preserving change | Pending |
+
+**Next:** CLN-04. **Active agents:** none. **Accepted 2026-09-10:** CLN-03 reused shared atomic storage for evaluation metadata, preserving sanitized errors and immutable evidence. Fresh review found no actionable issues; coordinator passed exact focused tests, all Go tests, race tests, formatting, vet, Go quality, and diff checks. No repairs, migrations, or live evaluation calls; accepted before the later batch-commit authorization. Candidate SHA-256: 6267407558d67a09c17753e26526274c205343bdbcd7fed52336e7958b6ae9a8. Evidence: .mini-orca/autopilot/cleanup/CLN-03/acceptance.json.
+
+**Accepted 2026-09-10:** CLN-02 removed four unreferenced desktop methods and redundant nullable test operations. Fresh review found no actionable issues. Writer executed desktop tests (327 passing) and quality; coordinator reran both exact commands successfully (up-to-date) and verified test XML and diff checks. No repairs; accepted before the later batch-commit authorization. Candidate SHA-256: 1713a9ddcb438a3e21037d8d47b8e8b163740c4955156535ef09422c0acd5817. Evidence: .mini-orca/autopilot/cleanup/CLN-02/acceptance.json.
+
+**Accepted 2026-09-10:** CLN-01 makes reachability findings and tool failures fail the gate while preserving later stages. Fresh review found no actionable issues; coordinator reran 4 isolated Python tests, all four Go quality stages, shell syntax, and diff checks successfully. No repairs; accepted before the later batch-commit authorization. Candidate SHA-256: 6c04a707f8c7c85ad4e75d86a3b72327c7ad4ed173474ff0389b8676d102e96d. Exact evidence: .mini-orca/autopilot/cleanup/CLN-01/acceptance.json.
+
 ## Current scope decision — 2026-09-09
 
 The user placed engineering-insight improvement and qualification on **standby**.

@@ -211,8 +211,8 @@ class ReviewEvidencePaneTest {
     val repair = repairMessageForChecks(session, current, checks)
 
     assertTrue(repair?.contains("sanitized focused check evidence") == true)
-    assertTrue(repair?.contains("assertion failed") == true)
-    assertTrue(repair!!.length < 4096)
+    assertTrue(repair.contains("assertion failed"))
+    assertTrue(repair.length < 4096)
     assertEquals(null, repairMessageForChecks(session.copy(repairCount = 3), current, checks))
     assertFalse(
         checksMatchDraft(

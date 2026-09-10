@@ -16,6 +16,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const (
@@ -1943,26 +1944,32 @@ func readPrivateResponse(directory, id string) (string, error) {
 	return string(data), nil
 }
 
+// Keep private paths and serialization details out of CLI errors while retaining
+// the underlying operation for internal error inspection.
+type evaluationMetadataWriteError struct {
+	cause error
+}
+
+func (e *evaluationMetadataWriteError) Error() string { return "write evaluation run" }
+
+func (e *evaluationMetadataWriteError) Unwrap() error { return e.cause }
+
 func writeRunnerJSON(path string, value any) error {
 	data, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("write evaluation run")
+		return &evaluationMetadataWriteError{cause: fmt.Errorf("marshal evaluation metadata: %w", err)}
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".evaluation-*")
+	// Evaluation callers establish storage before acquiring their locks. Do not
+	// let the shared writer initialize a missing evaluation directory implicitly.
+	directory, err := os.Stat(filepath.Dir(path))
 	if err != nil {
-		return fmt.Errorf("write evaluation run")
+		return &evaluationMetadataWriteError{cause: fmt.Errorf("inspect evaluation directory: %w", err)}
 	}
-	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
-	if err := temporary.Chmod(0600); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("write evaluation run")
+	if !directory.IsDir() {
+		return &evaluationMetadataWriteError{cause: errors.New("evaluation storage is not a directory")}
 	}
-	if _, err := temporary.Write(data); err != nil || temporary.Sync() != nil || temporary.Close() != nil {
-		return fmt.Errorf("write evaluation run")
-	}
-	if err := os.Rename(temporaryName, path); err != nil {
-		return fmt.Errorf("write evaluation run")
+	if err := storage.WriteFile(path, data, 0600); err != nil {
+		return &evaluationMetadataWriteError{cause: err}
 	}
 	return nil
 }

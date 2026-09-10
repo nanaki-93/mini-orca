@@ -29,11 +29,25 @@ run_stage() {
   failed_stages="${failed_stages}${failed_stages:+, }${stage}"
 }
 
+run_go_reachability() {
+  # deadcode reports findings on stdout but exits successfully when it finds any.
+  reachability_output=$(go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval)
+  reachability_status=$?
+  if [ -n "$reachability_output" ]; then
+    printf '%s\n' "$reachability_output"
+  fi
+  if [ "$reachability_status" -ne 0 ]; then
+    printf 'Reachability tool failed (exit %s).\n' "$reachability_status" >&2
+    return "$reachability_status"
+  fi
+  [ -z "$reachability_output" ]
+}
+
 run_go_quality() {
   # go run and npx use their user-level module/package caches. No quality tool is
   # added to go.mod, the daemon image, or this worktree.
   run_stage "Go static analysis" go run honnef.co/go/tools/cmd/staticcheck@"$staticcheck_version" ./...
-  run_stage "Go reachability" go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval
+  run_stage "Go reachability" run_go_reachability
   run_stage "Go complexity" find cmd internal -name '*.go' -type f ! -name '*_test.go' -exec go run github.com/fzipp/gocyclo/cmd/gocyclo@"$gocyclo_version" -over 15 '{}' +
   run_stage "Go clone detection" npx --yes jscpd@"$jscpd_version" \
     --min-tokens 70 \
