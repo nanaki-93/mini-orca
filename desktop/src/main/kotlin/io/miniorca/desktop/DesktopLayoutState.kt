@@ -92,20 +92,14 @@ internal data class DesktopLayoutState(
   fun openLeft(toolWindow: LeftToolWindow) =
       copy(activeLeftToolWindow = toolWindow, leftToolWindowVisible = true)
 
-  fun closeLeft() = copy(leftToolWindowVisible = false)
-
   fun openRight(toolWindow: RightToolWindow) =
       copy(activeRightToolWindow = toolWindow, rightToolWindowVisible = true)
-
-  fun closeRight() = copy(rightToolWindowVisible = false)
 
   fun openBottom(toolWindow: BottomToolWindow) =
       copy(
           activeBottomToolWindow = toolWindow,
           bottomToolWindowVisible = true,
           bottomCollapsed = false)
-
-  fun closeBottom() = copy(bottomToolWindowVisible = true, bottomCollapsed = true)
 
   fun withBottomCollapsed(collapsed: Boolean) =
       copy(bottomToolWindowVisible = true, bottomCollapsed = collapsed)

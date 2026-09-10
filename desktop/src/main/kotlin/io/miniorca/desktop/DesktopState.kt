@@ -626,10 +626,6 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
     return state.reduce(event).also { state = it }
   }
 
-  fun synchronize(updated: DesktopState) {
-    state = updated
-  }
-
   fun beginProjectLoad(): Long =
       nextId().also {
         projectRequest = it

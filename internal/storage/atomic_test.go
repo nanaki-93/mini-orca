@@ -81,7 +81,7 @@ func TestWriteFileAuthorizedRejectsAfterTempSyncWithoutReplacing(t *testing.T) {
 	}
 }
 
-func TestWriteFileCleansTempOnWriteSyncAndCloseFailures(t *testing.T) {
+func TestWriteFileRetainsPriorDataAndClosesTempOnOperationFailures(t *testing.T) {
 	for _, test := range []struct {
 		name      string
 		configure func(*atomicFileOperations, error)
@@ -90,6 +90,12 @@ func TestWriteFileCleansTempOnWriteSyncAndCloseFailures(t *testing.T) {
 			name: "write",
 			configure: func(operations *atomicFileOperations, failure error) {
 				operations.write = func(*os.File, []byte) (int, error) { return 0, failure }
+			},
+		},
+		{
+			name: "chmod",
+			configure: func(operations *atomicFileOperations, failure error) {
+				operations.chmod = func(*os.File, os.FileMode) error { return failure }
 			},
 		},
 		{
@@ -110,12 +116,32 @@ func TestWriteFileCleansTempOnWriteSyncAndCloseFailures(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			directory := t.TempDir()
+			path := filepath.Join(directory, "record.json")
+			if err := os.WriteFile(path, []byte("prior"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			failure := errors.New(test.name + " failed")
 			operations := defaultAtomicFileOperations()
 			test.configure(&operations, failure)
-			err := writeFile(filepath.Join(directory, "record.json"), []byte("next"), 0600, operations)
+			var temporary *os.File
+			write := operations.write
+			operations.write = func(file *os.File, data []byte) (int, error) {
+				temporary = file
+				return write(file, data)
+			}
+			err := writeFile(path, []byte("next"), 0600, operations)
 			if !errors.Is(err, failure) {
 				t.Fatalf("write error = %v", err)
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil || string(data) != "prior" {
+				t.Fatalf("prior metadata = %q, %v", data, readErr)
+			}
+			if temporary == nil {
+				t.Fatal("no temporary file was opened")
+			}
+			if _, err := temporary.Stat(); !errors.Is(err, os.ErrClosed) {
+				t.Fatalf("temporary file was not closed: %v", err)
 			}
 			temporaries, globErr := filepath.Glob(filepath.Join(directory, ".metadata-*.tmp"))
 			if globErr != nil || len(temporaries) != 0 {
