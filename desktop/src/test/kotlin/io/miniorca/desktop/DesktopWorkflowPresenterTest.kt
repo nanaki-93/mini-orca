@@ -5,11 +5,13 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -1574,50 +1576,59 @@ class DesktopWorkflowPresenterTest {
 
   @Test
   fun explicitSendMakesOneChatRequestAndPreservesFunctionRemoteConsent() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
     val sessionRequests = AtomicInteger()
     val messageRequests = AtomicInteger()
     var messageBody = ""
-    val presenter = presenter { method, path, body ->
-      when (method to path) {
-        "GET" to "/status" -> response("{\"status\":\"ok\",\"version\":\"v1\"}")
-        "GET" to "/api/models/current" ->
-            response(
-                """{"scopes":{"function":{"scope":"function","profile":"remote","model":"provider/editor","remote_provider":true}}}""")
-        "GET" to "/api/projects/current/files/info?path=main.go" ->
-            response(fileJson("main.go", "base"))
-        "GET" to "/api/projects/current/files/symbols?path=main.go" ->
-            response(symbolsJson("main.go", "Run"))
-        "GET" to "/api/projects/current/files/analysis?path=main.go&refresh=false" ->
-            response("{\"path\":\"main.go\",\"status\":\"missing\"}")
-        "GET" to "/api/projects/current/impact?path=main.go" ->
-            response("{\"target_path\":\"main.go\"}")
-        "GET" to "/api/projects/current/git?path=main.go" -> response("{\"available\":false}")
-        "POST" to "/api/projects/current/chat/sessions" -> {
-          sessionRequests.incrementAndGet()
-          response(
-              "{\"id\":\"session\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"open_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"state\":\"active\",\"messages\":[]}")
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, body ->
+          when (method to path) {
+            "GET" to "/status" -> response("{\"status\":\"ok\",\"version\":\"v1\"}")
+            "GET" to "/api/models/current" ->
+                response(
+                    """{"scopes":{"function":{"scope":"function","profile":"remote","model":"provider/editor","remote_provider":true}}}""")
+            "GET" to "/api/projects/current/files/info?path=main.go" ->
+                response(fileJson("main.go", "base"))
+            "GET" to "/api/projects/current/files/symbols?path=main.go" ->
+                response(symbolsJson("main.go", "Run"))
+            "GET" to
+                "/api/projects/current/files/analysis?path=main.go&project_revision=revision" ->
+                response("{\"path\":\"main.go\",\"status\":\"missing\"}")
+            "GET" to "/api/projects/current/impact?path=main.go" ->
+                response("{\"target_path\":\"main.go\"}")
+            "GET" to "/api/projects/current/git?path=main.go" -> response("{\"available\":false}")
+            "POST" to "/api/projects/current/chat/sessions" -> {
+              sessionRequests.incrementAndGet()
+              response(
+                  "{\"id\":\"session\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"open_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"state\":\"active\",\"messages\":[]}")
+            }
+            "POST" to "/api/projects/current/chat/sessions/session/messages" -> {
+              messageRequests.incrementAndGet()
+              messageBody = body.orEmpty()
+              response(
+                  "{\"session_id\":\"session\",\"draft\":{\"id\":\"draft\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"target_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"declaration\":\"func Run() {}\",\"revision\":1,\"hash\":\"draft-hash\",\"state\":\"generated\"},\"assistant_message\":{\"role\":\"assistant\",\"content\":\"Ready\"}}")
+            }
+            else -> error("unexpected request $method $path")
+          }
         }
-        "POST" to "/api/projects/current/chat/sessions/session/messages" -> {
-          messageRequests.incrementAndGet()
-          messageBody = body.orEmpty()
-          response(
-              "{\"session_id\":\"session\",\"draft\":{\"id\":\"draft\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"target_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"declaration\":\"func Run() {}\",\"revision\":1,\"hash\":\"draft-hash\",\"state\":\"generated\"},\"assistant_message\":{\"role\":\"assistant\",\"content\":\"Ready\"}}")
-        }
-        else -> error("unexpected request $method $path")
-      }
-    }
     try {
       presenter.refreshConnection()
-      eventually { presenter.snapshot.value.model(ModelScope.Function).remoteProvider }
+      dispatcher.runPending()
+      assertTrue(presenter.snapshot.value.model(ModelScope.Function).remoteProvider)
       loadProject(presenter)
       presenter.selectFile("main.go")
-      eventually { presenter.snapshot.value.state.selectedFile?.path == "main.go" }
+      // Complete file loading and enrichment before checking synchronous validation messages.
+      dispatcher.runPending()
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertEquals("missing", presenter.snapshot.value.state.analysis?.status)
       presenter.dispatch(
           DesktopEvent.SymbolSelected(
               SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)))
 
       presenter.sendChatMessage(
           ChatEditMode.ReplaceSymbol, "", FunctionChangePreset.BugFix.preparedMessage())
+      dispatcher.runPending()
       assertEquals(0, sessionRequests.get())
       assertEquals(0, messageRequests.get())
       assertEquals(
@@ -1626,6 +1637,7 @@ class DesktopWorkflowPresenterTest {
 
       presenter.sendChatMessage(
           ChatEditMode.ReplaceSymbol, "", "Fix a bug: return a typed error for a missing user")
+      dispatcher.runPending()
       assertEquals(0, sessionRequests.get())
       assertEquals(0, messageRequests.get())
       assertEquals(
@@ -1635,13 +1647,16 @@ class DesktopWorkflowPresenterTest {
       presenter.setProviderConfirmation(ModelScope.Function, true)
       presenter.sendChatMessage(
           ChatEditMode.ReplaceSymbol, "", "Fix a bug: return a typed error for a missing user")
-      eventually { presenter.snapshot.value.state.review.draft?.id == "draft" }
+      dispatcher.runPending()
+      assertEquals("draft", presenter.snapshot.value.state.review.draft?.id)
 
       assertEquals(1, sessionRequests.get())
       assertEquals(1, messageRequests.get())
       assertTrue(messageBody.contains("\"confirm_remote_provider\":true"))
     } finally {
       presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
     }
   }
 
@@ -1880,6 +1895,98 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun securityResponsesCannotPublishAfterFileProjectRevisionChangesOrClose() {
+    for (review in listOf(false, true)) {
+      for (change in listOf("file", "project", "revision", "close")) {
+        val main = QueuedDispatcher()
+        val io = QueuedDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + main)
+        val presenter =
+            DesktopWorkflowPresenter(
+                ApiClient(
+                    transport =
+                        DaemonTransport { _, _, _ ->
+                          response(securityReportJson(if (review) "ai" else "deterministic"))
+                        }),
+                LastProjectStore(),
+                scope,
+                io)
+        try {
+          loadFile(presenter)
+          if (review) presenter.reviewSecurity() else presenter.scanSecurity()
+          main.runPending()
+          io.runPending()
+          when (change) {
+            "file" ->
+                presenter.dispatch(
+                    DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()))
+            "project" ->
+                presenter.dispatch(
+                    DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")))
+            "revision" ->
+                presenter.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "new")))
+            "close" -> presenter.close()
+          }
+          main.runPending()
+          val security = presenter.snapshot.value.state.security
+          assertNull(security.sourceReport, "$change, review=$review")
+          assertNull(security.aiReport, "$change, review=$review")
+          assertTrue(security.action.isBlank(), "$change, review=$review")
+        } finally {
+          presenter.close()
+          scope.cancel()
+          main.runPending()
+        }
+      }
+    }
+  }
+
+  @Test
+  fun selectingAFileCancelsSecurityBeforeTheQueuedRequestCanRun() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val paths = mutableListOf<String>()
+    val presenter =
+        DesktopWorkflowPresenter(
+            ApiClient(
+                transport =
+                    DaemonTransport { _, path, _ ->
+                      paths.add(path)
+                      when {
+                        path.contains("/files/info") -> response(fileJson("other.go", "other"))
+                        path.contains("/files/symbols") -> response(symbolsJson("other.go"))
+                        else -> response("{}")
+                      }
+                    }),
+            LastProjectStore(),
+            scope,
+            io)
+    try {
+      loadFile(presenter)
+      presenter.scanSecurity()
+      main.runPending()
+      presenter.setSecurityReviewRemoteConfirmation(true)
+      presenter.selectFile("other.go")
+      repeat(3) {
+        main.runPending()
+        io.runPending()
+      }
+      main.runPending()
+      assertFalse(paths.any { it.contains("security") })
+      assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertFalse(presenter.snapshot.value.securityReviewRemoteConfirmed)
+      assertEquals(
+          SecuritySectionOperationStatus.Canceled,
+          presenter.snapshot.value.state.security.sourceOperation.status)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+    }
+  }
+
+  @Test
   fun preparingASecurityFixOnlyOpensTheComposerPathWithoutASend() {
     val chatPosts = AtomicInteger()
     val presenter = presenter { method, path, _ ->
@@ -2007,9 +2114,22 @@ class DesktopWorkflowPresenterTest {
     }
   }
 
+  private class QueuedDispatcher : CoroutineDispatcher() {
+    private val pending = ArrayDeque<Runnable>()
+
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+      pending.addLast(block)
+    }
+
+    fun runPending() {
+      while (pending.isNotEmpty()) pending.removeFirst().run()
+    }
+  }
+
   private fun presenter(
       parentScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
       interceptTrust: Boolean = true,
+      ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
       responder: (String, String, String?) -> TransportResponse,
   ): DesktopWorkflowPresenter {
     return DesktopWorkflowPresenter(
@@ -2030,7 +2150,7 @@ class DesktopWorkflowPresenterTest {
                 }),
         LastProjectStore(),
         parentScope,
-        Dispatchers.Default,
+        ioDispatcher,
         5)
   }
 
