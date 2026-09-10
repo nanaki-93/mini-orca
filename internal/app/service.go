@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,7 @@ type Service struct {
 	retryMax                        time.Duration
 	jobLifecycleMu                  sync.Mutex
 	analysisAll                     *analysisAllController
+	writeAnalyzeAllJob              func(string, []byte, os.FileMode) error
 	goScan                          *goScanController
 	drafts                          *draftStore
 	chatSessions                    *chatSessionStore
