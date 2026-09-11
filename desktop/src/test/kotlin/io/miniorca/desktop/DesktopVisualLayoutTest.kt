@@ -417,7 +417,6 @@ class DesktopVisualLayoutTest {
                         IndexedFile("internal/alpha.go", "alpha", "Go", false),
                         IndexedFile("internal/zeta.go", "zeta", "Go", false)),
                 symbols = emptyList(),
-                analysis = null,
                 hasActiveFile = false,
                 onSelectFile = { openedFiles += it },
                 onSelectSymbol = {},

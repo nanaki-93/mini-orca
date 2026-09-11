@@ -11,6 +11,22 @@ internal enum class LeftToolWindow {
   Editor,
 }
 
+/** Grouping changes presentation only; stored enum names and shortcut order stay stable. */
+internal data class WorkspaceNavigationGroup(
+    val label: String,
+    val destinations: List<LeftToolWindow>
+)
+
+internal val workspaceNavigationGroups =
+    listOf(
+        WorkspaceNavigationGroup(
+            "Project", listOf(LeftToolWindow.Summary, LeftToolWindow.Analysis)),
+        WorkspaceNavigationGroup(
+            "Results",
+            listOf(LeftToolWindow.Performance, LeftToolWindow.Problems, LeftToolWindow.Security)),
+        WorkspaceNavigationGroup("Editing", listOf(LeftToolWindow.Editor)),
+    )
+
 internal enum class RightToolWindow {
   Context,
   Assistant,
@@ -42,7 +58,7 @@ internal fun leftToolWindowLabel(toolWindow: LeftToolWindow): String =
       LeftToolWindow.Summary -> "Summary"
       LeftToolWindow.Analysis -> "Analysis"
       LeftToolWindow.Performance -> "Performance"
-      LeftToolWindow.Problems -> "Bugs & Problems"
+      LeftToolWindow.Problems -> "Bugs"
       LeftToolWindow.Security -> "Security"
       LeftToolWindow.Editor -> "Editor"
     }
@@ -177,7 +193,7 @@ internal fun dockedPaneWidths(
   )
 }
 
-internal const val TOOL_WINDOW_BAR_WIDTH = 88f
+internal const val TOOL_WINDOW_BAR_WIDTH = 120f
 internal const val PANE_SEPARATOR_WIDTH = 1f
 internal const val RESIZE_DIVIDER_WIDTH = 8f
 internal const val MIN_EDITOR_WIDTH = 400f

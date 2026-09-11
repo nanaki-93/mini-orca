@@ -7,6 +7,46 @@ import kotlin.test.assertTrue
 
 class DesktopStatusBarTest {
   @Test
+  fun analysisAndResultsShowTheCapturedRunAndAllProviderScopes() {
+    val run = analysisRunFixture().copy(status = "running")
+    val initial =
+        statusBarState()
+            .copy(
+                workspace = Workspace.Performance,
+                project = resultProjectFixture(),
+                index = resultIndexFixture(),
+                selectedFile = selectedFile(),
+                analysisRun = ProjectAnalysisRunState(run = run))
+    val presentation = desktopStatusBarPresentation(initial)
+    assertTrue(presentation.segments.any { it.label == "Project analysis: Running" })
+    val provider = presentation.segments.single { it.type == DesktopStatusSegmentType.Provider }
+    assertEquals("Run providers: 2 remote · 0 local", provider.label)
+    assertTrue(provider.detail.contains("bug-model"))
+    assertTrue(provider.detail.contains("review-model"))
+    assertFalse(presentation.segments.any { it.type == DesktopStatusSegmentType.File })
+    assertTrue(
+        visibleDesktopStatusSegments(presentation, 500f).any {
+          it.type == DesktopStatusSegmentType.ProjectRun
+        })
+    val stale =
+        desktopStatusBarPresentation(
+            initial.copy(project = resultProjectFixture().copy(projectRevision = "next")))
+    assertTrue(stale.segments.any { it.label == "Project analysis: Stale" && it.attention })
+    val foreign =
+        desktopStatusBarPresentation(
+            initial.copy(
+                analysisRun =
+                    initial.analysisRun.copy(
+                        run = run.copy(identity = run.identity.copy(projectId = "other")))))
+    assertFalse(
+        foreign.segments.any {
+          it.type in setOf(DesktopStatusSegmentType.ProjectRun, DesktopStatusSegmentType.Provider)
+        })
+    val empty = desktopStatusBarPresentation(initial.copy(analysisRun = ProjectAnalysisRunState()))
+    assertFalse(empty.segments.any { it.type == DesktopStatusSegmentType.Provider })
+  }
+
+  @Test
   fun idlePresentationUsesOnlyKnownProjectProviderAndDaemonState() {
     val presentation = desktopStatusBarPresentation(statusBarState())
 

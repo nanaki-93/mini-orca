@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -7,17 +8,54 @@ import kotlin.test.assertTrue
 
 class CommandPaletteTest {
   @Test
-  fun freshFileAnalysisCanBeRefreshedFromCommandsWithoutAddingASecondInspectorAction() {
-    val freshActions = availableCommandActions(FileAnalysis("main.go", "fresh"))
+  fun projectActionScopeRemainsReadableAndKeyboardActivationIsExplicit() {
+    listOf(800 to 650, 1280 to 600).forEach { (width, height) ->
+      val selected = mutableListOf<String>()
+      ComposeVisualFixture(width, height, 1.5f) {
+            CommandPaletteDialog(
+                mode = PaletteMode.Actions,
+                query = "analysis",
+                onQuery = {},
+                files = emptyList(),
+                symbols = emptyList(),
+                hasActiveFile = false,
+                onSelectFile = {},
+                onSelectSymbol = {},
+                onSelectAction = { selected += it },
+                onDismiss = {})
+          }
+          .use { fixture ->
+            fixture.render("palette-analysis-$width-1.5")
+            fixture.assertTextFits("Start analysis")
+            fixture.assertTextFits("View analysis progress")
+            assertTrue(fixture.hasText(commandActionDetail("start_analysis")))
+            assertTrue(selected.isEmpty())
+            assertTrue(fixture.pressKey(Key.DirectionDown))
+            fixture.render()
+            assertTrue(selected.isEmpty())
+            assertTrue(fixture.pressKey(Key.Enter))
+            assertEquals(listOf("open_analysis"), selected)
+          }
+    }
+  }
 
-    assertTrue("refresh_file_analysis" in freshActions)
-    assertTrue("create_function" in freshActions)
-    assertTrue("create_type" in freshActions)
-    assertFalse(
-        "refresh_file_analysis" in availableCommandActions(FileAnalysis("main.go", "stale")))
-    assertEquals("Refresh file analysis", commandActionLabel("refresh_file_analysis"))
-    assertEquals("New Go function", commandActionLabel("create_function"))
-    assertEquals("New Go type", commandActionLabel("create_type"))
+  @Test
+  fun projectAnalysisAndResultsRemainAvailableWithoutASelectedFile() {
+    val projectActions = availableCommandActions(hasActiveFile = false)
+    assertEquals(
+        listOf("start_analysis", "open_analysis", "open_bugs", "open_performance", "open_security"),
+        projectActions)
+    assertFalse("create_function" in projectActions)
+    assertTrue("create_function" in availableCommandActions())
+    assertTrue("create_type" in availableCommandActions())
+    assertFalse("refresh_file_analysis" in availableCommandActions())
+    assertEquals("Start analysis", commandActionLabel("start_analysis"))
+    assertTrue(commandActionDetail("start_analysis").startsWith("Whole project"))
+    assertTrue(commandActionDetail("open_bugs").contains("navigation only"))
+    assertEquals(Workspace.Analysis, commandActionWorkspace("start_analysis"))
+    assertEquals(Workspace.Analysis, commandActionWorkspace("open_analysis"))
+    assertEquals(Workspace.Editor, commandActionWorkspace("create_function"))
+    assertEquals(null, commandActionWorkspace("unknown"))
   }
 
   @Test
@@ -33,8 +71,8 @@ class CommandPaletteTest {
             SymbolInfo(
                 "Alpha", "function", startLine = 10, confidence = "exact", atomicTarget = true))
 
-    val fileResults = commandSearchResults(PaletteMode.Files, "", files, symbols, null, true)
-    val symbolResults = commandSearchResults(PaletteMode.Symbols, "", files, symbols, null, true)
+    val fileResults = commandSearchResults(PaletteMode.Files, "", files, symbols, true)
+    val symbolResults = commandSearchResults(PaletteMode.Symbols, "", files, symbols, true)
 
     assertEquals(listOf("internal/alpha.go", "README.md", "zeta.go"), fileResults.map { it.path })
     assertEquals(listOf("Alpha", "Zed"), symbolResults.map { it.label })
@@ -45,16 +83,11 @@ class CommandPaletteTest {
   @Test
   fun actionsKeepFileCommandsScopedAndExposeWorkspaceNavigation() {
     assertEquals(
-        listOf("open_performance", "open_security"),
-        availableCommandActions(FileAnalysis("main.go", "fresh"), hasActiveFile = false))
+        listOf("start_analysis", "open_analysis", "open_bugs", "open_performance", "open_security"),
+        availableCommandActions(hasActiveFile = false))
     val freshActions =
         commandSearchResults(
-            PaletteMode.Actions,
-            "",
-            emptyList(),
-            emptyList(),
-            FileAnalysis("main.go", "fresh"),
-            hasActiveFile = true)
+            PaletteMode.Actions, "", emptyList(), emptyList(), hasActiveFile = true)
 
     assertEquals(
         listOf(
@@ -62,12 +95,14 @@ class CommandPaletteTest {
             "Fix",
             "New Go function",
             "New Go type",
-            "Open Performance workspace",
-            "Open Security workspace",
             "Refactor",
-            "Refresh file analysis"),
+            "Start analysis",
+            "View Bugs results",
+            "View Performance results",
+            "View Security results",
+            "View analysis progress"),
         freshActions.map { it.label })
-    assertTrue(freshActions.any { it.label == "Open Performance workspace" })
+    assertTrue(freshActions.any { it.label == "View Performance results" })
     assertFalse(
         freshActions.any {
           it.label in
@@ -100,17 +135,11 @@ class CommandPaletteTest {
                 "main",
                 listOf(IndexedFile("internal/main.go", "hash", "Go", false)),
                 emptyList(),
-                null,
                 hasActiveFile = false)
             .single()
     val actionResult =
         commandSearchResults(
-                PaletteMode.Actions,
-                "function",
-                emptyList(),
-                emptyList(),
-                null,
-                hasActiveFile = true)
+                PaletteMode.Actions, "function", emptyList(), emptyList(), hasActiveFile = true)
             .single()
 
     assertEquals(

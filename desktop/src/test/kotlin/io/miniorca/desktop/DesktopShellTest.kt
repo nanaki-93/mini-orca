@@ -7,6 +7,64 @@ import kotlin.test.assertTrue
 
 class DesktopShellTest {
   @Test
+  fun navigationBadgesUseWholeProjectCountsAndKeepUnknownStaleAndErrorStates() {
+    val run = analysisRunFixture().copy(status = "running")
+    val initial =
+        DesktopState(
+            projectState = ProjectWorkspaceState(resultProjectFixture(), resultIndexFixture()),
+            analysisRun = ProjectAnalysisRunState(run = run))
+    val badges = workspaceNavigationBadges(initial)
+    assertEquals(1, badges[LeftToolWindow.Problems]?.count)
+    assertEquals("Running", badges[LeftToolWindow.Analysis]?.status)
+    val filtered =
+        initial.copy(
+            analysisRun = initial.analysisRun.copy(resultPaths = mapOf("bugs" to "missing.go")))
+    assertEquals(badges, workspaceNavigationBadges(filtered))
+    val unknown =
+        initial.copy(
+            analysisRun =
+                initial.analysisRun.copy(
+                    run =
+                        run.copy(
+                            sections =
+                                run.sections.map {
+                                  it.copy(findingCount = null, status = "running")
+                                })))
+    assertEquals(null, workspaceNavigationBadges(unknown)[LeftToolWindow.Problems]?.count)
+    assertTrue(
+        workspaceNavigationBadges(unknown)[LeftToolWindow.Problems]!!
+            .detail
+            .contains("Count unknown"))
+    val stale =
+        initial.copy(
+            projectState =
+                initial.projectState.copy(
+                    project = initial.project!!.copy(projectRevision = "next")))
+    assertEquals("Stale", workspaceNavigationBadges(stale)[LeftToolWindow.Problems]?.status)
+    assertEquals(null, workspaceNavigationBadges(stale)[LeftToolWindow.Problems]?.count)
+    val foreign =
+        initial.copy(
+            analysisRun =
+                initial.analysisRun.copy(
+                    run = run.copy(identity = run.identity.copy(projectId = "other"))))
+    assertEquals("Not started", workspaceNavigationBadges(foreign)[LeftToolWindow.Problems]?.status)
+    val failedRead =
+        initial.copy(
+            analysisRun =
+                initial.analysisRun.copy(
+                    sections =
+                        mapOf(
+                            AnalysisResultKey("security") to
+                                AnalysisSectionState(error = "Read failed"))))
+    assertTrue(workspaceNavigationBadges(failedRead)[LeftToolWindow.Security]!!.attention)
+    assertTrue(
+        workspaceNavigationBadges(failedRead)[LeftToolWindow.Security]!!
+            .detail
+            .contains("Read failed"))
+    assertTrue(workspaceNavigationBadges(DesktopState()).isEmpty())
+  }
+
+  @Test
   fun keyboardSplittersUseTheSameBoundedResizeStepAsPointerSplitters() {
     assertEquals(-KEYBOARD_SPLITTER_STEP, verticalSplitterKeyboardDelta(Key.DirectionLeft))
     assertEquals(KEYBOARD_SPLITTER_STEP, verticalSplitterKeyboardDelta(Key.DirectionRight))
@@ -167,7 +225,7 @@ class DesktopShellTest {
         LeftToolWindow.entries.toList())
     assertEquals("Summary", leftToolWindowLabel(LeftToolWindow.Summary))
     assertEquals("Analysis", leftToolWindowLabel(LeftToolWindow.Analysis))
-    assertEquals("Bugs & Problems", leftToolWindowLabel(LeftToolWindow.Problems))
+    assertEquals("Bugs", leftToolWindowLabel(LeftToolWindow.Problems))
     assertEquals("Security", leftToolWindowLabel(LeftToolWindow.Security))
     assertEquals("Editor", leftToolWindowLabel(LeftToolWindow.Editor))
     assertEquals(Workspace.Bugs, workspaceForLeftToolWindow(LeftToolWindow.Problems))

@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
@@ -46,9 +48,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.awt.Cursor
@@ -59,10 +61,10 @@ internal fun ToolWindowBar(
     activeToolWindow: LeftToolWindow,
     onSelect: (LeftToolWindow) -> Unit,
     modifier: Modifier = Modifier,
+    badges: Map<LeftToolWindow, WorkspaceNavigationBadge> = emptyMap(),
 ) {
   var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
   var tabGroupHasFocus by remember { mutableStateOf(false) }
-  val enlargedText = LocalDensity.current.fontScale > 1.15f
   Column(
       modifier
           .width(TOOL_WINDOW_BAR_WIDTH.dp)
@@ -84,57 +86,100 @@ internal fun ToolWindowBar(
           },
       horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    LeftToolWindow.entries.forEach { toolWindow ->
-      val label = leftToolWindowLabel(toolWindow)
-      val selected = toolWindow == activeToolWindow
-      TooltipArea(tooltip = { ToolWindowTooltip(label) }) {
-        ChromeButton(
-            onClick = { onSelect(toolWindow) },
-            modifier =
-                Modifier.fillMaxWidth()
-                    .heightIn(min = 76.dp)
-                    .drawWithContent {
-                      drawContent()
-                      if (selected)
-                          drawLine(
-                              SelectionAccent,
-                              Offset(1.dp.toPx(), 0f),
-                              Offset(1.dp.toPx(), size.height),
-                              2.dp.toPx())
-                    }
-                    .semantics {
-                      contentDescription =
-                          toolWindowSemanticsLabel(
-                              toolWindow,
-                              selected,
-                              focused = tabGroupHasFocus && toolWindow == focusedToolWindow)
-                      this.selected = selected
-                    },
-            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-            role = Role.Tab,
-            selected = selected,
-            focusHighlight = tabGroupHasFocus && toolWindow == focusedToolWindow,
-        ) {
+    workspaceNavigationGroups.forEachIndexed { index, group ->
+      if (index > 0) IdeHorizontalSeparator(Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+      Text(
+          group.label,
+          color = SecondaryText,
+          fontSize = 10.sp,
+          lineHeight = 14.sp,
+          fontWeight = FontWeight.SemiBold,
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+      group.destinations.forEach { toolWindow ->
+        WorkspaceNavigationEntry(
+            toolWindow,
+            activeToolWindow == toolWindow,
+            tabGroupHasFocus && toolWindow == focusedToolWindow,
+            badges[toolWindow],
+            { onSelect(toolWindow) })
+      }
+    }
+  }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun WorkspaceNavigationEntry(
+    toolWindow: LeftToolWindow,
+    selected: Boolean,
+    focused: Boolean,
+    badge: WorkspaceNavigationBadge?,
+    onSelect: () -> Unit
+) {
+  val label = leftToolWindowLabel(toolWindow)
+  val reveal = remember { BringIntoViewRequester() }
+  LaunchedEffect(focused) { if (focused) reveal.bringIntoView() }
+  TooltipArea(tooltip = { ToolWindowTooltip(badge?.detail ?: label) }) {
+    ChromeButton(
+        onClick = onSelect,
+        modifier =
+            Modifier.fillMaxWidth()
+                .heightIn(min = 60.dp)
+                .bringIntoViewRequester(reveal)
+                .drawWithContent {
+                  drawContent()
+                  if (selected)
+                      drawLine(
+                          SelectionAccent,
+                          Offset(1.dp.toPx(), 0f),
+                          Offset(1.dp.toPx(), size.height),
+                          2.dp.toPx())
+                }
+                .semantics {
+                  contentDescription = toolWindowSemanticsLabel(toolWindow, selected, focused)
+                  this.selected = selected
+                  badge?.let { stateDescription = it.detail }
+                },
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+        role = Role.Tab,
+        selected = selected,
+        focusHighlight = focused) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             DesktopLineIcon(
                 leftToolWindowIcon(toolWindow),
                 label,
-                iconSize = 24.dp,
+                iconSize = 20.dp,
                 tint = if (selected) SelectionText else SecondaryText)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
-                if (toolWindow == LeftToolWindow.Performance && enlargedText) "Perf." else label,
-                color = if (selected) SelectionText else SecondaryText,
+                label,
+                color = if (selected) SelectionText else PrimaryText,
                 fontSize = 11.sp,
-                lineHeight = 15.sp,
+                lineHeight = 16.sp,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+                fontWeight = FontWeight.SemiBold)
+            if (toolWindow == LeftToolWindow.Analysis)
+                Text(
+                    "Run & progress",
+                    color = SecondaryText,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                    textAlign = TextAlign.Center)
+            badge?.let {
+              Spacer(Modifier.height(4.dp))
+              it.count?.let { count ->
+                IdeLabelBadge(count.toString(), SecondaryText, accessibleName = "$count findings")
+                Text("findings", color = SecondaryText, fontSize = 10.sp, lineHeight = 14.sp)
+              }
+              Text(
+                  it.status,
+                  color = if (it.attention) Warning else SecondaryText,
+                  fontSize = 11.sp,
+                  lineHeight = 16.sp,
+                  textAlign = TextAlign.Center)
+            }
           }
         }
-      }
-    }
   }
 }
 

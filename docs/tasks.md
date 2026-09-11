@@ -1109,7 +1109,7 @@ including this user-authorized continuation.
 
 ## Task NAV-01 — Distinguish run, results and editing in the sidebar
 
-- [ ] NAV-01 completed with required checks and diff review.
+- [x] NAV-01 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/DesktopState.kt` — retain distinct workspaces and local per-page result filters.
@@ -1125,6 +1125,11 @@ including this user-authorized continuation.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — navigation/focus coverage.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopIntegrationCoverageTest.kt` — section-to-editor navigation.
 
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAccessibilityTest.kt` — migrate the existing Bugs label assertion; keep selection/focus semantics and shortcut coverage.
+- `desktop/src/test/kotlin/io/miniorca/desktop/CommandPaletteTest.kt` — replace obsolete file-analysis actions and assert the new project/navigation scopes.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopStatusBarTest.kt` — verify captured run/provider context and stale/foreign ownership.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — migrate affected palette/rail fixtures and render the grouped production navigation; preserve the user's pre-existing Context tests.
+
 **Inputs / dependencies**
 - ANA-07.
 
@@ -1137,7 +1142,69 @@ including this user-authorized continuation.
 `./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.DesktopLayoutStateTest' --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopIntegrationCoverageTest'`
 
 **Execution record**
-Not started.
+Started 2026-09-11. Verified the ANA-07 commit and all receipt hashes, an empty
+index, no active writer/validator, both Java toolchains and all ten unrelated
+working files. Captured original HEAD and working variants in the ignored NAV-01
+baseline. Read AGENTS.md, the run procedure and UI guidelines. Initial
+implementation; zero corrections. Added the directly coupled palette/status
+unit tests and existing visual fixture file to the target list before edits.
+Saved workspace keys and keyboard shortcuts remain stable; no terminal or bottom
+pane replacement is included in this card.
+
+**Correction 1 — 2026-09-12.** Initial prescribed verification ran 50 tests;
+two dock-width tests failed. The 128dp rail left only 395dp for source at 1000dp
+because the existing inspector minimum is 280dp. Use a 120dp rail, preserving
+all pane minima and stored preferences (rendered docks 180/283dp, source 400dp).
+Large-text review also found a split Completed badge; show the real numeric
+badge with a findings label and a separate wrapping state instead. Palette action
+rows now separate the action from its scope so the longer project scope remains
+readable. The initial log and renders remain under the ignored NAV-01 directory.
+One correction is used; rerun the same prescribed verification.
+
+**Correction 2 — 2026-09-12.** Correction-1 prescribed verification passed all
+50 tests. The full suite ran 375 tests and failed only the legacy accessibility
+expectation `Bugs & Problems tool window, not selected`; production now correctly
+says `Bugs tool window, not selected`. Added that coupled assertion file to the
+card before migrating it. Detekt and Spotless passed independently. Large-text
+render review found Performance splitting at the final letter; reduce entry
+horizontal padding from 8dp to 4dp within the same 120dp rail. Add action-palette
+render/keyboard coverage for the new wrapping scope descriptions. Two corrections
+are now used; failed logs remain `full-correction-1.log` and
+`focused-initial.log`, with all intermediate visuals retained.
+
+**Accepted — 2026-09-12.** The prescribed four-class command passes all 50 tests.
+`./desktop/gradlew -p desktop test detekt spotlessCheck` passes all 376 tests and
+both quality gates. The isolated candidate, built from accepted HEAD plus only
+NAV-01 changes, passes all 374 desktop tests, Detekt and Spotless. All invocations
+used the documented Java 21 launcher and explicit JBR25 path. Failed attempts,
+counts and successful logs are retained in `.mini-orca/autopilot/ux/NAV-01/`.
+Two focused corrections were used; their history above remains unchanged.
+
+The rail groups Project, Results and Editing, retains every stored destination
+and shortcut, and labels Analysis as Run & progress. Result counts come from the
+owned whole-project run, independent of local filters; unknown/stale counts are
+not fabricated as zero. Selection and keyboard focus remain separately visible,
+with focused entries scrolled into view. The command palette offers whole-project
+Start through existing preview/consent and local progress/results navigation;
+Editor actions retain their existing preparation flow. Status shows the captured
+run and all its provider scopes, without implying live provider connectivity.
+The 120dp rail preserves the existing pane minima and restores saved widths.
+
+Reviewed production rail renders at 1440×900, 1000×760, 999×760, 800×650, and
+1280×600 at 125%/150% text, including keyboard reveal of Editor. Scope descriptions
+and explicit palette keyboard activation pass component checks. Offscreen palette
+images do not establish native popup geometry, including the additional ignored
+full-size-host reproduction; native popup placement, OS focus and screen-reader
+behavior remain unverified. No live provider, Go/race or `make check` execution
+was needed for this desktop-only card. No configuration or migration is required.
+
+Final review found no actionable source issue or removed required behavior.
+Seven unrelated files are byte-identical, and all pre-existing changed lines in
+the three overlapping files remain intact and excluded from the isolated commit.
+Only the 15 listed Kotlin files plus PLAN.md and this checklist belong to the
+local NAV-01 commit. Verify its exact hashes and empty index in the ignored
+receipt, then end this card; the existing Astra Extra High scheduler remains
+active for TERM-01 on the next wake.
 
 ## Task TERM-01 — Prove the terminal dependency and local-session boundary
 

@@ -1,10 +1,99 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DesktopKeyboardNavigationTest {
+  @Test
+  fun groupedRailKeepsFullLabelsAndKeyboardReachabilityAtEverySupportedSize() {
+    listOf(
+            Triple(1440, 900, 1f),
+            Triple(1000, 760, 1f),
+            Triple(999, 760, 1f),
+            Triple(800, 650, 1f),
+            Triple(1280, 600, 1.25f),
+            Triple(1280, 600, 1.5f))
+        .forEach { (width, height, scale) ->
+          var active by mutableStateOf(LeftToolWindow.Summary)
+          var selections = 0
+          val focus = FocusRequester()
+          val fixtureRun =
+              analysisRunFixture()
+                  .copy(
+                      status = "running",
+                      sections =
+                          analysisRunFixture().sections.map {
+                            when (it.category) {
+                              "bugs" -> it.copy(status = "completed", findingCount = 12)
+                              "performance" -> it.copy(status = "running", findingCount = null)
+                              else -> it.copy(status = "partial", findingCount = 3)
+                            }
+                          })
+          val state =
+              DesktopState(
+                  projectState =
+                      ProjectWorkspaceState(resultProjectFixture(), resultIndexFixture()),
+                  analysisRun = ProjectAnalysisRunState(run = fixtureRun))
+          ComposeVisualFixture(width, height, scale) {
+                Row(Modifier.fillMaxSize()) {
+                  ToolWindowBar(
+                      active,
+                      {
+                        active = it
+                        selections++
+                      },
+                      Modifier.focusRequester(focus),
+                      workspaceNavigationBadges(state))
+                  Box(Modifier.weight(1f)) {
+                    AnalysisWorkspacePane(
+                        AnalysisWorkspacePaneState(state.project, state.analysisRun),
+                        AnalysisWorkspaceActions({}, {}, {}, {}, {}))
+                  }
+                }
+              }
+              .use { fixture ->
+                fixture.render("navigation-groups-$width-$scale")
+                fixture.assertTextFits("Performance")
+                assertFalse(fixture.hasText("Perf."))
+                assertTrue(fixture.hasText("Results"))
+                assertTrue(fixture.hasText("Editing"))
+                assertTrue(fixture.hasDescription("12 findings"))
+                fixture.assertTextFits("12")
+                fixture.assertTextFits("Completed")
+                assertTrue(fixture.stateDescription("Performance")!!.contains("Count unknown"))
+                focus.requestFocus()
+                fixture.render()
+                repeat(5) {
+                  fixture.pressKey(Key.DirectionDown)
+                  fixture.render()
+                }
+                fixture.render("navigation-editor-focused-$width-$scale")
+                assertEquals(0, selections)
+                assertEquals(LeftToolWindow.Summary, active)
+                assertTrue(fixture.hasDescription("Editor tool window, not selected, focused"))
+                fixture.assertTextFits("Editor")
+                fixture.pressKey(Key.Enter)
+                fixture.render()
+                assertEquals(LeftToolWindow.Editor, active)
+                assertEquals(1, selections)
+                assertTrue(fixture.hasDescription("Editor tool window, selected, focused"))
+              }
+        }
+  }
+
   @Test
   fun responsiveShellKeepsTheExactBreakpointDocked() {
     assertEquals(
@@ -44,7 +133,7 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
-  fun activityRailCyclesOnlyTheFiveRetainedWorkspaces() {
+  fun activityRailCyclesTheSixRetainedWorkspaces() {
     val entries = LeftToolWindow.entries.toList()
 
     assertEquals(

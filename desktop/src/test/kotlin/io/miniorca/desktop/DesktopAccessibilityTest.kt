@@ -41,8 +41,7 @@ class DesktopAccessibilityTest {
     assertEquals(
         "Editor tool window, selected", toolWindowSemanticsLabel(LeftToolWindow.Editor, true))
     assertEquals(
-        "Bugs & Problems tool window, not selected",
-        toolWindowSemanticsLabel(LeftToolWindow.Problems, false))
+        "Bugs tool window, not selected", toolWindowSemanticsLabel(LeftToolWindow.Problems, false))
   }
 
   @Test
