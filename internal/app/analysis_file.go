@@ -341,16 +341,10 @@ func (execution *analysisFileStageExecution) semantic(ctx context.Context, resul
 		if err != nil {
 			return err
 		}
-		if cached.Status == project.AnalysisStatusFresh && cached.ProjectRevision == execution.request.Run.ProjectRevision {
-			classified := true
-			for _, risk := range cached.Risks {
-				classified = classified && risk.Category.Valid()
-			}
-			if classified {
-				result.Semantic = cached
-				analysisStageEvidence(&result.Progress, len(cached.Risks), false, true)
-				return nil
-			}
+		if analysisSemanticCacheUsable(cached, execution.request.Run.ProjectRevision) {
+			result.Semantic = cached
+			analysisStageEvidence(&result.Progress, len(cached.Risks), false, true)
+			return nil
 		}
 	}
 	fresh, err := s.requestFileAnalysis(ctx, prepared, execution.dispatch())
@@ -391,8 +385,7 @@ func (execution *analysisFileStageExecution) performance(ctx context.Context, re
 		if err != nil {
 			return err
 		}
-		model := snapshot.runtime.effective
-		if cached != nil && cached.Status == "completed" && cached.ProjectID == execution.analysis.ProjectID && cached.ProjectRevision == execution.analysis.ProjectRevision && cached.Model == snapshot.runtime.profile.Model && cached.Profile == model.Profile && cached.Scope == model.Scope && cached.ProviderOrigin == model.ProviderOrigin && cached.ReasoningEffort == model.ReasoningEffort {
+		if analysisPerformanceCacheUsable(cached, execution.analysis, snapshot.runtime) {
 			result.Performance = cached
 			analysisStageEvidence(&result.Progress, len(cached.Findings), cached.Warning != "", true)
 			return nil
@@ -461,8 +454,7 @@ func (execution *analysisFileStageExecution) securityAI(ctx context.Context, res
 		return project.ErrRevisionConflict
 	}
 	if !execution.request.Refresh {
-		model := snapshot.runtime.effective
-		input := project.SecurityReportInput{ProjectID: execution.analysis.ProjectID, ProjectRevision: execution.analysis.ProjectRevision, Path: execution.file.Path, ContentHash: execution.file.ContentHash, Source: project.SecuritySourceAI, Model: snapshot.runtime.profile.Model, ConfiguredModel: snapshot.runtime.profile.Model, Profile: model.Profile, Scope: model.Scope, ProviderOrigin: model.ProviderOrigin, ReasoningEffort: securityReasoningEffort(model.ReasoningEffort), PromptVersion: project.SecurityPromptVersion, ContextPolicyVersion: execution.policy.Version()}
+		input := analysisSecurityCacheInput(execution.analysis, execution.file, snapshot.runtime, execution.policy.Version())
 		cached, err := s.loadSecurityFileReport(execution.root, input)
 		if err != nil {
 			return err
@@ -495,4 +487,26 @@ func (execution *analysisFileStageExecution) securityAI(ctx context.Context, res
 	result.Security = report
 	analysisStageEvidence(&result.Progress, len(report.Findings), report.Status == project.SecurityStatusPartial, false)
 	return nil
+}
+
+func analysisSemanticCacheUsable(report *project.FileAnalysis, revision string) bool {
+	if report == nil || report.Status != project.AnalysisStatusFresh || report.ProjectRevision != revision {
+		return false
+	}
+	for _, risk := range report.Risks {
+		if !risk.Category.Valid() {
+			return false
+		}
+	}
+	return true
+}
+
+func analysisPerformanceCacheUsable(report *project.PerformanceFileReport, analysis project.Analysis, runtime modelRuntime) bool {
+	model := runtime.effective
+	return report != nil && report.Status == "completed" && report.ProjectID == analysis.ProjectID && report.ProjectRevision == analysis.ProjectRevision && report.Model == runtime.profile.Model && report.Profile == model.Profile && report.Scope == model.Scope && report.ProviderOrigin == model.ProviderOrigin && report.ReasoningEffort == model.ReasoningEffort
+}
+
+func analysisSecurityCacheInput(analysis project.Analysis, file project.IndexFile, runtime modelRuntime, policyVersion string) project.SecurityReportInput {
+	model := runtime.effective
+	return project.SecurityReportInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: file.ContentHash, Source: project.SecuritySourceAI, Model: runtime.profile.Model, ConfiguredModel: runtime.profile.Model, Profile: model.Profile, Scope: model.Scope, ProviderOrigin: model.ProviderOrigin, ReasoningEffort: securityReasoningEffort(model.ReasoningEffort), PromptVersion: project.SecurityPromptVersion, ContextPolicyVersion: policyVersion}
 }

@@ -1,14 +1,23 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 	"gopkg.in/yaml.v3"
 )
 
@@ -253,5 +262,489 @@ func TestAnalysisRunOpenAPIContractsAreExplicitlyPlannedAndResolvable(t *testing
 		if strings.HasPrefix(name, "Analysis") {
 			checkRefs(schema)
 		}
+	}
+}
+
+func analysisRunPreviewFor(t *testing.T, s *Service, limits AnalysisRunLimits, resume *AnalysisRunIdentity) *AnalysisRunPreview {
+	t.Helper()
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := s.PreviewAnalysisRun(context.Background(), AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: AnalysisRunScopeProject, Limits: limits, ResumeRun: resume})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return preview
+}
+
+func analysisStartFor(preview *AnalysisRunPreview) AnalysisRunStartRequest {
+	confirmations := AnalysisRunConfirmations{SecurityReview: true}
+	for _, provider := range preview.Providers {
+		confirmations.ProviderIDs = append(confirmations.ProviderIDs, provider.ID)
+	}
+	return AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, Refresh: preview.Refresh, Confirmations: confirmations}
+}
+
+func waitAnalysisWindow(t *testing.T, s *Service) {
+	t.Helper()
+	c := s.analysisRun
+	c.mu.Lock()
+	done := c.done
+	c.mu.Unlock()
+	if done != nil {
+		waitForTestSignal(t, done, "analysis window completion")
+	}
+}
+
+func completedAnalysisRun(t *testing.T, s *Service) *AnalysisRun {
+	t.Helper()
+	waitAnalysisWindow(t, s)
+	run, err := s.CurrentAnalysisRun(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run
+}
+
+func emptyAnalysisReply(stage AnalysisStage) string {
+	if stage == AnalysisStageSemantic {
+		return validSemanticAnalysis
+	}
+	return `{"findings":[]}`
+}
+
+func TestAnalysisRunCapturesActualInventoryBeyond500AndRejectsChangedPreview(t *testing.T) {
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	for i := 0; i < 500; i++ {
+		if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("source-%03d.go", i)), []byte("package main\nfunc Run() {}\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, source := range map[string]string{"excluded.go": "package main", "large.go": strings.Repeat("x", maxSemanticAnalysisBytes+1), ".mini-orcaignore": "excluded.go\n"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(source), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 900, 4}, nil)
+	if len(preview.Files) != 502 || len(preview.Excluded) != 2 || preview.ExpectedModelRequests != 1505 || preview.MaxModelRequests != 3010 || calls.Load() != 0 {
+		t.Fatalf("inventory files=%d excluded=%d estimates=%d/%d calls=%d", len(preview.Files), len(preview.Excluded), preview.ExpectedModelRequests, preview.MaxModelRequests, calls.Load())
+	}
+	if preview.Excluded[0].Path != "excluded.go" || preview.Excluded[1].Path != "large.go" {
+		t.Fatalf("excluded=%+v", preview.Excluded)
+	}
+	for i := 1; i < len(preview.Files); i++ {
+		if preview.Files[i-1].Path >= preview.Files[i].Path {
+			t.Fatal("queue is not deterministic")
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Changed() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); !errors.Is(err, project.ErrRevisionConflict) || calls.Load() != 0 {
+		t.Fatalf("stale admission=%v, calls=%d", err, calls.Load())
+	}
+}
+
+func TestAnalysisRunBatchesRequireExplicitContinuationAndReuseCaches(t *testing.T) {
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	if err := os.WriteFile(filepath.Join(root, "z.go"), []byte("package main\nfunc Run() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	limits := AnalysisRunLimits{1, 30, 2}
+	preview := analysisRunPreviewFor(t, s, limits, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	paused := completedAnalysisRun(t, s)
+	if paused.Status != AnalysisRunPaused || paused.WindowFilesCompleted != 1 || calls.Load() != 3 || len(paused.Files) != 2 || !analysisFileFinished(paused.Files[0]) || analysisFileFinished(paused.Files[1]) {
+		t.Fatalf("batch=%+v calls=%d", paused, calls.Load())
+	}
+	resume := analysisRunPreviewFor(t, s, limits, &paused.Identity)
+	if resume.Identity != preview.Identity || resume.ExpectedModelRequests != 3 {
+		t.Fatalf("resume=%+v", resume)
+	}
+	confirmations := analysisStartFor(resume).Confirmations
+	next, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Identity.ID != paused.Identity.ID || next.Identity.Generation == paused.Identity.Generation {
+		t.Fatal("resume lost run identity or reused generation")
+	}
+	if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunCancel}); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatal("old generation controlled resumed run")
+	}
+	run := completedAnalysisRun(t, s)
+	if run.Status != AnalysisRunCompletedEmpty || calls.Load() != 6 {
+		t.Fatalf("completed=%+v calls=%d", run, calls.Load())
+	}
+	cached := analysisRunPreviewFor(t, s, limits, nil)
+	if cached.Identity != preview.Identity || cached.ExpectedModelRequests != 0 || cached.MaxModelRequests != 0 {
+		t.Fatalf("cached=%+v", cached)
+	}
+	data, err := os.ReadFile(filepath.Join(root, analysisRunRelativePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"confirmations", "provider_ids", "package main", "fmt.Println", "prompt\":"} {
+		if strings.Contains(string(data), secret) {
+			t.Fatalf("source or consent persisted: %s", secret)
+		}
+	}
+}
+
+func analysisBlockingServer(t *testing.T) (*httptest.Server, *atomic.Int32, chan struct{}, func()) {
+	t.Helper()
+	var calls atomic.Int32
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var once sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := calls.Add(1)
+		if call == 1 {
+			started <- struct{}{}
+			select {
+			case <-release:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		var request llm.ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			return
+		}
+		reply := `{"findings":[]}`
+		if strings.HasPrefix(request.Messages[0].Content, "You summarize") {
+			reply = validSemanticAnalysis
+		}
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: reply}}}})
+	}))
+	unblock := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(func() { unblock(); server.Close() })
+	return server, &calls, started, unblock
+}
+
+func TestAnalysisRunPauseWaitsForStageAndCancelInterruptsActiveRequest(t *testing.T) {
+	for _, action := range []AnalysisRunAction{AnalysisRunPause, AnalysisRunCancel} {
+		t.Run(string(action), func(t *testing.T) {
+			server, calls, started, release := analysisBlockingServer(t)
+			s, _ := newSemanticAnalysisService(t, server.URL, 0)
+			preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+			run, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview))
+			if err != nil {
+				t.Fatal(err)
+			}
+			waitForTestSignal(t, started, "first analysis request")
+			changed, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: run.Identity, Action: action})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if action == AnalysisRunPause {
+				if changed.Status != AnalysisRunPausing {
+					t.Fatalf("pause=%+v", changed)
+				}
+				release()
+			}
+			settled := completedAnalysisRun(t, s)
+			expected := AnalysisRunPaused
+			if action == AnalysisRunCancel {
+				expected = AnalysisRunCanceled
+			}
+			if settled.Status != expected || calls.Load() != 1 || settled.Files[0].Stages[0].Attempts != 1 {
+				t.Fatalf("settled=%+v calls=%d", settled, calls.Load())
+			}
+			if action == AnalysisRunPause && settled.Files[0].Stages[0].FindingCount == nil {
+				t.Fatal("pause discarded current stage evidence")
+			}
+			if action == AnalysisRunCancel && settled.Files[0].Stages[0].FindingCount != nil {
+				t.Fatal("canceled request published evidence")
+			}
+		})
+	}
+}
+
+func TestAnalysisRunConcurrentStartsAndControlsHaveOneWriter(t *testing.T) {
+	server, calls, started, release := analysisBlockingServer(t)
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	results := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		go func() { _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); results <- err }()
+	}
+	successes := 0
+	for i := 0; i < 8; i++ {
+		err := <-results
+		if err == nil {
+			successes++
+		} else if !errors.Is(err, errAnalysisRunBusy) {
+			t.Fatal(err)
+		}
+	}
+	waitForTestSignal(t, started, "single admitted request")
+	if successes != 1 || calls.Load() != 1 {
+		t.Fatalf("starts=%d calls=%d", successes, calls.Load())
+	}
+	run, err := s.CurrentAnalysisRun(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: run.Identity, Action: AnalysisRunPause})
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	release()
+	if got := completedAnalysisRun(t, s); got.Status != AnalysisRunPaused || calls.Load() != 1 {
+		t.Fatalf("concurrent pause=%+v", got)
+	}
+}
+
+func TestAnalysisRunFailedSavesStopRequestsAndRecoverWithoutResettingEvidence(t *testing.T) {
+	for _, point := range []string{"admission", "reservation", "result", "completion"} {
+		t.Run(point, func(t *testing.T) {
+			server, calls := analysisResponseServer(t, emptyAnalysisReply)
+			s, root := newSemanticAnalysisService(t, server.URL, 0)
+			preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+			var fault atomic.Bool
+			fault.Store(true)
+			s.writeAnalysisRun = func(name string, data []byte, mode os.FileMode) error {
+				var run AnalysisRun
+				if err := json.Unmarshal(data, &run); err != nil {
+					return err
+				}
+				first := run.Files[0].Stages[0]
+				fail := point == "admission" && run.Status == AnalysisRunQueued || point == "reservation" && first.Attempts == 1 || point == "result" && first.FindingCount != nil || point == "completion" && run.Status == AnalysisRunCompletedEmpty
+				if fault.Load() && fail {
+					return errors.New("private-path / secret-provider-value")
+				}
+				return storage.WriteFile(name, data, mode)
+			}
+			_, startErr := s.StartAnalysisRun(context.Background(), analysisStartFor(preview))
+			if (startErr != nil) != (point == "admission") {
+				t.Fatalf("start=%v", startErr)
+			}
+			waitAnalysisWindow(t, s)
+			stopped, err := s.CurrentAnalysisRun(context.Background())
+			if !errors.Is(err, errAnalysisRunPersistence) || stopped == nil || stopped.Status != AnalysisRunInterrupted {
+				t.Fatalf("fault=%+v %v", stopped, err)
+			}
+			expected := int32(0)
+			if point == "result" {
+				expected = 1
+			}
+			if point == "completion" {
+				expected = 3
+			}
+			if calls.Load() != expected || strings.Contains(stopped.Reason, "private") || strings.Contains(stopped.Reason, "secret-provider") {
+				t.Fatalf("fault calls=%d progress=%+v", calls.Load(), stopped)
+			}
+			if point == "result" {
+				cached, err := s.CachedFileAnalysis("main.go")
+				if err != nil || cached.Status != project.AnalysisStatusFresh {
+					t.Fatal("completed evidence lost after failed progress save")
+				}
+			}
+			before, _ := os.ReadFile(filepath.Join(root, analysisRunRelativePath))
+			resume := analysisRunPreviewFor(t, s, preview.Limits, &stopped.Identity)
+			after, _ := os.ReadFile(filepath.Join(root, analysisRunRelativePath))
+			if string(before) != string(after) || calls.Load() != expected {
+				t.Fatal("preview retried fault or dispatched requests")
+			}
+			fault.Store(false)
+			confirmations := analysisStartFor(resume).Confirmations
+			if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: stopped.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations}); err != nil {
+				t.Fatal(err)
+			}
+			completed := completedAnalysisRun(t, s)
+			if completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 3 {
+				t.Fatalf("recovered=%+v calls=%d", completed, calls.Load())
+			}
+			if point == "reservation" && completed.Files[0].Stages[0].Attempts != 2 {
+				t.Fatal("in-memory reservation allowance reset")
+			}
+		})
+	}
+}
+
+func TestAnalysisRunTimeBudgetAndRetryAllowanceRemainCumulative(t *testing.T) {
+	server, calls, started, _ := analysisBlockingServer(t)
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 1, 1}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "time-bounded request")
+	paused := completedAnalysisRun(t, s)
+	if paused.Status != AnalysisRunPaused || paused.ElapsedSeconds != 1 || paused.Files[0].Stages[0].Attempts != 1 || calls.Load() != 1 {
+		t.Fatalf("timeout=%+v calls=%d", paused, calls.Load())
+	}
+	resume := analysisRunPreviewFor(t, s, preview.Limits, &paused.Identity)
+	confirmations := analysisStartFor(resume).Confirmations
+	if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations}); err != nil {
+		t.Fatal(err)
+	}
+	completed := completedAnalysisRun(t, s)
+	if completed.Status != AnalysisRunPartial || completed.Files[0].Stages[0].Attempts != 1 || completed.Files[0].Stages[0].Status != AnalysisStageFailed || calls.Load() != 3 {
+		t.Fatalf("bounded resume=%+v calls=%d", completed, calls.Load())
+	}
+}
+
+func TestAnalysisRunRejectsSourcePolicyProviderAndProjectReplacement(t *testing.T) {
+	for _, change := range []string{"source", "policy", "provider", "reindex", "project"} {
+		t.Run(change, func(t *testing.T) {
+			server, calls, started, release := analysisBlockingServer(t)
+			s, root := newSemanticAnalysisService(t, server.URL, 0)
+			preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+			if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+				t.Fatal(err)
+			}
+			waitForTestSignal(t, started, "request before replacement")
+			switch change {
+			case "source":
+				if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Changed(){}\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "policy":
+				if err := os.WriteFile(filepath.Join(root, ".mini-orcaignore"), []byte("main.go\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "provider":
+				// No provider metadata is read during the blocked HTTP response; release
+				// synchronizes the subsequent validation with this simulated config change.
+				s.analysisRun.mu.Lock()
+				s.runtimes.analyze.effective.ReasoningEffort = "replacement"
+				s.analysisRun.mu.Unlock()
+			case "reindex":
+				if _, err := s.Reindex(); err != nil {
+					t.Fatal(err)
+				}
+			case "project":
+				other := t.TempDir()
+				if err := os.WriteFile(filepath.Join(other, "main.go"), []byte("package other\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := s.ActivateProject(other, &project.Analysis{Name: "replacement"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			release()
+			waitAnalysisWindow(t, s)
+			run, err := s.CurrentAnalysisRun(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if change == "project" {
+				if run != nil {
+					t.Fatal("old progress attached to replacement project")
+				}
+			} else if run == nil || run.Status != AnalysisRunStale {
+				t.Fatalf("stale=%+v", run)
+			}
+			entries, err := os.ReadDir(filepath.Join(root, ".mini-orca/file-analysis"))
+			if err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 || calls.Load() != 1 {
+				t.Fatalf("late evidence=%v calls=%d", entries, calls.Load())
+			}
+		})
+	}
+}
+
+func TestAnalysisRunCancelRecoversAWriteFaultAfterSourceInvalidation(t *testing.T) {
+	server, calls, started, _ := analysisBlockingServer(t)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	var fault atomic.Bool
+	s.writeAnalysisRun = func(name string, data []byte, mode os.FileMode) error {
+		if fault.Load() {
+			return errors.New("unavailable metadata storage")
+		}
+		return storage.WriteFile(name, data, mode)
+	}
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "request before invalidation failure")
+	fault.Store(true)
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	waitAnalysisWindow(t, s)
+	stale, err := s.CurrentAnalysisRun(context.Background())
+	if !errors.Is(err, errAnalysisRunPersistence) || stale == nil || stale.Status != AnalysisRunStale || calls.Load() != 1 {
+		t.Fatalf("stale fault=%+v %v", stale, err)
+	}
+	fault.Store(false)
+	recovered, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: stale.Identity, Action: AnalysisRunCancel})
+	if err != nil || recovered.Status != AnalysisRunStale || calls.Load() != 1 {
+		t.Fatalf("cancel recovery=%+v %v", recovered, err)
+	}
+	fresh := analysisRunPreviewFor(t, s, preview.Limits, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(fresh)); err != nil {
+		t.Fatal(err)
+	}
+	completed := completedAnalysisRun(t, s)
+	if completed.Identity.ID == stale.Identity.ID || completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 4 {
+		t.Fatalf("replacement=%+v calls=%d", completed, calls.Load())
+	}
+}
+
+func TestAnalysisRunKeepsCategoryCountsAndPartialEvidenceAcrossFailedStages(t *testing.T) {
+	server, calls := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if stage == AnalysisStagePerformance {
+			return "invalid response"
+		}
+		return analysisReply(stage)
+	})
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	run := completedAnalysisRun(t, s)
+	if run.Status != AnalysisRunPartial || calls.Load() != 3 {
+		t.Fatalf("partial run=%+v calls=%d", run, calls.Load())
+	}
+	for _, section := range run.Sections {
+		expected := 1
+		status := AnalysisRunCompleted
+		if section.Category == project.FindingCategoryPerformance {
+			expected = 0
+			status = AnalysisRunPartial
+		}
+		if section.Category == project.FindingCategorySecurity {
+			expected = 2
+		}
+		if section.FindingCount == nil || *section.FindingCount != expected || section.Status != status {
+			t.Fatalf("section=%+v", section)
+		}
+	}
+	stored, err := loadAnalysisRun(s.manager.Root())
+	if err != nil || !reflect.DeepEqual(stored.Sections, run.Sections) {
+		t.Fatalf("stored sections=%+v %v", stored, err)
+	}
+	overview, err := s.ProjectOverview()
+	if err != nil || overview.Run.Identity.ProjectID != overview.ProjectID || overview.Run.Identity.ProjectRevision != overview.ProjectRevision || !reflect.DeepEqual(overview.Run.Sections, run.Sections) {
+		t.Fatalf("overview=%+v %v", overview, err)
 	}
 }

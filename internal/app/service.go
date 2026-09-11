@@ -59,6 +59,8 @@ type Service struct {
 	retryMax                        time.Duration
 	jobLifecycleMu                  sync.Mutex
 	analysisAll                     *analysisAllController
+	analysisRun                     *analysisRunController
+	writeAnalysisRun                func(string, []byte, os.FileMode) error
 	writeAnalyzeAllJob              func(string, []byte, os.FileMode) error
 	writePerformanceJob             func(string, []byte, os.FileMode) error
 	goScan                          *goScanController
@@ -114,6 +116,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		retryBase:               time.Duration(backoffBase) * time.Millisecond,
 		retryMax:                time.Duration(backoffMax) * time.Millisecond,
 		analysisAll:             newAnalysisAllController(),
+		analysisRun:             &analysisRunController{},
 		goScan:                  newGoScanController(),
 		drafts:                  newDraftStore(),
 		chatSessions:            newChatSessionStore(),

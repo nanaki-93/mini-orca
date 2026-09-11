@@ -610,16 +610,20 @@ migration is needed. ANA-04 remains unchecked for the next scheduled wake.
 
 ## Task ANA-04 — Implement one durable, bounded run lifecycle
 
-- [ ] ANA-04 completed with required checks and diff review.
+- [x] ANA-04 completed with required checks and diff review.
 
 **Target files**
 - `internal/app/analysis_run.go` — preview/admission, sequential dispatch, pause/resume/cancel and recovery.
 - `internal/app/analysis_run_store.go` — new source-free durable run metadata using shared atomic storage.
+- `internal/app/analysis_run_preview.go` — isolate inventory, cache estimates and admission fingerprints from the existing run contracts and controller.
+- `internal/app/analysis_run_progress.go` — isolate source-free coverage and stage-result accounting used by execution and restore validation.
 - `internal/app/analysis_run_test.go` — lifecycle, budget, concurrency and persistence-failure tests.
 - `internal/app/analysis_run_store_test.go` — new corruption/interruption/recovery cases.
 - `internal/app/service.go` — one coordinator owner and lifecycle wiring.
 - `internal/app/project_workspace.go` — restore progress without restarting requests.
 - `internal/app/source_file_snapshot.go` — captured-run publication guard where required.
+- `internal/app/analyze_all.go` — only the existing Reindex/ActivateProject lifecycle entry points must invalidate the new run before changing the project; legacy scheduler migration remains ANA-05.
+- `internal/app/analysis_file.go` — share the existing cache-freshness predicates with preflight so its request estimates match stage execution.
 
 **Inputs / dependencies**
 - ANA-03.
@@ -636,7 +640,92 @@ migration is needed. ANA-04 remains unchecked for the next scheduled wake.
 `go test -race ./internal/app -run 'Test(AnalysisRun|AnalysisRunStore|ProjectOverview)' -count=1`
 
 **Execution record**
-Not started.
+Completed 2026-09-11 after explicit user authorization for one additional
+correction, validation, commit and scheduler resumption. The two earlier
+corrections and blocked regression remain recorded below; one further correction
+was applied under that authorization. Local commit: ANA-04 in Git history and
+`.mini-orca/autopilot/ux/ANA-04/receipt.json`.
+Verified ANA-03's commit and receipt, the empty index and both Java toolchains.
+Saved the ten unrelated desktop files under the ignored ANA-04 baseline directory.
+Preparation adds only lifecycle invalidation call sites in analyze_all.go and
+shared freshness predicates in analysis_file.go; these are direct dependencies
+of source-changing Apply/Reindex isolation and accurate admission estimates.
+The new owner is not registered with HTTP routes until ANA-05 replaces the old
+schedulers, so this card does not activate a third public scheduler.
+Initial prescribed verification exited 1: the 501-source-file inventory fixture
+reported 502 eligible files and only one exclusion. The index already omits
+policy-excluded files, while .mini-orcaignore itself remains eligible text under
+the existing policy. Correction 1 adds the existing policy-aware project walk to
+preflight exclusion accounting and source-inventory freshness checks, and corrects
+the fixture's expected two model stages for that text file. The source inventory
+still exceeds 500, all exclusions are asserted, and no provider calls are permitted
+during preflight. All other initial lifecycle/store tests passed. One correction
+is used; the original output is retained in `ANA-04/focused-initial.log`.
+Correction-1 verification passed in 5.082 seconds. Full Go tests, race tests and
+`make fmt-check vet` also passed. Final review found two related lifecycle gaps:
+a write fault followed by Reindex made Stale progress reject cancel recovery,
+and Overview read the run before reacquiring project facts, allowing a concurrent
+project replacement between those reads. Correction 2 allows explicit cancel to
+persist stale fault recovery without reviving work, and keeps Overview's complete
+read under the existing project lifecycle lock. Added stale-fault recovery and
+categorized partial-evidence regression coverage. Two corrections are used.
+Correction-2 prescribed verification passed in 5.433 seconds; full Go tests,
+`make test-race` and `make fmt-check vet` each exited 0. Those logs are retained as
+`focused-correction-2.log`, `go-tests-correction-2.log`,
+`race-tests-correction-2.log` and `format-vet-correction-2.log`.
+
+Final review added `TestAnalysisRunStoreResumeReusesPublishedEvidenceWithNoAttemptsRemaining`
+to reproduce process loss after successful report publication but before its
+progress update. The restored stage has one charged attempt and a matching fresh
+cache; preflight correctly estimates zero further requests for that stage.
+The worker's early exhausted-attempt branch instead marks it Failed without
+consulting the cache. The report is retained, but run coverage becomes Partial.
+The prescribed command now exits 1 (`review-regression.log`, 4.494 seconds):
+`run=partial stage=failed cached=false attempts=1 calls=3; want completed_empty,
+cached, one retained attempt and three total calls`.
+
+Required next correction: allow matching cached evidence through stage execution
+even when transport attempts are exhausted, keeping the existing no-request
+allowance and stale/missing-cache checks. A concrete proposed patch is retained at
+`.mini-orca/autopilot/ux/ANA-04/proposed-cache-recovery.patch`; it is not applied or
+validated. The two-correction allowance is exhausted, so no further production
+repair was made. This card remains unchecked, no commit was created and no later
+card started. The automation was paused through the app tool and its saved status
+was checked. The final candidate, diagnostics and baseline remain under ANA-04;
+all ten unrelated desktop files are unchanged. No desktop/native tests, live
+provider evaluation, configuration migration, push or release was performed.
+
+The user approved continuation with the prepared cache-recovery fix. The preserved
+candidate hashes, baseline HEAD, empty index, ten unrelated desktop files and
+both Java toolchains were verified before applying it. This authorized correction
+allows already-cached evidence past the exhausted transport-attempt branch;
+the stage still receives zero remaining attempts and independently checks cache
+freshness before reuse. Existing regression and request-budget assertions remain.
+
+Authorized-recovery validation: the exact prescribed command exited 0 in 5.571
+seconds, including the previously failing restart/cache test. It now records
+Completed-empty cached evidence, one retained attempt and three total fixture
+requests. `go test ./...`, `make test-race` and `make fmt-check vet` each exited 0;
+unchanged packages may use valid cached results. Logs are retained as
+`focused-authorized-recovery.log`, `go-tests-authorized-recovery.log`,
+`race-tests-authorized-recovery.log` and `format-vet-authorized-recovery.log`.
+
+Final review confirmed the production change from the preserved blocked candidate
+is exactly the approved conditional; other code and all regression assertions
+are unchanged. Cache reuse still passes captured identity, policy, provider and
+source checks, and receives zero transport allowance when exhausted. The complete
+card preserves independent evidence, bounded attempts, durable reservations,
+serialized publication, failure recovery, source-change invalidation and explicit
+restart consent. `git diff --check` passed and validated code hashes were frozen
+for staging. The authorized local commit includes the ten implementation/test
+files and the three related plan/checklist/error records. All ten unrelated
+desktop files were byte-compared with the original baseline and excluded.
+
+The scheduler resumes after the verified commit, preserving its Astra Extra High
+task settings, 20-minute cadence and one-card-per-wake procedure. ANA-05 remains
+unchecked. No configuration or existing-data migration is required; the new run
+metadata is created on explicit admission. Desktop/native checks and live provider
+evaluation were not run for this daemon-only card. No push or release was made.
 
 ## Task ANA-05 — Migrate existing jobs and expose the unified API
 
