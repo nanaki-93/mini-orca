@@ -96,3 +96,9 @@ internal fun topmostTransientSurface(
       drawerVisible -> TransientSurface.Drawer
       else -> null
     }
+
+/** Shell input bypasses app shortcuts; this reserved chord deliberately returns to the editor. */
+internal fun terminalReturnShortcut(keyCode: Int, control: Boolean, shift: Boolean): Boolean =
+    control && shift && keyCode == java.awt.event.KeyEvent.VK_F12
+
+internal fun appShortcutAllowed(terminalFocused: Boolean): Boolean = !terminalFocused

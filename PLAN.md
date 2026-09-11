@@ -194,7 +194,7 @@ Extra High** (`gpt-6-astra`, `xhigh`). The executable cards now live in
 
 Scheduler: **Mini-Orca UX implementation**, every **20 minutes**, attached to this
 Codex task; automation ID **mini-orca-ux-implementation**, status **Active**.
-The user authorized ANA-07 repair; the ordered scheduler resumes after its verified local commit.
+The user authorized TERM-02 repair; the ordered scheduler resumes after its verified local commit.
 The app accepted the task model override `gpt-6-astra` / `xhigh`; this heartbeat
 uses the task's settings rather than a separate scheduler model field. One card per wake,
 strictly in order, with required checks and diff review before acceptance.
@@ -206,7 +206,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 13/17. **Active task/writer:** none. **Next:** TERM-02; scheduler active.
+**Accepted:** 14/17. **Active writer:** none after TERM-02 acceptance. **Next:** BOTTOM-01.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -223,10 +223,29 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 11 | [ANA-07](docs/tasks.md#task-ana-07--separate-run-progress-from-the-three-result-pages) | Separate run progress from the three result pages | Complete; locally committed |
 | 12 | [NAV-01](docs/tasks.md#task-nav-01--distinguish-run-results-and-editing-in-the-sidebar) | Distinguish run, results and editing in the sidebar | Complete; locally committed |
 | 13 | [TERM-01](docs/tasks.md#task-term-01--prove-the-terminal-dependency-and-local-session-boundary) | Prove the terminal dependency and local-session boundary | Complete; locally committed |
-| 14 | [TERM-02](docs/tasks.md#task-term-02--integrate-the-interactive-terminal-pane) | Integrate the interactive terminal pane | Queued |
+| 14 | [TERM-02](docs/tasks.md#task-term-02--integrate-the-interactive-terminal-pane) | Integrate the interactive terminal pane | Complete; locally committed |
 | 15 | [BOTTOM-01](docs/tasks.md#task-bottom-01--preserve-unique-diagnostics-in-their-owning-workflows) | Preserve unique diagnostics in their owning workflows | Queued |
 | 16 | [BOTTOM-02](docs/tasks.md#task-bottom-02--replace-the-bottom-tools-with-terminal-only) | Replace the bottom tools with Terminal only | Queued |
 | 17 | [VERIFY-01](docs/tasks.md#task-verify-01--validate-the-complete-interaction-and-document-support) | Validate the complete interaction and document support | Queued |
+
+**Accepted TERM-02 — 2026-09-12:** The interactive terminal now owns a persistent
+project shell with themed output, working resize, explicit close/reopen and
+native Editor focus return. Shell edits refresh source and invalidate stale
+review evidence. Passed 71 prescribed tests, 398 working-tree tests, 396 isolated
+tests, both package builds and desktop quality checks. Native macOS arm64 proof
+covers prompt, history, interrupt, Vim, resize, focus return and app-exit child
+cleanup. All unrelated UI deltas remain separate. Seven correction groups total,
+including the user-authorized continuation, are recorded in docs/tasks.md;
+historical failures remain in docs/errors.log. Resume the scheduler for BOTTOM-01
+after the verified local commit. No migration, Go change or live provider calls.
+
+**Historical blocked TERM-02 checkpoint — 2026-09-12 (resolved):** Terminal integration candidate was preserved.
+Correction-1 passed 71 focused tests. Native verification found PTY resize and
+narrow-overlay focus defects; correction-2 addresses those and the routing quality
+findings but fails compilation because ScaledTerminalPanel's buffer/style
+constructor arguments are reversed. Two corrections exhausted; no third attempted.
+Required final checks remain incomplete. See docs/tasks.md and docs/errors.log.
+At that checkpoint the scheduler was **Paused**, no TERM-02 commit existed and no later card had started.
 
 **Accepted TERM-01 — 2026-09-12:** Pinned terminal dependencies, packaged notices
 and a stable local PTY owner are ready. On macOS arm64, actual packaged-runtime

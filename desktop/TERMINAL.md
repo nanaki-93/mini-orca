@@ -1,4 +1,4 @@
-# Local terminal foundation
+# Local interactive terminal
 
 The terminal runs in the desktop process. It adds no command-execution HTTP API
 and does not use the daemon's copied-workspace check sandbox. TERM-01 supplies
@@ -48,8 +48,9 @@ binaries contained in the original Pty4J jar. Dependency jars are not modified.
   output, report selection and project restore never write to terminal stdin.
 
 The pane, key routing, theme, project-switch confirmation and file-freshness
-integration are TERM-02 work. Compose/native focus and popup behavior are not
-established by the foundation's PTY tests.
+integration are implemented in TERM-02. Native focus is checked separately from
+the foundation's PTY tests; see the TERM-02 execution record in
+[docs/tasks.md](../docs/tasks.md#task-term-02--integrate-the-interactive-terminal-pane).
 
 ## Supported native package
 
@@ -94,3 +95,31 @@ to the shell script selects another built `Mini-Orca.app`.
 
 Exact run counts, failures/corrections and accepted package evidence belong to the
 TERM-01 execution record in [docs/tasks.md](../docs/tasks.md).
+
+## Terminal pane
+
+Select **Terminal** in the bottom tools to start one local interactive shell in
+the open project. **Ctrl+Shift+T** opens that pane from the application. A restored
+layout alone never launches a shell. Collapsing the pane or navigating to another
+workspace keeps its session and bounded in-memory scrollback. **Focus terminal**
+returns input to it. **Close shell** stops the shell and its children; **Open shell**
+then starts a new session. Launch, exit and cleanup errors remain visible.
+
+The terminal owns shell keys, including Ctrl+C. On macOS, Cmd+C copies the current
+selection and Cmd+V pastes; shell history, ANSI/full-screen programs, cursor motion
+and scrolling are provided by JediTerm. **Ctrl+Shift+F12** or **Back to editor**
+returns to the application and dismisses a narrow terminal overlay. Resizing the
+pane updates the real PTY dimensions; terminal text follows the source palette and
+application text scale.
+
+Opening another project while a shell is active requires **Cancel switch** or
+**Close shell and switch**. Closing the application waits for terminal cleanup;
+a shell that cannot stop keeps the window open with the failure visible. A running
+shell is never silently moved to another project's directory.
+
+Returning from the terminal, or later entering Editor/Review, reads the selected
+file again. Changed content invalidates old draft/check/file-analysis evidence
+and marks the captured project analysis stale until reindexing. A failed read also
+blocks the old draft. Use **Reindex project** after shell commands add, remove or
+rename files. No terminal output is parsed, persisted by Mini-Orca or sent to a
+model; shell programs may maintain their own files according to their settings.

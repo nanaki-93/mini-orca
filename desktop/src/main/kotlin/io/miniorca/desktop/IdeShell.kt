@@ -433,6 +433,7 @@ internal fun bottomToolWindowLabel(toolWindow: BottomToolWindow): String =
       BottomToolWindow.Problems -> "Bugs & Problems"
       BottomToolWindow.Checks -> "Checks"
       BottomToolWindow.Output -> "Output"
+      BottomToolWindow.Terminal -> "Terminal"
     }
 
 internal fun bottomToolWindowIcon(toolWindow: BottomToolWindow): DesktopIcon =
@@ -440,6 +441,7 @@ internal fun bottomToolWindowIcon(toolWindow: BottomToolWindow): DesktopIcon =
       BottomToolWindow.Problems -> DesktopIcon.Problems
       BottomToolWindow.Checks -> DesktopIcon.Summary
       BottomToolWindow.Output -> DesktopIcon.Editor
+      BottomToolWindow.Terminal -> DesktopIcon.Editor
     }
 
 internal fun bottomToolWindowTabDescription(

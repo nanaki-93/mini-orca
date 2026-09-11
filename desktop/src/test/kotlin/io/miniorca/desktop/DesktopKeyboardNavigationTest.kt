@@ -18,6 +18,19 @@ import kotlin.test.assertTrue
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun terminalInputOwnsInterruptAndOrdinaryAppChordsUntilExplicitFocusReturn() {
+    assertFalse(appShortcutAllowed(terminalFocused = true))
+    assertTrue(appShortcutAllowed(terminalFocused = false))
+    assertFalse(terminalReturnShortcut(java.awt.event.KeyEvent.VK_C, control = true, shift = false))
+    assertFalse(
+        terminalReturnShortcut(java.awt.event.KeyEvent.VK_F12, control = false, shift = true))
+    assertFalse(
+        terminalReturnShortcut(java.awt.event.KeyEvent.VK_F12, control = true, shift = false))
+    assertTrue(terminalReturnShortcut(java.awt.event.KeyEvent.VK_F12, control = true, shift = true))
+    assertEquals("Terminal", bottomToolWindowLabel(BottomToolWindow.Terminal))
+  }
+
+  @Test
   fun groupedRailKeepsFullLabelsAndKeyboardReachabilityAtEverySupportedSize() {
     listOf(
             Triple(1440, 900, 1f),

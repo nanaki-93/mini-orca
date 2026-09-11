@@ -24,7 +24,24 @@ import kotlinx.coroutines.flow.asStateFlow
 internal const val TERMINAL_SCROLLBACK_LINES = 5_000
 private const val TERMINAL_STOP_MILLIS = 750L
 
-internal class DesktopTerminalSettings : DefaultSettingsProvider() {
+internal class DesktopTerminalSettings(var fontScale: Float = 1f) : DefaultSettingsProvider() {
+  override fun getTerminalFontSize(): Float = 13f * fontScale
+
+  override fun getDefaultForeground() = terminalColor(PrimaryText)
+
+  override fun getDefaultBackground() = terminalColor(EditorCanvas)
+
+  override fun getSelectionColor() =
+      com.jediterm.terminal.TextStyle(terminalColor(SelectionText), terminalColor(SelectionSurface))
+
+  override fun useInverseSelectionColor(): Boolean = false
+
+  override fun audibleBell(): Boolean = false
+
+  private fun terminalColor(color: androidx.compose.ui.graphics.Color) =
+      com.jediterm.terminal.TerminalColor.rgb(
+          (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt())
+
   override fun getBufferMaxLinesCount(): Int = TERMINAL_SCROLLBACK_LINES
 }
 
