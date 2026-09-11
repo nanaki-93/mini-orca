@@ -121,7 +121,7 @@ func TestProjectIndexAndSymbolAPIs(t *testing.T) {
 
 func TestFileAnalysisAPIsRequireRevisionAndExposeStates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"high","summary":"Run ignores errors.","task_spec":{"schema_version":"1","target_path":"main.go","target_symbol":"Run","acceptance_criteria":["Return errors."],"non_goals":[]}}],"suggestions":[],"symbol_explanations":{}}`}}}})
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"high","summary":"Run ignores errors.","task_spec":{"schema_version":"1","target_path":"main.go","target_symbol":"Run","acceptance_criteria":["Return errors."],"non_goals":[]}}],"suggestions":[],"symbol_explanations":{}}`}}}})
 	}))
 	defer server.Close()
 	root := t.TempDir()

@@ -455,7 +455,7 @@ ANA-02 remains unchecked and is next.
 
 ## Task ANA-02 — Produce and validate explicit semantic categories
 
-- [ ] ANA-02 completed with required checks and diff review.
+- [x] ANA-02 completed with required checks and diff review.
 
 **Target files**
 - `internal/app/file_analysis.go` — strict category schema/parser/prompt update and new prompt identity.
@@ -464,6 +464,8 @@ ANA-02 remains unchecked and is next.
 - `internal/app/engineering_insight_test.go` — schema identity and optional-insight preservation.
 - `internal/insighteval/evaluation_test.go` — offline contract fixtures.
 - `internal/insighteval/runner_test.go` — offline runner/schema parity.
+- `internal/app/service_test.go` — existing AnalyzeFile-to-draft integration reply must include the now-required category.
+- `internal/api/handlers/project_handler_test.go` — existing finding/action HTTP integration reply must include the now-required category.
 
 **Inputs / dependencies**
 - ANA-01.
@@ -478,7 +480,55 @@ ANA-02 remains unchecked and is next.
 `go test ./internal/app ./internal/insighteval -count=1`
 
 **Execution record**
-Not started.
+Completed 2026-09-11. All required checks and diff review passed on the initial
+candidate; no failed verification or correction attempts. The local commit is
+recorded in `.mini-orca/autopilot/ux/ANA-02/receipt.json`.
+Verified the ANA-01 commit/receipt and both configured Java toolchains. Preserved
+the ten unrelated desktop files and empty index in
+`.mini-orca/autopilot/ux/ANA-02/baseline/`. This task updates production category
+generation/validation and synthetic contract tests, without live evaluation.
+Preparation found two directly coupled integration fixtures outside the original
+list; they are now listed above before editing. Historical v13 campaign identities
+remain fixed: synthetic tests assert their dispatch is rejected by the new
+production prompt identity, while retaining direct reservation/accounting checks.
+Initial candidate requires exact category enums in the schema and parser, adds
+category-specific grounding guidance, and bumps the prompt to v14. Synthetic v14
+prompt digests were regenerated with the production adapter, without provider
+calls. Existing optional-degradation fixtures now carry explicit categories;
+new cases cover rejection, source-target grounding, passive legacy reads and
+explicit refresh.
+
+Validation passed:
+
+- `go test ./internal/app ./internal/insighteval -count=1`: both packages passed
+  (`focused-initial.log`).
+- `go test ./...`: all Go packages passed, including daemon and handler integration
+  (`go-full.log`); unaffected packages used valid cached results.
+- `make test-race`: all Go packages passed (`go-race.log`), with cached results for
+  unaffected packages.
+- `make fmt-check vet` and `git diff --check`: passed (`go-quality.log`).
+
+Review confirmed exact enum enforcement without prose inference, unchanged
+severity and optional-field behavior, preserved target/path validation and response
+bounds, and shared production/evaluation rejection semantics. The v14 prompt
+separates correctness, resource-cost hypotheses and visible trust-boundary concerns;
+general advice stays in suggestions. Synthetic tests verify all three categories,
+invalid/missing enums, retained optional diagnostics and no model calls during
+historical cache reads. Refresh stores a categorized report under v14.
+
+Historical campaign constants, grants, receipts and corpus files are unchanged.
+The retired v13 dispatch tests now assert rejection without consumption; direct
+tests retain twelve-request limits, non-replay of charged reservations, manifest
+protocol checks, locking, source/schedule identity and predecessor/head boundaries.
+Current-prompt fake-provider integration continues to cover execution. No live
+qualification was run and no model accuracy claim is made from these contract tests.
+
+All ten pre-existing desktop files and the initially empty index were verified
+against the baseline before staging. This commit contains the eight listed target
+files plus PLAN.md and this checklist. Desktop/native checks were not run because
+no desktop/native code changed. No configuration or data migration is required;
+older semantic caches remain readable as stale and need explicit analysis to gain
+categories. ANA-03 is next and remains unchecked.
 
 ## Task ANA-03 — Compose the per-file analysis stages
 

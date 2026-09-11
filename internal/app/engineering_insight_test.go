@@ -9,7 +9,7 @@ import (
 
 func TestOptionalInsightsDoNotRejectSemanticOrDraftParents(t *testing.T) {
 	target := project.IndexFile{Path: "main.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "exact", AtomicTarget: true}}}
-	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"engineering_insight":{"mechanism":"A cache entry must remain tied to the reviewed file.","why_it_matters_here":"A late model result otherwise looks current after the source changes.","tradeoff_or_failure_mode":"More identity inputs make stale results unavailable sooner.","transferable_lesson":"Change the file hash and verify the cache reports stale."},"risks":[{"severity":"low","summary":"A conditional risk.","engineering_insight":{"mechanism":2}}],"suggestions":[{"title":"Keep identity","summary":"Retain the hash.","engineering_insight":{"mechanism":"Hashes bind advice to source.","why_it_matters_here":"Readers can see stale advice without treating it as current evidence.","tradeoff_or_failure_mode":"Additional identity comparisons can invalidate cached advice.","transferable_lesson":"Change the hash and verify the cached analysis becomes stale."}}],"symbol_explanations":{}}`
+	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"engineering_insight":{"mechanism":"A cache entry must remain tied to the reviewed file.","why_it_matters_here":"A late model result otherwise looks current after the source changes.","tradeoff_or_failure_mode":"More identity inputs make stale results unavailable sooner.","transferable_lesson":"Change the file hash and verify the cache reports stale."},"risks":[{"category":"bugs","severity":"low","summary":"A conditional risk.","engineering_insight":{"mechanism":2}}],"suggestions":[{"title":"Keep identity","summary":"Retain the hash.","engineering_insight":{"mechanism":"Hashes bind advice to source.","why_it_matters_here":"Readers can see stale advice without treating it as current evidence.","tradeoff_or_failure_mode":"Additional identity comparisons can invalidate cached advice.","transferable_lesson":"Change the hash and verify the cached analysis becomes stale."}}],"symbol_explanations":{}}`
 	parsed, err := parseSemanticAnalysis(output, target, "package main\nfunc Run() {}")
 	if err != nil || parsed.EngineeringInsight == nil || parsed.Risks[0].EngineeringInsight != nil || parsed.Suggestions[0].EngineeringInsight == nil {
 		t.Fatalf("parsed semantic insight = %+v, %v", parsed, err)
@@ -41,7 +41,7 @@ func TestFileAnalysisInsightUsesCompleteGroundedAdviceOrOmission(t *testing.T) {
 
 func TestFileAnalysisInsightDiagnosticsKeepRejectionsIsolatedByLocation(t *testing.T) {
 	target := project.IndexFile{Path: "main.go", Language: "Go"}
-	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional.","engineering_insight":{"mechanism":"risk","why_it_matters_here":"local"}}],"suggestions":[{"title":"Keep behavior","summary":"No change.","engineering_insight":{"mechanism":"  ","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}],"symbol_explanations":{},"engineering_insight":{"mechanism":"top","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}`
+	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","engineering_insight":{"mechanism":"risk","why_it_matters_here":"local"}}],"suggestions":[{"title":"Keep behavior","summary":"No change.","engineering_insight":{"mechanism":"  ","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}],"symbol_explanations":{},"engineering_insight":{"mechanism":"top","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}`
 	parsed, err := parseSemanticAnalysis(output, target, "package main\nfunc Run() {}")
 	if err != nil || parsed.Purpose != "Explains." || parsed.EngineeringInsight == nil || parsed.Risks[0].EngineeringInsight != nil || parsed.Suggestions[0].EngineeringInsight != nil {
 		t.Fatalf("optional rejection changed parent data: %+v, %v", parsed, err)
@@ -68,7 +68,7 @@ func TestFileAnalysisInsightDiagnosticsKeepRejectionsIsolatedByLocation(t *testi
 
 func TestEvaluationOptionalStateSeparatesSymbolAndTaskSpecDegradation(t *testing.T) {
 	target := project.IndexFile{Path: "main.go", Language: "Go"}
-	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"}}],"suggestions":[],"symbol_explanations":{"unselected":"Not a declaration."}}`
+	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"}}],"suggestions":[],"symbol_explanations":{"unselected":"Not a declaration."}}`
 	parsed, err := parseSemanticAnalysis(output, target, "package main\nfunc Run() {}")
 	if err != nil || len(parsed.Risks) != 1 || parsed.Risks[0].TaskSpec != nil || len(parsed.SymbolExplanations) != 0 {
 		t.Fatalf("parent optional data was not isolated: %+v, %v", parsed, err)
@@ -147,6 +147,12 @@ func TestSemanticPromptRequiresTypedInsightsAtEverySupportedLocation(t *testing.
 		"exactly these four non-empty string fields and no other keys: mechanism, why_it_matters_here, tradeoff_or_failure_mode, and transferable_lesson",
 		"Never use a string, array, or partial object",
 		"Do not duplicate that lesson in risks or suggestions",
+		"bugs for incorrect behavior, performance for avoidable resource costs, or security for a trust-boundary weakness",
+		"State the relevant local control/data flow and conditions in summary",
+		"never invent measured impact",
+		"do not infer missing safeguards in an unseen callee",
+		"Omit concerns unsupported by TARGET_SOURCE",
+		"General cleanup, explanations and best-practice advice belong in suggestions, not risks",
 	} {
 		if !strings.Contains(prompt, requirement) {
 			t.Fatalf("semantic prompt is missing nested insight contract %q", requirement)
@@ -164,9 +170,9 @@ func TestFileAnalysisNestedInsightSchemaPreservesParentAndCompleteness(t *testin
 		switch location {
 		case "risk":
 			if !includeNested {
-				return base + `,"risks":[{"severity":"low","summary":"A conditional concern."}],"suggestions":[]}`
+				return base + `,"risks":[{"category":"bugs","severity":"low","summary":"A conditional concern."}],"suggestions":[]}`
 			}
-			return base + `,"risks":[{"severity":"low","summary":"A conditional concern.","engineering_insight":` + value + `}],"suggestions":[]}`
+			return base + `,"risks":[{"category":"bugs","severity":"low","summary":"A conditional concern.","engineering_insight":` + value + `}],"suggestions":[]}`
 		case "suggestion":
 			if !includeNested {
 				return base + `,"risks":[],"suggestions":[{"title":"Adjust call","summary":"Keep behavior explicit."}]}`

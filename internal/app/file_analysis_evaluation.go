@@ -36,6 +36,8 @@ type FileAnalysisAssessment struct {
 
 // AssessFileAnalysisEvaluation shares the production semantic validator without
 // invoking a provider, modifying project state, or retaining response prose.
+// Missing/invalid risk categories reject the parent, while optional-field
+// diagnostics remain available under the same rules as production parsing.
 func AssessFileAnalysisEvaluation(content string, target project.IndexFile, source string) FileAnalysisAssessment {
 	parsed, err := validateSemanticAnalysisResponse(content, target, source, true)
 	return FileAnalysisAssessment{UsableSummary: err == nil, Diagnostics: parsed.Diagnostics}

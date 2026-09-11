@@ -205,7 +205,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 5/17. **Active task/writer:** none. **Next:** ANA-02.
+**Accepted:** 6/17. **Active task/writer:** none. **Next:** ANA-03.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -214,7 +214,7 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 3 | [CREATE-01](docs/tasks.md#task-create-01--expose-creation-in-the-normal-file-workflow) | Expose creation in the normal file workflow | Complete |
 | 4 | [CREATE-02](docs/tasks.md#task-create-02--close-creation-validation-and-lifecycle-gaps) | Close creation validation and lifecycle gaps | Complete; locally committed |
 | 5 | [ANA-01](docs/tasks.md#task-ana-01--define-categorized-results-and-unified-run-contracts) | Define categorized results and unified run contracts | Complete; locally committed |
-| 6 | [ANA-02](docs/tasks.md#task-ana-02--produce-and-validate-explicit-semantic-categories) | Produce and validate explicit semantic categories | Queued |
+| 6 | [ANA-02](docs/tasks.md#task-ana-02--produce-and-validate-explicit-semantic-categories) | Produce and validate explicit semantic categories | Complete; locally committed |
 | 7 | [ANA-03](docs/tasks.md#task-ana-03--compose-the-per-file-analysis-stages) | Compose the per-file analysis stages | Queued |
 | 8 | [ANA-04](docs/tasks.md#task-ana-04--implement-one-durable-bounded-run-lifecycle) | Implement one durable, bounded run lifecycle | Queued |
 | 9 | [ANA-05](docs/tasks.md#task-ana-05--migrate-existing-jobs-and-expose-the-unified-api) | Migrate existing jobs and expose the unified API | Queued |
@@ -261,6 +261,15 @@ planned until ANA-05. Focused/full Go tests, race tests, formatting, vet and dif
 review passed after two naming/schema corrections. All ten pre-existing desktop
 edits are preserved. No migration or live model calls; desktop checks are not
 applicable. Local commit evidence: `.mini-orca/autopilot/ux/ANA-01/receipt.json`.
+
+**Accepted ANA-02 — 2026-09-11:** New semantic findings require an explicit Bugs,
+Performance or Security category through the shared schema/parser. Prompt v14
+adds category-specific evidence guidance and leaves older caches readable as stale
+until explicit analysis. Optional diagnostics and one-file target checks remain.
+Focused/full Go tests, race tests, formatting, vet and diff review passed without
+corrections. Historical evaluation grants stay fixed; retired v13 dispatch is
+rejected without consumption. No live qualification or desktop changes. Local
+commit evidence: `.mini-orca/autopilot/ux/ANA-02/receipt.json`.
 
 ## Definition of done
 

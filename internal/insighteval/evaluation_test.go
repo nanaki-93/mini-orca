@@ -151,6 +151,8 @@ func TestEngineeringInsightEvaluationMalformedOutputIsSeparateFromControls(t *te
 	for name, output := range map[string]string{
 		"unknown parent field": validParent + `,"unexpected":true}`,
 		"trailing JSON":        validParent + `}{}`,
+		"missing category":     strings.Replace(validParent, `"risks":[]`, `"risks":[{"severity":"low","summary":"Historical risk."}]`, 1) + `}`,
+		"unknown category":     strings.Replace(validParent, `"risks":[]`, `"risks":[{"category":"reliability","severity":"low","summary":"Unknown category."}]`, 1) + `}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if app.AssessFileAnalysisEvaluation(output, target, "package fixture\n").UsableSummary {
