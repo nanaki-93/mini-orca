@@ -220,3 +220,124 @@ every 3xx response at the configured provider origin and returns a status-only
 error; it does not send the prompt, request body, or authorization header to a
 redirect target, and it does not retry a rejected redirect. Update the configured
 provider URL explicitly when its endpoint changes.
+
+## Unified analysis contract under implementation (ANA-01)
+
+The following contract is prepared for ANA-03–05. These endpoints are **not yet
+registered**. The live route table above and the OpenAPI `paths` section remain
+the shipped API. Proposed operations are recorded in the OpenAPI vendor extension
+`x-unified-analysis-contract`; its component schemas are the implementation target.
+The daemon continues using its existing jobs until ANA-05 replaces their owners.
+
+- `POST /api/projects/current/analysis/preview`: accepts `AnalysisPreviewRequest`;
+  returns `AnalysisRunPreview` without provider calls, subprocesses or source writes.
+- `POST /api/projects/current/analysis/run`: accepts `AnalysisRunStartRequest`;
+  returns an admitted `AnalysisRun` with status 202 after durable admission.
+- `GET /api/projects/current/analysis/run`: reads current progress for the required
+  `project_id` and `project_revision`; it never starts or resumes work.
+- `POST /api/projects/current/analysis/run/control`: accepts
+  `AnalysisRunControlRequest` for pause, resume or cancel.
+- `GET /api/projects/current/analysis/results`: accepts the complete run identity
+  as query guards plus `category` and optional project-relative `path`; returns
+  `AnalysisSectionResults`. A file filter only changes the read view.
+
+There is one execution scope: `project`. No selected file, path filter or list of
+user-picked files belongs in a start request. Preview captures the whole eligible
+project inventory, sorted by canonical path, with content hashes, language, size,
+stage eligibility/cache dispositions and explicit exclusions. The 100-file default
+and 500-file maximum bound a dispatch window, not the inventory or total coverage.
+Default window time is 900 seconds, maximum 3600. Total attempts per model stage
+include the initial request and transport retries: default 2, maximum 4. Counters
+never reset on resume/restart. Cached work and passive Security rules make zero
+model requests; retries cannot be multiplied by an undisclosed outer retry loop.
+
+Four stage identities are fixed: `semantic`, `performance`, `security_rules`,
+`security_ai`. Semantic risks can feed all three result categories. Performance
+reviews feed Performance; Security rules and advisory reviews feed Security.
+The latter three retain their existing report types and provenance. A stage's
+consumers do not classify its prose. Stage work counts once in request budgets,
+even when it feeds several result sections. The preview exposes expected model
+requests without retries and the inclusive maximum for the remaining work.
+
+`queue_id` binds project/revision, policy, provider fingerprints, ordered file/hash
+and stage identities, exclusions, refresh choice and limits. Effective provider
+identity includes scope, model, origin, reasoning, context/timeout/retry settings
+and prompt/rule versions. Cache availability is excluded from this stable identity:
+the run's own cache writes cannot invalidate its remaining queue. `preview_id`
+additionally binds current cache dispositions, remaining attempts/work and request
+bounds. Start echoes limits/refresh and both identities; the daemon recomputes
+them before admission. A changed preflight yields 409 and requires a fresh preview.
+
+Resume first requests a new preview with `resume_run` identifying the existing
+run. It preserves that run's captured scope, limits and cumulative attempt counts,
+but recalculates remaining request bounds. Control echoes the run identity,
+fresh `preview_id` and fresh confirmations. The durable initial `plan` retains the
+original source-free admission evidence; it never contains usable confirmation.
+Run `id` plus `generation` prevents late results or controls from acting on a
+replacement run with the same queue. All identity mismatches return 409. Unknown
+request fields/enums, missing guards or invalid limits return 400.
+
+Provider confirmation is a list of the displayed effective provider IDs. Security
+AI additionally requires explicit `security_review: true`, including for a local
+provider. This intent is limited to the displayed admitted work; it is consumed
+when start/resume is attempted, is never saved in a run, and cannot survive restart
+or authorize a changed provider/project. Pause/cancel do not carry confirmations.
+Scope-specific existing consent rules remain enforced before each provider dispatch.
+The run never invokes tests, vet, benchmarks, exploits or suggested shell commands.
+
+### Progress and partial evidence
+
+Run and section states are `queued`, `running`, `pausing`, `paused`, `canceling`,
+`canceled`, `interrupted`, `completed`, `completed_empty`, `partial`, `failed`,
+`unavailable`, `stale`. File-stage states additionally identify `pending`,
+`skipped` and incomplete producer reports as `partial`; paused work stays pending.
+Each of Bugs, Performance and Security has its own progress entry. Analysis is
+the progress owner; result prose belongs only to the three result reads.
+
+Coverage counts captured file-stage units relevant to the section: total, pending,
+running, succeeded, partial, failed, skipped and unavailable. These sum to total;
+excluded files are separately visible in the plan. Cached current evidence counts
+as succeeded. A partial/truncated report retains findings but cannot claim full
+coverage. Pending means unfinished, including abandoned work in canceled/stale
+runs; it is not permission to dispatch. A successful stage shared by sections is
+counted in each section's coverage, but only once in request/attempt budgets.
+
+`finding_count` is JSON null until there is successful or partial evidence. Zero
+means that such evidence returned no findings, not that the project is safe.
+`completed_empty` requires nonzero, fully successful coverage and zero findings;
+`completed` requires fully successful coverage with findings. A terminal `partial`
+section has useful evidence and incomplete coverage, with no work still pending
+or running. An all-failed/unavailable section cannot claim zero findings. Stale
+counts are historical and must not contribute to fresh navigation badges.
+
+Overall completion requires all three sections to be completely covered. A mixed
+terminal outcome with useful evidence is partial; no successful evidence yields
+failed or unavailable. Reaching a window file/time/attempt budget with work pending
+pauses the run with an explicit reason. Pause stops at a stage boundary; cancel
+stops active requests and future dispatch while retaining completed reports.
+Resume applies to paused/interrupted runs. Canceled or stale runs require a new
+explicit start. Restart restores interrupted progress and never dispatches work.
+Window counters reset only on an admitted resume; total elapsed/attempt counters
+and completed reports remain. Persistence failure stops dispatch before the next
+stage and exposes a recoverable operational failure.
+
+### Category and cache compatibility
+
+`Finding.category` and `UnifiedFinding.category` use `bugs`, `performance` or
+`security`. They are independent of severity, confidence, source and the existing
+specialized Performance/Security subtype categories. Storage envelope version 1
+remains readable: the category field is additive and omitted on historical records.
+Absent categories stay unclassified; no keyword inference, default Bugs category
+or history rewrite occurs. Such evidence is available as previous analysis and
+under `unclassified`, excluded from fresh section counts. General suggestions
+remain file explanations and are not findings in any result category.
+
+ANA-02 will require categories in new semantic model output and change its prompt
+identity. The existing prompt-sensitive cache lookup then returns older reports
+as stale while preserving their full explanations and risks. ANA-01 does not
+pretend the old model prompt already supplies classification. Unknown nonempty
+categories are rejected on writes; absence remains accepted for legacy producers.
+Finding IDs intentionally exclude category as well as revision/hash, so adding
+or correcting a category preserves existing dismissed/fixed triage for unchanged
+evidence. Typed Security triage/verification and Performance hypotheses are retained;
+results do not merge unrelated producers merely because line/title text matches.

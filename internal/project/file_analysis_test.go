@@ -1,12 +1,77 @@
 package project
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 )
+
+func TestFileAnalysisCategoriesRoundTripAndLegacyReportsRemainReadable(t *testing.T) {
+	root := t.TempDir()
+	writeIndexFixture(t, root, "main.go", "package main\nfunc Run() {}\n")
+	cache, err := NewFileAnalysisCache(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := analysisCacheInput("main.go", "hash")
+	legacy := newFreshAnalysis(input)
+	legacy.Purpose = "Historical explanation"
+	legacy.Risks = []Finding{{Severity: "high", Summary: "Slow and insecure bug text does not establish a category."}}
+	if err := cache.Store(legacy); err != nil {
+		t.Fatal(err)
+	}
+	path := cache.cachePath(input.Path)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(before), `"category"`) {
+		t.Fatalf("invented a legacy category: %s", before)
+	}
+	currentInput := input
+	currentInput.PromptVersion = "categorized-prompt-v2"
+	loaded, err := cache.Load(currentInput)
+	if err != nil || loaded.Status != AnalysisStatusStale || loaded.Purpose != legacy.Purpose || loaded.Risks[0].Category != FindingCategoryUnclassified {
+		t.Fatalf("legacy read = %+v, %v", loaded, err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(before) {
+		t.Fatal("legacy read rewrote stored evidence")
+	}
+	fresh := newFreshAnalysis(currentInput)
+	fresh.Risks = []Finding{
+		{Category: FindingCategoryBugs, Severity: "high", Summary: "Drops an error."},
+		{Category: FindingCategoryPerformance, Severity: "medium", Summary: "Copies each request twice."},
+		{Category: FindingCategorySecurity, Severity: "low", Summary: "Exposes internal paths."},
+	}
+	if err := cache.Store(fresh); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = cache.Load(currentInput)
+	if err != nil || loaded.Status != AnalysisStatusFresh {
+		t.Fatalf("categorized read = %+v, %v", loaded, err)
+	}
+	for index, risk := range fresh.Risks {
+		if loaded.Risks[index].Category != risk.Category {
+			t.Fatalf("category lost: %+v", loaded.Risks)
+		}
+	}
+	fresh.Risks[0].Category = "reliability"
+	if err := cache.Store(fresh); err == nil {
+		t.Fatal("stored an unknown category")
+	}
+	loaded, err = cache.Load(currentInput)
+	if err != nil || loaded.Risks[0].Category != FindingCategoryBugs {
+		t.Fatal("failed category write replaced valid evidence")
+	}
+	var decoded Finding
+	if err := json.Unmarshal([]byte(`{"severity":"low","summary":"Legacy"}`), &decoded); err != nil || decoded.Category.Valid() {
+		t.Fatalf("legacy decoding = %+v, %v", decoded, err)
+	}
+}
 
 func TestFileAnalysisCacheRoundTripAndSourceFreePersistence(t *testing.T) {
 	root := t.TempDir()

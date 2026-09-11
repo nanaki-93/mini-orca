@@ -51,6 +51,7 @@ type FindingLocation struct {
 // tool output while sharing one deterministic persistence and triage contract.
 type UnifiedFinding struct {
 	ID                  string              `json:"id"`
+	Category            FindingCategory     `json:"category,omitempty"`
 	Source              string              `json:"source"`
 	Confidence          string              `json:"confidence"`
 	Severity            string              `json:"severity"`
@@ -238,8 +239,8 @@ func normalizeFinding(finding UnifiedFinding, input FindingInput) UnifiedFinding
 	return finding
 }
 
-// FindingID intentionally excludes revision and hash, preserving triage for an
-// unchanged report while Load guards it from being treated as current.
+// FindingID excludes revision, hash and category. Adding or correcting a category
+// preserves triage for the same evidence; freshness is checked independently.
 func FindingID(finding UnifiedFinding) string {
 	values := []string{finding.Source, finding.Rule, finding.Location.Path, fmt.Sprint(finding.Location.StartLine), fmt.Sprint(finding.Location.EndLine), finding.Location.Symbol, finding.Message}
 	sum := sha256.Sum256([]byte(strings.Join(values, "\x00")))
@@ -257,6 +258,9 @@ func findingMatchesInput(finding UnifiedFinding, input FindingInput) bool {
 }
 
 func validateFinding(finding UnifiedFinding) error {
+	if finding.Category != FindingCategoryUnclassified && !finding.Category.Valid() {
+		return fmt.Errorf("finding category is invalid")
+	}
 	if !validFindingIdentity(finding) {
 		return fmt.Errorf("finding is invalid")
 	}
@@ -372,7 +376,7 @@ func SuggestedFindingsForFile(analysis FileAnalysis) []UnifiedFinding {
 				}
 			}
 		}
-		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "File analysis suggestion", Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: cloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
+		findings = append(findings, UnifiedFinding{Category: risk.Category, Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "File analysis suggestion", Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: cloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
 	}
 	return findings
 }
