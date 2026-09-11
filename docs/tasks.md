@@ -309,7 +309,7 @@ remains queued for deeper Go identifier and generation/Apply lifecycle coverage.
 
 ## Task CREATE-02 — Close creation validation and lifecycle gaps
 
-- [ ] CREATE-02 completed with required checks and diff review.
+- [x] CREATE-02 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/FileChatState.kt` — correct Go identifier/keyword eligibility and clear creation failures.
@@ -335,7 +335,49 @@ go test ./internal/project ./internal/app -run 'Test(ComposeGoDeclaration|Valida
 ```
 
 **Execution record**
-Not started.
+Completed 2026-09-11 by the authorized scheduler. Required checks and diff review
+passed with no failed attempts or corrections. The local CREATE-02 commit is
+recorded in Git history and the ignored execution receipt. Verified the CREATE-01 commit/receipt and both Java
+toolchains. Captured the ten pre-existing desktop diffs and empty index under
+`.mini-orca/autopilot/ux/CREATE-02/baseline/`; none overlaps the initial task targets.
+Initial prescribed desktop verification passed: 66 tests, no failures/errors/skips.
+Initial prescribed Go verification also exited 0 for both packages. Final review
+made binary-file rejection explicit instead of presenting it as a language error;
+the focused desktop checks passed again before full validation. No failed
+verification or correction attempt has occurred.
+
+Desktop preflight now accepts Go Unicode letters and decimal digits, rejects
+keywords and malformed names, and identifies missing names and binary files.
+The daemon remains authoritative for source syntax, declaration identity and
+composition. Matched desktop/daemon examples cover Unicode, supplementary letters,
+keywords, invalid punctuation, duplicates and unsupported files. Creation works
+without a selected symbol in a package-only Go file.
+
+Deterministic fake-transport tests cover explicit generation, rejected requests,
+daemon error presentation, cancellation and late replies after file/project/revision
+changes. Review coverage now exercises both replacement and creation, retaining
+fresh validation/check requirements. Temporary-project tests exercise real daemon
+generation with a local fake provider, malformed/retargeted/multiple declarations,
+no source writes before Apply, explicit confirmation, preservation of existing
+declarations/imports and unrelated files, exact Undo restoration and rejection
+after an external source change. Existing daemon behavior passed these cases;
+no daemon production code or API was changed.
+
+Final prescribed desktop verification exited 0: 66 tests, no failures/errors/skips.
+`./desktop/gradlew -p desktop test detekt spotlessCheck` exited 0: 378 desktop tests
+passed with no failures/errors/skips, no Detekt findings and clean formatting.
+The prescribed Go command exited 0 for both packages; `go test ./...` passed every
+package (some unaffected packages reused cached results), and `make fmt-check vet`
+exited 0. Java checks used the verified Java 21 launcher and Java 25 toolchain runtime
+override. Logs and test counts are retained in `.mini-orca/autopilot/ux/CREATE-02/`.
+
+Diff review and `git diff --check` passed. All ten pre-existing desktop files remain
+byte-for-byte unchanged and outside this commit; this card's targets do not overlap
+them. Review checked Unicode character categories, invalid-request short-circuiting,
+retained consent/preview boundaries, deterministic failure cases and test cleanup.
+No dependencies, configuration or migration steps. Full race/native/packaging
+checks were not run for this validation/test card; no live model evaluation was
+used. ANA-01 is next and remains unchecked.
 
 ## Task ANA-01 — Define categorized results and unified run contracts
 

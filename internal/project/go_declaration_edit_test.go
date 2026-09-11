@@ -86,6 +86,40 @@ func Existing() { fmt.Println("existing") }
 	}
 }
 
+func TestComposeGoDeclarationCreatesUnicodeFunctionWithAnExactPreviewDiff(t *testing.T) {
+	original := "package fixture\n"
+	result := ComposeGoDeclaration("empty.go", original, GoDeclarationEdit{Mode: DeclarationEditCreateSymbol, TargetSymbol: "新規", Declaration: "func 新規() int { return 1 }"})
+	if !result.Validation.Applicable || result.Source != "package fixture\n\nfunc 新規() int { return 1 }\n" {
+		t.Fatalf("package-only creation = %+v", result)
+	}
+	if result.CompositionHash == "" || !containsDiffText(diffLines(result.Validation.Diff), "func 新規() int { return 1 }") {
+		t.Fatalf("missing creation preview: %+v", result)
+	}
+	for _, line := range result.Validation.Diff.Lines {
+		if line.Kind == "removed" {
+			t.Fatalf("creation removed original source: %+v", line)
+		}
+	}
+}
+
+func TestValidateGoDeclarationCreationRejectsUnrelatedMutation(t *testing.T) {
+	original := "package fixture\n\nimport \"fmt\"\n\nfunc Existing() { fmt.Println(\"keep\") }\n"
+	edit := GoDeclarationEdit{Mode: DeclarationEditCreateSymbol, TargetSymbol: "Build", Declaration: "func Build() {}"}
+	composed := ComposeGoDeclaration("fixture.go", original, edit)
+	if !composed.Validation.Applicable {
+		t.Fatal(composed.Validation.Diagnostics)
+	}
+	for _, candidate := range []string{
+		strings.Replace(composed.Source, "keep", "changed", 1),
+		strings.Replace(composed.Source, `import "fmt"`, `import "strings"`, 1),
+	} {
+		validation := validateGoDeclarationComposition("fixture.go", original, candidate, edit, nil)
+		if validation.Applicable || len(validation.Diagnostics) == 0 {
+			t.Fatalf("accepted out-of-scope creation: %s", candidate)
+		}
+	}
+}
+
 func TestComposeGoDeclarationReplacesTypeInsideGroupedDeclaration(t *testing.T) {
 	original := `package fixture
 

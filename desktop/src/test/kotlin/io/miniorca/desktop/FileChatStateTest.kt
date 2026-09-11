@@ -67,6 +67,67 @@ class FileChatStateTest {
   }
 
   @Test
+  fun creationAcceptsUnicodeLettersAndDigitsButRejectsKeywordsAndNonGoIdentifierCharacters() {
+    listOf("新規", "Écrire", "Δοκιμή٢", "𐐀Build", "_helper", "any", "Type").forEach { name ->
+      val result =
+          validateChatTarget(file(), emptyList(), null, ChatEditMode.CreateSymbol, " $name ")
+      assertEquals(ChatTarget(ChatEditMode.CreateSymbol, name), result.target, name)
+    }
+    listOf("func", "type", "var", "package", "range", "fallthrough", "interface").forEach { name ->
+      val result = validateChatTarget(file(), emptyList(), null, ChatEditMode.CreateSymbol, name)
+      assertNull(result.target, name)
+      assertEquals("$name is a Go keyword. Choose a different name.", result.message)
+    }
+    listOf(
+            "",
+            " \n",
+            "2Build",
+            "٢Build",
+            "name-with-dash",
+            "Worker.Build",
+            "\$Build",
+            "e\u0301",
+            "Build😀",
+            "name\u200C")
+        .forEach { name ->
+          val result =
+              validateChatTarget(file(), emptyList(), null, ChatEditMode.CreateSymbol, name)
+          assertNull(result.target, name)
+          assertTrue(result.message.isNotBlank(), name)
+        }
+    assertEquals(
+        "Enter a name for the new Go function or type.",
+        validateChatTarget(file(), emptyList(), null, ChatEditMode.CreateSymbol, "").message)
+  }
+
+  @Test
+  fun creationRechecksFileAndTargetIdentityWithoutASelectedDeclaration() {
+    val name = "新規"
+    assertFalse(validateChatTarget(null, emptyList(), null, ChatEditMode.CreateSymbol, name).valid)
+    listOf(file().copy(language = "Kotlin"), file().copy(binary = true)).forEach { unsupported ->
+      assertFalse(
+          validateChatTarget(unsupported, emptyList(), null, ChatEditMode.CreateSymbol, name).valid)
+    }
+    assertEquals(
+        "Binary files cannot be used for declaration chat.",
+        validateChatTarget(
+                file().copy(binary = true), emptyList(), null, ChatEditMode.CreateSymbol, name)
+            .message)
+    val packageOnly = file().copy(content = "package main\n")
+    val target =
+        validateChatTarget(packageOnly, emptyList(), symbol("Old"), ChatEditMode.CreateSymbol, name)
+            .target!!
+    val createSession = session().copy(mode = "create_symbol", targetSymbol = name)
+    assertTrue(chatSessionMatches(createSession, packageOnly, project(), target))
+    assertFalse(chatSessionMatches(createSession, file(hash = "changed"), project(), target))
+    assertFalse(
+        chatSessionMatches(createSession, packageOnly, project(), target.copy(symbol = "Other")))
+    assertFalse(
+        validateChatTarget(packageOnly, listOf(symbol(name)), null, ChatEditMode.CreateSymbol, name)
+            .valid)
+  }
+
+  @Test
   fun changePresetsPrepareOnlyAShortIntentAndKeepConstraintsOptional() {
     assertEquals("Fix a bug: ", FunctionChangePreset.BugFix.preparedMessage())
     assertEquals("Improve performance: ", FunctionChangePreset.Performance.preparedMessage())
