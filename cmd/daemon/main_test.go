@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"gopkg.in/yaml.v3"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,6 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/version"
-	"gopkg.in/yaml.v3"
 )
 
 func TestDaemonStatusReportsCanonicalVersion(t *testing.T) {
@@ -409,4 +409,27 @@ func apiContractRoutes(t *testing.T) []documentedRoute {
 	}
 	sort.Slice(routes, func(i, j int) bool { return routes[i].method+routes[i].path < routes[j].method+routes[j].path })
 	return routes
+}
+
+func TestUnifiedAnalysisRoutesUseLocalOriginPolicy(t *testing.T) {
+	manager, err := project.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(config.Default(), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := newHTTPMux(service, manager)
+	for _, route := range []string{"/api/projects/current/analysis/preview", "/api/projects/current/analysis/run", "/api/projects/current/analysis/run/control"} {
+		request := httptest.NewRequest(http.MethodPost, route, strings.NewReader(`{}`))
+		request.Host = "localhost:9090"
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Origin", "https://untrusted.example")
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("origin bypass %s: %d %s", route, response.Code, response.Body)
+		}
+	}
 }

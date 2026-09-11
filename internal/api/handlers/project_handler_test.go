@@ -602,3 +602,27 @@ func assertStructuredError(t *testing.T, response *httptest.ResponseRecorder) {
 		t.Fatalf("unstructured error = %+v", body)
 	}
 }
+
+func TestLegacyAnalysisHandlerPreservesSavedProgressAndExplainsMigration(t *testing.T) {
+	_, h, analysis, calls := newAnalysisHandlerFixture(t)
+	data, _ := json.Marshal(app.AnalyzeAllJob{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Status: "running", MaxFiles: 100, MaxRetries: 1, Files: []app.AnalyzeAllFileJob{{Path: "main.go", Status: "running", Attempts: 2}}})
+	path := filepath.Join(analysis.Path, ".mini-orca/sessions/analyze-all.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	w := analysisHandlerRequest(t, h.AnalyzeAllJob, "GET", "/analysis-job?project_revision="+analysis.ProjectRevision, nil)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"interrupted"`) {
+		t.Fatalf("legacy read=%d %s", w.Code, w.Body)
+	}
+	w = analysisHandlerRequest(t, h.ResumeAnalyzeAll, "POST", "/analysis-job/resume", map[string]any{"project_revision": analysis.ProjectRevision})
+	if w.Code != 409 || !strings.Contains(w.Body.String(), "saved legacy job cannot resume") {
+		t.Fatalf("migration=%d %s", w.Code, w.Body)
+	}
+	after, _ := os.ReadFile(path)
+	if string(after) != string(data) || calls.Load() != 0 {
+		t.Fatal("legacy handler changed history or dispatched")
+	}
+}

@@ -21,3 +21,17 @@ Disposition: candidate and failing regression retained uncommitted; ANA-04 unche
 
 ANA-04 — 2026-09-11 — Resolved after user-authorized continuation
 The user authorized the prepared additional cache-recovery correction, validation, local commit and scheduler resumption. The worker now permits a matching cache through the exhausted-attempt branch; per-stage source/provider/policy checks remain and transport allowance remains zero. The previously failing restart regression passes with completed_empty cached evidence, one retained attempt and three total fixture requests. Prescribed race-enabled verification passed in 5.571s; all Go tests, full race tests, formatting, vet and diff checks passed. Two earlier corrections plus one user-authorized correction are retained in the history above. No unrelated files changed; no desktop/native or live-provider evaluation. Evidence: .mini-orca/autopilot/ux/ANA-04/receipt.json.
+
+2026-09-11 ANA-05 BLOCKED — two correction attempts exhausted.
+Command: go test -race ./internal/app ./internal/api/handlers ./cmd/daemon -count=1
+Initial: exit 1; missing project import and removed storeCachedPerformanceReport test fixture.
+Correction 1: restored test dependencies; passed expected Performance job IDs/revisions into shared controls; guarded active queue identity and missing/excluded result evidence. Verification failed: omitted internal revision guards rejected; canonical-root failure injection did not fire. A retained provider fixture blocked cleanup after Fatal; captured SIGQUIT stack from owned app.test only.
+Correction 2: keep absent internal guard optional, bind injected fault to canonical root, make blocked fixture cleanup unconditional, and use loopback Host for origin regression. Verification exit 1; internal/app 22.456s, handlers PASS 2.809s, daemon PASS 1.740s.
+Remaining failure: TestStartAnalyzeAllReturnsActiveJobWithoutStartingAnotherWorker: TempDir RemoveAll cleanup: unlinkat ...: directory not empty. The test observes provider response but does not join the canceled worker before deleting its project.
+Proposed additional correction: waitAnalysisWindow(t, service) after the response wait in that test, then exact verification and remaining acceptance checks. Requires authorization beyond the two-correction limit; not applied.
+Scheduler mini-orca-ux-implementation PAUSED and readback verified. ANA-05 candidate preserved, no commit, ANA-06 not started. Logs/hash checkpoint: .mini-orca/autopilot/ux/ANA-05/. All 10 unrelated desktop files preserved; index empty; HEAD remains accepted ANA-04 7dc5b7cf1b35454def3ecfbbe5681835c4706739.
+
+2026-09-11 ANA-05 RESOLVED after user-authorized repair continuation.
+User request: "yes, repair ANA-05". Correction 3 added the proposed worker join; prescribed race verification passed (app 23.464s, handlers 2.695s, daemon 1.664s).
+Final review found lost unobserved active-time accounting for interrupted legacy Performance jobs. Correction 4 conservatively charges that interval up to the original total budget while preserving idle paused time, with integration coverage for restored active/canceling/paused states and no new dispatch.
+Final exact race command PASS (app 23.032s, handlers 2.748s, daemon 2.106s); full Go tests, full race, fmt-check, vet and diff check PASS. Prior failures and correction accounting retained. ANA-05 accepted for its authorized local commit; scheduler resumes afterward. No desktop changes/native validation, live provider requests, push or release.

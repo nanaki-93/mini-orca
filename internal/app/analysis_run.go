@@ -133,12 +133,14 @@ func (identity AnalysisRunIdentity) Validate() error {
 }
 
 type AnalysisPreviewRequest struct {
-	ProjectID       string               `json:"project_id"`
-	ProjectRevision string               `json:"project_revision"`
-	Scope           string               `json:"scope"`
-	Refresh         bool                 `json:"refresh"`
-	Limits          AnalysisRunLimits    `json:"limits"`
-	ResumeRun       *AnalysisRunIdentity `json:"resume_run,omitempty"`
+	ProjectID           string               `json:"project_id"`
+	ProjectRevision     string               `json:"project_revision"`
+	Scope               string               `json:"scope"`
+	Refresh             bool                 `json:"refresh"`
+	Limits              AnalysisRunLimits    `json:"limits"`
+	ResumeRun           *AnalysisRunIdentity `json:"resume_run,omitempty"`
+	compatibilityStage  AnalysisStage
+	compatibilityBudget time.Duration
 }
 
 func (request AnalysisPreviewRequest) Validate() error {
@@ -192,6 +194,8 @@ type AnalysisExcludedFile struct {
 }
 
 type AnalysisRunPreview struct {
+	CompatibilityStage           AnalysisStage                 `json:"compatibility_stage,omitempty"`
+	CompatibilityBudget          time.Duration                 `json:"compatibility_budget_nanoseconds,omitempty"`
 	SchemaVersion                string                        `json:"schema_version"`
 	PreviewID                    string                        `json:"preview_id"`
 	Identity                     AnalysisQueueIdentity         `json:"identity"`
@@ -356,6 +360,7 @@ type AnalysisRunFile struct {
 // AnalysisRun persists only identities and operational progress. Result prose lives
 // in producer-owned report stores; no source, prompt, transcript or consent is saved here.
 type AnalysisRun struct {
+	CompatibilityElapsed time.Duration             `json:"compatibility_elapsed_nanoseconds,omitempty"`
 	SchemaVersion        string                    `json:"schema_version"`
 	Identity             AnalysisRunIdentity       `json:"identity"`
 	Plan                 AnalysisRunPreview        `json:"plan"`
@@ -384,22 +389,33 @@ type AnalysisSectionResults struct {
 }
 
 var errAnalysisRunPersistence = errors.New("analysis progress could not be saved; resume or cancel to recover")
-var errAnalysisRunBusy = errors.New("an analysis run is already active; pause or cancel it before replacement")
+var errAnalysisRunBusy = fmt.Errorf("%w: an analysis run is already active; pause or cancel it before replacement", project.ErrRevisionConflict)
+
+// ErrAnalysisProgressUnavailable identifies recoverable progress storage failures.
+var ErrAnalysisProgressUnavailable = errAnalysisRunPersistence
 
 // One mutex owns admission, attempt reservations, progress and report publication.
 // Disk writes remain inside that boundary. The worker never takes jobLifecycleMu,
 // so project changes can invalidate it without waiting while holding its lock.
+type analysisRunRecovery struct {
+	run   *AnalysisRun
+	fault error
+}
+
 type analysisRunController struct {
-	mu            sync.Mutex
-	run           *AnalysisRun
-	root          string
-	fault         error
-	done          chan struct{}
-	cancel        context.CancelFunc
-	admission     *AnalysisRunPreview
-	confirmations AnalysisRunConfirmations
-	windowStart   time.Time
-	elapsedBase   int64
+	detached                 map[string]analysisRunRecovery
+	mu                       sync.Mutex
+	run                      *AnalysisRun
+	root                     string
+	fault                    error
+	done                     chan struct{}
+	cancel                   context.CancelFunc
+	admission                *AnalysisRunPreview
+	confirmations            AnalysisRunConfirmations
+	windowStart              time.Time
+	elapsedBase              int64
+	compatibilityElapsedBase time.Duration
+	windowBudget             time.Duration
 }
 
 func (s *Service) StartAnalysisRun(ctx context.Context, request AnalysisRunStartRequest) (*AnalysisRun, error) {
@@ -411,6 +427,12 @@ func (s *Service) StartAnalysisRun(ctx context.Context, request AnalysisRunStart
 	c := s.analysisRun
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return s.startAnalysisRunLocked(ctx, request, "", 0)
+}
+
+// Caller holds both lifecycle and controller locks.
+func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRunStartRequest, stage AnalysisStage, budget time.Duration) (*AnalysisRun, error) {
+	c := s.analysisRun
 	if err := s.restoreAnalysisRunLocked(); err != nil {
 		return nil, err
 	}
@@ -426,7 +448,7 @@ func (s *Service) StartAnalysisRun(ctx context.Context, request AnalysisRunStart
 			return cloneAnalysisRun(c.run), errAnalysisRunBusy
 		}
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
 	if err != nil {
 		return nil, err
 	}
@@ -532,7 +554,7 @@ func (s *Service) ControlAnalysisRun(ctx context.Context, request AnalysisRunCon
 		}
 	case AnalysisRunPause:
 		if c.run.Status != AnalysisRunRunning && c.run.Status != AnalysisRunQueued && c.run.Status != AnalysisRunPausing && c.run.Status != AnalysisRunPaused && c.fault == nil {
-			return nil, fmt.Errorf("analysis cannot be paused in its current state")
+			return nil, fmt.Errorf("%w: analysis cannot be paused in its current state", project.ErrRevisionConflict)
 		}
 		c.run.Status = AnalysisRunPaused
 		if c.done != nil && c.fault == nil {
@@ -547,7 +569,10 @@ func (s *Service) ControlAnalysisRun(ctx context.Context, request AnalysisRunCon
 			return cloneAnalysisRun(c.run), errAnalysisRunBusy
 		}
 		if c.run.Status != AnalysisRunPaused && c.run.Status != AnalysisRunInterrupted {
-			return nil, fmt.Errorf("analysis requires paused or interrupted progress to resume")
+			return nil, fmt.Errorf("%w: analysis requires paused or interrupted progress to resume", project.ErrRevisionConflict)
+		}
+		if c.run.Plan.CompatibilityBudget > 0 && c.run.CompatibilityElapsed >= c.run.Plan.CompatibilityBudget {
+			return nil, fmt.Errorf("%w: performance job budget is exhausted; start a new job", project.ErrRevisionConflict)
 		}
 		preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: c.run.Identity.ProjectID, ProjectRevision: c.run.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, Refresh: c.run.Plan.Refresh, Limits: c.run.Plan.Limits, ResumeRun: &request.Identity})
 		if err != nil {
@@ -579,13 +604,18 @@ func (s *Service) ControlAnalysisRun(ctx context.Context, request AnalysisRunCon
 
 func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmations AnalysisRunConfirmations) {
 	c := s.analysisRun
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.run.Plan.Limits.BudgetSeconds)*time.Second)
+	c.windowBudget = time.Duration(c.run.Plan.Limits.BudgetSeconds) * time.Second
+	if c.run.Plan.CompatibilityBudget > 0 {
+		c.windowBudget = min(c.windowBudget, c.run.Plan.CompatibilityBudget-c.run.CompatibilityElapsed)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), c.windowBudget)
 	c.cancel = cancel
 	c.done = make(chan struct{})
 	c.admission = preview
 	c.confirmations = AnalysisRunConfirmations{SecurityReview: confirmations.SecurityReview, ProviderIDs: append([]string(nil), confirmations.ProviderIDs...)}
 	c.windowStart = time.Now()
 	c.elapsedBase = c.run.ElapsedSeconds
+	c.compatibilityElapsedBase = c.run.CompatibilityElapsed
 	go s.runAnalysisWindow(ctx, c.run.Identity, c.done)
 }
 
@@ -793,7 +823,11 @@ func (s *Service) updateAnalysisElapsedLocked() {
 	if c.run == nil || c.windowStart.IsZero() {
 		return
 	}
-	elapsed := min(int64(time.Since(c.windowStart)/time.Second), int64(c.run.Plan.Limits.BudgetSeconds))
+	active := min(time.Since(c.windowStart), c.windowBudget)
+	if c.run.Plan.CompatibilityBudget > 0 {
+		c.run.CompatibilityElapsed = min(c.run.Plan.CompatibilityBudget, c.compatibilityElapsedBase+active)
+	}
+	elapsed := int64(active / time.Second)
 	c.run.WindowElapsedSeconds = elapsed
 	c.run.ElapsedSeconds = c.elapsedBase + elapsed
 }

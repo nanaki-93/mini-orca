@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,11 +15,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
-	"gopkg.in/yaml.v3"
 )
 
 func TestAnalysisRunCoverageNeverTurnsMissingEvidenceIntoZeroFindings(t *testing.T) {
@@ -202,7 +203,7 @@ func TestAnalysisRunKeepsConsentTransientAndProducerEvidenceTyped(t *testing.T) 
 	}
 }
 
-func TestAnalysisRunOpenAPIContractsAreExplicitlyPlannedAndResolvable(t *testing.T) {
+func TestAnalysisRunOpenAPIContractsAreRegisteredAndResolvable(t *testing.T) {
 	data, err := os.ReadFile("../../docs/openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -211,14 +212,13 @@ func TestAnalysisRunOpenAPIContractsAreExplicitlyPlannedAndResolvable(t *testing
 	if err := yaml.Unmarshal(data, &document); err != nil {
 		t.Fatal(err)
 	}
-	planned := document["x-unified-analysis-contract"].(map[string]any)
-	if planned["status"] != "planned-not-registered" {
-		t.Fatal("future routes must not be presented as live")
+	if _, planned := document["x-unified-analysis-contract"]; planned {
+		t.Fatal("registered operations remain in a planned extension")
 	}
 	paths := document["paths"].(map[string]any)
-	for path := range planned["paths"].(map[string]any) {
-		if _, exists := paths[path]; exists {
-			t.Fatalf("premature live route: %s", path)
+	for _, path := range []string{"/api/projects/current/analysis/preview", "/api/projects/current/analysis/run", "/api/projects/current/analysis/run/control", "/api/projects/current/analysis/results"} {
+		if _, exists := paths[path]; !exists {
+			t.Fatalf("missing live route: %s", path)
 		}
 	}
 	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
@@ -257,7 +257,7 @@ func TestAnalysisRunOpenAPIContractsAreExplicitlyPlannedAndResolvable(t *testing
 			}
 		}
 	}
-	checkRefs(planned)
+	checkRefs(paths)
 	for name, schema := range schemas {
 		if strings.HasPrefix(name, "Analysis") {
 			checkRefs(schema)
@@ -746,5 +746,276 @@ func TestAnalysisRunKeepsCategoryCountsAndPartialEvidenceAcrossFailedStages(t *t
 	overview, err := s.ProjectOverview()
 	if err != nil || overview.Run.Identity.ProjectID != overview.ProjectID || overview.Run.Identity.ProjectRevision != overview.ProjectRevision || !reflect.DeepEqual(overview.Run.Sections, run.Sections) {
 		t.Fatalf("overview=%+v %v", overview, err)
+	}
+}
+
+func TestAnalysisCompatibilityUsesOneOwnerAndOnlyItsRequestedStage(t *testing.T) {
+	for _, stage := range []AnalysisStage{AnalysisStageSemantic, AnalysisStagePerformance} {
+		t.Run(string(stage), func(t *testing.T) {
+			server, calls, started, release := analysisBlockingServer(t)
+			s, _ := newSemanticAnalysisService(t, server.URL, 0)
+			all := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+			if stage == AnalysisStageSemantic {
+				_, err := s.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{MaxFiles: 1}, false)
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				_, err := s.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 1}, false)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			waitForTestSignal(t, started, "legacy dispatch")
+			run, err := s.CurrentAnalysisRun(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if run.Plan.CompatibilityStage != stage || len(run.Plan.Providers) != 1 || len(run.Plan.Providers[0].Stages) != 1 || run.Plan.Providers[0].Stages[0] != stage || run.Plan.SecurityReviewIntentRequired {
+				t.Fatalf("legacy scope=%+v", run.Plan)
+			}
+			if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(all)); !errors.Is(err, project.ErrRevisionConflict) {
+				t.Fatalf("overlap=%v", err)
+			}
+			other := AnalysisStageSemantic
+			if stage == other {
+				other = AnalysisStagePerformance
+			}
+			if _, err := s.controlCompatibilityRun(context.Background(), other, AnalysisRunCancel, "", false); !errors.Is(err, ErrAnalysisLegacyMigration) {
+				t.Fatalf("wrong owner control=%v", err)
+			}
+			if _, err := s.controlCompatibilityRun(context.Background(), stage, AnalysisRunCancel, "", false, "replacement"); !errors.Is(err, project.ErrRevisionConflict) {
+				t.Fatalf("late revision control=%v", err)
+			}
+			if _, err := s.controlCompatibilityRun(context.Background(), stage, AnalysisRunPause, run.Identity.ID, false); err != nil {
+				t.Fatal(err)
+			}
+			release()
+			paused := completedAnalysisRun(t, s)
+			resume := analysisRunPreviewFor(t, s, paused.Plan.Limits, &paused.Identity)
+			if resume.Identity != paused.Identity.AnalysisQueueIdentity || resume.ExpectedModelRequests != 0 {
+				t.Fatalf("resume lost cached captured queue: %+v", resume)
+			}
+			confirmations := compatibilityConfirmations(resume, false)
+			if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations}); err != nil {
+				t.Fatal(err)
+			}
+			done := completedAnalysisRun(t, s)
+			if calls.Load() != 1 || done.Identity.Generation == paused.Identity.Generation {
+				t.Fatalf("calls=%d run=%+v", calls.Load(), done)
+			}
+			for _, progress := range done.Files[0].Stages {
+				if progress.Stage != stage && (progress.Attempts != 0 || progress.FindingCount != nil) {
+					t.Fatalf("unauthorized stage: %+v", progress)
+				}
+			}
+			if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunCancel}); !errors.Is(err, project.ErrRevisionConflict) {
+				t.Fatalf("late generation=%v", err)
+			}
+		})
+	}
+}
+
+func TestAnalysisCompatibilityLegacyReadsPreserveHistoryWithoutAuthority(t *testing.T) {
+	for _, kind := range []string{"semantic", "performance"} {
+		t.Run(kind, func(t *testing.T) {
+			s, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+			analysis, _ := s.manager.Analysis()
+			var value any
+			relative := ".mini-orca/sessions/analyze-all.json"
+			if kind == "semantic" {
+				value = AnalyzeAllJob{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Status: "running", MaxFiles: 100, MaxRetries: 1, Files: []AnalyzeAllFileJob{{Path: "main.go", Status: "running", Attempts: 2}}}
+			} else {
+				job := performanceJobFixture(root, analysis, "legacy")
+				job.Files[0].Attempts = 2
+				job.Files[0].Status = "running"
+				value = job
+				relative = ".mini-orca/sessions/performance-job.json"
+			}
+			data, _ := json.Marshal(value)
+			file := filepath.Join(root, relative)
+			if err := storage.WriteFile(file, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if kind == "semantic" {
+				job, err := s.AnalyzeAllJob()
+				if err != nil || job.Status != "interrupted" || job.Files[0].Attempts != 2 || job.Files[0].Status != "running" {
+					t.Fatalf("legacy=%+v err=%v", job, err)
+				}
+				if _, err := s.ResumeAnalyzeAll(context.Background(), false); !errors.Is(err, ErrAnalysisLegacyMigration) {
+					t.Fatalf("resume=%v", err)
+				}
+			} else {
+				job, err := s.PerformanceJob()
+				if err != nil || job.Status != "interrupted" || job.Files[0].Attempts != 2 || job.Files[0].Status != "running" {
+					t.Fatalf("legacy=%+v err=%v", job, err)
+				}
+				if _, err := s.ResumePerformanceJob(context.Background(), job.ID, false); !errors.Is(err, ErrAnalysisLegacyMigration) {
+					t.Fatalf("resume=%v", err)
+				}
+			}
+			after, _ := os.ReadFile(file)
+			if string(after) != string(data) || s.analysisRun.run != nil || s.analysisRun.done != nil {
+				t.Fatal("legacy read changed history or granted authority")
+			}
+			if _, err := os.Stat(filepath.Join(root, analysisRunRelativePath)); !os.IsNotExist(err) {
+				t.Fatalf("legacy read created shared progress: %v", err)
+			}
+		})
+	}
+}
+
+func TestAnalysisCompatibilityPersistenceRecoveryKeepsOneAttemptLedger(t *testing.T) {
+	for _, stage := range []AnalysisStage{AnalysisStageSemantic, AnalysisStagePerformance} {
+		t.Run(string(stage), func(t *testing.T) {
+			server, calls, _, release := analysisBlockingServer(t)
+			release()
+			s, root := newSemanticAnalysisService(t, server.URL, 0)
+			var fail atomic.Bool
+			fail.Store(true)
+			s.writeAnalysisRun = func(path string, data []byte, mode os.FileMode) error {
+				var run AnalysisRun
+				if err := json.Unmarshal(data, &run); err != nil {
+					return err
+				}
+				for _, file := range run.Files {
+					for _, item := range file.Stages {
+						if item.Stage == stage && item.FindingCount != nil && fail.Load() {
+							return errors.New("private token /private/project disk failure")
+						}
+					}
+				}
+				return storage.WriteFile(path, data, mode)
+			}
+			_, err := s.startCompatibilityRun(context.Background(), stage, AnalysisRunLimits{100, 30, 2}, compatibilityTestBudget(stage), PerformanceJobOptions{}, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			waitAnalysisWindow(t, s)
+			run, err := s.CurrentAnalysisRun(context.Background())
+			if err != errAnalysisRunPersistence || run.Status != AnalysisRunInterrupted || calls.Load() != 1 {
+				t.Fatalf("fault run=%+v err=%v calls=%d", run, err, calls.Load())
+			}
+			if _, err := s.StartAnalyzeAll(context.Background(), AnalyzeAllOptions{}, false); err != errAnalysisRunPersistence {
+				t.Fatalf("fault bypass=%v", err)
+			}
+			fail.Store(false)
+			restored, err := New(scopedTestConfig(server.URL), s.manager)
+			if err != nil {
+				t.Fatal(err)
+			}
+			restored.runtimes = s.runtimes
+			recovered, err := restored.CurrentAnalysisRun(context.Background())
+			if err != nil || recovered.Status != AnalysisRunInterrupted {
+				t.Fatalf("restored=%+v err=%v", recovered, err)
+			}
+			if _, err := restored.controlCompatibilityRun(context.Background(), stage, AnalysisRunResume, recovered.Identity.ID, false); err != nil {
+				t.Fatal(err)
+			}
+			done := completedAnalysisRun(t, restored)
+			j := 0
+			if stage == AnalysisStagePerformance {
+				j = 1
+			}
+			if done.Files[0].Stages[j].Attempts != 1 || !done.Files[0].Stages[j].Cached || calls.Load() != 1 {
+				t.Fatalf("recovery reset accounting: %+v calls=%d", done, calls.Load())
+			}
+			if _, err := os.Stat(filepath.Join(root, analysisRunRelativePath)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func compatibilityTestBudget(stage AnalysisStage) time.Duration {
+	if stage == AnalysisStagePerformance {
+		return 30 * time.Second
+	}
+	return 0
+}
+
+func TestAnalysisCompatibilityPerformanceBudgetIsCumulativeAndPrecise(t *testing.T) {
+	server, calls, started, release := analysisBlockingServer(t)
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	_, err := s.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 1, RunBudget: 100 * time.Millisecond}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "bounded performance request")
+	paused := completedAnalysisRun(t, s)
+	release()
+	if paused.CompatibilityElapsed != 100*time.Millisecond || paused.Status != AnalysisRunPaused || calls.Load() != 1 {
+		t.Fatalf("budget run=%+v calls=%d", paused, calls.Load())
+	}
+	if _, err := s.ResumePerformanceJob(context.Background(), paused.Identity.ID, false); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("exhausted resume=%v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatal("exhausted budget dispatched")
+	}
+}
+
+func TestAnalysisRunSectionReadsPreserveCategoriesTriageAndDoNotDispatch(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var request llm.ChatRequest
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		reply := `{"findings":[]}`
+		if strings.HasPrefix(request.Messages[0].Content, "You summarize") {
+			reply = `{"purpose":"Explains this file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"high","summary":"Error handling needs review."},{"category":"performance","severity":"low","summary":"Repeated work needs review."},{"category":"security","severity":"medium","summary":"Input trust needs review."}],"suggestions":[],"symbol_explanations":{}}`
+		}
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: reply}}}})
+	}))
+	defer server.Close()
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	run := completedAnalysisRun(t, s)
+	findings, err := s.ListFindings(FindingFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 3 {
+		t.Fatalf("semantic fixtures=%+v", findings)
+	}
+	if err := s.UpdateFindingStatus(run.Identity.ProjectRevision, findings[0].ID, project.FindingStatusDismissed); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := os.ReadFile(filepath.Join(root, analysisRunRelativePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, category := range []project.FindingCategory{project.FindingCategoryBugs, project.FindingCategoryPerformance, project.FindingCategorySecurity} {
+		result, err := s.ReadAnalysisSection(context.Background(), run.Identity, category, "main.go")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result.Semantic) != 1 || result.Semantic[0].Category != category || result.Progress.FindingCount == nil || *result.Progress.FindingCount != 1 {
+			t.Fatalf("section=%+v", result)
+		}
+		if result.Semantic[0].ID == findings[0].ID && result.Semantic[0].Status != project.FindingStatusDismissed {
+			t.Fatal("triage lost")
+		}
+		if category != project.FindingCategoryPerformance && len(result.Performance) != 0 || category != project.FindingCategorySecurity && len(result.Security) != 0 {
+			t.Fatal("producer crossed sections")
+		}
+		if category == project.FindingCategorySecurity && len(result.Security) != 2 {
+			t.Fatalf("lost typed Security reports: %+v", result)
+		}
+	}
+	changed := run.Identity
+	changed.Generation = "old"
+	if _, err := s.ReadAnalysisSection(context.Background(), changed, project.FindingCategoryBugs, ""); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("old generation=%v", err)
+	}
+	if _, err := s.ReadAnalysisSection(context.Background(), run.Identity, project.FindingCategoryBugs, "missing.go"); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("uncaptured file=%v", err)
+	}
+	after, _ := os.ReadFile(filepath.Join(root, analysisRunRelativePath))
+	if string(after) != string(metadata) || calls.Load() != 3 {
+		t.Fatalf("read mutated progress or dispatched: calls=%d", calls.Load())
 	}
 }

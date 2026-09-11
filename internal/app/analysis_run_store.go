@@ -104,10 +104,21 @@ func (s *Service) restoreAnalysisRunLocked() error {
 	if c.cancel != nil {
 		c.cancel()
 	}
+	if c.fault != nil && c.run != nil {
+		if c.detached == nil {
+			c.detached = make(map[string]analysisRunRecovery)
+		}
+		c.detached[c.root] = analysisRunRecovery{run: cloneAnalysisRun(c.run), fault: c.fault}
+	}
 	c.run = nil
 	c.fault = nil
 	c.root = root
 	c.windowStart = time.Time{}
+	if retained, ok := c.detached[root]; ok {
+		c.run, c.fault = retained.run, retained.fault
+		delete(c.detached, root)
+		return c.fault
+	}
 	run, err := loadAnalysisRun(root)
 	if err != nil {
 		return err
@@ -116,6 +127,7 @@ func (s *Service) restoreAnalysisRunLocked() error {
 	if run == nil {
 		return nil
 	}
+	recoverAnalysisCompatibilityBudget(run, time.Now())
 	switch run.Status {
 	case AnalysisRunQueued, AnalysisRunRunning, AnalysisRunPausing:
 		run.Status = AnalysisRunInterrupted
@@ -128,6 +140,23 @@ func (s *Service) restoreAnalysisRunLocked() error {
 		return s.saveAnalysisRunLocked(false)
 	}
 	return nil
+}
+
+// A legacy Performance budget spans resumes. A process loss cannot establish
+// when its active window stopped, so charge the unobserved interval conservatively
+// up to the captured total budget, just as the old request-start ledger did.
+func recoverAnalysisCompatibilityBudget(run *AnalysisRun, now time.Time) {
+	if run.Plan.CompatibilityStage != AnalysisStagePerformance {
+		return
+	}
+	switch run.Status {
+	case AnalysisRunQueued, AnalysisRunRunning, AnalysisRunPausing, AnalysisRunCanceling:
+		remaining := run.Plan.CompatibilityBudget - run.CompatibilityElapsed
+		charged := min(remaining, max(time.Duration(0), now.Sub(run.UpdatedAt)))
+		run.CompatibilityElapsed += charged
+		run.ElapsedSeconds = int64(run.CompatibilityElapsed / time.Second)
+		run.WindowElapsedSeconds = min(int64(run.Plan.Limits.BudgetSeconds), run.WindowElapsedSeconds+int64(charged/time.Second))
+	}
 }
 
 func (s *Service) saveAnalysisRunLocked(recoverFault bool) error {
@@ -180,7 +209,7 @@ func analysisMetadataPath(value string) bool {
 
 func analysisMetadataReason(value string) bool {
 	switch value {
-	case "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
+	case "Outside this compatibility queue.", "Not requested by this compatibility action.", "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
 		"Passive security rules require a Go source file.", "The model for this stage is not configured.",
 		"Analysis stage could not complete.", "The stage needs an additional attempt allowance.", "The file is not eligible for this source analysis.",
 		"The report contains incomplete evidence; review its details.", "The model request or response failed. Other analysis results remain available.",
@@ -196,6 +225,9 @@ func analysisMetadataReason(value string) bool {
 func validateStoredAnalysisRun(run *AnalysisRun) error {
 	invalid := func() error { return errAnalysisRunCorrupt }
 	if run == nil || run.SchemaVersion != AnalysisRunSchemaVersion || run.Identity.Validate() != nil || !run.Status.Valid() || run.Plan.SchemaVersion != AnalysisRunSchemaVersion || run.Plan.Scope != AnalysisRunScopeProject || run.Plan.Identity != run.Identity.AnalysisQueueIdentity || run.Plan.Limits.Validate() != nil || run.Plan.PreviewID == "" || !analysisMetadataReason(run.Reason) {
+		return invalid()
+	}
+	if !validAnalysisCompatibility(run) {
 		return invalid()
 	}
 	queue, err := analysisQueueFingerprint(&run.Plan)

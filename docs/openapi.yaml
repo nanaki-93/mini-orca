@@ -21,36 +21,70 @@ tags:
   - name: Security
   - name: Chat
   - name: Drafts
-x-unified-analysis-contract:
-  status: planned-not-registered
-  activation-task: ANA-05
-  description: Source-free whole-project preflight and run contracts. These operations are not live routes yet.
-  paths:
-    /api/projects/current/analysis/preview:
-      post:
-        requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisPreviewRequest'}}}}
-        responses:
-          '200': {description: Whole-project admission preview, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunPreview'}}}}
-    /api/projects/current/analysis/run:
-      get:
-        description: Read current progress with required project_id and project_revision query guards; never dispatch.
-        responses:
-          '200': {description: Current run, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
-      post:
-        requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunStartRequest'}}}}
-        responses:
-          '202': {description: Durably admitted run, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
-    /api/projects/current/analysis/run/control:
-      post:
-        requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunControlRequest'}}}}
-        responses:
-          '200': {description: Updated control state, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
-    /api/projects/current/analysis/results:
-      get:
-        description: Require all AnalysisRunIdentity fields and category as query guards; optional path only filters this read view.
-        responses:
-          '200': {description: Categorized producer evidence, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisSectionResults'}}}}
 paths:
+  /api/projects/current/analysis/preview:
+    post:
+      tags: [Projects]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisPreviewRequest'}}}}
+      responses:
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '200': {description: Whole-project admission preview, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunPreview'}}}}
+  /api/projects/current/analysis/run:
+    get:
+      tags: [Projects]
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+        - {in: query, name: project_revision, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+      description: Read current progress with required project_id and project_revision query guards; never dispatch.
+      responses:
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '204': {description: No saved run for this project}
+        '200': {description: Current run, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
+    post:
+      tags: [Projects]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunStartRequest'}}}}
+      responses:
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '202': {description: Durably admitted run, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
+  /api/projects/current/analysis/run/control:
+    post:
+      tags: [Projects]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunControlRequest'}}}}
+      responses:
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '200': {description: Updated control state, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
+  /api/projects/current/analysis/results:
+    get:
+      tags: [Projects]
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+        - {in: query, name: project_revision, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+        - {in: query, name: policy_fingerprint, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+        - {in: query, name: provider_fingerprint, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+        - {in: query, name: queue_id, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+        - {in: query, name: id, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+        - {in: query, name: generation, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+        - {in: query, name: category, required: true, schema: {$ref: '#/components/schemas/FindingCategory'}}
+        - {in: query, name: path, required: false, schema: {type: string, minLength: 1, maxLength: 4096}, description: Canonical project-relative path already captured by this run.}
+      description: Require all AnalysisRunIdentity fields and category as query guards; optional path only filters this read view.
+      responses:
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '200': {description: Categorized producer evidence, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisSectionResults'}}}}
   /health:
     get:
       tags: [Daemon]
@@ -740,6 +774,7 @@ components:
       type: object
       required: [project_id, project_revision, metrics, analysis, analysis_coverage, finding_counts]
       properties:
+        analysis_run: {$ref: '#/components/schemas/AnalysisRun'}
         project_id: {type: string}
         project_revision: {type: string}
         metrics: {$ref: '#/components/schemas/ProjectMetrics'}
@@ -1089,7 +1124,7 @@ components:
       properties:
         project_id: {type: string}
         project_revision: {type: string}
-        status: {type: string, enum: [running, paused, canceled, completed, stale]}
+        status: {type: string, enum: [running, paused, interrupted, canceled, completed, stale]}
         max_files: {type: integer}
         max_retries: {type: integer}
         files:
@@ -1127,7 +1162,7 @@ components:
         root: {type: string, description: Canonical local project root captured by the job.}
         policy_fingerprint: {type: string}
         queue_id: {type: string}
-        status: {type: string, enum: [running, paused, canceled, completed, stale]}
+        status: {type: string, enum: [running, paused, interrupted, canceled, completed, stale]}
         max_files: {type: integer}
         run_budget: {type: integer, format: int64, description: Nanoseconds of provider execution budget.}
         elapsed: {type: integer, format: int64, description: Nanoseconds of recorded provider execution time.}
@@ -1166,7 +1201,7 @@ components:
         project_id: {type: string}
         project_revision: {type: string}
         queue_id: {type: string}
-        status: {type: string, enum: [running, paused, canceled, completed, stale]}
+        status: {type: string, enum: [running, paused, interrupted, canceled, completed, stale]}
         counts: {type: object, additionalProperties: {type: integer}}
         categories: {type: object, additionalProperties: {type: integer}}
         paths: {type: object, additionalProperties: {type: string}, description: Source-free finding ID to project-relative path mapping.}
@@ -1630,6 +1665,8 @@ components:
       type: object
       required: [schema_version, preview_id, identity, scope, refresh, limits, files, excluded, providers, expected_model_requests, max_model_requests, security_review_intent_required]
       properties:
+        compatibility_stage: {type: string, enum: [semantic, performance], description: Present only for a bounded legacy adapter run.}
+        compatibility_budget_nanoseconds: {type: integer, minimum: 1, maximum: 3600000000000, description: Total active-time budget retained by the legacy Performance adapter.}
         schema_version: {type: string, enum: ['1']}
         preview_id: {type: string, minLength: 1, description: Admission fingerprint including remaining work, cache dispositions and request bounds.}
         identity: {$ref: '#/components/schemas/AnalysisQueueIdentity'}
@@ -1712,6 +1749,7 @@ components:
       type: object
       required: [schema_version, identity, plan, status, files, sections, elapsed_seconds, window_elapsed_seconds, window_files_completed, created_at, updated_at]
       properties:
+        compatibility_elapsed_nanoseconds: {type: integer, minimum: 0, maximum: 3600000000000}
         schema_version: {type: string, enum: ['1']}
         identity: {$ref: '#/components/schemas/AnalysisRunIdentity'}
         plan: {$ref: '#/components/schemas/AnalysisRunPreview'}

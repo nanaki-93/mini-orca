@@ -392,7 +392,7 @@ func (h *ProjectHandler) StartAnalyzeAll(w http.ResponseWriter, r *http.Request)
 	if !ok || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
 		return
 	}
-	job, err := h.service.StartAnalyzeAll(r.Context(), app.AnalyzeAllOptions{MaxFiles: request.MaxFiles, MaxRetries: request.MaxRetries}, request.ConfirmRemoteProvider)
+	job, err := h.service.StartAnalyzeAll(r.Context(), app.AnalyzeAllOptions{ProjectRevision: request.ProjectRevision, MaxFiles: request.MaxFiles, MaxRetries: request.MaxRetries}, request.ConfirmRemoteProvider)
 	if err != nil {
 		writeProjectError(w, "start analyze-all failed", err)
 		return
@@ -405,7 +405,7 @@ func (h *ProjectHandler) PauseAnalyzeAll(w http.ResponseWriter, r *http.Request)
 	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
 		return
 	}
-	job, err := h.service.PauseAnalyzeAll()
+	job, err := h.service.PauseAnalyzeAll(r.URL.Query().Get("project_revision"))
 	if err != nil {
 		writeProjectError(w, "pause analyze-all failed", err)
 		return
@@ -419,7 +419,7 @@ func (h *ProjectHandler) ResumeAnalyzeAll(w http.ResponseWriter, r *http.Request
 	if !ok || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
 		return
 	}
-	job, err := h.service.ResumeAnalyzeAll(r.Context(), request.ConfirmRemoteProvider)
+	job, err := h.service.ResumeAnalyzeAll(r.Context(), request.ConfirmRemoteProvider, request.ProjectRevision)
 	if err != nil {
 		writeProjectError(w, "resume analyze-all failed", err)
 		return
@@ -432,7 +432,7 @@ func (h *ProjectHandler) CancelAnalyzeAll(w http.ResponseWriter, r *http.Request
 	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
 		return
 	}
-	job, err := h.service.CancelAnalyzeAll()
+	job, err := h.service.CancelAnalyzeAll(r.URL.Query().Get("project_revision"))
 	if err != nil {
 		writeProjectError(w, "cancel analyze-all failed", err)
 		return
@@ -510,7 +510,7 @@ func (h *ProjectHandler) PausePerformanceJob(w http.ResponseWriter, r *http.Requ
 		writeProjectError(w, "pause performance job failed", project.ErrRevisionConflict)
 		return
 	}
-	job, err = h.service.PausePerformanceJob()
+	job, err = h.service.PausePerformanceJob(r.URL.Query().Get("expected_job_id"), r.URL.Query().Get("project_revision"))
 	if err != nil {
 		writeProjectError(w, "pause performance job failed", err)
 		return
@@ -527,7 +527,7 @@ func (h *ProjectHandler) ResumePerformanceJob(w http.ResponseWriter, r *http.Req
 		api.WriteRequestError(w, errors.New("expected_job_id is required"), "invalid performance resume request", "Provide the paused job ID.")
 		return
 	}
-	job, err := h.service.ResumePerformanceJob(r.Context(), request.ExpectedJobID, request.ConfirmRemoteProvider)
+	job, err := h.service.ResumePerformanceJob(r.Context(), request.ExpectedJobID, request.ConfirmRemoteProvider, request.ProjectRevision)
 	if err != nil {
 		writeProjectError(w, "resume performance job failed", err)
 		return
@@ -544,7 +544,7 @@ func (h *ProjectHandler) CancelPerformanceJob(w http.ResponseWriter, r *http.Req
 		writeProjectError(w, "cancel performance job failed", project.ErrRevisionConflict)
 		return
 	}
-	job, err = h.service.CancelPerformanceJob()
+	job, err = h.service.CancelPerformanceJob(r.URL.Query().Get("expected_job_id"), r.URL.Query().Get("project_revision"))
 	if err != nil {
 		writeProjectError(w, "cancel performance job failed", err)
 		return
@@ -694,7 +694,7 @@ func (h *ProjectHandler) decodePerformanceJobRequest(w http.ResponseWriter, r *h
 }
 
 func performanceOptions(request performanceJobRequest) app.PerformanceJobOptions {
-	return app.PerformanceJobOptions{MaxFiles: request.MaxFiles, RunBudget: time.Duration(request.RunBudgetSeconds) * time.Second, QueueID: request.QueueID, PolicyFingerprint: request.PolicyFingerprint}
+	return app.PerformanceJobOptions{ProjectRevision: request.ProjectRevision, MaxFiles: request.MaxFiles, RunBudget: time.Duration(request.RunBudgetSeconds) * time.Second, QueueID: request.QueueID, PolicyFingerprint: request.PolicyFingerprint}
 }
 
 func queryPositiveInt(r *http.Request, name string) int {
@@ -705,6 +705,10 @@ func queryPositiveInt(r *http.Request, name string) int {
 
 func writeProjectError(w http.ResponseWriter, action string, err error) {
 	switch {
+	case errors.Is(err, app.ErrAnalysisProgressUnavailable):
+		api.WriteAppError(w, api.Internal(action, "Analysis progress could not be saved. Read the retained overview, then resume or cancel explicitly.", err))
+	case errors.Is(err, app.ErrAnalysisLegacyMigration):
+		api.WriteAppError(w, api.Conflict(action, "This saved legacy job cannot resume. Its progress is retained; review it and explicitly start a new job or use unified analysis preview/start.", err))
 	case errors.Is(err, project.ErrNoActiveProject):
 		api.WriteAppError(w, api.NotFound(action, "Import a project before using this endpoint.", err))
 	case errors.Is(err, project.ErrExcludedFile):

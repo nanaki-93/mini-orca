@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -72,4 +73,16 @@ func TestPreviewOperationsNeverMutateSelectedSource(t *testing.T) {
 		t.Fatalf("check draft = %+v, %v", checks, err)
 	}
 	assertSourceUnchanged()
+}
+
+func TestAnalysisCompatibilityHasOnlyOneSchedulingOwner(t *testing.T) {
+	fields := reflect.TypeOf(Service{})
+	for _, name := range []string{"analysisAll", "performance", "writeAnalyzeAllJob", "writePerformanceJob"} {
+		if _, exists := fields.FieldByName(name); exists {
+			t.Fatalf("obsolete scheduling owner retained: %s", name)
+		}
+	}
+	if _, exists := fields.FieldByName("analysisRun"); !exists {
+		t.Fatal("shared owner missing")
+	}
 }
