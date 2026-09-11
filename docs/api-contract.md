@@ -57,6 +57,11 @@ untrusted networks.
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
 | GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, coverage, and finding counts for `project_revision`. |
+| POST | `/api/projects/current/analysis/preview` | Whole-project, read-only preflight with strict project/revision guards. |
+| POST | `/api/projects/current/analysis/run` | Durably admit the previewed run with fresh provider and Security intent. |
+| GET | `/api/projects/current/analysis/run` | Read progress with `project_id` and `project_revision`; 204 when absent. |
+| POST | `/api/projects/current/analysis/run/control` | Pause, resume or cancel the exact run generation. |
+| GET | `/api/projects/current/analysis/results` | Read Bugs, Performance or Security evidence using full run identity; optional captured-file filter. |
 | GET | `/api/projects/current/findings` | List source-free verified findings and AI suggestions with provenance, filters, and freshness. |
 | PATCH | `/api/projects/current/findings/{findingID}` | Record an explicit user triage status for one finding. |
 | GET | `/api/projects/current/scan` | Read an explicitly started Go scan for `project_revision` from a temporary copied workspace. |
@@ -221,13 +226,16 @@ error; it does not send the prompt, request body, or authorization header to a
 redirect target, and it does not retry a rejected redirect. Update the configured
 provider URL explicitly when its endpoint changes.
 
-## Unified analysis contract under implementation (ANA-01)
+## Unified analysis contract
 
-The following contract is prepared for ANA-03–05. These endpoints are **not yet
-registered**. The live route table above and the OpenAPI `paths` section remain
-the shipped API. Proposed operations are recorded in the OpenAPI vendor extension
-`x-unified-analysis-contract`; its component schemas are the implementation target.
-The daemon continues using its existing jobs until ANA-05 replaces their owners.
+These routes are registered through the same loopback/origin policy as the other
+local APIs. The shared controller owns unified and compatibility execution.
+All bodies reject unknown fields and trailing JSON. Query guards must each occur
+once, use only documented names and contain 1–4096 characters. Missing/invalid
+request fields return 400, unknown projects 404, identity/lifecycle conflicts 409,
+and progress storage failures 500 with sanitized recovery guidance. No saved run
+returns 204. Result `path` must be a canonical path captured by this run; an
+unknown file yields 409. Filtering leaves the run's project coverage unchanged.
 
 - `POST /api/projects/current/analysis/preview`: accepts `AnalysisPreviewRequest`;
   returns `AnalysisRunPreview` without provider calls, subprocesses or source writes.
@@ -285,6 +293,48 @@ or authorize a changed provider/project. Pause/cancel do not carry confirmations
 Scope-specific existing consent rules remain enforced before each provider dispatch.
 The run never invokes tests, vet, benchmarks, exploits or suggested shell commands.
 
+### Legacy job migration (ANA-05)
+
+Analyze-all and Performance routes use the same durable analysis controller.
+They capture only their original semantic or performance stage and at most their
+existing `max_files` limit; they never authorize Security or another model scope.
+Their projections keep the original job/file response shapes and bounded queue
+IDs. New metadata lives in `.mini-orca/analysis/run.json`; old session job files
+and historical producer reports are retained, not rewritten. Unified previews
+show `compatibility_stage` when resuming one of these bounded jobs, making its
+limited coverage explicit. An ordinary unified start always captures every stage
+and the whole project.
+
+Legacy responses project queued/running to running, pausing/paused to paused,
+canceling/canceled to canceled, and terminal stage outcomes to completed with
+per-file errors. `interrupted` is an additive job state for recoverable shared
+progress and saved pre-migration jobs. Provider retries are now charged as actual
+transport attempts, bounded by the smaller effective-provider and job allowance;
+there is no additional semantic parser retry loop. Performance retains its total
+active-time budget across resumes (including sub-second accounting), rather than
+receiving a new window allowance. After process loss, an active job conservatively
+charges the interval since its last durable progress update, capped at that total
+budget; a saved paused job does not spend its idle time. An exhausted legacy budget
+requires a new start.
+
+Pre-migration jobs lack captured provider fingerprints and semantic source hashes,
+and their attempt counters represented file calls rather than transport requests.
+They therefore cannot safely resume under the new authority contract. Reads retain
+all original file progress/attempts and present formerly running/paused jobs as
+interrupted, without dispatch or writes. Legacy controls on those snapshots return
+409 with a migration message: review the retained progress and explicitly start a
+new job, or use unified preview/start. A new run has a new identity and accounting;
+it does not reinterpret or reset the historical job. Saved reports remain available
+through the existing report endpoints and matching caches can be reused.
+
+The single owner rejects overlapping kinds, retains a fault until explicit durable
+recovery, and requires the old worker to finish cancellation before replacement.
+A project switch may briefly return busy until that worker exits; stale controls
+cannot affect a replacement. Legacy clients should move to the unified identity
+and preview/control routes to distinguish every lifecycle state and use fresh
+provider-specific consent. Legacy remote-confirmation booleans remain limited to
+their single provider scope.
+
 ### Progress and partial evidence
 
 Run and section states are `queued`, `running`, `pausing`, `paused`, `canceling`,
@@ -332,11 +382,11 @@ or history rewrite occurs. Such evidence is available as previous analysis and
 under `unclassified`, excluded from fresh section counts. General suggestions
 remain file explanations and are not findings in any result category.
 
-ANA-02 will require categories in new semantic model output and change its prompt
-identity. The existing prompt-sensitive cache lookup then returns older reports
-as stale while preserving their full explanations and risks. ANA-01 does not
-pretend the old model prompt already supplies classification. Unknown nonempty
-categories are rejected on writes; absence remains accepted for legacy producers.
+New semantic model output requires explicit categories and uses the updated prompt
+identity introduced by ANA-02. Prompt-sensitive cache lookup returns older reports
+as stale while preserving their full explanations and risks. Historical output is
+not treated as classified. Unknown nonempty categories are rejected on writes;
+absence remains accepted for legacy producers.
 Finding IDs intentionally exclude category as well as revision/hash, so adding
 or correcting a category preserves existing dismissed/fixed triage for unchanged
 evidence. Typed Security triage/verification and Performance hypotheses are retained;

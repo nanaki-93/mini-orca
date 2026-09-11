@@ -65,6 +65,14 @@ func (s *Service) PreviewAnalysisRun(ctx context.Context, request AnalysisPrevie
 }
 
 func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPreviewRequest) (*AnalysisRunPreview, error) {
+	if request.ResumeRun != nil {
+		run := s.analysisRun.run
+		if run == nil || run.Identity != *request.ResumeRun {
+			return nil, project.ErrRevisionConflict
+		}
+		request.compatibilityStage = run.Plan.CompatibilityStage
+		request.compatibilityBudget = run.Plan.CompatibilityBudget
+	}
 	analysis, index, policy, err := s.performanceInputs()
 	if err != nil {
 		return nil, err
@@ -80,7 +88,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if err != nil {
 		return nil, err
 	}
-	preview := &AnalysisRunPreview{SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
+	preview := &AnalysisRunPreview{CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
 		Identity: AnalysisQueueIdentity{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, PolicyFingerprint: policy.Version(), ProviderFingerprint: fingerprint},
 		Files:    []AnalysisPlannedFile{}, Excluded: []AnalysisExcludedFile{}, Providers: providers}
 	files := append([]project.IndexFile(nil), index.Files...)
@@ -174,6 +182,11 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 		}
 		preview.Files = append(preview.Files, planned)
 	}
+	if request.compatibilityStage != "" {
+		if err := s.scopeCompatibilityPreview(preview, request.ResumeRun); err != nil {
+			return nil, err
+		}
+	}
 	sort.Slice(preview.Excluded, func(i, j int) bool { return preview.Excluded[i].Path < preview.Excluded[j].Path })
 	preview.Identity.QueueID, err = analysisQueueFingerprint(preview)
 	if err != nil {
@@ -254,6 +267,7 @@ func (s *Service) validateAnalysisQueue(ctx context.Context, root string, plan *
 	if err != nil {
 		return err
 	}
+	providers = compatibilityProviders(providers, plan.CompatibilityStage)
 	fingerprint, err := analysisFingerprint(providers)
 	if err != nil {
 		return err

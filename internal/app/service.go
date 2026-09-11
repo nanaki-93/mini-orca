@@ -58,15 +58,11 @@ type Service struct {
 	retryBase                       time.Duration
 	retryMax                        time.Duration
 	jobLifecycleMu                  sync.Mutex
-	analysisAll                     *analysisAllController
 	analysisRun                     *analysisRunController
 	writeAnalysisRun                func(string, []byte, os.FileMode) error
-	writeAnalyzeAllJob              func(string, []byte, os.FileMode) error
-	writePerformanceJob             func(string, []byte, os.FileMode) error
 	goScan                          *goScanController
 	drafts                          *draftStore
 	chatSessions                    *chatSessionStore
-	performance                     *performanceController
 	executionTrust                  *executionTrustStore
 	benchmarkRunner                 goBenchmarkRunner
 	buildDeclarationContext         func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
@@ -115,12 +111,10 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		focusedCheckTimeout:     configuredDuration(cfg.Timeouts.FocusedCheckSeconds, time.Minute),
 		retryBase:               time.Duration(backoffBase) * time.Millisecond,
 		retryMax:                time.Duration(backoffMax) * time.Millisecond,
-		analysisAll:             newAnalysisAllController(),
 		analysisRun:             &analysisRunController{},
 		goScan:                  newGoScanController(),
 		drafts:                  newDraftStore(),
 		chatSessions:            newChatSessionStore(),
-		performance:             newPerformanceController(),
 		executionTrust:          newExecutionTrustStore(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 		loadSecurityFileReport:  project.LoadSecurityFileReport,

@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -204,5 +206,107 @@ func TestAnalysisRunStoreResumeReusesPublishedEvidenceWithNoAttemptsRemaining(t 
 	}
 	if _, err := os.Stat(filepath.Join(root, analysisRunRelativePath)); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAnalysisRunDetachmentRetainsFailureOnlyForCapturedProject(t *testing.T) {
+	server, _, started, release := analysisBlockingServer(t)
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	root := s.manager.Root()
+	original, _ := s.manager.Analysis()
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "request before detachment")
+	s.analysisRun.mu.Lock()
+	s.writeAnalysisRun = func(path string, data []byte, mode os.FileMode) error {
+		var run AnalysisRun
+		_ = json.Unmarshal(data, &run)
+		if path == filepath.Join(root, analysisRunRelativePath) && run.Status == AnalysisRunStale {
+			return errors.New("private stale write failure")
+		}
+		return storage.WriteFile(path, data, mode)
+	}
+	s.analysisRun.mu.Unlock()
+	next := t.TempDir()
+	if err := os.WriteFile(filepath.Join(next, "next.go"), []byte("package next\nfunc Next() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ActivateProject(next, &project.Analysis{Name: "next", Path: next}); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	waitAnalysisWindow(t, s)
+	if run, err := s.CurrentAnalysisRun(context.Background()); err != nil || run != nil {
+		t.Fatalf("new project inherited fault: %+v %v", run, err)
+	}
+	if err := s.ActivateProject(root, original); err != nil {
+		t.Fatal(err)
+	}
+	retained, err := s.CurrentAnalysisRun(context.Background())
+	if err != errAnalysisRunPersistence || retained == nil || retained.Status != AnalysisRunStale {
+		t.Fatalf("lost detached fault: %+v %v", retained, err)
+	}
+	s.writeAnalysisRun = nil
+	if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: retained.Identity, Action: AnalysisRunCancel}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAnalysisRunStorePreservesPerformanceBudgetAcrossProcessLoss(t *testing.T) {
+	server, calls, started, release := analysisBlockingServer(t)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	if _, err := s.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 1, RunBudget: 30 * time.Second}, false); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "performance request before restart")
+	if _, err := s.PausePerformanceJob("", ""); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	paused := completedAnalysisRun(t, s)
+	for _, state := range []AnalysisRunStatus{AnalysisRunRunning, AnalysisRunPausing, AnalysisRunCanceling, AnalysisRunPaused} {
+		t.Run(string(state), func(t *testing.T) {
+			saved := cloneAnalysisRun(paused)
+			saved.Status = state
+			saved.CreatedAt = time.Now().Add(-2 * time.Minute).UTC()
+			saved.UpdatedAt = saved.CreatedAt.Add(time.Minute)
+			saved.CompatibilityElapsed = 100 * time.Millisecond
+			saved.ElapsedSeconds, saved.WindowElapsedSeconds = 0, 0
+			refreshAnalysisSections(saved)
+			data, err := json.Marshal(saved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := storage.WriteFile(filepath.Join(root, analysisRunRelativePath), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			restored, err := New(scopedTestConfig(server.URL), s.manager)
+			if err != nil {
+				t.Fatal(err)
+			}
+			restored.runtimes = s.runtimes
+			current, err := restored.CurrentAnalysisRun(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := 30 * time.Second
+			if state == AnalysisRunPaused {
+				want = 100 * time.Millisecond
+			}
+			if current.CompatibilityElapsed != want || current.Files[0].Stages[1].Attempts != paused.Files[0].Stages[1].Attempts || restored.analysisRun.done != nil || calls.Load() != 1 {
+				t.Fatalf("recovery=%+v calls=%d", current, calls.Load())
+			}
+			if state == AnalysisRunRunning || state == AnalysisRunPausing {
+				if _, err := restored.ResumePerformanceJob(context.Background(), current.Identity.ID, false); !errors.Is(err, project.ErrRevisionConflict) {
+					t.Fatalf("spent budget resumed: %v", err)
+				}
+			}
+			persisted, err := loadAnalysisRun(root)
+			if err != nil || persisted.CompatibilityElapsed != want {
+				t.Fatalf("budget not durable: %+v %v", persisted, err)
+			}
+		})
 	}
 }

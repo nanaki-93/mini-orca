@@ -194,7 +194,7 @@ Extra High** (`gpt-6-astra`, `xhigh`). The executable cards now live in
 
 Scheduler: **Mini-Orca UX implementation**, every **20 minutes**, attached to this
 Codex task; automation ID **mini-orca-ux-implementation**, status **Active**.
-The user authorized ANA-04's additional recovery correction and scheduler resumption.
+The user authorized ANA-05 repair; the existing ordered scheduler resumes after acceptance.
 The app accepted the task model override `gpt-6-astra` / `xhigh`; this heartbeat
 uses the task's settings rather than a separate scheduler model field. One card per wake,
 strictly in order, with required checks and diff review before acceptance.
@@ -206,7 +206,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 8/17. **Active task/writer:** none. **Next:** ANA-05.
+**Accepted:** 9/17. **Active task/writer:** none. **Next:** ANA-06.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -218,7 +218,7 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 6 | [ANA-02](docs/tasks.md#task-ana-02--produce-and-validate-explicit-semantic-categories) | Produce and validate explicit semantic categories | Complete; locally committed |
 | 7 | [ANA-03](docs/tasks.md#task-ana-03--compose-the-per-file-analysis-stages) | Compose the per-file analysis stages | Complete; locally committed |
 | 8 | [ANA-04](docs/tasks.md#task-ana-04--implement-one-durable-bounded-run-lifecycle) | Implement one durable, bounded run lifecycle | Complete; locally committed |
-| 9 | [ANA-05](docs/tasks.md#task-ana-05--migrate-existing-jobs-and-expose-the-unified-api) | Migrate existing jobs and expose the unified API | Queued |
+| 9 | [ANA-05](docs/tasks.md#task-ana-05--migrate-existing-jobs-and-expose-the-unified-api) | Migrate existing jobs and expose the unified API | Complete; locally committed |
 | 10 | [ANA-06](docs/tasks.md#task-ana-06--give-the-desktop-one-analysis-owner) | Give the desktop one analysis owner | Queued |
 | 11 | [ANA-07](docs/tasks.md#task-ana-07--separate-run-progress-from-the-three-result-pages) | Separate run progress from the three result pages | Queued |
 | 12 | [NAV-01](docs/tasks.md#task-nav-01--distinguish-run-results-and-editing-in-the-sidebar) | Distinguish run, results and editing in the sidebar | Queued |
@@ -227,6 +227,18 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 15 | [BOTTOM-01](docs/tasks.md#task-bottom-01--preserve-unique-diagnostics-in-their-owning-workflows) | Preserve unique diagnostics in their owning workflows | Queued |
 | 16 | [BOTTOM-02](docs/tasks.md#task-bottom-02--replace-the-bottom-tools-with-terminal-only) | Replace the bottom tools with Terminal only | Queued |
 | 17 | [VERIFY-01](docs/tasks.md#task-verify-01--validate-the-complete-interaction-and-document-support) | Validate the complete interaction and document support | Queued |
+
+**Accepted ANA-05 — 2026-09-11:** Analyze-all and Performance now use one durable
+analysis owner, with strict unified preview/start/read/control/result routes.
+The legacy adapters preserve single-purpose scope and bounded queues; Performance
+retains its total active-time budget across resumes and conservatively accounts
+for interrupted work after restart. Old job metadata remains readable without
+dispatch; its incomplete identity/counter contract requires an explicit new start.
+The worker-wait cleanup fix and restart-budget regression passed the prescribed
+race suite, full Go tests, full race tests, formatting and vet. Four corrections
+in total are recorded, including the user-authorized repair continuation. All ten
+unrelated desktop files remain unchanged. The local commit was verified and the
+scheduler resumed; ANA-06 is next. No push or release is authorized.
 
 Task bodies have moved to `docs/tasks.md` to keep one implementation specification.
 The completed cleanup task cards are preserved in
