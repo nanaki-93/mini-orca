@@ -24,6 +24,7 @@ internal enum class PaletteMode {
 }
 
 private enum class ComposerFocusTarget {
+  Name,
   Chat,
   Draft
 }
@@ -53,8 +54,9 @@ private sealed interface PendingDraftDiscard {
 
   data class Create(
       override val currentDraft: CurrentEditIdentity,
+      val kind: DeclarationCreationKind,
   ) : PendingDraftDiscard {
-    override val nextLabel: String = "create a declaration"
+    override val nextLabel: String = "create a ${kind.noun}"
   }
 }
 
@@ -80,6 +82,7 @@ internal fun MiniOrcaApp(
   var paletteQuery by remember { mutableStateOf("") }
   var showPalette by remember { mutableStateOf(false) }
   var chatMode by remember { mutableStateOf(ChatEditMode.ReplaceSymbol) }
+  var creationKind by remember { mutableStateOf(DeclarationCreationKind.Function) }
   var newChatSymbol by remember { mutableStateOf("") }
   var chatMessage by remember { mutableStateOf(TextFieldValue()) }
   var advancedConstraints by remember { mutableStateOf(TextFieldValue()) }
@@ -91,6 +94,7 @@ internal fun MiniOrcaApp(
   var pendingComposerFocus by remember { mutableStateOf<ComposerFocusTarget?>(null) }
   var pendingDraftDiscard by remember { mutableStateOf<PendingDraftDiscard?>(null) }
   val chatFocusRequester = remember { FocusRequester() }
+  val creationNameFocusRequester = remember { FocusRequester() }
   val draftFocusRequester = remember { FocusRequester() }
   val analyzeModel = workflow.model(ModelScope.Analyze)
   val bugModel = workflow.model(ModelScope.Bug)
@@ -202,18 +206,28 @@ internal fun MiniOrcaApp(
     else startReplaceEdit(request)
   }
 
-  fun startCreateDeclaration() {
+  fun startCreateDeclaration(kind: DeclarationCreationKind) {
     presenter.clearPreparedSuggestion()
     chatMode = ChatEditMode.CreateSymbol
+    creationKind = kind
     newChatSymbol = ""
     clearComposerInput()
-    focusComposerControl(ComposerFocusTarget.Chat)
+    presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
+    focusAssistantControl(ComposerFocusTarget.Name)
   }
 
-  fun requestCreateDeclaration() {
-    val currentDraft = currentEditIdentity(appState)?.takeIf { it.hasDraft }
-    if (currentDraft == null) startCreateDeclaration()
-    else pendingDraftDiscard = PendingDraftDiscard.Create(currentDraft)
+  fun requestCreateDeclaration(kind: DeclarationCreationKind) {
+    routeCreationRequest(workflow, kind, ::startCreateDeclaration) { pendingDraftDiscard = it }
+  }
+
+  fun sendComposerMessage() {
+    submitComposerMessage(
+        presenter,
+        chatMode,
+        creationKind,
+        newChatSymbol,
+        chatMessage.text,
+        advancedConstraints.text)
   }
 
   fun discardDraftAndContinue() {
@@ -226,7 +240,7 @@ internal fun MiniOrcaApp(
       is PendingDraftDiscard.Create -> {
         presenter.discardDraft()
         pendingDraftDiscard = null
-        startCreateDeclaration()
+        startCreateDeclaration(pending.kind)
       }
       null -> Unit
     }
@@ -310,6 +324,7 @@ internal fun MiniOrcaApp(
                 functionModel = workflow.model(ModelScope.Function),
                 functionRemoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Function),
                 declarationExplanation = workflow.declarationExplanation,
+                creationInProgress = workflow.creationInProgress,
             ),
         actions =
             ContextToolWindowActions(
@@ -323,6 +338,7 @@ internal fun MiniOrcaApp(
                 },
                 explainSelected = presenter::explainSelectedDeclaration,
                 cancelExplanation = presenter::cancelDeclarationExplanation,
+                createDeclaration = { requestCreateDeclaration(DeclarationCreationKind.Function) },
             ),
         modifier = modifier,
     )
@@ -345,6 +361,7 @@ internal fun MiniOrcaApp(
       val focusTarget = pendingComposerFocus
       LaunchedEffect(focusTarget, draftEditorVisible) {
         when (focusTarget) {
+          ComposerFocusTarget.Name -> creationNameFocusRequester.requestFocus()
           ComposerFocusTarget.Chat -> chatFocusRequester.requestFocus()
           ComposerFocusTarget.Draft -> if (draftEditorVisible) draftFocusRequester.requestFocus()
           null -> Unit
@@ -373,6 +390,8 @@ internal fun MiniOrcaApp(
                   selectedSymbol = appState.selectedSymbol,
                   targetValidation = targetValidation,
                   advancedConstraintsInput = advancedConstraints,
+                  creationKind = creationKind,
+                  creationNameFocus = creationNameFocusRequester,
               ),
           conversationActions =
               AssistantConversationActions(
@@ -382,12 +401,7 @@ internal fun MiniOrcaApp(
                     presenter.setProviderConfirmation(ModelScope.Function, it)
                   },
                   inspectContext = { presenter.inspectContext(contextAction) },
-                  send = {
-                    presenter.sendChatMessage(
-                        chatMode,
-                        newChatSymbol,
-                        functionChangeRequest(chatMessage.text, advancedConstraints.text))
-                  },
+                  send = ::sendComposerMessage,
                   cancel = presenter::cancelGeneration,
                   updateMessageValue = { chatMessage = it },
                   preparePreset = { preset ->
@@ -563,12 +577,8 @@ internal fun MiniOrcaApp(
               },
               validateDraft = presenter::validateEditableDraft,
               runDraftChecks = presenter::runDraftChecks,
-              generate = {
-                presenter.sendChatMessage(
-                    chatMode,
-                    newChatSymbol,
-                    functionChangeRequest(chatMessage.text, advancedConstraints.text))
-              },
+              generate = ::sendComposerMessage,
+              createDeclaration = { requestCreateDeclaration(DeclarationCreationKind.Function) },
               cancelGeneration = presenter::cancelGeneration,
               dismissContext = {
                 showContext = false
@@ -647,7 +657,8 @@ internal fun MiniOrcaApp(
                 presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
                 when (it) {
                   "refresh_file_analysis" -> presenter.analyzeSelected(true)
-                  "create_declaration" -> requestCreateDeclaration()
+                  "create_function" -> requestCreateDeclaration(DeclarationCreationKind.Function)
+                  "create_type" -> requestCreateDeclaration(DeclarationCreationKind.Type)
                   "open_performance" ->
                       presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Performance))
                   "open_security" ->
@@ -679,6 +690,43 @@ internal fun MiniOrcaApp(
         onCancel = { pendingImportPath = null },
     )
   }
+}
+
+private val DesktopWorkflowSnapshot.creationInProgress: Boolean
+  get() = generating || draftValidationInProgress
+
+private fun routeCreationRequest(
+    workflow: DesktopWorkflowSnapshot,
+    kind: DeclarationCreationKind,
+    start: (DeclarationCreationKind) -> Unit,
+    confirmDiscard: (PendingDraftDiscard.Create) -> Unit,
+) {
+  if (declarationCreationBlockedReason(workflow.state.selectedFile, workflow.creationInProgress) !=
+      null)
+      return
+  val currentDraft = currentEditIdentity(workflow.state)?.takeIf { it.hasDraft }
+  if (currentDraft == null) start(kind)
+  else confirmDiscard(PendingDraftDiscard.Create(currentDraft, kind))
+}
+
+private fun submitComposerMessage(
+    presenter: DesktopWorkflowPresenter,
+    mode: ChatEditMode,
+    kind: DeclarationCreationKind,
+    name: String,
+    behavior: String,
+    constraints: String,
+) {
+  val workflow = presenter.snapshot.value
+  if (mode == ChatEditMode.CreateSymbol &&
+      (declarationCreationBlockedReason(workflow.state.selectedFile, workflow.creationInProgress) !=
+          null || !hasFunctionChangeIntent(behavior)))
+      return
+  val request = functionChangeRequest(behavior, constraints)
+  presenter.sendChatMessage(
+      mode,
+      name,
+      if (mode == ChatEditMode.CreateSymbol) creationMessage(kind, name, request) else request)
 }
 
 private fun reviewToolWindowState(state: DesktopState) =

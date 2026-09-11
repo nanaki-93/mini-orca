@@ -45,26 +45,25 @@ internal fun RightToolWindowContainer(
 ) {
   var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
   var tabGroupHasFocus by remember { mutableStateOf(false) }
-  Column(
-      modifier
-          .fillMaxSize()
-          .onFocusChanged { tabGroupHasFocus = it.hasFocus }
-          .focusable()
-          .onPreviewKeyEvent { event ->
-            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-            val interaction =
-                tabGroupInteraction(
-                    RightToolWindow.entries.toList(), focusedToolWindow, tabGroupKey(event.key))
-                    ?: return@onPreviewKeyEvent false
-            focusedToolWindow = interaction.focused
-            interaction.activate?.let(onSelect)
-            true
-          }
-          .semantics {
-            contentDescription =
-                "Right tool windows. ${rightToolWindowLabel(activeToolWindow)} selected."
-          }) {
-        Row(Modifier.fillMaxWidth()) {
+  Column(modifier.fillMaxSize()) {
+    Row(
+        Modifier.fillMaxWidth()
+            .onFocusChanged { tabGroupHasFocus = it.hasFocus }
+            .focusable()
+            .onPreviewKeyEvent { event ->
+              if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+              val interaction =
+                  tabGroupInteraction(
+                      RightToolWindow.entries.toList(), focusedToolWindow, tabGroupKey(event.key))
+                      ?: return@onPreviewKeyEvent false
+              focusedToolWindow = interaction.focused
+              interaction.activate?.let(onSelect)
+              true
+            }
+            .semantics {
+              contentDescription =
+                  "Right tool windows. ${rightToolWindowLabel(activeToolWindow)} selected."
+            }) {
           RightToolWindow.entries.forEach { toolWindow ->
             val selected = toolWindow == activeToolWindow
             val badge = badges[toolWindow]
@@ -101,8 +100,8 @@ internal fun RightToolWindowContainer(
             }
           }
         }
-        content(activeToolWindow, Modifier.fillMaxWidth().weight(1f))
-      }
+    content(activeToolWindow, Modifier.fillMaxWidth().weight(1f))
+  }
 }
 
 internal fun rightToolWindowTabDescription(
@@ -193,6 +192,7 @@ internal fun ContextToolWindow(
             icon = DesktopIcon.Run,
             expanded = actionsExpanded,
             onToggle = { actionsExpanded = !actionsExpanded }) {
+              if (inspector.selectedSymbol == null) ContextCreationAction(state, actions)
               if (inspector.analysisAction != InspectorAnalysisAction.None) {
                 val onAnalysisAction =
                     when (inspector.analysisAction) {
@@ -289,6 +289,25 @@ internal fun ContextToolWindow(
 }
 
 @Composable
+internal fun ContextCreationAction(
+    state: ContextToolWindowState,
+    actions: ContextToolWindowActions
+) {
+  val file = state.inspector?.file ?: return
+  actions.createDeclaration?.let { create ->
+    val reason = declarationCreationBlockedReason(file, state.creationInProgress)
+    NewFunctionButton(file.path, reason, create, Modifier.fillMaxWidth())
+    reason?.let {
+      Text(
+          it,
+          color = SecondaryText,
+          style = IdeTypography.compactBody,
+          modifier = Modifier.padding(top = 4.dp))
+    }
+  }
+}
+
+@Composable
 private fun ContextSection(
     title: String,
     icon: DesktopIcon,
@@ -323,6 +342,7 @@ internal data class ContextToolWindowState(
     val functionModel: ScopedModel = ScopedModel(scope = "function"),
     val functionRemoteProviderConfirmed: Boolean = false,
     val declarationExplanation: DeclarationExplanationState = DeclarationExplanationState(),
+    val creationInProgress: Boolean = false,
 )
 
 /** File analysis and direct-edit intents available from Context. */
@@ -335,6 +355,7 @@ internal data class ContextToolWindowActions(
     val confirmFunctionRemoteProvider: (Boolean) -> Unit = {},
     val explainSelected: () -> Unit = {},
     val cancelExplanation: () -> Unit = {},
+    val createDeclaration: (() -> Unit)? = null,
 )
 
 internal fun explanationActionLabel(state: DeclarationExplanationState): String =

@@ -1,10 +1,92 @@
 package io.miniorca.desktop
 
+import androidx.compose.material.Text
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EditorWorkspaceTest {
+  @Test
+  fun creationAcceptsAGoFileWithoutDeclarationsAndExplainsUnsupportedOrBusyStates() {
+    val file = testFile("empty.go").copy(content = "package demo\n")
+    assertNull(declarationCreationBlockedReason(file))
+    assertEquals(
+        "Open a Go file to create a function or type.", declarationCreationBlockedReason(null))
+    assertEquals(
+        "Function and type creation requires a Go source file.",
+        declarationCreationBlockedReason(file.copy(language = "Kotlin")))
+    assertEquals(
+        "Function and type creation requires a Go source file.",
+        declarationCreationBlockedReason(file.copy(binary = true)))
+    assertEquals(
+        "Wait for the current generation or validation to finish.",
+        declarationCreationBlockedReason(file, busy = true))
+    assertNull(
+        editorChromeUiState(
+                file, null, EditorSurface.Source, progress(EditorProgress.Inspect), null)
+            .creationBlockedReason)
+  }
+
+  @Test
+  fun newFunctionIsVisibleAndKeyboardActivationDoesNotSelectAnEditorSurface() {
+    listOf(360 to 1.5f, 800 to 1f).forEach { (width, scale) ->
+      var creations = 0
+      var surfaceSelections = 0
+      val file = testFile("internal/empty.go").copy(content = "package demo\n")
+      val chrome =
+          editorChromeUiState(
+              file, null, EditorSurface.Source, progress(EditorProgress.Inspect), null)
+      ComposeVisualFixture(width, 650, scale) {
+            EditorWorkspace(
+                chrome,
+                null,
+                { surfaceSelections++ },
+                { creations++ },
+                canvas = { Text(file.content) })
+          }
+          .use { fixture ->
+            fixture.render("editor-new-function-$width-$scale")
+            fixture.assertTextFits("New function")
+            assertTrue(fixture.hasDescription("New function in internal/empty.go"))
+            assertFalse(fixture.isDisabled("New function"))
+            assertEquals(0, creations)
+            assertTrue(fixture.requestFocus("New function"))
+            fixture.render()
+            fixture.pressKey(Key.Enter)
+            fixture.render()
+            assertEquals(1, creations)
+            assertEquals(0, surfaceSelections)
+            assertEquals("package demo\n", file.content)
+          }
+    }
+  }
+
+  @Test
+  fun contextOffersCreationWithNoSelectedSymbolWithoutRunningAnalysis() {
+    val file = testFile("empty.go").copy(content = "package demo\n")
+    val inspector =
+        symbolInspectorUiState(
+            file, emptyList(), null, null, false, InspectorProviderState(false, false), null)
+    var creations = 0
+    var analyses = 0
+    ComposeVisualFixture(320, 200, 1.5f) {
+          ContextCreationAction(
+              ContextToolWindowState(inspector, ScopedModel(), false, null, null),
+              ContextToolWindowActions(
+                  {}, { analyses++ }, { analyses++ }, {}, {}, createDeclaration = { creations++ }))
+        }
+        .use { fixture ->
+          fixture.render("context-new-function-320-1.5")
+          assertTrue(fixture.hasText("New function"))
+          fixture.clickText("New function")
+          assertEquals(1, creations)
+          assertEquals(0, analyses)
+        }
+  }
+
   @Test
   fun sourceStaysActiveWhenAValidatedDraftMakesReviewAvailable() {
     val chrome =

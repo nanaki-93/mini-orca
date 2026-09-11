@@ -50,7 +50,7 @@ class WorkflowToolWindowsTest {
     val draft = draft()
 
     assertEquals(
-        ToolWindowScope("internal/main.go", "Create new function/type · Build"),
+        ToolWindowScope("internal/main.go", "New function · Build"),
         assistantToolWindowScope(file, ChatTarget(ChatEditMode.CreateSymbol, "Build"), null, ""))
     assertEquals(
         ToolWindowScope("internal/main.go", "Run"),
@@ -68,6 +68,20 @@ class WorkflowToolWindowsTest {
     assertFalse(layout.rightToolWindowVisible)
     assertTrue(layout.openRight(RightToolWindow.Review).rightToolWindowVisible)
     assertFalse(ApplyDecisionUiState(false, "Apply draft", "Locked").eligible)
+  }
+
+  @Test
+  fun incompleteCreationShowsItsFileAndRequiredNameWithoutBorrowingAnOldDraftTarget() {
+    assertEquals(
+        ToolWindowScope("internal/main.go", "New function · Name required"),
+        assistantToolWindowScope(file(), null, draft(), "", ChatEditMode.CreateSymbol))
+    assertEquals(
+        ToolWindowScope("internal/main.go", "New type · Config"),
+        assistantToolWindowScope(
+            file(), null, null, "Config", ChatEditMode.CreateSymbol, DeclarationCreationKind.Type))
+    assertEquals(
+        "No file selected",
+        assistantToolWindowScope(null, null, draft(), "", ChatEditMode.CreateSymbol).path)
   }
 
   private fun evidence(checkStatus: ReviewEvidenceStatus) =

@@ -11,11 +11,13 @@ class CommandPaletteTest {
     val freshActions = availableCommandActions(FileAnalysis("main.go", "fresh"))
 
     assertTrue("refresh_file_analysis" in freshActions)
-    assertTrue("create_declaration" in freshActions)
+    assertTrue("create_function" in freshActions)
+    assertTrue("create_type" in freshActions)
     assertFalse(
         "refresh_file_analysis" in availableCommandActions(FileAnalysis("main.go", "stale")))
     assertEquals("Refresh file analysis", commandActionLabel("refresh_file_analysis"))
-    assertEquals("Create declaration", commandActionLabel("create_declaration"))
+    assertEquals("New Go function", commandActionLabel("create_function"))
+    assertEquals("New Go type", commandActionLabel("create_type"))
   }
 
   @Test
@@ -56,9 +58,10 @@ class CommandPaletteTest {
 
     assertEquals(
         listOf(
-            "Create declaration",
             "Document",
             "Fix",
+            "New Go function",
+            "New Go type",
             "Open Performance workspace",
             "Open Security workspace",
             "Refactor",
@@ -102,12 +105,17 @@ class CommandPaletteTest {
             .single()
     val actionResult =
         commandSearchResults(
-                PaletteMode.Actions, "create", emptyList(), emptyList(), null, hasActiveFile = true)
+                PaletteMode.Actions,
+                "function",
+                emptyList(),
+                emptyList(),
+                null,
+                hasActiveFile = true)
             .single()
 
     assertEquals(
         CommandSearchActivation.File("internal/main.go"), commandSearchActivation(fileResult))
     assertEquals(
-        CommandSearchActivation.Action("create_declaration"), commandSearchActivation(actionResult))
+        CommandSearchActivation.Action("create_function"), commandSearchActivation(actionResult))
   }
 }

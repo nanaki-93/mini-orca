@@ -30,6 +30,12 @@ internal fun AssistantToolWindow(
     editorActions: DraftEditorActions,
     modifier: Modifier,
 ) {
+  val creating = state.mode == ChatEditMode.CreateSymbol
+  val creationBlocked =
+      if (creating)
+          declarationCreationBlockedReason(
+              state.selected, state.sending || state.editor?.status == DraftEditorStatus.Validating)
+      else null
   val bound =
       state.target != null &&
           chatSessionMatches(state.session, state.selected, state.project, state.target)
@@ -52,7 +58,13 @@ internal fun AssistantToolWindow(
   Column(modifier) {
     ToolWindowScopeHeader(
         "ASSISTANT",
-        assistantToolWindowScope(state.selected, state.target, state.draft, state.newSymbol),
+        assistantToolWindowScope(
+            state.selected,
+            state.target,
+            state.draft,
+            state.newSymbol,
+            state.mode,
+            state.creationKind),
         Modifier)
     Column(
         Modifier.weight(1f)
@@ -61,10 +73,11 @@ internal fun AssistantToolWindow(
             .padding(bottom = 8.dp)) {
           Column(Modifier.fillMaxWidth()) {
             IdePaneHeader(
-                title = "Conversation",
+                title = if (creating) "New ${state.creationKind.noun}" else "Conversation",
                 icon = DesktopIcon.Editor,
                 stateLabel =
                     when {
+                      creating -> "Generate a candidate, then review before applying"
                       bound -> "Bound to the focused declaration"
                       state.target != null -> "Ready for the selected declaration"
                       else -> "Select a declaration"
@@ -76,7 +89,11 @@ internal fun AssistantToolWindow(
                   fontFamily = FontFamily.Monospace,
                   fontSize = 12.sp)
               Text(
-                  state.target?.let { "${it.mode.label} · ${it.symbol}" }
+                  creationBlocked
+                      ?: state.target?.let {
+                        if (creating) "New ${state.creationKind.noun} · ${it.symbol}"
+                        else "${it.mode.label} · ${it.symbol}"
+                      }
                       ?: state.targetValidation.message.ifBlank {
                         "Select a declaration or enter a new name."
                       },
@@ -100,12 +117,18 @@ internal fun AssistantToolWindow(
                   }
                 }
               }
-              if (state.mode == ChatEditMode.CreateSymbol) {
+              if (creating) {
                 CompactSingleLineField(
                     state.newSymbol,
                     conversationActions.updateNewSymbol,
-                    label = "New Go function or type name",
-                    modifier = Modifier.fillMaxWidth().padding(top = 9.dp))
+                    label = "${state.creationKind.noun.replaceFirstChar { it.uppercase() }} name",
+                    enabled = creationBlocked == null,
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .padding(top = 9.dp)
+                            .then(
+                                state.creationNameFocus?.let { Modifier.focusRequester(it) }
+                                    ?: Modifier))
               }
               if (presetsAvailable) {
                 Text(
@@ -134,9 +157,15 @@ internal fun AssistantToolWindow(
               CompactMultilineField(
                   value = state.messageInput,
                   onValueChange = conversationActions.updateMessageValue,
-                  label = "Intent",
-                  enabled = !state.sending && state.target != null,
-                  placeholder = "For example: preserve order while deduplicating",
+                  label = if (creating) "Behavior" else "Intent",
+                  enabled =
+                      if (creating) creationBlocked == null
+                      else !state.sending && state.target != null,
+                  placeholder =
+                      if (!creating) "For example: preserve order while deduplicating"
+                      else if (state.creationKind == DeclarationCreationKind.Type)
+                          "Describe the type's fields and purpose"
+                      else "Describe inputs, return values and expected behavior",
                   minLines = 3,
                   modifier =
                       Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(state.chatFocus))
@@ -180,11 +209,13 @@ internal fun AssistantToolWindow(
                       onClick = conversationActions.send,
                       enabled =
                           state.target != null &&
+                              (!creating || creationBlocked == null) &&
                               hasFunctionChangeIntent(state.message) &&
                               (!state.functionModel.remoteProvider || state.remoteConfirmed),
                       tone = if (draftVisible) ActionTone.Neutral else ActionTone.Primary,
                       modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
-                        Text("Send message")
+                        Text(
+                            if (creating) "Generate ${state.creationKind.noun}" else "Send message")
                       }
             }
             IdeHorizontalSeparator()
@@ -295,6 +326,12 @@ internal fun assistantMessageLabel(role: String): String =
       else -> role.ifBlank { "Message" }.replaceFirstChar { it.uppercase() }
     }
 
+internal fun creationMessage(
+    kind: DeclarationCreationKind,
+    name: String,
+    behavior: String
+): String = "Create a Go ${kind.noun} named ${name.trim()}.\n\n$behavior"
+
 /** File-scoped drafting data rendered by the Assistant tool window. */
 internal data class AssistantToolWindowState(
     val project: ProjectAnalysis?,
@@ -316,6 +353,8 @@ internal data class AssistantToolWindowState(
     val selectedSymbol: SymbolInfo? = null,
     val targetValidation: ChatTargetValidation = ChatTargetValidation(target),
     val advancedConstraintsInput: TextFieldValue = TextFieldValue(),
+    val creationKind: DeclarationCreationKind = DeclarationCreationKind.Function,
+    val creationNameFocus: FocusRequester? = null,
 )
 
 /** Conversation intents that do not mutate the editable declaration. */

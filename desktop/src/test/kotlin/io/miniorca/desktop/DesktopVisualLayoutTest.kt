@@ -441,7 +441,7 @@ class DesktopVisualLayoutTest {
         )
     ComposeVisualFixture(480, 240, 1.3f) {
           EditorWorkspace(
-              longChrome, null, {}, canvas = { DiffViewer(null, Modifier.fillMaxSize()) })
+              longChrome, null, {}, {}, canvas = { DiffViewer(null, Modifier.fillMaxSize()) })
         }
         .use { fixture ->
           fixture.render("editor-breadcrumbs-deep-480-1.3")
@@ -578,6 +578,7 @@ class DesktopVisualLayoutTest {
               chrome,
               draft,
               { selectedSurfaces += it },
+              onCreateDeclaration = {},
               canvas = {
                 SourceEditorPane(project, file, listOf(symbol), symbol, 3, emptyList(), {})
               })
@@ -1475,6 +1476,17 @@ internal class ComposeVisualFixture(
         it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
       }
 
+  fun setFocusedText(value: String) {
+    val editor =
+        nodes().single {
+          it.config.getOrNull(SemanticsProperties.Focused) == true &&
+              it.config.getOrNull(SemanticsActions.SetText) != null
+        }
+    assertTrue(
+        requireNotNull(editor.config.getOrNull(SemanticsActions.SetText)?.action)
+            .invoke(AnnotatedString(value)))
+  }
+
   fun setText(value: String) {
     val editor = nodes().single { it.config.getOrNull(SemanticsActions.SetText) != null }
     assertTrue(
@@ -2031,8 +2043,10 @@ private fun EditorVisualFixture(width: Float) {
                         "Read-only source fixture",
                         EditorSurface.Source,
                         false,
-                        "SOURCE"),
+                        "SOURCE",
+                        null),
                     null,
+                    {},
                     {},
                     canvas = {
                       SourceEditorPane(
