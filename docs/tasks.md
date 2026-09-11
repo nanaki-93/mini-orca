@@ -1208,13 +1208,18 @@ active for TERM-01 on the next wake.
 
 ## Task TERM-01 — Prove the terminal dependency and local-session boundary
 
-- [ ] TERM-01 completed with required checks and diff review.
+- [x] TERM-01 completed with required checks and diff review.
 
 **Target files**
 - `desktop/build.gradle.kts` — pin verified terminal/PTY dependencies and required package modules.
 - `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTerminalSession.kt` — new local shell/PTY owner independent of Compose recomposition.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopTerminalSessionTest.kt` — new lifecycle tests with injected process boundary.
 - `desktop/TERMINAL.md` — new short dependency, native packaging and supported-host record.
+
+- `desktop/settings.gradle.kts` — add the official JediTerm repository restricted to its group; these artifacts are not on Maven Central.
+- `desktop/src/main/resources/terminal-licenses/` — package the selected upstream licenses and notices for the newly bundled dependencies.
+
+- `desktop/scripts/terminal-packaged-smoke.c` and `desktop/scripts/terminal-packaged-smoke.sh` — reproducible JNI probe using the bundled runtime, which has no java launcher; no product bootstrap or generated package files are modified.
 
 **Inputs / dependencies**
 - D2; existing JBR 25/macOS arm64 distribution constraints.
@@ -1234,7 +1239,71 @@ active for TERM-01 on the next wake.
 Also record a real packaged-host PTY smoke before TERM-02; dependency/native failure is an explicit implementation dependency, not permission to substitute an output box.
 
 **Execution record**
-Not started.
+Started 2026-09-12. Verified accepted NAV-01 hashes, empty index, no active validator, both toolchains and all ten unrelated UI files. Baseline saved in the ignored TERM-01 directory. Selected JediTerm 3.72 (the newest examined release using Kotlin 2.1.21, compatible with this app's Kotlin 2.3 toolchain) and Pty4J 0.13.12 for proof. Newer JediTerm 3.73–3.76 require Kotlin 2.4. Repository and packaged-notice targets added before edits as direct dependency-resolution/redistribution requirements. Initial preparation; zero corrections.
+
+Initial prescribed tests and createDistributable both passed. The additional
+real-PTY run reached cwd, UTF-8, TTY, resize and interrupt, then timed out waiting
+for the background-child marker. The initial XML/log are retained. A diagnostic
+rerun adds bounded synthetic-probe output on failure; no production correction
+has been applied and correction accounting remains zero.
+
+**Correction 1 — 2026-09-12.** Diagnostic output identified interactive Bash
+history expansion of the probe's `$!` as the missing-marker cause; disable history
+expansion only in the synthetic shell. The fixture helper now returns Unit so the
+path-boundary test is discovered by JUnit (it previously returned the asserted
+exception). Review also adds an actionable local-path error, cleanup if stream
+attachment fails after process creation, and an explicit Unit return type to
+remove the Kotlin compiler warning. A regression covers attachment cleanup.
+One correction used; earlier logs/XML remain intact.
+
+The first correction reached bounded close and exposed a real Pty4J boundary:
+UnixPtyProcess implements pid() but rejects Process.toHandle(). The cleanup error
+remained visible, so acceptance correctly failed. Resolve ProcessHandle from the
+owned PID instead, then repeat native and packaged validation. One correction
+has been used; the original failure is retained in focused-correction-1.log.
+
+**Correction 2 — 2026-09-12.** Use ProcessHandle.of(the owned Pty4J PID) to
+inspect descendants. The same failure reproduced under the app's bundled JVM,
+confirming the required native/package boundary. Also keep any process that
+survives bounded teardown owned and in cleanup-pending state so a retry cannot
+start an overlapping shell. Full desktop tests and both quality gates had passed
+before this correction; native completion remains the acceptance gate. Two
+corrections are used; do not reset accounting on a later wake.
+
+**Accepted — 2026-09-12.** The prescribed terminal class passes all 13 tests with
+`-PterminalNativeSmoke=true`, including the real PTY probe. Full desktop
+`test detekt spotlessCheck` with the same native flag passes 389 tests. The
+isolated candidate passes 387 tests and both quality gates. The working and
+isolated `createDistributable` commands pass, and both bundled-runtime JNI probes
+pass cwd, real TTY descriptors, UTF-8, 121×42 resize, Ctrl+C, background-child
+cleanup and a close deadline under 3 seconds. The launchers and JBR25 path are the
+verified versions documented for this queue; no toolchain substitution occurred.
+
+The pinned JediTerm 3.72/Pty4J 0.13.12 dependencies and scoped repository resolve
+without upgrading Kotlin. A stable local-only owner supplies explicit lifecycle,
+retryable launch/path/native errors, UTF-8 connector, 5,000-line scrollback policy,
+late-start disposal and bounded cleanup. A surviving shell remains owned and
+blocks replacement. No shell starts during construction or project restore, and
+no daemon command endpoint, model-to-stdin route or transcript persistence exists.
+The terminal pane and app integration remain TERM-02.
+
+The unmodified dependency jars include the macOS universal native library/helper;
+all nine notice resources are verified in the app jar. Pre-stage notice hygiene
+normalizes line endings/trailing whitespace without changing license wording.
+Packages and their native probes were repeated after that resource-only change;
+source/build/test hashes remain those of the passing full suites. The reproducible
+JNI probe uses the actual packaged JVM and jars, never a substituted development
+runtime, and leaves generated package files untouched. Evidence, hashes, initial
+failures and final logs are retained under `.mini-orca/autopilot/ux/TERM-01/`.
+
+Final diff review passes. All ten unrelated files remain byte-identical; no overlap
+requires partial staging on this card. Stage only the 16 task files plus PLAN.md
+and this checklist, create one authorized local TERM-01 commit, and verify its
+exact hashes and empty index in the ignored receipt. Two corrections are recorded
+above. No Go/race/full make check or live provider execution was needed; no daemon
+code changed. Native UI focus, history/copy-paste/full-screen redraw, other hosts,
+and signing/notarization are not claimed. No user configuration or data migration
+is needed. Keep the Astra Extra High scheduler active for TERM-02 and end this card.
 
 ## Task TERM-02 — Integrate the interactive terminal pane
 

@@ -35,6 +35,9 @@ dependencies {
   implementation("org.jetbrains.jewel:jewel-int-ui-standalone:0.40.0-262.10315.125")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+  implementation("org.jetbrains.jediterm:jediterm-core:3.72")
+  implementation("org.jetbrains.jediterm:jediterm-ui:3.72")
+  implementation("org.jetbrains.pty4j:pty4j:0.13.12")
   testImplementation(kotlin("test"))
 }
 
@@ -45,8 +48,9 @@ compose.desktop {
   application {
     mainClass = "io.miniorca.desktop.MainKt"
     javaHome = desktopJavaLauncher.get().metadata.installationPath.asFile.absolutePath
+    jvmArgs += "--enable-native-access=ALL-UNNAMED"
     nativeDistributions {
-      modules("java.net.http", "jdk.unsupported")
+      modules("java.net.http", "jdk.unsupported", "java.desktop", "java.management")
       packageName = "Mini-Orca"
       packageVersion = project.version.toString()
     }
@@ -55,6 +59,9 @@ compose.desktop {
 
 tasks.test {
   useJUnitPlatform()
+  providers.gradleProperty("terminalNativeSmoke").orNull?.let {
+    systemProperty("miniOrca.terminalNativeSmoke", it)
+  }
   providers.gradleProperty("visualOutput").orNull?.let {
     systemProperty("miniOrca.visualOutput", it)
   }
