@@ -33,13 +33,6 @@ internal enum class RightToolWindow {
   Review,
 }
 
-internal enum class BottomToolWindow {
-  Problems,
-  Checks,
-  Output,
-  Terminal,
-}
-
 internal enum class EditorSurface {
   Source,
   Review,
@@ -95,11 +88,9 @@ internal fun workspaceForLeftToolWindow(toolWindow: LeftToolWindow): Workspace =
 internal data class DesktopLayoutState(
     val activeLeftToolWindow: LeftToolWindow = LeftToolWindow.Editor,
     val activeRightToolWindow: RightToolWindow = RightToolWindow.Context,
-    val activeBottomToolWindow: BottomToolWindow = BottomToolWindow.Problems,
     val editorSurface: EditorSurface = EditorSurface.Source,
     val leftToolWindowVisible: Boolean = true,
     val rightToolWindowVisible: Boolean = true,
-    val bottomToolWindowVisible: Boolean = true,
     val bottomCollapsed: Boolean = true,
     val explorerWidth: Float = DEFAULT_EXPLORER_WIDTH,
     val actionWidth: Float = DEFAULT_ACTION_WIDTH,
@@ -112,14 +103,9 @@ internal data class DesktopLayoutState(
   fun openRight(toolWindow: RightToolWindow) =
       copy(activeRightToolWindow = toolWindow, rightToolWindowVisible = true)
 
-  fun openBottom(toolWindow: BottomToolWindow) =
-      copy(
-          activeBottomToolWindow = toolWindow,
-          bottomToolWindowVisible = true,
-          bottomCollapsed = false)
+  fun openTerminal() = withBottomCollapsed(false)
 
-  fun withBottomCollapsed(collapsed: Boolean) =
-      copy(bottomToolWindowVisible = true, bottomCollapsed = collapsed)
+  fun withBottomCollapsed(collapsed: Boolean) = copy(bottomCollapsed = collapsed)
 
   fun withEditorSurface(surface: EditorSurface) = copy(editorSurface = surface)
 
@@ -133,8 +119,6 @@ internal data class DesktopLayoutState(
 
   fun normalized() =
       copy(
-          // A collapsed pane remains visible as its text-only summary and explicit reopen control.
-          bottomToolWindowVisible = true,
           explorerWidth = clampExplorerWidth(explorerWidth),
           actionWidth = clampActionWidth(actionWidth),
           bottomHeight = clampBottomHeight(bottomHeight),
@@ -208,12 +192,11 @@ internal class DesktopLayoutStore(
       DesktopLayoutState(
               activeLeftToolWindow = enumPreference(LEFT_TOOL_KEY, LeftToolWindow.Editor),
               activeRightToolWindow = enumPreference(RIGHT_TOOL_KEY, RightToolWindow.Context),
-              activeBottomToolWindow = enumPreference(BOTTOM_TOOL_KEY, BottomToolWindow.Problems),
               editorSurface = enumPreference(EDITOR_SURFACE_KEY, EditorSurface.Source),
               leftToolWindowVisible = preferences.getBoolean(LEFT_VISIBLE_KEY, true),
               rightToolWindowVisible = preferences.getBoolean(RIGHT_VISIBLE_KEY, true),
-              bottomToolWindowVisible = preferences.getBoolean(BOTTOM_VISIBLE_KEY, false),
-              bottomCollapsed = preferences.getBoolean(BOTTOM_COLLAPSED_KEY, true),
+              // Restoring a layout never opens or starts a shell, including legacy bottom tabs.
+              bottomCollapsed = true,
               explorerWidth =
                   preferences.getFloat(
                       EXPLORER_WIDTH_KEY, DesktopLayoutState.DEFAULT_EXPLORER_WIDTH),
@@ -229,12 +212,12 @@ internal class DesktopLayoutStore(
     val normalized = layout.normalized()
     preferences.put(LEFT_TOOL_KEY, normalized.activeLeftToolWindow.name)
     preferences.put(RIGHT_TOOL_KEY, normalized.activeRightToolWindow.name)
-    preferences.put(BOTTOM_TOOL_KEY, normalized.activeBottomToolWindow.name)
+    preferences.remove(BOTTOM_TOOL_KEY)
+    preferences.remove(BOTTOM_VISIBLE_KEY)
+    preferences.remove(BOTTOM_COLLAPSED_KEY)
     preferences.put(EDITOR_SURFACE_KEY, normalized.editorSurface.name)
     preferences.putBoolean(LEFT_VISIBLE_KEY, normalized.leftToolWindowVisible)
     preferences.putBoolean(RIGHT_VISIBLE_KEY, normalized.rightToolWindowVisible)
-    preferences.putBoolean(BOTTOM_VISIBLE_KEY, normalized.bottomToolWindowVisible)
-    preferences.putBoolean(BOTTOM_COLLAPSED_KEY, normalized.bottomCollapsed)
     preferences.putFloat(EXPLORER_WIDTH_KEY, normalized.explorerWidth)
     preferences.putFloat(ACTION_WIDTH_KEY, normalized.actionWidth)
     preferences.putFloat(BOTTOM_HEIGHT_KEY, normalized.bottomHeight)

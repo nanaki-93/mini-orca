@@ -317,10 +317,12 @@ class DesktopShellTest {
   }
 
   @Test
-  fun bottomToolTabsUseLabeledIconsWithoutChangingTheirStableIdentity() {
-    assertEquals("Bugs & Problems", bottomToolWindowLabel(BottomToolWindow.Problems))
-    assertEquals(DesktopIcon.Problems, bottomToolWindowIcon(BottomToolWindow.Problems))
-    assertEquals(DesktopIcon.Summary, bottomToolWindowIcon(BottomToolWindow.Checks))
+  fun terminalHeightProtectsShortWindowContentWithoutChangingThePreferredSize() {
+    val preferred = DesktopLayoutState().withBottomHeight(520f)
+    assertEquals(300f, terminalDockHeight(preferred.bottomHeight, 600f))
+    assertEquals(350f, terminalDockHeight(preferred.bottomHeight, 650f))
+    assertEquals(520f, terminalDockHeight(preferred.bottomHeight, 900f))
+    assertEquals(520f, preferred.bottomHeight)
   }
 
   @Test

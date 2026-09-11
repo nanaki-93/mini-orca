@@ -262,8 +262,8 @@ internal data class DesktopShellPanes(
     val explorer: @Composable (Modifier, () -> Unit) -> Unit,
     val rightToolWindows: @Composable (RightToolWindow, Modifier) -> Unit,
     val rightToolWindowBadges: Map<RightToolWindow, RightToolWindowBadge>,
-    val bottomToolWindows: @Composable (BottomToolWindow, Modifier) -> Unit,
-    val bottomToolWindowSummaries: Map<BottomToolWindow, BottomToolWindowSummary>,
+    val terminalContent: @Composable (Modifier) -> Unit,
+    val terminalSession: TerminalSessionState,
 )
 
 private data class ShellFocusRequesters(
@@ -355,7 +355,7 @@ internal fun DesktopShell(
   var statusDetailsFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var contextFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var terminalUsesOverlay by remember { mutableStateOf(false) }
-  var bottomToolWindowOverlayVisible by remember { mutableStateOf(false) }
+  val terminalOverlayVisible = terminalUsesOverlay && !layout.bottomCollapsed
   var bottomOverlayFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   val showsEditorChrome =
       shellMode == DesktopShellMode.ProjectWorkspace && editorChromeVisible(workspace)
@@ -389,19 +389,20 @@ internal fun DesktopShell(
     layoutActions.updateLayout(
         layout.openRight(toolWindow).withFocus(DesktopFocusRegion.RightToolWindow))
   }
-  fun selectBottomToolWindow(toolWindow: BottomToolWindow) {
-    activateBottomTerminal(toolWindow, appState.project, terminal)
-    val updated = layout.openBottom(toolWindow).withFocus(DesktopFocusRegion.BottomToolWindow)
+  fun openTerminal() {
+    appState.project?.path?.let { terminal?.activate(it) }
+    val updated = layout.openTerminal().withFocus(DesktopFocusRegion.BottomToolWindow)
     layoutActions.updateLayout(updated)
     layoutActions.saveLayout(updated)
   }
-  fun collapseBottomToolWindow() {
+  fun collapseTerminal() {
     val updated = layout.withBottomCollapsed(true).withFocus(DesktopFocusRegion.BottomToolWindow)
     layoutActions.updateLayout(updated)
     layoutActions.saveLayout(updated)
+    bottomOverlayFocusRestoreTarget = DesktopFocusRegion.BottomToolWindow
   }
   TerminalFocusReturnEffect(terminal) {
-    bottomToolWindowOverlayVisible = false
+    if (terminalUsesOverlay) layoutActions.updateLayout(layout.withBottomCollapsed(true))
     editorActions.selectWorkspace(Workspace.Editor)
     scope.launch { restoreTerminalEditorFocus(drawerState, focusManager, focusRequesters.editor) }
   }
@@ -426,16 +427,12 @@ internal fun DesktopShell(
     contextFocusRestoreTarget = layout.lastFocusedRegion
     editorActions.dismissContext()
   }
-  fun dismissBottomToolWindowOverlayAndRestoreFocus() {
-    bottomOverlayFocusRestoreTarget = DesktopFocusRegion.BottomToolWindow
-    bottomToolWindowOverlayVisible = false
-  }
   fun dismissTopmostTransient(): Boolean =
       when (topmostTransientSurface(
           contextVisible = context.visible,
           paletteVisible = palette.visible,
           statusDetailsVisible = statusDetailsVisible,
-          bottomToolsVisible = bottomToolWindowOverlayVisible,
+          bottomToolsVisible = terminalOverlayVisible,
           drawerVisible = drawerState.isOpen,
       )) {
         TransientSurface.Context -> {
@@ -451,7 +448,7 @@ internal fun DesktopShell(
           true
         }
         TransientSurface.BottomTools -> {
-          dismissBottomToolWindowOverlayAndRestoreFocus()
+          collapseTerminal()
           true
         }
         TransientSurface.Drawer -> {
@@ -484,8 +481,8 @@ internal fun DesktopShell(
       contextFocusRestoreTarget = null
     }
   }
-  LaunchedEffect(bottomToolWindowOverlayVisible, bottomOverlayFocusRestoreTarget) {
-    if (!bottomToolWindowOverlayVisible && bottomOverlayFocusRestoreTarget != null) {
+  LaunchedEffect(terminalOverlayVisible, layout.bottomCollapsed, bottomOverlayFocusRestoreTarget) {
+    if (!terminalOverlayVisible && bottomOverlayFocusRestoreTarget != null) {
       focusRequesters.forRegion(bottomOverlayFocusRestoreTarget!!).requestFocus()
       bottomOverlayFocusRestoreTarget = null
     }
@@ -500,10 +497,7 @@ internal fun DesktopShell(
                 handleDesktopShortcut(
                     event = event,
                     terminal = terminal,
-                    onTerminalSelected = {
-                      selectBottomToolWindow(BottomToolWindow.Terminal)
-                      bottomToolWindowOverlayVisible = terminalUsesOverlay
-                    },
+                    onTerminalSelected = ::openTerminal,
                     shellMode = shellMode,
                     appState = appState,
                     editor = editor,
@@ -520,25 +514,20 @@ internal fun DesktopShell(
     } else {
       BoxWithConstraints {
         val widthDp = maxWidth.value
+        val heightDp = maxHeight.value
         val responsivePresentation = responsiveShellPresentation(widthDp)
         val narrow = responsivePresentation.left == ResponsiveShellRegion.Drawer
         val showEditorDrawers = editorDrawerActionsVisible(workspace, widthDp)
-        val availableBottomToolWindows =
-            BottomToolWindow.entries.filter { it in panes.bottomToolWindowSummaries }
         LaunchedEffect(narrow) { if (!narrow && drawerState.isOpen) closeDrawerAndRestoreFocus() }
         LaunchedEffect(responsivePresentation.bottom) {
           terminalUsesOverlay = responsivePresentation.bottom == ResponsiveShellRegion.Overlay
-          if (responsivePresentation.bottom == ResponsiveShellRegion.Docked &&
-              bottomToolWindowOverlayVisible) {
-            dismissBottomToolWindowOverlayAndRestoreFocus()
-          }
         }
         val restoredFocusRegion =
             paletteFocusRestorationRegion(
                 previous = paletteFocusRestoreTarget ?: layout.lastFocusedRegion,
                 rightToolWindowVisible =
                     !narrow && showsEditorChrome && layout.rightToolWindowVisible,
-                bottomToolWindowVisible = panes.bottomToolWindowSummaries.isNotEmpty(),
+                bottomToolWindowVisible = true,
             )
         LaunchedEffect(palette.visible, paletteFocusRestoreTarget, restoredFocusRegion) {
           if (!palette.visible && paletteFocusRestoreTarget != null) {
@@ -667,35 +656,27 @@ internal fun DesktopShell(
                   )
                 }
                 if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
-                  BottomToolWindowRegion(
-                      layout = layout,
-                      availableToolWindows = availableBottomToolWindows,
-                      summaries = panes.bottomToolWindowSummaries,
-                      onSelect = ::selectBottomToolWindow,
-                      onCollapse = ::collapseBottomToolWindow,
+                  TerminalDock(
+                      layout =
+                          layout.copy(
+                              bottomHeight = terminalDockHeight(layout.bottomHeight, heightDp)),
+                      session = panes.terminalSession,
+                      onOpen = ::openTerminal,
+                      onCollapse = ::collapseTerminal,
                       onHeightDelta = {
                         layoutActions.updateLayout(
                             layout.withBottomHeight(layout.bottomHeight + it))
                       },
                       onHeightCommit = { layoutActions.saveLayout(layout) },
-                      content = panes.bottomToolWindows,
-                      tabModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
+                      content = panes.terminalContent,
+                      controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
                   )
                 } else {
-                  NarrowBottomToolWindowSummary(
-                      layout = layout,
-                      availableToolWindows = availableBottomToolWindows,
-                      summaries = panes.bottomToolWindowSummaries,
-                      onOpen = {
-                        val activeToolWindow =
-                            layout.activeBottomToolWindow.takeIf {
-                              it in availableBottomToolWindows
-                            } ?: availableBottomToolWindows.firstOrNull()
-                        activeToolWindow?.let(::selectBottomToolWindow)
-                        bottomToolWindowOverlayVisible = activeToolWindow != null
-                      },
-                      openButtonModifier =
-                          Modifier.focusRequester(focusRequesters.bottomToolWindow),
+                  TerminalBar(
+                      session = panes.terminalSession,
+                      collapsed = true,
+                      onToggle = ::openTerminal,
+                      controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
                   )
                 }
               }
@@ -729,14 +710,10 @@ internal fun DesktopShell(
               )
             }
           }
-          if (bottomToolWindowOverlayVisible) {
-            BottomToolWindowOverlay(
-                layout = layout,
-                availableToolWindows = availableBottomToolWindows,
-                summaries = panes.bottomToolWindowSummaries,
-                onSelect = ::selectBottomToolWindow,
-                onDismiss = ::dismissBottomToolWindowOverlayAndRestoreFocus,
-                content = panes.bottomToolWindows,
+          if (narrow && !layout.bottomCollapsed) {
+            TerminalOverlay(
+                onDismiss = ::collapseTerminal,
+                content = panes.terminalContent,
             )
           }
         }
@@ -773,14 +750,6 @@ internal fun DesktopShell(
               context.manifest ?: ContextManifest(), ::dismissContextAndRestoreFocus)
     }
   }
-}
-
-private fun activateBottomTerminal(
-    toolWindow: BottomToolWindow,
-    project: ProjectAnalysis?,
-    terminal: DesktopTerminalWorkspace?,
-) {
-  if (toolWindow == BottomToolWindow.Terminal) project?.path?.let { terminal?.activate(it) }
 }
 
 private suspend fun restoreTerminalEditorFocus(

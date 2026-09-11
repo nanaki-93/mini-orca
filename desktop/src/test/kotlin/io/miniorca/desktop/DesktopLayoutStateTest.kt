@@ -18,7 +18,7 @@ class DesktopLayoutStateTest {
             DesktopLayoutState(
                 activeLeftToolWindow = destination, explorerWidth = 340f, actionWidth = 440f)
         DesktopLayoutStore(preferences).save(saved)
-        assertEquals(saved, DesktopLayoutStore(preferences).load())
+        assertEquals(saved.withBottomCollapsed(true), DesktopLayoutStore(preferences).load())
         assertEquals(
             destination, leftToolWindowForWorkspace(workspaceForLeftToolWindow(destination)))
       }
@@ -35,12 +35,10 @@ class DesktopLayoutStateTest {
 
     assertEquals(LeftToolWindow.Editor, layout.activeLeftToolWindow)
     assertEquals(RightToolWindow.Context, layout.activeRightToolWindow)
-    assertEquals(BottomToolWindow.Problems, layout.activeBottomToolWindow)
     assertEquals(EditorSurface.Source, layout.editorSurface)
     assertEquals(220f, layout.explorerWidth)
     assertEquals(300f, layout.actionWidth)
     assertEquals(220f, layout.bottomHeight)
-    assertTrue(layout.bottomToolWindowVisible)
     assertTrue(layout.bottomCollapsed)
   }
 
@@ -51,17 +49,15 @@ class DesktopLayoutStateTest {
         initial
             .openLeft(LeftToolWindow.Analysis)
             .openRight(RightToolWindow.Assistant)
-            .openBottom(BottomToolWindow.Checks)
+            .openTerminal()
             .withEditorSurface(EditorSurface.Review)
             .withFocus(DesktopFocusRegion.BottomToolWindow)
 
     assertEquals(LeftToolWindow.Analysis, updated.activeLeftToolWindow)
     assertEquals(RightToolWindow.Assistant, updated.activeRightToolWindow)
-    assertEquals(BottomToolWindow.Checks, updated.activeBottomToolWindow)
     assertEquals(EditorSurface.Review, updated.editorSurface)
     assertTrue(updated.leftToolWindowVisible)
     assertTrue(updated.rightToolWindowVisible)
-    assertTrue(updated.bottomToolWindowVisible)
     assertFalse(updated.bottomCollapsed)
     assertEquals(DesktopFocusRegion.BottomToolWindow, updated.lastFocusedRegion)
     assertEquals(initial.explorerWidth, updated.explorerWidth)
@@ -130,12 +126,12 @@ class DesktopLayoutStateTest {
           recovered
               .openLeft(LeftToolWindow.Problems)
               .openRight(RightToolWindow.Review)
-              .openBottom(BottomToolWindow.Output)
+              .openTerminal()
               .withBottomHeight(300f)
               .withFocus(DesktopFocusRegion.RightToolWindow)
       DesktopLayoutStore(preferences).save(saved)
 
-      assertEquals(saved, DesktopLayoutStore(preferences).load())
+      assertEquals(saved.withBottomCollapsed(true), DesktopLayoutStore(preferences).load())
 
       preferences.put("ide-left-tool", "Unknown")
       assertEquals(
@@ -144,18 +140,17 @@ class DesktopLayoutStateTest {
   }
 
   @Test
-  fun storePersistsTheCollapsedSelectedBottomTabWithoutWorkflowState() {
+  fun storeKeepsTerminalDimensionsButNeverRestoresAnOpenSession() {
     withPreferences { preferences ->
       val layout =
           DesktopLayoutState()
-              .openBottom(BottomToolWindow.Checks)
+              .openTerminal()
               .withBottomHeight(360f)
-              .withBottomCollapsed(true)
               .withFocus(DesktopFocusRegion.BottomToolWindow)
 
       DesktopLayoutStore(preferences).save(layout)
 
-      assertEquals(layout, DesktopLayoutStore(preferences).load())
+      assertEquals(layout.withBottomCollapsed(true), DesktopLayoutStore(preferences).load())
     }
   }
 
@@ -217,17 +212,28 @@ class DesktopLayoutStateTest {
   }
 
   @Test
-  fun storeRestoresTerminalAndFallsBackForUnknownDestinations() {
-    withPreferences { preferences ->
-      preferences.put("ide-bottom-tool", "Output")
-      assertEquals(
-          BottomToolWindow.Output, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
-      preferences.put("ide-bottom-tool", "Terminal")
-      assertEquals(
-          BottomToolWindow.Terminal, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
-      preferences.put("ide-bottom-tool", "Unknown")
-      assertEquals(
-          BottomToolWindow.Problems, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
+  fun everyLegacyBottomDestinationRestoresCollapsedAndRetainsPaneDimensions() {
+    listOf("Problems", "Checks", "Output", "Terminal", "Unknown").forEach { destination ->
+      withPreferences { preferences ->
+        preferences.put("ide-bottom-tool", destination)
+        preferences.putBoolean("ide-bottom-visible", true)
+        preferences.putBoolean("ide-bottom-collapsed", false)
+        preferences.putFloat("ide-bottom-height", 340f)
+        preferences.putFloat("explorer-width", 320f)
+        preferences.putFloat("action-width", 440f)
+        val store = DesktopLayoutStore(preferences)
+        val layout = store.load()
+        assertTrue(layout.bottomCollapsed)
+        assertEquals(340f, layout.bottomHeight)
+        assertEquals(320f, layout.explorerWidth)
+        assertEquals(440f, layout.actionWidth)
+        store.save(layout.openTerminal())
+        assertTrue(store.load().bottomCollapsed)
+        assertEquals(340f, store.load().bottomHeight)
+        listOf("ide-bottom-tool", "ide-bottom-visible", "ide-bottom-collapsed").forEach {
+          assertEquals(null, preferences.get(it, null))
+        }
+      }
     }
   }
 

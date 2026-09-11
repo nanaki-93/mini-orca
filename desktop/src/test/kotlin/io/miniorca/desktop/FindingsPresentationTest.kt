@@ -3,9 +3,8 @@ package io.miniorca.desktop
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
-class ProblemsToolWindowTest {
+class FindingsPresentationTest {
   private val highOpen =
       UnifiedFinding(
           id = "high-open",
@@ -27,7 +26,7 @@ class ProblemsToolWindowTest {
       )
 
   @Test
-  fun sharedPresentationKeepsBottomAndDetailedBugsOrderingAndFiltersAligned() {
+  fun presentationKeepsBugsOrderingAndFiltersAligned() {
     val mediumDismissed = highOpen.copy(id = "medium", severity = "medium", status = "dismissed")
     val lowOpen = highOpen.copy(id = "low", severity = "low")
 
@@ -44,20 +43,6 @@ class ProblemsToolWindowTest {
         groupFindingsByPriority(
             filterFindings(listOf(lowOpen, mediumDismissed, highOpen), presentation.filters)),
         presentation.priorityGroups)
-  }
-
-  @Test
-  fun collapsedSummaryUsesTotalAndHighestActionableSeverityWithoutColor() {
-    assertEquals(
-        ProblemsCollapsedSummary(total = 2, highestActionablePriority = FindingPriority.High),
-        problemsCollapsedSummary(
-            listOf(highOpen, highOpen.copy(id = "dismissed", status = "dismissed"))))
-    assertEquals(
-        "2 problems · highest actionable severity: High",
-        problemsCollapsedSummary(listOf(highOpen, highOpen.copy(id = "low", severity = "low")))
-            .text)
-    assertEquals("No problems", problemsCollapsedSummary(emptyList()).text)
-    assertEquals("Loading problems…", problemsCollapsedSummary(emptyList(), loading = true).text)
   }
 
   @Test
@@ -83,20 +68,6 @@ class ProblemsToolWindowTest {
     assertEquals(
         EditorNavigationTarget("internal/main.go", "Run", 12),
         findingNavigationTarget(highOpen, index))
-    assertTrue(compactProblemRowDescription(highOpen).contains("Open source navigates only."))
-  }
-
-  @Test
-  fun collapsedTabTextAndSelectionRemainKeyboardDiscoverable() {
-    val summary = problemsCollapsedSummary(listOf(highOpen)).text
-
-    assertEquals("Bugs & Problems", bottomToolWindowLabel(BottomToolWindow.Problems))
-    assertEquals(
-        "Bugs & Problems tool window tab, $summary, selected",
-        bottomToolWindowTabDescription(
-            BottomToolWindow.Problems, selected = true, summary = summary))
-    assertTrue(DesktopLayoutState().bottomToolWindowVisible)
-    assertTrue(DesktopLayoutState().bottomCollapsed)
   }
 
   @Test

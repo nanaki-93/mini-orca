@@ -27,7 +27,6 @@ class DesktopKeyboardNavigationTest {
     assertFalse(
         terminalReturnShortcut(java.awt.event.KeyEvent.VK_F12, control = true, shift = false))
     assertTrue(terminalReturnShortcut(java.awt.event.KeyEvent.VK_F12, control = true, shift = true))
-    assertEquals("Terminal", bottomToolWindowLabel(BottomToolWindow.Terminal))
   }
 
   @Test
@@ -212,15 +211,6 @@ class DesktopKeyboardNavigationTest {
         rightToolWindowTabDescription(
             RightToolWindow.Context,
             selected = false,
-            focused = true,
-        ),
-    )
-    assertEquals(
-        "Output tool window tab, 2 lines, selected, focused",
-        bottomToolWindowTabDescription(
-            BottomToolWindow.Output,
-            selected = true,
-            summary = "2 lines",
             focused = true,
         ),
     )

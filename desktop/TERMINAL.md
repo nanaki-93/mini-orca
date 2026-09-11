@@ -98,9 +98,12 @@ TERM-01 execution record in [docs/tasks.md](../docs/tasks.md).
 
 ## Terminal pane
 
-Select **Terminal** in the bottom tools to start one local interactive shell in
+Select the sole **Terminal** control at the bottom to start one local interactive shell in
 the open project. **Ctrl+Shift+T** opens that pane from the application. A restored
-layout alone never launches a shell. Collapsing the pane or navigating to another
+layout restores pane dimensions with Terminal collapsed. Old Problems, Checks and
+Output selections are discarded; no layout preference launches a shell.
+Select **Terminal** again to collapse the dock, or **Hide terminal** to dismiss
+the bounded overlay below 1000dp. Collapsing the pane or navigating to another
 workspace keeps its session and bounded in-memory scrollback. **Focus terminal**
 returns input to it. **Close shell** stops the shell and its children; **Open shell**
 then starts a new session. Launch, exit and cleanup errors remain visible.

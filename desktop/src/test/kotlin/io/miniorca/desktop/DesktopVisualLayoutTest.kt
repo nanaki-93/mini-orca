@@ -755,38 +755,6 @@ class DesktopVisualLayoutTest {
           kotlin.test.assertEquals(0, assistantActions)
         }
 
-    val checksPresentation =
-        checksToolWindowPresentation(
-            ChecksToolWindowState(project, file, editableDraft(draft), draft, failedChecks, false))
-    ComposeVisualFixture(800, 500, 1.3f) { ChecksToolWindow(checksPresentation) }
-        .use { fixture ->
-          fixture.render("checks-failed-800-1.3")
-          assertTrue(fixture.hasText("Evidence only; run checks and Apply stay in Review."))
-          assertTrue(fixture.hasText("go test · Failed · required"))
-          assertTrue(fixture.hasText("expected failure evidence"))
-        }
-
-    ComposeVisualFixture(800, 360, 1.3f) {
-          OutputToolWindow(
-              OutputToolWindowPresentation(
-                  listOf(
-                      OutputEntry("Generation", "Running", "Generating a preview-only draft."),
-                      OutputEntry(
-                          "Daemon failure",
-                          "Failed",
-                          "The daemon is unavailable.",
-                          "connection refused"),
-                  )))
-        }
-        .use { fixture ->
-          fixture.render("output-running-error-800-1.3")
-          assertTrue(fixture.hasText("Output"))
-          assertTrue(fixture.hasText("2 entries"))
-          assertTrue(fixture.hasText("Generation"))
-          assertTrue(fixture.hasText("Daemon failure"))
-          assertTrue(fixture.hasText("connection refused"))
-        }
-
     var remoteConfirmation by mutableStateOf(false)
     ComposeVisualFixture(480, 180, 1.3f) {
           Column(Modifier.fillMaxSize().background(AppBackground).padding(8.dp)) {
@@ -1106,6 +1074,57 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun terminalChromeKeepsOneControlAndVisibleStateAcrossDockAndOverlaySizes() {
+    listOf(
+            Triple(1000, 760, 1f),
+            Triple(999, 760, 1f),
+            Triple(800, 650, 1f),
+            Triple(1280, 600, 1.5f),
+            Triple(360, 240, 1.5f))
+        .forEach { (width, height, scale) ->
+          var layout by mutableStateOf(DesktopLayoutState())
+          var opens = 0
+          var session by mutableStateOf(TerminalSessionState())
+          ComposeVisualFixture(width, height, scale) {
+                TerminalDock(
+                    layout,
+                    session,
+                    {
+                      opens++
+                      layout = layout.openTerminal()
+                    },
+                    { layout = layout.withBottomCollapsed(true) },
+                    {},
+                    {},
+                    { modifier -> Text("Synthetic shell", modifier = modifier) })
+              }
+              .use { fixture ->
+                fixture.render("terminal-collapsed-$width-$scale")
+                fixture.assertTextFits("Terminal")
+                assertEquals("Collapsed", fixture.stateDescription("Terminal"))
+                assertEquals(1, fixture.textCount("Terminal"))
+                listOf("Bugs & Problems", "Checks", "Output", "Synthetic shell").forEach {
+                  assertFalse(fixture.hasText(it))
+                }
+                assertEquals(0, opens)
+                assertTrue(fixture.requestFocus("Terminal"))
+                assertTrue(fixture.pressKey(Key.Enter))
+                fixture.render("terminal-expanded-$width-$scale")
+                assertEquals("Expanded", fixture.stateDescription("Terminal"))
+                assertTrue(fixture.hasText("Synthetic shell"))
+                assertEquals(1, opens)
+                fixture.clickText("Terminal")
+                session =
+                    TerminalSessionState(TerminalSessionPhase.Failed, error = "Shell launch failed")
+                fixture.render("terminal-failed-collapsed-$width-$scale")
+                assertTrue(fixture.hasText("Terminal needs attention"))
+                assertFalse(fixture.hasText("Synthetic shell"))
+                assertEquals(1, opens)
+              }
+        }
+  }
+
+  @Test
   fun transientOpenersCanReceiveKeyboardFocus() {
     val paletteFocus = FocusRequester()
     ComposeVisualFixture(1000, 220) {
@@ -1120,19 +1139,18 @@ class DesktopVisualLayoutTest {
 
     val bottomToolsFocus = FocusRequester()
     ComposeVisualFixture(800, 120) {
-          NarrowBottomToolWindowSummary(
-              DesktopLayoutState(),
-              listOf(BottomToolWindow.Problems),
-              mapOf(BottomToolWindow.Problems to BottomToolWindowSummary("No problems")),
-              onOpen = {},
-              openButtonModifier = Modifier.focusRequester(bottomToolsFocus),
+          TerminalBar(
+              TerminalSessionState(),
+              collapsed = true,
+              onToggle = {},
+              controlModifier = Modifier.focusRequester(bottomToolsFocus),
           )
         }
         .use { fixture ->
           fixture.render()
           bottomToolsFocus.requestFocus()
           fixture.render()
-          assertTrue(fixture.isFocused("Open tools"))
+          assertTrue(fixture.isFocused("Terminal"))
         }
   }
 
@@ -1245,12 +1263,15 @@ class DesktopVisualLayoutTest {
   fun filtersAndToolWindowHeadersKeepInteractionLocalAtNarrowScale() {
     var workflowActions = 0
     ComposeVisualFixture(480, 650, 1.3f) {
-          ProblemsToolWindow(
-              ProblemsToolWindowState(visualFixtureFindings, false),
-              FindingActions(
-                  openFinding = { workflowActions++ },
-                  prepareFinding = { workflowActions++ },
-                  triageFinding = { _, _ -> workflowActions++ }))
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(visualFixtureFindings, null, false),
+              BugsWorkspaceActions(
+                  FindingActions(
+                      openFinding = { workflowActions++ },
+                      prepareFinding = { workflowActions++ },
+                      triageFinding = { _, _ -> workflowActions++ }),
+                  {},
+                  {}))
         }
         .use { fixture ->
           fixture.render("findings-filters-collapsed-480-1.3")
@@ -1277,41 +1298,35 @@ class DesktopVisualLayoutTest {
                 content = { Text("Indexed relative paths", modifier = it.padding(8.dp)) },
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 onClose = { closes++ })
-            BottomToolWindowRegion(
+            TerminalDock(
                 layout = DesktopLayoutState(bottomCollapsed = true),
-                availableToolWindows = listOf(BottomToolWindow.Output),
-                summaries =
-                    mapOf(BottomToolWindow.Output to BottomToolWindowSummary("Output ready")),
-                onSelect = { opens++ },
+                session = TerminalSessionState(),
+                onOpen = { opens++ },
                 onCollapse = {},
                 onHeightDelta = {},
                 onHeightCommit = {},
-                content = { _, _ -> })
+                content = {})
           }
         }
         .use { fixture ->
           fixture.render("tool-window-controls-360-1.3")
           fixture.clickDescription("Close Files drawer")
-          fixture.clickText("Open tools")
+          fixture.clickText("Terminal")
           kotlin.test.assertEquals(1, closes)
           kotlin.test.assertEquals(1, opens)
         }
 
     var overlayDismissals = 0
     ComposeVisualFixture(480, 420, 1.3f) {
-          BottomToolWindowOverlay(
-              layout = DesktopLayoutState(activeBottomToolWindow = BottomToolWindow.Output),
-              availableToolWindows = listOf(BottomToolWindow.Output),
-              summaries = mapOf(BottomToolWindow.Output to BottomToolWindowSummary("Output ready")),
-              onSelect = {},
+          TerminalOverlay(
               onDismiss = { overlayDismissals++ },
-              content = { _, modifier -> Text("Read-only output", modifier = modifier) })
+              content = { modifier -> Text("Synthetic shell", modifier = modifier) })
         }
         .use { fixture ->
-          fixture.render("bottom-tools-overlay-480-1.3")
-          assertTrue(fixture.hasText("Bottom tools"))
-          assertTrue(fixture.hasText("Output"))
-          fixture.clickText("Close")
+          fixture.render("terminal-overlay-480-1.3")
+          assertTrue(fixture.hasText("Terminal"))
+          assertTrue(fixture.hasText("Synthetic shell"))
+          fixture.clickText("Hide terminal")
           kotlin.test.assertEquals(1, overlayDismissals)
         }
   }
@@ -1321,9 +1336,12 @@ class DesktopVisualLayoutTest {
     var sourceRequests = 0
     var mutations = 0
     ComposeVisualFixture(900, 500) {
-          ProblemsToolWindow(
-              ProblemsToolWindowState(visualFixtureFindings, false),
-              FindingActions({ sourceRequests++ }, { mutations++ }, { _, _ -> mutations++ }))
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(visualFixtureFindings, null, false),
+              BugsWorkspaceActions(
+                  FindingActions({ sourceRequests++ }, { mutations++ }, { _, _ -> mutations++ }),
+                  {},
+                  {}))
         }
         .use { fixture ->
           fixture.render()
@@ -1828,22 +1846,16 @@ private fun EditorVisualFixture(width: Float) {
               modifier = Modifier.weight(1f))
         }
         if (useNarrowLayout(width)) {
-          NarrowBottomToolWindowSummary(layout, BottomToolWindow.entries, emptyMap(), {})
+          TerminalBar(TerminalSessionState(), true, {})
         } else {
-          BottomToolWindowRegion(
+          TerminalDock(
               layout,
-              BottomToolWindow.entries,
-              emptyMap(),
+              TerminalSessionState(),
               {},
               {},
               {},
               {},
-              { _, modifier ->
-                ProblemsToolWindow(
-                    ProblemsToolWindowState(visualFixtureFindings, false),
-                    FindingActions({}, {}, { _, _ -> }),
-                    modifier)
-              })
+              { modifier -> Text("Synthetic shell", modifier = modifier.padding(8.dp)) })
         }
       }
       if (!useNarrowLayout(width)) {

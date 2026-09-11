@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.awt.Cursor
@@ -241,225 +242,99 @@ internal fun EditorArea(content: @Composable () -> Unit, modifier: Modifier = Mo
       }
 }
 
+/** Keep source and app chrome reachable in short windows without changing the saved height. */
+internal fun terminalDockHeight(preferred: Float, viewportHeight: Float): Float =
+    minOf(preferred, (viewportHeight - 300f).coerceAtLeast(80f))
+
 @Composable
-internal fun BottomToolWindowRegion(
+internal fun TerminalDock(
     layout: DesktopLayoutState,
-    availableToolWindows: List<BottomToolWindow>,
-    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
-    onSelect: (BottomToolWindow) -> Unit,
+    session: TerminalSessionState,
+    onOpen: () -> Unit,
     onCollapse: () -> Unit,
     onHeightDelta: (Float) -> Unit,
     onHeightCommit: () -> Unit,
-    content: @Composable (BottomToolWindow, Modifier) -> Unit,
-    tabModifier: Modifier = Modifier,
+    content: @Composable (Modifier) -> Unit,
+    controlModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
-  if (availableToolWindows.isEmpty()) return
-  val activeToolWindow =
-      layout.activeBottomToolWindow.takeIf { it in availableToolWindows }
-          ?: availableToolWindows.first()
-  val visibleSummary = bottomToolWindowSummary(activeToolWindow, summaries)
-  val collapsed = layout.bottomCollapsed
   Column(
       modifier
           .fillMaxWidth()
-          .height(if (collapsed) 40.dp else layout.bottomHeight.dp)
-          .background(ToolWindowSurface),
-  ) {
-    if (collapsed) IdeHorizontalSeparator()
-    else HorizontalResizableDivider(onHeightDelta, onHeightCommit)
+          .then(if (layout.bottomCollapsed) Modifier else Modifier.height(layout.bottomHeight.dp))
+          .background(ToolWindowSurface)) {
+        if (!layout.bottomCollapsed) HorizontalResizableDivider(onHeightDelta, onHeightCommit)
+        TerminalBar(
+            session,
+            layout.bottomCollapsed,
+            if (layout.bottomCollapsed) onOpen else onCollapse,
+            controlModifier = controlModifier,
+            showSeparator = layout.bottomCollapsed)
+        if (!layout.bottomCollapsed) content(Modifier.fillMaxWidth().weight(1f))
+      }
+}
+
+@Composable
+internal fun TerminalBar(
+    session: TerminalSessionState,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    controlModifier: Modifier = Modifier,
+    showSeparator: Boolean = true,
+) {
+  Column(modifier.fillMaxWidth().background(ToolWindowSurface)) {
+    if (showSeparator) IdeHorizontalSeparator()
     Row(
-        Modifier.fillMaxWidth().height(38.dp).padding(horizontal = 8.dp),
+        Modifier.fillMaxWidth().heightIn(min = 38.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-          BottomToolWindowTabs(
-              availableToolWindows, activeToolWindow, summaries, onSelect, tabModifier)
+          ChromeButton(
+              onClick = onToggle,
+              selected = !collapsed,
+              modifier =
+                  controlModifier.semantics {
+                    contentDescription =
+                        if (collapsed) "Open terminal · Ctrl+Shift+T" else "Collapse terminal"
+                    stateDescription = if (collapsed) "Collapsed" else "Expanded"
+                  }) {
+                DesktopLineIcon(
+                    if (collapsed) DesktopIcon.ChevronRight else DesktopIcon.ChevronDown,
+                    "Terminal",
+                    iconSize = 16.dp)
+                Spacer(Modifier.width(4.dp))
+                Text("Terminal", fontSize = 12.sp)
+              }
           Text(
-              visibleSummary?.text.orEmpty(),
-              color = if (visibleSummary?.attention == true) Warning else SecondaryText,
+              terminalSummary(session),
+              color = if (session.error != null) Warning else SecondaryText,
               fontSize = 11.sp,
               maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
               modifier = Modifier.weight(1f).padding(start = 8.dp))
-          ChromeButton(
-              onClick = if (collapsed) ({ onSelect(activeToolWindow) }) else onCollapse,
-          ) {
-            DesktopLineIcon(
-                if (collapsed) DesktopIcon.ChevronRight else DesktopIcon.ChevronDown,
-                if (collapsed) "Open tools" else "Collapse tools",
-                iconSize = 16.dp)
-            Spacer(Modifier.width(4.dp))
-            Text(if (collapsed) "Open tools" else "Collapse", fontSize = 11.sp)
-          }
         }
-    if (!collapsed) content(activeToolWindow, Modifier.fillMaxWidth().weight(1f))
   }
 }
 
 @Composable
-internal fun NarrowBottomToolWindowSummary(
-    layout: DesktopLayoutState,
-    availableToolWindows: List<BottomToolWindow>,
-    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
-    onOpen: () -> Unit,
-    modifier: Modifier = Modifier,
-    openButtonModifier: Modifier = Modifier,
-) {
-  if (availableToolWindows.isEmpty()) return
-  val activeToolWindow =
-      layout.activeBottomToolWindow.takeIf { it in availableToolWindows }
-          ?: availableToolWindows.first()
-  val summary = bottomToolWindowSummary(activeToolWindow, summaries)
-  Column(modifier.fillMaxWidth().background(ToolWindowSurface)) {
-    IdeHorizontalSeparator()
-    Row(
-        Modifier.fillMaxWidth().height(37.dp).padding(horizontal = 8.dp).semantics {
-          contentDescription =
-              "Bottom tools summary. ${bottomToolWindowLabel(activeToolWindow)} selected. ${summary?.text.orEmpty()}"
-        },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Text(bottomToolWindowLabel(activeToolWindow), color = PrimaryText, fontSize = 11.sp)
-      Text(
-          summary?.text.orEmpty(),
-          color = if (summary?.attention == true) Warning else SecondaryText,
-          fontSize = 11.sp,
-          maxLines = 1,
-          modifier = Modifier.weight(1f).padding(start = 8.dp),
-      )
-      ChromeButton(onClick = onOpen, modifier = openButtonModifier) {
-        DesktopLineIcon(DesktopIcon.ChevronRight, "Open tools", iconSize = 16.dp)
-        Spacer(Modifier.width(4.dp))
-        Text("Open tools", fontSize = 11.sp)
-      }
-    }
-  }
-}
-
-@Composable
-internal fun BottomToolWindowOverlay(
-    layout: DesktopLayoutState,
-    availableToolWindows: List<BottomToolWindow>,
-    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
-    onSelect: (BottomToolWindow) -> Unit,
+internal fun TerminalOverlay(
     onDismiss: () -> Unit,
-    content: @Composable (BottomToolWindow, Modifier) -> Unit,
-    tabModifier: Modifier = Modifier,
+    content: @Composable (Modifier) -> Unit,
 ) {
-  if (availableToolWindows.isEmpty()) return
-  val activeToolWindow =
-      layout.activeBottomToolWindow.takeIf { it in availableToolWindows }
-          ?: availableToolWindows.first()
   IdeDialog(
       onDismissRequest = onDismiss,
-      title = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          DesktopLineIcon(
-              bottomToolWindowIcon(activeToolWindow),
-              bottomToolWindowLabel(activeToolWindow),
-              iconSize = 18.dp)
-          Spacer(Modifier.width(8.dp))
-          Column {
-            Text("Bottom tools", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-            Text(bottomToolWindowLabel(activeToolWindow), color = SecondaryText, fontSize = 11.sp)
-          }
-        }
-      },
+      title = { Text("Terminal", color = PrimaryText, fontWeight = FontWeight.SemiBold) },
       content = {
-        Column(Modifier.fillMaxWidth().semantics { contentDescription = "Bottom tools overlay" }) {
-          BottomToolWindowTabs(
-              availableToolWindows, activeToolWindow, summaries, onSelect, tabModifier)
-          Box(Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp)) {
-            content(activeToolWindow, Modifier.fillMaxSize())
-          }
-        }
+        Box(
+            Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp).semantics {
+              contentDescription = "Terminal overlay"
+            }) {
+              content(Modifier.fillMaxSize())
+            }
       },
       actions = {
-        MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Close") }
-      },
-  )
+        MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Hide terminal") }
+      })
 }
-
-@Composable
-private fun BottomToolWindowTabs(
-    availableToolWindows: List<BottomToolWindow>,
-    activeToolWindow: BottomToolWindow,
-    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
-    onSelect: (BottomToolWindow) -> Unit,
-    modifier: Modifier,
-) {
-  var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
-  var tabGroupHasFocus by remember { mutableStateOf(false) }
-  Row(
-      modifier
-          .onFocusChanged { tabGroupHasFocus = it.hasFocus }
-          .focusable()
-          .onPreviewKeyEvent { event ->
-            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-            val interaction =
-                tabGroupInteraction(availableToolWindows, focusedToolWindow, tabGroupKey(event.key))
-                    ?: return@onPreviewKeyEvent false
-            focusedToolWindow = interaction.focused
-            interaction.activate?.let(onSelect)
-            true
-          }) {
-        availableToolWindows.forEach { toolWindow ->
-          val selected = toolWindow == activeToolWindow
-          ChromeTab(
-              onClick = { onSelect(toolWindow) },
-              selected = selected,
-              focusHighlight = tabGroupHasFocus && toolWindow == focusedToolWindow,
-              modifier =
-                  Modifier.semantics {
-                    contentDescription =
-                        bottomToolWindowTabDescription(
-                            toolWindow,
-                            selected,
-                            summaries[toolWindow]?.text,
-                            focused = tabGroupHasFocus && toolWindow == focusedToolWindow)
-                  },
-          ) {
-            DesktopLineIcon(
-                bottomToolWindowIcon(toolWindow),
-                bottomToolWindowLabel(toolWindow),
-                iconSize = 16.dp)
-            Spacer(Modifier.width(4.dp))
-            Text(bottomToolWindowLabel(toolWindow), fontSize = 12.sp)
-          }
-        }
-      }
-}
-
-internal fun bottomToolWindowLabel(toolWindow: BottomToolWindow): String =
-    when (toolWindow) {
-      BottomToolWindow.Problems -> "Bugs & Problems"
-      BottomToolWindow.Checks -> "Checks"
-      BottomToolWindow.Output -> "Output"
-      BottomToolWindow.Terminal -> "Terminal"
-    }
-
-internal fun bottomToolWindowIcon(toolWindow: BottomToolWindow): DesktopIcon =
-    when (toolWindow) {
-      BottomToolWindow.Problems -> DesktopIcon.Problems
-      BottomToolWindow.Checks -> DesktopIcon.Summary
-      BottomToolWindow.Output -> DesktopIcon.Editor
-      BottomToolWindow.Terminal -> DesktopIcon.Editor
-    }
-
-internal fun bottomToolWindowTabDescription(
-    toolWindow: BottomToolWindow,
-    selected: Boolean,
-    summary: String?,
-    focused: Boolean = false,
-): String =
-    "${bottomToolWindowLabel(toolWindow)} tool window tab${summary?.let { ", $it" }.orEmpty()}, ${if (selected) "selected" else "not selected"}${if (focused) ", focused" else ""}"
-
-/**
- * A failed background tab is visible in the collapsed summary without changing the selected tab.
- */
-internal fun bottomToolWindowSummary(
-    activeToolWindow: BottomToolWindow,
-    summaries: Map<BottomToolWindow, BottomToolWindowSummary>,
-): BottomToolWindowSummary? =
-    summaries.values.firstOrNull { it.attention } ?: summaries[activeToolWindow]
 
 internal fun leftToolWindowIcon(toolWindow: LeftToolWindow): DesktopIcon =
     when (toolWindow) {
