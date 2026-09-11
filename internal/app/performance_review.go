@@ -13,6 +13,7 @@ import (
 )
 
 type performanceReviewSnapshot struct {
+	runtime       modelRuntime
 	root          string
 	analysis      project.Analysis
 	file          project.IndexFile
@@ -28,7 +29,7 @@ func (s *Service) reviewPerformanceFile(ctx context.Context, path string, confir
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.requestPerformanceReview(ctx, snapshot)
+	result, err := s.requestPerformanceReview(ctx, snapshot, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -66,18 +67,18 @@ func (s *Service) preparePerformanceReview(path string) (performanceReviewSnapsh
 	if err != nil {
 		return performanceReviewSnapshot{}, err
 	}
-	return performanceReviewSnapshot{root: root, analysis: *analysis, file: *file, source: info.Content, policyVersion: policy.Version()}, nil
+	return performanceReviewSnapshot{runtime: s.runtimes.analyze, root: root, analysis: *analysis, file: *file, source: info.Content, policyVersion: policy.Version()}, nil
 }
 
-func (s *Service) requestPerformanceReview(ctx context.Context, snapshot performanceReviewSnapshot) (modelOutput, error) {
-	runtime := s.runtimes.analyze
+func (s *Service) requestPerformanceReview(ctx context.Context, snapshot performanceReviewSnapshot, dispatch *analysisModelDispatch) (modelOutput, error) {
+	runtime := snapshot.runtime
 	prompt, err := performancePrompt(snapshot.source, snapshot.analysis, snapshot.file)
 	if err != nil {
 		return modelOutput{}, err
 	}
 	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
 	defer cancel()
-	result, err := s.retry(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}})
+	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, nil, dispatch)
 	if timed.Err() != nil {
 		return modelOutput{}, timed.Err()
 	}
@@ -91,39 +92,27 @@ func (s *Service) publishPerformanceReview(ctx context.Context, snapshot perform
 	if err := s.validatePerformanceReviewSnapshot(ctx, snapshot); err != nil {
 		return nil, err
 	}
-	runtime := s.runtimes.analyze
+	runtime := snapshot.runtime
 	report := project.PerformanceFileReport{SchemaVersion: "1", ProjectID: snapshot.analysis.ProjectID, ProjectRevision: snapshot.analysis.ProjectRevision, Path: snapshot.file.Path, ContentHash: snapshot.file.ContentHash, Status: "completed", Findings: findings, Warning: warning, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, ReasoningEffort: runtime.effective.ReasoningEffort, PromptVersion: project.PerformancePromptVersion, ContextPolicyVersion: snapshot.policyVersion, GeneratedAt: time.Now().UTC()}
 	if result.Model != "" {
 		report.Model = result.Model
 	}
-	published := false
 	store := func() error {
-		if published {
-			return fmt.Errorf("performance report is already published")
-		}
 		if err := s.validatePerformanceReviewSnapshot(ctx, snapshot); err != nil {
 			return err
 		}
-		if err := project.StorePerformanceFileReport(snapshot.root, report); err != nil {
-			return err
-		}
-		published = true
-		return nil
+		return project.StorePerformanceFileReport(snapshot.root, report)
 	}
-	if authorizePublication != nil {
-		if err := authorizePublication(store); err != nil {
-			return nil, err
-		}
-		if !published {
-			return nil, fmt.Errorf("performance publication was not completed")
-		}
-	} else if err := store(); err != nil {
+	if err := publishAnalysisReport(store, authorizePublication); err != nil {
 		return nil, err
 	}
 	return &report, nil
 }
 
 func (s *Service) validatePerformanceReviewSnapshot(ctx context.Context, snapshot performanceReviewSnapshot) error {
+	if s.runtimes.analyze.effective != snapshot.runtime.effective {
+		return project.ErrRevisionConflict
+	}
 	return s.validateSourceFileSnapshot(ctx, snapshot.root, snapshot.analysis, snapshot.file, snapshot.policyVersion, false)
 }
 

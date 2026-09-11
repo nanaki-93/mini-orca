@@ -26,12 +26,7 @@ func (s *Service) ScanSecurityFile(ctx context.Context, path, revision string) (
 	if err != nil {
 		return nil, err
 	}
-	input := project.SecurityReportInput{
-		ProjectID: snapshot.analysis.ProjectID, ProjectRevision: snapshot.analysis.ProjectRevision,
-		Path: snapshot.file.Path, ContentHash: snapshot.file.ContentHash,
-		Source: project.SecuritySourceDeterministic, RuleSetVersion: project.SecurityGoRuleSetVersion,
-		ContextPolicyVersion: snapshot.policyVersion,
-	}
+	input := securityRulesInput(snapshot)
 	cached, err := s.loadSecurityFileReport(snapshot.root, input)
 	if err != nil {
 		return nil, err
@@ -42,6 +37,17 @@ func (s *Service) ScanSecurityFile(ctx context.Context, path, revision string) (
 		}
 		return cached, nil
 	}
+	return s.executeSecurityRulesScan(ctx, snapshot, nil)
+}
+
+func securityRulesInput(snapshot securityRulesSnapshot) project.SecurityReportInput {
+	return project.SecurityReportInput{ProjectID: snapshot.analysis.ProjectID, ProjectRevision: snapshot.analysis.ProjectRevision,
+		Path: snapshot.file.Path, ContentHash: snapshot.file.ContentHash, Source: project.SecuritySourceDeterministic,
+		RuleSetVersion: project.SecurityGoRuleSetVersion, ContextPolicyVersion: snapshot.policyVersion}
+}
+
+func (s *Service) executeSecurityRulesScan(ctx context.Context, snapshot securityRulesSnapshot, authorizePublication func(func() error) error) (*project.SecurityFileReport, error) {
+	input := securityRulesInput(snapshot)
 	scan, err := project.ScanGoSecurityRules(snapshot.file, snapshot.source)
 	if err != nil {
 		return nil, err
@@ -62,7 +68,14 @@ func (s *Service) ScanSecurityFile(ctx context.Context, path, revision string) (
 	if err := s.validateSecurityRulesSnapshot(ctx, snapshot); err != nil {
 		return nil, err
 	}
-	if err := project.StoreSecurityFileReport(snapshot.root, report, snapshot.file); err != nil {
+	cache, err := project.NewSecurityReportCache(snapshot.root)
+	if err != nil {
+		return nil, err
+	}
+	store := func() error {
+		return cache.StoreAuthorized(report, snapshot.file, func() error { return s.validateSecurityRulesSnapshot(ctx, snapshot) })
+	}
+	if err := publishAnalysisReport(store, authorizePublication); err != nil {
 		return nil, err
 	}
 	return &report, nil

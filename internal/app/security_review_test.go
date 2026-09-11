@@ -229,7 +229,7 @@ func TestReviewSecurityFilePreservesSourceLinesAndRejectsRuntimeTransition(t *te
 		t.Fatal(err)
 	}
 	service.runtimes.analyze.effective.RemoteProvider = true
-	if _, _, err := service.executeSecurityReview(context.Background(), snapshot); !errors.Is(err, project.ErrRevisionConflict) || calls != 1 {
+	if _, _, err := service.executeSecurityReview(context.Background(), snapshot, nil); !errors.Is(err, project.ErrRevisionConflict) || calls != 1 {
 		t.Fatalf("runtime transition error = %v, provider calls = %d", err, calls)
 	}
 }

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -165,6 +166,8 @@ type semanticAnalysisSuggestion struct {
 }
 
 type preparedFileAnalysis struct {
+	root        string
+	runtime     modelRuntime
 	analysis    *project.Analysis
 	indexedFile *project.IndexFile
 	source      string
@@ -215,7 +218,7 @@ func (s *Service) prepareFileAnalysis(targetFile string) (preparedFileAnalysis, 
 	if err != nil {
 		return preparedFileAnalysis{}, err
 	}
-	return preparedFileAnalysis{analysis: analysis, indexedFile: indexedFile, source: fileInfo.Content, cache: cache, input: input}, nil
+	return preparedFileAnalysis{root: s.manager.Root(), runtime: s.runtimes.bug, analysis: analysis, indexedFile: indexedFile, source: fileInfo.Content, cache: cache, input: input}, nil
 }
 
 func reusableFileAnalysis(cached *project.FileAnalysis) bool {
@@ -230,37 +233,52 @@ func (s *Service) syncCachedFileAnalysis(input project.FileAnalysisInput, cached
 }
 
 func (s *Service) generateFileAnalysis(ctx context.Context, prepared preparedFileAnalysis) (*project.FileAnalysis, error) {
+	fresh, err := s.requestFileAnalysis(ctx, prepared, nil)
+	if err != nil {
+		var modelErr *analysisModelError
+		if errors.As(err, &modelErr) {
+			return s.storeAnalysisFailure(prepared.cache, prepared.input, err)
+		}
+		return nil, err
+	}
+	if err := prepared.cache.Store(*fresh); err != nil {
+		return nil, err
+	}
+	if err := s.syncFileAnalysisStatus(prepared.input, fresh.Status); err != nil {
+		return nil, err
+	}
+	return fresh, nil
+}
+
+// Request and validation are separate from publication so a project run can
+// retain prior evidence on failure and hold its own publication authority.
+func (s *Service) requestFileAnalysis(ctx context.Context, prepared preparedFileAnalysis, dispatch *analysisModelDispatch) (*project.FileAnalysis, error) {
 	index, err := s.manager.Index()
 	if err != nil {
 		return nil, err
 	}
-	runtime := s.runtimes.bug
+	runtime := prepared.runtime
 	prompt, err := semanticPrompt(prepared.source, *prepared.analysis, index, *prepared.indexedFile, s.contextManifestForRuntime(semanticManifest(*prepared.indexedFile), runtime))
 	if err != nil {
 		return nil, err
 	}
 	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
 	defer cancel()
-	result, err := s.retryWithJSONSchema(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, FileAnalysisResponseSchema())
+	schema := FileAnalysisResponseSchema()
+	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, &schema, dispatch)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
 	if err != nil {
-		return s.storeAnalysisFailure(prepared.cache, prepared.input, err)
+		return nil, &analysisModelError{err}
 	}
 	parsed, err := parseSemanticAnalysis(result.Content, *prepared.indexedFile, prepared.source)
 	if err != nil {
-		return s.storeAnalysisFailure(prepared.cache, prepared.input, err)
+		return nil, &analysisModelError{err}
 	}
 	fresh := newFileAnalysis(prepared, parsed)
 	if model := result.Model; model != "" {
 		fresh.Model = model
-	}
-	if err := prepared.cache.Store(fresh); err != nil {
-		return nil, err
-	}
-	if err := s.syncFileAnalysisStatus(prepared.input, fresh.Status); err != nil {
-		return nil, err
 	}
 	return &fresh, nil
 }

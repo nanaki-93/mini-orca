@@ -250,8 +250,19 @@ func (s *Service) retryWithJSONSchema(ctx context.Context, runtime modelRuntime,
 }
 
 func (s *Service) retryRequest(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema *llm.JSONSchema) (modelOutput, error) {
+	return s.retryRequestAuthorized(ctx, runtime, messages, schema, nil)
+}
+
+// The guard reserves and validates each attempt immediately before transport.
+// Guard failures are never retried or treated as provider failures.
+func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema *llm.JSONSchema, beforeAttempt func(context.Context) error) (modelOutput, error) {
 	var lastErr error
 	for attempt := 0; attempt <= runtime.effective.MaxRetries; attempt++ {
+		if beforeAttempt != nil {
+			if err := beforeAttempt(ctx); err != nil {
+				return modelOutput{}, err
+			}
+		}
 		result, err := runtime.execute(ctx, messages, schema)
 		if err == nil {
 			return result, nil
