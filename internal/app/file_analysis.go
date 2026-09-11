@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v13"
+	semanticAnalysisPromptVersion = "file-analysis-v14"
 	maxSemanticAnalysisBytes      = 64 * 1024
 	fileAnalysisInsightFieldCount = 4
 	fileAnalysisInsightMaxChars   = 250
@@ -80,8 +80,9 @@ const fileAnalysisResponseSchemaDocument = `{
     "risk":{
       "type":"object",
       "additionalProperties":false,
-      "required":["severity","summary"],
+      "required":["category","severity","summary"],
       "properties":{
+        "category":{"enum":["bugs","performance","security"]},
         "severity":{"enum":["low","medium","high"]},
         "summary":{"type":"string","minLength":1},
         "task_spec":{"anyOf":[{"$ref":"#/$defs/taskSpec"},{"type":"null"}]},
@@ -148,10 +149,11 @@ type semanticAnalysisWireResponse struct {
 }
 
 type semanticAnalysisFinding struct {
-	Severity string          `json:"severity"`
-	Summary  string          `json:"summary"`
-	TaskSpec json.RawMessage `json:"task_spec"`
-	Insight  json.RawMessage `json:"engineering_insight"`
+	Category project.FindingCategory `json:"category"`
+	Severity string                  `json:"severity"`
+	Summary  string                  `json:"summary"`
+	TaskSpec json.RawMessage         `json:"task_spec"`
+	Insight  json.RawMessage         `json:"engineering_insight"`
 }
 
 type semanticAnalysisSuggestion struct {
@@ -365,10 +367,11 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 		return "", err
 	}
 	return "You summarize exactly one selected source file. Return one JSON object only; do not use Markdown or code fences. " +
-		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({severity,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? (see the shared engineering insight contract below). Keep each array to at most three concise items. " +
+		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({category,severity,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? (see the shared engineering insight contract below). Keep each array to at most three concise items. " +
 		fileAnalysisInsightSchema + project.EngineeringInsightPromptInstructions +
 		"For symbol_explanations, copy keys verbatim from TARGET_FACTS.symbols[].name. Do not explain parameters, local variables, fields, imported names, or referenced types unless their exact name appears in that list. An empty object is valid. Risk severity must be low, medium, or high. " +
 		fileAnalysisInsightGuidance +
+		"Every risk must have exactly one category: bugs for incorrect behavior, performance for avoidable resource costs, or security for a trust-boundary weakness. Choose the category from the demonstrated failure mechanism, independently of severity. State the relevant local control/data flow and conditions in summary. Performance concerns are hypotheses unless measurements are supplied; never invent measured impact. For security, identify the visible input and sensitive operation; do not infer missing safeguards in an unseen callee. Omit concerns unsupported by TARGET_SOURCE. General cleanup, explanations and best-practice advice belong in suggestions, not risks; an empty risks array is valid. " +
 		"Keep each insight field at or below 250 Unicode characters. Generic advice to use defer, handle errors, or follow best practices is not an insight. " +
 		"Usually omit task_spec. If you include one, it must have only these fields: schema_version \"1\", target_path copied exactly from TARGET_FACTS.path, target_symbol copied exactly from one exact atomic TARGET_FACTS.symbols name, target_signature copied exactly from that symbol's TARGET_FACTS signature, acceptance_criteria (array), non_goals (array), and optional go_test_candidate {name,content}. Do not use a symbol field. Never target another file. " +
 		"Treat all interpretations as suggestions. Do not quote source wholesale, invent files, or include source from another file.\n\n" +
@@ -432,7 +435,7 @@ func validateSemanticAnalysisResponse(output string, target project.IndexFile, s
 	}
 
 	for _, risk := range parsed.Risks {
-		if risk.Severity != "low" && risk.Severity != "medium" && risk.Severity != "high" || risk.Summary == "" {
+		if !risk.Category.Valid() || risk.Severity != "low" && risk.Severity != "medium" && risk.Severity != "high" || risk.Summary == "" {
 			return semanticAnalysisResponse{Diagnostics: parsed.Diagnostics}, fmt.Errorf("semantic analysis contains an invalid risk")
 		}
 	}
@@ -515,6 +518,7 @@ func parseSemanticRisks(risks []semanticAnalysisFinding, target project.IndexFil
 	parsed := make([]project.Finding, 0, len(risks))
 	for index, risk := range risks {
 		finding := project.Finding{
+			Category:           risk.Category,
 			Severity:           strings.ToLower(strings.TrimSpace(risk.Severity)),
 			Summary:            strings.TrimSpace(risk.Summary),
 			TaskSpec:           parseOptionalBugTaskSpec(risk.TaskSpec, target, source),

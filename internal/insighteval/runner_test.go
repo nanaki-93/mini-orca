@@ -886,7 +886,7 @@ func TestEngineeringInsightRunnerStoresOnlyDigestBoundScores(t *testing.T) {
 
 func TestEngineeringInsightRunnerPersistsPrivateOptionalDiagnosticsWithoutOverwrite(t *testing.T) {
 	const privateText = "private optional insight prose"
-	response := `{"purpose":"model reply is private","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"},"engineering_insight":{"mechanism":"` + privateText + `","why_it_matters_here":"local"}}],"suggestions":[],"symbol_explanations":{"unselected":"private symbol explanation"}}`
+	response := `{"purpose":"model reply is private","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"},"engineering_insight":{"mechanism":"` + privateText + `","why_it_matters_here":"local"}}],"suggestions":[],"symbol_explanations":{"unselected":"private symbol explanation"}}`
 	client := &fakeEngineeringInsightClient{reply: response}
 	cfg := runnerTestConfig(t, "optional-diagnostics", EngineeringInsightCollectRunMode, 3, client)
 	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
@@ -1045,7 +1045,7 @@ func TestEngineeringInsightRunnerRejectsIncompleteFileInsightsAcrossOptionalLoca
 		case "top-level":
 			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{},"engineering_insight":` + insight + `}`
 		case "risk":
-			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"severity":"low","summary":"Conditional.","engineering_insight":` + insight + `}],"suggestions":[],"symbol_explanations":{}}`
+			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","engineering_insight":` + insight + `}],"suggestions":[],"symbol_explanations":{}}`
 		case "suggestion":
 			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[{"title":"Keep behavior","summary":"No change.","engineering_insight":` + insight + `}],"symbol_explanations":{}}`
 		default:
@@ -1162,37 +1162,59 @@ func TestEngineeringInsightRecoveryV2BindsCompleteHistoricalEvidenceSet(t *testi
 	}
 }
 
-func TestEngineeringInsightRecoveryV2RunsExactlyTwelveVerifiedDevelopmentCases(t *testing.T) {
-	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
-	cfg := recoveryV2DevelopmentTestConfig(t, client)
-	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
-	if err != nil {
-		t.Fatal(err)
+// Historical accounting remains testable without reauthorizing v13 dispatch.
+func TestEngineeringInsightRecoveryV2ReservesExactlyTwelveDevelopmentCases(t *testing.T) {
+	cfg := recoveryV2DevelopmentTestConfig(t, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	for _, item := range cfg.Cases {
+		if reserved, err := reserveRecoveryV2Attempt(directory, cfg, item.Expected); err != nil || !reserved {
+			t.Fatalf("reservation = %t, %v", reserved, err)
+		}
 	}
-	if client.calls.Load() != 12 || receipt.ProtocolVersion != "v2" || receipt.Consumption.Requests != 12 || len(receipt.Attempts) != 12 {
-		t.Fatalf("v2 development calls=%d receipt=%+v", client.calls.Load(), receipt)
-	}
-	period, err := loadRecoveryV2Period(filepath.Join(cfg.Root, runnerRelativeDirectory), cfg.Root)
+	period, err := loadRecoveryV2Period(directory, cfg.Root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if period.DevelopmentRequests != 12 || period.CumulativeDevelopmentRequests != 60 || len(period.DevelopmentSchedule) != 12 || len(period.Reservations) != 12 {
-		t.Fatalf("v2 period accounting = %+v", period)
+		t.Fatalf("v2 accounting = %+v", period)
 	}
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); !errors.Is(err, ErrEngineeringInsightRunFinished) || client.calls.Load() != 12 {
-		t.Fatalf("finished v2 run was replayed: %v, calls=%d", err, client.calls.Load())
+	if reserved, err := reserveRecoveryV2Attempt(directory, cfg, cfg.Cases[0].Expected); err != nil || reserved {
+		t.Fatalf("replayed reservation = %t, %v", reserved, err)
 	}
-	manifestPath := filepath.Join(cfg.Root, runnerRelativeDirectory, cfg.RunID+".json")
-	manifest, exists, err := loadRunManifest(manifestPath)
-	if err != nil || !exists {
-		t.Fatalf("load v2 manifest: %v", err)
+	if err := consumeRecoveryV2Request(&period, EngineeringInsightDevelopmentRunMode); err == nil {
+		t.Fatal("exceeded twelve-request budget")
 	}
-	manifest.Receipt.ProtocolVersion = ""
-	if err := writeRunnerJSON(manifestPath, manifest); err != nil {
+	manifest := engineeringInsightRunManifest{Receipt: runnerReceipt(cfg)}
+	if err := validateRunnerManifest(manifest, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 12 {
-		t.Fatalf("v2 manifest resumed with historical protocol identity: %v, calls=%d", err, client.calls.Load())
+	manifest.Receipt.ProtocolVersion = ""
+	if err := validateRunnerManifest(manifest, cfg); err == nil {
+		t.Fatal("v2 manifest accepted a historical protocol identity")
+	}
+}
+
+func TestEngineeringInsightRecoveryV2RejectsRetiredPromptWithoutConsumption(t *testing.T) {
+	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
+	cfg := recoveryV2DevelopmentTestConfig(t, client)
+	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
+	path := recoveryV2PeriodPath(directory)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, version := range []string{recoveryV2PromptVersion, app.EngineeringInsightPromptVersion()} {
+		cfg.PromptVersion = version
+		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
+			t.Fatalf("retired campaign dispatched under %s: %v", version, err)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || string(after) != string(before) {
+			t.Fatal("rejection changed historical accounting")
+		}
+		if _, err := os.Stat(filepath.Join(directory, cfg.RunID+".json")); !os.IsNotExist(err) {
+			t.Fatalf("rejection created a manifest: %v", err)
+		}
 	}
 }
 
@@ -1204,12 +1226,16 @@ func TestEngineeringInsightRecoveryV2RejectsConcurrentReservationOwner(t *testin
 		t.Fatal(err)
 	}
 	defer lock.Close()
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); !errors.Is(err, ErrEngineeringInsightRunLocked) || client.calls.Load() != 0 {
-		t.Fatalf("concurrent v2 reservation owner = %v, calls=%d", err, client.calls.Load())
+	second, err := lockRunnerFile(filepath.Join(cfg.Root, runnerRelativeDirectory, "campaign.lock"))
+	if second != nil {
+		defer second.Close()
+	}
+	if !errors.Is(err, ErrEngineeringInsightRunLocked) {
+		t.Fatalf("concurrent reservation owner = %v", err)
 	}
 }
 
-func TestEngineeringInsightRecoveryV2ResumesChargedUnknownWithoutReplacement(t *testing.T) {
+func TestEngineeringInsightRecoveryV2PreservesChargedReservationWithoutReplacement(t *testing.T) {
 	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
 	cfg := recoveryV2DevelopmentTestConfig(t, client)
 	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
@@ -1224,17 +1250,21 @@ func TestEngineeringInsightRecoveryV2ResumesChargedUnknownWithoutReplacement(t *
 	if err := writeRunnerJSON(recoveryV2PeriodPath(directory), period); err != nil {
 		t.Fatal(err)
 	}
-	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
-	if err != nil {
-		t.Fatal(err)
+	for index, item := range cfg.Cases {
+		reserved, err := reserveRecoveryV2Attempt(directory, cfg, item.Expected)
+		if err != nil || reserved != (index != 0) {
+			t.Fatalf("charged attempt %d reserved=%t, %v", index, reserved, err)
+		}
 	}
-	if client.calls.Load() != 11 || receipt.Consumption.Requests != 12 || receipt.Attempts[0].Outcome != "unknown" {
-		t.Fatalf("charged resume calls=%d receipt=%+v", client.calls.Load(), receipt)
+	period, err = loadRecoveryV2Period(directory, cfg.Root)
+	if err != nil || period.DevelopmentRequests != 12 || period.CumulativeDevelopmentRequests != 60 {
+		t.Fatalf("charged accounting = %+v, %v", period, err)
 	}
-	replacement := cfg
-	replacement.RunID = "replacement-run"
-	if _, _, err := RunEngineeringInsightEvaluation(context.Background(), replacement); err == nil || client.calls.Load() != 11 {
-		t.Fatalf("replacement run dispatched: %v, calls=%d", err, client.calls.Load())
+	for _, runID := range []string{cfg.RunID, "replacement-run"} {
+		cfg.RunID = runID
+		if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
+			t.Fatalf("retired/replacement run dispatched: %v", err)
+		}
 	}
 }
 
@@ -1267,6 +1297,9 @@ func TestEngineeringInsightRecoveryV2RejectsIdentityCorpusAndScheduleDrift(t *te
 			mutate(&cfg)
 			client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
 			cfg.Client = client
+			if recoveryV2RunnerConfig(cfg) && validateRecoveryV2RunnerConfig(cfg) == nil && cfg.BaseRevision == base.BaseRevision {
+				t.Fatal("historical identity/corpus/schedule guard accepted drift")
+			}
 			if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
 				t.Fatalf("drift dispatched: %v, calls=%d", err, client.calls.Load())
 			}
@@ -1296,6 +1329,9 @@ func TestEngineeringInsightRecoveryV2RejectsPredecessorAndCleanHeadDrift(t *test
 			client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
 			cfg := recoveryV2DevelopmentTestConfig(t, client)
 			mutate(t, cfg)
+			if reserved, err := reserveRecoveryV2Attempt(filepath.Join(cfg.Root, runnerRelativeDirectory), cfg, cfg.Cases[0].Expected); err == nil || reserved {
+				t.Fatalf("historical %s boundary accepted drift: %v", name, err)
+			}
 			if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
 				t.Fatalf("%s drift dispatched: %v, calls=%d", name, err, client.calls.Load())
 			}
@@ -1527,7 +1563,7 @@ func recoveryV2TestRoot(t *testing.T) (string, string) {
 	return root, base
 }
 
-// Prompt digests were captured from the production prompt before extraction.
+// Prompt digests bind the reviewed categorized v14 prompt and provider metadata.
 func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 	source := "package fixture\nfunc Run() {}\n"
 	target := project.IndexFile{Path: "sample.go", Language: "Go", SizeBytes: int64(len(source)), ContentHash: "source-hash", Symbols: []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "exact", AtomicTarget: true}}}
@@ -1538,13 +1574,13 @@ func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 		remote           bool
 		promptDigest     string
 	}{
-		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false, "0992e3761823c6a7c543c3ead08fec1885c34ee935b5988391c20abc918d58db"},
-		{"http://localhost:1234/v1", "http://localhost:1234", false, "d74c6f5ebb26cc1ad72f24d4d1534d0637f7284abc5338a16273cf0a9d81807e"},
-		{"http://[::1]:1234/v1", "http://[::1]:1234", false, "ffd2671edd136725578e1a4d28f7ebdd305beaa5ff3806a92bf4cc1989258a80"},
-		{"http://127.25.0.1/v1", "http://127.25.0.1", false, "b69910273ae2479a61c11d42137f81f101956298e4cd3f51a3d6a61b11596de9"},
-		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true, "26cbeb6c3b83c1fd9637a12f7c033c4e8afffad865035c7e18095a2bfdbd3a44"},
-		{"http://localhost.example/v1", "http://localhost.example", true, "4e5d8a7d9104b64302b524083e8b092d8b851db4d7b56dafa7947ed0cfb8fdd3"},
-		{"invalid endpoint", "", true, "769121c99c9578fc290b12d45d4227ef9aace04ef110c180715446dcd5f04d13"},
+		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false, "723a2c5f1fd303b680178e2755df14178059fafca32c6e162f59ca67708eec78"},
+		{"http://localhost:1234/v1", "http://localhost:1234", false, "b0287793626f4efe12d508b4b740b457248dc197fcd963b0cf09ddd3a48d5334"},
+		{"http://[::1]:1234/v1", "http://[::1]:1234", false, "1b933cbdd6d76bd5fd2d02a2d894c2750dfdc20f964fe701c28cdbb5cab78b8d"},
+		{"http://127.25.0.1/v1", "http://127.25.0.1", false, "5b384cee1b37d039beb40742689fcece8fa30c56206dec47bb4903447fdd61a7"},
+		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true, "4cb1ea7f084c88a0bd913457d99b8f309e86063c44b7e850580fb9701754709e"},
+		{"http://localhost.example/v1", "http://localhost.example", true, "5d57c4f07293493489678ac626109567dfdc0c85cd826959f16e28d39ac8f925"},
+		{"invalid endpoint", "", true, "4eba46f45a5dd91ae2ce329871a56ad39554e416549f3bdd00f4aac70e223a5b"},
 	} {
 		t.Run(test.endpoint, func(t *testing.T) {
 			profile := config.ModelProfile{Scope: config.BugModelScope, Model: "fixture-model", APIBaseURL: test.endpoint, APIKey: "private-api-key", ContextMaxTokens: 16384}
@@ -1563,7 +1599,7 @@ func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 			}
 			got, err := app.PrepareFileAnalysisEvaluation(source, analysis, index, target, profile)
 			if err != nil || fmt.Sprintf("%x", sha256.Sum256([]byte(got))) != test.promptDigest {
-				t.Fatalf("evaluation prompt differs from pre-extraction bytes: %v", err)
+				t.Fatalf("evaluation prompt differs from reviewed v14 bytes: %v", err)
 			}
 		})
 	}
@@ -1583,7 +1619,8 @@ func TestFileAnalysisEvaluationAssessmentMatchesRunner(t *testing.T) {
 		{"accepted", `{"purpose":"Explains.","engineering_insight":{"mechanism":"One operation.","why_it_matters_here":"A local call.","tradeoff_or_failure_mode":"Changes its result.","transferable_lesson":"Verify its result."}}`, "present", true, false},
 		{"rejected", `{"purpose":"Explains.","engineering_insight":false}`, "rejected", true, true},
 		{"symbol degradation", `{"purpose":"Explains.","symbol_explanations":{"missing":"Explanation"}}`, "omitted", true, true},
-		{"task degradation", `{"purpose":"Explains.","risks":[{"severity":"low","summary":"Risk.","task_spec":{}}]}`, "omitted", true, true},
+		{"task degradation", `{"purpose":"Explains.","risks":[{"category":"bugs","severity":"low","summary":"Risk.","task_spec":{}}]}`, "omitted", true, true},
+		{"category rejected", `{"purpose":"Explains.","risks":[{"severity":"low","summary":"Legacy.","engineering_insight":false}]}`, "rejected", false, true},
 		{"parent rejected", `{"purpose":"","engineering_insight":false}`, "rejected", false, true},
 		{"not JSON", `private response`, "omitted", false, false},
 	} {
