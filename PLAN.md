@@ -206,7 +206,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 15/17. **Active writer:** none after BOTTOM-01 acceptance. **Next:** BOTTOM-02.
+**Accepted:** 16/17. **Active writer:** none after BOTTOM-02 acceptance. **Next:** VERIFY-01.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -225,8 +225,18 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 13 | [TERM-01](docs/tasks.md#task-term-01--prove-the-terminal-dependency-and-local-session-boundary) | Prove the terminal dependency and local-session boundary | Complete; locally committed |
 | 14 | [TERM-02](docs/tasks.md#task-term-02--integrate-the-interactive-terminal-pane) | Integrate the interactive terminal pane | Complete; locally committed |
 | 15 | [BOTTOM-01](docs/tasks.md#task-bottom-01--preserve-unique-diagnostics-in-their-owning-workflows) | Preserve unique diagnostics in their owning workflows | Complete; locally committed |
-| 16 | [BOTTOM-02](docs/tasks.md#task-bottom-02--replace-the-bottom-tools-with-terminal-only) | Replace the bottom tools with Terminal only | Queued |
+| 16 | [BOTTOM-02](docs/tasks.md#task-bottom-02--replace-the-bottom-tools-with-terminal-only) | Replace the bottom tools with Terminal only | Complete; locally committed |
 | 17 | [VERIFY-01](docs/tasks.md#task-verify-01--validate-the-complete-interaction-and-document-support) | Validate the complete interaction and document support | Queued |
+
+**Accepted BOTTOM-02 — 2026-09-12:** Terminal is the sole bottom control; the
+old Problems, Checks and Output panels, tab counts and dead helpers are removed.
+Saved dimensions survive, while startup restores a collapsed terminal without
+launching a shell. Dock resizing and the bounded narrow overlay preserve the same
+process. Passed 61 focused, 400 full working-tree and 398 isolated-candidate tests,
+quality gates and packaging. Native checks verified hide/reopen, PTY resizing,
+1000/999dp rehosting, short-window layout, keyboard focus and app-exit cleanup.
+One correction; all ten unrelated UI edits remain preserved and excluded. VERIFY-01
+is next; the Astra Extra High scheduler remains Active.
 
 **Accepted BOTTOM-01 — 2026-09-12:** Check/validation details stay in Review,
 request failures appear beside their Assistant target, verified-scan commands and

@@ -15,8 +15,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -111,34 +109,11 @@ internal fun findingsFilterStateLabel(activeFilters: List<String>): String? =
     activeFilters.size.takeIf { it > 0 }?.let { "$it active" }
 
 @Composable
-internal fun CompactProblemRow(
-    finding: UnifiedFinding,
-    actions: FindingActions,
-    onShowDetails: (() -> Unit)? = null,
-) {
-  Column(
-      Modifier.fillMaxWidth().padding(8.dp).semantics {
-        contentDescription = compactProblemRowDescription(finding)
-      }) {
-        ResultRowContent(semanticResultRow(finding))
-        FindingActionButtons(finding, actions, onShowDetails)
-        IdeHorizontalSeparator(Modifier.padding(top = 8.dp))
-      }
-}
-
-@Composable
 internal fun FindingActionButtons(
     finding: UnifiedFinding,
     actions: FindingActions,
-    onShowDetails: (() -> Unit)? = null,
 ) {
   ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact)) {
-    onShowDetails?.let { onDetails ->
-      MiniOrcaButton(
-          onClick = onDetails, tone = ActionTone.Neutral, density = ButtonDensity.Toolbar) {
-            Text("Details", fontSize = 11.sp)
-          }
-    }
     MiniOrcaButton(
         onClick = { actions.select(finding) },
         enabled = finding.location.path.isNotBlank(),
@@ -163,9 +138,6 @@ internal fun FindingActionButtons(
     }
   }
 }
-
-internal fun compactProblemRowDescription(finding: UnifiedFinding): String =
-    "${finding.severity.ifBlank { "unknown" }} problem, ${findingStatusLabel(finding)}, ${findingProvenanceLabel(finding)}, ${findingLocationLabel(finding)}. ${finding.title.ifBlank { finding.message.ifBlank { "Untitled finding" } }}. Open source navigates only."
 
 internal fun findingLocationLabel(finding: UnifiedFinding): String {
   val location = finding.location

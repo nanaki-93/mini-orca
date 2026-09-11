@@ -1534,7 +1534,7 @@ The scheduler remains Active with BOTTOM-02 next; no later card has started.
 
 ## Task BOTTOM-02 — Replace the bottom tools with Terminal only
 
-- [ ] BOTTOM-02 completed with required checks and diff review.
+- [x] BOTTOM-02 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/DesktopLayoutState.kt` — terminal-only preference model and legacy bottom selection fallback.
@@ -1546,6 +1546,14 @@ The scheduler remains Active with BOTTOM-02 next; no later card has started.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ProblemsToolWindowTest.kt` — move shared finding assertions or remove obsolete tests.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopLayoutStateTest.kt` — old bottom preferences restore collapsed Terminal.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — terminal wide/narrow/collapsed/failed states.
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/IdeShell.kt` — replace the old bottom tab primitives with terminal-only dock, opener and overlay.
+- `desktop/src/main/kotlin/io/miniorca/desktop/BugsWorkspaceState.kt` — remove the now-unreferenced bottom problem summary model.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopShellTest.kt` — migrate removed bottom-tab expectations and verify bounded terminal height.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — remove obsolete bottom-tab semantics expectations; preserve terminal routing checks.
+- `desktop/src/test/kotlin/io/miniorca/desktop/FindingsPresentationTest.kt` — retain the shared finding behavior tests previously housed under the removed Problems surface.
+- `desktop/src/main/kotlin/io/miniorca/desktop/FindingsPresentation.kt` — remove the compact bottom-only finding row and its now-unused details callback; retain shared result/action components.
+- `desktop/TERMINAL.md` — document the sole bottom control and startup preference migration.
 
 **Inputs / dependencies**
 - NAV-01, TERM-02, BOTTOM-01.
@@ -1559,7 +1567,47 @@ The scheduler remains Active with BOTTOM-02 next; no later card has started.
 `./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.DesktopLayoutStateTest' --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
 
 **Execution record**
-Not started.
+Started 2026-09-12. Verified BOTTOM-01 commit/receipt, empty index, all ten unrelated UI edits and both Java toolchains. Saved HEAD/working baselines under `.mini-orca/autopilot/ux/BOTTOM-02/`. Added the directly coupled terminal chrome, obsolete summary model and required behavior-test targets before editing. Preserve shared finding/filter/navigation assertions in their owning test class; obsolete Checks/Output UI assertions are covered by BOTTOM-01 workflow diagnostic tests. Initial implementation; zero corrections.
+
+
+**Correction 1 — 2026-09-12.** The prescribed command stopped at compilation: nested Compose receiver scope hid `BoxWithConstraints.maxHeight`. Capture viewport height beside width before entering nested pane scopes. Review also found the removed Problems surface was the last consumer of its compact finding row, optional Details callback and severity-summary extension; remove those directly coupled dead helpers and obsolete helper-only assertion. Retained finding navigation/filter tests now live in FindingsPresentationTest. Failed command/output: `focused.log`.
+
+**Accepted — 2026-09-12.** Correction 1 passes the prescribed three-class command:
+**61 tests**, zero failures/errors/skips. The full working tree passes **400 tests**;
+the isolated candidate excluding unrelated UI edits passes **398 tests**. Both
+pass Detekt and Spotless; the isolated candidate also passes `createDistributable`.
+The five-test net reduction removes six obsolete bottom-panel/summary tests and
+adds a terminal control/lifecycle presentation test. Three shared finding tests
+were moved intact in purpose to FindingsPresentationTest; filter and source-only
+navigation interaction tests now exercise the actual Bugs workspace. Workflow
+check/output diagnostics remain covered by the accepted BOTTOM-01 tests.
+
+The bottom destination enum, old pane constructors, tab selection/counts, summary
+models and compact bottom-only finding helpers are removed. One Terminal control
+owns open/collapse; the integrated status bar remains separate. Startup keeps pane
+sizes and restores a collapsed terminal, ignoring/removing old bottom selections
+and visibility preferences. It never starts a process from saved layout. Dock
+height temporarily clamps in short windows without overwriting the saved value.
+
+Native verification on macOS arm64 used the isolated packaged runtime/application
+jars and the existing synthetic terminal entry point with temporary project and
+in-memory preferences. Verified 800x600 startup/overlay, 1280x650 dock and resize,
+exact 1000dp dock/999dp overlay, and 1280x600 short-window layout. One shell PID
+survived collapse/open, Hide/Enter reopen, resize and responsive rehosting; observed
+PTY dimensions changed with the available region. Ctrl+Shift+F12 restored native
+app shortcuts in both presentations. Drawer dismissal, palette navigation and
+terminal opener focus worked; Cmd+Q stopped the owned shell. Component renders
+cover collapsed/expanded/failed state and 150% text. No new other-host, screen-reader
+or full-screen-terminal claim. Native checks, screenshots and package-input hashes
+are under the ignored BOTTOM-02 evidence directory.
+
+Final scope review found no unrelated changes in the isolated candidate, no
+remaining consumers of deleted helpers and no added model/source-write authority.
+All ten prior UI edits remain preserved; three overlapping files were reconstructed
+against their saved baseline to exclude the user changes from the tested commit.
+No Go code changed, so Go/race/full `make check` were not run. Preference migration
+is automatic; no manual configuration step is needed. Create and verify the one
+local BOTTOM-02 commit, then end this wake with VERIFY-01 next and scheduler Active.
 
 ## Task VERIFY-01 — Validate the complete interaction and document support
 
