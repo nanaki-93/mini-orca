@@ -205,7 +205,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 6/17. **Active task/writer:** none. **Next:** ANA-03.
+**Accepted:** 7/17. **Active task/writer:** none. **Next:** ANA-04.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -215,7 +215,7 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 4 | [CREATE-02](docs/tasks.md#task-create-02--close-creation-validation-and-lifecycle-gaps) | Close creation validation and lifecycle gaps | Complete; locally committed |
 | 5 | [ANA-01](docs/tasks.md#task-ana-01--define-categorized-results-and-unified-run-contracts) | Define categorized results and unified run contracts | Complete; locally committed |
 | 6 | [ANA-02](docs/tasks.md#task-ana-02--produce-and-validate-explicit-semantic-categories) | Produce and validate explicit semantic categories | Complete; locally committed |
-| 7 | [ANA-03](docs/tasks.md#task-ana-03--compose-the-per-file-analysis-stages) | Compose the per-file analysis stages | Queued |
+| 7 | [ANA-03](docs/tasks.md#task-ana-03--compose-the-per-file-analysis-stages) | Compose the per-file analysis stages | Complete; locally committed |
 | 8 | [ANA-04](docs/tasks.md#task-ana-04--implement-one-durable-bounded-run-lifecycle) | Implement one durable, bounded run lifecycle | Queued |
 | 9 | [ANA-05](docs/tasks.md#task-ana-05--migrate-existing-jobs-and-expose-the-unified-api) | Migrate existing jobs and expose the unified API | Queued |
 | 10 | [ANA-06](docs/tasks.md#task-ana-06--give-the-desktop-one-analysis-owner) | Give the desktop one analysis owner | Queued |
@@ -270,6 +270,17 @@ Focused/full Go tests, race tests, formatting, vet and diff review passed withou
 corrections. Historical evaluation grants stay fixed; retired v13 dispatch is
 rejected without consumption. No live qualification or desktop changes. Local
 commit evidence: `.mini-orca/autopilot/ux/ANA-02/receipt.json`.
+
+**Accepted ANA-03 — 2026-09-11:** Composed private per-file semantic, Performance,
+Security rules and Security AI stages using existing parsers and report stores.
+Matching cache evidence, partial results and producer identities remain distinct;
+model failures retain earlier reports. Each request/retry reserves a bounded
+attempt and rechecks ownership, source and consent; publication rejects stale or
+canceled work. Focused/full Go tests, race tests, formatting, vet and diff review
+passed after one correction preserving preparation-error behavior. All ten
+unrelated desktop edits are unchanged. No migration, desktop/native checks or
+live provider calls; whole-project orchestration remains ANA-04/05 work. Local
+commit evidence: `.mini-orca/autopilot/ux/ANA-03/receipt.json`.
 
 ## Definition of done
 

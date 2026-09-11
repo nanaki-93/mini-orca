@@ -532,7 +532,7 @@ categories. ANA-03 is next and remains unchecked.
 
 ## Task ANA-03 — Compose the per-file analysis stages
 
-- [ ] ANA-03 completed with required checks and diff review.
+- [x] ANA-03 completed with required checks and diff review.
 
 **Target files**
 - `internal/app/analysis_file.go` — new typed stage execution over the existing analyzers.
@@ -542,6 +542,8 @@ categories. ANA-03 is next and remains unchecked.
 - `internal/app/security_review.go` — bind advisory execution/publication to admitted run identity and fresh intent.
 - `internal/app/security_rules.go` — include passive rules for eligible Go files.
 - `internal/app/source_file_snapshot.go` — share only truly identical identity checks.
+- `internal/app/service.go` — narrow retry-loop entry point for an explicit before-attempt guard; existing callers keep the same retry behavior.
+- `internal/app/security_review_test.go` — update the existing direct execution call for the explicit optional dispatch argument.
 
 **Inputs / dependencies**
 - ANA-01, ANA-02.
@@ -557,7 +559,54 @@ categories. ANA-03 is next and remains unchecked.
 `go test -race ./internal/app -run 'Test(AnalysisFile|AnalyzeFile|ReviewPerformanceFile|ReviewSecurityFile|ScanSecurityFile)' -count=1`
 
 **Execution record**
-Not started.
+Completed 2026-09-11. Required validation and diff review passed with one focused
+correction. The authorized local commit is identified by ANA-03 in Git history
+and `.mini-orca/autopilot/ux/ANA-03/receipt.json`.
+Verified ANA-02 commit/receipt and both configured Java toolchains. The ten
+unrelated desktop files and empty index are preserved under
+`.mini-orca/autopilot/ux/ANA-03/baseline/`. Preparation added the directly coupled
+retry entry point in service.go so every attempt, including retries, can validate
+ownership/source/consent and reserve its budget before dispatch. The per-stage
+executor is private; admission and scheduling remain ANA-04/05 work.
+The existing direct Security execution test is also a required signature-dependent
+target; it keeps its runtime-transition assertion with nil standalone dispatch.
+Initial implementation is ready: a private stage executor reuses producer-owned
+parsers/stores, validates captured snapshots and explicit publication authority,
+and reserves bounded model attempts before every retry. Tests cover partial and
+failed stages, cache/refresh, producer identity, consent, cancellation, stale work
+and reservation/publication failures. The initial candidate had no repairs.
+The initial prescribed race-enabled command passed (`focused-initial.log`).
+Review then found a compatibility regression: extracted semantic preparation
+errors could be stored as model failures, and Security snapshot read failures
+could be reported as ordinary model failures. Correction 1 distinguishes typed
+model request/response errors from preparation/identity/storage failures and adds
+a standalone oversized-input regression test. One correction is used.
+
+Correction-1 prescribed verification exited 0:
+`go test -race ./internal/app -run 'Test(AnalysisFile|AnalyzeFile|ReviewPerformanceFile|ReviewSecurityFile|ScanSecurityFile)' -count=1`
+passed in 3.528 seconds. `go test ./...`, `make test-race` and
+`make fmt-check vet` each exited 0; unchanged packages may use valid cached results.
+Logs are retained as `focused-initial.log`, `focused-correction-1.log`,
+`go-tests.log`, `race-tests.log` and `format-vet.log` in the ignored ANA-03 evidence
+directory. No verification command failed; the correction addressed a concrete
+review finding. No additional correction or passing-suite rerun was needed.
+
+Final diff review checked the synchronous publication boundary for lock reentry,
+durable reservation failures, bounded transport retries without runtime mutation,
+cache/provider identity, cancellation during active requests and cache reads,
+source/policy/generation changes, partial evidence and source-free failure text.
+Existing standalone behavior tests remain intact, with the one required optional
+dispatch argument added to the direct Security test call. Existing snapshot
+validation was reused without editing source_file_snapshot.go. The new executor
+is private and does not yet admit or schedule whole-project runs. It executes no
+project tests, vet, benchmarks or terminal commands.
+
+`git diff --check` passed. The eight implementation/test files were frozen after
+validation; the commit includes those files and the two related plan/checklist
+updates. All ten unrelated desktop files were byte-compared with the saved
+baseline and excluded from staging. Desktop/native validation and live provider
+evaluation were not run for this daemon-only card. No configuration or data
+migration is needed. ANA-04 remains unchecked for the next scheduled wake.
 
 ## Task ANA-04 — Implement one durable, bounded run lifecycle
 

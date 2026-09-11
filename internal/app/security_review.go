@@ -47,14 +47,14 @@ func (s *Service) runSecurityReview(ctx context.Context, request SecurityReviewR
 	if err != nil {
 		return nil, err
 	}
-	result, findings, err := s.executeSecurityReview(ctx, snapshot)
+	result, findings, err := s.executeSecurityReview(ctx, snapshot, nil)
 	if err != nil {
 		return nil, err
 	}
-	return s.publishSecurityReview(ctx, snapshot, result, findings)
+	return s.publishSecurityReview(ctx, snapshot, result, findings, nil)
 }
 
-func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityReviewSnapshot) (modelOutput, []project.SecurityFinding, error) {
+func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityReviewSnapshot, dispatch *analysisModelDispatch) (modelOutput, []project.SecurityFinding, error) {
 	if err := s.validateSecurityReviewSnapshot(ctx, snapshot); err != nil {
 		return modelOutput{}, nil, err
 	}
@@ -70,19 +70,19 @@ func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityRe
 	if err := requireSecurityRuntimeConfirmation(snapshot.runtime, snapshot.request.ConfirmRemoteProvider); err != nil {
 		return modelOutput{}, nil, err
 	}
-	result, err := s.retry(timed, snapshot.runtime, []llm.ChatMessage{{Role: "user", Content: prompt}})
+	result, err := s.requestAnalysisModel(timed, snapshot.runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, nil, dispatch)
 	if timed.Err() != nil {
-		return modelOutput{}, nil, timed.Err()
+		return modelOutput{}, nil, &analysisModelError{timed.Err()}
 	}
 	if err != nil {
-		return modelOutput{}, nil, err
+		return modelOutput{}, nil, &analysisModelError{err}
 	}
 	findings, err := project.ParseSecurityFindings(result.Content, snapshot.file, snapshot.source)
 	if err != nil {
-		return modelOutput{}, nil, err
+		return modelOutput{}, nil, &analysisModelError{err}
 	}
 	if !securityFindingsInScope(findings, snapshot.symbol) {
-		return modelOutput{}, nil, fmt.Errorf("security review findings fall outside the requested declaration")
+		return modelOutput{}, nil, &analysisModelError{fmt.Errorf("security review findings fall outside the requested declaration")}
 	}
 	if err := s.validateSecurityReviewSnapshot(ctx, snapshot); err != nil {
 		return modelOutput{}, nil, err
@@ -90,7 +90,7 @@ func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityRe
 	return result, findings, nil
 }
 
-func (s *Service) publishSecurityReview(ctx context.Context, snapshot securityReviewSnapshot, result modelOutput, findings []project.SecurityFinding) (*project.SecurityFileReport, error) {
+func (s *Service) publishSecurityReview(ctx context.Context, snapshot securityReviewSnapshot, result modelOutput, findings []project.SecurityFinding, authorizePublication func(func() error) error) (*project.SecurityFileReport, error) {
 	runtime := snapshot.runtime
 	report := project.SecurityFileReport{
 		SchemaVersion: "1", ProjectID: snapshot.analysis.ProjectID, ProjectRevision: snapshot.analysis.ProjectRevision,
@@ -110,21 +110,24 @@ func (s *Service) publishSecurityReview(ctx context.Context, snapshot securityRe
 	}
 	report = project.SanitizeSecurityFileReport(report)
 	if err := project.ValidateSecurityFileReportSourceFree(report, snapshot.source); err != nil {
-		return nil, err
+		return nil, &analysisModelError{err}
 	}
 	cache, err := project.NewSecurityReportCache(snapshot.root)
 	if err != nil {
 		return nil, err
 	}
-	if err := cache.StoreAuthorized(report, snapshot.file, func() error {
-		if s.beforeSecurityReviewPublication != nil {
-			s.beforeSecurityReviewPublication()
-		}
-		if err := s.validateSecurityReviewSnapshot(ctx, snapshot); err != nil {
-			return err
-		}
-		return requireSecurityRuntimeConfirmation(snapshot.runtime, snapshot.request.ConfirmRemoteProvider)
-	}); err != nil {
+	store := func() error {
+		return cache.StoreAuthorized(report, snapshot.file, func() error {
+			if s.beforeSecurityReviewPublication != nil {
+				s.beforeSecurityReviewPublication()
+			}
+			if err := s.validateSecurityReviewSnapshot(ctx, snapshot); err != nil {
+				return err
+			}
+			return requireSecurityRuntimeConfirmation(snapshot.runtime, snapshot.request.ConfirmRemoteProvider)
+		})
+	}
+	if err := publishAnalysisReport(store, authorizePublication); err != nil {
 		return nil, err
 	}
 	return &report, nil
