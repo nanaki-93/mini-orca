@@ -1,7 +1,10 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -378,4 +381,440 @@ type AnalysisSectionResults struct {
 	Performance  []project.PerformanceFileReport `json:"performance"`
 	Security     []project.SecurityFileReport    `json:"security"`
 	Unclassified []project.UnifiedFinding        `json:"unclassified"`
+}
+
+var errAnalysisRunPersistence = errors.New("analysis progress could not be saved; resume or cancel to recover")
+var errAnalysisRunBusy = errors.New("an analysis run is already active; pause or cancel it before replacement")
+
+// One mutex owns admission, attempt reservations, progress and report publication.
+// Disk writes remain inside that boundary. The worker never takes jobLifecycleMu,
+// so project changes can invalidate it without waiting while holding its lock.
+type analysisRunController struct {
+	mu            sync.Mutex
+	run           *AnalysisRun
+	root          string
+	fault         error
+	done          chan struct{}
+	cancel        context.CancelFunc
+	admission     *AnalysisRunPreview
+	confirmations AnalysisRunConfirmations
+	windowStart   time.Time
+	elapsedBase   int64
+}
+
+func (s *Service) StartAnalysisRun(ctx context.Context, request AnalysisRunStartRequest) (*AnalysisRun, error) {
+	if err := request.Validate(); err != nil {
+		return nil, err
+	}
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	c := s.analysisRun
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := s.restoreAnalysisRunLocked(); err != nil {
+		return nil, err
+	}
+	if c.done != nil {
+		return nil, errAnalysisRunBusy
+	}
+	if c.fault != nil {
+		return cloneAnalysisRun(c.run), errAnalysisRunPersistence
+	}
+	if c.run != nil {
+		switch c.run.Status {
+		case AnalysisRunRunning, AnalysisRunQueued, AnalysisRunPausing, AnalysisRunPaused, AnalysisRunInterrupted:
+			return cloneAnalysisRun(c.run), errAnalysisRunBusy
+		}
+	}
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits})
+	if err != nil {
+		return nil, err
+	}
+	if preview.Identity != request.Identity || preview.PreviewID != request.PreviewID {
+		return nil, project.ErrRevisionConflict
+	}
+	if err := validateAnalysisConfirmations(preview, request.Confirmations); err != nil {
+		return nil, err
+	}
+	if err := s.validateAnalysisQueue(ctx, s.manager.Root(), preview, true); err != nil {
+		return nil, err
+	}
+	c.root = s.manager.Root()
+	c.run = newAnalysisRun(*preview)
+	if err := s.saveAnalysisRunLocked(false); err != nil {
+		return cloneAnalysisRun(c.run), err
+	}
+	result := cloneAnalysisRun(c.run)
+	s.launchAnalysisRunLocked(preview, request.Confirmations)
+	return result, nil
+}
+
+// CurrentAnalysisRun can restore metadata but never starts a worker or reuses consent.
+// A recoverable persistence fault returns the retained progress alongside its error.
+func (s *Service) CurrentAnalysisRun(ctx context.Context) (*AnalysisRun, error) {
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	return s.currentAnalysisRunLocked(ctx)
+}
+
+// The caller holds jobLifecycleMu through its complete project read.
+func (s *Service) currentAnalysisRunLocked(ctx context.Context) (*AnalysisRun, error) {
+	c := s.analysisRun
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := s.restoreAnalysisRunLocked(); err != nil && (c.run == nil || c.fault == nil) {
+		return cloneAnalysisRun(c.run), err
+	}
+	if c.run == nil {
+		return nil, nil
+	}
+	if c.run.Status != AnalysisRunStale {
+		if err := s.validateAnalysisQueue(ctx, c.root, &c.run.Plan, true); err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			s.staleAnalysisRunLocked()
+			if saveErr := s.saveAnalysisRunLocked(false); saveErr != nil {
+				return cloneAnalysisRun(c.run), saveErr
+			}
+		}
+	}
+	s.updateAnalysisElapsedLocked()
+	return cloneAnalysisRun(c.run), c.fault
+}
+
+func (s *Service) ControlAnalysisRun(ctx context.Context, request AnalysisRunControlRequest) (*AnalysisRun, error) {
+	if err := request.Validate(); err != nil {
+		return nil, err
+	}
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	c := s.analysisRun
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Recoverable write failures retain the in-memory state; only explicit controls
+	// may attempt another save. Restore errors without a retained run remain fatal.
+	if err := s.restoreAnalysisRunLocked(); err != nil && (c.run == nil || c.fault == nil) {
+		return nil, err
+	}
+	if c.run == nil || c.run.Identity != request.Identity {
+		return nil, project.ErrRevisionConflict
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	switch request.Action {
+	case AnalysisRunCancel:
+		if c.run.Status == AnalysisRunStale {
+			if c.fault == nil {
+				return cloneAnalysisRun(c.run), project.ErrRevisionConflict
+			}
+			// Discarding stale work must remain possible after a failed save.
+			// Recovery preserves its stale identity and cannot restart requests.
+			c.run.Reason = "Project source, policy or provider identity changed; start a new analysis."
+			err := s.saveAnalysisRunLocked(true)
+			return cloneAnalysisRun(c.run), err
+		}
+		c.run.Status = AnalysisRunCanceled
+		if c.done != nil {
+			c.run.Status = AnalysisRunCanceling
+		}
+		if c.cancel != nil {
+			c.cancel()
+		}
+		c.run.Reason = "Analysis canceled by the user."
+		interruptAnalysisStages(c.run, AnalysisStageCanceled)
+		if err := s.saveAnalysisRunLocked(true); err != nil {
+			return cloneAnalysisRun(c.run), err
+		}
+	case AnalysisRunPause:
+		if c.run.Status != AnalysisRunRunning && c.run.Status != AnalysisRunQueued && c.run.Status != AnalysisRunPausing && c.run.Status != AnalysisRunPaused && c.fault == nil {
+			return nil, fmt.Errorf("analysis cannot be paused in its current state")
+		}
+		c.run.Status = AnalysisRunPaused
+		if c.done != nil && c.fault == nil {
+			c.run.Status = AnalysisRunPausing
+		}
+		c.run.Reason = "Analysis paused by the user."
+		if err := s.saveAnalysisRunLocked(true); err != nil {
+			return cloneAnalysisRun(c.run), err
+		}
+	case AnalysisRunResume:
+		if c.done != nil {
+			return cloneAnalysisRun(c.run), errAnalysisRunBusy
+		}
+		if c.run.Status != AnalysisRunPaused && c.run.Status != AnalysisRunInterrupted {
+			return nil, fmt.Errorf("analysis requires paused or interrupted progress to resume")
+		}
+		preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: c.run.Identity.ProjectID, ProjectRevision: c.run.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, Refresh: c.run.Plan.Refresh, Limits: c.run.Plan.Limits, ResumeRun: &request.Identity})
+		if err != nil {
+			return nil, err
+		}
+		if request.PreviewID != preview.PreviewID {
+			return nil, project.ErrRevisionConflict
+		}
+		if err := validateAnalysisConfirmations(preview, *request.Confirmations); err != nil {
+			return nil, err
+		}
+		if err := s.validateAnalysisQueue(ctx, c.root, preview, true); err != nil {
+			return nil, err
+		}
+		c.run.Identity.Generation = newOpaqueID("generation")
+		c.run.Status = AnalysisRunQueued
+		c.run.Reason = ""
+		c.run.WindowElapsedSeconds = 0
+		c.run.WindowFilesCompleted = 0
+		if err := s.saveAnalysisRunLocked(true); err != nil {
+			return cloneAnalysisRun(c.run), err
+		}
+		result := cloneAnalysisRun(c.run)
+		s.launchAnalysisRunLocked(preview, *request.Confirmations)
+		return result, nil
+	}
+	return cloneAnalysisRun(c.run), nil
+}
+
+func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmations AnalysisRunConfirmations) {
+	c := s.analysisRun
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.run.Plan.Limits.BudgetSeconds)*time.Second)
+	c.cancel = cancel
+	c.done = make(chan struct{})
+	c.admission = preview
+	c.confirmations = AnalysisRunConfirmations{SecurityReview: confirmations.SecurityReview, ProviderIDs: append([]string(nil), confirmations.ProviderIDs...)}
+	c.windowStart = time.Now()
+	c.elapsedBase = c.run.ElapsedSeconds
+	go s.runAnalysisWindow(ctx, c.run.Identity, c.done)
+}
+
+func (s *Service) runAnalysisWindow(ctx context.Context, identity AnalysisRunIdentity, done chan struct{}) {
+	c := s.analysisRun
+	defer func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.done == done {
+			if c.cancel != nil {
+				c.cancel()
+			}
+			c.cancel = nil
+			c.done = nil
+			c.admission = nil
+			c.confirmations = AnalysisRunConfirmations{}
+			c.windowStart = time.Time{}
+		}
+		close(done)
+	}()
+	for {
+		c.mu.Lock()
+		if c.run == nil || c.run.Identity != identity || c.fault != nil {
+			c.mu.Unlock()
+			return
+		}
+		if c.run.Status == AnalysisRunQueued {
+			c.run.Status = AnalysisRunRunning
+		}
+		if s.finishAnalysisWindowLocked(ctx) {
+			c.mu.Unlock()
+			return
+		}
+		fileIndex, stageIndex, found := nextAnalysisStage(c.run)
+		if !found {
+			if err := s.validateAnalysisQueue(ctx, c.root, &c.run.Plan, true); err != nil {
+				s.staleAnalysisRunLocked()
+			} else {
+				refreshAnalysisSections(c.run)
+				c.run.Status = analysisFinishedStatus(c.run)
+			}
+			_ = s.saveAnalysisRunLocked(false) // Failure is retained and stops this worker.
+			c.mu.Unlock()
+			return
+		}
+		if c.run.WindowFilesCompleted >= c.run.Plan.Limits.BatchFiles {
+			c.run.Status = AnalysisRunPaused
+			c.run.Reason = "The batch limit was reached; resume to continue pending files."
+			_ = s.saveAnalysisRunLocked(false)
+			c.mu.Unlock()
+			return
+		}
+		stage := &c.run.Files[fileIndex].Stages[stageIndex]
+		if stage.Stage != AnalysisStageSecurityRules && stage.Attempts >= c.run.Plan.Limits.MaxAttemptsPerStage && !c.admission.Files[fileIndex].Stages[stageIndex].Cached {
+			stage.Status = AnalysisStageFailed
+			stage.Reason = "The stage exhausted its total attempt allowance."
+			if analysisFileFinished(c.run.Files[fileIndex]) {
+				c.run.WindowFilesCompleted++
+			}
+			if err := s.saveAnalysisRunLocked(false); err != nil {
+				c.mu.Unlock()
+				return
+			}
+			c.mu.Unlock()
+			continue
+		}
+		stage.Status = AnalysisStageRunning
+		stage.Reason = ""
+		if err := s.saveAnalysisRunLocked(false); err != nil {
+			c.mu.Unlock()
+			return
+		}
+		plan := c.admission.Files[fileIndex].Stages[stageIndex]
+		confirmed := false
+		for _, id := range c.confirmations.ProviderIDs {
+			confirmed = confirmed || id == plan.ProviderID
+		}
+		request := analysisFileStageRequest{Run: identity, File: c.run.Files[fileIndex].AnalysisFileIdentity, Stage: stage.Stage, Refresh: c.run.Plan.Refresh,
+			RemainingAttempts: min(plan.MaxModelRequests, c.run.Plan.Limits.MaxAttemptsPerStage-stage.Attempts), ConfirmRemoteProvider: confirmed, SecurityReview: c.confirmations.SecurityReview}
+		authority := s.analysisRunAuthority(fileIndex, stageIndex)
+		c.mu.Unlock()
+		result, err := s.analyzeFileStage(ctx, request, authority)
+		c.mu.Lock()
+		if c.run == nil || c.run.Identity != identity || c.fault != nil {
+			c.mu.Unlock()
+			return
+		}
+		if c.run.Status == AnalysisRunStale || c.run.Status == AnalysisRunCanceled || c.run.Status == AnalysisRunCanceling {
+			s.finishAnalysisWindowLocked(ctx)
+			c.mu.Unlock()
+			return
+		}
+		if err != nil {
+			current := &c.run.Files[fileIndex].Stages[stageIndex]
+			current.Status = AnalysisStageInterrupted
+			current.Reason = "Analysis stage could not complete."
+			if errors.Is(err, project.ErrRevisionConflict) {
+				s.staleAnalysisRunLocked()
+			} else if ctx.Err() != nil || errors.Is(err, errAnalysisAttemptBudget) {
+				c.run.Status = AnalysisRunPaused
+				c.run.Reason = "The dispatch allowance ended; preview and resume the remaining work."
+			} else {
+				c.run.Status = AnalysisRunInterrupted
+				c.run.Reason = "Analysis stopped before the stage completed; review and resume."
+			}
+			_ = s.saveAnalysisRunLocked(false)
+			c.mu.Unlock()
+			return
+		}
+		recordAnalysisResult(c.run, fileIndex, stageIndex, result)
+		if analysisFileFinished(c.run.Files[fileIndex]) {
+			c.run.WindowFilesCompleted++
+		}
+		if err := s.saveAnalysisRunLocked(false); err != nil {
+			c.mu.Unlock()
+			return
+		}
+		c.mu.Unlock()
+	}
+}
+
+func (s *Service) finishAnalysisWindowLocked(ctx context.Context) bool {
+	c := s.analysisRun
+	switch c.run.Status {
+	case AnalysisRunStale, AnalysisRunCanceled:
+		return true
+	case AnalysisRunCanceling:
+		c.run.Status = AnalysisRunCanceled
+		interruptAnalysisStages(c.run, AnalysisStageCanceled)
+	case AnalysisRunPausing:
+		c.run.Status = AnalysisRunPaused
+	case AnalysisRunRunning:
+		if ctx.Err() == nil {
+			return false
+		}
+		c.run.Status = AnalysisRunPaused
+		c.run.Reason = "The dispatch allowance ended; preview and resume the remaining work."
+		interruptAnalysisStages(c.run, AnalysisStageInterrupted)
+	default:
+		return true
+	}
+	_ = s.saveAnalysisRunLocked(false)
+	return true
+}
+
+func (s *Service) analysisRunAuthority(fileIndex, stageIndex int) analysisFileStageAuthority {
+	c := s.analysisRun
+	validate := func(ctx context.Context, identity AnalysisRunIdentity, file AnalysisFileIdentity, stage AnalysisStage) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if c.run == nil || c.run.Identity != identity || c.run.Files[fileIndex].AnalysisFileIdentity != file || c.run.Files[fileIndex].Stages[stageIndex].Stage != stage {
+			return project.ErrRevisionConflict
+		}
+		if c.fault != nil {
+			return errAnalysisRunPersistence
+		}
+		if c.run.Status != AnalysisRunRunning && c.run.Status != AnalysisRunPausing {
+			return project.ErrRevisionConflict
+		}
+		return s.validateAnalysisQueue(ctx, c.root, &c.run.Plan, false)
+	}
+	return analysisFileStageAuthority{
+		Check: func(ctx context.Context, identity AnalysisRunIdentity) error {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			if c.run == nil || c.run.Identity != identity {
+				return project.ErrRevisionConflict
+			}
+			return validate(ctx, identity, c.run.Files[fileIndex].AnalysisFileIdentity, c.run.Files[fileIndex].Stages[stageIndex].Stage)
+		},
+		BeforeAttempt: func(ctx context.Context, identity AnalysisRunIdentity, file AnalysisFileIdentity, stage AnalysisStage) error {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			if err := validate(ctx, identity, file, stage); err != nil {
+				return err
+			}
+			progress := &c.run.Files[fileIndex].Stages[stageIndex]
+			if progress.Attempts >= c.run.Plan.Limits.MaxAttemptsPerStage {
+				return errAnalysisAttemptBudget
+			}
+			progress.Attempts++
+			return s.saveAnalysisRunLocked(false)
+		},
+		Publish: func(identity AnalysisRunIdentity, file AnalysisFileIdentity, stage AnalysisStage, write func() error) error {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			if err := validate(context.Background(), identity, file, stage); err != nil {
+				return err
+			}
+			if err := write(); err != nil {
+				if errors.Is(err, project.ErrRevisionConflict) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return err
+				}
+				s.failAnalysisPersistenceLocked()
+				return errAnalysisRunPersistence
+			}
+			return nil
+		},
+	}
+}
+
+func (s *Service) updateAnalysisElapsedLocked() {
+	c := s.analysisRun
+	if c.run == nil || c.windowStart.IsZero() {
+		return
+	}
+	elapsed := min(int64(time.Since(c.windowStart)/time.Second), int64(c.run.Plan.Limits.BudgetSeconds))
+	c.run.WindowElapsedSeconds = elapsed
+	c.run.ElapsedSeconds = c.elapsedBase + elapsed
+}
+
+func (s *Service) staleAnalysisRunLocked() {
+	c := s.analysisRun
+	c.run.Status = AnalysisRunStale
+	c.run.Reason = "Project source, policy or provider identity changed; start a new analysis."
+	interruptAnalysisStages(c.run, AnalysisStageStale)
+	if c.cancel != nil {
+		c.cancel()
+	}
+}
+
+func (s *Service) invalidateAnalysisRun() {
+	c := s.analysisRun
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.run == nil {
+		return
+	}
+	s.staleAnalysisRunLocked()
+	_ = s.saveAnalysisRunLocked(false) // Retained fault blocks any further dispatch.
 }

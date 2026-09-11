@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -10,6 +12,7 @@ import (
 // It combines deterministic facts with optional model interpretation so it
 // remains useful when no model analysis or scan has been performed.
 type ProjectOverview struct {
+	Run             *AnalysisRun                  `json:"analysis_run,omitempty"`
 	ProjectID       string                        `json:"project_id"`
 	ProjectRevision string                        `json:"project_revision"`
 	Metrics         ProjectMetrics                `json:"metrics"`
@@ -54,6 +57,15 @@ type FindingFilter struct {
 // ProjectOverview returns current deterministic metrics even when all optional
 // interpretation and verification data is missing.
 func (s *Service) ProjectOverview() (*ProjectOverview, error) {
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	// Reading a workspace restores progress without starting requests. A retained
+	// persistence fault is visible in the run's status/reason; deterministic facts
+	// remain available while the user recovers through explicit run controls.
+	run, runErr := s.currentAnalysisRunLocked(context.Background())
+	if runErr != nil && !errors.Is(runErr, errAnalysisRunPersistence) {
+		return nil, runErr
+	}
 	analysis, index, input, coverage, err := s.workspaceState()
 	if err != nil {
 		return nil, err
@@ -72,6 +84,7 @@ func (s *Service) ProjectOverview() (*ProjectOverview, error) {
 		}
 	}
 	return &ProjectOverview{
+		Run:       run,
 		ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
 		Metrics:  ProjectMetrics{Type: analysis.Type, BuildFile: analysis.BuildFile, FileCount: analysis.FileCount, SourceFileCount: analysis.SourceFileCount, TotalLines: analysis.TotalLines, Languages: cloneLanguageCounts(analysis.Languages)},
 		Analysis: analysis.Report, Coverage: coverage, Findings: counts,

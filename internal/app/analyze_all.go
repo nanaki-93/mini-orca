@@ -336,6 +336,7 @@ func (s *Service) Reindex() (*project.ProjectIndex, error) {
 }
 
 func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
+	s.invalidateAnalysisRun()
 	s.invalidateAnalyzeAll()
 	s.invalidatePerformanceJob()
 	s.cancelGoScan()
@@ -365,6 +366,7 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 }
 
 func (s *Service) invalidateJobsForProjectChange() {
+	s.invalidateAnalysisRun()
 	s.invalidateAnalyzeAll()
 	s.detachPerformanceJobForProjectChange()
 	s.cancelGoScan()

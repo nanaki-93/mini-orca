@@ -194,6 +194,7 @@ Extra High** (`gpt-6-astra`, `xhigh`). The executable cards now live in
 
 Scheduler: **Mini-Orca UX implementation**, every **20 minutes**, attached to this
 Codex task; automation ID **mini-orca-ux-implementation**, status **Active**.
+The user authorized ANA-04's additional recovery correction and scheduler resumption.
 The app accepted the task model override `gpt-6-astra` / `xhigh`; this heartbeat
 uses the task's settings rather than a separate scheduler model field. One card per wake,
 strictly in order, with required checks and diff review before acceptance.
@@ -205,7 +206,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 7/17. **Active task/writer:** none. **Next:** ANA-04.
+**Accepted:** 8/17. **Active task/writer:** none. **Next:** ANA-05.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -216,7 +217,7 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 5 | [ANA-01](docs/tasks.md#task-ana-01--define-categorized-results-and-unified-run-contracts) | Define categorized results and unified run contracts | Complete; locally committed |
 | 6 | [ANA-02](docs/tasks.md#task-ana-02--produce-and-validate-explicit-semantic-categories) | Produce and validate explicit semantic categories | Complete; locally committed |
 | 7 | [ANA-03](docs/tasks.md#task-ana-03--compose-the-per-file-analysis-stages) | Compose the per-file analysis stages | Complete; locally committed |
-| 8 | [ANA-04](docs/tasks.md#task-ana-04--implement-one-durable-bounded-run-lifecycle) | Implement one durable, bounded run lifecycle | Queued |
+| 8 | [ANA-04](docs/tasks.md#task-ana-04--implement-one-durable-bounded-run-lifecycle) | Implement one durable, bounded run lifecycle | Complete; locally committed |
 | 9 | [ANA-05](docs/tasks.md#task-ana-05--migrate-existing-jobs-and-expose-the-unified-api) | Migrate existing jobs and expose the unified API | Queued |
 | 10 | [ANA-06](docs/tasks.md#task-ana-06--give-the-desktop-one-analysis-owner) | Give the desktop one analysis owner | Queued |
 | 11 | [ANA-07](docs/tasks.md#task-ana-07--separate-run-progress-from-the-three-result-pages) | Separate run progress from the three result pages | Queued |
@@ -281,6 +282,35 @@ passed after one correction preserving preparation-error behavior. All ten
 unrelated desktop edits are unchanged. No migration, desktop/native checks or
 live provider calls; whole-project orchestration remains ANA-04/05 work. Local
 commit evidence: `.mini-orca/autopilot/ux/ANA-03/receipt.json`.
+
+**Initial ANA-04 blocker — 2026-09-11 (resolved below):** The durable controller, full inventory/preflight,
+bounded stages, controls, recovery and workspace restoration are implemented but
+uncommitted. Initial verification exposed missing policy-exclusion accounting;
+correction 1 fixed it. Correction 2 fixed stale fault cancellation and serialized
+Overview's project/run read. Focused/full Go tests, race tests, formatting and vet
+then passed. A final added regression reproduces a remaining defect: after a
+report is published but its progress save is lost, resume marks a stage Failed
+when its attempt allowance is exhausted, before reusing the matching cached
+report. The report remains intact; coverage incorrectly becomes Partial.
+The exact prescribed suite now fails that regression. Two corrections are used,
+so the scheduler is Paused and ANA-04 remains unchecked. The proposed one-condition
+cache-recovery patch is saved but not applied in the ignored ANA-04 evidence
+directory. Details are in docs/tasks.md and docs/errors.log. All ten unrelated
+desktop files and the empty index are preserved; no later task started.
+
+**Accepted ANA-04 — 2026-09-11:** Added whole-project inventory and request
+preflight, bounded sequential execution, durable progress and attempts, explicit
+pause/resume/cancel, and recovery without restarting requests or restoring consent.
+Source/project changes invalidate publication; Overview restores matching progress.
+The user-authorized additional correction lets a matching cached report finish a
+stage with zero remaining transport attempts. The reproduced recovery test and
+the full prescribed race-enabled suite pass (5.571s); all Go tests, race tests,
+formatting, vet and final diff checks pass. Two earlier corrections plus one
+explicitly authorized correction are recorded, with failed evidence retained.
+The local commit includes only ANA-04 and its records; all ten unrelated desktop
+edits are preserved. No configuration/data migration, desktop/native checks or
+live provider calls. Unified route and legacy-owner migration remains ANA-05.
+Receipt: `.mini-orca/autopilot/ux/ANA-04/receipt.json`.
 
 ## Definition of done
 
