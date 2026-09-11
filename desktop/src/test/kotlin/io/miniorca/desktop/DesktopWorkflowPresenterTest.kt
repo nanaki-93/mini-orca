@@ -20,6 +20,61 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class DesktopWorkflowPresenterTest {
+
+  @Test
+  fun generationFailureSurvivesOtherStatusAndClearsBeforeRetryOrFileChange() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          when {
+            path.contains("files/info?") ->
+                response(fileJson(if (path.contains("other.go")) "other.go" else "main.go", "base"))
+            path.contains("files/symbols?") ->
+                response(
+                    symbolsJson(if (path.contains("other.go")) "other.go" else "main.go", "Run"))
+            method == "POST" && path.endsWith("chat/sessions") ->
+                TransportResponse(503, """{"message":"provider request failed"}""")
+            else -> response("{}")
+          }
+        }
+    fun drain() {
+      repeat(5) {
+        main.runPending()
+        io.runPending()
+      }
+      main.runPending()
+    }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      drain()
+      presenter.dispatch(
+          DesktopEvent.SymbolSelected(
+              SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)))
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Preserve the public signature")
+      drain()
+      val failure = presenter.snapshot.value.state.chat.failure
+      assertEquals("Request failed for Run.", presenter.snapshot.value.state.status)
+      assertEquals(ChatTarget(ChatEditMode.ReplaceSymbol, "Run"), failure?.target)
+      assertTrue(failure?.message.orEmpty().contains("provider request failed"))
+      presenter.dispatch(DesktopEvent.Status("Another operation finished"))
+      assertEquals(failure, presenter.snapshot.value.state.chat.failure)
+      presenter.sendChatMessage(
+          ChatEditMode.ReplaceSymbol, "", "Try preserving the public signature again")
+      assertNull(presenter.snapshot.value.state.chat.failure)
+      main.runPending()
+      presenter.selectFile("other.go")
+      drain()
+      assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertNull(presenter.snapshot.value.state.chat.failure)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
   @Test
   fun returningFromTerminalRetainsUnchangedDraftAndStalesChangedEvidenceUsingOnlyReads() {
     listOf(false, true).forEach { changed ->

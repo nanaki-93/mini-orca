@@ -175,7 +175,10 @@ private fun mentionedNavigationSymbol(
 data class ChatState(
     val session: ChatSession? = null,
     val pendingRequestId: Long = 0,
+    val failure: ChatRequestFailure? = null,
 )
+
+data class ChatRequestFailure(val target: ChatTarget, val message: String)
 
 data class DraftReviewState(
     val checks: DraftCheckReport? = null,
@@ -367,6 +370,8 @@ sealed interface DesktopEvent {
 
   data class Failed(val message: String) : DesktopEvent
 
+  data class ChatRequestFailed(val failure: ChatRequestFailure) : DesktopEvent
+
   data class Status(val message: String) : DesktopEvent
 }
 
@@ -547,7 +552,15 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
           copy(
               review = review.copy(benchmark = review.benchmark.copy(running = false)),
               jobs = jobs.copy(loading = false))
-      is DesktopEvent.ChatLoaded -> copy(chat = chat.copy(session = event.session))
+      is DesktopEvent.ChatRequestFailed ->
+          copy(
+              chat = chat.copy(failure = event.failure),
+              jobs =
+                  jobs.copy(
+                      loading = false,
+                      error = event.failure.message,
+                      status = "Request failed for ${event.failure.target.symbol}."))
+      is DesktopEvent.ChatLoaded -> copy(chat = chat.copy(session = event.session, failure = null))
       is DesktopEvent.ChatProposalLoaded -> {
         val messages =
             event.session.messages +
@@ -556,6 +569,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
         copy(
             chat =
                 chat.copy(
+                    failure = null,
                     session =
                         event.session.copy(
                             latestDraftId = event.proposal.draft.id, messages = messages)),
@@ -584,16 +598,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                         benchmark = review.benchmark.withoutCatalog()),
                 jobs = jobs.copy(loading = false))
           } ?: this
-      DesktopEvent.DraftValidationStarted ->
-          review.editor?.let { editor ->
-            copy(
-                review =
-                    review.copy(
-                        editor = editor.copy(status = DraftEditorStatus.Validating),
-                        checks = null,
-                        benchmark = review.benchmark.withoutCatalog()),
-                jobs = jobs.copy(loading = false))
-          } ?: this
+      DesktopEvent.DraftValidationStarted -> withValidationStarted()
       DesktopEvent.DraftMarkedStale ->
           review.editor?.let { editor ->
             copy(
@@ -625,6 +630,17 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.Failed -> copy(jobs = jobs.copy(loading = false, error = event.message))
       is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))
     }
+
+private fun DesktopState.withValidationStarted(): DesktopState =
+    review.editor?.let { editor ->
+      copy(
+          review =
+              review.copy(
+                  editor = editor.copy(status = DraftEditorStatus.Validating),
+                  checks = null,
+                  benchmark = review.benchmark.withoutCatalog()),
+          jobs = jobs.copy(loading = false))
+    } ?: this
 
 private fun BenchmarkEvidenceState.withoutCatalog(): BenchmarkEvidenceState =
     copy(catalog = null, selected = null, running = false)
@@ -796,7 +812,10 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
       if (requestId == analysisRequest) analysisLoaded(file, analysis) else false
 
   fun beginChatLoad(): Pair<Long, RequestIdentity>? =
-      fileRequest?.let { file -> nextId().also { chatRequest = it } to file }
+      fileRequest?.let { file ->
+        state = state.copy(chat = state.chat.copy(failure = null))
+        nextId().also { chatRequest = it } to file
+      }
 
   fun chatLoaded(requestId: Long, file: RequestIdentity, session: ChatSession): Boolean =
       if (requestId == chatRequest &&

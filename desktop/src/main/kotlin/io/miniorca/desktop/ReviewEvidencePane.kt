@@ -665,7 +665,7 @@ internal fun checkFailurePreview(checks: DraftCheckReport?, limit: Int = 240): S
       checks?.checks?.firstOrNull {
         it.state.lowercase() in setOf("failed", "error", "canceled", "cancelled")
       } ?: return null
-  val output = failed.output.replace(Regex("\\s+"), " ").trim()
+  val output = sanitizedOutputText(failed.output).replace(Regex("\\s+"), " ").trim()
   val summary = if (output.isBlank()) failed.name else "${failed.name}: $output"
   return summary.take(limit).let { if (summary.length > limit) "$it…" else it }
 }
@@ -743,7 +743,7 @@ private fun ReviewEvidenceDetails(
           }
           checks.forEach { check ->
             Text(
-                check.name,
+                sanitizedOutputText(check.name, 256),
                 color = PrimaryText,
                 style = IdeTypography.resultHeading,
                 modifier = Modifier.padding(top = 12.dp))
@@ -752,16 +752,9 @@ private fun ReviewEvidenceDetails(
                 evidenceColor(checkStatus(check.state)),
                 Modifier.padding(vertical = 4.dp))
             if (check.command.isNotEmpty())
-                Text(
-                    "\$ ${check.command.joinToString(" ")}",
-                    color = SecondaryText,
-                    style = IdeTypography.resultCode)
+                DiagnosticText("\$ ${check.command.joinToString(" ")}", color = SecondaryText)
             if (check.output.isNotBlank())
-                Text(
-                    check.output,
-                    color = PrimaryText,
-                    style = IdeTypography.resultCode,
-                    modifier = Modifier.padding(top = 2.dp))
+                DiagnosticText(check.output, Modifier.padding(top = 2.dp))
           }
         }
       }

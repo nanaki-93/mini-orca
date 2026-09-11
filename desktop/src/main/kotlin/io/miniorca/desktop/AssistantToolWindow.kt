@@ -169,6 +169,12 @@ internal fun AssistantToolWindow(
                   minLines = 3,
                   modifier =
                       Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(state.chatFocus))
+              state.requestFailure
+                  ?.takeIf { it.target == state.target }
+                  ?.let { failure ->
+                    Text("Request failed", color = Error, style = IdeTypography.resultHeading)
+                    DiagnosticText(failure.message, color = Error)
+                  }
               IdeDisclosureHeader(
                   title = "Advanced constraints",
                   expanded = constraintsExpanded,
@@ -307,12 +313,9 @@ internal fun DraftValidationDiagnostics(diagnostics: List<DeclarationFinding>) {
   SelectionContainer {
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
       diagnostics.forEach { diagnostic ->
-        IdeLabelBadge(diagnostic.code, Error, Modifier.padding(top = 4.dp))
-        Text(
-            diagnostic.message,
-            color = PrimaryText,
-            style = IdeTypography.body,
-            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+        IdeLabelBadge(
+            sanitizedOutputText(diagnostic.code, 128), Error, Modifier.padding(top = 4.dp))
+        DiagnosticText(diagnostic.message, Modifier.padding(top = 4.dp, bottom = 8.dp))
       }
     }
   }
@@ -355,6 +358,7 @@ internal data class AssistantToolWindowState(
     val advancedConstraintsInput: TextFieldValue = TextFieldValue(),
     val creationKind: DeclarationCreationKind = DeclarationCreationKind.Function,
     val creationNameFocus: FocusRequester? = null,
+    val requestFailure: ChatRequestFailure? = null,
 )
 
 /** Conversation intents that do not mutate the editable declaration. */

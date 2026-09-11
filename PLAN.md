@@ -206,7 +206,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 14/17. **Active writer:** none after TERM-02 acceptance. **Next:** BOTTOM-01.
+**Accepted:** 15/17. **Active writer:** none after BOTTOM-01 acceptance. **Next:** BOTTOM-02.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -224,9 +224,18 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 12 | [NAV-01](docs/tasks.md#task-nav-01--distinguish-run-results-and-editing-in-the-sidebar) | Distinguish run, results and editing in the sidebar | Complete; locally committed |
 | 13 | [TERM-01](docs/tasks.md#task-term-01--prove-the-terminal-dependency-and-local-session-boundary) | Prove the terminal dependency and local-session boundary | Complete; locally committed |
 | 14 | [TERM-02](docs/tasks.md#task-term-02--integrate-the-interactive-terminal-pane) | Integrate the interactive terminal pane | Complete; locally committed |
-| 15 | [BOTTOM-01](docs/tasks.md#task-bottom-01--preserve-unique-diagnostics-in-their-owning-workflows) | Preserve unique diagnostics in their owning workflows | Queued |
+| 15 | [BOTTOM-01](docs/tasks.md#task-bottom-01--preserve-unique-diagnostics-in-their-owning-workflows) | Preserve unique diagnostics in their owning workflows | Complete; locally committed |
 | 16 | [BOTTOM-02](docs/tasks.md#task-bottom-02--replace-the-bottom-tools-with-terminal-only) | Replace the bottom tools with Terminal only | Queued |
 | 17 | [VERIFY-01](docs/tasks.md#task-verify-01--validate-the-complete-interaction-and-document-support) | Validate the complete interaction and document support | Queued |
+
+**Accepted BOTTOM-01 — 2026-09-12:** Check/validation details stay in Review,
+request failures appear beside their Assistant target, verified-scan commands and
+output live in Bugs, and Analysis/status retain operational and selected-file
+failures. Shared bounded, selectable diagnostics preserve copy access. Passed
+35 prescribed tests, 405 working-tree tests, 403 isolated tests, desktop quality
+and package build after two recorded corrections. Native macOS status details
+and copy were verified. All ten unrelated UI edits remain untouched. BOTTOM-02
+now removes the duplicate bottom tools; no migration or live-provider calls.
 
 **Accepted TERM-02 — 2026-09-12:** The interactive terminal now owns a persistent
 project shell with themed output, working resize, explicit close/reopen and

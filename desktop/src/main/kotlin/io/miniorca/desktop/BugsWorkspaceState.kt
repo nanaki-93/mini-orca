@@ -59,7 +59,6 @@ data class FindingLifecycleAction(val label: String, val status: String)
 data class VerifiedScanProgress(
     val summary: String,
     val canCancel: Boolean,
-    val warnings: List<String>
 )
 
 fun classifyFinding(finding: UnifiedFinding): FindingClassification =
@@ -184,19 +183,14 @@ fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress =
     when {
       scan == null ->
           VerifiedScanProgress(
-              "No verified scan. Importing or reindexing never starts one automatically.",
-              false,
-              emptyList())
+              "No verified scan. Importing or reindexing never starts one automatically.", false)
       shouldPollVerifiedScan(scan) ->
           VerifiedScanProgress(
               "Trusted local execution: verified scan ${scan.status.lowercase()} in a temporary copied workspace; source remains unchanged.",
-              true,
-              scanWarnings(scan))
+              true)
       else ->
           VerifiedScanProgress(
-              "Verified scan ${scan.status.lowercase()}; results remain available.",
-              false,
-              scanWarnings(scan))
+              "Verified scan ${scan.status.lowercase()}; results remain available.", false)
     }
 
 fun findingCanPrepareFix(finding: UnifiedFinding): Boolean {
@@ -259,13 +253,6 @@ private fun matchesFindingQuery(finding: UnifiedFinding, query: String): Boolean
 
 private fun matchesFindingField(value: String, filter: String): Boolean =
     filter.trim().isBlank() || value.equals(filter.trim(), ignoreCase = true)
-
-private fun scanWarnings(scan: GoScanReport): List<String> =
-    scan.phases
-        .filter { phase -> phase.state.lowercase() !in setOf("passed", "running", "") }
-        .map { phase ->
-          "${phase.name}: ${phase.state}${phase.output.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()}"
-        }
 
 /** Only explicitly classified semantic bugs and tool-reported diagnostics belong on Bugs. */
 internal fun DesktopState.projectBugFindings(): List<UnifiedFinding> {

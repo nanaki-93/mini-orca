@@ -1442,7 +1442,7 @@ acceptance receipt are under `.mini-orca/autopilot/ux/TERM-02/`.
 
 ## Task BOTTOM-01 — Preserve unique diagnostics in their owning workflows
 
-- [ ] BOTTOM-01 completed with required checks and diff review.
+- [x] BOTTOM-01 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/BottomEvidenceToolWindows.kt` — identify/move uniquely used diagnostic formatting before deletion.
@@ -1456,6 +1456,14 @@ acceptance receipt are under `.mini-orca/autopilot/ux/TERM-02/`.
 - `desktop/src/test/kotlin/io/miniorca/desktop/BugsWorkspaceStateTest.kt` — verified-scan output access.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopStatusBarTest.kt` — global failure access.
 
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — pass the request-specific failure into Assistant.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopState.kt` — retain request-scoped generation failure and clear it for a new request/selection.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopWorkflowPresenter.kt` — record only the current generation request failure beside its request.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AssistantToolWindowTest.kt` — request failure visibility and target isolation.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopWorkflowPresenterTest.kt` — generation failure lifetime and stale response guards.
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/BugsWorkspaceState.kt` — remove the now-unused warning-string projection replaced by scan phase details.
+
 **Inputs / dependencies**
 - UX-02, ANA-07.
 
@@ -1468,7 +1476,61 @@ acceptance receipt are under `.mini-orca/autopilot/ux/TERM-02/`.
 `./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.ReviewEvidencePaneTest' --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.BugsWorkspaceStateTest' --tests 'io.miniorca.desktop.DesktopStatusBarTest'`
 
 **Execution record**
-Not started.
+Started 2026-09-12. Verified TERM-02 commit/receipt, empty index, all ten unrelated UI edits, toolchains and absence of another writer. Baseline captured under `.mini-orca/autopilot/ux/BOTTOM-01/`. Added the coupled App/state/presenter targets because Assistant has no request-failure input and a generic global error cannot safely identify a generation failure. Initial implementation; zero corrections.
+
+Inventory: Review already owns validation diagnostics and focused checks, but its detailed output must retain the bottom sanitizer and selection access. Unified Analysis already owns per-file/stage failures (including migrated Analyze-all); make failure reasons selectable and bounded. Bugs owns scan status/trust but lacks phase command/output. Assistant needs a retained target-specific request failure. Current status owns daemon errors/latest operation and must preserve selected-file failure text plus selectable, scrollable details. No new global Output surface; obsolete bottom components are removed in BOTTOM-02.
+
+**Correction 1 — 2026-09-12.** The prescribed selection passed 35 tests. The
+combined full-suite/quality run failed Detekt: DesktopState.reduce measured 65
+against the strict threshold 65. Extract its existing validation-start transition
+without changing behavior. Visual inspection also found raw control characters
+in the old scan-warning preview; the new phase details replace that duplicate
+preview, and scan actions precede long output. The status-dialog render fixture
+needs the same full-size parent used by production for correct popup placement.
+The initial logs/screenshots are retained. Re-run prescribed/full/quality checks.
+
+**Correction 2 — final review, 2026-09-12.** Correction 1 passed the 35 prescribed
+tests, 405 working-tree tests, 403 isolated tests, Detekt and Spotless. Final
+review found the replaced scan-warning projection had no production consumers;
+remove it and its obsolete string assertion (phase visibility is now covered by
+the rendered Bugs test). A failed generation also retained the old cancellation
+status from request teardown; record a failed-request status with the scoped
+failure and assert it. Native status details are centered/readable at 800×600,
+and selecting/copying their text into file search works. The offscreen dialog
+image remains unsuitable for placement claims; native evidence is retained.
+
+**Accepted — 2026-09-12.** The final prescribed command passes **35 tests**;
+full working-tree tests pass **405**, isolated accepted-HEAD candidate tests
+**403**, with zero failures/errors/skips. Both candidates pass Detekt and
+Spotless; the final working package builds successfully. Validation used the
+verified JDK 21 launcher and JBR 25 toolchain through `scripts/desktop-gradle.sh`.
+Exact logs and counts are in `.mini-orca/autopilot/ux/BOTTOM-01/`.
+
+Review retains failed/skipped/stale check commands and bounded, selectable output;
+its current-draft/Apply guards remain authoritative. Assistant retains a failure
+for the matching request target, clears it for a new attempt or file, and rejects
+late failures from replaced requests. Analysis owns run/stage failure details;
+Bugs owns all verified-scan phase commands and output. Scan execution controls
+precede output, and the obsolete warning-string projection is removed. Current
+status retains selected-file failures, daemon errors and latest-operation detail
+in a bounded scrolling disclosure. The shared renderer preserves line breaks and
+tabs, strips control characters, and visibly marks output beyond 4,096 characters.
+Opening disclosures is read-only and never dispatches model requests or checks.
+
+Diff review and visual inspection pass for the affected components at narrow
+widths and 150% text. A packaged native fixture using temporary source and
+in-memory preferences verified the status dialog at 800×600 and selected/copied
+its diagnostic text into file search. The fixture was closed. Native dialog
+placement is not inferred from the offscreen images; the unchanged final dialog
+and text renderer match the native-tested sources. No new native PTY, other-host,
+screen-reader or live-provider execution is claimed. No Go code changed, so Go,
+race and full `make check` were not run; no configuration/data migration is needed.
+
+Two focused corrections total are retained above. All ten unrelated UI files
+remain byte-identical and excluded from the independently tested candidate. Stage
+only this card's implementation, checklist/status and failure history, create one
+authorized local BOTTOM-01 commit and verify the receipt before ending this wake.
+The scheduler remains Active with BOTTOM-02 next; no later card has started.
 
 ## Task BOTTOM-02 — Replace the bottom tools with Terminal only
 

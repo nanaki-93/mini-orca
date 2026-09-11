@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -87,7 +86,7 @@ internal fun AnalysisWorkspacePane(
                 }
               })
           Text(
-              presentation.detail,
+              sanitizedOutputText(presentation.detail),
               style = IdeTypography.body,
               color = PrimaryText,
               modifier = Modifier.padding(8.dp))
@@ -96,7 +95,7 @@ internal fun AnalysisWorkspacePane(
                   "${analysis.action.replaceFirstChar { it.uppercase() }}…",
                   style = IdeTypography.compactBody,
                   color = SelectionText)
-          analysis.error?.let { Text(it, color = Error, style = IdeTypography.body) }
+          analysis.error?.let { DiagnosticText(it, color = Error) }
         }
         item {
           val run = analysis.run
@@ -164,19 +163,7 @@ internal fun AnalysisWorkspacePane(
                 style = IdeTypography.resultHeading,
                 color = Error)
           }
-          items(presentation.failures) { failure ->
-            Column(Modifier.fillMaxWidth().padding(8.dp)) {
-              Text(
-                  "${analysisStageLabel(failure.stage)} · ${failure.path}",
-                  style = IdeTypography.resultLabel,
-                  color = PrimaryText)
-              Text(
-                  "Attempts: ${failure.attempts}",
-                  style = IdeTypography.compactBody,
-                  color = SecondaryText)
-              SelectionContainer { Text(failure.reason, style = IdeTypography.body, color = Error) }
-            }
-          }
+          items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
         }
         item {
           IdeDisclosureHeader(
@@ -211,6 +198,18 @@ internal fun AnalysisWorkspacePane(
               }
         }
       }
+}
+
+@Composable
+internal fun AnalysisFailureDetails(failure: AnalysisStageFailure) {
+  Column(Modifier.fillMaxWidth().padding(8.dp)) {
+    Text(
+        "${analysisStageLabel(failure.stage)} · ${failure.path}",
+        style = IdeTypography.resultLabel,
+        color = PrimaryText)
+    Text("Attempts: ${failure.attempts}", style = IdeTypography.compactBody, color = SecondaryText)
+    DiagnosticText(failure.reason, color = Error)
+  }
 }
 
 internal data class AnalysisWorkspacePaneState(
@@ -291,7 +290,6 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                     "Explicit local execution: go test ./... runs in a copied workspace; go vet ./... reads source.",
                     style = IdeTypography.compactBody,
                     color = SecondaryText)
-                scan.warnings.forEach { Text(it, color = Error, style = IdeTypography.compactBody) }
                 if (scan.canCancel)
                     MiniOrcaButton(
                         onClick = actions.cancelScan,
@@ -303,6 +301,7 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                     MiniOrcaButton(onClick = actions.startScan, tone = ActionTone.Neutral) {
                       Text("Trust local execution & run scan")
                     }
+                state.scan?.let { VerifiedScanDiagnostics(it) }
               }
       page?.let { PreviousAnalysisDetails(it.unclassified) }
     }
@@ -316,6 +315,21 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
               .firstOrNull { semanticResultRow(it).key == key }
               ?.let { FindingDetailsRegion(it, actions.findingActions) }
         }
+  }
+}
+
+@Composable
+internal fun VerifiedScanDiagnostics(scan: GoScanReport) {
+  scan.phases.forEach { phase ->
+    IdeHorizontalSeparator(Modifier.padding(vertical = 8.dp))
+    Text(
+        sanitizedOutputText(phase.name.ifBlank { "Unnamed scan phase" }, 256),
+        color = PrimaryText,
+        style = IdeTypography.resultHeading)
+    IdeLabelBadge(analysisStatusLabel(phase.state), evidenceColor(checkStatus(phase.state)))
+    if (phase.command.isNotEmpty())
+        DiagnosticText("\$ ${phase.command.joinToString(" ")}", color = SecondaryText)
+    DiagnosticText(phase.output.ifBlank { "No output reported for this phase." })
   }
 }
 

@@ -410,6 +410,7 @@ internal fun MiniOrcaApp(
                   advancedConstraintsInput = advancedConstraints,
                   creationKind = creationKind,
                   creationNameFocus = creationNameFocusRequester,
+                  requestFailure = appState.chat.failure,
               ),
           conversationActions =
               AssistantConversationActions(

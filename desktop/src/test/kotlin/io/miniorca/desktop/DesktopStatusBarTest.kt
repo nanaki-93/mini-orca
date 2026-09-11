@@ -1,11 +1,44 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.fillMaxSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DesktopStatusBarTest {
+
+  @Test
+  fun selectedFileAndGlobalFailuresRemainActionableAndSelectableInStatusDetails() {
+    val presentation =
+        desktopStatusBarPresentation(
+            statusBarState(
+                selectedFile = selectedFile(),
+                analysis = FileAnalysis("main.go", "failed", failure = "model\u0000 unavailable"),
+                error = "daemon\u0000 unavailable",
+                operation = "Index\u0001 stopped"))
+    val fileFailure = presentation.segments.single { it.type == DesktopStatusSegmentType.Analysis }
+    assertTrue(fileFailure.actionable)
+    assertTrue(fileFailure.detail.contains("model  unavailable"))
+    assertTrue(
+        presentation.segments.none { it.detail.contains('\u0000') || it.detail.contains('\u0001') })
+    var dismissed = false
+    ComposeVisualFixture(800, 600, 1.5f) {
+          androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+            DesktopStatusDetailsDialog(presentation) { dismissed = true }
+          }
+        }
+        .use { fixture ->
+          fixture.render("bottom-status-details-800-1.5")
+          assertTrue(fixture.hasText("daemon  unavailable"))
+          assertTrue(fixture.hasText("Index  stopped"))
+          assertTrue(fixture.hasText(fileFailure.detail))
+          assertTrue(fixture.scrollableContentCount() > 0)
+          fixture.clickText("Close")
+          assertTrue(dismissed)
+        }
+  }
+
   @Test
   fun analysisAndResultsShowTheCapturedRunAndAllProviderScopes() {
     val run = analysisRunFixture().copy(status = "running")
