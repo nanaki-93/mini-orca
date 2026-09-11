@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -470,10 +471,6 @@ internal fun ReviewToolWindow(
       reviewNextActionUiState(
           evidence, decision, state.draft, state.checks, state.session, state.checksRunning)
   val progression = reviewProgressionRows(state.session, state.draft, evidence, decision)
-  var diagnosticsExpanded by
-      rememberSaveable(state.draft?.id, state.draft?.revision, state.draft?.hash) {
-        mutableStateOf(false)
-      }
   var checksEvidenceExpanded by
       rememberSaveable(
           state.checks?.draftId, state.checks?.draftRevision, state.checks?.draftHash) {
@@ -514,56 +511,6 @@ internal fun ReviewToolWindow(
             return@Column
           }
           ReviewSection(
-              title = "Progress",
-              icon = DesktopIcon.Check,
-              stateLabel = "Request → Draft → Validate → Checks → Review",
-              stateTint = SecondaryText,
-              actions = {
-                if (state.editor != null && state.draft != null)
-                    ChromeButton(
-                        onClick = evidenceActions.editDraft, accessibleName = "Edit draft") {
-                          Text("Edit draft", fontSize = 11.sp)
-                        }
-              }) {
-                progression.forEachIndexed { index, row ->
-                  if (index > 0) IdeHorizontalSeparator(Modifier.padding(vertical = 6.dp))
-                  EvidenceRow(row)
-                }
-                checkFailurePreview(state.checks)?.let { preview ->
-                  Text(
-                      preview,
-                      color = Error,
-                      fontFamily = FontFamily.Monospace,
-                      fontSize = 10.sp,
-                      modifier = Modifier.padding(top = 5.dp))
-                }
-                val diagnostics = state.editor?.diagnostics.orEmpty()
-                if (diagnostics.isNotEmpty())
-                    ReviewEvidenceDetails(
-                        title = "Validation diagnostics",
-                        diagnostics = diagnostics,
-                        checks = emptyList(),
-                        candidateHash = state.draft?.hash,
-                        expanded = diagnosticsExpanded,
-                        onToggle = { diagnosticsExpanded = !diagnosticsExpanded })
-              }
-          val checksWithDetails =
-              state.checks?.checks.orEmpty().isNotEmpty() ||
-                  !state.draft?.hash.isNullOrBlank() ||
-                  !state.checks?.draftHash.isNullOrBlank()
-          if (checksWithDetails)
-              ReviewEvidenceDetails(
-                  title =
-                      if (evidence.checks.status == ReviewEvidenceStatus.Failed)
-                          "Failed check details"
-                      else "Focused check details",
-                  diagnostics = emptyList(),
-                  checks = state.checks?.checks.orEmpty(),
-                  candidateHash = state.draft?.hash,
-                  checkHash = state.checks?.draftHash,
-                  expanded = checksEvidenceExpanded,
-                  onToggle = { checksEvidenceExpanded = !checksEvidenceExpanded })
-          ReviewSection(
               title = "Next action",
               icon = DesktopIcon.Run,
               stateLabel = nextAction.scope,
@@ -573,7 +520,7 @@ internal fun ReviewToolWindow(
                     Text(
                         "Trusted local execution may run ${draftProjectCodeCommand(state.draft)}. gofmt and go vet are source-only.",
                         color = SecondaryText,
-                        fontSize = 10.sp,
+                        style = IdeTypography.compactBody,
                         modifier = Modifier.padding(top = 5.dp))
                 if (nextAction.kind == ReviewNextActionKind.Apply && evidence.canRunChecks)
                     ChromeButton(
@@ -596,6 +543,46 @@ internal fun ReviewToolWindow(
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 5.dp))
               }
+          ReviewSection(
+              title = "Progress",
+              icon = DesktopIcon.Check,
+              stateLabel = "Request → Draft → Validate → Checks → Review",
+              stateTint = SecondaryText,
+              actions = {
+                if (state.editor != null && state.draft != null)
+                    ChromeButton(
+                        onClick = evidenceActions.editDraft, accessibleName = "Edit draft") {
+                          Text("Edit draft", fontSize = 11.sp)
+                        }
+              }) {
+                progression.forEachIndexed { index, row ->
+                  if (index > 0) IdeHorizontalSeparator(Modifier.padding(vertical = 6.dp))
+                  EvidenceRow(row)
+                }
+                checkFailurePreview(state.checks)?.let { preview ->
+                  Text(
+                      preview,
+                      color = Error,
+                      style = IdeTypography.body,
+                      modifier = Modifier.padding(top = 5.dp))
+                }
+                DraftValidationDiagnostics(state.editor?.diagnostics.orEmpty())
+              }
+          val checksWithDetails =
+              state.checks?.checks.orEmpty().isNotEmpty() ||
+                  !state.draft?.hash.isNullOrBlank() ||
+                  !state.checks?.draftHash.isNullOrBlank()
+          if (checksWithDetails)
+              ReviewEvidenceDetails(
+                  title =
+                      if (evidence.checks.status == ReviewEvidenceStatus.Failed)
+                          "Failed check details"
+                      else "Focused check details",
+                  checks = state.checks?.checks.orEmpty(),
+                  candidateHash = state.draft?.hash,
+                  checkHash = state.checks?.draftHash,
+                  expanded = checksEvidenceExpanded,
+                  onToggle = { checksEvidenceExpanded = !checksEvidenceExpanded })
           ReadOnlyImpactPane(state.impact, state.gitStatus)
           state.draft?.engineeringInsight?.let { insight ->
             EngineeringInsightPanel(
@@ -649,8 +636,8 @@ private fun ReviewNextAction(
 ) {
   Text(
       action.detail,
-      color = SecondaryText,
-      fontSize = 12.sp,
+      color = if (action.enabled) PrimaryText else Warning,
+      style = IdeTypography.body,
       modifier = Modifier.padding(top = 4.dp))
   if (action.kind == ReviewNextActionKind.Waiting) return
   val onClick =
@@ -731,7 +718,6 @@ private fun ReviewDisclosureSection(
 @Composable
 private fun ReviewEvidenceDetails(
     title: String,
-    diagnostics: List<DeclarationFinding>,
     checks: List<DraftCheck>,
     candidateHash: String? = null,
     checkHash: String? = null,
@@ -739,7 +725,7 @@ private fun ReviewEvidenceDetails(
     onToggle: () -> Unit,
 ) {
   val identityHashes = reviewIdentityHashDetails(candidateHash, checkHash)
-  val detailCount = diagnostics.size + checks.size + identityHashes.size
+  val detailCount = checks.size + identityHashes.size
   IdeDisclosureHeader(
       title = title,
       expanded = expanded,
@@ -752,35 +738,29 @@ private fun ReviewEvidenceDetails(
             Text(
                 "${identity.label}: ${identity.hash}",
                 color = SecondaryText,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
+                style = IdeTypography.resultCode,
                 modifier = Modifier.padding(top = if (index == 0) 0.dp else 3.dp))
-          }
-          diagnostics.forEach { diagnostic ->
-            Text(
-                "${diagnostic.code}: ${diagnostic.message}",
-                color = Error,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 3.dp))
           }
           checks.forEach { check ->
             Text(
-                "${check.name} · ${check.state} · ${if (check.required) "required" else "optional"}",
-                color = evidenceColor(checkStatus(check.state)),
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 4.dp))
+                check.name,
+                color = PrimaryText,
+                style = IdeTypography.resultHeading,
+                modifier = Modifier.padding(top = 12.dp))
+            IdeLabelBadge(
+                "${checkStatus(check.state).label} · ${if (check.required) "Required" else "Optional"}",
+                evidenceColor(checkStatus(check.state)),
+                Modifier.padding(vertical = 4.dp))
             if (check.command.isNotEmpty())
                 Text(
                     "\$ ${check.command.joinToString(" ")}",
                     color = SecondaryText,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp)
+                    style = IdeTypography.resultCode)
             if (check.output.isNotBlank())
                 Text(
                     check.output,
-                    color = SecondaryText,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
+                    color = PrimaryText,
+                    style = IdeTypography.resultCode,
                     modifier = Modifier.padding(top = 2.dp))
           }
         }
@@ -789,12 +769,19 @@ private fun ReviewEvidenceDetails(
 
 @Composable
 private fun EvidenceRow(row: ReviewEvidenceRow) {
-  Text(row.label, color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+  Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+    Text(
+        row.label,
+        color = PrimaryText,
+        style = IdeTypography.resultLabel,
+        modifier = Modifier.weight(1f))
+    IdeLabelBadge(row.status.label, evidenceColor(row.status))
+  }
   Text(
-      "${row.status.label} · ${row.detail}",
-      color = evidenceColor(row.status),
-      fontSize = 11.sp,
-      modifier = Modifier.padding(top = 2.dp))
+      row.detail,
+      color = if (row.status == ReviewEvidenceStatus.Failed) Error else SecondaryText,
+      style = IdeTypography.compactBody,
+      modifier = Modifier.padding(top = 4.dp))
 }
 
 @Composable

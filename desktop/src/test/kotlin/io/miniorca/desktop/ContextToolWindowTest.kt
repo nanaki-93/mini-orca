@@ -1,5 +1,14 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -33,13 +42,66 @@ class ContextToolWindowTest {
                 sideEffects = listOf("writes output"),
                 contextManifest = ContextManifest()))
 
-    assertEquals("BEHAVIOR", facts.first().first)
+    assertEquals("Behavior", facts.first().first)
     assertEquals(listOf("dispatches work"), facts.first().second)
     assertEquals(listOf("writes output"), facts[3].second)
     assertEquals(
-        "FUNCTION · model-a · http://127.0.0.1:8080",
-        explanationProvenanceLabel(
+        listOf("Scope" to "Function", "Model" to "model-a", "Provider" to "http://127.0.0.1:8080"),
+        explanationProvenanceFacts(
             ContextManifest(model = "model-a", providerOrigin = "http://127.0.0.1:8080")))
+    assertEquals(listOf("Scope" to "Function"), explanationProvenanceFacts(ContextManifest()))
+  }
+
+  @Test
+  fun explanationFactsStaySeparateAndSourceDisclosureIsLocalAndResetsWithTheResponse() {
+    val result =
+        DeclarationExplanation(
+            version = "v1",
+            projectId = "project",
+            projectRevision = "revision",
+            baseFileHash = "hash",
+            anchor = DeclarationSourceAnchor("internal/main.go", "Run", "func Run() error", 4, 9),
+            summary = "**Validate** the request before dispatching work.",
+            behavior = listOf("Read `request.ID`.", "Dispatch valid requests."),
+            inputs = listOf("The incoming request."),
+            errorBehavior = listOf("Missing input returns an error."),
+            contextManifest = ContextManifest(model = "model-a", providerOrigin = "local-provider"))
+    var state by
+        mutableStateOf(
+            DeclarationExplanationState(
+                status = DeclarationExplanationStatus.Current, result = result))
+    ComposeVisualFixture(360, 1100, 1.5f) {
+          Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            DeclarationExplanationDetails(state)
+          }
+        }
+        .use { fixture ->
+          fixture.render("context-structured-explanation-360-1.5")
+          listOf(
+                  "Summary",
+                  "Behavior",
+                  "Inputs",
+                  "Error behavior",
+                  "Read request.ID.",
+                  "Dispatch valid requests.",
+                  "Missing input returns an error.")
+              .forEach { assertTrue(fixture.hasText(it), it) }
+          fixture.assertTextWrapsWithoutClipping("Validate the request before dispatching work.")
+          assertFalse(fixture.hasText("Outputs"))
+          assertFalse(fixture.hasText("model-a"))
+          assertEquals(1, fixture.scrollableContentCount())
+          assertTrue(fixture.requestFocus("Explanation source"))
+          fixture.pressKey(Key.Enter)
+          fixture.render("context-explanation-source-360-1.5")
+          assertEquals("Expanded", fixture.stateDescription("Explanation source"))
+          assertTrue(fixture.hasText("model-a"))
+          assertTrue(fixture.hasText("local-provider"))
+          state = state.copy(result = result.copy(summary = "Replacement explanation."))
+          fixture.render()
+          assertEquals("Collapsed", fixture.stateDescription("Explanation source"))
+          assertFalse(fixture.hasText("model-a"))
+          assertTrue(fixture.hasText("Replacement explanation."))
+        }
   }
 
   @Test

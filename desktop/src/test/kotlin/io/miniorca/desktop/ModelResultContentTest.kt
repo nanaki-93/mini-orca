@@ -41,15 +41,13 @@ class ModelResultContentTest {
   }
 
   @Test
-  fun listsKeepOrderAndItemBoundariesWithHangingIndentation() {
+  fun listsKeepOrderAndItemBoundariesWithDistinctMarkers() {
     val result =
         formatModelResult(
             "- **Bug:** a nil pointer\n+ Check `err`\n* Keep the guard\n\n3. First check\n8) Next check")
     assertEquals(
         "• Bug: a nil pointer\n• Check err\n• Keep the guard\n\n3. First check\n8) Next check",
         result.text)
-    assertEquals(5, result.paragraphStyles.size)
-    assertTrue(result.paragraphStyles.all { it.item.textIndent != null })
     assertEquals(5, result.spanStyles.count { it.item.color == ResultAccent })
   }
 

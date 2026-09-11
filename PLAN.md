@@ -205,12 +205,12 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 1/17. **Active task/writer:** none. **Next:** UX-02.
+**Accepted:** 2/17. **Active task/writer:** none. **Next:** CREATE-01.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
 | 1 | [UX-01](docs/tasks.md#task-ux-01--establish-readable-result-primitives) | Establish readable result primitives | Complete; locally committed |
-| 2 | [UX-02](docs/tasks.md#task-ux-02--apply-the-hierarchy-to-explanations-and-model-responses) | Apply the hierarchy to explanations and model responses | Queued |
+| 2 | [UX-02](docs/tasks.md#task-ux-02--apply-the-hierarchy-to-explanations-and-model-responses) | Apply the hierarchy to explanations and model responses | Complete; locally committed |
 | 3 | [CREATE-01](docs/tasks.md#task-create-01--expose-creation-in-the-normal-file-workflow) | Expose creation in the normal file workflow | Queued |
 | 4 | [CREATE-02](docs/tasks.md#task-create-02--close-creation-validation-and-lifecycle-gaps) | Close creation validation and lifecycle gaps | Queued |
 | 5 | [ANA-01](docs/tasks.md#task-ana-01--define-categorized-results-and-unified-run-contracts) | Define categorized results and unified run contracts | Queued |
@@ -241,6 +241,17 @@ and the contrast test's surface assumptions; diagnostics remain in the task card
 No Go changes, dependencies or migration steps. The isolated commit candidate
 also passed all 360 tests and quality checks without pre-existing desktop edits.
 The authorized local commit's hash is reported in the task response/local receipt.
+
+UX-02 accepted on **2026-09-11**: explanations now separate facts from source
+metadata; Assistant distinguishes requests, model responses and drafts; project
+and engineering prose use the shared formatter with one parent scroll owner.
+Review leads with the next action, and validation messages stay visible. Tightened
+formatted list spacing. Passed 43 focused tests, all 366 desktop tests and quality
+checks; the isolated commit passed all 364 tests and quality checks. One focused
+test correction retained existing insight whitespace normalization. Production
+offscreen renders and the exact diff were reviewed. The required explanation
+status helper is included; unrelated existing tab/layout work remains uncommitted.
+No daemon, API, dependency or migration changes. Commit hash: task response/local receipt.
 
 ## Definition of done
 

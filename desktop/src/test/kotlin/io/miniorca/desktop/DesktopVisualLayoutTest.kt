@@ -49,6 +49,17 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun formattedResponseListsUseOnlyTheOriginalLineBreaks() {
+    val response = "Summary.\n\n- First item\n- Second item\n\nNext paragraph.\n1. Last item"
+    ComposeVisualFixture(480, 600, 1.5f) { ModelResultContent(response) }
+        .use { fixture ->
+          fixture.render("model-list-spacing-480-1.5")
+          fixture.assertTextLineCount(formatModelResult(response).text, 7)
+          assertFalse(fixture.hasText("Show full response"))
+        }
+  }
+
+  @Test
   fun securityWorkspaceKeepsActionsAndEvidenceReadableAcrossWideNarrowAndLargeText() {
     listOf(Triple(1440, 900, 1f), Triple(999, 760, 1f), Triple(1280, 600, 1.5f)).forEach {
         (width, height, scale) ->
@@ -628,6 +639,8 @@ class DesktopVisualLayoutTest {
           fixture.render("review-invalid-draft-800-1.3")
           assertTrue(fixture.hasText("Progress"))
           assertTrue(fixture.hasText("Next action"))
+          assertTrue(fixture.hasText("missing closing brace"))
+          assertFalse(fixture.hasDescription("Expand Validation diagnostics"))
           fixture.clickText("Failed check details")
           fixture.render("review-invalid-draft-details-800-1.3")
           assertTrue(fixture.hasText("expected failure evidence"))
@@ -663,7 +676,8 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("review-ready-$width-${height}-$scale")
-            assertTrue(fixture.hasText("Passed · The request is bound to this candidate."))
+            assertTrue(fixture.hasText("Passed"))
+            assertTrue(fixture.hasText("The request is bound to this candidate."))
             assertTrue(fixture.hasText("Next action"))
             assertTrue(fixture.hasText("Apply Serve to internal/api/server.go"))
             fixture.clickText("Focused check details")
@@ -741,6 +755,10 @@ class DesktopVisualLayoutTest {
         }
 
     var assistantActions = 0
+    val request = "Keep **literal** request text and validate the input."
+    val response =
+        "**Plan:** validate the input before calling `Serve`.\n\n" +
+            (1..12).joinToString("\n") { "- Preserve requirement $it." }
     val session =
         ChatSession(
             projectId = project.projectId,
@@ -750,7 +768,10 @@ class DesktopVisualLayoutTest {
             mode = draft.mode,
             targetSymbol = draft.targetSymbol,
             state = "active",
-            latestDraftId = draft.id)
+            latestDraftId = draft.id,
+            messages =
+                listOf(
+                    ChatSessionMessage("user", request), ChatSessionMessage("assistant", response)))
     ComposeVisualFixture(800, 900, 1.3f) {
           AssistantToolWindow(
               AssistantToolWindowState(
@@ -787,6 +808,16 @@ class DesktopVisualLayoutTest {
           fixture.render("assistant-invalid-800-1.3")
           assertTrue(fixture.hasText("Conversation"))
           assertTrue(fixture.hasText("Editable draft"))
+          assertTrue(fixture.hasText("Your request"))
+          assertTrue(fixture.hasText("Model response"))
+          assertTrue(fixture.hasText(request))
+          assertTrue(fixture.hasText(formatModelResult(response).text))
+          assertTrue(fixture.hasText("Candidate for review"))
+          assertTrue(fixture.hasText("missing closing brace"))
+          assertEquals(1, fixture.scrollableContentCount())
+          fixture.clickText("Show full response")
+          fixture.render("assistant-response-expanded-800-1.3")
+          assertEquals("Expanded", fixture.stateDescription("Show less"))
           assertTrue(fixture.hasText("Fix validation diagnostics before continuing."))
           assertTrue(fixture.hasText("Confirm remote destination"))
           kotlin.test.assertEquals(0, assistantActions)
@@ -1176,7 +1207,8 @@ class DesktopVisualLayoutTest {
   @Test
   fun summaryDashboardKeepsLongInterpretationExpandableAndNavigationLocal() {
     val longPurpose =
-        "This returned purpose stays intact when the compact dashboard only previews it. ".repeat(8)
+        "This returned purpose stays intact when the compact dashboard only previews it. "
+            .repeat(24)
     val overview =
         visualFixtureOverview.copy(
             analysis =
@@ -1197,7 +1229,7 @@ class DesktopVisualLayoutTest {
           fixture.clickText("Analysis")
           fixture.clickText("Bugs")
           kotlin.test.assertEquals(listOf(Workspace.Analysis, Workspace.Bugs), destinations)
-          fixture.clickText("Show full purpose")
+          fixture.clickText("Show full response")
           fixture.render("summary-purpose-expanded-1440")
           assertTrue(fixture.hasText(longPurpose))
           fixture.clickText("Interpretation details")
@@ -1522,6 +1554,21 @@ internal class ComposeVisualFixture(
 
   fun hasScrollableContent(): Boolean =
       nodes().any { it.config.getOrNull(SemanticsActions.ScrollBy) != null }
+
+  fun scrollableContentCount(): Int =
+      nodes().count { it.config.getOrNull(SemanticsActions.ScrollBy) != null }
+
+  fun assertTextLineCount(label: String, expected: Int) {
+    val layouts = mutableListOf<TextLayoutResult>()
+    textNodes(label)
+        .single()
+        .config
+        .getOrNull(SemanticsActions.GetTextLayoutResult)
+        ?.action
+        ?.invoke(layouts)
+    assertTrue(layouts.isNotEmpty())
+    layouts.forEach { assertEquals(expected, it.lineCount) }
+  }
 
   fun pressKey(key: Key): Boolean {
     val keyDown = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyDown))
