@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.dismiss
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
@@ -357,9 +358,34 @@ private fun RowScope.HeaderTitle(
     modifier: Modifier = Modifier.weight(1f),
 ) {
   Column(modifier) {
-    Text(title, color = PrimaryText, style = IdeTypography.compactBody, maxLines = 2)
-    stateLabel?.let { Text(it, color = stateTint, style = IdeTypography.section, maxLines = 2) }
+    Text(
+        title,
+        color = PrimaryText,
+        style = IdeTypography.resultHeading,
+        modifier = Modifier.semantics { heading() })
+    stateLabel?.let { Text(it, color = stateTint, style = IdeTypography.compactBody) }
   }
+}
+
+/** A state or severity must remain readable in text, including at large font scales. */
+@Composable
+internal fun IdeLabelBadge(
+    label: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    accessibleName: String = label,
+) {
+  Text(
+      label,
+      color = tint,
+      style = IdeTypography.resultLabel,
+      modifier =
+          modifier
+              .background(labelBadgeBackground(tint), MiniOrcaShapes.small)
+              .border(BorderStroke(1.dp, tint.copy(alpha = 0.42f)), MiniOrcaShapes.small)
+              .semantics { contentDescription = accessibleName }
+              .padding(horizontal = MiniOrcaSpacing.standard, vertical = MiniOrcaSpacing.compact),
+  )
 }
 
 /** A compact disclosure target with independently composable trailing actions. */

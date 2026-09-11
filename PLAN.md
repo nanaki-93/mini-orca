@@ -1,10 +1,290 @@
-# Mini-Orca current plan and status
+# Mini-Orca — clearer results, unified analysis and a terminal
 
-This is the sole execution/status ledger. The accepted product remains a local-first
+Planning proposal prepared on **2026-09-11**. Preserve the current dark IDE style,
+make model explanations and actions readable at a glance, run project-wide analysis
+with separate **Bugs / Performance / Security** result pages, expose new-function
+generation, and replace the duplicated bottom tools with a real terminal. The user
+approved the plan and authorized scheduled implementation on **2026-09-11**.
+Task preparation and scheduler setup do not mark any implementation complete.
+
+This file owns product decisions and the execution/status ledger. `docs/tasks.md`
+owns the current implementation cards. Previous status and acceptance records
+remain below; their automation and commit instructions do not extend this scope.
+
+## Findings from the current checkout
+
+| Request | What exists | What needs to change |
+| --- | --- | --- |
+| Cleaner UI and readable explanations | Jewel, shared dark tokens, pane headers, badges and disclosures already exist. The uncommitted Context changes add Actions / Explain / Details. | Apply a consistent content hierarchy throughout the app. `DeclarationExplanationDetails` joins several facts into muted text with middle dots; Assistant renders each turn as plain `Text`; insight labels use 10sp text and nested scrolling. |
+| One analysis workflow | Separate Analysis, Bugs, Performance and Security workspaces; separate Analyze-all and Performance jobs. Their daemon controllers explicitly reject simultaneous runs. | One project-wide Start action and progress owner; results stay in their own Bugs, Performance and Security pages. A Start button cannot simply launch the existing jobs together. |
+| Generate a new function | `create_symbol` is already supported by chat, draft composition, validation and Apply. The desktop enters it through `create_declaration` in the command palette. | A visible file-level action, a clear creation form, correct focus and useful eligibility messages. Reuse the current generation pipeline. |
+| Remove bottom duplicates | Problems repeats findings, Checks repeats Review evidence, and Output aggregates operation/scan diagnostics. | Move any unique diagnostic information into its owning workflow before deleting these three bottom surfaces. |
+| Bottom terminal | No terminal implementation or terminal dependency is present. | Add desktop-owned PTY lifecycle and a terminal renderer; an output text box is insufficient for interactive shell behavior. |
+
+Relevant boundaries: `internal/app/` owns requests, source freshness and guarded
+mutation; `internal/project/` owns typed reports and persistence;
+`internal/api/handlers/` and `cmd/daemon/main.go` own HTTP contracts; desktop
+presenter/controller state owns UI publication and rejects late results.
+
+The working tree already contains changes to Context, shared controls/theme,
+layout defaults, desktop documentation and visual/keyboard tests. Use that working
+tree as the implementation baseline and preserve unrelated edits. No new theme,
+Jewel migration, broad refactor or insight qualification campaign is required.
+
+## Confirmed product decisions
+
+The user answered the planning questions on **2026-09-11**. These answers define
+the implementation scope; the later request authorizes its scheduled execution.
+
+| ID | Question | User answer and resulting scope |
+| --- | --- | --- |
+| D1 | Analyze the selected file or always the whole project? | **Always analyze the whole project.** The primary Analyze action never depends on the selected file. File selection/filtering affects result inspection only. |
+| D2 | Real interactive terminal or individual command runner? | **Real interactive terminal.** Use a local shell rooted in the open project; PTY/native packaging and keyboard verification are required. |
+| D3 | Stronger hierarchy with expandable detail, or all detail expanded? | **Use the proposed hierarchy.** Short visible summary, headings, labeled severity badges, highlighted code references and expandable technical details; retain the style. |
+| D4 | Go-only new functions, or additional languages? | **Make Go generation prominent.** Additional language generation is outside this plan. |
+| D5 | How should the unified analysis be presented? | **One Start button; results in their own sections; Analysis only tracks progress.** Keep separate Bugs, Performance and Security destinations. Coordinating the existing analyzers is the implementation recommendation; the user did not request a single model response. |
+
+Keep **Summary / Analysis / Bugs / Performance / Security / Editor** as distinct
+destinations. Give the three results pages a clear shared visual grouping in the
+sidebar, with counts/state next to their labels. **Analysis** owns Start and run
+progress, including coverage and failures; it does not contain findings lists.
+Its progress rows link to each result page. Each result page can filter to a file
+without starting analysis or changing the project-wide run scope.
+
+Keep source-based analysis separate from explicit execution: tests/vet remain an
+optional **Run checks** action inside Bugs, and benchmark measurement remains
+explicit in the Performance detail/review flow. The ordinary Analyze action can
+run the existing passive Go security rules, but does not silently start tests,
+benchmarks or model-suggested commands.
+
+## Intended interaction and presentation
+
+1. Open a project; its name and the project-wide **Start analysis** action are visible.
+2. Choose **Start analysis**. A compact preflight identifies the project, covered files,
+   excluded/oversized files, relevant providers and any required fresh consent.
+   Existing advanced limits remain available in a disclosure.
+3. Analysis shows one run with three progress rows. Results appear progressively
+   in the separate Bugs / Performance / Security pages. Each section
+   distinguishes running, completed-empty, partial, failed, skipped, canceled and
+   stale. A failure in one section does not erase valid results in another.
+4. Each result starts with a concise title and visible severity/state, followed by
+   the supported explanation and source location. Evidence, provenance and longer
+   recommendations expand locally. Selecting a source reference opens the exact
+   indexed file/line; **Prepare fix** only prepares the existing Assistant flow.
+5. In Editor, **New function** is visible with an open eligible Go file, including
+   a valid package-only file with no declarations. It opens a form showing the
+   file, required function name and behavior request. Generate produces an editable
+   isolated draft and a read-only composed diff; validation, checks and explicit
+   Apply/Undo remain the existing workflow.
+6. The bottom area contains **Terminal** only. It starts collapsed with an explicit
+   open control. First activation starts the shell; collapsing preserves the
+   session. Close/restart and session-exit states are visible.
+
+Presentation rules:
+
+- Keep the shared dark palette, square panes, separators and blue selection edge.
+  Use teal for explanatory content and labeled warning/error/success accents for
+  state. Category identity must not look like a severity verdict.
+- Use a readable 12–13sp body with 18–20sp line height and semibold headings. Do not
+  use tiny muted labels for the main explanation. Render structured facts as
+  separate labeled rows or lists, never one long middle-dot-separated sentence.
+- Keep the summary, actionable failures and primary action visible. Collapse
+  provider metadata, hashes, repetitive context and optional technical detail.
+  Disclosure controls must remain obvious and keyboard accessible.
+- Render model emphasis, lists and inline code through a bounded text component
+  where the payload is freeform. Structured explanation fields remain structured;
+  do not invent a summary or run another model to improve formatting. Code blocks
+  remain selectable/read-only, and malformed formatting remains readable text.
+- Use one main scroll region per pane; avoid a scrollable explanation nested in
+  another scrollable sidebar. Long paths/errors must wrap or offer full detail.
+- Counts mean actual current findings under the selected result filters. Missing, unrun,
+  unavailable or stale results must not become green zeroes. Preserve AI/tool
+  provenance and distinguish performance hypotheses from measured benchmarks.
+
+## Architecture and migration decisions
+
+**Unified analysis:** use one daemon run coordinator for project-wide scope,
+calling the existing per-file services. Preserve their validators,
+source-policy checks and report stores. Replace the duplicated scheduling owners
+as the unified runner takes over; do not layer a third independent scheduler over
+Analyze-all and Performance. Existing public routes should be narrow adapters to
+the shared owner where their behavior can be preserved. Define and document any
+unavoidable incompatibility before removing a public route.
+
+The primary UI has no file/project scope selector. Existing file-analysis APIs can
+remain available for compatibility, but Context offers **Analyze project** or
+**View this file's results**, clearly distinguishing execution from local filtering.
+
+One run needs a stable ID/generation, project/revision, immutable queue identities,
+per-file hashes, policy/provider fingerprints, bounded work/attempt accounting and
+per-section progress. Project scope means enumerating all policy-eligible files;
+process them in bounded batches when necessary rather than silently analyzing only
+the first 100/500 files. Show excluded/unsupported coverage separately. If a time
+or request budget is reached, preserve pending work and show Paused/Partial with
+explicit continuation; never label incomplete project coverage Completed.
+Persist source-free progress using `internal/storage/atomic.go`.
+Report publication and progress updates must remain tied to the captured run;
+late results cannot overwrite a replacement run or a newly opened project.
+
+**Classification is a real contract gap:** current semantic `risks` have no
+category, while Performance and Security have different typed contracts. Do not
+label every old risk a bug or categorize prose with keyword matching. Add an
+explicit category to newly generated semantic risks, validate its enum and route
+it at the report boundary. Existing specialized reports carry their known
+category. Retain source-specific evidence types behind a small presentation
+adapter, rather than flattening away security anchors or benchmark evidence.
+Old unclassified reports remain readable as previous analysis details, with a
+refresh label; they do not enter fresh category counts. General explanations and
+non-finding suggestions remain in Context/Summary rather than becoming bugs.
+
+Changes to the semantic response schema require a new prompt/cache identity and
+updated offline contract/evaluation tests. Preserve historical evaluation verdicts,
+budgets and sealed material; this plan does not resume live qualification.
+
+**Consent and cost:** admission binds the specific queue and relevant providers.
+Keep Bug and Analyze scope confirmations explicit, and retain fresh Security
+review intent within that admission. Do not reuse an unrelated Summary/Performance
+checkbox as Security consent. Opening pages, switching sections and restoring
+reports make no provider requests. Resume after restart or changed consent context
+requires the corresponding explicit action; authorization is not persisted as a
+reusable boolean. Avoid multiplying the existing provider retry loop by a second
+unbounded job retry loop.
+
+**Creation:** use `ChatEditMode.CreateSymbol`, the current chat routes and
+`ComposeGoDeclaration`. Creation appends one supported top-level declaration and
+explicit imports to the current existing Go file. Creating files, multi-function
+edits and adding receiver-method creation are outside the confirmed Go-creation scope.
+Retain the already supported type-creation capability through a clearly labeled
+secondary creation mode. Correct the desktop's ASCII-only/keyword validation
+mismatch with the Go boundary and ensure invalid names are explained before a
+model request. The daemon remains authoritative.
+
+**Terminal:** own the shell in the desktop process, without adding a general
+command-execution HTTP endpoint. Start with one session for the current project,
+no tabs/session persistence requirement. Use the local project's canonical path;
+if the daemon exposes a container-only path, show an actionable unavailable state
+instead of silently starting in another directory. A local path mapping can be a
+follow-up if container-backed use requires it.
+
+[JediTerm](https://github.com/JetBrains/jediterm) provides an embeddable Swing terminal
+and [Pty4J](https://github.com/JetBrains/pty4j) is the associated PTY candidate.
+Embedding them in Compose is a proposed implementation choice, not a verified
+compatibility claim for this app's JBR 25/macOS arm64 package. Validate dependency
+versions, redistribution notices, native libraries, focus and packaging in TERM-01
+before relying on them. Do not implement an ANSI emulator from scratch.
+
+The terminal is an ordinary user-controlled local shell: commands can change
+files. It must not be described as the daemon's copied-workspace check sandbox.
+No model output or report selection writes to terminal stdin. Do not log terminal
+input/output to app metadata or include it in prompts automatically. Shell-driven
+file changes must invalidate affected review/analysis evidence through the existing
+freshness checks. Keep project-execution trust for automated checks independent.
+
+**Retirement:** retain saved Performance/Bugs/Security navigation identities and map
+old bottom-tool preferences to a collapsed Terminal. Preserve
+pane sizes. Keep existing report files and triage metadata; do not delete old caches
+or automatically resume old jobs. Restore any older active job as interrupted/paused
+with explicit recovery, and preserve attempt counts during migration.
+
+## Scheduled implementation — authorized 2026-09-11
+
+The user approved this plan and requested scheduled execution with **GPT-6 Astra
+Extra High** (`gpt-6-astra`, `xhigh`). The executable cards now live in
+[docs/tasks.md](docs/tasks.md); [tasks/README.md](tasks/README.md) owns the run procedure.
+
+Scheduler: **Mini-Orca UX implementation**, every **20 minutes**, attached to this
+Codex task; automation ID **mini-orca-ux-implementation**, status **Active**.
+The app accepted the task model override `gpt-6-astra` / `xhigh`; this heartbeat
+uses the task's settings rather than a separate scheduler model field. One card per wake,
+strictly in order, with required checks and diff review before acceptance.
+**Per-task local commits are authorized by the user on 2026-09-11.** Create one
+commit for each validated task, including its related checklist/status updates,
+with the task ID in the commit subject. Review the staged diff, exclude unrelated
+pre-existing edits and preserve any unrelated staged changes. Verify and report
+the resulting commit hash before advancing. A failed commit leaves the task at
+the commit stage for recovery; never repeat implementation or create a duplicate
+commit after an interrupted wake. Pushes and releases remain outside scope.
+
+**Accepted:** 1/17. **Active task/writer:** none. **Next:** UX-02.
+
+| Order | ID | Outcome | Status |
+| --- | --- | --- | --- |
+| 1 | [UX-01](docs/tasks.md#task-ux-01--establish-readable-result-primitives) | Establish readable result primitives | Complete; locally committed |
+| 2 | [UX-02](docs/tasks.md#task-ux-02--apply-the-hierarchy-to-explanations-and-model-responses) | Apply the hierarchy to explanations and model responses | Queued |
+| 3 | [CREATE-01](docs/tasks.md#task-create-01--expose-creation-in-the-normal-file-workflow) | Expose creation in the normal file workflow | Queued |
+| 4 | [CREATE-02](docs/tasks.md#task-create-02--close-creation-validation-and-lifecycle-gaps) | Close creation validation and lifecycle gaps | Queued |
+| 5 | [ANA-01](docs/tasks.md#task-ana-01--define-categorized-results-and-unified-run-contracts) | Define categorized results and unified run contracts | Queued |
+| 6 | [ANA-02](docs/tasks.md#task-ana-02--produce-and-validate-explicit-semantic-categories) | Produce and validate explicit semantic categories | Queued |
+| 7 | [ANA-03](docs/tasks.md#task-ana-03--compose-the-per-file-analysis-stages) | Compose the per-file analysis stages | Queued |
+| 8 | [ANA-04](docs/tasks.md#task-ana-04--implement-one-durable-bounded-run-lifecycle) | Implement one durable, bounded run lifecycle | Queued |
+| 9 | [ANA-05](docs/tasks.md#task-ana-05--migrate-existing-jobs-and-expose-the-unified-api) | Migrate existing jobs and expose the unified API | Queued |
+| 10 | [ANA-06](docs/tasks.md#task-ana-06--give-the-desktop-one-analysis-owner) | Give the desktop one analysis owner | Queued |
+| 11 | [ANA-07](docs/tasks.md#task-ana-07--separate-run-progress-from-the-three-result-pages) | Separate run progress from the three result pages | Queued |
+| 12 | [NAV-01](docs/tasks.md#task-nav-01--distinguish-run-results-and-editing-in-the-sidebar) | Distinguish run, results and editing in the sidebar | Queued |
+| 13 | [TERM-01](docs/tasks.md#task-term-01--prove-the-terminal-dependency-and-local-session-boundary) | Prove the terminal dependency and local-session boundary | Queued |
+| 14 | [TERM-02](docs/tasks.md#task-term-02--integrate-the-interactive-terminal-pane) | Integrate the interactive terminal pane | Queued |
+| 15 | [BOTTOM-01](docs/tasks.md#task-bottom-01--preserve-unique-diagnostics-in-their-owning-workflows) | Preserve unique diagnostics in their owning workflows | Queued |
+| 16 | [BOTTOM-02](docs/tasks.md#task-bottom-02--replace-the-bottom-tools-with-terminal-only) | Replace the bottom tools with Terminal only | Queued |
+| 17 | [VERIFY-01](docs/tasks.md#task-verify-01--validate-the-complete-interaction-and-document-support) | Validate the complete interaction and document support | Queued |
+
+Task bodies have moved to `docs/tasks.md` to keep one implementation specification.
+The completed cleanup task cards are preserved in
+[cleanup history](docs/history/cleanup-tasks-2026-09-10.md). Historical cleanup,
+dispatcher and insight-evaluation authorizations remain inactive for this queue.
+
+UX-01 validation on **2026-09-11**: 19 focused tests and all 362 desktop tests
+passed; Detekt, Spotless and diff checks passed. Shared headings, labeled badges
+and bounded selectable result formatting are ready for adoption in UX-02.
+Offscreen production renders covered narrow/wide layouts, larger text, full-response
+disclosures and keyboard focus. Two focused corrections resolved badge contrast
+and the contrast test's surface assumptions; diagnostics remain in the task card.
+No Go changes, dependencies or migration steps. The isolated commit candidate
+also passed all 360 tests and quality checks without pre-existing desktop edits.
+The authorized local commit's hash is reported in the task response/local receipt.
+
+## Definition of done
+
+- Model explanations have an obvious summary, visible hierarchy and readable detail;
+  the current dark style and source-first editor remain recognizable.
+- One Start analysis entry point always targets the whole project. Analysis only
+  starts/tracks the run; separate Bugs, Performance and Security pages present
+  results with honest evidence, provenance and freshness. File filtering never
+  silently changes run scope or sends model requests.
+- A user can find New function without the command palette and create a function
+  in an existing Go file through preview, validation/checks and explicit Apply.
+- Problems, Checks and Output no longer occupy the bottom area; their necessary
+  information is reachable in the result pages, Analysis progress, Assistant,
+  Review or status detail.
+- The sole bottom tool is a functioning interactive terminal, with correct focus,
+  resize, project binding and teardown; no placeholder terminal is shipped.
+- Required automated checks and supported-host native checks have recorded results;
+  old report/triage data and user layout preferences are handled deliberately.
+
+## Planning and scheduler setup validation
+
+Repository inspection covered the current working-tree UI, request/state flows,
+API routes, report/schema stores, generation/composition/Apply boundaries, job
+controllers and existing tests. The original planning step changed only this file.
+Scheduler setup moves the 17 task cards into `docs/tasks.md`, archives the completed
+cleanup cards and updates `tasks/README.md`; it changes no application code.
+Task blocks, dependency order, target paths, Markdown links and `git diff --check`
+passed setup verification. At setup all 17 cards were unchecked, with UX-01 first. The
+registered heartbeat was read back with the correct task, 20-minute cadence and
+Active state. Installed Java 21/25 launcher/toolchain binaries passed version
+checks. The ten pre-existing modified desktop files remain unchanged by setup.
+Application tests and native terminal compatibility tests are deferred to the
+implementation tasks; no runtime behavior or platform compatibility is claimed
+from this analysis.
+
+---
+
+## Previous implementation status — retained history
+
+The completed-work ledger below records the earlier accepted scope. The accepted product remains a local-first
 assistant for one project, file and symbol, with explicit candidate review and Apply.
 REL-01 and REL-02 are **Complete** for the documented limited release scope.
-The current cleanup specification is [docs/tasks.md](docs/tasks.md); the
-[execution guide](tasks/README.md) describes its coordinator/review boundaries.
+The completed cleanup specification is preserved in
+[cleanup history](docs/history/cleanup-tasks-2026-09-10.md), including its execution boundaries.
 
 ## Cleanup execution — authorized 2026-09-10
 

@@ -1376,7 +1376,7 @@ class DesktopVisualLayoutTest {
 
 /** This test-only adapter is tied to the Compose version pinned in build.gradle.kts. */
 @OptIn(ExperimentalComposeUiApi::class, InternalComposeUiApi::class)
-private class ComposeVisualFixture(
+internal class ComposeVisualFixture(
     private val width: Int,
     private val height: Int,
     fontScale: Float = 1f,
