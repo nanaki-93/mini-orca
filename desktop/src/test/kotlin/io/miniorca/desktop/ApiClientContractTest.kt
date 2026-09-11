@@ -11,6 +11,93 @@ import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
   @Test
+  fun unifiedAnalysisUsesExplicitScopeLimitsAndFullRunGuardsWithoutFlatteningEvidence() {
+    val requests = mutableListOf<Triple<String, String, String?>>()
+    val run = analysisRunFixture()
+    val api =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, body ->
+                  requests.add(Triple(method, path, body))
+                  when {
+                    path.endsWith("/preview") ->
+                        TransportResponse(200, Json.encodeToString(analysisPreviewFixture()))
+                    path.contains("/results?") ->
+                        TransportResponse(
+                            200,
+                            Json.encodeToString(
+                                analysisResultsFixture(run, "security", "dir/a b.go")))
+                    else -> TransportResponse(202, Json.encodeToString(run))
+                  }
+                })
+    val preview =
+        api.previewAnalysis(
+            AnalysisPreviewRequest(
+                "project", "revision", "project", false, AnalysisRunLimits(100, 900, 2)))
+    val request = requireNotNull(requests.last().third)
+    assertContains(request, "\"scope\":\"project\"")
+    assertContains(request, "\"batch_files\":100")
+    assertContains(request, "\"budget_seconds\":900")
+    assertContains(request, "\"max_attempts_per_stage\":2")
+    assertContains(request, "\"refresh\":false")
+    val confirmations = AnalysisRunConfirmations(listOf("bug-provider", "analyze-provider"), true)
+    assertEquals(
+        run,
+        api.startAnalysis(
+            AnalysisRunStartRequest(
+                preview.identity,
+                preview.previewId,
+                preview.limits,
+                preview.refresh,
+                confirmations)))
+    api.controlAnalysis(AnalysisRunControlRequest(run.identity, "pause"))
+    val pause = requireNotNull(requests.last().third)
+    assertContains(pause, "\"generation\":\"generation\"")
+    assertFalse(pause.contains("confirmations"))
+    api.controlAnalysis(
+        AnalysisRunControlRequest(run.identity, "resume", preview.previewId, confirmations))
+    assertContains(requireNotNull(requests.last().third), "\"security_review\":true")
+    val results = api.analysisResults(run.identity, "security", "dir/a b.go")
+    assertEquals("unverified", results.security.single().findings.single().verificationState)
+    val path = requests.last().second
+    for (part in
+        listOf(
+            "project_id=project",
+            "project_revision=revision",
+            "policy_fingerprint=policy",
+            "provider_fingerprint=providers",
+            "queue_id=queue",
+            "id=run",
+            "generation=generation",
+            "category=security",
+            "path=dir%2Fa+b.go")) assertContains(path, part)
+  }
+
+  @Test
+  fun unifiedCurrentReadHandlesAbsentAndInterruptedRunsAndNumericProviderTimeout() {
+    val api =
+        ApiClient(
+            transport =
+                DaemonTransport { _, path, _ ->
+                  if (path.contains("project_id=empty")) TransportResponse(204, "")
+                  else
+                      TransportResponse(
+                          200,
+                          Json.encodeToString(analysisRunFixture().copy(status = "interrupted")))
+                })
+    assertNull(api.analysisRun("empty", "revision"))
+    assertEquals("interrupted", api.analysisRun("project", "revision")?.status)
+    val model =
+        Json.decodeFromString<AnalysisEffectiveModel>(
+            """{"model":"review","timeout":120000000000}""")
+    assertEquals(120000000000L, model.timeout)
+    val section =
+        Json.decodeFromString<AnalysisSectionProgress>(
+            """{"category":"bugs","status":"running","coverage":{"total":1,"running":1},"finding_count":null}""")
+    assertNull(section.findingCount)
+  }
+
+  @Test
   fun benchmarkCatalogIsReadOnlyAndComparisonSendsTheExactCatalogChoice() {
     val client =
         ApiClient(

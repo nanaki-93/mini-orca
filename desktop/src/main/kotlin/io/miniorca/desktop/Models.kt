@@ -402,7 +402,8 @@ data class ProjectOverview(
     val metrics: ProjectMetrics = ProjectMetrics(),
     val analysis: StructuredProjectAnalysis = StructuredProjectAnalysis(),
     @SerialName("analysis_coverage") val analysisCoverage: AnalysisCoverage = AnalysisCoverage(),
-    @SerialName("finding_counts") val findingCounts: FindingCounts = FindingCounts()
+    @SerialName("finding_counts") val findingCounts: FindingCounts = FindingCounts(),
+    @SerialName("analysis_run") val analysisRun: AnalysisRun? = null
 )
 
 @Serializable
@@ -432,7 +433,8 @@ data class UnifiedFinding(
     @SerialName("detected_at") val detectedAt: String = "",
     @SerialName("originating_analysis") val originatingAnalysis: String = "",
     @SerialName("task_spec") val taskSpec: BugTaskSpec? = null,
-    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null
+    @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null,
+    val category: String = ""
 )
 
 @Serializable
@@ -721,4 +723,216 @@ data class DeclarationDraft(
     val validation: DeclarationValidation? = null,
     @SerialName("task_spec") val taskSpec: BugTaskSpec? = null,
     @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null
+)
+
+/**
+ * Authoritative project-run wire contracts; unknown progress is never represented as zero findings.
+ */
+@Serializable
+data class AnalysisRunLimits(
+    @SerialName("batch_files") val batchFiles: Int,
+    @SerialName("budget_seconds") val budgetSeconds: Int,
+    @SerialName("max_attempts_per_stage") val maxAttemptsPerStage: Int,
+)
+
+@Serializable
+data class AnalysisQueueIdentity(
+    @SerialName("project_id") val projectId: String,
+    @SerialName("project_revision") val projectRevision: String,
+    @SerialName("policy_fingerprint") val policyFingerprint: String,
+    @SerialName("provider_fingerprint") val providerFingerprint: String,
+    @SerialName("queue_id") val queueId: String,
+)
+
+@Serializable
+data class AnalysisRunIdentity(
+    @SerialName("project_id") val projectId: String,
+    @SerialName("project_revision") val projectRevision: String,
+    @SerialName("policy_fingerprint") val policyFingerprint: String,
+    @SerialName("provider_fingerprint") val providerFingerprint: String,
+    @SerialName("queue_id") val queueId: String,
+    val id: String,
+    val generation: String,
+) {
+  fun queue() =
+      AnalysisQueueIdentity(
+          projectId, projectRevision, policyFingerprint, providerFingerprint, queueId)
+}
+
+@Serializable
+data class AnalysisPreviewRequest(
+    @SerialName("project_id") val projectId: String,
+    @SerialName("project_revision") val projectRevision: String,
+    val scope: String,
+    val refresh: Boolean,
+    val limits: AnalysisRunLimits,
+    @SerialName("resume_run") val resumeRun: AnalysisRunIdentity? = null,
+)
+
+@Serializable
+data class AnalysisEffectiveModel(
+    val scope: String = "",
+    val profile: String = "",
+    val model: String = "",
+    @SerialName("reasoning_effort") val reasoningEffort: String = "",
+    @SerialName("provider_origin") val providerOrigin: String = "",
+    @SerialName("remote_provider") val remoteProvider: Boolean = false,
+    val timeout: Long = 0,
+)
+
+@Serializable
+data class AnalysisProviderRequirement(
+    val id: String,
+    val stages: List<String>,
+    val model: AnalysisEffectiveModel,
+    @SerialName("remote_confirmation_required") val remoteConfirmationRequired: Boolean,
+)
+
+@Serializable
+data class AnalysisStagePlan(
+    val stage: String,
+    val eligible: Boolean,
+    val cached: Boolean,
+    val reason: String = "",
+    @SerialName("provider_id") val providerId: String = "",
+    @SerialName("max_model_requests") val maxModelRequests: Int,
+)
+
+@Serializable
+data class AnalysisPlannedFile(
+    val path: String,
+    @SerialName("content_hash") val contentHash: String,
+    val language: String,
+    @SerialName("size_bytes") val sizeBytes: Long,
+    val stages: List<AnalysisStagePlan>,
+)
+
+@Serializable data class AnalysisExcludedFile(val path: String, val reason: String)
+
+@Serializable
+data class AnalysisRunPreview(
+    @SerialName("schema_version") val schemaVersion: String,
+    @SerialName("preview_id") val previewId: String,
+    val identity: AnalysisQueueIdentity,
+    val scope: String,
+    val refresh: Boolean,
+    val limits: AnalysisRunLimits,
+    val files: List<AnalysisPlannedFile> = emptyList(),
+    val excluded: List<AnalysisExcludedFile> = emptyList(),
+    val providers: List<AnalysisProviderRequirement> = emptyList(),
+    @SerialName("expected_model_requests") val expectedModelRequests: Int,
+    @SerialName("max_model_requests") val maxModelRequests: Int,
+    @SerialName("security_review_intent_required") val securityReviewIntentRequired: Boolean,
+    @SerialName("compatibility_stage") val compatibilityStage: String = "",
+)
+
+@Serializable
+data class AnalysisRunConfirmations(
+    @SerialName("provider_ids") val providerIds: List<String>,
+    @SerialName("security_review") val securityReview: Boolean,
+)
+
+@Serializable
+data class AnalysisRunStartRequest(
+    val identity: AnalysisQueueIdentity,
+    @SerialName("preview_id") val previewId: String,
+    val limits: AnalysisRunLimits,
+    val refresh: Boolean,
+    val confirmations: AnalysisRunConfirmations,
+)
+
+@Serializable
+data class AnalysisRunControlRequest(
+    val identity: AnalysisRunIdentity,
+    val action: String,
+    @SerialName("preview_id") val previewId: String = "",
+    val confirmations: AnalysisRunConfirmations? = null,
+)
+
+@Serializable
+data class AnalysisRunCoverage(
+    val total: Int = 0,
+    val pending: Int = 0,
+    val running: Int = 0,
+    val succeeded: Int = 0,
+    val partial: Int = 0,
+    val failed: Int = 0,
+    val skipped: Int = 0,
+    val unavailable: Int = 0,
+)
+
+@Serializable
+data class AnalysisSectionProgress(
+    val category: String,
+    val status: String,
+    val coverage: AnalysisRunCoverage,
+    @SerialName("finding_count") val findingCount: Int? = null,
+)
+
+@Serializable
+data class AnalysisStageProgress(
+    val stage: String,
+    val status: String,
+    val attempts: Int,
+    val cached: Boolean,
+    @SerialName("finding_count") val findingCount: Int? = null,
+    @SerialName("report_id") val reportId: String = "",
+    val reason: String = "",
+)
+
+@Serializable
+data class AnalysisRunFile(
+    val path: String,
+    @SerialName("content_hash") val contentHash: String,
+    val language: String,
+    val stages: List<AnalysisStageProgress>,
+)
+
+@Serializable
+data class AnalysisRun(
+    @SerialName("schema_version") val schemaVersion: String,
+    val identity: AnalysisRunIdentity,
+    val plan: AnalysisRunPreview,
+    val status: String,
+    val files: List<AnalysisRunFile> = emptyList(),
+    val sections: List<AnalysisSectionProgress> = emptyList(),
+    @SerialName("elapsed_seconds") val elapsedSeconds: Long = 0,
+    @SerialName("window_elapsed_seconds") val windowElapsedSeconds: Long = 0,
+    @SerialName("window_files_completed") val windowFilesCompleted: Int = 0,
+    val reason: String = "",
+    @SerialName("created_at") val createdAt: String = "",
+    @SerialName("updated_at") val updatedAt: String = "",
+) {
+  fun isActive(): Boolean = status in setOf("queued", "running", "pausing", "canceling")
+}
+
+@Serializable
+data class PerformanceFileReport(
+    @SerialName("schema_version") val schemaVersion: String = "",
+    @SerialName("project_id") val projectId: String,
+    @SerialName("project_revision") val projectRevision: String,
+    val path: String,
+    @SerialName("content_hash") val contentHash: String,
+    val status: String,
+    val findings: List<PerformanceFinding> = emptyList(),
+    val warning: String = "",
+    val model: String = "",
+    val profile: String = "",
+    val scope: String = "",
+    @SerialName("provider_origin") val providerOrigin: String = "",
+    @SerialName("reasoning_effort") val reasoningEffort: String = "",
+    @SerialName("prompt_version") val promptVersion: String = "",
+    @SerialName("context_policy_version") val contextPolicyVersion: String = "",
+    @SerialName("generated_at") val generatedAt: String = "",
+)
+
+@Serializable
+data class AnalysisSectionResults(
+    val identity: AnalysisRunIdentity,
+    val progress: AnalysisSectionProgress,
+    val path: String = "",
+    val semantic: List<UnifiedFinding> = emptyList(),
+    val performance: List<PerformanceFileReport> = emptyList(),
+    val security: List<SecurityFileReport> = emptyList(),
+    val unclassified: List<UnifiedFinding> = emptyList(),
 )

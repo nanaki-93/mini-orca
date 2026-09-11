@@ -44,6 +44,34 @@ data class FindingsState(
     val performanceContext: PerformanceQueuePreview? = null,
 )
 
+data class AnalysisAdmission(
+    val preview: AnalysisRunPreview,
+    val resumeRun: AnalysisRunIdentity? = null,
+    val providerIds: Set<String> = emptySet(),
+    val securityReview: Boolean = false,
+) {
+  fun isConfirmed(): Boolean =
+      preview.providers.filter { it.remoteConfirmationRequired }.all { it.id in providerIds } &&
+          (!preview.securityReviewIntentRequired || securityReview)
+}
+
+data class AnalysisResultKey(val category: String, val path: String = "")
+
+data class AnalysisSectionState(
+    val results: AnalysisSectionResults? = null,
+    val loading: Boolean = false,
+    val error: String? = null,
+)
+
+/** Consent is transient and belongs only to this admission preview. */
+data class ProjectAnalysisRunState(
+    val run: AnalysisRun? = null,
+    val admission: AnalysisAdmission? = null,
+    val action: String = "",
+    val error: String? = null,
+    val sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
+)
+
 enum class SecuritySectionOperationStatus {
   Idle,
   Running,
@@ -182,6 +210,7 @@ data class DesktopState(
     val selection: FileSelectionState = FileSelectionState(),
     val jobs: JobState = JobState(),
     val findings: FindingsState = FindingsState(),
+    val analysisRun: ProjectAnalysisRunState = ProjectAnalysisRunState(),
     val security: SecurityWorkspaceState = SecurityWorkspaceState(),
     val chat: ChatState = ChatState(),
     val review: DraftReviewState = DraftReviewState(),
@@ -253,6 +282,8 @@ sealed interface DesktopEvent {
   data class FindingsLoaded(val findings: List<UnifiedFinding>) : DesktopEvent
 
   data class FindingStatusUpdated(val findingId: String, val status: String) : DesktopEvent
+
+  data class AnalysisRunUpdated(val state: ProjectAnalysisRunState) : DesktopEvent
 
   data class AnalyzeAllLoaded(val job: AnalyzeAllJob?) : DesktopEvent
 
@@ -343,6 +374,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
               projectState = ProjectWorkspaceState(event.project, event.index),
               selection = FileSelectionState(),
               findings = FindingsState(),
+              analysisRun = ProjectAnalysisRunState(),
               security = SecurityWorkspaceState(),
               chat = ChatState(),
               review = DraftReviewState(),
@@ -357,6 +389,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                 projectState.copy(
                     project = project?.copy(projectRevision = event.index.projectRevision),
                     index = event.index),
+            analysisRun = analysisRun.afterRevisionChange(revisionChanged),
             chat = if (revisionChanged) ChatState() else chat,
             review = if (revisionChanged) DraftReviewState(applied = review.applied) else review,
             jobs = jobs.copy(loading = false, status = "Re-analyzed project index", error = null),
@@ -365,15 +398,8 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.OverviewLoaded ->
           copy(projectState = projectState.copy(overview = event.overview))
       is DesktopEvent.FindingsLoaded -> copy(findings = findings.copy(findings = event.findings))
-      is DesktopEvent.FindingStatusUpdated ->
-          copy(
-              findings =
-                  findings.copy(
-                      findings =
-                          findings.findings.map { finding ->
-                            if (finding.id == event.findingId) finding.copy(status = event.status)
-                            else finding
-                          }))
+      is DesktopEvent.FindingStatusUpdated -> withFindingStatus(event)
+      is DesktopEvent.AnalysisRunUpdated -> copy(analysisRun = event.state)
       is DesktopEvent.AnalyzeAllLoaded -> copy(findings = findings.copy(analyzeAll = event.job))
       is DesktopEvent.PerformanceLoaded ->
           copy(
@@ -885,4 +911,27 @@ fun draftReviewEligibility(
   if (!draftEditorMatchesOpenFile(editor, selectedFile, project))
       return ApplyEligibility(false, "The draft no longer matches the open file.")
   return draftApplyEligibility(draft, checks, selectedFile)
+}
+
+private fun ProjectAnalysisRunState.afterRevisionChange(changed: Boolean): ProjectAnalysisRunState =
+    if (changed) copy(admission = null, action = "", run = run?.copy(status = "stale")) else this
+
+private fun DesktopState.withFindingStatus(event: DesktopEvent.FindingStatusUpdated): DesktopState {
+  fun List<UnifiedFinding>.updated(): List<UnifiedFinding> = map { finding ->
+    if (finding.id == event.findingId) finding.copy(status = event.status) else finding
+  }
+  return copy(
+      findings = findings.copy(findings = findings.findings.updated()),
+      analysisRun =
+          analysisRun.copy(
+              sections =
+                  analysisRun.sections.mapValues { (_, section) ->
+                    section.copy(
+                        results =
+                            section.results?.let {
+                              it.copy(
+                                  semantic = it.semantic.updated(),
+                                  unclassified = it.unclassified.updated())
+                            })
+                  }))
 }

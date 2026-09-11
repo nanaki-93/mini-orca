@@ -345,6 +345,44 @@ class ApiClient(
   fun cancelGoScan(revision: String): GoScanReport =
       decode(send("DELETE", "/api/projects/current/scan?project_revision=${encode(revision)}"))
 
+  fun previewAnalysis(request: AnalysisPreviewRequest): AnalysisRunPreview =
+      decode(send("POST", "/api/projects/current/analysis/preview", requestBody(request)))
+
+  fun startAnalysis(request: AnalysisRunStartRequest): AnalysisRun =
+      decode(send("POST", "/api/projects/current/analysis/run", requestBody(request)))
+
+  fun analysisRun(projectId: String, revision: String): AnalysisRun? =
+      decodeOptional(
+          sendResponse(
+              "GET",
+              "/api/projects/current/analysis/run?project_id=${encode(projectId)}&project_revision=${encode(revision)}"))
+
+  fun controlAnalysis(request: AnalysisRunControlRequest): AnalysisRun =
+      decode(send("POST", "/api/projects/current/analysis/run/control", requestBody(request)))
+
+  fun analysisResults(
+      identity: AnalysisRunIdentity,
+      category: String,
+      path: String = ""
+  ): AnalysisSectionResults {
+    val query =
+        linkedMapOf(
+            "project_id" to identity.projectId,
+            "project_revision" to identity.projectRevision,
+            "policy_fingerprint" to identity.policyFingerprint,
+            "provider_fingerprint" to identity.providerFingerprint,
+            "queue_id" to identity.queueId,
+            "id" to identity.id,
+            "generation" to identity.generation,
+            "category" to category)
+    if (path.isNotEmpty()) query["path"] = path
+    return decode(
+        send(
+            "GET",
+            "/api/projects/current/analysis/results?" +
+                query.entries.joinToString("&") { "${it.key}=${encode(it.value)}" }))
+  }
+
   fun analyzeAllJob(revision: String): AnalyzeAllJob? =
       decodeOptional(
           sendResponse(

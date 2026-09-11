@@ -675,6 +675,7 @@ internal fun MiniOrcaApp(
               bottomToolWindows,
               bottomToolWindowSummaries),
   )
+  DesktopAnalysisAdmissionOverlay(appState.analysisRun, presenter)
   pendingDraftDiscard?.let { pending ->
     DraftDiscardDialog(pending, ::discardDraftAndContinue) { pendingDraftDiscard = null }
   }

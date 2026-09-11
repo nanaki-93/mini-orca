@@ -15,6 +15,22 @@ import kotlinx.serialization.json.Json
 
 class DesktopSecurityWorkflowTest {
   @Test
+  fun failedDeterministicScanRetainsBothExistingEvidenceSources() {
+    Harness().use { harness ->
+      harness.dispatch(DesktopEvent.SecurityReportLoaded(report("deterministic")))
+      harness.dispatch(DesktopEvent.SecurityReportLoaded(report("ai")))
+      harness.response =
+          TransportResponse(500, Json.encodeToString(ApiError(message = "scan failed")))
+      harness.workflow.scanSecurity()
+      harness.completeRequest()
+      assertEquals(report("deterministic"), harness.state.security.sourceReport)
+      assertEquals(report("ai"), harness.state.security.aiReport)
+      assertEquals(
+          SecuritySectionOperationStatus.Failed, harness.state.security.sourceOperation.status)
+    }
+  }
+
+  @Test
   fun scanUsesTheDeterministicEndpointWithoutConsumingReviewConsent() {
     Harness().use { harness ->
       harness.confirmed = true
@@ -28,102 +44,14 @@ class DesktopSecurityWorkflowTest {
   }
 
   @Test
-  fun remoteReviewConsumesItsOwnConfirmationEvenWhenTheRequestFails() {
-    Harness().use { harness ->
-      harness.review(remote = true)
-      harness.completeRequest()
-      assertTrue(harness.paths.isEmpty())
-      assertTrue(harness.state.security.aiOperation.message.contains("Confirm"))
-      harness.confirmed = true
-      harness.response =
-          TransportResponse(500, Json.encodeToString(ApiError(message = "review unavailable")))
-      harness.review(remote = true)
-      assertFalse(harness.confirmed)
-      harness.completeRequest()
-      assertEquals(SecuritySectionOperationStatus.Failed, harness.state.security.aiOperation.status)
-      assertTrue(harness.state.security.aiOperation.message.contains("review unavailable"))
-      harness.review(remote = true)
-      harness.completeRequest()
-      assertEquals(1, harness.paths.size)
-    }
-  }
-
-  @Test
-  fun changedDestinationClearsNewConfirmationAndExplainsTheFailure() {
-    Harness().use { harness ->
-      harness.confirmed = true
-      harness.response =
-          TransportResponse(
-              409, Json.encodeToString(ApiError(message = "remote confirmation required")))
-      harness.review(remote = true)
-      harness.confirmed = true
-      harness.completeRequest()
-      assertFalse(harness.confirmed)
-      assertTrue(harness.state.security.aiOperation.message.contains("destination changed"))
-    }
-  }
-
-  @Test
-  fun reviewIncludesOnlyAnExactAtomicGoSymbol() {
-    val exact = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
-    for ((language, symbol, expected) in
-        listOf(
-            Triple("Go", exact, true),
-            Triple("Go", exact.copy(confidence = "approximate"), false),
-            Triple("Go", exact.copy(atomicTarget = false), false),
-            Triple("Markdown", exact, false))) {
-      Harness().use { harness ->
-        harness.dispatch(DesktopEvent.FileLoaded(file().copy(language = language), listOf(symbol)))
-        harness.dispatch(DesktopEvent.SymbolSelected(symbol))
-        harness.response = TransportResponse(200, Json.encodeToString(report("ai")))
-        harness.review()
-        harness.completeRequest()
-        assertEquals(expected, harness.bodies.single().contains("\"symbol\":\"Run\""))
-        assertEquals(report("ai"), harness.state.security.aiReport)
-      }
-    }
-  }
-
-  @Test
   fun ineligibleFilesFailWithoutStartingRequests() {
     Harness().use { harness ->
       harness.dispatch(DesktopEvent.FileLoaded(file().copy(language = "Markdown"), emptyList()))
       harness.workflow.scanSecurity()
       assertEquals(
           SecuritySectionOperationStatus.Failed, harness.state.security.sourceOperation.status)
-      harness.dispatch(DesktopEvent.FileLoaded(file().copy(binary = true), emptyList()))
-      harness.review()
-      assertEquals(SecuritySectionOperationStatus.Failed, harness.state.security.aiOperation.status)
       harness.completeRequest()
       assertTrue(harness.paths.isEmpty())
-    }
-  }
-
-  @Test
-  fun replacementCancelsTheOtherSectionAndRetainsPriorReports() {
-    for (scanFirst in listOf(true, false)) {
-      Harness().use { harness ->
-        harness.dispatch(DesktopEvent.SecurityReportLoaded(report("deterministic")))
-        harness.dispatch(DesktopEvent.SecurityReportLoaded(report("ai")))
-        if (scanFirst) harness.workflow.scanSecurity() else harness.review()
-        harness.main.runPending()
-        if (scanFirst) harness.review() else harness.workflow.scanSecurity()
-        val canceled =
-            if (scanFirst) harness.state.security.sourceOperation
-            else harness.state.security.aiOperation
-        assertEquals(SecuritySectionOperationStatus.Canceled, canceled.status)
-        harness.response =
-            TransportResponse(500, Json.encodeToString(ApiError(message = "replacement failed")))
-        harness.completeRequest()
-        assertEquals(1, harness.paths.size)
-        assertEquals(report("deterministic"), harness.state.security.sourceReport)
-        assertEquals(report("ai"), harness.state.security.aiReport)
-        val failed =
-            if (scanFirst) harness.state.security.aiOperation
-            else harness.state.security.sourceOperation
-        assertEquals(SecuritySectionOperationStatus.Failed, failed.status)
-        assertTrue(failed.message.contains("replacement failed"))
-      }
     }
   }
 
@@ -235,19 +163,19 @@ class DesktopSecurityWorkflowTest {
   }
 
   @Test
-  fun cancelRejectsPendingReviewPublicationAndRetainsPriorReports() {
+  fun cancelRejectsPendingScanPublicationAndRetainsPriorReports() {
     Harness().use { harness ->
-      harness.dispatch(DesktopEvent.SecurityReportLoaded(report("ai")))
+      harness.dispatch(DesktopEvent.SecurityReportLoaded(report("deterministic")))
       harness.response =
-          TransportResponse(200, Json.encodeToString(report("ai").copy(reason = "late")))
-      harness.review()
+          TransportResponse(200, Json.encodeToString(report("deterministic").copy(reason = "late")))
+      harness.workflow.scanSecurity()
       harness.main.runPending()
       harness.io.runPending()
       harness.workflow.cancel()
       harness.main.runPending()
-      assertEquals(report("ai"), harness.state.security.aiReport)
+      assertEquals(report("deterministic"), harness.state.security.sourceReport)
       assertEquals(
-          SecuritySectionOperationStatus.Canceled, harness.state.security.aiOperation.status)
+          SecuritySectionOperationStatus.Canceled, harness.state.security.sourceOperation.status)
     }
   }
 
@@ -285,8 +213,6 @@ class DesktopSecurityWorkflowTest {
           DesktopEvent.ProjectLoaded(project(), ProjectIndex("project", "revision")))
       controller.dispatch(DesktopEvent.FileLoaded(file(), emptyList()))
     }
-
-    fun review(remote: Boolean = false) = workflow.reviewSecurity(remote, confirmed)
 
     fun dispatch(event: DesktopEvent) {
       workflow.beforeEvent(event)

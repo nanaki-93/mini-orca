@@ -21,6 +21,92 @@ import kotlinx.coroutines.launch
 
 class DesktopWorkflowPresenterTest {
   @Test
+  fun failedReindexRestoresTheProjectRunWithoutStartingAnotherAnalysis() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls.add(method to path)
+          when {
+            path.endsWith("/reindex") ->
+                TransportResponse(500, """{"message":"index unavailable"}""")
+            path.contains("/analysis/run?") ->
+                response(
+                    kotlinx.serialization.json.Json.encodeToString(
+                        AnalysisRun.serializer(), analysisRunFixture()))
+            path.contains("/analysis/results?") -> {
+              val category = path.substringAfter("category=")
+              response(
+                  kotlinx.serialization.json.Json.encodeToString(
+                      AnalysisSectionResults.serializer(),
+                      analysisResultsFixture(analysisRunFixture(), category)))
+            }
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      presenter.reanalyze()
+      repeat(8) {
+        main.runPending()
+        io.runPending()
+      }
+      main.runPending()
+      assertEquals("paused", presenter.snapshot.value.state.analysisRun.run?.status)
+      assertEquals("index unavailable", presenter.snapshot.value.state.error)
+      assertEquals(
+          listOf("POST" to "/api/projects/current/reindex"), calls.filter { it.first == "POST" })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun everyAnalysisEntryPreviewsTheWholeProjectAndNavigationNeverStartsIt() {
+    val calls = mutableListOf<Pair<String, String>>()
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls.add(method to path)
+          assertEquals("/api/projects/current/analysis/preview", path)
+          response(
+              kotlinx.serialization.json.Json.encodeToString(
+                  AnalysisRunPreview.serializer(), analysisPreviewFixture()))
+        }
+    try {
+      loadProject(presenter)
+      for (entry in
+          listOf<() -> Unit>(
+              { presenter.startAnalyzeAll(AnalyzeAllRunOptions()) },
+              { presenter.previewPerformance() },
+              { presenter.reviewSecurity() },
+              { presenter.analyzeSelected(false) })) {
+        entry()
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        assertEquals(
+            "project", presenter.snapshot.value.state.analysisRun.admission?.preview?.scope)
+        presenter.dismissAnalysisAdmission()
+      }
+      Workspace.entries.forEach { presenter.dispatch(DesktopEvent.WorkspaceSelected(it)) }
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(4, calls.size)
+      assertTrue(calls.all { it.first == "POST" && it.second.endsWith("/preview") })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun benchmarkComparisonUsesAnExplicitReadOnlyCatalogThenRetainsExactEvidence() {
     val catalogCalls = AtomicInteger()
     val comparisonCalls = AtomicInteger()
@@ -498,42 +584,6 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun cancelingAnalysisRetainsTheCurrentFileAndClearsOperationState() {
-    val analysisStarted = CountDownLatch(1)
-    val releaseAnalysis = CountDownLatch(1)
-    val presenter = presenter { _, path, _ ->
-      when {
-        path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
-        path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go", "Run"))
-        path == "/api/projects/current/files/analysis" -> {
-          analysisStarted.countDown()
-          releaseAnalysis.await(2, TimeUnit.SECONDS)
-          response("{\"path\":\"main.go\",\"status\":\"fresh\"}")
-        }
-        path.contains("files/analysis") -> response("{\"path\":\"main.go\",\"status\":\"missing\"}")
-        path.contains("/impact") -> response("{\"target_path\":\"main.go\"}")
-        path.contains("/git") -> response("{\"available\":false}")
-        else -> error("unexpected request $path")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.selectFile("main.go")
-      eventually { presenter.snapshot.value.state.selectedFile?.path == "main.go" }
-      presenter.analyzeSelected(refresh = false)
-      assertTrue(analysisStarted.await(1, TimeUnit.SECONDS))
-      presenter.cancelAnalysis()
-      eventually { !presenter.snapshot.value.analysisInProgress }
-
-      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
-      assertFalse(presenter.snapshot.value.analysisInProgress)
-    } finally {
-      releaseAnalysis.countDown()
-      presenter.close()
-    }
-  }
-
-  @Test
   fun reconnectPublishesDaemonFailuresAndThenTheRecoveredConnection() {
     val attempts = AtomicInteger()
     val presenter = presenter { _, path, _ ->
@@ -556,174 +606,6 @@ class DesktopWorkflowPresenterTest {
       assertEquals("Daemon connected", presenter.snapshot.value.state.connection.label)
       assertEquals("fixture", presenter.snapshot.value.model(ModelScope.Function).model)
     } finally {
-      presenter.close()
-    }
-  }
-
-  @Test
-  fun lateAnalyzeAllPollingCannotOverwriteAReplacementProject() {
-    val pollStarted = CountDownLatch(1)
-    val releasePoll = CountDownLatch(1)
-    val presenter = presenter { _, path, _ ->
-      when (path) {
-        "/api/projects/current/analysis-job" ->
-            response(
-                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\",\"files\":[]}")
-        "/api/projects/current/analysis-job?project_revision=revision" -> {
-          pollStarted.countDown()
-          releasePoll.await(2, TimeUnit.SECONDS)
-          response(
-              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\",\"files\":[]}")
-        }
-        else -> error("unexpected request $path")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
-      assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
-      presenter.dispatch(
-          DesktopEvent.ProjectLoaded(
-              project("next", "next-revision"), ProjectIndex("next", "next-revision")))
-      releasePoll.countDown()
-      eventually { presenter.snapshot.value.state.project?.projectId == "next" }
-
-      assertEquals("next", presenter.snapshot.value.state.project?.projectId)
-      assertEquals(null, presenter.snapshot.value.state.findings.analyzeAll)
-    } finally {
-      releasePoll.countDown()
-      presenter.close()
-    }
-  }
-
-  @Test
-  fun analyzeAllPollsOnceAndStopsAfterItsTerminalResponse() {
-    val polls = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/analysis-job" ->
-            response(
-                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
-        "GET" to "/api/projects/current/analysis-job?project_revision=revision" -> {
-          polls.incrementAndGet()
-          response(
-              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
-        }
-        else -> response("{}")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
-      eventually { presenter.snapshot.value.state.findings.analyzeAll?.status == "completed" }
-      Thread.sleep(25)
-
-      assertEquals(1, polls.get())
-    } finally {
-      presenter.close()
-    }
-  }
-
-  @Test
-  fun performancePollsOnlyWhileRunningAndStopsWhenPaused() {
-    val polls = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/performance-job" ->
-            response(
-                "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
-        "GET" to "/api/projects/current/performance-job?project_revision=revision" -> {
-          polls.incrementAndGet()
-          response(
-              "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
-        }
-        "GET" to "/api/projects/current/performance?project_revision=revision" ->
-            TransportResponse(204, "")
-        else -> response("{}")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.startPerformance(
-          PerformanceQueuePreview(
-              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
-          confirmRemoteProvider = false)
-      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "paused" }
-      Thread.sleep(25)
-
-      assertEquals(1, polls.get())
-    } finally {
-      presenter.close()
-    }
-  }
-
-  @Test
-  fun closeCancelsAnInFlightAnalyzeAllPollBeforeItCanPublish() {
-    val pollStarted = CountDownLatch(1)
-    val releasePoll = CountDownLatch(1)
-    val presenter = presenter { _, path, _ ->
-      when (path) {
-        "/api/projects/current/analysis-job" ->
-            response(
-                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\",\"files\":[]}")
-        "/api/projects/current/analysis-job?project_revision=revision" -> {
-          pollStarted.countDown()
-          releasePoll.await(2, TimeUnit.SECONDS)
-          response(
-              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\",\"files\":[]}")
-        }
-        else -> response("{}")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
-      assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
-      presenter.close()
-      releasePoll.countDown()
-      Thread.sleep(25)
-
-      assertEquals("running", presenter.snapshot.value.state.findings.analyzeAll?.status)
-    } finally {
-      releasePoll.countDown()
-      presenter.close()
-    }
-  }
-
-  @Test
-  fun lateAnalyzeAllActionCannotReplaceTheLatestActionForTheSameProject() {
-    val firstStarted = CountDownLatch(1)
-    val releaseFirst = CountDownLatch(1)
-    val starts = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/analysis-job" ->
-            if (starts.incrementAndGet() == 1) {
-              firstStarted.countDown()
-              releaseFirst.await(2, TimeUnit.SECONDS)
-              response(
-                  "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
-            } else
-                response(
-                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
-        "GET" to "/api/projects/current/analysis-job?project_revision=revision" ->
-            response(
-                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
-        else -> response("{}")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
-      assertTrue(firstStarted.await(1, TimeUnit.SECONDS))
-      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
-      eventually { presenter.snapshot.value.state.findings.analyzeAll?.status == "completed" }
-      releaseFirst.countDown()
-      Thread.sleep(25)
-
-      assertEquals("completed", presenter.snapshot.value.state.findings.analyzeAll?.status)
-    } finally {
-      releaseFirst.countDown()
       presenter.close()
     }
   }
@@ -901,92 +783,6 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun failedAnalyzeAllActionRestoresOnePollForTheActiveJob() {
-    val initialPollStarted = CountDownLatch(1)
-    val releaseInitialPoll = CountDownLatch(1)
-    val polls = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/analysis-job" ->
-            response(
-                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
-        "POST" to "/api/projects/current/analysis-job/pause?project_revision=revision" ->
-            TransportResponse(500, "pause failed")
-        "GET" to "/api/projects/current/analysis-job?project_revision=revision" ->
-            if (polls.incrementAndGet() == 1) {
-              initialPollStarted.countDown()
-              releaseInitialPoll.await(2, TimeUnit.SECONDS)
-              response(
-                  "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
-            } else
-                response(
-                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
-        else -> response("{}")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
-      assertTrue(initialPollStarted.await(1, TimeUnit.SECONDS))
-      presenter.pauseAnalyzeAll()
-      eventually { presenter.snapshot.value.state.findings.analyzeAll?.status == "completed" }
-      Thread.sleep(25)
-
-      assertEquals(2, polls.get())
-      assertTrue(presenter.snapshot.value.state.jobs.error != null)
-    } finally {
-      releaseInitialPoll.countDown()
-      presenter.close()
-    }
-  }
-
-  @Test
-  fun failedPerformanceActionRestoresOnePollForTheActiveJob() {
-    val initialPollStarted = CountDownLatch(1)
-    val releaseInitialPoll = CountDownLatch(1)
-    val polls = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/performance-job" ->
-            response(
-                "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
-        "POST" to
-            "/api/projects/current/performance-job/pause?project_revision=revision&expected_job_id=job" ->
-            TransportResponse(500, "pause failed")
-        "GET" to "/api/projects/current/performance-job?project_revision=revision" ->
-            if (polls.incrementAndGet() == 1) {
-              initialPollStarted.countDown()
-              releaseInitialPoll.await(2, TimeUnit.SECONDS)
-              response(
-                  "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
-            } else
-                response(
-                    "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
-        "GET" to "/api/projects/current/performance?project_revision=revision" ->
-            TransportResponse(204, "")
-        else -> response("{}")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.startPerformance(
-          PerformanceQueuePreview(
-              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
-          confirmRemoteProvider = false)
-      assertTrue(initialPollStarted.await(1, TimeUnit.SECONDS))
-      presenter.pausePerformance()
-      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "paused" }
-      Thread.sleep(25)
-
-      assertEquals(2, polls.get())
-      assertTrue(presenter.snapshot.value.state.jobs.error != null)
-    } finally {
-      releaseInitialPoll.countDown()
-      presenter.close()
-    }
-  }
-
-  @Test
   fun failedVerifiedScanStartRestoresOnePollForARunningScan() {
     val initialPollStarted = CountDownLatch(1)
     val releaseInitialPoll = CountDownLatch(1)
@@ -1068,128 +864,6 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun queuedOlderAnalyzeAllPauseCannotReachTheDaemonAfterANewerStart() {
-    val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-    val scope = CoroutineScope(SupervisorJob() + dispatcher)
-    val blockerStarted = CountDownLatch(1)
-    val releaseBlocker = CountDownLatch(1)
-    val pauses = AtomicInteger()
-    val starts = AtomicInteger()
-    scope.launch {
-      blockerStarted.countDown()
-      releaseBlocker.await(2, TimeUnit.SECONDS)
-    }
-    val presenter =
-        presenter(
-            responder = { method, path, _ ->
-              when (method to path) {
-                "POST" to "/api/projects/current/analysis-job/pause?project_revision=revision" -> {
-                  pauses.incrementAndGet()
-                  response(
-                      "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
-                }
-                "POST" to "/api/projects/current/analysis-job" -> {
-                  starts.incrementAndGet()
-                  response(
-                      "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
-                }
-                else -> error("unexpected request $method $path")
-              }
-            },
-            parentScope = scope)
-    try {
-      assertTrue(blockerStarted.await(1, TimeUnit.SECONDS))
-      loadProject(presenter)
-      presenter.dispatch(
-          DesktopEvent.AnalyzeAllLoaded(
-              AnalyzeAllJob(
-                  projectId = "project", projectRevision = "revision", status = "running")))
-
-      presenter.pauseAnalyzeAll()
-      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
-      releaseBlocker.countDown()
-
-      eventually { starts.get() == 1 }
-      assertEquals(0, pauses.get())
-      assertEquals("completed", presenter.snapshot.value.state.findings.analyzeAll?.status)
-    } finally {
-      releaseBlocker.countDown()
-      presenter.close()
-      scope.cancel()
-      dispatcher.close()
-    }
-  }
-
-  @Test
-  fun queuedOlderPerformancePauseCannotTargetAReplacementJob() {
-    val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-    val scope = CoroutineScope(SupervisorJob() + dispatcher)
-    val blockerStarted = CountDownLatch(1)
-    val releaseBlocker = CountDownLatch(1)
-    val pauses = AtomicInteger()
-    val starts = AtomicInteger()
-    scope.launch {
-      blockerStarted.countDown()
-      releaseBlocker.await(2, TimeUnit.SECONDS)
-    }
-    val presenter =
-        presenter(
-            responder = { method, path, _ ->
-              when (method to path) {
-                "POST" to
-                    "/api/projects/current/performance-job/pause?project_revision=revision&expected_job_id=old" -> {
-                  pauses.incrementAndGet()
-                  response(
-                      "{\"id\":\"old\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
-                }
-                "POST" to "/api/projects/current/performance-job" -> {
-                  starts.incrementAndGet()
-                  response(
-                      "{\"id\":\"replacement\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
-                }
-                "GET" to "/api/projects/current/performance?project_revision=revision" ->
-                    TransportResponse(204, "")
-                else -> error("unexpected request $method $path")
-              }
-            },
-            parentScope = scope)
-    try {
-      assertTrue(blockerStarted.await(1, TimeUnit.SECONDS))
-      loadProject(presenter)
-      presenter.dispatch(
-          DesktopEvent.PerformanceLoaded(
-              PerformanceJob(
-                  id = "old",
-                  projectId = "project",
-                  projectRevision = "revision",
-                  status = "running"),
-              null))
-
-      presenter.pausePerformance()
-      presenter.startPerformance(
-          PerformanceQueuePreview(
-              projectId = "project", projectRevision = "revision", queueId = "new", maxFiles = 1),
-          confirmRemoteProvider = false)
-      releaseBlocker.countDown()
-
-      eventually { starts.get() == 1 }
-      eventually {
-        presenter.snapshot.value.state.findings.performanceJob?.let { job ->
-          job.id == "replacement" && job.status == "paused"
-        } == true
-      }
-      assertEquals(0, pauses.get())
-      assertEquals("replacement", presenter.snapshot.value.state.findings.performanceJob?.id)
-      assertEquals("paused", presenter.snapshot.value.state.findings.performanceJob?.status)
-    } finally {
-      releaseBlocker.countDown()
-      presenter.close()
-      scope.cancel()
-      dispatcher.close()
-    }
-  }
-
-  @Test
   fun queuedOlderVerifiedScanStartCannotReachTheDaemonAfterCancel() {
     val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -1242,212 +916,6 @@ class DesktopWorkflowPresenterTest {
       presenter.close()
       scope.cancel()
       dispatcher.close()
-    }
-  }
-
-  @Test
-  fun delayedWorkspaceRefreshCannotReplaceANewerAnalyzeAllAction() {
-    val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-    val scope = CoroutineScope(SupervisorJob() + dispatcher)
-    val overviewStarted = CountDownLatch(1)
-    val releaseOverview = CountDownLatch(1)
-    val staleJobFetched = CountDownLatch(1)
-    val jobRequests = AtomicInteger()
-    val presenter =
-        presenter(parentScope = scope) { method, path, _ ->
-          when (method to path) {
-            "POST" to "/api/projects/import" -> response(projectJson())
-            "GET" to "/api/projects/current/index" -> response(indexJson())
-            "GET" to "/api/projects/current/overview?project_revision=revision" -> {
-              overviewStarted.countDown()
-              releaseOverview.await(2, TimeUnit.SECONDS)
-              response("{}")
-            }
-            "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
-            "GET" to "/api/projects/current/analysis-job?project_revision=revision" ->
-                if (jobRequests.incrementAndGet() == 1)
-                    response(
-                        "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"completed\"}")
-                else {
-                  staleJobFetched.countDown()
-                  response(
-                      "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"paused\"}")
-                }
-            "GET" to "/api/projects/current/scan?project_revision=revision" ->
-                TransportResponse(204, "")
-            "GET" to "/api/projects/current/performance-job?project_revision=revision",
-            "GET" to "/api/projects/current/performance?project_revision=revision" ->
-                TransportResponse(204, "")
-            "POST" to "/api/projects/current/analysis-job" ->
-                response(
-                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
-            else -> error("unexpected request $method $path")
-          }
-        }
-    try {
-      presenter.loadProject("/tmp/project", restore = false)
-      assertTrue(overviewStarted.await(1, TimeUnit.SECONDS))
-      presenter.startAnalyzeAll(AnalyzeAllRunOptions())
-      eventually { presenter.snapshot.value.state.findings.analyzeAll?.status == "completed" }
-      releaseOverview.countDown()
-      assertTrue(staleJobFetched.await(1, TimeUnit.SECONDS))
-      Thread.sleep(25)
-
-      assertEquals("completed", presenter.snapshot.value.state.findings.analyzeAll?.status)
-    } finally {
-      releaseOverview.countDown()
-      presenter.close()
-      scope.cancel()
-      dispatcher.close()
-    }
-  }
-
-  @Test
-  fun delayedWorkspaceRefreshCannotReplaceANewerPerformanceAction() {
-    val overviewStarted = CountDownLatch(1)
-    val releaseOverview = CountDownLatch(1)
-    val staleJobFetched = CountDownLatch(1)
-    val jobRequests = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/import" -> response(projectJson())
-        "GET" to "/api/projects/current/index" -> response(indexJson())
-        "GET" to "/api/projects/current/overview?project_revision=revision" -> {
-          overviewStarted.countDown()
-          releaseOverview.await(2, TimeUnit.SECONDS)
-          response("{}")
-        }
-        "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
-        "GET" to "/api/projects/current/analysis-job?project_revision=revision",
-        "GET" to "/api/projects/current/scan?project_revision=revision" ->
-            TransportResponse(204, "")
-        "GET" to "/api/projects/current/performance-job?project_revision=revision" ->
-            if (jobRequests.incrementAndGet() == 1)
-                response(
-                    "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
-            else {
-              staleJobFetched.countDown()
-              response(
-                  "{\"id\":\"stale\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"old\",\"status\":\"canceled\"}")
-            }
-        "GET" to "/api/projects/current/performance?project_revision=revision" ->
-            TransportResponse(204, "")
-        "POST" to "/api/projects/current/performance-job" ->
-            response(
-                "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
-        else -> error("unexpected request $method $path")
-      }
-    }
-    try {
-      presenter.loadProject("/tmp/project", restore = false)
-      assertTrue(overviewStarted.await(1, TimeUnit.SECONDS))
-      presenter.startPerformance(
-          PerformanceQueuePreview(
-              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
-          confirmRemoteProvider = false)
-      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "paused" }
-      releaseOverview.countDown()
-      assertTrue(staleJobFetched.await(1, TimeUnit.SECONDS))
-      Thread.sleep(25)
-
-      assertEquals("paused", presenter.snapshot.value.state.findings.performanceJob?.status)
-      assertEquals("job", presenter.snapshot.value.state.findings.performanceJob?.id)
-    } finally {
-      releaseOverview.countDown()
-      presenter.close()
-    }
-  }
-
-  @Test
-  fun performanceReportFailureAfterAStartedJobKeepsItsPollActive() {
-    val pollStarted = CountDownLatch(1)
-    val releasePoll = CountDownLatch(1)
-    val polls = AtomicInteger()
-    val reports = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/performance-job" ->
-            response(
-                "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
-        "GET" to "/api/projects/current/performance?project_revision=revision" ->
-            if (reports.incrementAndGet() == 1) TransportResponse(500, "report failed")
-            else TransportResponse(204, "")
-        "GET" to "/api/projects/current/performance-job?project_revision=revision" -> {
-          polls.incrementAndGet()
-          pollStarted.countDown()
-          releasePoll.await(2, TimeUnit.SECONDS)
-          response(
-              "{\"id\":\"job\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
-        }
-        else -> response("{}")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.startPerformance(
-          PerformanceQueuePreview(
-              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
-          confirmRemoteProvider = false)
-      assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
-      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "running" }
-      eventually { presenter.snapshot.value.state.jobs.error != null }
-      releasePoll.countDown()
-      eventually { presenter.snapshot.value.state.findings.performanceJob?.status == "paused" }
-      Thread.sleep(25)
-
-      assertEquals(1, polls.get())
-    } finally {
-      releasePoll.countDown()
-      presenter.close()
-    }
-  }
-
-  @Test
-  fun delayedInitialPerformanceReportCannotOverwriteANewerPollReport() {
-    val initialReportStarted = CountDownLatch(1)
-    val releaseInitialReport = CountDownLatch(1)
-    val pollJobStarted = CountDownLatch(1)
-    val releasePollJob = CountDownLatch(1)
-    val reports = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/performance-job" ->
-            response(
-                "{\"id\":\"job\",\"generation\":\"one\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"running\"}")
-        "GET" to "/api/projects/current/performance-job?project_revision=revision" -> {
-          pollJobStarted.countDown()
-          releasePollJob.await(2, TimeUnit.SECONDS)
-          response(
-              "{\"id\":\"job\",\"generation\":\"one\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"queue_id\":\"queue\",\"status\":\"paused\"}")
-        }
-        "GET" to "/api/projects/current/performance?project_revision=revision" ->
-            if (reports.incrementAndGet() == 1) {
-              initialReportStarted.countDown()
-              releaseInitialReport.await(2, TimeUnit.SECONDS)
-              response("{\"status\":\"old\"}")
-            } else response("{\"status\":\"new\"}")
-        else -> error("unexpected request $method $path")
-      }
-    }
-    try {
-      loadProject(presenter)
-      presenter.startPerformance(
-          PerformanceQueuePreview(
-              projectId = "project", projectRevision = "revision", queueId = "queue", maxFiles = 1),
-          confirmRemoteProvider = false)
-      assertTrue(initialReportStarted.await(1, TimeUnit.SECONDS))
-      assertTrue(pollJobStarted.await(1, TimeUnit.SECONDS))
-      releasePollJob.countDown()
-      eventually { presenter.snapshot.value.state.findings.performanceReport?.status == "new" }
-      releaseInitialReport.countDown()
-      Thread.sleep(25)
-
-      assertEquals("new", presenter.snapshot.value.state.findings.performanceReport?.status)
-      assertEquals("paused", presenter.snapshot.value.state.findings.performanceJob?.status)
-    } finally {
-      releasePollJob.countDown()
-      releaseInitialReport.countDown()
-      presenter.close()
     }
   }
 
@@ -1930,52 +1398,10 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun remoteSecurityReviewUsesItsOwnOneTimeConfirmationAndNeverStartsFromSelection() {
-    val reviewCalls = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "GET" to "/status" -> response("{\"status\":\"ok\",\"version\":\"v1\"}")
-        "GET" to "/api/models/current" ->
-            response(
-                """{"scopes":{"analyze":{"scope":"analyze","profile":"analyze","model":"remote","remote_provider":true}}}""")
-        "POST" to "/api/projects/current/security-review" -> {
-          reviewCalls.incrementAndGet()
-          response(securityReportJson("ai"))
-        }
-        else -> response("{}")
-      }
-    }
-    try {
-      presenter.refreshConnection()
-      eventually { presenter.snapshot.value.model(ModelScope.Analyze).remoteProvider }
-      loadFile(presenter)
-      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Security))
-
-      assertEquals(0, reviewCalls.get())
-      presenter.setProviderConfirmation(ModelScope.Analyze, true)
-      presenter.reviewSecurity()
-      assertEquals(0, reviewCalls.get())
-      assertTrue(presenter.snapshot.value.state.security.error.orEmpty().contains("Confirm"))
-
-      presenter.setSecurityReviewRemoteConfirmation(true)
-      presenter.reviewSecurity()
-      eventually { reviewCalls.get() == 1 }
-      assertFalse(presenter.snapshot.value.securityReviewRemoteConfirmed)
-
-      presenter.reviewSecurity()
-      assertEquals(1, reviewCalls.get())
-    } finally {
-      presenter.close()
-    }
-  }
-
-  @Test
   fun securityActionsRejectReportsOwnedByTheOtherSource() {
     val presenter = presenter { method, path, _ ->
       when (method to path) {
         "POST" to "/api/projects/current/files/security-scan" -> response(securityReportJson("ai"))
-        "POST" to "/api/projects/current/security-review" ->
-            response(securityReportJson("deterministic"))
         else -> response("{}")
       }
     }
@@ -1985,14 +1411,6 @@ class DesktopWorkflowPresenterTest {
       presenter.scanSecurity()
       eventually {
         presenter.snapshot.value.state.security.sourceOperation.status ==
-            SecuritySectionOperationStatus.Failed
-      }
-      assertNull(presenter.snapshot.value.state.security.sourceReport)
-      assertNull(presenter.snapshot.value.state.security.aiReport)
-
-      presenter.reviewSecurity()
-      eventually {
-        presenter.snapshot.value.state.security.aiOperation.status ==
             SecuritySectionOperationStatus.Failed
       }
       assertNull(presenter.snapshot.value.state.security.sourceReport)
@@ -2036,47 +1454,43 @@ class DesktopWorkflowPresenterTest {
 
   @Test
   fun securityResponsesCannotPublishAfterFileProjectRevisionChangesOrClose() {
-    for (review in listOf(false, true)) {
-      for (change in listOf("file", "project", "revision", "close")) {
-        val main = QueuedDispatcher()
-        val io = QueuedDispatcher()
-        val scope = CoroutineScope(SupervisorJob() + main)
-        val presenter =
-            DesktopWorkflowPresenter(
-                ApiClient(
-                    transport =
-                        DaemonTransport { _, _, _ ->
-                          response(securityReportJson(if (review) "ai" else "deterministic"))
-                        }),
-                LastProjectStore(),
-                scope,
-                io)
-        try {
-          loadFile(presenter)
-          if (review) presenter.reviewSecurity() else presenter.scanSecurity()
-          main.runPending()
-          io.runPending()
-          when (change) {
-            "file" ->
-                presenter.dispatch(
-                    DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()))
-            "project" ->
-                presenter.dispatch(
-                    DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")))
-            "revision" ->
-                presenter.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "new")))
-            "close" -> presenter.close()
-          }
-          main.runPending()
-          val security = presenter.snapshot.value.state.security
-          assertNull(security.sourceReport, "$change, review=$review")
-          assertNull(security.aiReport, "$change, review=$review")
-          assertTrue(security.action.isBlank(), "$change, review=$review")
-        } finally {
-          presenter.close()
-          scope.cancel()
-          main.runPending()
+    for (change in listOf("file", "project", "revision", "close")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val presenter =
+          DesktopWorkflowPresenter(
+              ApiClient(
+                  transport =
+                      DaemonTransport { _, _, _ -> response(securityReportJson("deterministic")) }),
+              LastProjectStore(),
+              scope,
+              io)
+      try {
+        loadFile(presenter)
+        presenter.scanSecurity()
+        main.runPending()
+        io.runPending()
+        when (change) {
+          "file" ->
+              presenter.dispatch(
+                  DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()))
+          "project" ->
+              presenter.dispatch(
+                  DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")))
+          "revision" ->
+              presenter.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "new")))
+          "close" -> presenter.close()
         }
+        main.runPending()
+        val security = presenter.snapshot.value.state.security
+        assertNull(security.sourceReport, change)
+        assertNull(security.aiReport, change)
+        assertTrue(security.action.isBlank(), change)
+      } finally {
+        presenter.close()
+        scope.cancel()
+        main.runPending()
       }
     }
   }
@@ -2190,28 +1604,6 @@ class DesktopWorkflowPresenterTest {
 
       assertEquals(0, chatPosts.get())
       assertEquals("fix", presenter.snapshot.value.state.preparedAction)
-    } finally {
-      presenter.close()
-    }
-  }
-
-  @Test
-  fun securityReviewAcceptsEligibleNonGoTextWithoutAnExactSymbol() {
-    val reviewCalls = AtomicInteger()
-    val presenter = presenter { method, path, body ->
-      if (method == "POST" && path == "/api/projects/current/security-review") {
-        reviewCalls.incrementAndGet()
-        assertFalse(body.orEmpty().contains("Run"))
-        response(securityReportJson("ai"))
-      } else response("{}")
-    }
-    try {
-      loadProject(presenter)
-      presenter.dispatch(DesktopEvent.FileLoaded(file().copy(language = "Markdown"), emptyList()))
-
-      presenter.reviewSecurity()
-      eventually { reviewCalls.get() == 1 }
-      eventually { presenter.snapshot.value.state.security.aiReport?.source == "ai" }
     } finally {
       presenter.close()
     }

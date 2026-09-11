@@ -880,7 +880,7 @@ end this wake without starting ANA-06.
 
 ## Task ANA-06 — Give the desktop one analysis owner
 
-- [ ] ANA-06 completed with required checks and diff review.
+- [x] ANA-06 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/Models.kt` — unified wire types.
@@ -892,6 +892,9 @@ end this wake without starting ANA-06.
 - `desktop/src/main/kotlin/io/miniorca/desktop/DesktopSecurityWorkflow.kt` — remove duplicate run ownership; retain only independently required security operations.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ApiClientContractTest.kt` — unified and compatibility payloads.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAnalysisWorkflowTest.kt` — new run ownership/consent/late-result tests.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopAnalysisAdmission.kt` — new shared preview/consent dialog required to admit the unified request.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — mount that dialog and wire its explicit actions.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAnalysisAdmissionTest.kt` — production admission content, consent controls and layout coverage.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopWorkflowPresenterTest.kt` — migrated analysis lifecycle cases.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopSecurityWorkflowTest.kt` — preserve fresh intent and retained-evidence assertions.
 
@@ -908,7 +911,67 @@ end this wake without starting ANA-06.
 `./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.ApiClientContractTest' --tests 'io.miniorca.desktop.DesktopAnalysisWorkflowTest' --tests 'io.miniorca.desktop.DesktopWorkflowPresenterTest' --tests 'io.miniorca.desktop.DesktopSecurityWorkflowTest'`
 
 **Execution record**
-Not started.
+Started 2026-09-11. Verified the ANA-05 commit/receipt, empty index,
+and all ten unrelated desktop files; captured their exact bytes in the ignored
+ANA-06 baseline. Read the current UI guidelines. Java 21 and JBR 25 binaries
+passed their version checks. Resumed preparation on the next wake with no active
+writer or validator; no implementation was repeated. The admission dialog, app
+mount and its tests are narrowly added because the owner cannot satisfy fresh
+provider/Security consent without an actual user action surface. Existing result
+page restructuring remains ANA-07. Initial implementation; zero corrections.
+
+Initial prescribed verification passed. The full desktop suite passed all 375
+tests, but the combined quality command failed at Detekt: DesktopState.reduce
+measured 66/65 and MiniOrcaApp 67/65 cyclomatic complexity. Correction 1 extracts
+the new state transition and admission visibility routing into cohesive helpers.
+Review in this correction also preserves immediate triage in unified evidence,
+rejects pre-triage pending reads, and restores polling after a failed reindex.
+The admission content renders at narrow/large-text and wide/default-text sizes;
+required consent controls pass keyboard and state assertions. No native popup or
+OS accessibility claim is made by those component renders.
+
+Correction-1 prescribed verification exited 1: 78 tests, one failure in
+`finalProgressReloadsAReportReadThatWasStillInFlightAtCompletion`, expected
+"completed" but got an empty string. The fixture had not populated its changing
+message marker; the other 77 cases, including triage and failed-reindex recovery,
+passed. Correction 2 populates that marker from the authoritative run status so
+the assertion distinguishes the stale report from the final reread. The unchanged
+production correction passes Detekt and Spotless. No earlier failure is discarded.
+
+Final acceptance — 2026-09-11: correction-2 prescribed verification passed all
+78 tests. Full desktop `test detekt spotlessCheck` passed all 378 tests with
+zero failures/errors/skips, and both quality gates passed. The exact commit
+candidate (HEAD plus this card's 14 Kotlin files, excluding the ten unrelated
+UI edits) independently passed the same full checks: 376 tests, zero failures,
+errors or skips. `git diff --check` passed. Java 21 launched the wrapper with
+the documented JBR 25 override; no build configuration or quality gate changed.
+Two correction attempts in total; their failures and diagnostics remain above.
+
+Review confirmed one desktop analysis owner and poller, full project admission
+with per-preview provider/Security consent, guarded start/resume/pause/cancel,
+read-only reconnect/recovery and typed results indexed by category/file. Late
+project/generation/report replies, retained partial failures, final-progress
+rereads and immediate triage are covered. Closing/selecting a file does not
+cancel a daemon-owned project run; explicit Cancel does. The independently
+required deterministic file scan, verified Go scan, benchmark trust and draft
+Review/Apply retain their own workflows. Legacy client wire APIs remain for
+compatibility, while their duplicate presenter requests/polling and old security
+AI owner are removed. Existing page intents delegate to the unified preview;
+ANA-07 owns replacement of those page layouts and their legacy view bindings.
+
+The shared admission content was rendered and inspected at 360dp/150% and
+640dp/100%, including loading/error and separate keyboard consent controls.
+These are production-component checks, not native popup placement, OS focus or
+screen-reader certification. No live provider evaluation, Go tests or combined
+`make check` was run for this desktop-only card. The client requires the unified
+daemon routes from ANA-05; no configuration migration is needed.
+
+All ten unrelated desktop files remain byte-identical to the captured baseline.
+This card's implementation and checklist/status records form one authorized local
+commit; its verified hash and file hashes are recorded in the ignored ANA-06
+receipt. The existing Astra Extra High scheduler remains Active. End this wake;
+ANA-07 is next.
+
 
 ## Task ANA-07 — Separate run progress from the three result pages
 
