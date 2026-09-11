@@ -1,11 +1,63 @@
 package project
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestFindingClassificationPreservesLegacyIDsTriageAndProvenance(t *testing.T) {
+	for _, status := range []string{FindingStatusDismissed, FindingStatusFixed} {
+		t.Run(status, func(t *testing.T) {
+			root := t.TempDir()
+			store, err := NewFindingStore(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input := FindingInput{ProjectID: "project", ProjectRevision: "revision", FileHashes: map[string]string{"main.go": "hash"}}
+			analysis := FileAnalysis{Path: "main.go", ContentHash: "hash", Status: AnalysisStatusFresh, Risks: []Finding{{Severity: "high", Summary: "Missing authorization check."}}}
+			legacy := normalizeFinding(SuggestedFindingsForFile(analysis)[0], input)
+			legacy.Status = status
+			data, err := json.Marshal(findingDocument{SchemaVersion: findingStoreSchema, Findings: []UnifiedFinding{legacy}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(data), `"category"`) {
+				t.Fatal("legacy fixture unexpectedly classified")
+			}
+			if err := os.MkdirAll(filepath.Join(root, ".mini-orca"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, findingStorePath), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := store.Load(input)
+			if err != nil || len(loaded) != 1 || loaded[0].Category.Valid() || loaded[0].Status != status {
+				t.Fatalf("legacy finding = %+v, %v", loaded, err)
+			}
+			analysis.Risks[0].Category = FindingCategorySecurity
+			reported := SuggestedFindingsForFile(analysis)
+			current, err := store.ReconcileSource(input, FindingSourceAI, reported)
+			if err != nil || len(current) != 1 {
+				t.Fatalf("classified reconciliation = %+v, %v", current, err)
+			}
+			got := current[0]
+			if got.ID != legacy.ID || got.Status != status || got.Category != FindingCategorySecurity || got.Source != FindingSourceAI || got.Confidence != FindingConfidenceSuggested || got.Severity != "high" {
+				t.Fatalf("classification changed identity/triage/provenance: %+v", got)
+			}
+			reported[0].Category = "correctness"
+			if _, err := store.ReconcileSource(input, FindingSourceAI, reported); err == nil {
+				t.Fatal("accepted unknown category")
+			}
+			loaded, err = store.Load(input)
+			if err != nil || loaded[0].Category != FindingCategorySecurity || loaded[0].Status != status {
+				t.Fatal("invalid update replaced stored triage")
+			}
+		})
+	}
+}
 
 func TestFindingIDAndValidationKeepSourcesDistinct(t *testing.T) {
 	base := UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: "medium", Title: "Suggestion", Message: "Check input", Location: FindingLocation{Path: "main.go", StartLine: 4, EndLine: 4}}

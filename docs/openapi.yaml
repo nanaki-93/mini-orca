@@ -21,6 +21,35 @@ tags:
   - name: Security
   - name: Chat
   - name: Drafts
+x-unified-analysis-contract:
+  status: planned-not-registered
+  activation-task: ANA-05
+  description: Source-free whole-project preflight and run contracts. These operations are not live routes yet.
+  paths:
+    /api/projects/current/analysis/preview:
+      post:
+        requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisPreviewRequest'}}}}
+        responses:
+          '200': {description: Whole-project admission preview, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunPreview'}}}}
+    /api/projects/current/analysis/run:
+      get:
+        description: Read current progress with required project_id and project_revision query guards; never dispatch.
+        responses:
+          '200': {description: Current run, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
+      post:
+        requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunStartRequest'}}}}
+        responses:
+          '202': {description: Durably admitted run, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
+    /api/projects/current/analysis/run/control:
+      post:
+        requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunControlRequest'}}}}
+        responses:
+          '200': {description: Updated control state, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
+    /api/projects/current/analysis/results:
+      get:
+        description: Require all AnalysisRunIdentity fields and category as query guards; optional path only filters this read view.
+        responses:
+          '200': {description: Categorized producer evidence, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisSectionResults'}}}}
 paths:
   /health:
     get:
@@ -776,6 +805,7 @@ components:
       required: [id, source, confidence, severity, title, message, project_id, project_revision, location, status, freshness, detected_at]
       properties:
         id: {type: string}
+        category: {$ref: '#/components/schemas/FindingCategory'}
         source: {type: string, enum: [ai, parser, vet, test]}
         confidence: {type: string, enum: [suggested, tool_reported]}
         severity: {type: string, enum: [low, medium, high]}
@@ -1162,6 +1192,7 @@ components:
     Finding:
       type: object
       properties:
+        category: {$ref: '#/components/schemas/FindingCategory'}
         severity: {type: string}
         summary: {type: string}
         task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
@@ -1507,3 +1538,221 @@ components:
         type: {type: string}
         message: {type: string}
         user_message: {type: string}
+    FindingCategory:
+      type: string
+      enum: [bugs, performance, security]
+      description: Explicit semantic category. An absent legacy field means unclassified and never contributes to fresh section counts.
+    AnalysisRunStatus:
+      type: string
+      enum: [queued, running, pausing, paused, canceling, canceled, interrupted, completed, completed_empty, partial, failed, unavailable, stale]
+    AnalysisStage:
+      type: string
+      enum: [semantic, performance, security_rules, security_ai]
+    AnalysisStageStatus:
+      type: string
+      enum: [pending, running, completed, completed_empty, partial, failed, skipped, unavailable, canceled, interrupted, stale]
+    AnalysisRunLimits:
+      type: object
+      additionalProperties: false
+      required: [batch_files, budget_seconds, max_attempts_per_stage]
+      properties:
+        batch_files: {type: integer, minimum: 1, maximum: 500, default: 100, description: Dispatch-window limit; does not truncate captured project inventory.}
+        budget_seconds: {type: integer, minimum: 1, maximum: 3600, default: 900}
+        max_attempts_per_stage: {type: integer, minimum: 1, maximum: 4, default: 2, description: Initial request plus all retries; cumulative across resumes.}
+    AnalysisQueueIdentity:
+      type: object
+      required: [project_id, project_revision, policy_fingerprint, provider_fingerprint, queue_id]
+      properties:
+        project_id: {type: string, minLength: 1}
+        project_revision: {type: string, minLength: 1}
+        policy_fingerprint: {type: string, minLength: 1}
+        provider_fingerprint: {type: string, minLength: 1}
+        queue_id: {type: string, minLength: 1, description: Stable captured scope; excludes mutable cache availability.}
+    AnalysisRunIdentity:
+      allOf:
+        - {$ref: '#/components/schemas/AnalysisQueueIdentity'}
+        - type: object
+          required: [id, generation]
+          properties:
+            id: {type: string, minLength: 1}
+            generation: {type: string, minLength: 1}
+    AnalysisPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, scope, refresh, limits]
+      properties:
+        project_id: {type: string, minLength: 1}
+        project_revision: {type: string, minLength: 1}
+        scope: {type: string, enum: [project]}
+        refresh: {type: boolean}
+        limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
+        resume_run: {$ref: '#/components/schemas/AnalysisRunIdentity'}
+    AnalysisFileIdentity:
+      type: object
+      required: [path, content_hash, language]
+      properties:
+        path: {type: string, minLength: 1, description: Canonical project-relative path.}
+        content_hash: {type: string, minLength: 1}
+        language: {type: string, minLength: 1}
+    AnalysisProviderRequirement:
+      type: object
+      required: [id, stages, model, remote_confirmation_required]
+      properties:
+        id: {type: string, minLength: 1}
+        stages: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/AnalysisStage'}}
+        model: {$ref: '#/components/schemas/ScopedModel'}
+        remote_confirmation_required: {type: boolean}
+    AnalysisStagePlan:
+      type: object
+      required: [stage, eligible, cached, max_model_requests]
+      properties:
+        stage: {$ref: '#/components/schemas/AnalysisStage'}
+        eligible: {type: boolean}
+        cached: {type: boolean}
+        reason: {type: string, description: Sanitized eligibility/cache explanation.}
+        provider_id: {type: string}
+        max_model_requests: {type: integer, minimum: 0, maximum: 4, description: Zero for cache/rules/ineligible work; otherwise includes all retries.}
+    AnalysisPlannedFile:
+      allOf:
+        - {$ref: '#/components/schemas/AnalysisFileIdentity'}
+        - type: object
+          required: [size_bytes, stages]
+          properties:
+            size_bytes: {type: integer, format: int64, minimum: 0}
+            stages: {type: array, items: {$ref: '#/components/schemas/AnalysisStagePlan'}}
+    AnalysisExcludedFile:
+      type: object
+      required: [path, reason]
+      properties:
+        path: {type: string}
+        reason: {type: string}
+    AnalysisRunPreview:
+      type: object
+      required: [schema_version, preview_id, identity, scope, refresh, limits, files, excluded, providers, expected_model_requests, max_model_requests, security_review_intent_required]
+      properties:
+        schema_version: {type: string, enum: ['1']}
+        preview_id: {type: string, minLength: 1, description: Admission fingerprint including remaining work, cache dispositions and request bounds.}
+        identity: {$ref: '#/components/schemas/AnalysisQueueIdentity'}
+        scope: {type: string, enum: [project]}
+        refresh: {type: boolean}
+        limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
+        files: {type: array, description: Entire captured inventory, items: {$ref: '#/components/schemas/AnalysisPlannedFile'}}
+        excluded: {type: array, items: {$ref: '#/components/schemas/AnalysisExcludedFile'}}
+        providers: {type: array, items: {$ref: '#/components/schemas/AnalysisProviderRequirement'}}
+        expected_model_requests: {type: integer, minimum: 0}
+        max_model_requests: {type: integer, minimum: 0}
+        security_review_intent_required: {type: boolean}
+    AnalysisRunConfirmations:
+      type: object
+      additionalProperties: false
+      required: [provider_ids, security_review]
+      properties:
+        provider_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        security_review: {type: boolean, description: Fresh explicit intent for Security AI, even for a local provider.}
+    AnalysisRunStartRequest:
+      type: object
+      additionalProperties: false
+      required: [identity, preview_id, limits, refresh, confirmations]
+      properties:
+        identity: {$ref: '#/components/schemas/AnalysisQueueIdentity'}
+        preview_id: {type: string, minLength: 1}
+        limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
+        refresh: {type: boolean}
+        confirmations: {$ref: '#/components/schemas/AnalysisRunConfirmations'}
+    AnalysisRunControlRequest:
+      type: object
+      additionalProperties: false
+      required: [identity, action]
+      description: Resume requires a fresh preview_id and confirmations; pause/cancel carry neither.
+      properties:
+        identity: {$ref: '#/components/schemas/AnalysisRunIdentity'}
+        action: {type: string, enum: [pause, resume, cancel]}
+        preview_id: {type: string, minLength: 1}
+        confirmations: {$ref: '#/components/schemas/AnalysisRunConfirmations'}
+    AnalysisRunCoverage:
+      type: object
+      required: [total, pending, running, succeeded, partial, failed, skipped, unavailable]
+      description: File-stage work units; component counts sum to total. Exclusions remain in the plan.
+      properties:
+        total: {type: integer, minimum: 0}
+        pending: {type: integer, minimum: 0}
+        running: {type: integer, minimum: 0}
+        succeeded: {type: integer, minimum: 0}
+        partial: {type: integer, minimum: 0}
+        failed: {type: integer, minimum: 0}
+        skipped: {type: integer, minimum: 0}
+        unavailable: {type: integer, minimum: 0}
+    AnalysisSectionProgress:
+      type: object
+      required: [category, status, coverage, finding_count]
+      properties:
+        category: {$ref: '#/components/schemas/FindingCategory'}
+        status: {$ref: '#/components/schemas/AnalysisRunStatus'}
+        coverage: {$ref: '#/components/schemas/AnalysisRunCoverage'}
+        finding_count: {type: integer, minimum: 0, nullable: true, description: Null without successful/partial evidence; stale counts are historical.}
+    AnalysisStageProgress:
+      type: object
+      required: [stage, status, attempts, cached, finding_count]
+      properties:
+        stage: {$ref: '#/components/schemas/AnalysisStage'}
+        status: {$ref: '#/components/schemas/AnalysisStageStatus'}
+        attempts: {type: integer, minimum: 0, maximum: 4}
+        cached: {type: boolean}
+        finding_count: {type: integer, minimum: 0, nullable: true}
+        report_id: {type: string, description: Producer-owned report reference; never a source blob.}
+        reason: {type: string, description: Sanitized operational reason.}
+    AnalysisRunFile:
+      allOf:
+        - {$ref: '#/components/schemas/AnalysisFileIdentity'}
+        - type: object
+          required: [stages]
+          properties:
+            stages: {type: array, items: {$ref: '#/components/schemas/AnalysisStageProgress'}}
+    AnalysisRun:
+      type: object
+      required: [schema_version, identity, plan, status, files, sections, elapsed_seconds, window_elapsed_seconds, window_files_completed, created_at, updated_at]
+      properties:
+        schema_version: {type: string, enum: ['1']}
+        identity: {$ref: '#/components/schemas/AnalysisRunIdentity'}
+        plan: {$ref: '#/components/schemas/AnalysisRunPreview'}
+        status: {$ref: '#/components/schemas/AnalysisRunStatus'}
+        files: {type: array, items: {$ref: '#/components/schemas/AnalysisRunFile'}}
+        sections: {type: array, minItems: 3, maxItems: 3, description: Exactly one entry per category., items: {$ref: '#/components/schemas/AnalysisSectionProgress'}}
+        elapsed_seconds: {type: integer, format: int64, minimum: 0}
+        window_elapsed_seconds: {type: integer, format: int64, minimum: 0}
+        window_files_completed: {type: integer, minimum: 0, maximum: 500}
+        reason: {type: string, description: Sanitized operational failure or pause reason.}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AnalysisSectionResults:
+      type: object
+      required: [identity, progress, semantic, performance, security, unclassified]
+      description: Only the selected category is populated. Legacy unclassified evidence never contributes to fresh counts.
+      properties:
+        identity: {$ref: '#/components/schemas/AnalysisRunIdentity'}
+        progress: {$ref: '#/components/schemas/AnalysisSectionProgress'}
+        path: {type: string, description: Optional read-only file filter; progress remains project-wide.}
+        semantic: {type: array, items: {$ref: '#/components/schemas/UnifiedFinding'}}
+        performance: {type: array, items: {$ref: '#/components/schemas/PerformanceFileReport'}}
+        security: {type: array, items: {$ref: '#/components/schemas/SecurityFileReport'}}
+        unclassified: {type: array, items: {$ref: '#/components/schemas/UnifiedFinding'}}
+    PerformanceFileReport:
+      type: object
+      required: [schema_version, project_id, project_revision, path, content_hash, status, findings, model, profile, scope, prompt_version, context_policy_version, generated_at]
+      properties:
+        schema_version: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        path: {type: string}
+        content_hash: {type: string}
+        status: {type: string}
+        findings: {type: array, items: {$ref: '#/components/schemas/PerformanceFinding'}}
+        warning: {type: string}
+        model: {type: string}
+        profile: {type: string}
+        scope: {type: string}
+        provider_origin: {type: string}
+        reasoning_effort: {type: string}
+        prompt_version: {type: string}
+        context_policy_version: {type: string}
+        generated_at: {type: string, format: date-time}

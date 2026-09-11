@@ -205,7 +205,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 4/17. **Active task/writer:** none. **Next:** ANA-01 at the next scheduled wake.
+**Accepted:** 5/17. **Active task/writer:** none. **Next:** ANA-02.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -213,7 +213,7 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 2 | [UX-02](docs/tasks.md#task-ux-02--apply-the-hierarchy-to-explanations-and-model-responses) | Apply the hierarchy to explanations and model responses | Complete; locally committed |
 | 3 | [CREATE-01](docs/tasks.md#task-create-01--expose-creation-in-the-normal-file-workflow) | Expose creation in the normal file workflow | Complete |
 | 4 | [CREATE-02](docs/tasks.md#task-create-02--close-creation-validation-and-lifecycle-gaps) | Close creation validation and lifecycle gaps | Complete; locally committed |
-| 5 | [ANA-01](docs/tasks.md#task-ana-01--define-categorized-results-and-unified-run-contracts) | Define categorized results and unified run contracts | Queued |
+| 5 | [ANA-01](docs/tasks.md#task-ana-01--define-categorized-results-and-unified-run-contracts) | Define categorized results and unified run contracts | Complete; locally committed |
 | 6 | [ANA-02](docs/tasks.md#task-ana-02--produce-and-validate-explicit-semantic-categories) | Produce and validate explicit semantic categories | Queued |
 | 7 | [ANA-03](docs/tasks.md#task-ana-03--compose-the-per-file-analysis-stages) | Compose the per-file analysis stages | Queued |
 | 8 | [ANA-04](docs/tasks.md#task-ana-04--implement-one-durable-bounded-run-lifecycle) | Implement one durable, bounded run lifecycle | Queued |
@@ -252,6 +252,15 @@ test correction retained existing insight whitespace normalization. Production
 offscreen renders and the exact diff were reviewed. The required explanation
 status helper is included; unrelated existing tab/layout work remains uncommitted.
 No daemon, API, dependency or migration changes. Commit hash: task response/local receipt.
+
+**Accepted ANA-01 — 2026-09-11:** Added explicit semantic finding categories while
+preserving old reports, stable IDs and triage. Defined whole-project preview,
+run/control and separate result contracts with bounded requests, transient consent
+and honest empty/partial/failure coverage. Future endpoints remain explicitly
+planned until ANA-05. Focused/full Go tests, race tests, formatting, vet and diff
+review passed after two naming/schema corrections. All ten pre-existing desktop
+edits are preserved. No migration or live model calls; desktop checks are not
+applicable. Local commit evidence: `.mini-orca/autopilot/ux/ANA-01/receipt.json`.
 
 ## Definition of done
 

@@ -24,8 +24,24 @@ const (
 	AnalysisStatusRunning = "running"
 )
 
+// FindingCategory routes semantic advice independently of its severity or producer.
+// The empty value is retained for historical reports; it is never a fresh category.
+type FindingCategory string
+
+const (
+	FindingCategoryUnclassified FindingCategory = ""
+	FindingCategoryBugs         FindingCategory = "bugs"
+	FindingCategoryPerformance  FindingCategory = "performance"
+	FindingCategorySecurity     FindingCategory = "security"
+)
+
+func (category FindingCategory) Valid() bool {
+	return category == FindingCategoryBugs || category == FindingCategoryPerformance || category == FindingCategorySecurity
+}
+
 // Finding is model-derived advice, not a deterministic project fact.
 type Finding struct {
+	Category           FindingCategory     `json:"category,omitempty"`
 	Severity           string              `json:"severity"`
 	Summary            string              `json:"summary"`
 	TaskSpec           *BugTaskSpec        `json:"task_spec,omitempty"`
@@ -140,6 +156,9 @@ func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 	defer c.mu.Unlock()
 	analysis = *cloneFileAnalysis(&analysis)
 	for index := range analysis.Risks {
+		if category := analysis.Risks[index].Category; category != FindingCategoryUnclassified && !category.Valid() {
+			return fmt.Errorf("file analysis risk category is invalid")
+		}
 		analysis.Risks[index].TaskSpec = SanitizeBugTaskSpec(analysis.Risks[index].TaskSpec)
 		analysis.Risks[index].EngineeringInsight = CloneEngineeringInsight(analysis.Risks[index].EngineeringInsight)
 		if !validPersistedBugTaskSpec(analysis.Risks[index].TaskSpec) {

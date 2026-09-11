@@ -381,7 +381,7 @@ used. ANA-01 is next and remains unchecked.
 
 ## Task ANA-01 — Define categorized results and unified run contracts
 
-- [ ] ANA-01 completed with required checks and diff review.
+- [x] ANA-01 completed with required checks and diff review.
 
 **Target files**
 - `internal/project/file_analysis.go` — explicit semantic risk category and cache compatibility.
@@ -406,7 +406,52 @@ used. ANA-01 is next and remains unchecked.
 `go test ./internal/project ./internal/app -run 'Test(FileAnalysis|Finding|AnalysisRun)' -count=1`
 
 **Execution record**
-Not started.
+Completed 2026-09-11 by the authorized scheduler after two focused corrections.
+Required checks and diff review passed; the local commit is recorded in
+`.mini-orca/autopilot/ux/ANA-01/receipt.json`. Verified CREATE-02 commit/receipt and the configured
+Java toolchains. The ten pre-existing desktop files and empty index are preserved
+under `.mini-orca/autopilot/ux/ANA-01/baseline/`. This card defines contracts;
+execution, HTTP handlers and desktop adoption remain in their ordered successor cards.
+The initial candidate defines additive category persistence, source-free planned
+run contracts, complete request guards and truthful section coverage. Go formatting
+is complete. Initial prescribed verification passed `internal/project` but failed
+to compile `internal/app`: `AnalysisCoverage` already names the workspace cache
+summary in `project_workspace.go` (fresh/stale/missing). Correction 1 renames the
+new file-stage coverage contract to `AnalysisRunCoverage`, preserving the existing
+workspace contract and changing only this card's new type, tests and schema.
+Initial failure is retained in `.mini-orca/autopilot/ux/ANA-01/focused-initial.log`.
+Correction 1 compiled, but the same prescribed command failed its OpenAPI test:
+the schema rename also changed the existing workspace schema, leaving duplicate
+`AnalysisRunCoverage` keys at lines 780/1672. Correction 2 restores the original
+workspace `AnalysisCoverage` schema name/reference and keeps only the new run
+schema named `AnalysisRunCoverage`. The first repair's failure is retained in
+`focused-correction-1.log`; both available corrections are now used.
+
+Final validation passed:
+- `go test ./internal/project ./internal/app -run 'Test(FileAnalysis|Finding|AnalysisRun)' -count=1`
+  passed both packages after correction 2 (`focused-correction-2.log`).
+- `go test ./...` passed all Go packages (`go-full.log`); unaffected packages used
+  valid cached results. This includes the live route/documentation parity tests.
+- `make test-race` passed all Go packages (`go-race.log`), with cached results for
+  unaffected packages.
+- `make fmt-check vet` passed (`go-quality.log`); `git diff --check` passed.
+
+Review confirmed the category is additive, unknown writes cannot replace stored
+evidence, old reports remain readable, and category assignment preserves finding
+IDs, provenance and dismissed/fixed triage. Contract tests cover whole-project
+inventory exceeding a dispatch window, all required identity guards, transient
+resume intent and truthful empty/partial/failure coverage. Planned OpenAPI refs
+resolve without changing live route registration or the existing workspace
+coverage schema. The run metadata contains no source or persisted confirmations.
+Stage execution, durable coordination, report filtering and HTTP admission remain
+successor-card work; this card does not claim those runtime behaviors are active.
+
+All ten pre-existing desktop files were compared byte-for-byte with the baseline;
+the initially empty index and predecessor HEAD were verified before staging.
+Only this card's eight target files plus PLAN.md and this checklist enter the
+commit. Desktop/native checks were not run because this card changes no desktop
+code or native behavior. No configuration/data migration or live provider calls.
+ANA-02 remains unchecked and is next.
 
 ## Task ANA-02 — Produce and validate explicit semantic categories
 
