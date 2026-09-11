@@ -1,7 +1,97 @@
 # Release acceptance
 
-**Current state: REL-01 and REL-02 accepted for the limited scope below.** Insight qualification is user-deferred. This ledger owns
-release evidence and limitations; [PLAN.md](../PLAN.md) owns task status.
+**Current engineering state: the 17-card UX implementation queue is accepted and
+its scheduler is Paused.** REL-01 and REL-02 retain their previously accepted
+limited release scope. Insight qualification remains user-deferred. This ledger
+owns evidence and limitations; [PLAN.md](../PLAN.md) owns task status.
+
+## UX implementation acceptance — 2026-09-12
+
+This acceptance covers the 17-card UX/analysis/creation/terminal queue on
+`codex/autopilot`. It does not reopen insight qualification or publish a release.
+The candidate starts from BOTTOM-02 (`793450f`) and adds final tests, a test-only
+native fixture, backend cleanup and usage/migration documentation. The full gate
+found unused backend wrappers and over-complex analysis functions. VERIFY-01
+removes those wrappers and separates planning, stored-state validation, result
+projection and locked lifecycle steps without changing public contracts. The
+existing performance publication tests now exercise the actual shared stage path.
+A cancellation test waits for final worker completion before temporary cleanup.
+Ten pre-existing UI edits are preserved and excluded from its commit;
+overlapping documentation/visual tests are reconstructed against saved baselines.
+
+### Final checks
+
+| Check | Result |
+| --- | --- |
+| `./scripts/validate.sh` | Passed on the isolated candidate after two focused corrections. All nine stages passed: Go formatting, tests, race, vet, daemon contracts, dispatcher tests, Go quality, desktop static and desktop tests. Unchanged package results and Gradle tasks reused valid caches on subsequent invocations. |
+| Go quality | Static analysis, reachability, complexity ≤15 and clone detection pass. Removed three unreachable wrappers. No threshold or test was suppressed. |
+| Dispatcher | 55 tests, one opt-in pinned insight-runtime conformance test skipped because no campaign runtime was selected. No live model call. |
+| Desktop | 403 tests in the isolated candidate; 405 with the preserved user UI changes; zero failures/errors/skips. Both pass Spotless/Detekt. The initial four-class preflight passed 49 tests. |
+| Component reproduction | The command below, with `--rerun-tasks` and an ignored `visualOutput` directory, passed 43 tests. Captures cover all current panes, responsive layouts and font/density states. |
+| Package | `./scripts/desktop-gradle.sh createDistributable` passed using Temurin 21.0.11 and JBR `25.0.4.1+1-b583.48`. |
+| Packaged PTY | `./desktop/scripts/terminal-packaged-smoke.sh` passed against that package's own embedded runtime and jars: canonical cwd, UTF-8, real TTY, 121×42 resize, Ctrl+C, child cleanup and bounded close. |
+| Native UI | Production panes in the test-only native entry point passed visual inspection of all eleven progress/result states at 800×650 and 150% text; 1000/999dp Editor docks/drawers at 125%; wide 1280×600 at 150%; terminal lifecycle labels and wrapped long failures. |
+| Native terminal | One shell PID survived navigation, text scaling and resize. Observed PTY 16×114 at 1280×600/150%, 17×71 at 800×650/150%, and 23×78 at 800×650/125%. Ctrl+Shift+F12 returned to Compose. Natural exit reported code 7; explicit reopen created a new PID; Close shell reported Closed. Both PIDs and the fixture app were verified stopped. |
+| Scope/diff | Exact candidate code hashes retained through final documentation updates; unrelated UI changes excluded with round-trip reconstruction. `git diff --check` passed. No API/schema/consent or source-write behavior was broadened. |
+
+Native scaling above is an explicit Compose `fontScale` supplied by the fixture,
+not a system display setting. Its projection values are independent synthetic
+layout inputs; service tests own run-accounting correctness. Full product
+Editor/palette/drawer focus, dock/overlay process persistence, full-screen terminal
+input and source refresh evidence from TERM-02/BOTTOM-02 remains applicable because
+VERIFY-01 does not change Desktop production code. The native fixture routes its
+focus-return action to Progress. An oversized-window drag used capture coordinates
+at the wrong scale and was retried after reopening the disposable fixture; this
+was an operator/capture issue, not a passing resize observation.
+
+The two corrections and original failures are retained in the task execution log:
+first the aggregate backend quality issues, then the canceled-worker test cleanup
+race and one residual complexity value of 16. The final complete gate passes.
+Local logs, test counts, component/native captures and package-input hashes live
+under ignored `.mini-orca/autopilot/ux/VERIFY-01/`. The scheduler was paused through
+the app after final checks; the authorized local commit and verification receipt
+close the queue. No later task is queued.
+
+### Workflow evidence
+
+The fake-provider/temporary-project suite exercises the real Go service through
+partial results in all three categories, bounded explicit continuation, cancellation
+of an active request, cumulative attempts, process-loss restoration and guarded
+source/policy/provider identity changes. Restoration does not restore consent.
+`analysis_run_test.go` and `analysis_run_store_test.go` own these checks; result
+reads and path filters cannot dispatch new work.
+
+`draft_lifecycle_test.go` covers generation in a package-only Go file and beside
+existing declarations/imports, real validation and trusted checks, explicit Apply,
+Undo restoring original bytes, and source-conflict rejection without overwriting
+external changes. No unrelated file is changed. Desktop workflow tests cover
+creation eligibility and draft discard/preservation, file-bound Apply/Undo refresh,
+and read-only return-from-terminal refresh. The added cross-workspace regression
+preserves a draft while browsing results and marks the draft plus all three result
+pages stale together after a changed selected-file hash; an unchanged refresh
+preserves the draft.
+
+These are deterministic service/presenter checks with fake providers. The native
+visual fixture supplies synthetic state to production components, and its shell
+uses a temporary local project. This is separate evidence; it is not a claim that
+one native automated scenario performed every provider/Apply/Undo operation.
+
+### Migration and limits
+
+The [root guide](../README.md#existing-projects-and-preferences) records semantic
+prompt `file-analysis-v14`, explicit categories, historical unclassified evidence,
+unified-run schema `1`, interrupted-run admission and unchanged model scope names.
+Saved pane dimensions survive; obsolete bottom selections are discarded and the
+terminal restores collapsed without starting a shell. No manual configuration or
+source migration is required.
+
+The supported native target remains macOS arm64/JBR 25. Other OS/architecture
+support, signing/notarization, spoken screen-reader output, external-display/system
+scaling combinations and real external-provider compatibility remain unclaimed.
+Known upstream native-access/Unsafe/Gradle deprecation warnings remain. No live
+provider campaign, Docker rebuild, push, publication or release was performed by
+this queue. Historical REL-01 distribution and failed/deferred insight verdicts
+below retain their original scope and dates.
 
 ## Current scope deferral — 2026-09-09
 
@@ -1690,10 +1780,17 @@ MINI_ORCA_JBR25_HOME=/path/to/jbr-25 \
 ```
 
 The production Compose/Skia fixtures use labeled local data without a daemon or
-provider. Coverage includes Summary, Analysis, Editor/Review, Performance, Problems,
-Assistant, menus/disclosures, responsive drawers, bottom overlays and keyboard
+provider. Coverage includes Summary, Analysis progress, Bugs, Performance, Security,
+Editor/Review, Assistant, menus/disclosures, responsive drawers, Terminal and keyboard
 semantics; empty, failed, stale, populated and disabled states remain represented.
 The compact matrix includes 1280×600 at 100%, 125%, 150% text and 1×/2× density.
+The final lifecycle matrix also renders all eleven progress/result states at
+800×650 and 150% text. `DesktopAcceptanceFixtureKt` is a test-only native entry
+point with the same production panes, selectable lifecycle states and explicit
+100/125/150% Compose text scaling. Its real shell uses an isolated temporary
+project; the fixture has no API client or provider. Package it using the tested
+application jars, compiled test classes and embedded runtime, with that main class.
+The fixture controls are verification aids and are absent from the product.
 Popup/dialog scene layers cannot be inferred from an offscreen image; the
 [keyboard operator checklist](../desktop/KEYBOARD_SMOKE_CHECKLIST.md) owns native
 reproduction. Historical Task 159 captures used `desktop/build/reports/ui-refinement/after`;

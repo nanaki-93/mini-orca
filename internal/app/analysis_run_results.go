@@ -43,6 +43,31 @@ func (s *Service) ReadAnalysisSection(ctx context.Context, identity AnalysisRunI
 	if run == nil || run.Identity != identity {
 		return nil, project.ErrRevisionConflict
 	}
+	reader, err := s.analysisSectionReader(run, category, path, c.root)
+	if err != nil {
+		return nil, err
+	}
+	if err := reader.read(ctx, path); err != nil {
+		return nil, err
+	}
+	return reader.result, nil
+}
+
+// This projection owns only a captured read snapshot; all callers hold the run locks.
+type analysisSectionReader struct {
+	service  *Service
+	root     string
+	run      *AnalysisRun
+	analysis *project.Analysis
+	index    *project.ProjectIndex
+	policy   *project.ContextPolicy
+	captured map[string]AnalysisRunFile
+	statuses map[string]string
+	result   *AnalysisSectionResults
+}
+
+func (s *Service) analysisSectionReader(run *AnalysisRun, category project.FindingCategory, path, root string) (*analysisSectionReader, error) {
+	identity := run.Identity
 	analysis, index, policy, err := s.performanceInputs()
 	if err != nil {
 		return nil, err
@@ -67,7 +92,15 @@ func (s *Service) ReadAnalysisSection(ctx context.Context, identity AnalysisRunI
 			return nil, project.ErrRevisionConflict
 		}
 	}
-	store, err := project.NewFindingStore(c.root)
+	statuses, err := loadAnalysisTriage(root, identity, hashes)
+	if err != nil {
+		return nil, err
+	}
+	return &analysisSectionReader{service: s, root: root, run: run, analysis: analysis, index: index, policy: policy, captured: captured, statuses: statuses, result: result}, nil
+}
+
+func loadAnalysisTriage(root string, identity AnalysisRunIdentity, hashes map[string]string) (map[string]string, error) {
+	store, err := project.NewFindingStore(root)
 	if err != nil {
 		return nil, err
 	}
@@ -81,95 +114,128 @@ func (s *Service) ReadAnalysisSection(ctx context.Context, identity AnalysisRunI
 			statuses[finding.ID] = finding.Status
 		}
 	}
-	for _, indexed := range index.Files {
-		file, ok := captured[indexed.Path]
+	return statuses, nil
+}
+
+func (reader *analysisSectionReader) read(ctx context.Context, path string) error {
+	for _, indexed := range reader.index.Files {
+		file, ok := reader.captured[indexed.Path]
 		if !ok || path != "" && path != file.Path {
 			continue
 		}
-		if !policy.Decide(file.Path).Include {
-			return nil, project.ErrExcludedFile
+		if !reader.policy.Decide(file.Path).Include {
+			return project.ErrExcludedFile
 		}
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return err
 		}
-		cache, input, err := s.fileAnalysisCacheInput(analysis, &indexed, file.ContentHash)
-		if err != nil {
-			return nil, err
+		if err := reader.readSemantic(indexed, file); err != nil {
+			return err
 		}
-		semantic, err := cache.Load(input)
-		if err != nil {
-			return nil, err
-		}
-		if file.Stages[0].FindingCount != nil && (semantic == nil || semantic.Status == project.AnalysisStatusMissing) {
-			return nil, project.ErrRevisionConflict
-		}
-		if semantic != nil && semantic.ProjectID == identity.ProjectID {
-			fresh := semantic.Status == project.AnalysisStatusFresh && semantic.ContentHash == file.ContentHash && semantic.ProjectRevision == identity.ProjectRevision && run.Status != AnalysisRunStale
-			// The adapter only accepts fresh status. Extract historical risks from a copy,
-			// then explicitly label them stale; no cache or history record is rewritten.
-			view := *semantic
-			view.Status = project.AnalysisStatusFresh
-			for _, finding := range project.SuggestedFindingsForFile(view) {
-				finding.ID = project.FindingID(finding)
-				finding.ProjectID, finding.ProjectRevision = semantic.ProjectID, semantic.ProjectRevision
-				finding.DetectedAt = semantic.GeneratedAt
-				finding.Status = project.FindingStatusOpen
-				if status := statuses[finding.ID]; status != "" {
-					finding.Status = status
-				}
-				finding.Freshness = project.FindingFreshnessStale
-				if !finding.Category.Valid() {
-					result.Unclassified = append(result.Unclassified, finding)
-					continue
-				}
-				if finding.Category != category || file.Stages[0].FindingCount == nil {
-					continue
-				}
-				if fresh {
-					finding.Freshness = project.FindingFreshnessFresh
-				}
-				result.Semantic = append(result.Semantic, finding)
+		switch reader.result.Progress.Category {
+		case project.FindingCategoryPerformance:
+			if err := reader.readPerformance(file); err != nil {
+				return err
 			}
-		}
-		if category == project.FindingCategoryPerformance && file.Stages[1].FindingCount != nil {
-			report, err := project.LoadPerformanceFileReport(c.root, file.Path, file.ContentHash, policy)
-			if err != nil {
-				return nil, err
-			}
-			if report == nil {
-				return nil, project.ErrRevisionConflict
-			}
-			if report != nil && report.ProjectID == identity.ProjectID && report.ProjectRevision == identity.ProjectRevision {
-				if run.Status == AnalysisRunStale || !analysisPerformanceCacheUsable(report, *analysis, s.runtimes.analyze) {
-					report.Status = "stale"
-				}
-				result.Performance = append(result.Performance, *report)
-			}
-		}
-		if category == project.FindingCategorySecurity {
-			for j := 2; j <= 3; j++ {
-				if file.Stages[j].FindingCount == nil {
-					continue
-				}
-				input := analysisSecurityCacheInput(*analysis, indexed, s.runtimes.analyze, policy.Version())
-				if j == 2 {
-					input = securityRulesInput(securityRulesSnapshot{analysis: *analysis, file: indexed, policyVersion: policy.Version()})
-				}
-				report, err := s.loadSecurityFileReport(c.root, input)
-				if err != nil {
-					return nil, err
-				}
-				if report == nil {
-					return nil, project.ErrRevisionConflict
-				}
-				if report != nil && report.ProjectID == identity.ProjectID && report.ProjectRevision == identity.ProjectRevision {
-					if run.Status == AnalysisRunStale {
-						report.Status = project.SecurityStatusStale
-					}
-					result.Security = append(result.Security, *report)
-				}
+		case project.FindingCategorySecurity:
+			if err := reader.readSecurity(indexed, file); err != nil {
+				return err
 			}
 		}
 	}
-	return result, nil
+	return nil
+}
+
+func (reader *analysisSectionReader) readSemantic(indexed project.IndexFile, file AnalysisRunFile) error {
+	cache, input, err := reader.service.fileAnalysisCacheInput(reader.analysis, &indexed, file.ContentHash)
+	if err != nil {
+		return err
+	}
+	semantic, err := cache.Load(input)
+	if err != nil {
+		return err
+	}
+	if file.Stages[0].FindingCount != nil && (semantic == nil || semantic.Status == project.AnalysisStatusMissing) {
+		return project.ErrRevisionConflict
+	}
+	if semantic != nil && semantic.ProjectID == reader.run.Identity.ProjectID {
+		reader.appendSemanticFindings(semantic, file)
+	}
+
+	return nil
+}
+
+func (reader *analysisSectionReader) appendSemanticFindings(semantic *project.FileAnalysis, file AnalysisRunFile) {
+	fresh := semantic.Status == project.AnalysisStatusFresh && semantic.ContentHash == file.ContentHash && semantic.ProjectRevision == reader.run.Identity.ProjectRevision && reader.run.Status != AnalysisRunStale
+	// The adapter only accepts fresh status. Extract historical risks from a copy,
+	// then explicitly label them stale; no cache or history record is rewritten.
+	view := *semantic
+	view.Status = project.AnalysisStatusFresh
+	for _, finding := range project.SuggestedFindingsForFile(view) {
+		finding.ID = project.FindingID(finding)
+		finding.ProjectID, finding.ProjectRevision = semantic.ProjectID, semantic.ProjectRevision
+		finding.DetectedAt = semantic.GeneratedAt
+		finding.Status = project.FindingStatusOpen
+		if status := reader.statuses[finding.ID]; status != "" {
+			finding.Status = status
+		}
+		finding.Freshness = project.FindingFreshnessStale
+		if !finding.Category.Valid() {
+			reader.result.Unclassified = append(reader.result.Unclassified, finding)
+			continue
+		}
+		if finding.Category != reader.result.Progress.Category || file.Stages[0].FindingCount == nil {
+			continue
+		}
+		if fresh {
+			finding.Freshness = project.FindingFreshnessFresh
+		}
+		reader.result.Semantic = append(reader.result.Semantic, finding)
+	}
+}
+
+func (reader *analysisSectionReader) readPerformance(file AnalysisRunFile) error {
+	if file.Stages[1].FindingCount == nil {
+		return nil
+	}
+	report, err := project.LoadPerformanceFileReport(reader.root, file.Path, file.ContentHash, reader.policy)
+	if err != nil {
+		return err
+	}
+	if report == nil {
+		return project.ErrRevisionConflict
+	}
+	if report.ProjectID == reader.run.Identity.ProjectID && report.ProjectRevision == reader.run.Identity.ProjectRevision {
+		if reader.run.Status == AnalysisRunStale || !analysisPerformanceCacheUsable(report, *reader.analysis, reader.service.runtimes.analyze) {
+			report.Status = "stale"
+		}
+		reader.result.Performance = append(reader.result.Performance, *report)
+	}
+	return nil
+}
+
+func (reader *analysisSectionReader) readSecurity(indexed project.IndexFile, file AnalysisRunFile) error {
+	for j := 2; j <= 3; j++ {
+		if file.Stages[j].FindingCount == nil {
+			continue
+		}
+		input := analysisSecurityCacheInput(*reader.analysis, indexed, reader.service.runtimes.analyze, reader.policy.Version())
+		if j == 2 {
+			input = securityRulesInput(securityRulesSnapshot{analysis: *reader.analysis, file: indexed, policyVersion: reader.policy.Version()})
+		}
+		report, err := reader.service.loadSecurityFileReport(reader.root, input)
+		if err != nil {
+			return err
+		}
+		if report == nil {
+			return project.ErrRevisionConflict
+		}
+		if report.ProjectID == reader.run.Identity.ProjectID && report.ProjectRevision == reader.run.Identity.ProjectRevision {
+			if reader.run.Status == AnalysisRunStale {
+				report.Status = project.SecurityStatusStale
+			}
+			reader.result.Security = append(reader.result.Security, *report)
+		}
+	}
+	return nil
 }

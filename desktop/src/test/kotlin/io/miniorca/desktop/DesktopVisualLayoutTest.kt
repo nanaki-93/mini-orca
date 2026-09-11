@@ -49,6 +49,31 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun finalLifecycleMatrixUsesProductionPanesAtLargeText() {
+    acceptanceRunStates.forEach { status ->
+      ComposeVisualFixture(800, 650, 1.5f) {
+            AnalysisWorkspacePane(
+                AnalysisWorkspacePaneState(
+                    resultProjectFixture(), ProjectAnalysisRunState(run = acceptanceRun(status))),
+                AnalysisWorkspaceActions({}, {}, {}, {}, {}))
+          }
+          .use { fixture ->
+            fixture.render("final-progress-$status-800-150")
+            assertTrue(fixture.hasText("Analysis"))
+          }
+      listOf("bugs", "performance", "security").forEach { category ->
+        ComposeVisualFixture(800, 650, 1.5f) { AcceptanceResultPane(category, status) }
+            .use { fixture ->
+              fixture.render("final-$category-$status-800-150")
+              fixture.assertTextFits("View analysis")
+              assertTrue(fixture.hasText(acceptanceResultPage(category, status).statusLabel))
+              assertFalse(fixture.hasText("Start analysis"))
+            }
+      }
+    }
+  }
+
+  @Test
   fun analysisProgressAndResultLinksRemainReadableAcrossSupportedViewports() {
     listOf(
             Triple(1440, 900, 1f),
@@ -1731,7 +1756,7 @@ private fun SharedChromeStatesVisualFixture() {
 }
 
 @Composable
-private fun EditorVisualFixture(width: Float) {
+internal fun EditorVisualFixture(width: Float) {
   val layout = DesktopLayoutState(bottomCollapsed = false)
   val panes = dockedPaneWidths(width, layout.explorerWidth, layout.actionWidth)
   val symbol =

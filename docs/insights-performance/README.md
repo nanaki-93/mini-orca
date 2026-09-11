@@ -24,9 +24,14 @@ model request.
 ## Performance review and measurements
 
 Performance reports describe source patterns, workload conditions, confidence,
-trade-offs and verification plans. They use the `analyze` scope, separate report/job
-state and current source, policy and provider identities. File input/output is
-capped at 64 KiB and five findings. Job file/time budgets do not reset on resume.
+trade-offs and verification plans. The Analysis page admits one whole-project run,
+which coordinates semantic, Performance and Security stages. Performance retains
+its `analyze` model scope and typed reports, while shared durable run progress lives
+in `.mini-orca/analysis/run.json`. Performance owns result browsing and file filters;
+it has no separate Start/Pause/Resume controls. Current source, policy, provider and
+prompt identities still guard evidence. File input/output is capped at 64 KiB and
+five findings. Attempts remain cumulative; legacy Performance jobs retain their
+total active-time budget across resumes.
 Source review alone establishes no runtime measurement or demonstrated speedup.
 
 An optional comparison runs an explicitly selected existing Go benchmark for a
@@ -43,8 +48,7 @@ These tests do not measure explanation usefulness.
 
 The historical dispatcher and insight evaluation remain paused. Preserve cumulative
 **60 development / 24 qualification requests** (48/24 original and 12/0 successor),
-all grants/receipts, and the sealed unused conditional 24-case holdout. The active
-cleanup scheduler does not authorize additional model calls.
+all grants/receipts, and the sealed unused conditional 24-case holdout. The UX implementation queue does not authorize additional model calls.
 
 - [Historical runtime and evaluation instructions](../history/insight-evaluation-2026-09.md)
 - [Recovered v2 specification from fe4cdad:docs/tasks.md](../history/insight-evaluation-2026-09.md#recovery-after-the-failed-medium-reasoning-qualification)

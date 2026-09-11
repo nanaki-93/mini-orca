@@ -223,77 +223,117 @@ func analysisMetadataReason(value string) bool {
 }
 
 func validateStoredAnalysisRun(run *AnalysisRun) error {
-	invalid := func() error { return errAnalysisRunCorrupt }
-	if run == nil || run.SchemaVersion != AnalysisRunSchemaVersion || run.Identity.Validate() != nil || !run.Status.Valid() || run.Plan.SchemaVersion != AnalysisRunSchemaVersion || run.Plan.Scope != AnalysisRunScopeProject || run.Plan.Identity != run.Identity.AnalysisQueueIdentity || run.Plan.Limits.Validate() != nil || run.Plan.PreviewID == "" || !analysisMetadataReason(run.Reason) {
-		return invalid()
-	}
-	if !validAnalysisCompatibility(run) {
-		return invalid()
+	if !validStoredAnalysisIdentity(run) || !validAnalysisCompatibility(run) || !validStoredAnalysisWindow(run) {
+		return errAnalysisRunCorrupt
 	}
 	queue, err := analysisQueueFingerprint(&run.Plan)
 	if err != nil || queue != run.Identity.QueueID {
-		return invalid()
+		return errAnalysisRunCorrupt
 	}
-	if run.CreatedAt.IsZero() || run.UpdatedAt.Before(run.CreatedAt) || run.ElapsedSeconds < 0 || run.WindowElapsedSeconds < 0 || run.WindowElapsedSeconds > int64(run.Plan.Limits.BudgetSeconds) || run.ElapsedSeconds < run.WindowElapsedSeconds || run.WindowFilesCompleted < 0 || run.WindowFilesCompleted > run.Plan.Limits.BatchFiles || len(run.Files) != len(run.Plan.Files) || len(run.Sections) != 3 {
-		return invalid()
-	}
-	totalFindings := 0
-	for i, file := range run.Files {
-		planned := run.Plan.Files[i]
-		if file.AnalysisFileIdentity != planned.AnalysisFileIdentity || !analysisMetadataPath(file.Path) || file.ContentHash == "" || file.Language == "" || planned.SizeBytes < 0 || len(file.Stages) != len(analysisStages) || len(planned.Stages) != len(analysisStages) || i > 0 && run.Files[i-1].Path >= file.Path {
-			return invalid()
-		}
-		for j, stage := range file.Stages {
-			plan := planned.Stages[j]
-			if stage.Stage != analysisStages[j] || plan.Stage != stage.Stage || stage.Attempts < 0 || stage.Attempts > run.Plan.Limits.MaxAttemptsPerStage || stage.Stage == AnalysisStageSecurityRules && stage.Attempts != 0 || !analysisMetadataReason(stage.Reason) || !analysisMetadataReason(plan.Reason) || plan.MaxModelRequests < 0 || plan.MaxModelRequests > run.Plan.Limits.MaxAttemptsPerStage {
-				return invalid()
-			}
-			evidence := false
-			switch stage.Status {
-			case AnalysisStageCompleted, AnalysisStageCompletedEmpty, AnalysisStagePartial:
-				evidence = true
-			case AnalysisStagePending, AnalysisStageRunning, AnalysisStageFailed, AnalysisStageSkipped, AnalysisStageUnavailable, AnalysisStageCanceled, AnalysisStageInterrupted, AnalysisStageStale:
-			default:
-				return invalid()
-			}
-			if evidence != (stage.FindingCount != nil) || !evidence && (stage.Cached || stage.ReportID != "") {
-				return invalid()
-			}
-			if evidence {
-				if *stage.FindingCount < 0 || *stage.FindingCount > 32 || len(stage.ReportID) != 64 || stage.Status == AnalysisStageCompletedEmpty && *stage.FindingCount != 0 || stage.Status == AnalysisStageCompleted && *stage.FindingCount == 0 {
-					return invalid()
-				}
-				totalFindings += *stage.FindingCount
-			}
-		}
+	totalFindings, err := validateStoredAnalysisFiles(run)
+	if err != nil {
+		return err
 	}
 	for _, file := range run.Plan.Excluded {
 		if !analysisMetadataPath(file.Path) || !analysisMetadataReason(file.Reason) {
-			return invalid()
+			return errAnalysisRunCorrupt
 		}
 	}
+	if err := validateStoredAnalysisSections(run, totalFindings); err != nil {
+		return err
+	}
+	switch run.Status {
+	case AnalysisRunCompleted, AnalysisRunCompletedEmpty, AnalysisRunPartial, AnalysisRunFailed, AnalysisRunUnavailable:
+		if analysisFinishedStatus(run) != run.Status {
+			return errAnalysisRunCorrupt
+		}
+	}
+	return nil
+}
+
+func validStoredAnalysisIdentity(run *AnalysisRun) bool {
+	return run != nil && run.SchemaVersion == AnalysisRunSchemaVersion && run.Identity.Validate() == nil && run.Status.Valid() &&
+		run.Plan.SchemaVersion == AnalysisRunSchemaVersion && run.Plan.Scope == AnalysisRunScopeProject && run.Plan.Identity == run.Identity.AnalysisQueueIdentity &&
+		run.Plan.Limits.Validate() == nil && run.Plan.PreviewID != "" && analysisMetadataReason(run.Reason)
+}
+
+func validStoredAnalysisWindow(run *AnalysisRun) bool {
+	return !run.CreatedAt.IsZero() && !run.UpdatedAt.Before(run.CreatedAt) && run.ElapsedSeconds >= 0 && run.WindowElapsedSeconds >= 0 &&
+		run.WindowElapsedSeconds <= int64(run.Plan.Limits.BudgetSeconds) && run.ElapsedSeconds >= run.WindowElapsedSeconds &&
+		run.WindowFilesCompleted >= 0 && run.WindowFilesCompleted <= run.Plan.Limits.BatchFiles && len(run.Files) == len(run.Plan.Files) && len(run.Sections) == 3
+}
+
+func validateStoredAnalysisFiles(run *AnalysisRun) (int, error) {
+	total := 0
+	for i, file := range run.Files {
+		planned := run.Plan.Files[i]
+		if !validStoredAnalysisFile(file, planned) || i > 0 && run.Files[i-1].Path >= file.Path {
+			return 0, errAnalysisRunCorrupt
+		}
+		for j, stage := range file.Stages {
+			count, err := validateStoredAnalysisStage(stage, planned.Stages[j], analysisStages[j], run.Plan.Limits.MaxAttemptsPerStage)
+			if err != nil {
+				return 0, err
+			}
+			total += count
+		}
+	}
+	return total, nil
+}
+
+func validStoredAnalysisFile(file AnalysisRunFile, planned AnalysisPlannedFile) bool {
+	return file.AnalysisFileIdentity == planned.AnalysisFileIdentity && analysisMetadataPath(file.Path) && file.ContentHash != "" && file.Language != "" &&
+		planned.SizeBytes >= 0 && len(file.Stages) == len(analysisStages) && len(planned.Stages) == len(analysisStages)
+}
+
+func validateStoredAnalysisStage(stage AnalysisStageProgress, plan AnalysisStagePlan, expected AnalysisStage, maxAttempts int) (int, error) {
+	if stage.Stage != expected || plan.Stage != stage.Stage || stage.Attempts < 0 || stage.Attempts > maxAttempts ||
+		stage.Stage == AnalysisStageSecurityRules && stage.Attempts != 0 || !analysisMetadataReason(stage.Reason) || !analysisMetadataReason(plan.Reason) ||
+		plan.MaxModelRequests < 0 || plan.MaxModelRequests > maxAttempts {
+		return 0, errAnalysisRunCorrupt
+	}
+	return validateStoredStageEvidence(stage)
+}
+
+func validateStoredStageEvidence(stage AnalysisStageProgress) (int, error) {
+	evidence := false
+	switch stage.Status {
+	case AnalysisStageCompleted, AnalysisStageCompletedEmpty, AnalysisStagePartial:
+		evidence = true
+	case AnalysisStagePending, AnalysisStageRunning, AnalysisStageFailed, AnalysisStageSkipped, AnalysisStageUnavailable, AnalysisStageCanceled, AnalysisStageInterrupted, AnalysisStageStale:
+	default:
+		return 0, errAnalysisRunCorrupt
+	}
+	if evidence != (stage.FindingCount != nil) || !evidence && (stage.Cached || stage.ReportID != "") {
+		return 0, errAnalysisRunCorrupt
+	}
+	if !evidence {
+		return 0, nil
+	}
+	count := *stage.FindingCount
+	if count < 0 || count > 32 || len(stage.ReportID) != 64 || stage.Status == AnalysisStageCompletedEmpty && count != 0 || stage.Status == AnalysisStageCompleted && count == 0 {
+		return 0, errAnalysisRunCorrupt
+	}
+	return count, nil
+}
+
+func validateStoredAnalysisSections(run *AnalysisRun, totalFindings int) error {
 	recomputed := cloneAnalysisRun(run)
 	refreshAnalysisSections(recomputed)
 	if !reflect.DeepEqual(run.Sections, recomputed.Sections) {
-		return invalid()
+		return errAnalysisRunCorrupt
 	}
 	sectionFindings := 0
 	for _, section := range run.Sections {
 		if section.Validate() != nil {
-			return invalid()
+			return errAnalysisRunCorrupt
 		}
 		if section.FindingCount != nil {
 			sectionFindings += *section.FindingCount
 		}
 	}
 	if totalFindings != sectionFindings {
-		return invalid()
-	}
-	switch run.Status {
-	case AnalysisRunCompleted, AnalysisRunCompletedEmpty, AnalysisRunPartial, AnalysisRunFailed, AnalysisRunUnavailable:
-		if analysisFinishedStatus(run) != run.Status {
-			return invalid()
-		}
+		return errAnalysisRunCorrupt
 	}
 	return nil
 }

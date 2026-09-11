@@ -1,37 +1,77 @@
 # Desktop keyboard smoke checklist
 
-Use a disposable Go fixture and isolated preferences. This is an operator procedure,
-not a list of passing results; [release acceptance](../docs/RELEASE_ACCEPTANCE.md)
-owns all observations and supported-host limitations.
+Use a disposable Go project, a fake provider and isolated preferences. This is an
+operator procedure, not passing evidence. [Release acceptance](../docs/RELEASE_ACCEPTANCE.md)
+owns observed results and host limitations; [UI guidelines](UI_DESIGN_GUIDELINES.md)
+owns the visual rules.
 
-Follow [UI design guidelines](UI_DESIGN_GUIDELINES.md) for current dimensions and
-labels. Check wide windows, exactly 1000dp, 999dp and compact 800×650/1280×600
-windows where the host permits. Repeat at supported text/density settings; record
-unsupported combinations instead of treating component renders as native proof.
+Check wide, exactly 1000dp, 999dp, 800×650 and 1280×600 windows. Repeat affected
+surfaces at 125% and 150% text. Record native versus component observations
+separately; native accessibility names do not establish spoken reader behavior.
 
-1. Confirm the landing state contains only product identity, **Open project**, and contextual progress or retry feedback. Press `Cmd/Ctrl+O`, cancel the chooser, and confirm the landing state is unchanged. Repeat with a failed open if available; confirm **Open project** remains available for retry. Before a project opens, verify `Cmd/Ctrl+1`–`4`, `Cmd/Ctrl+P`, `Cmd/Ctrl+Shift+O`, `Cmd/Ctrl+K`, and `Cmd/Ctrl+Tab` have no project action.
-2. Press `Cmd/Ctrl+O` and import the fixture. Confirm the full workspace replaces the landing state with no remaining landing content.
-3. Press `Cmd/Ctrl+1` through `Cmd/Ctrl+4`; Summary, Analysis, Bugs, and Editor each become active. Use `Cmd/Ctrl+K` and select **Open Performance workspace**; confirm it opens without starting a review. `Cmd/Ctrl+Tab` includes Performance while preserving the four numbered destinations.
-- In Performance, verify **Source-based review · Not measured**, preview limits, and the actual Analysis-model destination before starting. For a remote destination, confirmation must be checked for that run. Verify Pause, Resume, and Cancel retain honest partial coverage; open a selected opportunity in Editor and confirm **Prepare optimization** only enables for one exact Go declaration and only prefills the existing composer.
-4. From Summary, Analysis, or Bugs, press `Cmd/Ctrl+P` and choose an indexed file. Confirm Editor becomes active with that exact path and its header shows the basename plus project-relative path, then use `Cmd/Ctrl+Shift+O` to choose a symbol. Repeat with duplicate basenames when available and confirm the relative path disambiguates them. Hover and click within a highlighted declaration; confirm the pointer becomes a hand and Context shows only that declaration's explanation. Click a nested declaration to confirm the most specific declaration wins; click between declarations to confirm Context clears stale symbol context while retaining the focused line. Drag source text and confirm it selects text without changing the declaration or draft.
-5. On a wide window, confirm Summary, Analysis, and Bugs have no Explorer or Context pane while Editor retains both. At exactly 1000dp, confirm Editor's wide panes remain stable. Below 1000dp, confirm labeled Files and Context drawers appear only in Editor; leave Editor with a drawer open and confirm it closes without losing the selected file.
-6. In Analysis, confirm project coverage and current/last-run totals are visible. Confirm only failures with path, attempts, and sanitized error text appear under Analysis Errors, with a textual no-errors state when applicable. Check that the file/retry limits share one compact row and Pause/Cancel or Resume/Cancel wrap without clipping on a narrow window.
-7. In Bugs, use Tab to reach the search field, Filters disclosure, advanced filters, and finding actions. Confirm only search is initially visible, active filters are named in text, and `Cmd/Ctrl+Shift+F` returns to Bugs. Confirm filtered findings appear in nonempty `HIGH PRIORITY`, `MEDIUM PRIORITY`, `LOW PRIORITY`, then `OTHER PRIORITY` sections; each card still names its verified/tool or AI provenance.
-8. In Editor, select an exact atomic Go function, method, or type and confirm Context shows one **Edit `<symbol>`** action. Activate it and confirm the Replace composer opens and focuses its message field without sending a request or changing source. Open Commands and choose **Create declaration** to confirm the new-name field appears only on that route. If another draft is active, confirm changing target requires an explicit discard decision.
-9. Tab to the chat composer, enter a request, and press `Cmd/Ctrl+Enter` to send. Tab to the declaration field. For a draft without imports, confirm `Required imports` is absent and diagnostics/status follow the declaration immediately; for a draft with imports, confirm the field is editable. Edit only the draft, then press `Cmd/Ctrl+Shift+V` to validate and `Cmd/Ctrl+Shift+C` to run focused checks when each contextual action is available.
-10. Confirm no Editor progress explanation or source selection subtitle is shown. Successful validation opens the read-only diff and Review beneath the same active-file header; Review combines scope, validation, checks, read-only impact/Git context, the exact Apply action, receipt, and Undo. Confirm Apply appears only after current focused checks and names the selected symbol and file; Apply has no generic confirmation dialog. Use **Edit draft** to return to the current draft, then modify it and confirm previous validation/checks are invalidated.
-11. During an open dialog or active request, press Escape and confirm only that dialog/request closes or cancels. With no active dialog/request, Escape leaves the current workspace and source unchanged.
-12. After Apply and Undo, confirm the selected source refreshes, the receipt names the guarded result, and old draft/check evidence is gone.
+1. Before opening a project, verify Open project and Cmd/Ctrl+O work. Cancel the
+   chooser and confirm the landing state remains. Project shortcuts must have no
+   action until a project opens. Restore must not call a provider or start a shell.
+2. Verify Project, Results and Editing groups have distinct labeled destinations.
+   Cmd/Ctrl+1–4 select Summary, Analysis, Bugs and Editor. Cmd/Ctrl+Tab cycles all
+   workspaces. Commands offers View Performance results and View Security results;
+   navigation preserves the selected file, draft and result filters.
+3. In Analysis, Start analysis opens a whole-project preview with file/stage scope,
+   exclusions, cache use, limits and request bounds. Confirm every required remote
+   destination and explicit Security intent. Admission is one operation; starting
+   a result page or applying a path filter must never launch another analysis.
+4. Verify Analysis contains progress, per-section states, failures and result
+   links. Pause settles at a stage boundary, Cancel stops further requests, and
+   Resume requires a fresh preview. After restart, retained progress is interrupted
+   or paused without dispatch authority. Check partial, failed, unavailable,
+   canceled and completed-empty evidence retain their distinct labels/counts.
+5. In each result page, inspect severity, provenance, source location, state and
+   detail disclosure. Filter by path without changing project-wide coverage.
+   Select a row, open source, then return; navigation must not prepare or apply a
+   fix. Only the explicit preparation action prefills Assistant. Performance source
+   hypotheses never claim measured speedup; Security rule matches and advisory
+   findings remain distinct. Bugs keeps separately trusted verified Go scans.
+6. Use Cmd/Ctrl+P to choose a file and Cmd/Ctrl+Shift+O to choose a declaration.
+   Source and diff must remain selectable/read-only. Relative paths disambiguate
+   equal basenames. Source drag selects text without changing the draft target.
+7. Editor retains Files and Context/Assistant/Review docks at 1000dp and above.
+   Below that width, Files and Context drawers are labeled. Open and dismiss each
+   drawer, leave Editor with one open, and verify predictable focus restoration.
+   Cmd/Ctrl+P must work again after dismissal; selected source stays intact.
+8. Open a Go file containing only `package main`. Select New function in the file
+   header or Context; Assistant focuses the name field without a model request.
+   New Go function and New Go type remain in Commands. Reject keywords, duplicate
+   names and invalid identifiers before sending. With an existing draft, cancel
+   a target-change discard prompt and verify the original draft is preserved.
+9. Send an explicit request in Assistant. Check readable model headings, code,
+   summary and expandable details. Edit only the declaration/import draft. Use
+   Cmd/Ctrl+Shift+V to validate and Cmd/Ctrl+Shift+C for eligible trusted checks.
+   Validation/check failures remain available in Review; request failures stay
+   beside the matching Assistant request. Copy long diagnostics without clipping.
+10. Review the exact diff, current validation and required checks. Apply names the
+    file and declaration and is unavailable for stale evidence. Edit draft clears
+    previous approval evidence. After explicit Apply/Undo, source refreshes and
+    Undo is limited to the immediately preceding unchanged Apply.
+11. Confirm Terminal is the sole bottom control and status details remain separate.
+    Ctrl+Shift+T opens a real shell in the project. Collapse/Enter reopen, workspace
+    changes and the 1000/999dp transition preserve PID, history and scrollback.
+    Resize the dock and verify real PTY dimensions change without losing content.
+12. With terminal focus, verify typing, Unicode paste, selection/copy, shell history,
+    Ctrl+C, scrolling and a disposable full-screen program. App shortcuts must not
+    steal ordinary shell input. Ctrl+Shift+F12 returns to Editor; Cmd/Ctrl+P then
+    opens the application palette. Hide terminal restores its opener's focus.
+13. Change the selected temporary file from the shell. Return to Editor/Review:
+    source refreshes and old draft/check/analysis evidence becomes stale. Reindex
+    is explicit for added/removed/renamed files. Project switch requires closing an
+    active shell; cancel preserves it. Close shell stops its children, Open shell
+    starts a new session, and application exit cleans up owned processes.
+14. Inspect idle, starting, running, exited, failed, closed and cleanup-pending
+    terminal labels. Failures remain visible and retry/close controls reachable.
+    At short windows and large text, verify long paths/errors, headings, badges,
+    disclosure controls, row actions and status details remain readable. Color
+    must supplement text labels for selection, severity, provenance and freshness.
 
-13. At supported text scaling, verify long relative paths, symbol names, diagnostics, command output, compact buttons, and fields remain readable through scrolling or ellipsis without horizontal clipping. Confirm primary, navigation, positive, attention, destructive, and neutral actions retain text labels and readable state in addition to their color.
-
-14. Where a current project/file/finding/proposal includes **Engineering insight**, Tab to its
-opener and use Enter or Space. Confirm it expands only already-returned AI interpretation, the
-scope label and any **Outdated — source changed** label are textual, and **Close insight**
-returns focus to the opener. Repeat at exactly `1000dp`, below `1000dp`, and at supported text
-scaling; confirm no drawer, modal, provider request, check, or source mutation occurs.
-
-
-Record runtime, viewport, scaling, input method and actual observations in the
-acceptance ledger. Screen-reader names/states, spoken output and reader cursor
-behavior are distinct evidence; claim only what was observed.
+Use Escape to dismiss only the top transient surface before canceling a request.
+With no transient surface or active request, Escape leaves source unchanged.
+Record runtime, viewport, text/density scale, input method and actual observations
+in the acceptance ledger. Historical qualification limits remain unchanged.

@@ -1,11 +1,58 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
+  @Test
+  fun soleTerminalControlAnnouncesItsStateAndActivatesFromTheKeyboard() {
+    var opens = 0
+    ComposeVisualFixture(800, 100, 1.5f) {
+          TerminalBar(TerminalSessionState(), collapsed = true, onToggle = { opens++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Open terminal · Ctrl+Shift+T"))
+          assertEquals("Collapsed", fixture.stateDescription("Terminal"))
+          assertEquals(0, opens)
+          assertTrue(fixture.requestFocus("Terminal"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, opens)
+          listOf("Bugs & Problems", "Checks", "Output").forEach { assertFalse(fixture.hasText(it)) }
+        }
+  }
+
+  @Test
+  fun packageOnlyCreationHasAnExplicitNameAndKeepsSourceReadOnly() {
+    val file =
+        ProjectFileInfo(
+            "empty.go",
+            "base",
+            "empty.go",
+            language = "Go",
+            sizeBytes = 13,
+            lineCount = 1,
+            modifiedAt = "",
+            binary = false,
+            content = "package main\n")
+    var requests = 0
+    ComposeVisualFixture(800, 100, 1.5f) {
+          NewFunctionButton(file.path, declarationCreationBlockedReason(file), { requests++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("New function in empty.go"))
+          assertTrue(fixture.requestFocus("New function"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, requests)
+          assertEquals("package main\n", file.content)
+        }
+  }
+
   @Test
   fun keyboardShortcutsCoverFocusedWorkflowWithoutMouse() {
     assertEquals(DesktopShortcut.OpenFile, desktopShortcut("P", primaryModifier = true))

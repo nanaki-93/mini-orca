@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -19,25 +18,6 @@ type performanceReviewSnapshot struct {
 	file          project.IndexFile
 	source        string
 	policyVersion string
-}
-
-func (s *Service) reviewPerformanceFile(ctx context.Context, path string, confirmRemoteProvider bool, authorizePublication func(func() error) error) (*project.PerformanceFileReport, error) {
-	if err := s.RequireRemoteConfirmation(config.AnalyzeModelScope, confirmRemoteProvider); err != nil {
-		return nil, err
-	}
-	snapshot, err := s.preparePerformanceReview(path)
-	if err != nil {
-		return nil, err
-	}
-	result, err := s.requestPerformanceReview(ctx, snapshot, nil)
-	if err != nil {
-		return nil, err
-	}
-	findings, warning, err := project.ParsePerformanceFindings(result.Content, snapshot.file.Path, snapshot.source, snapshot.file.Symbols)
-	if err != nil {
-		return nil, err
-	}
-	return s.publishPerformanceReview(ctx, snapshot, result, findings, warning, authorizePublication)
 }
 
 func (s *Service) preparePerformanceReview(path string) (performanceReviewSnapshot, error) {

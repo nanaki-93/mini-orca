@@ -7,17 +7,28 @@ The Kotlin/Compose Desktop client talks to a Go daemon on loopback.
 ## Use it
 
 1. Open a local project and inspect its summary, files and symbols.
-2. Review a bug suggestion or select a declaration to change. New declarations
-   must belong to the current file and have an absent valid name.
-3. Send a short request in the file-bound Assistant. Edit only the returned
-   declaration/import draft; source and composed diffs stay selectable/read-only.
-4. Validate, run focused checks and inspect Review. Apply names the exact file
-   and declaration. Undo restores only the immediately preceding unchanged Apply.
+2. Select **Start analysis** in Analysis. Review the whole-project inventory,
+   request bounds and model destinations, then confirm the displayed run.
+   Analysis tracks progress; Bugs, Performance and Security show separate results.
+3. Open a finding or select a declaration in Editor. To add a Go function, use
+   **New function** in the file header or Context, including in a package-only file.
+   Enter an absent valid Go name and a short request in Assistant.
+4. Edit only the returned declaration/import draft; source and composed diffs stay
+   selectable/read-only. Changing the target of an existing draft requires discard.
+5. Validate, explicitly trust and run focused checks, then inspect Review. Apply
+   names the exact file and declaration. Undo restores the immediately preceding
+   unchanged Apply.
+6. Open **Terminal** at the bottom, or press **Ctrl+Shift+T**, for a local shell in
+   the project. Hiding it preserves the process; **Close shell** ends it.
+   **Ctrl+Shift+F12** returns keyboard focus to the editor.
 
-Analysis, deterministic scans, advisory Security review and selected benchmark
-runs are explicit actions. Findings retain provenance and freshness. Security
-keeps local rule matches separate from AI suggestions, and remote review consumes
-a fresh Security-specific Analyze confirmation.
+A file filter changes the result view, never the analysis scope. Pause waits for
+an active stage; Cancel stops further work. Resume uses a fresh preview and intent;
+completed or canceled runs need a new Start. The run coordinates specialized
+semantic, Performance, Security-rule and advisory Security stages and can make
+multiple model requests. Security intent is explicit even with a local provider.
+Verified Go scans, focused checks and selected benchmarks remain separate trusted
+execution actions. Source hypotheses are not runtime measurements.
 
 Mini-Orca does not automatically edit source, run scans, write tests to your
 project, commit or push. Exact declaration editing is currently Go-first; other
@@ -52,10 +63,32 @@ Three configured scopes serve project/Performance analysis (`analyze`), file/bug
 analysis (`bug`) and declaration proposals/repairs (`function`).
 
 Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`,
-`file-analysis/`, `findings.json`, `performance/files/`, job state under `sessions/`,
+`file-analysis/`, `findings.json`, `performance/files/`, unified progress in
+`analysis/run.json`, legacy job history under `sessions/`,
 Apply receipts/audit under `sessions/`, and Undo data under `backups/`. These are
 application metadata. Restore uses local persisted analysis without a model call.
 See the [API guide](docs/api-contract.md) for current contracts and boundaries.
+
+## Existing projects and preferences
+
+No model-scope configuration rename is required. Fresh semantic reports use prompt
+`file-analysis-v14` with explicit Bugs/Performance/Security risk categories. The
+persisted semantic report schema remains `1`; uncategorized historical findings
+remain visible as historical/unclassified evidence and never enter new category
+counts. Changed prompt/provider/source identities require fresh analysis; reading
+or restoring history makes no model request.
+
+Unified runs use schema `1` in `.mini-orca/analysis/run.json`. Interrupted runs
+retain their attempt ledger and need a fresh preview before resuming. Older
+Analyze-all/Performance jobs remain readable but cannot inherit fresh dispatch
+authority; start a new run when they cannot be resumed. See the
+[API migration details](docs/api-contract.md#legacy-job-migration-ana-05).
+
+Saved sidebar widths and bottom height survive. Removed Problems/Checks/Output
+selections are discarded, and Terminal starts collapsed without launching a shell.
+Mini-Orca does not save terminal transcripts or send them to a model. Returning to
+Editor/Review rechecks the selected file and invalidates stale evidence; reindex
+explicitly after adding, removing or renaming files in the terminal.
 
 ## Development and documentation
 

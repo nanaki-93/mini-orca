@@ -774,6 +774,8 @@ func TestAnalyzeAllCancelRetainsCompletedEntries(t *testing.T) {
 	if _, err := service.CancelAnalyzeAll(); err != nil {
 		t.Fatal(err)
 	}
+	// The legacy canceled projection can precede the worker's final durable save.
+	waitAnalysisWindow(t, service)
 	job := waitForAnalyzeAll(t, service, analysisAllStateCanceled)
 	waitForTestSignal(t, secondCanceled, "second analysis cancellation")
 	if job.Files[0].Status != analysisAllFileCompleted || job.Files[1].Status == analysisAllFileCompleted {

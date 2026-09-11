@@ -452,10 +452,8 @@ func validateSemanticAnalysisResponse(output string, target project.IndexFile, s
 		return semanticAnalysisResponse{Diagnostics: parsed.Diagnostics}, parentErr
 	}
 
-	for _, risk := range parsed.Risks {
-		if !risk.Category.Valid() || risk.Severity != "low" && risk.Severity != "medium" && risk.Severity != "high" || risk.Summary == "" {
-			return semanticAnalysisResponse{Diagnostics: parsed.Diagnostics}, fmt.Errorf("semantic analysis contains an invalid risk")
-		}
+	if err := validateSemanticRisks(parsed.Risks); err != nil {
+		return semanticAnalysisResponse{Diagnostics: parsed.Diagnostics}, err
 	}
 	limitFileAnalysisInsights(&parsed.EngineeringInsight, parsed.Risks, parsed.Suggestions)
 	return parsed, nil
@@ -704,4 +702,13 @@ func validateGoTestCandidate(candidate *project.GoTestCandidateSpec, target proj
 func validGoTestName(name string) bool {
 	runes := []rune(name)
 	return len(runes) > len("Test") && strings.HasPrefix(name, "Test") && unicode.IsUpper(runes[len("Test")])
+}
+
+func validateSemanticRisks(risks []project.Finding) error {
+	for _, risk := range risks {
+		if !risk.Category.Valid() || risk.Severity != "low" && risk.Severity != "medium" && risk.Severity != "high" || risk.Summary == "" {
+			return fmt.Errorf("semantic analysis contains an invalid risk")
+		}
+	}
+	return nil
 }

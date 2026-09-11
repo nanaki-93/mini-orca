@@ -5,13 +5,13 @@ make model explanations and actions readable at a glance, run project-wide analy
 with separate **Bugs / Performance / Security** result pages, expose new-function
 generation, and replace the duplicated bottom tools with a real terminal. The user
 approved the plan and authorized scheduled implementation on **2026-09-11**.
-Task preparation and scheduler setup do not mark any implementation complete.
+Implementation completed on **2026-09-12**: all 17 cards passed their acceptance gates.
 
 This file owns product decisions and the execution/status ledger. `docs/tasks.md`
 owns the current implementation cards. Previous status and acceptance records
 remain below; their automation and commit instructions do not extend this scope.
 
-## Findings from the current checkout
+## Planning baseline — 2026-09-11
 
 | Request | What exists | What needs to change |
 | --- | --- | --- |
@@ -193,8 +193,9 @@ Extra High** (`gpt-6-astra`, `xhigh`). The executable cards now live in
 [docs/tasks.md](docs/tasks.md); [tasks/README.md](tasks/README.md) owns the run procedure.
 
 Scheduler: **Mini-Orca UX implementation**, every **20 minutes**, attached to this
-Codex task; automation ID **mini-orca-ux-implementation**, status **Active**.
-The user authorized TERM-02 repair; the ordered scheduler resumes after its verified local commit.
+Codex task; automation ID **mini-orca-ux-implementation**, status **Paused**.
+TERM-02 repair is committed (`5678e48`); all 17 cards are accepted. The scheduler
+was paused through the app after final validation on 2026-09-12.
 The app accepted the task model override `gpt-6-astra` / `xhigh`; this heartbeat
 uses the task's settings rather than a separate scheduler model field. One card per wake,
 strictly in order, with required checks and diff review before acceptance.
@@ -206,13 +207,13 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 16/17. **Active writer:** none after BOTTOM-02 acceptance. **Next:** VERIFY-01.
+**Accepted:** 17/17. **Active writer:** none. **Next:** none. Scheduler **Paused**.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
 | 1 | [UX-01](docs/tasks.md#task-ux-01--establish-readable-result-primitives) | Establish readable result primitives | Complete; locally committed |
 | 2 | [UX-02](docs/tasks.md#task-ux-02--apply-the-hierarchy-to-explanations-and-model-responses) | Apply the hierarchy to explanations and model responses | Complete; locally committed |
-| 3 | [CREATE-01](docs/tasks.md#task-create-01--expose-creation-in-the-normal-file-workflow) | Expose creation in the normal file workflow | Complete |
+| 3 | [CREATE-01](docs/tasks.md#task-create-01--expose-creation-in-the-normal-file-workflow) | Expose creation in the normal file workflow | Complete; locally committed |
 | 4 | [CREATE-02](docs/tasks.md#task-create-02--close-creation-validation-and-lifecycle-gaps) | Close creation validation and lifecycle gaps | Complete; locally committed |
 | 5 | [ANA-01](docs/tasks.md#task-ana-01--define-categorized-results-and-unified-run-contracts) | Define categorized results and unified run contracts | Complete; locally committed |
 | 6 | [ANA-02](docs/tasks.md#task-ana-02--produce-and-validate-explicit-semantic-categories) | Produce and validate explicit semantic categories | Complete; locally committed |
@@ -226,7 +227,19 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 14 | [TERM-02](docs/tasks.md#task-term-02--integrate-the-interactive-terminal-pane) | Integrate the interactive terminal pane | Complete; locally committed |
 | 15 | [BOTTOM-01](docs/tasks.md#task-bottom-01--preserve-unique-diagnostics-in-their-owning-workflows) | Preserve unique diagnostics in their owning workflows | Complete; locally committed |
 | 16 | [BOTTOM-02](docs/tasks.md#task-bottom-02--replace-the-bottom-tools-with-terminal-only) | Replace the bottom tools with Terminal only | Complete; locally committed |
-| 17 | [VERIFY-01](docs/tasks.md#task-verify-01--validate-the-complete-interaction-and-document-support) | Validate the complete interaction and document support | Queued |
+| 17 | [VERIFY-01](docs/tasks.md#task-verify-01--validate-the-complete-interaction-and-document-support) | Validate the complete interaction and document support | Complete; locally committed |
+
+**Accepted VERIFY-01 — 2026-09-12:** The complete gate, package build and packaged
+PTY smoke pass. Final counts: 403 isolated and 405 working-tree desktop tests,
+plus 43 explicitly rerun component checks. Native checks cover progress/results,
+1000/999dp, short windows, 125/150% text, terminal input/resize, exit/reopen/close and
+focus return. Two focused corrections removed unused backend wrappers, split
+analysis responsibilities within the quality limit, and fixed canceled-worker
+test cleanup. Public contracts and guards remain intact. Usage, report identity,
+preference migration and host/evidence limits are documented in
+[release acceptance](docs/RELEASE_ACCEPTANCE.md#ux-implementation-acceptance--2026-09-12).
+All ten unrelated UI edits remain preserved and excluded from the task commit.
+The scheduler is Paused; no further work or live provider campaign is scheduled.
 
 **Accepted BOTTOM-02 — 2026-09-12:** Terminal is the sole bottom control; the
 old Problems, Checks and Output panels, tab counts and dead helpers are removed.
@@ -235,8 +248,8 @@ launching a shell. Dock resizing and the bounded narrow overlay preserve the sam
 process. Passed 61 focused, 400 full working-tree and 398 isolated-candidate tests,
 quality gates and packaging. Native checks verified hide/reopen, PTY resizing,
 1000/999dp rehosting, short-window layout, keyboard focus and app-exit cleanup.
-One correction; all ten unrelated UI edits remain preserved and excluded. VERIFY-01
-is next; the Astra Extra High scheduler remains Active.
+One correction; all ten unrelated UI edits remained preserved and excluded.
+VERIFY-01 followed in the next wake, as recorded above.
 
 **Accepted BOTTOM-01 — 2026-09-12:** Check/validation details stay in Review,
 request failures appear beside their Assistant target, verified-scan commands and

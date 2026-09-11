@@ -91,97 +91,15 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	preview := &AnalysisRunPreview{CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
 		Identity: AnalysisQueueIdentity{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, PolicyFingerprint: policy.Version(), ProviderFingerprint: fingerprint},
 		Files:    []AnalysisPlannedFile{}, Excluded: []AnalysisExcludedFile{}, Providers: providers}
-	files := append([]project.IndexFile(nil), index.Files...)
-	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	root := s.manager.Root()
-	paths, err := project.WalkProjectFiles(ctx, project.ProjectWalkOptions{Root: root, IncludeSymlinkFiles: true, MaxFiles: maxAnalysisInventoryFiles})
-	if err != nil {
+	if err := s.planAnalysisFiles(ctx, root, *analysis, index.Files, policy, request, preview); err != nil {
 		return nil, err
 	}
-	indexed := make(map[string]bool, len(files))
-	for _, file := range files {
-		indexed[file.Path] = true
-	}
-	for _, path := range paths {
-		if !policy.Decide(path).Include {
-			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: path, Reason: "Excluded by source policy."})
-		} else if !indexed[path] {
-			return nil, project.ErrRevisionConflict
-		}
-	}
-	for _, file := range files {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		reason := ""
-		switch {
-		case !policy.Decide(file.Path).Include:
-			reason = "Excluded by source policy."
-		case file.Binary || file.Language == "":
-			reason = "Not a supported text source file."
-		case file.SizeBytes > maxSemanticAnalysisBytes && file.SizeBytes > project.PerformanceMaxSourceBytes && file.SizeBytes > project.SecurityMaxSourceBytes:
-			reason = "Source exceeds analyzer size limits."
-		}
-		if reason == "Excluded by source policy." {
-			continue
-		}
-		if reason != "" {
-			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: file.Path, Reason: reason})
-			continue
-		}
-		info, err := project.GetFileInfo(root, file.Path)
-		if err != nil {
-			return nil, err
-		}
-		if info.ContentHash != file.ContentHash || info.Binary {
-			return nil, project.ErrRevisionConflict
-		}
-		planned := AnalysisPlannedFile{AnalysisFileIdentity: AnalysisFileIdentity{Path: file.Path, ContentHash: file.ContentHash, Language: file.Language}, SizeBytes: file.SizeBytes, Stages: []AnalysisStagePlan{}}
-		for _, stage := range analysisStages {
-			plan := AnalysisStagePlan{Stage: stage, Eligible: true}
-			switch {
-			case stage == AnalysisStageSemantic && (!isSemanticAnalysisCandidate(file) || file.SizeBytes > maxSemanticAnalysisBytes):
-				plan.Eligible = false
-				plan.Reason = "Not eligible for semantic source analysis."
-			case stage == AnalysisStagePerformance && file.SizeBytes > project.PerformanceMaxSourceBytes:
-				plan.Eligible = false
-				plan.Reason = "Source exceeds analyzer size limits."
-			case (stage == AnalysisStageSecurityRules || stage == AnalysisStageSecurityAI) && file.SizeBytes > project.SecurityMaxSourceBytes:
-				plan.Eligible = false
-				plan.Reason = "Source exceeds analyzer size limits."
-			case stage == AnalysisStageSecurityRules && file.Language != "Go":
-				plan.Eligible = false
-				plan.Reason = "Passive security rules require a Go source file."
-			}
-			if stage != AnalysisStageSecurityRules {
-				provider := providers[1]
-				runtime := s.runtimes.analyze
-				if stage == AnalysisStageSemantic {
-					provider = providers[0]
-					runtime = s.runtimes.bug
-				}
-				plan.ProviderID = provider.ID
-				if runtime.client == nil {
-					plan.Reason = "The model for this stage is not configured."
-				}
-				plan.MaxModelRequests = min(request.Limits.MaxAttemptsPerStage, runtime.effective.MaxRetries+1)
-			}
-			if plan.Eligible {
-				plan.Cached, err = s.analysisStageCached(*analysis, file, policy, stage)
-				if err != nil {
-					return nil, err
-				}
-				if request.Refresh && stage != AnalysisStageSecurityRules {
-					plan.Cached = false
-				}
-			}
-			if !plan.Eligible || plan.Cached || plan.Reason == "The model for this stage is not configured." {
-				plan.MaxModelRequests = 0
-			}
-			planned.Stages = append(planned.Stages, plan)
-		}
-		preview.Files = append(preview.Files, planned)
-	}
+	return s.completeAnalysisPreviewLocked(ctx, root, preview, request)
+}
+
+func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string, preview *AnalysisRunPreview, request AnalysisPreviewRequest) (*AnalysisRunPreview, error) {
+	var err error
 	if request.compatibilityStage != "" {
 		if err := s.scopeCompatibilityPreview(preview, request.ResumeRun); err != nil {
 			return nil, err
@@ -193,33 +111,11 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 		return nil, err
 	}
 	if request.ResumeRun != nil {
-		run := s.analysisRun.run
-		if run == nil || run.Identity != *request.ResumeRun || run.Identity.AnalysisQueueIdentity != preview.Identity || run.Plan.Limits != request.Limits || run.Plan.Refresh != request.Refresh {
-			return nil, project.ErrRevisionConflict
-		}
-		for i := range preview.Files {
-			for j := range preview.Files[i].Stages {
-				plan := &preview.Files[i].Stages[j]
-				progress := run.Files[i].Stages[j]
-				if !analysisStageNeedsWork(progress.Status) {
-					plan.MaxModelRequests = 0
-					continue
-				}
-				plan.MaxModelRequests = min(plan.MaxModelRequests, max(0, request.Limits.MaxAttemptsPerStage-progress.Attempts))
-			}
+		if err := s.applyAnalysisResumeBudget(preview, request); err != nil {
+			return nil, err
 		}
 	}
-	for _, file := range preview.Files {
-		for _, stage := range file.Stages {
-			if stage.MaxModelRequests > 0 {
-				preview.ExpectedModelRequests++
-				preview.MaxModelRequests += stage.MaxModelRequests
-				if stage.Stage == AnalysisStageSecurityAI {
-					preview.SecurityReviewIntentRequired = true
-				}
-			}
-		}
-	}
+	countAnalysisPreviewRequests(preview)
 	preview.PreviewID, err = analysisFingerprint(struct {
 		Preview *AnalysisRunPreview
 		Resume  *AnalysisRunIdentity
@@ -276,26 +172,14 @@ func (s *Service) validateAnalysisQueue(ctx context.Context, root string, plan *
 		return project.ErrRevisionConflict
 	}
 	if sources {
-		paths, err := project.WalkProjectFiles(ctx, project.ProjectWalkOptions{Root: root, IncludeSymlinkFiles: true, MaxFiles: maxAnalysisInventoryFiles})
-		if err != nil {
+		if err := validateAnalysisInventory(ctx, root, plan); err != nil {
 			return err
 		}
-		captured := make(map[string]bool, len(plan.Files)+len(plan.Excluded))
-		for _, file := range plan.Files {
-			captured[file.Path] = true
-		}
-		for _, file := range plan.Excluded {
-			captured[file.Path] = true
-		}
-		if len(paths) != len(captured) {
-			return project.ErrRevisionConflict
-		}
-		for _, path := range paths {
-			if !captured[path] {
-				return project.ErrRevisionConflict
-			}
-		}
 	}
+	return validateAnalysisFiles(ctx, root, plan, index, policy, sources)
+}
+
+func validateAnalysisFiles(ctx context.Context, root string, plan *AnalysisRunPreview, index *project.ProjectIndex, policy *project.ContextPolicy, sources bool) error {
 	indexed := make(map[string]project.IndexFile, len(index.Files))
 	for _, file := range index.Files {
 		indexed[file.Path] = file
@@ -369,4 +253,176 @@ func analysisQueueFingerprint(preview *AnalysisRunPreview) (string, error) {
 		}
 	}
 	return analysisFingerprint(stable)
+}
+
+func (s *Service) planAnalysisFiles(ctx context.Context, root string, analysis project.Analysis, indexedFiles []project.IndexFile, policy *project.ContextPolicy, request AnalysisPreviewRequest, preview *AnalysisRunPreview) error {
+	files := append([]project.IndexFile(nil), indexedFiles...)
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	if err := collectAnalysisInventoryExclusions(ctx, root, files, policy, preview); err != nil {
+		return err
+	}
+	for _, file := range files {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		reason := analysisFileExclusion(file, policy)
+		if reason == "Excluded by source policy." {
+			continue
+		}
+		if reason != "" {
+			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: file.Path, Reason: reason})
+			continue
+		}
+		info, err := project.GetFileInfo(root, file.Path)
+		if err != nil {
+			return err
+		}
+		if info.ContentHash != file.ContentHash || info.Binary {
+			return project.ErrRevisionConflict
+		}
+		planned := AnalysisPlannedFile{AnalysisFileIdentity: AnalysisFileIdentity{Path: file.Path, ContentHash: file.ContentHash, Language: file.Language}, SizeBytes: file.SizeBytes, Stages: []AnalysisStagePlan{}}
+		for _, stage := range analysisStages {
+			plan, err := s.planAnalysisStage(analysis, file, policy, stage, request, preview.Providers)
+			if err != nil {
+				return err
+			}
+			planned.Stages = append(planned.Stages, plan)
+		}
+		preview.Files = append(preview.Files, planned)
+	}
+	return nil
+}
+
+func collectAnalysisInventoryExclusions(ctx context.Context, root string, files []project.IndexFile, policy *project.ContextPolicy, preview *AnalysisRunPreview) error {
+	paths, err := project.WalkProjectFiles(ctx, project.ProjectWalkOptions{Root: root, IncludeSymlinkFiles: true, MaxFiles: maxAnalysisInventoryFiles})
+	if err != nil {
+		return err
+	}
+	indexed := make(map[string]bool, len(files))
+	for _, file := range files {
+		indexed[file.Path] = true
+	}
+	for _, path := range paths {
+		if !policy.Decide(path).Include {
+			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: path, Reason: "Excluded by source policy."})
+		} else if !indexed[path] {
+			return project.ErrRevisionConflict
+		}
+	}
+	return nil
+}
+
+func analysisFileExclusion(file project.IndexFile, policy *project.ContextPolicy) string {
+	reason := ""
+	switch {
+	case !policy.Decide(file.Path).Include:
+		reason = "Excluded by source policy."
+	case file.Binary || file.Language == "":
+		reason = "Not a supported text source file."
+	case file.SizeBytes > maxSemanticAnalysisBytes && file.SizeBytes > project.PerformanceMaxSourceBytes && file.SizeBytes > project.SecurityMaxSourceBytes:
+		reason = "Source exceeds analyzer size limits."
+	}
+	return reason
+}
+
+func analysisStageExclusion(file project.IndexFile, stage AnalysisStage) string {
+	switch {
+	case stage == AnalysisStageSemantic && (!isSemanticAnalysisCandidate(file) || file.SizeBytes > maxSemanticAnalysisBytes):
+		return "Not eligible for semantic source analysis."
+	case stage == AnalysisStagePerformance && file.SizeBytes > project.PerformanceMaxSourceBytes:
+		return "Source exceeds analyzer size limits."
+	case (stage == AnalysisStageSecurityRules || stage == AnalysisStageSecurityAI) && file.SizeBytes > project.SecurityMaxSourceBytes:
+		return "Source exceeds analyzer size limits."
+	case stage == AnalysisStageSecurityRules && file.Language != "Go":
+		return "Passive security rules require a Go source file."
+	}
+	return ""
+}
+
+func (s *Service) planAnalysisStage(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage, request AnalysisPreviewRequest, providers []AnalysisProviderRequirement) (AnalysisStagePlan, error) {
+	var err error
+	reason := analysisStageExclusion(file, stage)
+	plan := AnalysisStagePlan{Stage: stage, Eligible: reason == "", Reason: reason}
+	if stage != AnalysisStageSecurityRules {
+		provider := providers[1]
+		runtime := s.runtimes.analyze
+		if stage == AnalysisStageSemantic {
+			provider = providers[0]
+			runtime = s.runtimes.bug
+		}
+		plan.ProviderID = provider.ID
+		if runtime.client == nil {
+			plan.Reason = "The model for this stage is not configured."
+		}
+		plan.MaxModelRequests = min(request.Limits.MaxAttemptsPerStage, runtime.effective.MaxRetries+1)
+	}
+	if plan.Eligible {
+		plan.Cached, err = s.analysisStageCached(analysis, file, policy, stage)
+		if err != nil {
+			return AnalysisStagePlan{}, err
+		}
+		if request.Refresh && stage != AnalysisStageSecurityRules {
+			plan.Cached = false
+		}
+	}
+	if !plan.Eligible || plan.Cached || plan.Reason == "The model for this stage is not configured." {
+		plan.MaxModelRequests = 0
+	}
+	return plan, nil
+}
+
+func (s *Service) applyAnalysisResumeBudget(preview *AnalysisRunPreview, request AnalysisPreviewRequest) error {
+	run := s.analysisRun.run
+	if run == nil || run.Identity != *request.ResumeRun || run.Identity.AnalysisQueueIdentity != preview.Identity || run.Plan.Limits != request.Limits || run.Plan.Refresh != request.Refresh {
+		return project.ErrRevisionConflict
+	}
+	for i := range preview.Files {
+		for j := range preview.Files[i].Stages {
+			plan := &preview.Files[i].Stages[j]
+			progress := run.Files[i].Stages[j]
+			if !analysisStageNeedsWork(progress.Status) {
+				plan.MaxModelRequests = 0
+				continue
+			}
+			plan.MaxModelRequests = min(plan.MaxModelRequests, max(0, request.Limits.MaxAttemptsPerStage-progress.Attempts))
+		}
+	}
+	return nil
+}
+
+func countAnalysisPreviewRequests(preview *AnalysisRunPreview) {
+	for _, file := range preview.Files {
+		for _, stage := range file.Stages {
+			if stage.MaxModelRequests > 0 {
+				preview.ExpectedModelRequests++
+				preview.MaxModelRequests += stage.MaxModelRequests
+				if stage.Stage == AnalysisStageSecurityAI {
+					preview.SecurityReviewIntentRequired = true
+				}
+			}
+		}
+	}
+}
+
+func validateAnalysisInventory(ctx context.Context, root string, plan *AnalysisRunPreview) error {
+	paths, err := project.WalkProjectFiles(ctx, project.ProjectWalkOptions{Root: root, IncludeSymlinkFiles: true, MaxFiles: maxAnalysisInventoryFiles})
+	if err != nil {
+		return err
+	}
+	captured := make(map[string]bool, len(plan.Files)+len(plan.Excluded))
+	for _, file := range plan.Files {
+		captured[file.Path] = true
+	}
+	for _, file := range plan.Excluded {
+		captured[file.Path] = true
+	}
+	if len(paths) != len(captured) {
+		return project.ErrRevisionConflict
+	}
+	for _, path := range paths {
+		if !captured[path] {
+			return project.ErrRevisionConflict
+		}
+	}
+	return nil
 }

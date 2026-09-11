@@ -81,10 +81,7 @@ func validAnalysisCompatibility(run *AnalysisRun) bool {
 	if len(plan.Files) > plan.Limits.BatchFiles {
 		return false
 	}
-	if plan.CompatibilityStage == AnalysisStageSemantic && (plan.CompatibilityBudget != 0 || run.CompatibilityElapsed != 0) {
-		return false
-	}
-	if plan.CompatibilityStage == AnalysisStagePerformance && (plan.CompatibilityBudget <= 0 || plan.CompatibilityBudget > maxPerformanceRunBudget || run.CompatibilityElapsed < 0 || run.CompatibilityElapsed > plan.CompatibilityBudget) {
+	if !validCompatibilityBudget(run) {
 		return false
 	}
 	for _, file := range plan.Files {
@@ -125,11 +122,8 @@ func (s *Service) startCompatibilityRun(ctx context.Context, stage AnalysisStage
 	}
 	if c.run != nil && legacyRunActive(c.run.Status) {
 		if c.run.Plan.CompatibilityStage == stage && c.fault == nil && c.run.Status != AnalysisRunCanceling {
-			if stage == AnalysisStagePerformance {
-				current := performanceProjection(c.run, c.root)
-				if options.QueueID != "" && options.QueueID != current.QueueID || options.PolicyFingerprint != "" && options.PolicyFingerprint != current.PolicyFingerprint {
-					return nil, project.ErrRevisionConflict
-				}
+			if err := validateCompatibilityQueue(c.run, c.root, stage, options); err != nil {
+				return nil, err
 			}
 			return cloneAnalysisRun(c.run), nil
 		}
@@ -139,11 +133,8 @@ func (s *Service) startCompatibilityRun(ctx context.Context, stage AnalysisStage
 	if err != nil {
 		return nil, err
 	}
-	if stage == AnalysisStagePerformance {
-		queue := performanceProjection(newAnalysisRun(*preview), s.manager.Root())
-		if (options.QueueID != "" && options.QueueID != queue.QueueID) || (options.PolicyFingerprint != "" && options.PolicyFingerprint != queue.PolicyFingerprint) {
-			return nil, project.ErrRevisionConflict
-		}
+	if err := validateCompatibilityQueue(newAnalysisRun(*preview), s.manager.Root(), stage, options); err != nil {
+		return nil, err
 	}
 	confirmations := compatibilityConfirmations(preview, confirmed)
 	return s.startAnalysisRunLocked(ctx, AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, Confirmations: confirmations}, stage, budget)
@@ -249,4 +240,26 @@ func performanceProjection(run *AnalysisRun, root string) *PerformanceJob {
 	}
 	job.QueueID = performanceQueueID(job.ProjectID, job.ProjectRevision, job.PolicyFingerprint, job.Files)
 	return job
+}
+
+func validCompatibilityBudget(run *AnalysisRun) bool {
+	plan := run.Plan
+	if plan.CompatibilityStage == AnalysisStageSemantic && (plan.CompatibilityBudget != 0 || run.CompatibilityElapsed != 0) {
+		return false
+	}
+	if plan.CompatibilityStage == AnalysisStagePerformance && (plan.CompatibilityBudget <= 0 || plan.CompatibilityBudget > maxPerformanceRunBudget || run.CompatibilityElapsed < 0 || run.CompatibilityElapsed > plan.CompatibilityBudget) {
+		return false
+	}
+	return true
+}
+
+func validateCompatibilityQueue(run *AnalysisRun, root string, stage AnalysisStage, options PerformanceJobOptions) error {
+	if stage != AnalysisStagePerformance {
+		return nil
+	}
+	queue := performanceProjection(run, root)
+	if (options.QueueID != "" && options.QueueID != queue.QueueID) || (options.PolicyFingerprint != "" && options.PolicyFingerprint != queue.PolicyFingerprint) {
+		return project.ErrRevisionConflict
+	}
+	return nil
 }
