@@ -783,9 +783,11 @@ class DesktopWorkflowPresenter(
             if (controller.cancelChatLoad(request, fileRequest)) publish()
             throw CancellationException()
           } catch (error: Exception) {
-            if (activeTask == identity && controller.cancelChatLoad(request, fileRequest)) publish()
-            if (activeTask == identity)
-                modelRequestFailed(error, ModelScope.Function, "Chat request failed")
+            if (activeTask == identity && controller.cancelChatLoad(request, fileRequest)) {
+              val message =
+                  modelRequestFailureMessage(error, ModelScope.Function, "Chat request failed")
+              dispatch(DesktopEvent.ChatRequestFailed(ChatRequestFailure(chatTarget, message)))
+            }
           } finally {
             if (chatJob === coroutineContext[Job]) setOperation(generating = false)
           }
@@ -1263,9 +1265,17 @@ class DesktopWorkflowPresenter(
               snapshot.value.state.findings.scan == request.expectedScan)
 
   private fun modelRequestFailed(error: Exception, scope: ModelScope, fallback: String) {
+    dispatch(DesktopEvent.Failed(modelRequestFailureMessage(error, scope, fallback)))
+  }
+
+  private fun modelRequestFailureMessage(
+      error: Exception,
+      scope: ModelScope,
+      fallback: String
+  ): String {
     val staleConfirmation = staleRemoteConfirmationMessage(error, scope)
     if (staleConfirmation != null) setProviderConfirmation(scope, false)
-    dispatch(DesktopEvent.Failed(staleConfirmation ?: error.message ?: fallback))
+    return staleConfirmation ?: error.message ?: fallback
   }
 
   private fun clearSecurityReviewRemoteConfirmation() {

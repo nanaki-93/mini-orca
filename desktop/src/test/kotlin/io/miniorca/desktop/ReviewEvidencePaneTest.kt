@@ -6,6 +6,71 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ReviewEvidencePaneTest {
+
+  @Test
+  fun detailedChecksStayReachableForFailedSkippedAndStaleEvidenceWithoutExecuting() {
+    listOf("failed", "skipped", "stale").forEach { state ->
+      val current = draft()
+      val output = "compiler\u0000 diagnostic\n" + "details ".repeat(700)
+      val checks =
+          DraftCheckReport(
+              "main.go",
+              true,
+              checks =
+                  listOf(
+                      DraftCheck(
+                          "go test",
+                          true,
+                          if (state == "stale") "passed" else state,
+                          command = listOf("go", "test", "./..."),
+                          output = output)),
+              draftId = current.id,
+              draftRevision = current.revision,
+              draftHash = if (state == "stale") "old" else current.hash)
+      var calls = 0
+      ComposeVisualFixture(360, 900, 1.5f) {
+            ReviewToolWindow(
+                ReviewToolWindowState(
+                    project(),
+                    file(),
+                    null,
+                    null,
+                    editableDraft(current),
+                    current,
+                    checks,
+                    null,
+                    null,
+                    null,
+                    false),
+                ReviewToolWindowActions({ calls++ }, { calls++ }, { calls++ }),
+                DraftApplicationActions({ calls++ }, { calls++ }))
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickText(
+                if (state == "failed") "Failed check details" else "Focused check details")
+            fixture.render("bottom-review-$state-360-1.5")
+            assertTrue(fixture.hasText("$ go test ./..."))
+            assertTrue(fixture.hasText(sanitizedOutputText(output)))
+            assertFalse(fixture.hasText(output))
+            assertEquals(0, calls)
+          }
+    }
+  }
+
+  @Test
+  fun diagnosticSanitizationPreservesLinesAndTabsWhileBoundingRecordedOutput() {
+    assertEquals("line one\n\tline two", sanitizedOutputText("line one\n\tline two\u0000"))
+    assertEquals("01234\n… output truncated", sanitizedOutputText("0123456789", 5))
+    assertEquals("", sanitizedOutputText("\u0000\u0001"))
+    val failed =
+        DraftCheckReport(
+            "main.go",
+            false,
+            checks = listOf(DraftCheck("compile", true, "failed", output = "bad\u0000 token")))
+    assertEquals("compile: bad token", checkFailurePreview(failed))
+  }
+
   @Test
   fun validatedButUncheckedDraftStaysInReviewWithAnExplicitCheckAction() {
     val evidence =

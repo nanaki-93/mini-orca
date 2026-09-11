@@ -7,6 +7,50 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AnalysisWorkspaceStateTest {
+
+  @Test
+  fun analysisOwnsBoundedRunAndFileStageFailuresWithoutDispatchOnOpen() {
+    val failure = "scan\u0000 unavailable\n" + "context ".repeat(700)
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "failed",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress(
+                                    "semantic", "failed", 2, false, reason = failure)))))
+    var calls = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  resultProjectFixture(),
+                  ProjectAnalysisRunState(run = run, error = "Cannot resume\u0000 run")),
+              AnalysisWorkspaceActions(
+                  { calls++ }, { calls++ }, { calls++ }, { calls++ }, { calls++ }))
+        }
+        .use { fixture ->
+          fixture.render("bottom-analysis-failures-800-1.5")
+          assertTrue(fixture.hasText("Cannot resume  run"))
+          assertEquals(0, calls)
+        }
+    ComposeVisualFixture(800, 650) {
+          AnalysisFailureDetails(AnalysisStageFailure("main.go", "semantic", 2, failure))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(sanitizedOutputText(failure)))
+          assertFalse(fixture.hasText(failure))
+        }
+    assertEquals(
+        failure,
+        projectRunPresentation(ProjectAnalysisRunState(run = run)).failures.single().reason)
+  }
+
   @Test
   fun lifecycleCommandsFollowTheDaemonAndResumeRequiresFreshAdmission() {
     assertEquals(

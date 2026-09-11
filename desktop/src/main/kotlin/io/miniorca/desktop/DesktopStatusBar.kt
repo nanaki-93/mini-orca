@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -106,18 +109,21 @@ internal fun desktopStatusBarPresentation(
       file?.lineCount?.let { lineCount -> state.focusedLine.takeIf { it in 1..lineCount } }
   val analysis = state.analysis?.takeIf { it.path == file?.path }
   val segments = buildList {
-    state.error?.trim()?.takeIf(String::isNotBlank)?.let { error ->
-      add(
-          DesktopStatusSegment(
-              DesktopStatusSegmentType.Error,
-              "Error: $error",
-              error,
-              priority = CRITICAL_PRIORITY,
-              actionable = true,
-              attention = true,
-          ))
-    }
-    state.operation.trim().takeIf(String::isNotBlank)?.let { operation ->
+    state.error
+        ?.let { sanitizedOutputText(it) }
+        ?.takeIf(String::isNotBlank)
+        ?.let { error ->
+          add(
+              DesktopStatusSegment(
+                  DesktopStatusSegmentType.Error,
+                  "Error: $error",
+                  error,
+                  priority = CRITICAL_PRIORITY,
+                  actionable = true,
+                  attention = true,
+              ))
+        }
+    sanitizedOutputText(state.operation).takeIf(String::isNotBlank)?.let { operation ->
       val label = if (state.loading) "Working: $operation" else "Status: $operation"
       add(
           DesktopStatusSegment(
@@ -182,8 +188,13 @@ internal fun desktopStatusBarPresentation(
           DesktopStatusSegment(
               DesktopStatusSegmentType.Analysis,
               "File analysis: $status",
-              "File analysis for ${it.path}: $status",
+              "File analysis for ${it.path}: $status" +
+                  it.failure
+                      .takeIf(String::isNotBlank)
+                      ?.let { failure -> "\n${sanitizedOutputText(failure)}" }
+                      .orEmpty(),
               priority = MEDIUM_PRIORITY,
+              actionable = it.failure.isNotBlank(),
               attention = status in setOf("Stale", "Failed"),
           ))
     }
@@ -299,12 +310,11 @@ internal fun DesktopStatusDetailsDialog(
       onDismissRequest = onDismiss,
       title = { Text("Current status") },
       content = {
-        Column {
+        Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
           presentation.segments.forEach { segment ->
-            Text(
+            DiagnosticText(
                 segment.detail,
                 color = if (segment.attention) Warning else SecondaryText,
-                fontSize = 11.sp,
                 modifier = Modifier.padding(bottom = 6.dp),
             )
           }

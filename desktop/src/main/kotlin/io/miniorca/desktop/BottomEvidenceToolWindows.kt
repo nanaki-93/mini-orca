@@ -314,14 +314,7 @@ private fun SelectableOutputText(value: String) {
   }
 }
 
-internal fun sanitizedOutputText(value: String, limit: Int = MAX_OUTPUT_CHARS): String {
-  val cleaned = value.replace(CONTROL_CHARACTERS, " ").trim()
-  return if (cleaned.length <= limit) cleaned else "${cleaned.take(limit)}\n… output truncated"
-}
-
 private fun String.outputStatus(): String =
     trim().ifBlank { "Unknown" }.replaceFirstChar { it.uppercase() }
 
 private const val MAX_DIAGNOSTICS = 32
-private const val MAX_OUTPUT_CHARS = 4_096
-private val CONTROL_CHARACTERS = Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]")

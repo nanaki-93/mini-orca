@@ -6,6 +6,44 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class BugsWorkspaceStateTest {
+
+  @Test
+  fun verifiedScanDetailsRetainEveryPhaseCommandAndOutputWithoutStartingWork() {
+    val report =
+        GoScanReport(
+            status = "failed",
+            phases =
+                listOf(
+                    GoScanPhase(
+                        "go vet",
+                        "failed",
+                        listOf("go", "vet", "./..."),
+                        "vet\u0000 diagnostic",
+                        1),
+                    GoScanPhase(
+                        "go test",
+                        "skipped",
+                        listOf("go", "test", "./..."),
+                        "Skipped after cancellation")))
+    var executions = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(emptyList(), report, false),
+              BugsWorkspaceActions(
+                  FindingActions({}, {}, { _, _ -> }), { executions++ }, { executions++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Verified checks")
+          fixture.render("bottom-scan-details-800-1.5")
+          assertTrue(fixture.hasText("$ go vet ./..."))
+          assertTrue(fixture.hasText("vet  diagnostic"))
+          assertTrue(fixture.hasText("$ go test ./..."))
+          assertTrue(fixture.hasText("Skipped after cancellation"))
+          assertEquals(0, executions)
+        }
+  }
+
   private val verified =
       UnifiedFinding(
           id = "vet-1",
@@ -193,7 +231,7 @@ class BugsWorkspaceStateTest {
   }
 
   @Test
-  fun verifiedScanProgressOnlyPollsActiveScansAndShowsWarnings() {
+  fun verifiedScanProgressOnlyPollsActiveScansAndRetainsCompletionStatus() {
     assertFalse(shouldPollVerifiedScan(null))
     assertTrue(shouldPollVerifiedScan(GoScanReport(status = "running")))
     assertFalse(shouldPollVerifiedScan(GoScanReport(status = "completed")))
@@ -205,6 +243,5 @@ class BugsWorkspaceStateTest {
                 phases = listOf(GoScanPhase("go vet", "failed", output = "vet output"))))
     assertFalse(progress.canCancel)
     assertTrue(progress.summary.contains("results remain available"))
-    assertEquals(listOf("go vet: failed: vet output"), progress.warnings)
   }
 }

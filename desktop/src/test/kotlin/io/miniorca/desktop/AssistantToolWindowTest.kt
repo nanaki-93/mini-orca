@@ -14,6 +14,43 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AssistantToolWindowTest {
+
+  @Test
+  fun requestFailureAppearsBesideItsTargetWithoutExecutingAnotherRequest() {
+    val target = ChatTarget(ChatEditMode.CreateSymbol, "Build")
+    listOf(target, target.copy(symbol = "Other")).forEach { selected ->
+      var calls = 0
+      ComposeVisualFixture(360, 900, 1.5f) {
+            AssistantToolWindow(
+                AssistantToolWindowState(
+                    null,
+                    creationFile(),
+                    null,
+                    null,
+                    null,
+                    selected,
+                    ChatEditMode.CreateSymbol,
+                    selected.symbol,
+                    "Return a reusable result",
+                    false,
+                    ScopedModel(),
+                    false,
+                    FocusRequester(),
+                    FocusRequester(),
+                    requestFailure = ChatRequestFailure(target, "provider\u0000 unavailable")),
+                AssistantConversationActions({}, {}, {}, {}, { calls++ }, {}),
+                DraftEditorActions({}, {}, {}),
+                Modifier.fillMaxSize())
+          }
+          .use { fixture ->
+            fixture.render("bottom-request-failure-${selected.symbol}-360-1.5")
+            assertEquals(selected == target, fixture.hasText("Request failed"))
+            assertEquals(selected == target, fixture.hasText("provider  unavailable"))
+            assertEquals(0, calls)
+          }
+    }
+  }
+
   @Test
   fun creationFormFocusesTheNameThenBehaviorAndDoesNotGenerateUntilRequested() {
     DeclarationCreationKind.entries.forEach { kind ->
