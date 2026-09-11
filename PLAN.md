@@ -206,7 +206,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 9/17. **Active task/writer:** none. **Next:** ANA-06.
+**Accepted:** 10/17. **Active task/writer:** none. **Next:** ANA-07.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -219,7 +219,7 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 7 | [ANA-03](docs/tasks.md#task-ana-03--compose-the-per-file-analysis-stages) | Compose the per-file analysis stages | Complete; locally committed |
 | 8 | [ANA-04](docs/tasks.md#task-ana-04--implement-one-durable-bounded-run-lifecycle) | Implement one durable, bounded run lifecycle | Complete; locally committed |
 | 9 | [ANA-05](docs/tasks.md#task-ana-05--migrate-existing-jobs-and-expose-the-unified-api) | Migrate existing jobs and expose the unified API | Complete; locally committed |
-| 10 | [ANA-06](docs/tasks.md#task-ana-06--give-the-desktop-one-analysis-owner) | Give the desktop one analysis owner | Queued |
+| 10 | [ANA-06](docs/tasks.md#task-ana-06--give-the-desktop-one-analysis-owner) | Give the desktop one analysis owner | Complete; locally committed |
 | 11 | [ANA-07](docs/tasks.md#task-ana-07--separate-run-progress-from-the-three-result-pages) | Separate run progress from the three result pages | Queued |
 | 12 | [NAV-01](docs/tasks.md#task-nav-01--distinguish-run-results-and-editing-in-the-sidebar) | Distinguish run, results and editing in the sidebar | Queued |
 | 13 | [TERM-01](docs/tasks.md#task-term-01--prove-the-terminal-dependency-and-local-session-boundary) | Prove the terminal dependency and local-session boundary | Queued |
@@ -227,6 +227,17 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 15 | [BOTTOM-01](docs/tasks.md#task-bottom-01--preserve-unique-diagnostics-in-their-owning-workflows) | Preserve unique diagnostics in their owning workflows | Queued |
 | 16 | [BOTTOM-02](docs/tasks.md#task-bottom-02--replace-the-bottom-tools-with-terminal-only) | Replace the bottom tools with Terminal only | Queued |
 | 17 | [VERIFY-01](docs/tasks.md#task-verify-01--validate-the-complete-interaction-and-document-support) | Validate the complete interaction and document support | Queued |
+
+**Accepted ANA-06 — 2026-09-11:** The desktop now admits and follows one daemon-owned
+project analysis run. Existing analysis entry points open a shared preview naming
+all provider scopes and explicit Security intent. Consent is consumed before each
+Start/Resume attempt; reconnect and section reads preserve typed evidence and
+localized failures. The duplicate Analyze-all/Performance pollers and standalone
+AI Security review owner are removed. Deterministic scans, benchmarks and draft
+review retain their explicit workflows. The focused suite, all 378 desktop tests,
+quality gates and the isolated commit candidate passed. Two corrections and the
+component-render limitations are retained in the card. Result-page restructuring
+is ANA-07. The scheduler remains Active; no other card started this wake.
 
 **Accepted ANA-05 — 2026-09-11:** Analyze-all and Performance now use one durable
 analysis owner, with strict unified preview/start/read/control/result routes.

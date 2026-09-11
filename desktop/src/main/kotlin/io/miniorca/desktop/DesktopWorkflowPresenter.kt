@@ -77,37 +77,11 @@ data class DesktopWorkflowSnapshot(
   fun providerConfirmed(scope: ModelScope): Boolean = providerConfirmations.confirmed(scope)
 }
 
-private data class AnalyzeAllActionRequest(
-    val project: WorkflowProjectIdentity,
-    val generation: Long,
-    val expectedJob: AnalyzeAllJob? = null,
-    val requiresExpectedJob: Boolean = false,
-)
-
-private data class PerformanceActionRequest(
-    val project: WorkflowProjectIdentity,
-    val generation: Long,
-    val expectedJob: PerformanceJob? = null,
-    val requiresExpectedJob: Boolean = false,
-)
-
 private data class VerifiedScanActionRequest(
     val project: WorkflowProjectIdentity,
     val generation: Long,
     val expectedScan: GoScanReport? = null,
     val requiresExpectedScan: Boolean = false,
-)
-
-private data class PerformanceJobIdentity(
-    val project: WorkflowProjectIdentity,
-    val id: String,
-    val generation: String,
-    val queueId: String,
-)
-
-private data class PerformanceReportPublication(
-    val job: PerformanceJobIdentity?,
-    val generation: Long,
 )
 
 /**
@@ -137,20 +111,19 @@ class DesktopWorkflowPresenter(
           ::dispatch,
           ::clearSecurityReviewRemoteConfirmation)
 
+  private val analysisWorkflow =
+      DesktopAnalysisWorkflow(
+          api, scope, ioDispatcher, jobCoordinator, { controller.state }, ::dispatch)
+
   private var connectionJob: Job? = null
   private var projectJob: Job? = null
   private var fileJob: Job? = null
   private var enrichmentJobs: List<Job> = emptyList()
-  private var analysisJob: Job? = null
   private var declarationExplanationJob: Job? = null
   private var chatJob: Job? = null
   private var draftValidationJob: Job? = null
   private var draftChecksJob: Job? = null
-  private var analysisGeneration = 0L
   private var declarationExplanationGeneration = 0L
-  private var analyzeAllActionGeneration = 0L
-  private var performanceActionGeneration = 0L
-  private var performanceReportPublicationGeneration = 0L
   private var verifiedScanActionGeneration = 0L
   private var activeTask: WorkflowTaskIdentity? = null
   private var activeDraft: WorkflowDraftIdentity? = null
@@ -164,6 +137,7 @@ class DesktopWorkflowPresenter(
 
   fun dispatch(event: DesktopEvent) {
     val before = selectedDeclarationTarget(controller.state)
+    analysisWorkflow.beforeEvent(event)
     benchmarkWorkflow.beforeEvent(event)
     securityWorkflow.beforeEvent(event)
     if (event is DesktopEvent.ProjectLoaded) {
@@ -171,6 +145,10 @@ class DesktopWorkflowPresenter(
       jobCoordinator.projectOpened(event.project.identity())
     }
     controller.dispatch(event)
+    if (event is DesktopEvent.IndexRefreshed &&
+        snapshot.value.state.project?.projectRevision != event.index.projectRevision) {
+      controller.state.project?.identity()?.let(jobCoordinator::projectOpened)
+    }
     val after = selectedDeclarationTarget(controller.state)
     if (before != after &&
         mutableSnapshot.value.declarationExplanation.status !=
@@ -218,6 +196,9 @@ class DesktopWorkflowPresenter(
                         previous.securityReviewRemoteConfirmed.takeIf {
                           previous.modelCatalog.identity() == catalog.identity()
                         } ?: false)
+            if (previous.modelCatalog.identity() != catalog.identity())
+                analysisWorkflow.providerChanged()
+            else analysisWorkflow.refresh()
             val function = catalog.forScope(ModelScope.Function)
             dispatch(
                 DesktopEvent.ConnectionUpdated(
@@ -300,8 +281,11 @@ class DesktopWorkflowPresenter(
           } catch (_: CancellationException) {
             throw CancellationException()
           } catch (error: Exception) {
-            if (matchesProject(project.identity()))
-                dispatch(DesktopEvent.Failed(error.message ?: "Re-analysis failed"))
+            if (matchesProject(project.identity())) {
+              jobCoordinator.projectOpened(project.identity())
+              analysisWorkflow.refresh()
+              dispatch(DesktopEvent.Failed(error.message ?: "Re-analysis failed"))
+            }
           }
         }
   }
@@ -401,10 +385,7 @@ class DesktopWorkflowPresenter(
 
   fun scanSecurity() = securityWorkflow.scanSecurity()
 
-  fun reviewSecurity() =
-      securityWorkflow.reviewSecurity(
-          snapshot.value.model(ModelScope.Analyze).remoteProvider,
-          snapshot.value.securityReviewRemoteConfirmed)
+  fun reviewSecurity() = previewAnalysis()
 
   fun openSecurityFinding(finding: SecurityFinding) {
     val state = snapshot.value.state
@@ -465,54 +446,32 @@ class DesktopWorkflowPresenter(
     }
   }
 
-  fun analyzeSelected(refresh: Boolean) {
-    val state = snapshot.value.state
-    val project = state.project ?: return
-    val file = state.selectedFile ?: return
-    if (snapshot.value.model(ModelScope.Bug).remoteProvider &&
-        !snapshot.value.providerConfirmed(ModelScope.Bug)) {
-      dispatch(
-          DesktopEvent.Failed("Confirm the Bugs model destination before analyzing this file."))
-      return
-    }
-    analysisJob?.cancel()
-    val generation = ++analysisGeneration
-    val (request, fileRequest) = controller.beginAnalysis() ?: return
-    dispatch(DesktopEvent.Loading)
-    dispatch(DesktopEvent.Status("${if (refresh) "Refreshing" else "Analyzing"} ${file.path}…"))
-    setOperation(analysis = true)
-    analysisJob =
-        scope.launch {
-          try {
-            val result = io {
-              api.analyze(
-                  file.path,
-                  project.projectRevision,
-                  refresh,
-                  snapshot.value.providerConfirmed(ModelScope.Bug))
-            }
-            if (generation == analysisGeneration &&
-                controller.analysisCompleted(request, fileRequest, result)) {
-              publish()
-              dispatch(DesktopEvent.Status("Summary ${result.status}"))
-            }
-          } catch (_: CancellationException) {
-            dispatch(DesktopEvent.Status("Analysis canceled"))
-            throw CancellationException()
-          } catch (error: Exception) {
-            if (generation == analysisGeneration && isCurrentFile(file.identity(project)))
-                modelRequestFailed(error, ModelScope.Bug, "Analysis failed")
-          } finally {
-            if (analysisJob === coroutineContext[Job]) setOperation(analysis = false)
-          }
-        }
-  }
+  fun analyzeSelected(refresh: Boolean) = previewAnalysis(refresh)
 
-  fun cancelAnalysis() {
-    analysisGeneration++
-    analysisJob?.cancel()
-    setOperation(analysis = false)
-  }
+  fun cancelAnalysis() = analysisWorkflow.control("cancel")
+
+  fun previewAnalysis(
+      refresh: Boolean = false,
+      limits: AnalysisRunLimits = AnalysisRunLimits(100, 900, 2)
+  ) = analysisWorkflow.preview(refresh, limits)
+
+  fun resumeAnalysis() = analysisWorkflow.preview(resume = true)
+
+  fun startAnalysis() = analysisWorkflow.admit()
+
+  fun pauseAnalysis() = analysisWorkflow.control("pause")
+
+  fun refreshAnalysis() = analysisWorkflow.refresh()
+
+  fun dismissAnalysisAdmission() = analysisWorkflow.dismissAdmission()
+
+  fun confirmAnalysisProvider(id: String, confirmed: Boolean) =
+      analysisWorkflow.confirmProvider(id, confirmed)
+
+  fun confirmAnalysisSecurity(confirmed: Boolean) = analysisWorkflow.confirmSecurity(confirmed)
+
+  fun loadAnalysisResults(category: String, path: String = "") =
+      analysisWorkflow.loadResults(category, path)
 
   fun explainSelectedDeclaration() {
     val state = snapshot.value.state
@@ -929,92 +888,30 @@ class DesktopWorkflowPresenter(
     }
   }
 
-  fun startAnalyzeAll(options: AnalyzeAllRunOptions) {
-    val request = beginAnalyzeAllAction() ?: return
-    runAnalyzeAllAction(request, "Unable to start Analyze-all") {
-      api.startAnalyzeAll(
-          request.project.revision,
-          options.maxFiles,
-          options.maxRetries,
-          options.confirmRemoteProvider)
-    }
-  }
+  // Existing page intents converge on the unified admission; old checkboxes cannot grant it
+  // consent.
+  fun startAnalyzeAll(options: AnalyzeAllRunOptions) =
+      previewAnalysis(
+          limits =
+              AnalysisRunLimits(options.maxFiles, 900, (options.maxRetries + 1).coerceIn(1, 4)))
 
-  fun pauseAnalyzeAll() {
-    val expectedJob = snapshot.value.state.findings.analyzeAll ?: return
-    val request = beginAnalyzeAllAction(expectedJob) ?: return
-    runAnalyzeAllAction(request, "Unable to update Analyze-all") {
-      api.pauseAnalyzeAll(request.project.revision)
-    }
-  }
+  fun pauseAnalyzeAll() = pauseAnalysis()
 
-  fun resumeAnalyzeAll(confirmRemoteProvider: Boolean) {
-    val expectedJob = snapshot.value.state.findings.analyzeAll ?: return
-    val request = beginAnalyzeAllAction(expectedJob) ?: return
-    runAnalyzeAllAction(request, "Unable to update Analyze-all") {
-      api.resumeAnalyzeAll(request.project.revision, confirmRemoteProvider)
-    }
-  }
+  fun resumeAnalyzeAll(confirmRemoteProvider: Boolean) = resumeAnalysis()
 
-  fun cancelAnalyzeAll() {
-    val expectedJob = snapshot.value.state.findings.analyzeAll ?: return
-    val request = beginAnalyzeAllAction(expectedJob) ?: return
-    runAnalyzeAllAction(request, "Unable to update Analyze-all") {
-      api.cancelAnalyzeAll(request.project.revision)
-    }
-  }
+  fun cancelAnalyzeAll() = cancelAnalysis()
 
-  fun previewPerformance(maxFiles: Int = 100, runBudgetSeconds: Int = 900) {
-    val project = snapshot.value.state.project ?: return
-    val identity = project.identity()
-    scope.launch {
-      try {
-        val preview = io { api.performanceContext(identity.revision, maxFiles, runBudgetSeconds) }
-        if (matchesProject(identity)) dispatch(DesktopEvent.PerformanceContextLoaded(preview))
-      } catch (_: CancellationException) {
-        throw CancellationException()
-      } catch (error: Exception) {
-        if (matchesProject(identity))
-            dispatch(DesktopEvent.Failed(error.message ?: "Performance preview failed"))
-      }
-    }
-  }
+  fun previewPerformance(maxFiles: Int = 100, runBudgetSeconds: Int = 900) =
+      previewAnalysis(limits = AnalysisRunLimits(maxFiles, runBudgetSeconds, 2))
 
-  fun startPerformance(preview: PerformanceQueuePreview, confirmRemoteProvider: Boolean) {
-    val request = beginPerformanceAction() ?: return
-    runPerformanceAction(request, "Unable to start Performance review") {
-      api.startPerformanceJob(
-          request.project.revision,
-          preview.maxFiles,
-          queueId = preview.queueId,
-          policyFingerprint = preview.policyFingerprint,
-          confirmRemoteProvider = confirmRemoteProvider)
-    }
-  }
+  fun startPerformance(preview: PerformanceQueuePreview, confirmRemoteProvider: Boolean) =
+      previewAnalysis(limits = AnalysisRunLimits(preview.maxFiles, 900, 2))
 
-  fun pausePerformance() {
-    val expectedJob = snapshot.value.state.findings.performanceJob ?: return
-    val request = beginPerformanceAction(expectedJob) ?: return
-    runPerformanceAction(request, "Unable to pause Performance review") {
-      api.pausePerformanceJob(request.project.revision, expectedJob.id)
-    }
-  }
+  fun pausePerformance() = pauseAnalysis()
 
-  fun resumePerformance(confirmRemoteProvider: Boolean) {
-    val expectedJob = snapshot.value.state.findings.performanceJob ?: return
-    val request = beginPerformanceAction(expectedJob) ?: return
-    runPerformanceAction(request, "Unable to resume Performance review") {
-      api.resumePerformanceJob(request.project.revision, expectedJob.id, confirmRemoteProvider)
-    }
-  }
+  fun resumePerformance(confirmRemoteProvider: Boolean) = resumeAnalysis()
 
-  fun cancelPerformance() {
-    val expectedJob = snapshot.value.state.findings.performanceJob ?: return
-    val request = beginPerformanceAction(expectedJob) ?: return
-    runPerformanceAction(request, "Unable to cancel Performance review") {
-      api.cancelPerformanceJob(request.project.revision, expectedJob.id)
-    }
-  }
+  fun cancelPerformance() = cancelAnalysis()
 
   fun runVerifiedScan() {
     val request = beginVerifiedScanAction() ?: return
@@ -1080,7 +977,7 @@ class DesktopWorkflowPresenter(
   private fun cancelAll() {
     invalidateJobActions()
     benchmarkWorkflow.cancel()
-    cancelAnalysis()
+    analysisWorkflow.detach()
     cancelGeneration()
     cancelDraftValidation()
     if (mutableSnapshot.value.declarationExplanation.status ==
@@ -1141,9 +1038,7 @@ class DesktopWorkflowPresenter(
   }
 
   private fun refreshProjectWorkspace(identity: WorkflowProjectIdentity) {
-    val workspaceAnalyzeAllGeneration = analyzeAllActionGeneration
-    val workspacePerformanceGeneration = performanceActionGeneration
-    val workspacePerformanceReportGeneration = performanceReportPublicationGeneration
+    analysisWorkflow.refresh()
     val workspaceScanGeneration = verifiedScanActionGeneration
     scope.launch {
       try {
@@ -1151,22 +1046,12 @@ class DesktopWorkflowPresenter(
           WorkflowProjectWorkspaceDetails(
               api.overview(identity.revision),
               api.findings(identity.revision),
-              api.analyzeAllJob(identity.revision),
-              api.goScan(identity.revision),
-              api.performanceJob(identity.revision),
-              api.performanceReport(identity.revision))
+              api.goScan(identity.revision))
         }
         if (!matchesProject(identity)) return@launch
         dispatch(DesktopEvent.OverviewLoaded(details.overview))
         if (isCurrentVerifiedScanAction(identity, workspaceScanGeneration))
             dispatch(DesktopEvent.FindingsLoaded(details.findings.findings))
-        publishAnalyzeAll(identity, details.analyzeAll, workspaceAnalyzeAllGeneration)
-        publishPerformance(
-            identity,
-            details.performanceJob,
-            details.performanceReport,
-            workspacePerformanceGeneration,
-            workspacePerformanceReportGeneration)
         publishVerifiedScan(
             identity, details.scan, workspaceScanGeneration, refreshSeedTerminal = false)
       } catch (_: CancellationException) {
@@ -1197,141 +1082,6 @@ class DesktopWorkflowPresenter(
         // Findings refresh is enrichment; preserve visible deterministic state.
       }
     }
-  }
-
-  private fun refreshAnalysisFreshness(identity: WorkflowProjectIdentity) {
-    scope.launch {
-      try {
-        val index = io { api.index() }
-        if (matchesProject(identity) && index.projectRevision == identity.revision)
-            dispatch(DesktopEvent.IndexRefreshed(index))
-      } catch (_: CancellationException) {
-        throw CancellationException()
-      } catch (_: Exception) {
-        // Cache freshness is optional enrichment.
-      }
-    }
-  }
-
-  private fun runAnalyzeAllAction(
-      request: AnalyzeAllActionRequest,
-      fallback: String,
-      action: () -> AnalyzeAllJob,
-  ) {
-    scope.launch {
-      try {
-        val job = io { if (canInvokeAnalyzeAllAction(request)) action() else null } ?: return@launch
-        if (isCurrentAnalyzeAllAction(request.project, request.generation))
-            publishAnalyzeAll(request.project, job, request.generation)
-      } catch (_: CancellationException) {
-        throw CancellationException()
-      } catch (error: Exception) {
-        if (isCurrentAnalyzeAllAction(request.project, request.generation)) {
-          modelRequestFailed(error, ModelScope.Bug, fallback)
-          recoverAnalyzeAllPolling(request.project, request.generation)
-        }
-      }
-    }
-  }
-
-  private fun publishAnalyzeAll(
-      identity: WorkflowProjectIdentity,
-      job: AnalyzeAllJob?,
-      actionGeneration: Long = analyzeAllActionGeneration,
-  ) {
-    if (!isCurrentAnalyzeAllAction(identity, actionGeneration)) return
-    jobCoordinator.observeAnalyzeAll(
-        identity,
-        job,
-        onUpdate = { updated ->
-          if (!isCurrentAnalyzeAllAction(identity, actionGeneration)) return@observeAnalyzeAll false
-          if (updated?.projectRevision?.takeIf { it.isNotBlank() } != null &&
-              updated.projectRevision != identity.revision)
-              return@observeAnalyzeAll false
-          dispatch(DesktopEvent.AnalyzeAllLoaded(updated))
-          refreshAnalysisFreshness(identity)
-          true
-        },
-        fetch = { io { api.analyzeAllJob(identity.revision) } },
-        onFailure = { error ->
-          if (isCurrentAnalyzeAllAction(identity, actionGeneration))
-              dispatch(DesktopEvent.Failed(error.message ?: "Analyze-all status failed"))
-        })
-  }
-
-  private fun runPerformanceAction(
-      request: PerformanceActionRequest,
-      fallback: String,
-      action: () -> PerformanceJob,
-  ) {
-    scope.launch {
-      try {
-        val job =
-            io { if (canInvokePerformanceAction(request)) action() else null } ?: return@launch
-        if (!isCurrentPerformanceAction(request.project, request.generation)) return@launch
-        val publication =
-            publishPerformance(request.project, job, null, request.generation) ?: return@launch
-        try {
-          val report = io { api.performanceReport(request.project.revision) }
-          val currentJob = snapshot.value.state.findings.performanceJob
-          if (isCurrentPerformanceAction(request.project, request.generation) &&
-              currentJob?.identity() == publication.job &&
-              performanceReportPublicationGeneration == publication.generation) {
-            performanceReportPublicationGeneration++
-            dispatch(DesktopEvent.PerformanceLoaded(currentJob, report))
-          }
-        } catch (_: CancellationException) {
-          throw CancellationException()
-        } catch (error: Exception) {
-          if (isCurrentPerformanceAction(request.project, request.generation))
-              dispatch(DesktopEvent.Failed(error.message ?: "Performance report failed"))
-        }
-      } catch (_: CancellationException) {
-        throw CancellationException()
-      } catch (error: Exception) {
-        if (isCurrentPerformanceAction(request.project, request.generation)) {
-          modelRequestFailed(error, ModelScope.Analyze, fallback)
-          recoverPerformancePolling(request.project, request.generation)
-        }
-      }
-    }
-  }
-
-  private fun publishPerformance(
-      identity: WorkflowProjectIdentity,
-      job: PerformanceJob?,
-      report: PerformanceReport?,
-      actionGeneration: Long = performanceActionGeneration,
-      expectedReportPublicationGeneration: Long? = null,
-  ): PerformanceReportPublication? {
-    if (!isCurrentPerformanceAction(identity, actionGeneration)) return null
-    if (expectedReportPublicationGeneration != null &&
-        expectedReportPublicationGeneration != performanceReportPublicationGeneration)
-        return null
-    var publication: PerformanceReportPublication? = null
-    jobCoordinator.observePerformance(
-        identity,
-        job,
-        report,
-        onUpdate = { updatedJob, updatedReport ->
-          if (!isCurrentPerformanceAction(identity, actionGeneration))
-              return@observePerformance false
-          if (updatedJob != null && !updatedJob.belongsTo(identity)) return@observePerformance false
-          performanceReportPublicationGeneration++
-          publication =
-              PerformanceReportPublication(
-                  updatedJob?.identity(), performanceReportPublicationGeneration)
-          dispatch(DesktopEvent.PerformanceLoaded(updatedJob, updatedReport))
-          true
-        },
-        fetch = {
-          io { api.performanceJob(identity.revision) to api.performanceReport(identity.revision) }
-        },
-        onFailure = { error ->
-          if (isCurrentPerformanceAction(identity, actionGeneration))
-              dispatch(DesktopEvent.Failed(error.message ?: "Performance status failed"))
-        })
-    return publication
   }
 
   private fun publishVerifiedScan(
@@ -1392,30 +1142,6 @@ class DesktopWorkflowPresenter(
     cancelAll()
   }
 
-  private fun beginAnalyzeAllAction(
-      expectedJob: AnalyzeAllJob? = null,
-  ): AnalyzeAllActionRequest? {
-    val identity = snapshot.value.state.project?.identity() ?: return null
-    jobCoordinator.beginAnalyzeAllAction(identity)
-    return AnalyzeAllActionRequest(
-        identity,
-        ++analyzeAllActionGeneration,
-        expectedJob,
-        requiresExpectedJob = expectedJob != null)
-  }
-
-  private fun beginPerformanceAction(
-      expectedJob: PerformanceJob? = null,
-  ): PerformanceActionRequest? {
-    val identity = snapshot.value.state.project?.identity() ?: return null
-    jobCoordinator.beginPerformanceAction(identity)
-    return PerformanceActionRequest(
-        identity,
-        ++performanceActionGeneration,
-        expectedJob,
-        requiresExpectedJob = expectedJob != null)
-  }
-
   private fun beginVerifiedScanAction(
       expectedScan: GoScanReport? = null,
   ): VerifiedScanActionRequest? {
@@ -1427,21 +1153,6 @@ class DesktopWorkflowPresenter(
         requiresExpectedScan = expectedScan != null)
   }
 
-  private fun recoverAnalyzeAllPolling(identity: WorkflowProjectIdentity, generation: Long) {
-    if (!isCurrentAnalyzeAllAction(identity, generation)) return
-    val job = snapshot.value.state.findings.analyzeAll ?: return
-    if (!job.belongsTo(identity)) return
-    publishAnalyzeAll(identity, job, generation)
-  }
-
-  private fun recoverPerformancePolling(identity: WorkflowProjectIdentity, generation: Long) {
-    if (!isCurrentPerformanceAction(identity, generation)) return
-    val findings = snapshot.value.state.findings
-    val job = findings.performanceJob ?: return
-    if (!job.belongsTo(identity)) return
-    publishPerformance(identity, job, findings.performanceReport, generation)
-  }
-
   private fun recoverVerifiedScanPolling(identity: WorkflowProjectIdentity, generation: Long) {
     if (!isCurrentVerifiedScanAction(identity, generation)) return
     val scan = snapshot.value.state.findings.scan ?: return
@@ -1450,8 +1161,6 @@ class DesktopWorkflowPresenter(
   }
 
   private fun invalidateJobActions() {
-    analyzeAllActionGeneration++
-    performanceActionGeneration++
     verifiedScanActionGeneration++
   }
 
@@ -1459,26 +1168,6 @@ class DesktopWorkflowPresenter(
       identity: WorkflowProjectIdentity,
       generation: Long,
   ): Boolean = generation == verifiedScanActionGeneration && matchesProject(identity)
-
-  private fun isCurrentAnalyzeAllAction(
-      identity: WorkflowProjectIdentity,
-      generation: Long,
-  ): Boolean = generation == analyzeAllActionGeneration && matchesProject(identity)
-
-  private fun isCurrentPerformanceAction(
-      identity: WorkflowProjectIdentity,
-      generation: Long,
-  ): Boolean = generation == performanceActionGeneration && matchesProject(identity)
-
-  private fun canInvokeAnalyzeAllAction(request: AnalyzeAllActionRequest): Boolean =
-      isCurrentAnalyzeAllAction(request.project, request.generation) &&
-          (!request.requiresExpectedJob ||
-              snapshot.value.state.findings.analyzeAll == request.expectedJob)
-
-  private fun canInvokePerformanceAction(request: PerformanceActionRequest): Boolean =
-      isCurrentPerformanceAction(request.project, request.generation) &&
-          (!request.requiresExpectedJob ||
-              snapshot.value.state.findings.performanceJob == request.expectedJob)
 
   private fun canInvokeVerifiedScanAction(request: VerifiedScanActionRequest): Boolean =
       isCurrentVerifiedScanAction(request.project, request.generation) &&
@@ -1497,7 +1186,12 @@ class DesktopWorkflowPresenter(
   }
 
   private fun publish() {
-    mutableSnapshot.value = mutableSnapshot.value.copy(state = controller.state)
+    mutableSnapshot.value =
+        mutableSnapshot.value.copy(
+            state = controller.state,
+            analysisInProgress =
+                controller.state.analysisRun.run?.isActive() == true ||
+                    controller.state.analysisRun.action.isNotEmpty())
   }
 
   private fun invalidateDeclarationExplanation(message: String) {
@@ -1510,15 +1204,10 @@ class DesktopWorkflowPresenter(
                 current.copy(status = DeclarationExplanationStatus.Stale, message = message))
   }
 
-  private fun setOperation(
-      analysis: Boolean? = null,
-      generating: Boolean? = null,
-      validating: Boolean? = null
-  ) {
+  private fun setOperation(generating: Boolean? = null, validating: Boolean? = null) {
     val current = mutableSnapshot.value
     mutableSnapshot.value =
         current.copy(
-            analysisInProgress = analysis ?: current.analysisInProgress,
             generating = generating ?: current.generating,
             draftValidationInProgress = validating ?: current.draftValidationInProgress,
         )
@@ -1590,16 +1279,6 @@ private fun explanationFailureState(
             result = null,
             message = error.message ?: "Declaration explanation failed")
 
-private fun AnalyzeAllJob.belongsTo(identity: WorkflowProjectIdentity): Boolean =
-    projectId == identity.id && projectRevision == identity.revision
-
-private fun PerformanceJob.belongsTo(identity: WorkflowProjectIdentity): Boolean =
-    projectId == identity.id && projectRevision == identity.revision
-
-private fun PerformanceJob.identity(): PerformanceJobIdentity =
-    PerformanceJobIdentity(
-        WorkflowProjectIdentity(projectId, projectRevision), id, generation, queueId)
-
 private fun GoScanReport.belongsTo(identity: WorkflowProjectIdentity): Boolean =
     projectId == identity.id && projectRevision == identity.revision
 
@@ -1609,8 +1288,5 @@ private fun DeclarationDraft.identity(file: WorkflowFileIdentity): WorkflowDraft
 private data class WorkflowProjectWorkspaceDetails(
     val overview: ProjectOverview,
     val findings: FindingsResponse,
-    val analyzeAll: AnalyzeAllJob?,
     val scan: GoScanReport?,
-    val performanceJob: PerformanceJob?,
-    val performanceReport: PerformanceReport?,
 )

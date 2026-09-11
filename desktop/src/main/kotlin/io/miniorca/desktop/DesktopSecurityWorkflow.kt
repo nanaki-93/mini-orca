@@ -8,7 +8,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
-/** Owns security requests while reading and publishing through the desktop state store. */
+/** Owns only the explicit deterministic file scan. AI review belongs to the project run. */
 internal class DesktopSecurityWorkflow(
     private val api: ApiClient,
     private val scope: CoroutineScope,
@@ -77,74 +77,6 @@ internal class DesktopSecurityWorkflow(
                 dispatch(
                     DesktopEvent.SecurityActionFailed(
                         "scan", error.message ?: "Security scan failed"))
-          }
-        }
-  }
-
-  fun reviewSecurity(remoteProvider: Boolean, remoteConfirmed: Boolean) {
-    val state = state()
-    val project = state.project ?: return
-    val file =
-        state.selectedFile
-            ?: run {
-              dispatch(
-                  DesktopEvent.SecurityActionFailed(
-                      "review", "Open one indexed file before reviewing."))
-              return
-            }
-    if (file.binary) {
-      dispatch(
-          DesktopEvent.SecurityActionFailed(
-              "review", "Security review requires one eligible non-binary text file."))
-      return
-    }
-    if (remoteProvider && !remoteConfirmed) {
-      dispatch(
-          DesktopEvent.SecurityActionFailed(
-              "review", "Confirm the remote Analyze destination for this Security review."))
-      return
-    }
-    val exactSymbol =
-        state.selectedSymbol
-            ?.takeIf { file.language == "Go" && it.atomicTarget && it.confidence == "exact" }
-            ?.name
-            .orEmpty()
-    cancel()
-    val generation = actionGeneration
-    val identity = fileIdentity(file, project)
-    // Fresh confirmation is consumed by every review attempt, including an unsuccessful one.
-    clearRemoteConfirmation()
-    dispatch(DesktopEvent.SecurityActionStarted("review"))
-    securityJob =
-        scope.launch {
-          try {
-            val report = io {
-              api.securityReview(
-                  project.projectId,
-                  project.projectRevision,
-                  file.contentHash,
-                  file.path,
-                  exactSymbol,
-                  remoteConfirmed)
-            }
-            if (isCurrentAction(identity, generation)) {
-              if (securityReportMatchesFile(report, identity, "ai"))
-                  dispatch(DesktopEvent.SecurityReportLoaded(report))
-              else
-                  dispatch(
-                      DesktopEvent.SecurityActionFailed(
-                          "review", "The returned review no longer matches the selected file."))
-            }
-          } catch (_: CancellationException) {
-            throw CancellationException()
-          } catch (error: Exception) {
-            if (isCurrentAction(identity, generation)) {
-              val message = staleRemoteConfirmationMessage(error, ModelScope.Analyze)
-              if (message != null) clearRemoteConfirmation()
-              dispatch(
-                  DesktopEvent.SecurityActionFailed(
-                      "review", message ?: error.message ?: "Security review failed"))
-            }
           }
         }
   }
