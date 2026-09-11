@@ -118,6 +118,7 @@ class DesktopWorkflowPresenter(
   private var connectionJob: Job? = null
   private var projectJob: Job? = null
   private var fileJob: Job? = null
+  private var fileFreshnessJob: Job? = null
   private var enrichmentJobs: List<Job> = emptyList()
   private var declarationExplanationJob: Job? = null
   private var chatJob: Job? = null
@@ -311,6 +312,7 @@ class DesktopWorkflowPresenter(
     activeDraft = null
     val request = controller.beginFileLoad(path) ?: return
     publish()
+    fileFreshnessJob?.cancel()
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
     fileJob =
@@ -340,6 +342,52 @@ class DesktopWorkflowPresenter(
             if (controller.fileFailed(request, error.message ?: "File load failed")) publish()
           }
         }
+  }
+
+  /**
+   * Read-only return from a shell: retain the draft if unchanged, invalidate evidence if changed.
+   */
+  fun refreshSelectedFile() {
+    val project = snapshot.value.state.project?.identity() ?: return
+    val selected = snapshot.value.state.selectedFile ?: return
+    fileFreshnessJob?.cancel()
+    fileFreshnessJob =
+        scope.launch {
+          fun isCurrent(): Boolean =
+              matchesProject(project) &&
+                  snapshot.value.state.selectedFile?.let {
+                    it.path == selected.path && it.contentHash == selected.contentHash
+                  } == true
+          try {
+            val file = io { api.fileInfo(selected.path) }
+            if (!isCurrent()) return@launch
+            require(file.path == selected.path) { "Refreshed source belongs to another file." }
+            if (file.contentHash == selected.contentHash) return@launch
+            val symbols = io { api.symbols(selected.path).symbols }
+            if (!isCurrent()) return@launch
+            invalidateFileEvidenceWork()
+            dispatch(DesktopEvent.SelectedFileRefreshed(file, symbols))
+          } catch (canceled: CancellationException) {
+            throw canceled
+          } catch (error: Exception) {
+            if (!isCurrent()) return@launch
+            invalidateFileEvidenceWork()
+            dispatch(
+                DesktopEvent.SelectedFileUnavailable(
+                    error.message ?: "Could not refresh the selected file."))
+          }
+        }
+  }
+
+  private fun invalidateFileEvidenceWork() {
+    chatJob?.cancel()
+    draftValidationJob?.cancel()
+    draftChecksJob?.cancel()
+    enrichmentJobs.forEach(Job::cancel)
+    benchmarkWorkflow.invalidate()
+    securityWorkflow.cancel()
+    activeTask = null
+    activeDraft = null
   }
 
   fun openFileInEditor(
@@ -1032,6 +1080,7 @@ class DesktopWorkflowPresenter(
     cancelAll()
     connectionJob?.cancel()
     projectJob?.cancel()
+    fileFreshnessJob?.cancel()
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
     securityWorkflow.cancel()
@@ -1174,6 +1223,7 @@ class DesktopWorkflowPresenter(
 
   private fun cancelProjectScopedWork() {
     jobCoordinator.projectClosed()
+    fileFreshnessJob?.cancel()
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
     securityWorkflow.cancel()

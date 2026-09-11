@@ -49,3 +49,25 @@ Scheduler mini-orca-ux-implementation PAUSED through the app API; no commit, no 
 User request: "you can continue with the repair and task". Correction 3 applies the recorded three-reference repair to FindingsPresentation.kt and WorkspacePanes.kt using committed SelectionText, without including unrelated theme edits.
 Prescribed verification PASS: 55 tests. Full working-tree test detekt spotlessCheck PASS: 370 tests. Isolated accepted-HEAD candidate test detekt spotlessCheck PASS: 368 tests. Zero failures/errors/skips; diff check PASS. Logs and exact toolchain arguments are retained in .mini-orca/autopilot/ux/ANA-07/*correction-3*. Prior failures and correction count retained.
 Candidate accepted for the authorized local ANA-07 commit and scheduler resumption afterward. Unrelated desktop edits remain separate. No Go code change, Go/race/make check, native OS accessibility test, live-provider execution, push or release.
+
+2026-09-12 — TERM-02 blocked after two correction attempts
+Prescribed command (verified Java 21 launcher / JBR 25 toolchain):
+./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.TerminalToolWindowTest' --tests 'io.miniorca.desktop.DesktopTerminalSessionTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopWorkflowPresenterTest'
+The actual executions additionally enabled -PterminalNativeSmoke=true and saved visual fixtures.
+Initial: exit 1, compileTestKotlin: unresolved screenLines accessor in two new tests.
+Correction 1: fixed getScreenLines() and guarded canceled switch/exit callbacks.
+Standalone focused selection passed 71 tests (zero failures/errors/skips).
+Combined quality execution exited 1: Detekt complexity App=66, Shell=73, reducer=68 (threshold65).
+Native correction-1 jpackage fixture used the real packaged runtime/jars and a temporary source project. Prompt, history, Ctrl+C observed. Defects: PTY remained80x24 because Java default resize was not delegated; focus return left narrow overlay open; native scrollbar had default styling.
+Correction 2: explicit resize forwarding + regression assertion; dismiss overlay/focus return, theme/scale terminal, refresh on later Editor/Review entry, extract cohesive routing helpers.
+Final prescribed verification: exit1, compileKotlin:
+TerminalToolWindow.kt:388:29 Argument type mismatch: actual type is 'StyleState', but 'TerminalTextBuffer' was expected.
+TerminalToolWindow.kt:388:36 Argument type mismatch: actual type is 'TerminalTextBuffer', but 'StyleState' was expected.
+Pending repair: ScaledTerminalPanel must invoke TerminalPanel(settings, buffer, style). No third correction was attempted.
+Required final focused/full tests, quality, isolated candidate and native resize/full-screen/focus/switch/app-exit checks remain incomplete. No commit or next card. Changes preserved; scheduler mini-orca-ux-implementation PAUSED via app tool. Exact logs and checkpoint are in .mini-orca/autopilot/ux/TERM-02/.
+
+2026-09-12 — TERM-02 RESOLVED after user-authorized repair
+User request: "repair TERM-02". Earlier two-correction stop and failures remain above. Authorized corrections 3–7: constructor argument order; retired Terminal layout expectation; cohesive App/Shell/index routing extraction; remaining overlay assignment simplification for Detekt; explicit Compose focus clear before Editor focus request to return actual native input from docked Swing.
+Resumed failures retained: first automated edit did not match and left the same compiler failure; full suite found one obsolete layout assertion (397/398 passed); intermediate Detekt failures measured App=65, Shell=68, reducer=66, then Shell=65 against the exclusive threshold65. The packaged UI subsequently exposed native focus remaining in Swing despite Editor selection; final clearFocus/requestFocus repair fixes it. No verification threshold was weakened.
+Final required selection PASS: 71 tests, including native PTY. Working full suite PASS: 398; isolated accepted-HEAD candidate PASS: 396. All zero failures/errors/skips. Both candidates pass Detekt, Spotless and createDistributable. Isolated actual-packaged-runtime PTY probe PASS. Native packaged UI proves prompt, history, Ctrl+C, Vim redraw, resize, session retention, close/reopen, Editor focus/app shortcut return, shell-edit freshness and shell/child cleanup on window close and Cmd+Q. Native project-chooser switch flow was not completed; owner isolation/close behavior is tested. Other platforms, screen readers and signing remain unverified.
+All ten unrelated UI edits are preserved and excluded from the task commit; overlapping labels are separated using the independently tested candidate. No Go/race/make check needed for desktop-only changes; no live provider, push or release. Acceptance/commit receipt, failures, exact toolchains, native inputs and screenshots retained under .mini-orca/autopilot/ux/TERM-02/. Scheduler resumes only after the authorized local TERM-02 commit is verified; BOTTOM-01 is next.

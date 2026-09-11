@@ -217,12 +217,15 @@ class DesktopLayoutStateTest {
   }
 
   @Test
-  fun storeRecoversTheRetiredTerminalTabAsTheDefaultEvidenceDestination() {
+  fun storeRestoresTerminalAndFallsBackForUnknownDestinations() {
     withPreferences { preferences ->
       preferences.put("ide-bottom-tool", "Output")
       assertEquals(
           BottomToolWindow.Output, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
       preferences.put("ide-bottom-tool", "Terminal")
+      assertEquals(
+          BottomToolWindow.Terminal, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
+      preferences.put("ide-bottom-tool", "Unknown")
       assertEquals(
           BottomToolWindow.Problems, DesktopLayoutStore(preferences).load().activeBottomToolWindow)
     }

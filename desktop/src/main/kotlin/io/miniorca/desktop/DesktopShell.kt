@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -42,6 +43,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -316,6 +318,7 @@ internal fun DesktopShell(
     findingActions: FindingActions,
     paletteActions: DesktopShellPaletteActions,
     panes: DesktopShellPanes,
+    terminal: DesktopTerminalWorkspace? = null,
 ) {
   val appState = state.app
   val layout = state.layout
@@ -329,6 +332,7 @@ internal fun DesktopShell(
   val workspace = appState.workspace
   val shellMode = desktopShellMode(appState)
   val scope = rememberCoroutineScope()
+  val focusManager = LocalFocusManager.current
   val focusRequesters = remember {
     ShellFocusRequesters(
         fallback = FocusRequester(),
@@ -350,6 +354,7 @@ internal fun DesktopShell(
   var statusDetailsVisible by remember { mutableStateOf(false) }
   var statusDetailsFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var contextFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
+  var terminalUsesOverlay by remember { mutableStateOf(false) }
   var bottomToolWindowOverlayVisible by remember { mutableStateOf(false) }
   var bottomOverlayFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   val showsEditorChrome =
@@ -385,6 +390,7 @@ internal fun DesktopShell(
         layout.openRight(toolWindow).withFocus(DesktopFocusRegion.RightToolWindow))
   }
   fun selectBottomToolWindow(toolWindow: BottomToolWindow) {
+    activateBottomTerminal(toolWindow, appState.project, terminal)
     val updated = layout.openBottom(toolWindow).withFocus(DesktopFocusRegion.BottomToolWindow)
     layoutActions.updateLayout(updated)
     layoutActions.saveLayout(updated)
@@ -394,6 +400,12 @@ internal fun DesktopShell(
     layoutActions.updateLayout(updated)
     layoutActions.saveLayout(updated)
   }
+  TerminalFocusReturnEffect(terminal) {
+    bottomToolWindowOverlayVisible = false
+    editorActions.selectWorkspace(Workspace.Editor)
+    scope.launch { restoreTerminalEditorFocus(drawerState, focusManager, focusRequesters.editor) }
+  }
+  LaunchedEffect(Unit) { focusRequesters.fallback.requestFocus() }
   LaunchedEffect(appState.project?.projectId, appState.project?.projectRevision) {
     statusDetailsVisible = false
   }
@@ -487,6 +499,11 @@ internal fun DesktopShell(
               .onPreviewKeyEvent { event ->
                 handleDesktopShortcut(
                     event = event,
+                    terminal = terminal,
+                    onTerminalSelected = {
+                      selectBottomToolWindow(BottomToolWindow.Terminal)
+                      bottomToolWindowOverlayVisible = terminalUsesOverlay
+                    },
                     shellMode = shellMode,
                     appState = appState,
                     editor = editor,
@@ -510,6 +527,7 @@ internal fun DesktopShell(
             BottomToolWindow.entries.filter { it in panes.bottomToolWindowSummaries }
         LaunchedEffect(narrow) { if (!narrow && drawerState.isOpen) closeDrawerAndRestoreFocus() }
         LaunchedEffect(responsivePresentation.bottom) {
+          terminalUsesOverlay = responsivePresentation.bottom == ResponsiveShellRegion.Overlay
           if (responsivePresentation.bottom == ResponsiveShellRegion.Docked &&
               bottomToolWindowOverlayVisible) {
             dismissBottomToolWindowOverlayAndRestoreFocus()
@@ -757,6 +775,26 @@ internal fun DesktopShell(
   }
 }
 
+private fun activateBottomTerminal(
+    toolWindow: BottomToolWindow,
+    project: ProjectAnalysis?,
+    terminal: DesktopTerminalWorkspace?,
+) {
+  if (toolWindow == BottomToolWindow.Terminal) project?.path?.let { terminal?.activate(it) }
+}
+
+private suspend fun restoreTerminalEditorFocus(
+    drawer: androidx.compose.material.DrawerState,
+    focusManager: FocusManager,
+    editor: FocusRequester,
+) {
+  if (drawer.isOpen) drawer.close()
+  kotlinx.coroutines.yield()
+  // Swing can own native focus while Compose still considers the editor focused.
+  focusManager.clearFocus(force = true)
+  editor.requestFocus()
+}
+
 private fun handleDesktopShortcut(
     event: KeyEvent,
     shellMode: DesktopShellMode,
@@ -767,8 +805,18 @@ private fun handleDesktopShortcut(
     paletteActions: DesktopShellPaletteActions,
     onDismissTransient: () -> Boolean,
     onWorkspaceSelected: (Workspace) -> Unit,
+    terminal: DesktopTerminalWorkspace?,
+    onTerminalSelected: () -> Unit,
 ): Boolean {
-  if (event.type != KeyEventType.KeyDown) return false
+  if (event.type != KeyEventType.KeyDown || !appShortcutAllowed(terminal?.ownsFocus() == true))
+      return false
+  if (event.key == Key.T &&
+      event.isCtrlPressed &&
+      event.isShiftPressed &&
+      appState.project != null) {
+    onTerminalSelected()
+    return true
+  }
   val key =
       when (event.key) {
         Key.P -> "P"

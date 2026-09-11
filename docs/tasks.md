@@ -1307,7 +1307,7 @@ is needed. Keep the Astra Extra High scheduler active for TERM-02 and end this c
 
 ## Task TERM-02 — Integrate the interactive terminal pane
 
-- [ ] TERM-02 completed with required checks and diff review.
+- [x] TERM-02 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/TerminalToolWindow.kt` — new themed terminal host and explicit session controls.
@@ -1321,6 +1321,13 @@ is needed. Keep the Astra Extra High scheduler active for TERM-02 and end this c
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopTerminalSessionTest.kt` — hide/show/switch/close process behavior.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — focus-aware shortcut behavior.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopWorkflowPresenterTest.kt` — shell-originated file changes reject stale review/analysis evidence.
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — wire explicit activation and focus return through docked/overlay layouts.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopLayoutState.kt` — add the terminal destination without migrating the old tools before BOTTOM-02.
+- `desktop/src/main/kotlin/io/miniorca/desktop/IdeShell.kt` — exhaustive terminal label/icon routing.
+- `desktop/TERMINAL.md` — document terminal controls and verified integration behavior.
+
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopLayoutStateTest.kt` — replace the retired-terminal fallback expectation now that Terminal is a supported destination.
 
 **Inputs / dependencies**
 - UX-01, TERM-01.
@@ -1338,7 +1345,100 @@ is needed. Keep the Astra Extra High scheduler active for TERM-02 and end this c
 Native verification additionally covers a prompt, history, interruption, full-screen terminal redraw, focus return, resize and app-exit cleanup.
 
 **Execution record**
-Not started.
+Started 2026-09-12. Verified TERM-01 receipt, empty index, all ten unrelated file hashes and both Java toolchains. Captured HEAD/working baselines in the ignored TERM-02 directory. Added the narrowly coupled shell, destination and exhaustive label/icon targets before editing. Terminal documentation records the new controls. Initial implementation; zero corrections. Native UI automation is available.
+
+**Correction 1 — 2026-09-12.** Initial prescribed verification exited 1 at test
+compilation: JediTerm's Kotlin `getScreenLines()` is a function, not a synthetic
+property. Production compilation passed. Corrected the two buffer assertions.
+Diff review also found pending project-switch/app-exit continuations could ignore
+a later cancellation; the completion callbacks now check the current user intent.
+Re-running the exact focused selection; initial log retained locally.
+
+Correction-1 focused tests passed: 71 tests, zero failures/errors/skips, including
+the native PTY test. Its combined quality command failed before tests ran because
+Detekt measured MiniOrcaApp 66, DesktopShell 73 and the reducer 68 against the
+existing threshold 65. The standalone prescribed test selection then passed.
+
+**Correction 2 — 2026-09-12.** Native testing of a temporary project through a
+jpackage verification app using the packaged runtime/jars confirmed prompt,
+history and Ctrl+C, but found PTY geometry stayed 80×24: Kotlin delegation did
+not forward the Java default `resize` method. Forward it explicitly and assert
+the emulator connector reaches the process. Returning to Editor also left the
+narrow overlay open; dismiss it before restoring focus. Theme the native
+scrollbar, preserve text scaling, refresh source on later Editor/Review entry,
+and extract cohesive refresh/focus/shortcut branches from the three oversized
+routers. The initial JNI-only UI launcher could not initialize macOS graphics;
+the jpackage harness supplies the native launcher and packaged Skiko path.
+No user sources or providers were used. Re-run prescribed tests, full desktop
+suite, quality, and native checks before acceptance. Two corrections total.
+
+**Blocked checkpoint — 2026-09-12.** Correction-2 prescribed verification exited
+1 in production compilation: `ScaledTerminalPanel` passes `(settings, style,
+buffer)` to a library constructor expecting `(settings, buffer, style)` at
+TerminalToolWindow.kt:388. The two allowed corrections are exhausted. Preserve
+the candidate and pending one-line repair; do not mark this card complete.
+Correction-1's 71 passing tests are historical evidence, not validation of this
+candidate. Full desktop tests, final quality, isolated candidate verification and
+required native resize/full-screen/focus/project-switch/app-exit checks remain
+unrun or incomplete. All earlier commits and unrelated user deltas are retained;
+index empty and HEAD unchanged. Failure recorded in docs/errors.log; scheduler
+`mini-orca-ux-implementation` paused through the app tool. No task commit.
+
+**User-authorized repair — 2026-09-12.** The user explicitly requested “repair
+TERM-02,” authorizing continuation beyond the recorded stop. All checkpoint
+hashes and the empty index match; HEAD remains TERM-01. Correct the terminal
+panel constructor order and finish this card's required validation. Earlier
+two-correction history remains intact; the scheduler stays paused during repair.
+
+Resumed validation: the focused 71 tests passed. Full desktop validation ran 398
+tests with one obsolete expectation: saved Terminal was expected to fall back to
+Problems. Add the coupled layout test target and replace that retired-feature
+expectation; unknown destinations still fall back safely. Native fixture stores
+are now injected in memory so UI verification does not alter saved app preferences.
+The first resumed edit command did not match the formatted constructor line; its
+unchanged compile failure and the subsequent successful explicit patch are retained
+in the local repair logs.
+
+**Accepted after authorized continuation — 2026-09-12.** Corrections 3–7 retain
+the previous accounting: correct the constructor order; migrate the obsolete
+Terminal layout expectation; finish the App/Shell/index routing extractions;
+simplify the remaining Shell overlay assignment to pass the strict complexity
+threshold; and clear Compose focus before requesting Editor focus. The last fix
+addresses a native-only defect: with a docked Swing terminal, Compose still
+considered Editor focused and otherwise left shell keys in Swing. The initial
+unmatched constructor edit and intermediate Detekt failures are retained in
+`repair-focused.log`, `repair-full-updated.log` and `repair-complete.log`.
+
+Final prescribed selection passes **71 tests**, including the opt-in real PTY
+smoke. The working-tree full suite passes **398 tests** and the isolated accepted-
+HEAD candidate passes **396 tests**, all with zero failures/errors/skips. Both
+candidates pass Detekt, Spotless and `createDistributable`. The isolated package's
+native probe passes canonical cwd, UTF-8, real TTY, 121×42 resize, interrupt,
+child cleanup and bounded close. Verified JDK 21/JBR 25 paths and all commands
+are retained in the ignored evidence directory.
+
+Native UI verification used the actual packaged runtime/application jars with a
+synthetic test entry point, in-memory preference stores and temporary source;
+no live provider or user project was used. Verified prompt, ANSI color, Unicode
+paste, history, Ctrl+C, full-screen Vim, explicit close/reopen, persistent shell
+PID across hiding/rehosting, and PTY sizes at wide/narrow layouts. At 1280×650,
+Ctrl+Shift+F12 returns native focus, Cmd+P opens the app palette, and a shell edit
+appears in read-only source with stale-review status. At 999dp the overlay retains
+the session and the same return/open shortcuts work. Recorded 1000dp dock and
+999dp overlay screenshots; earlier 800×600 verification and 150% text component
+renders are retained. Window-close and Cmd+Q checks both removed the owned shell
+and a background sleep process. Project-switch isolation/explicit close are
+covered by owner tests; native chooser navigation was canceled, so a complete
+native project-switch flow is not claimed. No screen-reader or other-host claim.
+
+The final diff excludes all ten unrelated UI edits. The two overlapping files
+retain their pre-existing Context-label deltas only in the working tree; the
+isolated candidate keeps the accepted HEAD labels. No Go code changed, so Go,
+race and full `make check` were not run. No configuration/data migration is
+required. Accept one local TERM-02 commit, verify its exact staged hashes and
+receipt, then resume the Astra Extra High scheduler with BOTTOM-01 next. No later
+card was started during this repair. Logs, package-input hashes, screenshots and
+acceptance receipt are under `.mini-orca/autopilot/ux/TERM-02/`.
 
 ## Task BOTTOM-01 — Preserve unique diagnostics in their owning workflows
 

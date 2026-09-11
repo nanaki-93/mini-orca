@@ -62,8 +62,10 @@ private sealed interface PendingDraftDiscard {
 
 @Composable
 internal fun MiniOrcaApp(
+    terminal: DesktopTerminalWorkspace = remember { DesktopTerminalWorkspace() },
     api: ApiClient = remember { ApiClient() },
     lastProjectStore: LastProjectStore = remember { LastProjectStore() },
+    layoutStore: DesktopLayoutStore = remember { DesktopLayoutStore() },
 ) {
   val scope = rememberCoroutineScope()
   val presenter =
@@ -72,7 +74,6 @@ internal fun MiniOrcaApp(
       }
   val workflow by presenter.snapshot.collectAsState()
   val appState = workflow.state
-  val layoutStore = remember { DesktopLayoutStore() }
   var layout by remember { mutableStateOf(layoutStore.load()) }
   var filter by remember { mutableStateOf("") }
   var collapsedDirectories by remember { mutableStateOf(emptySet<String>()) }
@@ -89,6 +90,7 @@ internal fun MiniOrcaApp(
   var consumedPreparedRequestGeneration by remember { mutableStateOf(0L) }
   var draftFieldKey by remember { mutableStateOf<DraftFieldIdentity?>(null) }
   var draftFieldValue by remember { mutableStateOf(TextFieldValue()) }
+  var pendingTerminalSwitch by remember { mutableStateOf<String?>(null) }
   var pendingImportPath by remember { mutableStateOf<String?>(null) }
   var composerRequested by remember { mutableStateOf(false) }
   var pendingComposerFocus by remember { mutableStateOf<ComposerFocusTarget?>(null) }
@@ -96,6 +98,7 @@ internal fun MiniOrcaApp(
   val chatFocusRequester = remember { FocusRequester() }
   val creationNameFocusRequester = remember { FocusRequester() }
   val draftFocusRequester = remember { FocusRequester() }
+  TerminalSourceRefreshEffect(appState, layout, terminal, presenter)
   val analyzeModel = workflow.model(ModelScope.Analyze)
   val bugModel = workflow.model(ModelScope.Bug)
   val functionModel = workflow.model(ModelScope.Function)
@@ -167,7 +170,13 @@ internal fun MiniOrcaApp(
     if (workflow.contextManifest != null) showContext = true
   }
   LaunchedEffect(presenter) { presenter.start() }
-  DisposableEffect(presenter) { onDispose { presenter.close() } }
+  DisposableEffect(presenter, terminal) {
+    terminal.onFocusLeft = { presenter.refreshSelectedFile() }
+    onDispose {
+      terminal.onFocusLeft = {}
+      presenter.close()
+    }
+  }
 
   fun focusComposerControl(target: ComposerFocusTarget) {
     composerRequested = true
@@ -246,11 +255,16 @@ internal fun MiniOrcaApp(
     }
   }
 
+  fun loadChosenProject(path: String) {
+    if (analyzeModel.remoteProvider && !workflow.providerConfirmed(ModelScope.Analyze))
+        pendingImportPath = path
+    else presenter.loadProject(path, restore = false)
+  }
+
   fun importProject() {
     val directory = chooseDirectory() ?: return
-    if (analyzeModel.remoteProvider && !workflow.providerConfirmed(ModelScope.Analyze))
-        pendingImportPath = directory.absolutePath
-    else presenter.loadProject(directory.absolutePath, restore = false)
+    if (terminal.state.value.requiresClose) pendingTerminalSwitch = directory.absolutePath
+    else loadChosenProject(directory.absolutePath)
   }
 
   fun openPalette(mode: PaletteMode) {
@@ -495,17 +509,17 @@ internal fun MiniOrcaApp(
           ))
   val bottomToolWindows: @Composable (BottomToolWindow, Modifier) -> Unit =
       { toolWindow, modifier ->
-        when (toolWindow) {
-          BottomToolWindow.Problems ->
-              ProblemsToolWindow(
-                  state = ProblemsToolWindowState(appState.findings.findings, appState.loading),
-                  actions = findingActions,
-                  modifier = modifier,
-              )
-          BottomToolWindow.Checks -> ChecksToolWindow(checksPresentation, modifier)
-          BottomToolWindow.Output -> OutputToolWindow(outputPresentation, modifier)
-        }
+        DesktopBottomToolWindow(
+            toolWindow,
+            appState,
+            terminal,
+            findingActions,
+            checksPresentation,
+            outputPresentation,
+            presenter::reanalyze,
+            modifier)
       }
+  val terminalState by terminal.state.collectAsState()
   val bottomToolWindowSummaries =
       mapOf(
           BottomToolWindow.Problems to
@@ -513,6 +527,10 @@ internal fun MiniOrcaApp(
                   problemsCollapsedSummary(appState.findings.findings, appState.loading).text),
           BottomToolWindow.Checks to checksPresentation.summary,
           BottomToolWindow.Output to outputPresentation.summary,
+          BottomToolWindow.Terminal to
+              BottomToolWindowSummary(
+                  terminalSummary(terminalState.session),
+                  attention = terminalState.session.error != null),
       )
   val contextualActions =
       editorContextualActions(
@@ -525,6 +543,7 @@ internal fun MiniOrcaApp(
           remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Function),
       )
   DesktopShell(
+      terminal = terminal,
       state =
           DesktopShellState(
               app = appState,
@@ -657,6 +676,13 @@ internal fun MiniOrcaApp(
               bottomToolWindows,
               bottomToolWindowSummaries),
   )
+  TerminalProjectSwitchDialog(pendingTerminalSwitch, terminal, { pendingTerminalSwitch = null }) {
+      path ->
+    if (pendingTerminalSwitch == path) {
+      pendingTerminalSwitch = null
+      loadChosenProject(path)
+    }
+  }
   DesktopAnalysisAdmissionOverlay(appState.analysisRun, presenter)
   pendingDraftDiscard?.let { pending ->
     DraftDiscardDialog(pending, ::discardDraftAndContinue) { pendingDraftDiscard = null }
@@ -672,6 +698,33 @@ internal fun MiniOrcaApp(
         },
         onCancel = { pendingImportPath = null },
     )
+  }
+}
+
+@Composable
+private fun DesktopBottomToolWindow(
+    toolWindow: BottomToolWindow,
+    appState: DesktopState,
+    terminal: DesktopTerminalWorkspace,
+    findingActions: FindingActions,
+    checksPresentation: ChecksToolWindowPresentation,
+    outputPresentation: OutputToolWindowPresentation,
+    onReindex: () -> Unit,
+    modifier: Modifier,
+) {
+  when (toolWindow) {
+    BottomToolWindow.Problems ->
+        ProblemsToolWindow(
+            state = ProblemsToolWindowState(appState.findings.findings, appState.loading),
+            actions = findingActions,
+            modifier = modifier,
+        )
+    BottomToolWindow.Checks -> ChecksToolWindow(checksPresentation, modifier)
+    BottomToolWindow.Output -> OutputToolWindow(outputPresentation, modifier)
+    BottomToolWindow.Terminal ->
+        appState.project?.let { project ->
+          TerminalToolWindow(terminal, project.path, onReindex, modifier)
+        }
   }
 }
 

@@ -14,6 +14,7 @@ data class ProjectWorkspaceState(
     val project: ProjectAnalysis? = null,
     val index: ProjectIndex? = null,
     val overview: ProjectOverview? = null,
+    val sourceChangeObserved: Boolean = false,
 )
 
 data class FileSelectionState(
@@ -305,6 +306,11 @@ sealed interface DesktopEvent {
 
   data class FileLoaded(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) : DesktopEvent
 
+  data class SelectedFileRefreshed(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) :
+      DesktopEvent
+
+  data class SelectedFileUnavailable(val message: String) : DesktopEvent
+
   data class SymbolSelected(val symbol: SymbolInfo) : DesktopEvent
 
   data class EditorContextSelected(val symbol: SymbolInfo?, val line: Int) : DesktopEvent
@@ -383,24 +389,13 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                   jobs.copy(
                       loading = false, status = "Imported ${event.project.name}", error = null),
           )
-      is DesktopEvent.IndexRefreshed -> {
-        val revisionChanged = project?.projectRevision != event.index.projectRevision
-        copy(
-            projectState =
-                projectState.copy(
-                    project = project?.copy(projectRevision = event.index.projectRevision),
-                    index = event.index),
-            analysisRun = analysisRun.afterRevisionChange(revisionChanged),
-            chat = if (revisionChanged) ChatState() else chat,
-            review = if (revisionChanged) DraftReviewState(applied = review.applied) else review,
-            jobs = jobs.copy(loading = false, status = "Re-analyzed project index", error = null),
-        )
-      }
+      is DesktopEvent.IndexRefreshed -> withRefreshedIndex(event.index)
       is DesktopEvent.OverviewLoaded ->
           copy(projectState = projectState.copy(overview = event.overview))
       is DesktopEvent.FindingsLoaded -> copy(findings = findings.copy(findings = event.findings))
       is DesktopEvent.FindingStatusUpdated -> withFindingStatus(event)
-      is DesktopEvent.AnalysisRunUpdated -> copy(analysisRun = event.state)
+      is DesktopEvent.AnalysisRunUpdated ->
+          copy(analysisRun = event.state.afterRevisionChange(projectState.sourceChangeObserved))
       is DesktopEvent.AnalyzeAllLoaded -> copy(findings = findings.copy(analyzeAll = event.job))
       is DesktopEvent.PerformanceLoaded ->
           copy(
@@ -485,6 +480,18 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
               review = DraftReviewState(applied = review.applied),
               jobs = jobs.copy(loading = false, status = event.file.path, error = null),
           )
+      is DesktopEvent.SelectedFileRefreshed -> withRefreshedFile(event)
+      is DesktopEvent.SelectedFileUnavailable ->
+          withObservedSourceChange()
+              .copy(
+                  selection = FileSelectionState(),
+                  jobs =
+                      jobs.copy(
+                          loading = false,
+                          error = event.message,
+                          status =
+                              "Source could not be refreshed. Reopen the file or reindex the project."),
+              )
       is DesktopEvent.SymbolSelected -> selectEditorTarget(event.symbol, event.symbol.startLine)
       is DesktopEvent.EditorContextSelected -> selectEditorTarget(event.symbol, event.line)
       is DesktopEvent.SourceLineSelected ->
@@ -622,6 +629,54 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
 private fun BenchmarkEvidenceState.withoutCatalog(): BenchmarkEvidenceState =
     copy(catalog = null, selected = null, running = false)
 
+private fun DesktopState.withRefreshedIndex(index: ProjectIndex): DesktopState {
+  val revisionChanged = project?.projectRevision != index.projectRevision
+  return copy(
+      projectState =
+          projectState.copy(
+              project = project?.copy(projectRevision = index.projectRevision),
+              index = index,
+              sourceChangeObserved = false),
+      analysisRun = analysisRun.afterRevisionChange(revisionChanged),
+      chat = if (revisionChanged) ChatState() else chat,
+      review = if (revisionChanged) DraftReviewState(applied = review.applied) else review,
+      jobs = jobs.copy(loading = false, status = "Re-analyzed project index", error = null),
+  )
+}
+
+private fun DesktopState.withRefreshedFile(
+    event: DesktopEvent.SelectedFileRefreshed
+): DesktopState =
+    if (selectedFile?.path != event.file.path ||
+        selectedFile?.contentHash == event.file.contentHash)
+        this
+    else
+        withObservedSourceChange()
+            .copy(
+                selection =
+                    FileSelectionState(
+                        selectedFile = event.file,
+                        symbols = event.symbols,
+                        selectedSymbol =
+                            event.symbols.firstOrNull { it.name == selectedSymbol?.name },
+                    ),
+                jobs =
+                    jobs.copy(
+                        loading = false,
+                        error = null,
+                        status =
+                            "File changed outside Mini-Orca. Review evidence is stale; reindex the project before analysis."),
+            )
+
+private fun DesktopState.withObservedSourceChange(): DesktopState =
+    reduce(DesktopEvent.DraftMarkedStale)
+        .copy(
+            projectState = projectState.copy(sourceChangeObserved = true),
+            analysisRun = analysisRun.afterRevisionChange(true),
+            chat = ChatState(),
+            security = SecurityWorkspaceState(),
+        )
+
 data class RequestIdentity(
     val id: Long,
     val projectId: String,
@@ -646,6 +701,14 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
   private var draftRequest: Long = 0
 
   fun dispatch(event: DesktopEvent): DesktopState {
+    if (event is DesktopEvent.SelectedFileRefreshed &&
+        state.selectedFile?.path == event.file.path &&
+        state.selectedFile?.contentHash != event.file.contentHash) {
+      fileRequest = fileRequest?.copy(id = nextId(), contentHash = event.file.contentHash)
+      chatRequest = 0
+      draftRequest = 0
+    }
+    if (event is DesktopEvent.SelectedFileUnavailable) fileRequest = null
     if (event == DesktopEvent.DraftDiscarded) {
       chatRequest = 0
       draftRequest = 0

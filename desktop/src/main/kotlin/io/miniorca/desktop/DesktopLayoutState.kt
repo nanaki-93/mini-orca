@@ -37,6 +37,7 @@ internal enum class BottomToolWindow {
   Problems,
   Checks,
   Output,
+  Terminal,
 }
 
 internal enum class EditorSurface {

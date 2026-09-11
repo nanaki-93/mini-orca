@@ -21,6 +21,96 @@ import kotlinx.coroutines.launch
 
 class DesktopWorkflowPresenterTest {
   @Test
+  fun returningFromTerminalRetainsUnchangedDraftAndStalesChangedEvidenceUsingOnlyReads() {
+    listOf(false, true).forEach { changed ->
+      val calls = mutableListOf<Pair<String, String>>()
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+            calls.add(method to path)
+            when {
+              path.contains("files/info?") ->
+                  response(fileJson("main.go", if (changed) "shell-edit" else "base"))
+              path.contains("files/symbols?") -> response(symbolsJson("main.go", "Run"))
+              else -> error("Unexpected $method $path")
+            }
+          }
+      try {
+        loadFile(presenter)
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(ProjectAnalysisRunState(run = analysisRunFixture())))
+        val before = presenter.snapshot.value.state.review
+        presenter.refreshSelectedFile()
+        repeat(4) {
+          main.runPending()
+          io.runPending()
+        }
+        main.runPending()
+        if (changed) {
+          val state = presenter.snapshot.value.state
+          assertEquals(DraftEditorStatus.Stale, state.review.editor?.status)
+          assertNull(state.review.checks)
+          assertNull(state.analysis)
+          assertEquals("stale", state.analysisRun.run?.status)
+          assertFalse(
+              draftReviewEligibility(
+                      state.review.editor,
+                      state.review.draft,
+                      state.review.checks,
+                      state.selectedFile,
+                      state.project)
+                  .eligible)
+          // Polling the same daemon run cannot make locally observed stale evidence fresh again.
+          presenter.dispatch(
+              DesktopEvent.AnalysisRunUpdated(ProjectAnalysisRunState(run = analysisRunFixture())))
+          assertEquals("stale", presenter.snapshot.value.state.analysisRun.run?.status)
+        } else assertEquals(before, presenter.snapshot.value.state.review)
+        assertTrue(calls.all { it.first == "GET" })
+        assertEquals(if (changed) 2 else 1, calls.size)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun failedReturnRefreshBlocksOldDraftAndLateRefreshCannotReplaceAnotherSelection() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, _, _ ->
+          TransportResponse(404, """{"message":"file removed"}""")
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.refreshSelectedFile()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertNull(presenter.snapshot.value.state.selectedFile)
+      assertEquals(DraftEditorStatus.Stale, presenter.snapshot.value.state.review.editor?.status)
+      assertTrue(presenter.snapshot.value.state.error.orEmpty().contains("file removed"))
+      loadFile(presenter)
+      presenter.refreshSelectedFile()
+      main.runPending()
+      presenter.dispatch(DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()))
+      io.runPending()
+      main.runPending()
+      assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertNull(presenter.snapshot.value.state.error)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun resultNavigationAndFiltersNeverRequestAnalysisOrChangeTheSelectedFile() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
