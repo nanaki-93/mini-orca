@@ -21,6 +21,75 @@ import kotlinx.coroutines.launch
 
 class DesktopWorkflowPresenterTest {
   @Test
+  fun resultNavigationAndFiltersNeverRequestAnalysisOrChangeTheSelectedFile() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          calls.add(path)
+          response("{}")
+        }
+    try {
+      presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+      presenter.viewAnalysisResults("security", "main.go")
+      presenter.setAnalysisResultPath("performance", "src/")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(Workspace.Security, presenter.snapshot.value.state.workspace)
+      assertEquals("main.go", presenter.snapshot.value.state.analysisRun.resultPaths["security"])
+      assertEquals("src/", presenter.snapshot.value.state.analysisRun.resultPaths["performance"])
+      assertNull(presenter.snapshot.value.state.selectedFile)
+      assertTrue(calls.isEmpty())
+      presenter.viewAnalysisResults("bugs", "missing.go")
+      presenter.viewAnalysisResults("unknown", "main.go")
+      assertEquals(Workspace.Security, presenter.snapshot.value.state.workspace)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun projectWideResultsPrepareOnlyAnExplicitCurrentDeclarationWithoutGenerating() {
+    listOf("security", "performance").forEach { category ->
+      val writes = AtomicInteger()
+      val presenter = presenter { method, path, _ ->
+        if (method != "GET") writes.incrementAndGet()
+        when {
+          path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
+          path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go", "Run"))
+          path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+          path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+          path.contains("/git") -> response("""{"available":false}""")
+          else -> response("{}")
+        }
+      }
+      try {
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+        val page = if (category == "security") securityPageFixture() else performancePageFixture()
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = page.run, sections = mapOf(AnalysisResultKey(category) to page.section))))
+        assertNull(presenter.snapshot.value.state.selectedFile)
+        if (category == "security")
+            presenter.prepareSecurityFinding(securityResults(page).first().finding)
+        else
+            presenter.preparePerformanceFinding(
+                "main.go", performanceResults(page).single().finding)
+        eventually { presenter.snapshot.value.state.preparedRequest.isNotBlank() }
+        assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+        assertEquals(0, writes.get())
+      } finally {
+        presenter.close()
+      }
+    }
+  }
+
+  @Test
   fun failedReindexRestoresTheProjectRunWithoutStartingAnotherAnalysis() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()

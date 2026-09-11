@@ -70,6 +70,7 @@ data class ProjectAnalysisRunState(
     val action: String = "",
     val error: String? = null,
     val sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
+    val resultPaths: Map<String, String> = emptyMap(),
 )
 
 enum class SecuritySectionOperationStatus {

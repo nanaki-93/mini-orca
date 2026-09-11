@@ -231,27 +231,18 @@ internal data class DesktopShellEditorActions(
 )
 
 internal data class DesktopShellAnalysisActions(
-    val confirmBugProvider: (Boolean) -> Unit,
-    val startAnalyzeAll: (AnalyzeAllRunOptions) -> Unit,
-    val pauseAnalyzeAll: () -> Unit,
-    val resumeAnalyzeAll: (Boolean) -> Unit,
-    val cancelAnalyzeAll: () -> Unit,
+    val startAnalysis: (AnalysisRunLimits) -> Unit,
+    val pauseAnalysis: () -> Unit,
+    val resumeAnalysis: () -> Unit,
+    val cancelAnalysis: () -> Unit,
+    val resultPathChanged: (String, String) -> Unit,
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
-    val confirmPerformanceProvider: (Boolean) -> Unit,
-    val confirmSecurityReviewProvider: (Boolean) -> Unit,
-    val previewPerformance: () -> Unit,
-    val startPerformance: (PerformanceQueuePreview, Boolean) -> Unit,
-    val pausePerformance: () -> Unit,
-    val resumePerformance: (Boolean) -> Unit,
-    val cancelPerformance: () -> Unit,
     val openPerformanceFinding: (String, PerformanceFinding) -> Unit,
     val preparePerformanceFinding: (String, PerformanceFinding) -> Unit,
     val loadGoBenchmarks: () -> Unit,
     val selectGoBenchmark: (GoBenchmarkChoice) -> Unit,
     val compareSelectedGoBenchmark: () -> Unit,
-    val scanSecurity: () -> Unit,
-    val reviewSecurity: () -> Unit,
     val openSecurityFinding: (SecurityFinding) -> Unit,
     val prepareSecurityFinding: (SecurityFinding) -> Unit,
 )
@@ -947,23 +938,17 @@ private fun DesktopCanvas(
                     draft = appState.review.draft,
                     focusedLine = appState.selection.focusedLine,
                     findings = appState.findings.findings,
-                    analysis =
-                        AnalysisWorkspacePaneState(
-                            job = appState.findings.analyzeAll,
-                            coverage = appState.overview?.analysisCoverage,
-                            model = context.bugModel,
-                            remoteProviderConfirmed = context.bugProviderConfirmed,
-                        ),
+                    analysis = AnalysisWorkspacePaneState(appState.project, appState.analysisRun),
                     bugs =
                         BugsWorkspacePaneState(
-                            appState.findings.findings, appState.findings.scan, appState.loading),
+                            appState.projectBugFindings(),
+                            appState.findings.scan,
+                            appState.loading,
+                            appState.analysisResultPage("bugs")),
                     performance =
                         PerformanceWorkspacePaneState(
-                            job = appState.findings.performanceJob,
-                            report = appState.findings.performanceReport,
-                            context = appState.findings.performanceContext,
-                            model = context.analyzeModel,
-                            remoteProviderConfirmed = context.analyzeProviderConfirmed,
+                            page = appState.analysisResultPage("performance"),
+                            index = appState.index,
                             benchmarkComparison = appState.review.benchmark.comparison,
                             expectedBenchmarkIdentity = benchmarkEvidenceIdentity(appState.review),
                             benchmarkCatalog = appState.review.benchmark.catalog,
@@ -971,17 +956,7 @@ private fun DesktopCanvas(
                             benchmarkRunning = appState.review.benchmark.running),
                     security =
                         SecurityWorkspacePaneState(
-                            project = appState.project,
-                            selectedFile = appState.selectedFile,
-                            index = appState.index,
-                            sourceReport = appState.security.sourceReport,
-                            aiReport = appState.security.aiReport,
-                            action = appState.security.action,
-                            error = appState.security.error,
-                            model = context.analyzeModel,
-                            remoteProviderConfirmed = context.securityReviewRemoteConfirmed,
-                            sourceOperation = appState.security.sourceOperation,
-                            aiOperation = appState.security.aiOperation),
+                            appState.analysisResultPage("security"), appState.index),
                 ),
             navigation =
                 ContentPaneNavigationActions(
@@ -993,21 +968,20 @@ private fun DesktopCanvas(
                       contextDrawerForSourceSelection(workspace, widthDp)?.let(onOpenNarrowDrawer)
                     },
                 ),
-            analysisActions = analysisActions.toWorkspaceActions(),
+            analysisActions = analysisActions.toWorkspaceActions(onWorkspaceSelected),
             bugsActions =
                 BugsWorkspaceActions(
                     findingActions = findingActions,
                     startScan = analysisActions.startScan,
                     cancelScan = analysisActions.cancelScan,
+                    openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
+                    pathChanged = { analysisActions.resultPathChanged("bugs", it) },
                 ),
             performanceActions =
                 PerformanceWorkspaceActions(
-                    confirmRemoteProvider = analysisActions.confirmPerformanceProvider,
-                    preview = analysisActions.previewPerformance,
-                    start = analysisActions.startPerformance,
-                    pause = analysisActions.pausePerformance,
-                    resume = analysisActions.resumePerformance,
-                    cancel = analysisActions.cancelPerformance,
+                    openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
+                    pathChanged = { analysisActions.resultPathChanged("performance", it) },
+                    semanticActions = findingActions,
                     openInEditor = analysisActions.openPerformanceFinding,
                     prepareOptimization = analysisActions.preparePerformanceFinding,
                     loadBenchmarks = analysisActions.loadGoBenchmarks,
@@ -1015,9 +989,9 @@ private fun DesktopCanvas(
                     runBenchmark = analysisActions.compareSelectedGoBenchmark),
             securityActions =
                 SecurityWorkspaceActions(
-                    confirmRemoteProvider = analysisActions.confirmSecurityReviewProvider,
-                    scan = analysisActions.scanSecurity,
-                    review = analysisActions.reviewSecurity,
+                    openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
+                    pathChanged = { analysisActions.resultPathChanged("security", it) },
+                    semanticActions = findingActions,
                     openSource = analysisActions.openSecurityFinding,
                     prepareFix = analysisActions.prepareSecurityFinding),
             modifier = Modifier.fillMaxSize(),
@@ -1093,14 +1067,9 @@ private data class ContentPaneNavigationActions(
     val createDeclaration: () -> Unit,
 )
 
-private fun DesktopShellAnalysisActions.toWorkspaceActions() =
+private fun DesktopShellAnalysisActions.toWorkspaceActions(openResults: (Workspace) -> Unit) =
     AnalysisWorkspaceActions(
-        confirmRemoteProvider = confirmBugProvider,
-        start = startAnalyzeAll,
-        pause = pauseAnalyzeAll,
-        resume = resumeAnalyzeAll,
-        cancel = cancelAnalyzeAll,
-    )
+        startAnalysis, pauseAnalysis, resumeAnalysis, cancelAnalysis, openResults)
 
 internal fun modelDestinationLabel(scope: ModelScope, model: ScopedModel): String {
   val reasoningEffort =

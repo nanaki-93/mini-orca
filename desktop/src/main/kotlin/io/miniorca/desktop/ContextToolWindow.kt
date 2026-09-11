@@ -193,40 +193,7 @@ internal fun ContextToolWindow(
             expanded = actionsExpanded,
             onToggle = { actionsExpanded = !actionsExpanded }) {
               if (inspector.selectedSymbol == null) ContextCreationAction(state, actions)
-              if (inspector.analysisAction != InspectorAnalysisAction.None) {
-                val onAnalysisAction =
-                    when (inspector.analysisAction) {
-                      InspectorAnalysisAction.AnalyzeFile -> actions.analyze
-                      InspectorAnalysisAction.RefreshAnalysis -> actions.refresh
-                      InspectorAnalysisAction.CancelAnalysis,
-                      InspectorAnalysisAction.None -> actions.cancel
-                    }
-                if (inspector.remoteProviderConfirmationRequired) {
-                  RemoteProviderConfirmation(
-                      ModelScope.Bug,
-                      state.bugModel,
-                      state.remoteProviderConfirmed,
-                      actions.confirmRemoteProvider)
-                }
-                MiniOrcaButton(
-                    onClick = onAnalysisAction,
-                    enabled =
-                        !inspector.remoteProviderConfirmationRequired ||
-                            state.remoteProviderConfirmed,
-                    tone =
-                        if (inspector.analysisAction == InspectorAnalysisAction.CancelAnalysis)
-                            ActionTone.Destructive
-                        else ActionTone.Neutral,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                  DesktopLineIcon(DesktopIcon.Search, "File analysis", iconSize = 16.dp)
-                  Spacer(Modifier.width(8.dp))
-                  Text(
-                      inspector.analysisAction.label,
-                      fontSize = 12.sp,
-                      modifier = Modifier.weight(1f))
-                }
-              }
+              ContextProjectAnalysisActions(state, actions)
               inspector.selectedSymbol
                   ?.takeIf { it.editEligibility.eligible }
                   ?.let { symbol ->
@@ -343,6 +310,7 @@ internal data class ContextToolWindowState(
     val functionRemoteProviderConfirmed: Boolean = false,
     val declarationExplanation: DeclarationExplanationState = DeclarationExplanationState(),
     val creationInProgress: Boolean = false,
+    val analysisRun: ProjectAnalysisRunState = ProjectAnalysisRunState(),
 )
 
 /** File analysis and direct-edit intents available from Context. */
@@ -356,6 +324,7 @@ internal data class ContextToolWindowActions(
     val explainSelected: () -> Unit = {},
     val cancelExplanation: () -> Unit = {},
     val createDeclaration: (() -> Unit)? = null,
+    val viewResults: (() -> Unit)? = null,
 )
 
 internal fun explanationActionLabel(state: DeclarationExplanationState): String =
@@ -541,6 +510,34 @@ private fun ContextReadOnlySummaries(impact: ImpactPreview?, gitStatus: GitStatu
           color = SecondaryText,
           fontSize = 11.sp,
           modifier = Modifier.padding(top = 4.dp))
+    }
+  }
+}
+
+/** Context starts whole-project admission; the adjacent results action only filters a page. */
+@Composable
+internal fun ContextProjectAnalysisActions(
+    state: ContextToolWindowState,
+    actions: ContextToolWindowActions
+) {
+  Column(Modifier.fillMaxWidth()) {
+    MiniOrcaButton(
+        onClick = actions.analyze,
+        enabled = state.analysisRun.run?.isActive() != true && state.analysisRun.action.isBlank(),
+        tone = ActionTone.Neutral,
+        modifier = Modifier.fillMaxWidth()) {
+          Text("Analyze project", style = IdeTypography.action)
+        }
+    Text(
+        "Whole project · ${analysisStatusLabel(state.analysisRun.run?.status)}",
+        color = SecondaryText,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.padding(vertical = 4.dp))
+    actions.viewResults?.let { view ->
+      MiniOrcaButton(
+          onClick = view, tone = ActionTone.Navigation, modifier = Modifier.fillMaxWidth()) {
+            Text("View this file’s results", style = IdeTypography.action)
+          }
     }
   }
 }

@@ -319,6 +319,7 @@ internal fun MiniOrcaApp(
                 impact = appState.impact,
                 gitStatus = appState.gitStatus,
                 fileAnalysis = appState.analysis,
+                analysisRun = appState.analysisRun,
                 project = appState.project,
                 overview = appState.overview,
                 functionModel = workflow.model(ModelScope.Function),
@@ -329,7 +330,10 @@ internal fun MiniOrcaApp(
         actions =
             ContextToolWindowActions(
                 confirmRemoteProvider = { presenter.setProviderConfirmation(ModelScope.Bug, it) },
-                analyze = { presenter.analyzeSelected(false) },
+                analyze = { presenter.previewAnalysis() },
+                viewResults = {
+                  presenter.viewAnalysisResults("bugs", appState.selectedFile?.path.orEmpty())
+                },
                 refresh = { presenter.analyzeSelected(true) },
                 cancel = presenter::cancelAnalysis,
                 editSelected = ::requestDirectEdit,
@@ -587,47 +591,25 @@ internal fun MiniOrcaApp(
           ),
       analysisActions =
           DesktopShellAnalysisActions(
-              confirmBugProvider = { presenter.setProviderConfirmation(ModelScope.Bug, it) },
-              startAnalyzeAll = presenter::startAnalyzeAll,
-              pauseAnalyzeAll = presenter::pauseAnalyzeAll,
-              resumeAnalyzeAll = presenter::resumeAnalyzeAll,
-              cancelAnalyzeAll = presenter::cancelAnalyzeAll,
+              startAnalysis = { presenter.previewAnalysis(limits = it) },
+              pauseAnalysis = presenter::pauseAnalysis,
+              resumeAnalysis = presenter::resumeAnalysis,
+              cancelAnalysis = presenter::cancelAnalysis,
+              resultPathChanged = presenter::setAnalysisResultPath,
               startScan = presenter::runVerifiedScan,
               cancelScan = presenter::cancelVerifiedScan,
-              confirmPerformanceProvider = {
-                presenter.setProviderConfirmation(ModelScope.Analyze, it)
-              },
-              confirmSecurityReviewProvider = presenter::setSecurityReviewRemoteConfirmation,
-              previewPerformance = presenter::previewPerformance,
-              startPerformance = presenter::startPerformance,
-              pausePerformance = presenter::pausePerformance,
-              resumePerformance = presenter::resumePerformance,
-              cancelPerformance = presenter::cancelPerformance,
               openPerformanceFinding = { path, finding ->
                 clearComposerInput()
                 presenter.openFileInEditor(
                     path, EditorNavigationTarget(path, finding.symbol, finding.startLine))
               },
               preparePerformanceFinding = { path, finding ->
-                val indexed = appState.index?.files?.firstOrNull { it.path == path }
-                val exact =
-                    indexed?.symbols?.singleOrNull { it.name == finding.symbol && it.atomicTarget }
-                if (indexed?.language == "Go" && exact != null) {
-                  clearComposerInput()
-                  presenter.openFileInEditor(
-                      path,
-                      EditorNavigationTarget(path, exact.name, finding.startLine),
-                      "Optimize ${exact.name} without changing behavior. Observed pattern: ${finding.observedPattern} Trade-off: ${finding.tradeoff}")
-                } else
-                    presenter.dispatch(
-                        DesktopEvent.Failed(
-                            "This opportunity is analysis-only; it is not one exact eligible Go declaration."))
+                clearComposerInput()
+                presenter.preparePerformanceFinding(path, finding)
               },
               loadGoBenchmarks = presenter::loadGoBenchmarks,
               selectGoBenchmark = presenter::selectGoBenchmark,
               compareSelectedGoBenchmark = presenter::compareSelectedGoBenchmark,
-              scanSecurity = presenter::scanSecurity,
-              reviewSecurity = presenter::reviewSecurity,
               openSecurityFinding = presenter::openSecurityFinding,
               prepareSecurityFinding = { finding ->
                 clearComposerInput()

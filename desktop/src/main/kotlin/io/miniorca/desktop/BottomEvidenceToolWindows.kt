@@ -204,17 +204,21 @@ internal fun outputToolWindowPresentation(
           ))
     }
     state.analyzeAll?.let { job ->
-      val presentation = analyzeAllPresentation(job, state.coverage)
-      add(OutputEntry("Analyze-all", presentation.run.statusLabel, presentation.run.statusDetail))
-      presentation.failures.forEach { failure ->
-        add(
-            OutputEntry(
-                "Analysis failure · ${failure.path}",
-                "Failed",
-                "Attempt ${failure.attempts}",
-                sanitizedOutputText(failure.error),
-            ))
-      }
+      add(
+          OutputEntry(
+              "Analyze-all",
+              job.status.outputStatus(),
+              "Saved Analyze-all run: ${job.status.outputStatus()}."))
+      job.files
+          .filter { it.status == "failed" || it.error.isNotBlank() }
+          .forEach { file ->
+            add(
+                OutputEntry(
+                    "Analysis failure · ${file.path}",
+                    "Failed",
+                    "Attempt ${file.attempts}",
+                    sanitizedOutputText(file.error)))
+          }
     }
     state.scan?.let { scan ->
       add(

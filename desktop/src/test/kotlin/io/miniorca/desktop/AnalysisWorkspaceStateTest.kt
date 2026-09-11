@@ -1,232 +1,159 @@
 package io.miniorca.desktop
 
-import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AnalysisWorkspaceStateTest {
   @Test
-  fun workspaceWidthRulesKeepTheSharedGutterWithoutASeparateRunControlsColumn() {
-    assertEquals(16.dp, workspacePageHorizontalGutter(899.dp))
-    assertEquals(24.dp, workspacePageHorizontalGutter(900.dp))
-  }
-
-  @Test
-  fun headerToolbarExposesOnlyValidLifecycleActionsAndHonorsRemoteConfirmation() {
-    val localModel = ScopedModel(model = "local-model")
-    val remoteModel = ScopedModel(model = "remote-model", remoteProvider = true)
-
+  fun lifecycleCommandsFollowTheDaemonAndResumeRequiresFreshAdmission() {
     assertEquals(
-        listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Start, true)),
-        analyzeAllToolbarActions(analyzeAllPresentation(null, null).run, localModel, false),
-    )
-    assertEquals(
-        listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Start, false)),
-        analyzeAllToolbarActions(analyzeAllPresentation(null, null).run, remoteModel, false),
-    )
-    assertEquals(
-        listOf(
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Pause, true),
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, true),
-        ),
-        analyzeAllToolbarActions(
-            analyzeAllPresentation(job("running"), null).run, localModel, false),
-    )
-    assertEquals(
-        listOf(
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Resume, false),
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, true),
-        ),
-        analyzeAllToolbarActions(
-            analyzeAllPresentation(job("paused"), null).run, remoteModel, false),
-    )
-    assertEquals(
-        listOf(
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Resume, true),
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, true),
-        ),
-        analyzeAllToolbarActions(
-            analyzeAllPresentation(job("paused"), null).run, remoteModel, true),
-    )
-    assertEquals(
-        listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, true)),
-        analyzeAllToolbarActions(
-            analyzeAllPresentation(job("pausing"), null).run, localModel, false),
-    )
-    assertTrue(
-        analyzeAllToolbarActions(
-                analyzeAllPresentation(job("canceling"), null).run, localModel, false)
-            .isEmpty())
-    listOf("starting", "completed", "canceled", "failed", "stale").forEach { status ->
+        listOf(AnalysisRunCommand.Start),
+        projectRunPresentation(ProjectAnalysisRunState()).commands)
+    val expected =
+        mapOf(
+            "running" to listOf(AnalysisRunCommand.Pause, AnalysisRunCommand.Cancel),
+            "queued" to listOf(AnalysisRunCommand.Pause, AnalysisRunCommand.Cancel),
+            "pausing" to listOf(AnalysisRunCommand.Cancel),
+            "canceling" to emptyList(),
+            "paused" to listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel),
+            "interrupted" to listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel),
+            "stale" to listOf(AnalysisRunCommand.Start, AnalysisRunCommand.Cancel))
+    expected.forEach { (status, commands) ->
       assertEquals(
-          listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Start, true)),
-          analyzeAllToolbarActions(
-              analyzeAllPresentation(job(status), null).run, localModel, false),
-      )
+          commands,
+          projectRunPresentation(
+                  ProjectAnalysisRunState(run = analysisRunFixture().copy(status = status)))
+              .commands)
+    }
+    listOf("completed", "completed_empty", "failed", "partial", "canceled", "unavailable").forEach {
+      assertEquals(
+          listOf(AnalysisRunCommand.Start),
+          projectRunPresentation(
+                  ProjectAnalysisRunState(run = analysisRunFixture().copy(status = it)))
+              .commands)
     }
   }
 
   @Test
-  fun metricColumnsReflowBeforeNarrowLabelsCanCrowd() {
-    assertEquals(6, analysisMetricColumnCount(780.dp))
-    assertEquals(3, analysisMetricColumnCount(779.dp))
-    assertEquals(2, analysisMetricColumnCount(519.dp))
-  }
-
-  @Test
-  fun progressCountsFailuresAsProcessedAndKeepsEmptyQueuesAtZero() {
-    val empty = analyzeAllPresentation(null, null).run
-    assertEquals(0f, analysisRunProgress(empty))
+  fun overallProgressCountsUniqueStagesAndRetainsFailuresAndCurrentPaths() {
     val run =
-        analyzeAllPresentation(
-                job(
-                    "running",
-                    files =
-                        listOf(
-                            file("one.go", "completed"),
-                            file("two.go", "failed"),
-                            file("three.go", "running"),
-                            file("four.go", "pending"))),
-                null)
-            .run
-    assertEquals(0.5f, analysisRunProgress(run))
-    assertEquals(1f, analysisRunProgress(run.copy(completed = 8)))
-  }
-
-  @Test
-  fun runOptionsKeepFileAndRetryLimitsWithinDaemonBounds() {
-    assertEquals(
-        AnalyzeAllRunOptions(maxFiles = 1, maxRetries = 0),
-        AnalyzeAllRunOptions(maxFiles = -1, maxRetries = -1).bounded())
-    assertEquals(
-        AnalyzeAllRunOptions(maxFiles = 500, maxRetries = 3),
-        AnalyzeAllRunOptions(maxFiles = 501, maxRetries = 4).bounded())
-    assertTrue(AnalyzeAllRunOptions(confirmRemoteProvider = true).bounded().confirmRemoteProvider)
-  }
-
-  @Test
-  fun analysisPresentationSeparatesCoverageRunCountsAndFailureRows() {
-    val presentation =
-        analyzeAllPresentation(
-            AnalyzeAllJob(
-                projectRevision = "revision",
+        analysisRunFixture()
+            .copy(
                 status = "running",
-                maxFiles = 20,
-                maxRetries = 2,
                 files =
                     listOf(
-                        file("complete.go", "completed"),
-                        file("failed.go", "failed", attempts = 2, error = "sanitized failure"),
-                        file("active.go", "running"),
-                        file("queued.go", "pending"),
-                        file("unknown.go", "unexpected", error = "sanitized unknown failure"),
-                        file("missing-message.go", "failed", attempts = 3),
-                    ),
-            ),
-            AnalysisCoverage(
-                total = 42, fresh = 8, stale = 5, missing = 20, running = 6, failed = 3),
-        )
-
-    assertEquals(42, presentation.coverage.total)
-    assertEquals(8, presentation.coverage.fresh)
-    assertEquals(6, presentation.coverage.running)
-    assertEquals(3, presentation.coverage.failed)
-    assertEquals(20, presentation.run.maxFiles)
-    assertEquals(2, presentation.run.maxRetries)
-    assertEquals(6, presentation.run.candidates)
-    assertEquals(1, presentation.run.completed)
-    assertEquals(3, presentation.run.failed)
-    assertEquals(1, presentation.run.running)
-    assertEquals(1, presentation.run.remaining)
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress("semantic", "completed", 1, false),
+                                AnalysisStageProgress("performance", "running", 1, false),
+                                AnalysisStageProgress(
+                                    "security_source",
+                                    "failed",
+                                    2,
+                                    false,
+                                    reason = "source scanner unavailable"),
+                                AnalysisStageProgress("security_ai", "pending", 0, false)))))
+    val result = projectRunPresentation(ProjectAnalysisRunState(run = run))
+    assertEquals(4, result.totalSteps)
+    assertEquals(2, result.finishedSteps)
+    assertEquals(0.5f, result.progress)
+    assertEquals(listOf("main.go"), result.currentFiles)
     assertEquals(
-        listOf("failed.go", "unknown.go", "missing-message.go"),
-        presentation.failures.map { it.path },
-    )
-    assertEquals("sanitized failure", presentation.failures[0].error)
-    assertEquals(2, presentation.failures[0].attempts)
-    assertEquals("Analysis failed", presentation.failures[2].error)
-    assertFalse(presentation.statusDetail.contains("Coverage:"))
-    assertTrue(presentation.run.statusDetail.contains("counts and failures"))
-    assertFalse(presentation.run.statusDetail.contains("revision"))
+        AnalysisStageFailure("main.go", "security_source", 2, "source scanner unavailable"),
+        result.failures.single())
   }
 
   @Test
-  fun analysisPresentationUsesStableLifecycleTextForEveryJobState() {
-    val cases =
-        listOf(
-            null to Triple("Not started", "Start", "never starts one automatically"),
-            "running" to Triple("Running", "Pause or cancel", "Processing candidates"),
-            "paused" to Triple("Paused", "Resume or cancel", "Resume to process"),
-            "completed" to Triple("Completed", "Start a new run", "refresh coverage"),
-            "canceled" to
-                Triple("Canceled", "Start a new run", "reviews and failures remain available"),
-            "stale" to Triple("Stale", "Start a new run", "cannot resume"),
-            "failed" to Triple("Failed", "Retry", "Inspect failures"),
-        )
-
-    cases.forEach { (status, expected) ->
-      val presentation = analyzeAllPresentation(status?.let(::job), null)
-
-      assertEquals(expected.first, presentation.run.statusLabel)
-      assertEquals(expected.second, presentation.run.controls)
-      assertTrue(presentation.run.statusDetail.contains(expected.third))
-    }
+  fun localFiltersNeverChangeCoverageAndUnknownCountsAreNotZero() {
+    val page = resultPageFixture("bugs")
+    assertEquals(1, page.reportedCount)
+    assertTrue(page.copy(path = "missing").semantic.isEmpty())
+    assertEquals(page.progress, page.copy(path = "missing").progress)
+    assertEquals(page.reportedCount, page.copy(path = "missing").reportedCount)
+    assertNull(
+        page
+            .copy(
+                run =
+                    page.run!!.copy(
+                        sections = page.run.sections.map { it.copy(findingCount = null) }))
+            .reportedCount)
+    assertNull(page.copy(run = null).reportedCount)
+    assertTrue(analysisCoverageLabel(null).contains("not available"))
   }
 
   @Test
-  fun errorBearingUnknownStatesAreFailuresWhileSuccessfulAndActiveFilesAreNot() {
-    val presentation =
-        analyzeAllPresentation(
-            job(
-                "running",
-                files =
-                    listOf(
-                        file("completed.go", "completed"),
-                        file("running.go", "running"),
-                        file("pending.go", "pending"),
-                        file("unknown.go", "unknown", error = "sanitized failure"),
-                    ),
-            ),
-            null,
-        )
-
-    assertEquals(1, presentation.run.failed)
-    assertEquals(listOf("unknown.go"), presentation.failures.map { it.path })
-    assertEquals("sanitized failure", presentation.failures.single().error)
+  fun staleAndForeignEvidenceCannotAppearAsCurrentResults() {
+    val page = resultPageFixture("bugs")
+    val stale = page.copy(project = page.project!!.copy(projectRevision = "next"))
+    assertEquals("Stale", stale.statusLabel)
+    assertNull(stale.reportedCount)
+    assertEquals("stale", stale.semantic.single().freshness)
+    val foreign =
+        page.copy(run = page.run!!.copy(identity = page.run.identity.copy(projectId = "other")))
+    assertNull(foreign.results)
+    assertNull(foreign.progress)
+    assertTrue(foreign.semantic.isEmpty())
+    assertNull(
+        page
+            .copy(section = page.section.copy(results = page.results!!.copy(path = "main.go")))
+            .results)
+    val wrongCategory = page.results!!.semantic.single().copy(category = "security")
+    assertTrue(
+        page
+            .copy(
+                section =
+                    page.section.copy(
+                        results = page.results!!.copy(semantic = listOf(wrongCategory))))
+            .semantic
+            .isEmpty())
+    assertFalse(page.stale)
   }
+}
 
-  @Test
-  fun emptyFailureListUsesACompactExplicitMessage() {
-    val presentation =
-        analyzeAllPresentation(job("completed", files = listOf(file("main.go", "completed"))), null)
+internal fun resultProjectFixture() =
+    ProjectAnalysis(
+        "project",
+        "revision",
+        "Mini-Orca fixture",
+        "/tmp/fixture",
+        "Go",
+        fileCount = 2,
+        sourceFileCount = 2,
+        totalLines = 20,
+        summary = "",
+        aiStatus = "",
+        analyzedAt = "")
 
-    assertTrue(presentation.failures.isEmpty())
-    assertEquals("No failures recorded.", presentation.noErrorsMessage)
-  }
+internal fun resultIndexFixture() =
+    ProjectIndex(
+        "project",
+        "revision",
+        files =
+            listOf(
+                IndexedFile(
+                    "main.go",
+                    "base",
+                    "Go",
+                    false,
+                    lineCount = 20,
+                    symbols =
+                        listOf(SymbolInfo("Run", "function", "func Run()", 2, 10, "exact", true)))))
 
-  @Test
-  fun missingAnalysisJobStatesThatImportAndReindexNeverStartIt() {
-    val presentation = analyzeAllPresentation(null, null)
-
-    assertEquals("Not started", presentation.statusLabel)
-    assertTrue(presentation.statusDetail.contains("never starts one automatically"))
-    assertEquals("Start", presentation.controls)
-  }
-
-  private fun job(
-      status: String,
-      revision: String = "revision",
-      files: List<AnalyzeAllFileJob> = emptyList()
-  ) =
-      AnalyzeAllJob(
-          projectId = "project",
-          projectRevision = revision,
-          status = status,
-          files = files,
-      )
-
-  private fun file(path: String, status: String, attempts: Int = 0, error: String = "") =
-      AnalyzeAllFileJob(path = path, status = status, attempts = attempts, error = error)
+internal fun resultPageFixture(category: String): AnalysisResultPageState {
+  val run =
+      analysisRunFixture()
+          .copy(
+              status = "partial",
+              sections = analysisRunFixture().sections.map { it.copy(status = "partial") })
+  return AnalysisResultPageState(
+      category,
+      resultProjectFixture(),
+      run,
+      AnalysisSectionState(results = analysisResultsFixture(run, category)))
 }

@@ -1,14 +1,14 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,274 +25,195 @@ internal fun PerformanceWorkspacePane(
     state: PerformanceWorkspacePaneState,
     actions: PerformanceWorkspaceActions
 ) {
-  var category by remember { mutableStateOf("") }
-  var impact by remember { mutableStateOf("") }
-  var path by remember { mutableStateOf("") }
-  var selectedID by remember { mutableStateOf("") }
-  var reviewOptionsExpanded by remember { mutableStateOf(true) }
-  var filtersExpanded by remember { mutableStateOf(true) }
-  val job = state.job
-  val presentation = performanceReviewPresentation(job, state.report)
-  val report = presentation.report
-  val toolbarActions =
-      performanceToolbarActions(
-          job = job,
-          hasPreviewContext = state.context != null,
-          model = state.model,
-          remoteProviderConfirmed = state.remoteProviderConfirmed,
-      )
-  val findings = presentation.findings(category, impact, path)
-  val selected = findings.firstOrNull { it.id == selectedID }
-  fun requestToolbarAction(action: PerformanceToolbarAction) {
-    when (action) {
-      PerformanceToolbarAction.Preview -> actions.preview()
-      PerformanceToolbarAction.Start ->
-          state.context?.let { actions.start(it, state.remoteProviderConfirmed) }
-      PerformanceToolbarAction.Pause -> actions.pause()
-      PerformanceToolbarAction.Resume -> actions.resume(state.remoteProviderConfirmed)
-      PerformanceToolbarAction.Cancel -> actions.cancel()
-    }
-  }
-  BoxWithConstraints(Modifier.fillMaxSize()) {
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = workspacePagePadding(maxWidth, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      item { PerformanceReviewHeader(job, report, toolbarActions, ::requestToolbarAction) }
-      item {
-        PerformanceReviewScope(
-            state = state,
-            report = report,
-            expanded = reviewOptionsExpanded,
-            onToggle = { reviewOptionsExpanded = !reviewOptionsExpanded },
-            onRemoteProviderConfirmed = actions.confirmRemoteProvider,
-        )
+  var category by remember(state.page.project?.projectId) { mutableStateOf("") }
+  var impact by remember(state.page.project?.projectId) { mutableStateOf("") }
+  var selectedKey by remember(state.page.run?.identity) { mutableStateOf<String?>(null) }
+  var filtersExpanded by remember { mutableStateOf(false) }
+  var benchmarksExpanded by remember { mutableStateOf(false) }
+  val results = performanceResults(state.page, category, impact)
+  val semantic =
+      state.page.semantic.filter {
+        (impact.isBlank() || it.severity.equals(impact, true)) &&
+            (category.isBlank() ||
+                it.title.contains(category, true) ||
+                it.message.contains(category, true))
       }
-      if (state.expectedBenchmarkIdentity != null || state.benchmarkCatalog != null) {
-        item {
-          PerformanceBenchmarkControls(
-              catalog = state.benchmarkCatalog,
-              selected = state.selectedBenchmark,
-              candidateAvailable = state.expectedBenchmarkIdentity != null,
-              running = state.benchmarkRunning,
-              actions = actions,
-          )
-        }
-      }
-      state.benchmarkComparison?.let { comparison ->
-        item {
-          PerformanceBenchmarkEvidence(
-              comparison = comparison,
-              expectedIdentity = state.expectedBenchmarkIdentity,
-              expectedChoice = state.selectedBenchmark,
-          )
-        }
-      }
-      item {
+  val rows = results.map { it.row() } + semantic.map(::semanticResultRow)
+  Column(Modifier.fillMaxSize()) {
+    ResultSectionHeader(state.page, actions.openAnalysis)
+    Text(
+        "Source-based hypotheses · Not measured",
+        color = Warning,
+        style = IdeTypography.resultLabel,
+        modifier = Modifier.padding(horizontal = 8.dp))
+    ResultPathFilter(state.page.path, actions.pathChanged)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+      IdeDisclosureHeader("Filters", filtersExpanded, { filtersExpanded = !filtersExpanded })
+      if (filtersExpanded)
+          ResponsiveFieldPair(
+              Modifier.fillMaxWidth(),
+              first = { field ->
+                CompactSingleLineField(category, { category = it }, "Category or text", field)
+              },
+              second = { field ->
+                CompactSingleLineField(impact, { impact = it }, "Potential impact", field)
+              })
+      if (state.expectedBenchmarkIdentity != null ||
+          state.benchmarkCatalog != null ||
+          state.benchmarkComparison != null) {
         IdeDisclosureHeader(
-            title = "Filters",
-            expanded = filtersExpanded,
-            onToggle = { filtersExpanded = !filtersExpanded },
-            stateLabel = "Filter opportunities",
-        )
-        if (filtersExpanded) {
-          Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-            ResponsiveFieldPair(
-                modifier = Modifier.fillMaxWidth(),
-                first = { modifier ->
-                  CompactSingleLineField(category, { category = it }, "Category", modifier)
-                },
-                second = { modifier ->
-                  CompactSingleLineField(impact, { impact = it }, "Potential impact", modifier)
-                })
-            CompactSingleLineField(
-                path, { path = it }, "Path", Modifier.fillMaxWidth().padding(top = 6.dp))
-          }
-        }
-      }
-      selected?.let { finding ->
-        item {
-          PerformanceFindingDetails(
-              finding, presentation.pathFor(finding), presentation.isStale, actions)
-        }
-      }
-      item {
-        SectionLabel("Opportunities")
-        IdeHorizontalSeparator(Modifier.padding(top = 4.dp))
-      }
-      if (!presentation.hasReport)
-          item {
-            SystemStateMessage(
-                "No performance review",
-                "Preview limits, then start a bounded source review.",
-                modifier = Modifier.fillMaxWidth())
-          }
-      else if (findings.isEmpty())
-          item {
-            SystemStateMessage(
-                "No opportunities in reviewed files",
-                "Coverage and skipped files are shown above.",
-                modifier = Modifier.fillMaxWidth())
-          }
-      else
-          items(findings, key = { it.id }) { finding ->
-            ChromeButton(
-                onClick = { selectedID = finding.id },
-                selected = finding.id == selectedID,
-                modifier = Modifier.fillMaxWidth()) {
-                  Text(
-                      "${finding.category.uppercase()} · ${finding.potentialImpact} · ${presentation.pathFor(finding)}:${finding.startLine} · ${finding.title}",
-                      fontSize = 11.sp,
-                      modifier = Modifier.weight(1f))
+            "Benchmark evidence",
+            benchmarksExpanded,
+            { benchmarksExpanded = !benchmarksExpanded },
+            stateLabel = if (state.benchmarkRunning) "Running" else "Explicit local execution")
+        if (benchmarksExpanded)
+            Column(
+                Modifier.fillMaxWidth()
+                    .heightIn(max = 260.dp)
+                    .verticalScroll(rememberScrollState())) {
+                  PerformanceBenchmarkControls(
+                      state.benchmarkCatalog,
+                      state.selectedBenchmark,
+                      state.expectedBenchmarkIdentity != null,
+                      state.benchmarkRunning,
+                      actions)
+                  state.benchmarkComparison?.let {
+                    PerformanceBenchmarkEvidence(
+                        it, state.expectedBenchmarkIdentity, state.selectedBenchmark)
+                  }
                 }
-          }
-    }
-  }
-}
-
-@Composable
-private fun PerformanceReviewHeader(
-    job: PerformanceJob?,
-    report: PerformanceReport?,
-    toolbarActions: List<PerformanceToolbarActionPresentation>,
-    onToolbarAction: (PerformanceToolbarAction) -> Unit,
-) {
-  IdePaneHeader(
-      title = "Performance",
-      icon = DesktopIcon.Performance,
-      stateLabel = performanceStatusLabel(job, report),
-      stateTint = performanceStatusTint(job, report),
-      actions = {
-        toolbarActions.forEach { toolbarAction ->
-          MiniOrcaButton(
-              onClick = { onToolbarAction(toolbarAction.action) },
-              enabled = toolbarAction.enabled,
-              tone = performanceToolbarActionTone(toolbarAction.action),
-              density = ButtonDensity.Toolbar) {
-                Text(performanceToolbarActionLabel(toolbarAction.action), fontSize = 11.sp)
-              }
-        }
-      },
-  )
-  Text(
-      "Source-based review · Not measured",
-      color = Warning,
-      fontSize = 11.sp,
-      modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 8.dp))
-}
-
-@Composable
-private fun PerformanceReviewScope(
-    state: PerformanceWorkspacePaneState,
-    report: PerformanceReport?,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    onRemoteProviderConfirmed: (Boolean) -> Unit,
-) {
-  val context = state.context
-  val coverage = performanceCoveragePresentation(state.job, report)
-  IdeDisclosureHeader(
-      title = "Review scope",
-      expanded = expanded,
-      onToggle = onToggle,
-      stateLabel =
-          context?.let { "${it.files.size} selected files" } ?: "Preview limits to inspect scope",
-      stateTint = if (context == null) SecondaryText else SelectionText,
-  )
-  if (expanded) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-      context?.let { preview ->
-        CompactKeyValueRows(
-            listOf(
-                "Selected" to "${preview.files.size} files",
-                "Eligible limits" to
-                    "${preview.excluded} excluded · ${preview.oversized} oversized · ${preview.outsideLimit} outside limit",
-            ))
       }
-          ?: Text(
-              "No previewed scope is available yet. Preview limits before starting a review.",
-              color = SecondaryText,
-              fontSize = 11.sp,
-              lineHeight = 16.sp)
-      if (state.job?.status == "running")
-          Text(
-              modelDestinationLabel(ModelScope.Analyze, state.model),
-              color = if (state.model.remoteProvider) Warning else SecondaryText,
-              fontSize = 11.sp,
-              lineHeight = 16.sp,
-              modifier = Modifier.padding(top = 8.dp))
-      else
-          RemoteProviderConfirmation(
-              ModelScope.Analyze,
-              state.model,
-              state.remoteProviderConfirmed,
-              onRemoteProviderConfirmed)
-      IdeHorizontalSeparator(Modifier.padding(top = 8.dp))
-      SectionLabel("Review coverage", Modifier.padding(top = 8.dp))
-      Text(
-          coverage.stateLabel,
-          color =
-              if (coverage.stateLabel == "Unknown" || coverage.stateLabel.startsWith("Partial"))
-                  Warning
-              else SecondaryText,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 4.dp))
-      if (coverage.rows.isNotEmpty())
-          CompactKeyValueRows(coverage.rows, Modifier.padding(top = 4.dp))
+      PreviousAnalysisDetails(state.page.unclassified)
     }
+    ResultListDetail(
+        rows,
+        selectedKey,
+        { selectedKey = it },
+        "No performance results match this view. Coverage is shown above.",
+        Modifier.weight(1f).fillMaxWidth()) { key ->
+          val result = results.firstOrNull { it.row().key == key }
+          if (result != null) PerformanceFindingDetails(result, state.index, actions)
+          else
+              semantic
+                  .firstOrNull { semanticResultRow(it).key == key }
+                  ?.let { FindingDetailsRegion(it, actions.semanticActions) }
+        }
   }
+}
+
+internal data class PerformanceResult(
+    val report: PerformanceFileReport,
+    val finding: PerformanceFinding,
+    val stale: Boolean
+) {
+  fun row() =
+      ResultRowPresentation(
+          "performance:${report.path}:${finding.id}",
+          finding.title.ifBlank { "Untitled opportunity" },
+          "${report.path}:${finding.startLine}",
+          finding.observedPattern,
+          finding.potentialImpact.ifBlank { "Unknown impact" },
+          "Performance review · ${finding.confidence.ifBlank { "unknown confidence" }}",
+          if (stale) "Stale · Not measured" else "Not measured")
+}
+
+internal fun performanceResults(
+    page: AnalysisResultPageState,
+    category: String = "",
+    impact: String = ""
+): List<PerformanceResult> =
+    page.results
+        ?.performance
+        .orEmpty()
+        .filter {
+          it.projectId == page.project?.projectId &&
+              it.projectRevision == page.run?.identity?.projectRevision &&
+              page.matchesPath(it.path)
+        }
+        .flatMap { report ->
+          report.findings
+              .filter {
+                (category.isBlank() ||
+                    it.category.contains(category, true) ||
+                    it.title.contains(category, true)) &&
+                    (impact.isBlank() || it.potentialImpact.equals(impact, true))
+              }
+              .map { PerformanceResult(report, it, page.stale || report.status == "stale") }
+        }
+        .sortedWith(
+            compareByDescending<PerformanceResult> {
+                  performanceImpactOrder(it.finding.potentialImpact)
+                }
+                .thenByDescending { performanceConfidenceOrder(it.finding.confidence) }
+                .thenBy { it.report.path }
+                .thenBy { it.finding.startLine }
+                .thenBy { it.finding.id })
+
+internal fun performanceCanPrepare(result: PerformanceResult, index: ProjectIndex?): Boolean {
+  if (index == null ||
+      result.stale ||
+      result.report.projectId != index.projectId ||
+      result.report.projectRevision != index.projectRevision ||
+      result.report.status !in setOf("completed", "partial"))
+      return false
+  val file =
+      index.files.firstOrNull {
+        it.path == result.report.path && it.contentHash == result.report.contentHash
+      } ?: return false
+  val declaration =
+      file.symbols.singleOrNull {
+        it.name == result.finding.symbol && it.atomicTarget && it.confidence == "exact"
+      } ?: return false
+  return file.language == "Go" &&
+      result.finding.startLine in declaration.startLine..declaration.endLine
 }
 
 @Composable
 private fun PerformanceFindingDetails(
-    finding: PerformanceFinding,
-    path: String,
-    stale: Boolean,
+    result: PerformanceResult,
+    index: ProjectIndex?,
     actions: PerformanceWorkspaceActions
 ) {
-  Column(Modifier.fillMaxWidth()) {
-    IdePaneHeader(
-        title = "Selected opportunity",
-        icon = DesktopIcon.Performance,
-        stateLabel = "${finding.potentialImpact} · Not measured · $path:${finding.startLine}",
-        stateTint = performanceFindingTint(finding.potentialImpact),
-        actions = {
-          MiniOrcaButton(
-              { actions.openInEditor(path, finding) },
-              tone = ActionTone.Neutral,
-              density = ButtonDensity.Toolbar) {
-                Text("Open in Editor", fontSize = 11.sp)
-              }
-          MiniOrcaButton(
-              { actions.prepareOptimization(path, finding) },
-              enabled = finding.symbol.isNotBlank(),
-              tone = ActionTone.Primary,
-              density = ButtonDensity.Toolbar) {
-                Text("Prepare optimization", fontSize = 11.sp)
-              }
-        },
-    )
-    SelectionContainer {
-      Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-        CompactKeyValueRows(
-            listOf("Location" to "$path:${finding.startLine}", "Confidence" to finding.confidence))
-        Text(
-            "Observed pattern: ${finding.observedPattern}",
-            color = PrimaryText,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(top = 6.dp))
-        Text(
-            "When it matters: ${finding.workloadConditions}\nRecommendation: ${finding.recommendation}\nTrade-off: ${finding.tradeoff}\nVerify: ${finding.verificationPlan}",
-            color = SecondaryText,
-            fontSize = 11.sp,
-            lineHeight = 16.sp,
-            modifier = Modifier.padding(top = 6.dp))
-      }
+  val finding = result.finding
+  var technical by remember(result.row().key) { mutableStateOf(false) }
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    ResultRowContent(result.row().copy(summary = ""))
+    Text("Observed pattern", style = IdeTypography.resultLabel, color = PrimaryText)
+    ModelResultContent(finding.observedPattern)
+    Text("Recommendation", style = IdeTypography.resultLabel, color = PrimaryText)
+    ModelResultContent(finding.recommendation)
+    ResponsiveActionGroup(Modifier.fillMaxWidth()) {
+      MiniOrcaButton(
+          onClick = { actions.openInEditor(result.report.path, finding) },
+          tone = ActionTone.Navigation) {
+            Text("Open source")
+          }
+      MiniOrcaButton(
+          onClick = { actions.prepareOptimization(result.report.path, finding) },
+          enabled = performanceCanPrepare(result, index),
+          tone = ActionTone.Primary) {
+            Text("Prepare optimization")
+          }
     }
-    EngineeringInsightPanel(
-        finding.engineeringInsight, stale = stale, scopeLabel = "Selected performance opportunity")
+    IdeDisclosureHeader(
+        "Workload, trade-offs and verification", technical, { technical = !technical })
+    if (technical) {
+      Text("When it matters", style = IdeTypography.resultLabel, color = PrimaryText)
+      ModelResultContent(finding.workloadConditions)
+      Text("Trade-offs", style = IdeTypography.resultLabel, color = PrimaryText)
+      ModelResultContent(finding.tradeoff)
+      Text("Verification plan", style = IdeTypography.resultLabel, color = PrimaryText)
+      ModelResultContent(finding.verificationPlan)
+      Text(
+          "${result.report.profile} · ${result.report.model} · ${result.report.providerOrigin}",
+          color = SecondaryText,
+          style = IdeTypography.compactBody)
+      if (result.report.warning.isNotBlank()) ModelResultContent(result.report.warning)
+      EngineeringInsightPanel(
+          finding.engineeringInsight,
+          stale = result.stale,
+          scopeLabel = "Selected performance opportunity")
+    }
   }
 }
 
@@ -442,11 +363,8 @@ private fun PerformanceBenchmarkControls(
 }
 
 internal data class PerformanceWorkspacePaneState(
-    val job: PerformanceJob?,
-    val report: PerformanceReport?,
-    val context: PerformanceQueuePreview?,
-    val model: ScopedModel,
-    val remoteProviderConfirmed: Boolean,
+    val page: AnalysisResultPageState,
+    val index: ProjectIndex?,
     val benchmarkComparison: GoBenchmarkComparison? = null,
     val expectedBenchmarkIdentity: GoBenchmarkComparisonIdentity? = null,
     val benchmarkCatalog: GoBenchmarkCatalog? = null,
@@ -455,35 +373,14 @@ internal data class PerformanceWorkspacePaneState(
 )
 
 internal data class PerformanceWorkspaceActions(
-    val confirmRemoteProvider: (Boolean) -> Unit,
-    val preview: () -> Unit,
-    val start: (PerformanceQueuePreview, Boolean) -> Unit,
-    val pause: () -> Unit,
-    val resume: (Boolean) -> Unit,
-    val cancel: () -> Unit,
     val openInEditor: (String, PerformanceFinding) -> Unit,
     val prepareOptimization: (String, PerformanceFinding) -> Unit,
+    val openAnalysis: () -> Unit,
+    val pathChanged: (String) -> Unit,
+    val semanticActions: FindingActions,
     val loadBenchmarks: () -> Unit = {},
     val selectBenchmark: (GoBenchmarkChoice) -> Unit = {},
     val runBenchmark: () -> Unit = {},
-)
-
-internal enum class PerformanceToolbarAction {
-  Preview,
-  Start,
-  Pause,
-  Resume,
-  Cancel,
-}
-
-internal data class PerformanceToolbarActionPresentation(
-    val action: PerformanceToolbarAction,
-    val enabled: Boolean,
-)
-
-internal data class PerformanceCoveragePresentation(
-    val stateLabel: String,
-    val rows: List<Pair<String, String>>,
 )
 
 internal data class GoBenchmarkComparisonIdentity(
@@ -879,186 +776,6 @@ private fun metricChangeLabel(base: Double, candidate: Double): String =
 
 private fun formatPercent(value: Double): String =
     String.format(Locale.ROOT, "%+.1f%%", value * 100)
-
-internal class PerformanceReviewPresentation
-private constructor(
-    val report: PerformanceReport?,
-) {
-  val hasReport: Boolean
-    get() = report != null
-
-  val isStale: Boolean
-    get() = report?.status.equals("stale", ignoreCase = true)
-
-  fun findings(category: String, impact: String, path: String): List<PerformanceFinding> =
-      report
-          ?.findings
-          .orEmpty()
-          .filter {
-            (category.isBlank() || it.category.equals(category, true)) &&
-                (impact.isBlank() || it.potentialImpact.equals(impact, true)) &&
-                (path.isBlank() || pathFor(it).contains(path, true))
-          }
-          .sortedWith(
-              compareByDescending<PerformanceFinding> { performanceImpactOrder(it.potentialImpact) }
-                  .thenByDescending { performanceConfidenceOrder(it.confidence) }
-                  .thenBy { pathFor(it) }
-                  .thenBy { it.startLine }
-                  .thenBy { it.id })
-
-  fun pathFor(finding: PerformanceFinding): String = report?.paths?.get(finding.id).orEmpty()
-
-  companion object {
-    fun forJob(job: PerformanceJob?, report: PerformanceReport?): PerformanceReviewPresentation =
-        PerformanceReviewPresentation(
-            report?.takeIf { candidate ->
-              job?.let { performanceReportMatchesJob(candidate, it) } == true
-            })
-  }
-}
-
-internal fun performanceReviewPresentation(
-    job: PerformanceJob?,
-    report: PerformanceReport?,
-): PerformanceReviewPresentation = PerformanceReviewPresentation.forJob(job, report)
-
-internal fun performanceCoveragePresentation(
-    job: PerformanceJob?,
-    report: PerformanceReport?,
-): PerformanceCoveragePresentation {
-  if (job == null) return PerformanceCoveragePresentation("Unknown", emptyList())
-
-  val effectiveReport = performanceReviewPresentation(job, report).report
-  val status = effectiveReport?.status?.ifBlank { job.status } ?: job.status
-  val counts =
-      effectiveReport?.counts?.takeIf { it.isNotEmpty() }
-          ?: job.files.groupingBy { it.status }.eachCount()
-  val completed = counts["completed"].orZero()
-  val cached = counts["cached"].orZero()
-  val stale = counts["stale"].orZero()
-  val skipped = counts["skipped"].orZero()
-  val failed = counts["failed"].orZero()
-  val pending = counts["pending"].orZero()
-  val running = counts["running"].orZero()
-  val remaining = pending + running
-  val partial =
-      remaining > 0 ||
-          skipped > 0 ||
-          failed > 0 ||
-          stale > 0 ||
-          status in setOf("running", "paused", "canceled", "stale")
-  val budgetLimited =
-      job.runBudget > 0 &&
-          (job.elapsed >= job.runBudget || (status == "completed" && remaining > 0))
-  val coverageState =
-      when {
-        status == "canceled" -> "Partial · canceled review retains completed files"
-        status == "stale" || stale > 0 -> "Partial · source or policy changed"
-        partial -> "Partial"
-        else -> "Complete"
-      }
-  val rows = buildList {
-    add("Reviewed" to "$completed completed · $cached cached")
-    if (stale > 0) add("Stale" to stale.toString())
-    add("Skipped" to skipped.toString())
-    add("Failed" to failed.toString())
-    add("Remaining" to "$pending pending · $running running")
-    if (job.runBudget > 0) {
-      val budget = "${job.elapsed / 1_000_000_000}s of ${job.runBudget / 1_000_000_000}s"
-      add("Budget" to if (budgetLimited) "$budget · budget-limited" else budget)
-    }
-  }
-  return PerformanceCoveragePresentation(coverageState, rows)
-}
-
-private fun Int?.orZero(): Int = this ?: 0
-
-internal fun performanceToolbarActions(
-    job: PerformanceJob?,
-    hasPreviewContext: Boolean,
-    model: ScopedModel,
-    remoteProviderConfirmed: Boolean,
-): List<PerformanceToolbarActionPresentation> {
-  val providerConfirmed = !model.remoteProvider || remoteProviderConfirmed
-  return when (job?.status) {
-    "running" ->
-        listOf(
-            PerformanceToolbarActionPresentation(PerformanceToolbarAction.Pause, true),
-            PerformanceToolbarActionPresentation(PerformanceToolbarAction.Cancel, true),
-        )
-    "paused" ->
-        listOf(
-            PerformanceToolbarActionPresentation(
-                PerformanceToolbarAction.Resume, providerConfirmed),
-            PerformanceToolbarActionPresentation(PerformanceToolbarAction.Cancel, true),
-        )
-    else ->
-        listOf(
-            PerformanceToolbarActionPresentation(PerformanceToolbarAction.Preview, true),
-            PerformanceToolbarActionPresentation(
-                PerformanceToolbarAction.Start, hasPreviewContext && providerConfirmed),
-        )
-  }
-}
-
-internal fun performanceToolbarActionLabel(action: PerformanceToolbarAction): String =
-    when (action) {
-      PerformanceToolbarAction.Preview -> "Preview limits"
-      PerformanceToolbarAction.Start -> "Analyze performance"
-      PerformanceToolbarAction.Pause -> "Pause"
-      PerformanceToolbarAction.Resume -> "Resume"
-      PerformanceToolbarAction.Cancel -> "Cancel"
-    }
-
-private fun performanceToolbarActionTone(action: PerformanceToolbarAction) =
-    when (action) {
-      PerformanceToolbarAction.Preview -> ActionTone.Neutral
-      PerformanceToolbarAction.Start,
-      PerformanceToolbarAction.Resume -> ActionTone.Primary
-      PerformanceToolbarAction.Pause -> ActionTone.Attention
-      PerformanceToolbarAction.Cancel -> ActionTone.Destructive
-    }
-
-private fun performanceStatusTint(job: PerformanceJob?, report: PerformanceReport?) =
-    when (performanceReviewStatus(job, report)) {
-      "running" -> SelectionText
-      "paused",
-      "stale" -> Warning
-      "completed" -> Success
-      else -> SecondaryText
-    }
-
-private fun performanceFindingTint(impact: String) =
-    when (impact.lowercase()) {
-      "high" -> Error
-      "medium" -> Warning
-      else -> SecondaryText
-    }
-
-internal fun performanceStatusLabel(
-    job: PerformanceJob?,
-    report: PerformanceReport? = null
-): String =
-    when (performanceReviewStatus(job, report)) {
-      "running" -> "Running · ${(job?.elapsed ?: 0) / 1_000_000_000}s budget used"
-      "paused" -> "Paused · resume explicitly"
-      "canceled" -> "Canceled · completed reviews remain available"
-      "stale" -> "Stale · source or policy changed"
-      "completed" -> "Completed · source-based queue"
-      else -> "No review yet"
-    }
-
-private fun performanceReviewStatus(job: PerformanceJob?, report: PerformanceReport?): String? =
-    performanceReviewPresentation(job, report).report?.status?.ifBlank { job?.status.orEmpty() }
-        ?: job?.status
-
-private fun performanceReportMatchesJob(report: PerformanceReport, job: PerformanceJob): Boolean =
-    job.projectId.isNotBlank() &&
-        job.projectRevision.isNotBlank() &&
-        job.queueId.isNotBlank() &&
-        report.projectId == job.projectId &&
-        report.projectRevision == job.projectRevision &&
-        report.queueId == job.queueId
 
 private fun performanceImpactOrder(value: String): Int =
     when (value) {
