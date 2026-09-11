@@ -235,14 +235,15 @@ internal fun availableCommandActions(
   return buildList {
     add("open_performance")
     add("open_security")
-    addAll(listOf("fix", "refactor", "document", "create_declaration"))
+    addAll(listOf("fix", "refactor", "document", "create_function", "create_type"))
     if (analysis?.status.equals("fresh", ignoreCase = true)) add("refresh_file_analysis")
   }
 }
 
 internal fun commandActionLabel(action: String): String =
     when (action) {
-      "create_declaration" -> "Create declaration"
+      "create_function" -> "New Go function"
+      "create_type" -> "New Go type"
       "refresh_file_analysis" -> "Refresh file analysis"
       "open_performance" -> "Open Performance workspace"
       "open_security" -> "Open Security workspace"

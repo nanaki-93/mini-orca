@@ -46,19 +46,32 @@ internal data class ToolWindowScope(
     val target: String,
 )
 
+internal enum class DeclarationCreationKind(val noun: String) {
+  Function("function"),
+  Type("type"),
+}
+
 internal fun assistantToolWindowScope(
     selected: ProjectFileInfo?,
     target: ChatTarget?,
     draft: DeclarationDraft?,
     newSymbol: String,
+    mode: ChatEditMode = target?.mode ?: ChatEditMode.ReplaceSymbol,
+    creationKind: DeclarationCreationKind = DeclarationCreationKind.Function,
 ): ToolWindowScope =
     ToolWindowScope(
-        path = selected?.path ?: draft?.targetPath ?: "No file selected",
+        path =
+            selected?.path
+                ?: draft?.targetPath?.takeIf { mode != ChatEditMode.CreateSymbol }
+                ?: "No file selected",
         target =
-            target?.let { "${it.mode.label} · ${it.symbol}" }
-                ?: draft?.let { "${it.mode} · ${it.targetSymbol}" }
-                ?: newSymbol.trim().takeIf(String::isNotBlank)?.let { "New declaration · $it" }
-                ?: "No declaration target",
+            if (mode == ChatEditMode.CreateSymbol)
+                "New ${creationKind.noun} · ${target?.symbol ?: newSymbol.trim().ifBlank { "Name required" }}"
+            else
+                target?.let { "${it.mode.label} · ${it.symbol}" }
+                    ?: draft?.let { "${it.mode} · ${it.targetSymbol}" }
+                    ?: newSymbol.trim().takeIf(String::isNotBlank)?.let { "New declaration · $it" }
+                    ?: "No declaration target",
     )
 
 internal fun reviewToolWindowScope(

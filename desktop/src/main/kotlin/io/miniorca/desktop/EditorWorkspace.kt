@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,7 +42,37 @@ internal data class EditorChromeUiState(
     val activeSurface: EditorSurface,
     val reviewAvailable: Boolean,
     val stageLabel: String,
+    val creationBlockedReason: String?,
 )
+
+internal fun declarationCreationBlockedReason(
+    file: ProjectFileInfo?,
+    busy: Boolean = false
+): String? =
+    when {
+      file == null -> "Open a Go file to create a function or type."
+      file.binary || !file.language.equals("Go", ignoreCase = true) ->
+          "Function and type creation requires a Go source file."
+      busy -> "Wait for the current generation or validation to finish."
+      else -> null
+    }
+
+@Composable
+internal fun NewFunctionButton(
+    path: String,
+    blockedReason: String?,
+    onCreate: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+  MiniOrcaButton(
+      onClick = onCreate,
+      enabled = blockedReason == null,
+      tone = ActionTone.Primary,
+      density = ButtonDensity.Toolbar,
+      modifier = modifier.semantics { contentDescription = "New function in $path" }) {
+        Text("New function", style = IdeTypography.action)
+      }
+}
 
 internal enum class EditorBreadcrumbKind(val icon: DesktopIcon?) {
   Folder(DesktopIcon.Folder),
@@ -87,6 +118,7 @@ internal fun editorChromeUiState(
     requestedSurface: EditorSurface,
     progress: EditorProgressUiState,
     draft: DeclarationDraft?,
+    creationInProgress: Boolean = false,
 ): EditorChromeUiState {
   val path = file?.path ?: "No file selected"
   val reviewAvailable =
@@ -112,6 +144,7 @@ internal fun editorChromeUiState(
       activeSurface = activeSurface,
       reviewAvailable = reviewAvailable,
       stageLabel = stageLabel,
+      creationBlockedReason = declarationCreationBlockedReason(file, creationInProgress),
   )
 }
 
@@ -151,11 +184,12 @@ internal fun EditorWorkspace(
     chrome: EditorChromeUiState,
     draft: DeclarationDraft?,
     onSelectSurface: (EditorSurface) -> Unit,
+    onCreateDeclaration: () -> Unit,
     canvas: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
   Column(modifier.fillMaxSize().background(EditorCanvas)) {
-    ActiveFileEditorChrome(chrome, onSelectSurface)
+    ActiveFileEditorChrome(chrome, onSelectSurface, onCreateDeclaration)
     Box(Modifier.fillMaxWidth().weight(1f)) { canvas() }
     candidateSummaryPresentation(draft, chrome)?.let { summary ->
       CandidateSummary(summary, onReview = { onSelectSurface(EditorSurface.Review) })
@@ -202,6 +236,7 @@ private fun CandidateSummary(summary: CandidateSummaryPresentation, onReview: ()
 private fun ActiveFileEditorChrome(
     state: EditorChromeUiState,
     onSelectSurface: (EditorSurface) -> Unit,
+    onCreateDeclaration: () -> Unit,
 ) {
   val surfaces = buildList {
     add(EditorSurface.Source)
@@ -211,51 +246,78 @@ private fun ActiveFileEditorChrome(
       remember(state.activeSurface, state.reviewAvailable) { mutableStateOf(state.activeSurface) }
   var tabGroupHasFocus by remember { mutableStateOf(false) }
   Column(
-      Modifier.fillMaxWidth()
-          .background(EditorCanvas)
-          .onFocusChanged { tabGroupHasFocus = it.hasFocus }
-          .focusable()
-          .onPreviewKeyEvent { event ->
-            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-            val interaction =
-                tabGroupInteraction(surfaces, focusedSurface, tabGroupKey(event.key))
-                    ?: return@onPreviewKeyEvent false
-            focusedSurface = interaction.focused
-            interaction.activate?.let(onSelectSurface)
-            true
-          }
-          .semantics { contentDescription = state.accessibleDescription },
+      Modifier.fillMaxWidth().background(EditorCanvas).semantics {
+        contentDescription = state.accessibleDescription
+      },
   ) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-        ChromeTab(
-            onClick = { onSelectSurface(EditorSurface.Source) },
-            selected = state.activeSurface == EditorSurface.Source,
-            focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source,
-            modifier =
-                Modifier.weight(1f, fill = false).semantics {
-                  contentDescription = "Source file · ${state.title}"
-                },
-        ) {
-          DesktopLineIcon(DesktopIcon.File, "Source file", tint = SelectionText, iconSize = 16.dp)
-          Spacer(Modifier.width(6.dp))
-          Text(
-              "Source · ${state.title}",
-              fontSize = 12.sp,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis)
-        }
-        if (state.reviewAvailable) {
-          ChromeTab(
-              onClick = { onSelectSurface(EditorSurface.Review) },
-              selected = state.activeSurface == EditorSurface.Review,
-              focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
-                DesktopLineIcon(DesktopIcon.Check, "Review candidate", iconSize = 14.dp)
-                Spacer(Modifier.width(6.dp))
-                Text("Review candidate", fontSize = 12.sp)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+      val stackAction = maxWidth < 480.dp
+      Column {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+          Row(
+              Modifier.weight(1f)
+                  .onFocusChanged { tabGroupHasFocus = it.hasFocus }
+                  .focusable()
+                  .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val interaction =
+                        tabGroupInteraction(surfaces, focusedSurface, tabGroupKey(event.key))
+                            ?: return@onPreviewKeyEvent false
+                    focusedSurface = interaction.focused
+                    interaction.activate?.let(onSelectSurface)
+                    true
+                  },
+              verticalAlignment = Alignment.CenterVertically) {
+                ChromeTab(
+                    onClick = { onSelectSurface(EditorSurface.Source) },
+                    selected = state.activeSurface == EditorSurface.Source,
+                    focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source,
+                    modifier =
+                        Modifier.weight(1f, fill = false).semantics {
+                          contentDescription = "Source file · ${state.title}"
+                        },
+                ) {
+                  DesktopLineIcon(
+                      DesktopIcon.File, "Source file", tint = SelectionText, iconSize = 16.dp)
+                  Spacer(Modifier.width(6.dp))
+                  Text(
+                      "Source · ${state.title}",
+                      fontSize = 12.sp,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis)
+                }
+                if (state.reviewAvailable) {
+                  ChromeTab(
+                      onClick = { onSelectSurface(EditorSurface.Review) },
+                      selected = state.activeSurface == EditorSurface.Review,
+                      focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
+                        DesktopLineIcon(DesktopIcon.Check, "Review candidate", iconSize = 14.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Review candidate", fontSize = 12.sp)
+                      }
+                }
               }
+          if (!stackAction)
+              NewFunctionButton(
+                  state.path,
+                  state.creationBlockedReason,
+                  onCreateDeclaration,
+                  Modifier.padding(end = 8.dp))
         }
+        if (stackAction)
+            NewFunctionButton(
+                state.path,
+                state.creationBlockedReason,
+                onCreateDeclaration,
+                Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
       }
+    }
+    state.creationBlockedReason?.let { reason ->
+      Text(
+          reason,
+          color = SecondaryText,
+          style = IdeTypography.compactBody,
+          modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
     }
     Row(
         Modifier.fillMaxWidth()

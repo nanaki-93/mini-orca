@@ -227,6 +227,7 @@ internal data class DesktopShellEditorActions(
     val generate: () -> Unit,
     val cancelGeneration: () -> Unit,
     val dismissContext: () -> Unit,
+    val createDeclaration: () -> Unit,
 )
 
 internal data class DesktopShellAnalysisActions(
@@ -939,6 +940,9 @@ private fun DesktopCanvas(
                             requestedSurface = layout.editorSurface,
                             progress = editor.progress,
                             draft = appState.review.draft,
+                            creationInProgress =
+                                editor.generating ||
+                                    appState.review.editor?.status == DraftEditorStatus.Validating,
                         ),
                     draft = appState.review.draft,
                     focusedLine = appState.selection.focusedLine,
@@ -983,6 +987,7 @@ private fun DesktopCanvas(
                 ContentPaneNavigationActions(
                     selectWorkspace = onWorkspaceSelected,
                     selectEditorSurface = editorActions.selectEditorSurface,
+                    createDeclaration = editorActions.createDeclaration,
                     sourceLineSelected = { selection ->
                       editorActions.sourceLineSelected(selection)
                       contextDrawerForSourceSelection(workspace, widthDp)?.let(onOpenNarrowDrawer)
@@ -1041,6 +1046,7 @@ private fun ContentPane(
               chrome = state.editorChrome,
               draft = state.draft,
               onSelectSurface = navigation.selectEditorSurface,
+              onCreateDeclaration = navigation.createDeclaration,
               canvas = {
                 if (state.editorChrome.activeSurface == EditorSurface.Review) {
                   ReviewDiffCanvas(state.draft)
@@ -1084,6 +1090,7 @@ private data class ContentPaneNavigationActions(
     val selectWorkspace: (Workspace) -> Unit,
     val selectEditorSurface: (EditorSurface) -> Unit,
     val sourceLineSelected: (SourceLineSelection) -> Unit,
+    val createDeclaration: () -> Unit,
 )
 
 private fun DesktopShellAnalysisActions.toWorkspaceActions() =

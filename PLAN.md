@@ -205,13 +205,13 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 2/17. **Active task/writer:** none. **Next:** CREATE-01.
+**Accepted:** 3/17. **Active task/writer:** none. **Next:** CREATE-02 at the next scheduled wake.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
 | 1 | [UX-01](docs/tasks.md#task-ux-01--establish-readable-result-primitives) | Establish readable result primitives | Complete; locally committed |
 | 2 | [UX-02](docs/tasks.md#task-ux-02--apply-the-hierarchy-to-explanations-and-model-responses) | Apply the hierarchy to explanations and model responses | Complete; locally committed |
-| 3 | [CREATE-01](docs/tasks.md#task-create-01--expose-creation-in-the-normal-file-workflow) | Expose creation in the normal file workflow | Queued |
+| 3 | [CREATE-01](docs/tasks.md#task-create-01--expose-creation-in-the-normal-file-workflow) | Expose creation in the normal file workflow | Complete |
 | 4 | [CREATE-02](docs/tasks.md#task-create-02--close-creation-validation-and-lifecycle-gaps) | Close creation validation and lifecycle gaps | Queued |
 | 5 | [ANA-01](docs/tasks.md#task-ana-01--define-categorized-results-and-unified-run-contracts) | Define categorized results and unified run contracts | Queued |
 | 6 | [ANA-02](docs/tasks.md#task-ana-02--produce-and-validate-explicit-semantic-categories) | Produce and validate explicit semantic categories | Queued |

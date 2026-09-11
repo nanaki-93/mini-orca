@@ -223,7 +223,7 @@ none is required for this presentation card. CREATE-01 remains unchecked.
 
 ## Task CREATE-01 — Expose creation in the normal file workflow
 
-- [ ] CREATE-01 completed with required checks and diff review.
+- [x] CREATE-01 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/EditorWorkspace.kt` — visible New function action with open-file identity.
@@ -232,9 +232,12 @@ none is required for this presentation card. CREATE-01 remains unchecked.
 - `desktop/src/main/kotlin/io/miniorca/desktop/AssistantToolWindow.kt` — creation heading, name, behavior prompt and Generate label.
 - `desktop/src/main/kotlin/io/miniorca/desktop/CommandPalette.kt` — consistent searchable creation names.
 - `desktop/src/main/kotlin/io/miniorca/desktop/WorkflowToolWindows.kt` — explicit create-mode scope/status.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — forward the creation callback from DesktopApp to the production EditorWorkspace.
 - `desktop/src/test/kotlin/io/miniorca/desktop/EditorWorkspaceTest.kt` — action discoverability and eligibility.
 - `desktop/src/test/kotlin/io/miniorca/desktop/AssistantToolWindowTest.kt` — creation without a selected symbol.
 - `desktop/src/test/kotlin/io/miniorca/desktop/CommandPaletteTest.kt` — matching creation entry.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — supply the new editor callback in production fixtures and verify keyboard/layout behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/WorkflowToolWindowsTest.kt` — cover the changed creation scope labels.
 
 **Inputs / dependencies**
 - UX-01; D4.
@@ -249,7 +252,60 @@ none is required for this presentation card. CREATE-01 remains unchecked.
 `./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.EditorWorkspaceTest' --tests 'io.miniorca.desktop.AssistantToolWindowTest' --tests 'io.miniorca.desktop.CommandPaletteTest'`
 
 **Execution record**
-Not started.
+Completed 2026-09-11 by the authorized scheduler. Required checks and diff review
+passed after two focused corrections; the local CREATE-01 commit is recorded in
+Git history and the ignored execution receipt. Verified UX-02 commit/receipt and both Java
+toolchains. Captured baseline and empty index under ignored
+`.mini-orca/autopilot/ux/CREATE-01/baseline/`. The narrow target additions cover
+the required DesktopApp → DesktopShell → EditorWorkspace callback dependency,
+existing production fixture call sites and changed creation-scope assertions.
+Unrelated pre-existing Context/tab/layout work will remain outside this commit.
+
+Initial prescribed verification exited 0. The full desktop suite passed all 373
+tests, but `test detekt spotlessCheck` exited 1 at Detekt: `MiniOrcaApp` cyclomatic
+complexity 72 exceeded the existing 65 limit. Correction 1 extracts the shared
+composer submission from the screen router and reuses its busy-state expression.
+Submission reads the current presenter snapshot and checks the original behavior
+before adding the creation-kind prefix, preserving blank-intent rejection for
+keyboard submission. No quality threshold or suppression was changed. Logs and
+offscreen renders are in `.mini-orca/autopilot/ux/CREATE-01/`.
+
+Correction-1 prescribed verification and all 373 desktop tests passed, but the
+full command again exited 1 at Detekt: the screen complexity fell to 66, still
+above 65. Correction 2 moves the cohesive creation-admission/draft-discard routing
+into a small helper, leaving state updates with the screen. The quality gate is
+unchanged. Commit review also identified the pre-existing Right tool-window
+keyboard-handler relocation as a required dependency: it confines tab navigation
+to the tabs so form arrows/Enter reach the fields. Include that narrow relocation
+while retaining the unrelated Context tabs outside the commit. The creation test
+now renders the real surrounding tool-window container and verifies field keys
+do not select another tool.
+
+Final prescribed verification exited 0: 21 tests, no failures/errors/skips.
+`./desktop/gradlew -p desktop test detekt spotlessCheck` exited 0: all 373 working-tree
+desktop tests passed, no Detekt findings, clean formatting. The exact isolated
+commit candidate also passed `test detekt spotlessCheck`, with 371 tests and no
+failures/errors/skips or quality findings. The two additional working-tree tests
+belong to the preserved Context tabs. Commands used the verified Java 21 launcher
+and Java 25 toolchain runtime override. The specified test selections were retained.
+
+Reviewed production offscreen renders at 360dp/150% text and 800dp: visible New
+function action, open-file identity, focused name then Behavior, explicit Generate
+function/type and readable unsupported-file guidance. Keyboard tests verify the
+editor action and creation fields do not activate surrounding tabs. Existing
+source/review behavior, provider consent, constraints, and draft-discard routing
+remain intact; opening creation does not submit a request. Package-only Go files
+are eligible without a selected symbol. All entry points use the same guarded
+creation flow and the existing chat/preview pipeline.
+
+Diff review and `git diff --check` passed. Eight unrelated baseline files are
+byte-for-byte unchanged; only the required creation additions were made over the
+Context and visual-test baselines. The narrow pre-existing tool-window keyboard
+fix is included as a coupled dependency; the remaining Context tabs, layout/theme
+changes and unrelated tests remain uncommitted. No daemon/API, dependency,
+configuration or migration change. Go tests, live providers and native OS/accessibility
+acceptance were not run; this card uses offscreen component evidence. CREATE-02
+remains queued for deeper Go identifier and generation/Apply lifecycle coverage.
 
 ## Task CREATE-02 — Close creation validation and lifecycle gaps
 
