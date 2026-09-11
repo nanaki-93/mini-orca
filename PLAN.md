@@ -206,7 +206,7 @@ the resulting commit hash before advancing. A failed commit leaves the task at
 the commit stage for recovery; never repeat implementation or create a duplicate
 commit after an interrupted wake. Pushes and releases remain outside scope.
 
-**Accepted:** 11/17. **Active task/writer:** None. **Next:** NAV-01.
+**Accepted:** 12/17. **Active task/writer:** none. **Next:** TERM-01; scheduler active.
 
 | Order | ID | Outcome | Status |
 | --- | --- | --- | --- |
@@ -221,12 +221,22 @@ commit after an interrupted wake. Pushes and releases remain outside scope.
 | 9 | [ANA-05](docs/tasks.md#task-ana-05--migrate-existing-jobs-and-expose-the-unified-api) | Migrate existing jobs and expose the unified API | Complete; locally committed |
 | 10 | [ANA-06](docs/tasks.md#task-ana-06--give-the-desktop-one-analysis-owner) | Give the desktop one analysis owner | Complete; locally committed |
 | 11 | [ANA-07](docs/tasks.md#task-ana-07--separate-run-progress-from-the-three-result-pages) | Separate run progress from the three result pages | Complete; locally committed |
-| 12 | [NAV-01](docs/tasks.md#task-nav-01--distinguish-run-results-and-editing-in-the-sidebar) | Distinguish run, results and editing in the sidebar | Queued |
+| 12 | [NAV-01](docs/tasks.md#task-nav-01--distinguish-run-results-and-editing-in-the-sidebar) | Distinguish run, results and editing in the sidebar | Complete; locally committed |
 | 13 | [TERM-01](docs/tasks.md#task-term-01--prove-the-terminal-dependency-and-local-session-boundary) | Prove the terminal dependency and local-session boundary | Queued |
 | 14 | [TERM-02](docs/tasks.md#task-term-02--integrate-the-interactive-terminal-pane) | Integrate the interactive terminal pane | Queued |
 | 15 | [BOTTOM-01](docs/tasks.md#task-bottom-01--preserve-unique-diagnostics-in-their-owning-workflows) | Preserve unique diagnostics in their owning workflows | Queued |
 | 16 | [BOTTOM-02](docs/tasks.md#task-bottom-02--replace-the-bottom-tools-with-terminal-only) | Replace the bottom tools with Terminal only | Queued |
 | 17 | [VERIFY-01](docs/tasks.md#task-verify-01--validate-the-complete-interaction-and-document-support) | Validate the complete interaction and document support | Queued |
+
+**Accepted NAV-01 — 2026-09-12:** Project, Results and Editing groups distinguish
+analysis progress from findings and editing. Full labels, actual run counts/state,
+keyboard reveal, project-scoped palette actions and captured provider context are
+in place. Stored destinations, shortcuts, pane minima and unrelated UI edits are
+preserved. All 50 prescribed tests, 376 working-tree tests, 374 isolated candidate
+tests, Detekt, Spotless and diff review passed after two recorded corrections.
+Rail component renders cover the viewport/text matrix; native popup/focus and
+screen-reader checks remain unverified. The local commit is recorded in the ignored
+NAV-01 receipt. Scheduler remains active for TERM-01 next.
 
 **Accepted ANA-07 — 2026-09-11:** Analysis now tracks one whole-project run;
 Bugs, Performance and Security present their own results with local filters,

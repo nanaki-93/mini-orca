@@ -9,6 +9,30 @@ import kotlin.test.assertTrue
 /** Deterministic cross-boundary smoke coverage; no daemon, model, or UI window is required. */
 class DesktopIntegrationCoverageTest {
   @Test
+  fun resultNavigationPreservesFileSelectionFiltersAndAnalysisOwnership() {
+    val controller = loadedController()
+    val request = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(request, file(), listOf(symbol())))
+    val run =
+        ProjectAnalysisRunState(
+            run = analysisRunFixture(),
+            resultPaths = mapOf("bugs" to "main.go", "security" to "internal/"))
+    controller.dispatch(DesktopEvent.AnalysisRunUpdated(run))
+    val selection = controller.state.selection
+    listOf("open_analysis", "open_bugs", "open_performance", "open_security").forEach { action ->
+      controller.dispatch(
+          DesktopEvent.WorkspaceSelected(requireNotNull(commandActionWorkspace(action))))
+      assertEquals(run, controller.state.analysisRun)
+      assertEquals(selection, controller.state.selection)
+      assertEquals(null, controller.state.review.draft)
+      assertTrue(controller.state.preparedRequest.isBlank())
+    }
+    controller.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
+    assertEquals(selection, controller.state.selection)
+    assertEquals(run, controller.state.analysisRun)
+  }
+
+  @Test
   fun projectOpenCancelFailureAndSuccessKeepTheLandingTransitionExplicit() {
     val controller = DesktopWorkflowController()
     val beforeChooserCancel = controller.state

@@ -7,6 +7,29 @@ import kotlin.test.assertTrue
 
 class DesktopLayoutStateTest {
   @Test
+  fun navigationGroupsPreserveStoredDestinationsAndPreferredPaneWidths() {
+    assertEquals(
+        listOf("Project", "Results", "Editing"), workspaceNavigationGroups.map { it.label })
+    assertEquals(
+        LeftToolWindow.entries.toList(), workspaceNavigationGroups.flatMap { it.destinations })
+    withPreferences { preferences ->
+      LeftToolWindow.entries.forEach { destination ->
+        val saved =
+            DesktopLayoutState(
+                activeLeftToolWindow = destination, explorerWidth = 340f, actionWidth = 440f)
+        DesktopLayoutStore(preferences).save(saved)
+        assertEquals(saved, DesktopLayoutStore(preferences).load())
+        assertEquals(
+            destination, leftToolWindowForWorkspace(workspaceForLeftToolWindow(destination)))
+      }
+      preferences.put("ide-left-tool", "Problems")
+      assertEquals(
+          Workspace.Bugs,
+          workspaceForLeftToolWindow(DesktopLayoutStore(preferences).load().activeLeftToolWindow))
+    }
+  }
+
+  @Test
   fun defaultsKeepDockedPaneDimensionsAndACollapsedBottomSummary() {
     val layout = DesktopLayoutState()
 
@@ -148,7 +171,7 @@ class DesktopLayoutStateTest {
         dockedPaneWidths(1_000f, preferredExplorerWidth = 520f, preferredActionWidth = 560f)
 
     assertEquals(DesktopLayoutState.MIN_EXPLORER_WIDTH, constrained.explorer)
-    assertEquals(315f, constrained.action)
+    assertEquals(283f, constrained.action)
     assertEquals(MIN_EDITOR_WIDTH, constrained.editor)
     assertEquals(520f, DesktopLayoutState().withExplorerWidth(520f).explorerWidth)
     assertEquals(560f, DesktopLayoutState().withActionWidth(560f).actionWidth)
@@ -161,7 +184,7 @@ class DesktopLayoutStateTest {
 
     assertEquals(220f, preferred.explorer)
     assertEquals(300f, preferred.action)
-    assertEquals(815f, preferred.editor)
+    assertEquals(783f, preferred.editor)
   }
 
   @Test
@@ -170,8 +193,8 @@ class DesktopLayoutStateTest {
     val constrained = dockedPaneWidths(1_000f, defaults.explorerWidth, defaults.actionWidth)
 
     assertEquals(MIN_EDITOR_WIDTH, constrained.editor)
-    assertEquals(195f, constrained.explorer)
-    assertEquals(300f, constrained.action)
+    assertEquals(180f, constrained.explorer)
+    assertEquals(283f, constrained.action)
   }
 
   @Test

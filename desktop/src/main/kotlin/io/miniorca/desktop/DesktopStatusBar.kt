@@ -40,6 +40,8 @@ internal data class DesktopStatusBarState(
     val error: String?,
     val provider: DesktopStatusProvider,
     val connection: ConnectionState,
+    val workspace: Workspace = Workspace.Editor,
+    val analysisRun: ProjectAnalysisRunState = ProjectAnalysisRunState(),
 )
 
 internal enum class DesktopStatusSegmentType {
@@ -51,6 +53,7 @@ internal enum class DesktopStatusSegmentType {
   Symbol,
   Line,
   Analysis,
+  ProjectRun,
   Provider,
   Daemon,
 }
@@ -87,6 +90,8 @@ internal fun desktopStatusBarState(
         error = appState.error,
         provider = provider,
         connection = appState.connection,
+        workspace = appState.workspace,
+        analysisRun = appState.analysisRun,
     )
 
 internal fun desktopStatusBarPresentation(
@@ -94,7 +99,8 @@ internal fun desktopStatusBarPresentation(
 ): DesktopStatusBarPresentation {
   val project = state.project
   val index = currentStatusIndex(project, state.index)
-  val file = currentStatusFile(index, state.selectedFile)
+  val file =
+      currentStatusFile(index, state.selectedFile.takeIf { state.workspace == Workspace.Editor })
   val symbol = currentStatusSymbol(file, state.symbols, state.selectedSymbol)
   val focusedLine =
       file?.lineCount?.let { lineCount -> state.focusedLine.takeIf { it in 1..lineCount } }
@@ -181,7 +187,11 @@ internal fun desktopStatusBarPresentation(
               attention = status in setOf("Stale", "Failed"),
           ))
     }
-    providerStatusSegment(state.provider)?.let(::add)
+    projectRunStatusSegment(state)?.let(::add)
+    if (state.workspace in
+        setOf(Workspace.Analysis, Workspace.Bugs, Workspace.Performance, Workspace.Security))
+        capturedRunProviderStatusSegment(state)?.let(::add)
+    else providerStatusSegment(state.provider)?.let(::add)
     add(daemonStatusSegment(state.connection))
   }
   return DesktopStatusBarPresentation(segments)
@@ -331,6 +341,50 @@ private fun indexStatusLabel(index: ProjectIndex?): String =
 private fun indexStatusDetail(index: ProjectIndex?): String =
     if (index == null) "Current project index is unavailable"
     else "Current index has ${index.files.size} files"
+
+private fun currentStatusRun(state: DesktopStatusBarState): AnalysisRun? =
+    state.analysisRun.run?.takeIf { it.identity.projectId == state.project?.projectId }
+
+private fun projectRunStatusSegment(state: DesktopStatusBarState): DesktopStatusSegment? {
+  val run = currentStatusRun(state) ?: return null
+  val stale =
+      run.status == "stale" || run.identity.projectRevision != state.project?.projectRevision
+  val status = if (stale) "Stale" else analysisStatusLabel(run.status)
+  return DesktopStatusSegment(
+      DesktopStatusSegmentType.ProjectRun,
+      "Project analysis: $status",
+      "Whole-project analysis: $status. " +
+          run.sections
+              .filter { it.category in setOf("bugs", "performance", "security") }
+              .joinToString("; ") {
+                "${analysisCategoryLabel(it.category)}: ${analysisStatusLabel(it.status)}"
+              } +
+          state.analysisRun.error?.let { ". $it" }.orEmpty(),
+      priority = DAEMON_PRIORITY,
+      actionable = true,
+      attention =
+          stale ||
+              run.isActive() ||
+              state.analysisRun.error != null ||
+              run.status in setOf("failed", "partial", "interrupted"))
+}
+
+private fun capturedRunProviderStatusSegment(state: DesktopStatusBarState): DesktopStatusSegment? {
+  val run = currentStatusRun(state) ?: return null
+  val providers = run.plan.providers
+  if (providers.isEmpty()) return null
+  val remote = providers.count { it.model.remoteProvider }
+  val detail =
+      providers.joinToString("; ") { provider ->
+        "${provider.model.scope}: ${provider.model.profile} · ${provider.model.model} · ${provider.model.providerOrigin} · ${if (provider.model.remoteProvider) "remote" else "local"}"
+      }
+  return DesktopStatusSegment(
+      DesktopStatusSegmentType.Provider,
+      "Run providers: $remote remote · ${providers.size - remote} local",
+      "Captured providers for the displayed run: $detail. This describes the run configuration, not a live connection.",
+      priority = DAEMON_PRIORITY,
+      attention = remote > 0)
+}
 
 private fun providerStatusSegment(provider: DesktopStatusProvider): DesktopStatusSegment? {
   val model = provider.model

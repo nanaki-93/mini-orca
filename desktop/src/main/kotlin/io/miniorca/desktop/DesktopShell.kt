@@ -610,6 +610,7 @@ internal fun DesktopShell(
                   leftToolWindowForWorkspace(workspace),
                   ::selectToolWindow,
                   Modifier.focusRequester(focusRequesters.leftToolWindow),
+                  badges = workspaceNavigationBadges(appState),
               )
               IdeVerticalSeparator()
               val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
@@ -728,7 +729,6 @@ internal fun DesktopShell(
               paletteActions.updateQuery,
               appState.index?.files.orEmpty(),
               appState.symbols,
-              appState.analysis,
               appState.selectedFile != null,
               { path ->
                 paletteActions.selectFile(path)

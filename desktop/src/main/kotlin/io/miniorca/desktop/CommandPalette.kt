@@ -65,7 +65,6 @@ internal fun commandSearchResults(
     query: String,
     files: List<IndexedFile>,
     symbols: List<SymbolInfo>,
-    analysis: FileAnalysis?,
     hasActiveFile: Boolean,
 ): List<CommandSearchResult> {
   val normalizedQuery = query.trim()
@@ -103,7 +102,7 @@ internal fun commandSearchResults(
             }
             .toList()
     PaletteMode.Actions ->
-        availableCommandActions(analysis, hasActiveFile)
+        availableCommandActions(hasActiveFile)
             .asSequence()
             .filter { commandActionLabel(it).contains(normalizedQuery, ignoreCase = true) }
             .sortedBy(::commandActionLabel)
@@ -111,7 +110,7 @@ internal fun commandSearchResults(
               CommandSearchResult(
                   type = CommandSearchResultType.Action,
                   label = commandActionLabel(action),
-                  detail = "Current file scope only",
+                  detail = commandActionDetail(action),
                   accessibleDescription = "Action ${commandActionLabel(action)}",
                   action = action,
               )
@@ -146,14 +145,13 @@ internal fun CommandPaletteDialog(
     onQuery: (String) -> Unit,
     files: List<IndexedFile>,
     symbols: List<SymbolInfo>,
-    analysis: FileAnalysis?,
     hasActiveFile: Boolean,
     onSelectFile: (String) -> Unit,
     onSelectSymbol: (SymbolInfo) -> Unit,
     onSelectAction: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-  val results = commandSearchResults(mode, query, files, symbols, analysis, hasActiveFile)
+  val results = commandSearchResults(mode, query, files, symbols, hasActiveFile)
   val filterFocusRequester = FocusRequester()
   var selectedIndex by
       remember(mode, query, results.map(CommandSearchResult::label)) {
@@ -227,27 +225,47 @@ internal fun CommandPaletteDialog(
   LaunchedEffect(Unit) { filterFocusRequester.requestFocus() }
 }
 
-internal fun availableCommandActions(
-    analysis: FileAnalysis?,
-    hasActiveFile: Boolean = true,
-): List<String> {
-  if (!hasActiveFile) return listOf("open_performance", "open_security")
-  return buildList {
-    add("open_performance")
-    add("open_security")
-    addAll(listOf("fix", "refactor", "document", "create_function", "create_type"))
-    if (analysis?.status.equals("fresh", ignoreCase = true)) add("refresh_file_analysis")
-  }
+internal fun availableCommandActions(hasActiveFile: Boolean = true): List<String> = buildList {
+  addAll(
+      listOf("start_analysis", "open_analysis", "open_bugs", "open_performance", "open_security"))
+  if (hasActiveFile) addAll(listOf("fix", "refactor", "document", "create_function", "create_type"))
 }
+
+internal fun commandActionWorkspace(action: String): Workspace? =
+    when (action) {
+      "start_analysis",
+      "open_analysis" -> Workspace.Analysis
+      "open_bugs" -> Workspace.Bugs
+      "open_performance" -> Workspace.Performance
+      "open_security" -> Workspace.Security
+      "fix",
+      "refactor",
+      "document",
+      "create_function",
+      "create_type" -> Workspace.Editor
+      else -> null
+    }
 
 internal fun commandActionLabel(action: String): String =
     when (action) {
+      "start_analysis" -> "Start analysis"
+      "open_analysis" -> "View analysis progress"
+      "open_bugs" -> "View Bugs results"
+      "open_performance" -> "View Performance results"
+      "open_security" -> "View Security results"
       "create_function" -> "New Go function"
       "create_type" -> "New Go type"
-      "refresh_file_analysis" -> "Refresh file analysis"
-      "open_performance" -> "Open Performance workspace"
-      "open_security" -> "Open Security workspace"
       else -> action.replaceFirstChar { it.uppercase() }
+    }
+
+internal fun commandActionDetail(action: String): String =
+    when (action) {
+      "start_analysis" -> "Whole project · review scope and consent before starting"
+      "open_analysis" -> "Current project run · navigation only"
+      "open_bugs",
+      "open_performance",
+      "open_security" -> "Project results · navigation only"
+      else -> "Current file · prepare an edit"
     }
 
 internal fun commandSearchEmptyTitle(mode: PaletteMode): String =
@@ -261,7 +279,7 @@ internal fun commandSearchEmptyDetail(mode: PaletteMode): String =
     when (mode) {
       PaletteMode.Files -> "Change the filter to search indexed relative paths."
       PaletteMode.Symbols -> "Open a file with indexed symbols or change the filter."
-      PaletteMode.Actions -> "Open an indexed file before choosing a scoped action."
+      PaletteMode.Actions -> "Change the filter to find project analysis, results or file actions."
     }
 
 @Composable
@@ -280,11 +298,18 @@ private fun CommandSearchEntry(
       tone = ActionTone.Navigation,
       selected = selected,
   ) {
-    Text(
-        "${result.type.label} · ${result.label} · ${result.detail}",
-        fontFamily = FontFamily.Monospace,
-        fontSize = 11.sp,
-        maxLines = 1)
+    if (result.type == CommandSearchResultType.Action) {
+      Column(Modifier.fillMaxWidth()) {
+        Text(result.label, color = PrimaryText, style = IdeTypography.resultHeading)
+        Text(result.detail, color = SecondaryText, fontSize = 11.sp, lineHeight = 16.sp)
+      }
+    } else {
+      Text(
+          "${result.type.label} · ${result.label} · ${result.detail}",
+          fontFamily = FontFamily.Monospace,
+          fontSize = 11.sp,
+          maxLines = 1)
+    }
   }
 }
 

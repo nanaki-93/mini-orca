@@ -634,18 +634,18 @@ internal fun MiniOrcaApp(
                 if (it != appState.selectedSymbol) clearComposerInput()
                 composerRequested = false
               },
-              selectAction = {
+              selectAction = { action ->
                 showPalette = false
-                presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
-                when (it) {
-                  "refresh_file_analysis" -> presenter.analyzeSelected(true)
+                commandActionWorkspace(action)?.let {
+                  presenter.dispatch(DesktopEvent.WorkspaceSelected(it))
+                }
+                when (action) {
+                  "start_analysis" -> presenter.previewAnalysis()
                   "create_function" -> requestCreateDeclaration(DeclarationCreationKind.Function)
                   "create_type" -> requestCreateDeclaration(DeclarationCreationKind.Type)
-                  "open_performance" ->
-                      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Performance))
-                  "open_security" ->
-                      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Security))
-                  else -> contextAction = it
+                  "fix",
+                  "refactor",
+                  "document" -> contextAction = action
                 }
               },
           ),
