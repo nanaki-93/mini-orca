@@ -65,6 +65,23 @@ Keep empty, loading, stale, failed, partial, canceled and unavailable states
 explicit. Unknown metrics are not zero. Daemon connectivity is not provider
 connectivity. No fabricated findings, project facts or scores in normal usage.
 
+Model results use primary body text, 13sp semibold headings and 12sp semibold
+labels. Keep the supported summary, severity/state and useful action visible;
+place metadata and optional technical details behind a labeled disclosure. Use
+the teal result accent for explanation identity, not as a severity verdict.
+Badges always include a text label and wrap rather than clipping their meaning.
+Headers grow for long titles and larger fonts; do not shrink the text to fit.
+
+Use `ModelResultContent` for freeform model prose. Its selectable text supports
+paragraphs, simple emphasis, flat lists, inline code and triple-backtick code
+fences. Unsupported or unfinished markup stays literal; links, HTML and images
+are never activated. Formatting is bounded to 32,768 characters and 512 lines; larger
+responses remain complete as plain text. An eight-line preview offers an explicit
+keyboard-focusable **Show full response** control when it overflows. Expanding
+retains all content, and a new response resets the preview. The containing pane
+owns vertical scrolling; do not add a scroll area inside each result. Structured
+failures and required next actions belong outside optional disclosures.
+
 UI-01 removed the inert Preview utilities. Keep unsupported controls out of the
 current interface. No navigation, disclosure,
 preview or preset may send a provider request, execute code or mutate source.

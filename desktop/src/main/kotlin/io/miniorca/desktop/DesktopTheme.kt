@@ -150,6 +150,9 @@ internal object MiniOrcaShapes {
 internal object IdeTypography {
   val body = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, lineHeight = 20.sp)
   val compactBody = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 18.sp)
+  val resultHeading = body.copy(fontWeight = FontWeight.SemiBold)
+  val resultLabel = compactBody.copy(fontWeight = FontWeight.SemiBold)
+  val resultCode = compactBody.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
   val section =
       androidx.compose.ui.text.TextStyle(
           fontWeight = FontWeight.SemiBold, fontSize = 11.sp, lineHeight = 16.sp)
@@ -423,6 +426,7 @@ internal val SelectionText = MiniOrcaPalette.selectionText
 internal val ActionFill = MiniOrcaPalette.actionFill
 internal val OnActionFill = MiniOrcaPalette.onActionFill
 internal val FocusAccent = MiniOrcaPalette.focusAccent
+internal val ResultAccent = MiniOrcaPalette.codeType
 internal val Success = MiniOrcaPalette.success
 internal val Warning = MiniOrcaPalette.warning
 internal val Error = MiniOrcaPalette.error
@@ -435,6 +439,9 @@ internal val CodeComment = MiniOrcaPalette.codeComment
 internal val CodeType = MiniOrcaPalette.codeType
 
 data class StatusBadgeStyle(val label: String, val color: Color)
+
+// Resolve against the panel so a selected or highlighted parent cannot reduce label contrast.
+internal fun labelBadgeBackground(tint: Color): Color = blendOver(tint.copy(alpha = 0.12f), Panel)
 
 internal fun statusBadgeStyle(status: String): StatusBadgeStyle =
     when (status.lowercase()) {
@@ -552,18 +559,11 @@ internal fun CompactKeyValueRows(
 @Composable
 internal fun StatusBadge(status: String, modifier: Modifier = Modifier) {
   val style = statusBadgeStyle(status)
-  Text(
-      style.label,
-      color = style.color,
-      style = IdeTypography.compactBody.copy(fontWeight = FontWeight.SemiBold),
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      modifier =
-          modifier
-              .background(style.color.copy(alpha = 0.12f), MiniOrcaShapes.small)
-              .border(BorderStroke(1.dp, style.color.copy(alpha = 0.42f)), MiniOrcaShapes.small)
-              .semantics { contentDescription = "Status: ${style.label}" }
-              .padding(horizontal = MiniOrcaSpacing.standard, vertical = MiniOrcaSpacing.compact),
+  IdeLabelBadge(
+      label = style.label,
+      tint = style.color,
+      modifier = modifier,
+      accessibleName = "Status: ${style.label}",
   )
 }
 

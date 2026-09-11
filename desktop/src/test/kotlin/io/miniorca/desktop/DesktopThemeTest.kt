@@ -60,6 +60,32 @@ class DesktopThemeTest {
   }
 
   @Test
+  fun resultRolesKeepHeadingsLabelsCodeAndBadgeTextReadable() {
+    assertEquals(IdeTypography.body.fontSize, IdeTypography.resultHeading.fontSize)
+    assertEquals(IdeTypography.body.lineHeight, IdeTypography.resultHeading.lineHeight)
+    assertEquals(
+        androidx.compose.ui.text.font.FontWeight.SemiBold, IdeTypography.resultHeading.fontWeight)
+    assertEquals(
+        androidx.compose.ui.text.font.FontWeight.SemiBold, IdeTypography.resultLabel.fontWeight)
+    assertEquals(IdeTypography.compactBody.fontSize, IdeTypography.resultLabel.fontSize)
+    assertEquals(
+        androidx.compose.ui.text.font.FontFamily.Monospace, IdeTypography.resultCode.fontFamily)
+    assertEquals(IdeTypography.compactBody.lineHeight, IdeTypography.resultCode.lineHeight)
+    listOf(Panel, OverlaySurface, EditorCanvas, SelectionSurface).forEach { surface ->
+      listOf(PrimaryText, ResultAccent, SecondaryText).forEach { tint ->
+        assertTrue(contrastRatio(tint, surface) >= 4.5, "Result label $tint on $surface")
+      }
+      listOf(ResultAccent, Success, Warning, Error, SecondaryText).forEach { tint ->
+        assertEquals(1f, labelBadgeBackground(tint).alpha)
+        assertTrue(
+            contrastRatio(tint, blendOver(labelBadgeBackground(tint), surface)) >= 4.5,
+            "Badge label $tint on $surface")
+      }
+    }
+    assertTrue(contrastRatio(SelectionText, SelectionSurface) >= 4.5)
+  }
+
+  @Test
   fun statusStylesKeepTheStateInTextAsWellAsColor() {
     assertEquals(StatusBadgeStyle("Fresh", Success), statusBadgeStyle("fresh"))
     assertEquals(StatusBadgeStyle("Stale", Warning), statusBadgeStyle("stale"))

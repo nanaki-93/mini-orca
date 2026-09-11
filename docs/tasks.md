@@ -1,415 +1,650 @@
-# Codebase cleanup and maintainability audit
+# Mini-Orca UX, project analysis and terminal implementation
 
-Audit the existing Go daemon, Compose desktop client, tooling, and operational documentation; reduce avoidable complexity while preserving behavior. The user authorized background implementation of CLN-01 through CLN-12 with agents on 2026-09-10. All twelve cleanup tasks are complete and the cleanup scheduler is paused; model evaluations and the historical autopilot remain on standby.
+Implement the approved 2026-09-11 product scope in [PLAN.md](../PLAN.md): readable
+model results, project-wide analysis with separate result pages, prominent Go
+function creation and a real terminal replacing the three duplicated bottom tools.
 
-## Background execution — authorized 2026-09-10
+## Authorized execution
 
-Automation: **Mini-Orca cleanup agents** (ID: mini-orca-cleanup-agents), attached to this Codex task, now **Paused** after completion (previously every 20 minutes). Each wake handled at most one ordered cleanup task with one implementation agent, a fresh independent reviewer, and coordinator-run checks. Scheduler setup accepted no implementation. CLN-01 through CLN-12 are accepted; no cleanup task remains. PLAN.md owns current status.
+The user requested task preparation and scheduled execution with **GPT-6 Astra,
+Extra High** (`gpt-6-astra`, `xhigh`). These 17 ordered cards are the current
+implementation source of truth. [PLAN.md](../PLAN.md) owns product decisions and
+the concise status ledger; [the execution guide](../tasks/README.md) defines the
+per-wake procedure. The completed cleanup specification is preserved in
+[the historical archive](history/cleanup-tasks-2026-09-10.md).
 
-PLAN.md owns status and concise acceptance evidence; the checkboxes below mirror accepted work. The user authorized local commits on 2026-09-10: commit the first three accepted tasks together, then commit every later accepted task separately after independent review and coordinator checks. The coordinator stages only that task and its ledger/checklist updates; workers and reviewers do not commit. Preserve earlier accepted changes and unrelated user edits. Pause the cleanup automation after exhausted repairs or final completion. The historical dispatcher and insight qualification stay paused. This authorization excludes pushes, releases, and live Mini-Orca model evaluation.
+- Work in the current `codex/autopilot` checkout and preserve the existing UI
+  changes. Re-read `AGENTS.md` and UI guidelines before relevant work.
+- Process at most one card per scheduled wake. Select the first unchecked card;
+  never skip an incomplete predecessor. If work spans wakes, resume its recorded
+  stage rather than starting a second writer or repeating completed work.
+- Use Astra Extra High for implementation and review of the diff. No additional
+  agents, standalone jobs or historical dispatcher are required by this queue.
+- A passing verification command plus a production-quality diff review is required
+  before checking a task. Run the full desktop test suite before accepting any
+  desktop-changing card, as required by `AGENTS.md`, using cached results when valid.
+- The user authorized one local commit per completed task on 2026-09-11. After
+  required checks and diff review pass, include that task's implementation and
+  related checklist/status updates in one commit with its task ID in the subject.
+  Inspect the staged diff and commit only that scope; preserve unrelated staged
+  changes and exclude unrelated pre-existing working-tree edits. Never use a
+  blanket add/commit of the repository. Verify/report the commit hash before
+  advancing. If commit creation fails, record the pending commit stage and pause;
+  on recovery check Git history before retrying to avoid duplicate commits.
+- Allow the initial implementation attempt and at most two focused correction
+  attempts for a concrete failure. Retain the exact command, exit/result, relevant
+  diagnostics and correction history in the card. Do not reset repair accounting
+  on the next wake. Exhausted failures go to `docs/errors.log` and pause the scheduler.
+- Edit the listed targets and their required behavior tests. Administrative updates
+  to this checklist, `PLAN.md` status and `docs/errors.log` are allowed. If a necessary
+  coupled file was omitted, record the concrete compile/behavior dependency and
+  narrowly correct the target list before editing it; this is task preparation,
+  not permission for unrelated scope expansion.
+- Preserve one-file preview/Review/Apply, source/revision checks, consent, loopback
+  policy and benchmark trust. No pushes, releases, live Mini-Orca model
+  evaluation, destructive cleanup or changes to historical scheduler grants are
+  authorized. Dependency resolution and fake-provider/temporary-project tests are
+  part of implementation; do not edit generated build output by hand.
+- Advance only after required checks pass. Missing mandatory native evidence or
+  incompatible terminal packaging keeps that card incomplete; report the specific
+  blocker, preserve the candidate and pause rather than shipping a placeholder.
 
-## Audit baseline — 2026-09-10
+## Validation environment
 
-Reviewed clean commit **fe4cdad**. Only this file changed during the audit; scheduler setup subsequently registered the cleanup queue in PLAN.md. The previous recovery specification at **fe4cdad:docs/tasks.md** is retained in [insight evaluation history](history/insight-evaluation-2026-09.md#recovery-after-the-failed-medium-reasoning-qualification); PLAN.md owns current standby decisions and docs/RELEASE_ACCEPTANCE.md preserves historical verdicts.
+Use the documented JDK 21 launcher and Java/JBR 25 toolchain. Task commands are
+from the repository root. The scheduler prompt records verified local toolchain
+paths; keep machine-specific locations out of versioned configuration. Direct
+wrapper commands need the Java 21 launcher and a discoverable Java 25 toolchain;
+passing `-Porg.gradle.java.installations.paths=<verified-java25-home>` is a runtime
+location override, not a replacement for the prescribed test selection.
 
-**Assessment:** the codebase has useful package boundaries, substantial behavioral tests, shared storage/context/UI primitives, and little detected copy-paste duplication. Its main maintainability problems are concentrated workflow ownership, campaign-specific code mixed into the application package, silent background persistence failures, and a few unused desktop methods. A rewrite or arbitrary line-count reduction is not justified.
+All cards are initially unchecked. Product decisions D1–D5 are confirmed in PLAN.md.
+Task completion requires both the specified validation and its authorized local
+commit; a checked card with a pending/failed commit must be finished before the
+next card starts. Commit hashes can be reported in the task's final response or
+an ignored local execution receipt; do not amend solely to embed a commit's own hash.
 
-Source inventory (physical lines, including comments/blanks; excludes generated output): Go production/fixtures 19,053; Go tests 14,077; desktop production 16,893; desktop tests 11,139; scripts 2,705; script tests 1,857. These are scale indicators, not quality scores.
+## Task UX-01 — Establish readable result primitives
 
-### Findings and priorities
-
-| ID | Priority / evidence | Finding and intended response |
-| --- | --- | --- |
-| F01 | P1; scripts/quality.sh:40 | The reachability stage trusts the deadcode process exit code. The pinned tool prints findings and returns normally even when it finds unreachable functions. Make findings fail the gate; current analysis itself reported none. |
-| F02 | P2; DesktopLayoutState.kt:95,100,108; DesktopState.kt:629 | closeLeft, closeRight, closeBottom, and DesktopWorkflowController.synchronize have no references in repository source/tests. Remove these four ordinary methods after rechecking references; do not infer that other public members are unused. |
-| F03 | P1; internal/app/engineering_insight_runner.go:1946 | writeRunnerJSON duplicates atomic-file mechanics. Its combined write/sync/close condition short-circuits, so write or sync failure can skip Close. Reuse internal/storage.WriteFile for replaceable metadata. Preserve the separate immutable hard-link writer. |
-| F04 | P1; internal/app/analyze_all.go:575,583,617 | Worker admission/progress/completion discard persistence errors. In-memory progress can diverge from restart state, and provider work can proceed without its progress being saved. Handle failures before structural refactoring. |
-| F05 | P1; internal/app/performance_job.go:486,495,540 | Performance has the same failure class with different lifecycle and budget rules. Keep those rules distinct and make failed persistence observable. |
-| F06 | P2; internal/app/go_scan.go:251 | A failed asynchronous scan can also silently fail to save its failure report. Keep the original scan failure and expose the persistence failure through the existing diagnostics boundary. |
-| F07 | P2; internal/app/file_analysis.go:398; engineering_insight_runner.go:1665,1736 | Production parsing, optional-section assessment, and evaluation diagnostics repeat decoding/validation of the same response. Return diagnostics from the production parsing boundary and reuse them in evaluation. |
-| F08 | P2; internal/app/engineering_insight_runner.go and engineering_insight_evaluation.go | These two files total 2,819 lines and mix fixed campaign identities, budgets, receipt validation, private artifacts, and provider collection into package app. They are reachable from the evaluation CLI, not dead code. Isolate them without removing historical contracts. |
-| F09 | P2; DesktopWorkflowPresenter.kt:996–1115,418–528 | The 1,952-line presenter owns connection, project/file loading, analysis, explanation, security, chat, drafts, jobs, and benchmarks. Extract the benchmark and security operation owners in separate passes; retain one authoritative state store. |
-| F10 | P2; PLAN.md, docs/RELEASE_ACCEPTANCE.md, docs/insights-performance/README.md | Current decisions and extensive superseded campaign instructions coexist. Separate active navigation from retained historical evidence without deleting verdicts or changing authorization. |
-
-Paths abbreviated in F02/F09 are under desktop/src/main/kotlin/io/miniorca/desktop.
-
-### Checks actually run
-
-- make quality — passed: Staticcheck, Go reachability, Go complexity, Go clone detection, Desktop Spotless and configured Detekt checks.
-- go test ./... — passed.
-- make test-race — passed.
-- make fmt-check and make vet — passed.
-- ./desktop/gradlew -p desktop test — passed with cached results; then test --rerun-tasks passed with all eight Gradle tasks executed.
-- python3 -m unittest discover -s scripts/tests -p 'test_*.py' — 51 tests, passed with one explicitly opt-in runtime-conformance skip.
-- Additional Kotlin clone scan at 100 tokens / 10 lines — three matches, all import blocks (0.26% of analyzed lines). Existing Go scan at 70 tokens / 8 lines reported zero clones. These thresholds do not prove absence of smaller or semantic duplication.
-- Native UI/accessibility smoke, live providers, pinned insight-runtime conformance, packaging, dependency vulnerability/version audits, and non-host platform execution were not run. The composed make check command was not invoked; its constituent check categories were run as listed.
-
-The desktop build emitted two redundant-nullability warnings in ReviewEvidencePaneTest.kt:214–215, plus Gradle/Skiko/Jewel compatibility warnings. Fix the two local warnings with Task CLN-02; dependency upgrades are a separate compatibility investigation, not an automatic cleanup change.
-
-### Constraints and non-goals
-
-- Preserve loopback defaults, explicit provider consent, source policy, source/revision checks, one-file preview/apply, benchmark execution trust, and read-only source/diff surfaces.
-- Preserve API routes, JSON field names, cache namespaces, schema/prompt identities, and persisted evidence unless a task explicitly describes an additive diagnostics field.
-- Keep Analyze-all and Performance as separate domain workflows. Similar loops do not justify a generic job engine or generic report cache.
-- Retain internal/storage, source-file snapshot validation, context policy, DesktopJobCoordinator, DesktopTheme, and ChromeControls as the existing reuse boundaries.
-- Do not change model prompts, merge analysis/security/performance requests, delete tests/fixtures for standby capabilities, erase campaign budgets, or remove evaluation safeguards.
-- Do not treat hash/buffer writes or intentionally discarded optional insights as equivalent to ignored filesystem errors.
-- Local cleanup commits are explicitly authorized as described above. Provider calls, unrelated scheduler changes, Docker cleanup, and generated-file edits are excluded.
-- Tasks are ordered below and explicitly depend on predecessors where needed. PLAN.md remains the status ledger; this file is the cleanup specification. Implementation should register this new scope there without reopening completed or standby work.
-
-## Task CLN-01 — Make the reachability gate enforce its result
-
-- [x] CLN-01 accepted after independent review and coordinator verification.
-
-Accepted 2026-09-10: fresh review reported no actionable findings; coordinator reran the four isolated tests and all Go-only quality stages successfully, plus shell syntax and diff checks. Initially accepted without a commit; included in the later authorized CLN-01–03 batch. Exact candidate/evidence is recorded in PLAN.md and .mini-orca/autopilot/cleanup/CLN-01/acceptance.json.
-
-**Target files**
-- scripts/quality.sh — distinguish findings from tool execution failures.
-- scripts/tests/test_quality.py — new isolated gate regression tests.
-
-**Inputs / dependencies**
-- None. F01; pinned deadcode v0.40.0 and the two current executable roots.
-
-**Implementation rules**
-- Capture structured or unambiguous output and fail on any reported unreachable function as well as tool failure. Preserve actionable diagnostics and aggregate reporting of other stages.
-- Empty results pass. Do not hide findings with a broad allowlist or add test roots to make otherwise-unused production functions appear live.
-- Keep tools pinned and outside go.mod. Tests use temporary fixtures or executable stubs; test clean output, findings with exit zero, and tool failure without network/model calls.
-
-**Verification command**
-
-    python3 -m unittest discover -s scripts/tests -p 'test_quality.py'
-    ./scripts/quality.sh --go-only
-
-## Task CLN-02 — Remove confirmed unused desktop methods
-
-- [x] CLN-02 accepted after independent review and coordinator verification.
-
-Accepted 2026-09-10: removed four methods after reference/callback/reflection checks and retained every test assertion. Fresh review reported no actionable findings. Writer executed 327 passing desktop tests and Spotless/Detekt; coordinator reran the exact commands (up-to-date), checked JUnit results, and passed diff checks. No native smoke was needed for this nonvisual deletion; none is claimed. Evidence: .mini-orca/autopilot/cleanup/CLN-02/acceptance.json.
+- [x] UX-01 completed with required checks and diff review.
 
 **Target files**
-- desktop/src/main/kotlin/io/miniorca/desktop/DesktopLayoutState.kt — remove closeLeft, closeRight, and closeBottom.
-- desktop/src/main/kotlin/io/miniorca/desktop/DesktopState.kt — remove DesktopWorkflowController.synchronize.
-- desktop/src/test/kotlin/io/miniorca/desktop/ReviewEvidencePaneTest.kt — remove redundant nullable access/assertion at the two compiler warning sites.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt` — semantic typography and result accents.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ChromeControls.kt` — reusable labeled headers/badges/disclosures.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ModelResultContent.kt` — new bounded freeform-text presentation component.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ModelResultContentTest.kt` — new formatting/fallback behavior tests.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopThemeTest.kt` — contrast and role coverage.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — expose the existing test-only Compose fixture for reuse by the new component tests; no existing fixtures or assertions change.
+- `desktop/UI_DESIGN_GUIDELINES.md` — accepted hierarchy, disclosure and scrolling rules.
 
 **Inputs / dependencies**
-- CLN-01; F02 and the fresh compiler diagnostics.
+- D3; existing working-tree Context changes and the referenced dark mock.
 
 **Implementation rules**
-- Recheck whole-repository references, callback references, and reflection before deleting; retain a method if a real consumer is discovered and record it.
-- Preserve open/toggle/collapse behavior and preference serialization. Do not remove fields, states, or routes merely because no direct call was found.
-- Use existing behavioral tests; no tests that assert source text or merely confirm deletion. Do not add a weak identifier-count lint as a Kotlin reachability substitute.
+- Extend the existing design system; no palette migration or repeated elevated cards.
+- Support the small useful formatting subset: paragraphs, emphasis, lists, inline code and fenced code. Treat unsupported markup as text; no HTML/webview, remote image loading or executable content.
+- Use selectable text, visible focus and semantic labels; retain the complete underlying response when using a collapsed preview.
 
 **Verification command**
+`./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.ModelResultContentTest' --tests 'io.miniorca.desktop.DesktopThemeTest'`
 
-    ./desktop/gradlew -p desktop test
-    ./scripts/quality.sh --desktop-only
+**Execution record**
+Completed 2026-09-11 at the user's request. Validation and diff review passed;
+the local task commit is identified by UX-01 in Git history and the execution receipt.
+Captured the existing worktree and empty index under the
+ignored `.mini-orca/autopilot/ux/UX-01/baseline/` directory. The narrowly added
+test target exposes the existing offscreen renderer so the new component can
+exercise real layout, disclosure and keyboard behavior without duplicating it.
+The planning queue, execution guide and cleanup archive prepared in this task
+are related documentation for the first implementation commit.
 
-## Task CLN-03 — Reuse durable storage for evaluation metadata
+Initial prescribed verification exited 1: 19 tests, one failure in
+`DesktopThemeTest.resultRolesKeepHeadingsLabelsCodeAndBadgeTextReadable` at the
+badge contrast assertion. Transparent badge fills on selected rows reduced
+success/error label contrast below 4.5:1. Correction 1 resolves badge fills
+against the panel with an opaque result; the test checks that production color
+and retains all supported-surface label assertions. The eight formatter/production
+render tests passed, including disclosure activation through the keyboard and
+replacement-response reset. Logs and renders are in the ignored UX-01 evidence
+directory. A formatter invocation first used a relative init-script path that
+Gradle resolved under `desktop/`; rerunning with its absolute path succeeded
+before verification and required no source correction.
 
-- [x] CLN-03 accepted after independent review and coordinator verification.
+Correction-1 verification exited 1: 19 tests, one remaining failure in the same
+test's raw severity-color assertion on a selected surface. The badge fix passed;
+the assertion incorrectly bypassed its opaque background. Correction 2 separates
+uncontained prose roles from badge roles and verifies badge contrast using the
+actual resolved background on every supported parent surface. Severity labels
+are not weakened or removed from the checks. Review also retained spaced emphasis
+delimiters literally so multiplication in prose is not reformatted.
 
-Accepted 2026-09-10: shared atomic metadata writes now preserve cleanup on failures; compact bytes, private mode, directory preconditions, sanitized errors, and immutable evidence remain intact. Fresh review found no actionable issues. Coordinator passed the exact focused command, full Go/race tests, fmt-check, vet, Go-only quality, and diff checks. No migration or live evaluation. Evidence: .mini-orca/autopilot/cleanup/CLN-03/acceptance.json.
+Final prescribed verification exited 0: 19 tests, no failures/errors/skips.
+`./desktop/gradlew -p desktop test detekt spotlessCheck` exited 0: all 362 desktop
+tests passed with no failures/errors/skips, no static-analysis findings, and clean
+formatting. Both commands used the documented Java 21 launcher/Java 25 toolchain
+runtime override and wrote offscreen renders to ignored local evidence paths.
+Reviewed production renders at narrow/wide widths and 150% text, including visible
+keyboard focus, expanding/collapsing the full response, wrapped labels and existing
+shared chrome/summary views. This is offscreen Compose evidence, not native
+screen-reader acceptance. No daemon behavior changed; Go tests and live provider
+tests were not run. No dependency, configuration or migration steps are needed.
+
+Diff review checked literal fallbacks, formatting bounds, response reset, single
+scroll ownership, existing status semantics and retained full response data.
+`git diff --check` passed; out-of-scope baseline files are unchanged. The local
+commit includes only UX-01 implementation, fixture visibility and related planning
+records; pre-existing desktop edits are excluded. UX-02 remains unchecked.
+
+The exact commit candidate was additionally validated in an isolated source
+snapshot with the pre-existing edits excluded: `test detekt spotlessCheck` exited
+0, all 360 tests passed with no failures/errors/skips, and quality checks passed.
+The two additional working-tree tests belong to the preserved Context changes.
+All ten pre-existing desktop diffs were compared against the baseline and retained
+exactly outside this commit. This check confirms UX-01 has no dependency on those
+uncommitted changes.
+
+## Task UX-02 — Apply the hierarchy to explanations and model responses
+
+- [ ] UX-02 completed with required checks and diff review.
 
 **Target files**
-- internal/app/engineering_insight_runner.go — replace writeRunnerJSON file operations with the established storage primitive.
-- internal/app/engineering_insight_runner_test.go — metadata write failure and retained-content tests.
-- internal/storage/atomic_test.go — extend existing operation-failure coverage only where missing.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ContextToolWindow.kt` — summary, labeled explanation facts and technical disclosures.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AssistantToolWindow.kt` — distinguish user request, model response and candidate action.
+- `desktop/src/main/kotlin/io/miniorca/desktop/EngineeringInsightPanel.kt` — readable labels and single-owner scrolling.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryPane.kt` — concise project explanation with supporting detail.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ReviewEvidencePane.kt` — clearer evidence and blocked-action hierarchy.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ContextToolWindowTest.kt` — structured result and state coverage.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AssistantToolWindowTest.kt` — conversation/draft distinction.
+- `desktop/src/test/kotlin/io/miniorca/desktop/EngineeringInsightPanelTest.kt` — optional/stale insight behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — populated/empty/long-text production renders.
 
 **Inputs / dependencies**
-- CLN-01; F03; internal/storage/atomic.go.
+- UX-01.
 
 **Implementation rules**
-- Keep compact JSON bytes, file mode 0600, paths, replacement semantics, and user-facing error sanitization. Preserve useful internal error context without exposing private response/source content.
-- Reuse storage.WriteFile; ensure caller preconditions on the evaluation directory remain intact.
-- Do not replace writePrivateArtifact: its hard-link publication intentionally rejects overwriting prior evidence.
-- Verify old metadata survives failure and temporary resources are cleaned up. Retain immutable-artifact collision coverage.
+- Replace joined explanation facts with short labeled sections. Keep the meaningful answer visible before provenance/metadata.
+- Do not change model payloads merely for visual formatting, add AI summaries, hide errors in closed details or turn inspection into a provider request.
+- Preserve Actions / Explain / Details, read-only content, file/declaration identity and responsive drawers.
 
 **Verification command**
+`./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.ContextToolWindowTest' --tests 'io.miniorca.desktop.AssistantToolWindowTest' --tests 'io.miniorca.desktop.EngineeringInsightPanelTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
 
-    go test ./internal/storage ./internal/app -run 'Atomic|WriteFile|EngineeringInsightRunner' -count=1
+**Execution record**
+Not started.
 
-## Task CLN-04 — Handle Analyze-all persistence failures explicitly
+## Task CREATE-01 — Expose creation in the normal file workflow
 
-- [x] CLN-04 accepted after independent review and coordinator verification.
+- [ ] CREATE-01 completed with required checks and diff review.
 
 **Target files**
-- internal/app/analyze_all.go — worker admission, result, invalidation, and completion error paths.
-- internal/app/file_analysis_test.go — existing Analyze-all restart/race tests and deterministic write-failure coverage.
-- internal/app/service.go — a narrow injectable persistence seam only if needed for deterministic failure tests.
+- `desktop/src/main/kotlin/io/miniorca/desktop/EditorWorkspace.kt` — visible New function action with open-file identity.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ContextToolWindow.kt` — file-level creation access when no symbol is selected.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — route all creation actions through the existing draft-discard boundary.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AssistantToolWindow.kt` — creation heading, name, behavior prompt and Generate label.
+- `desktop/src/main/kotlin/io/miniorca/desktop/CommandPalette.kt` — consistent searchable creation names.
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkflowToolWindows.kt` — explicit create-mode scope/status.
+- `desktop/src/test/kotlin/io/miniorca/desktop/EditorWorkspaceTest.kt` — action discoverability and eligibility.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AssistantToolWindowTest.kt` — creation without a selected symbol.
+- `desktop/src/test/kotlin/io/miniorca/desktop/CommandPaletteTest.kt` — matching creation entry.
 
 **Inputs / dependencies**
-- CLN-03; F04; existing beginPersist serialization and current-job identity checks.
+- UX-01; D4.
 
 **Implementation rules**
-- A failed pre-dispatch write must stop the worker before another provider request. A later failed progress/completion write must stop further work and remain observable to progress callers.
-- Keep a controller-local persistence fault and return a sanitized error from the existing progress boundary; preserve current wire statuses. Do not report a durable completion or automatically resume.
-- Keep completed reports available, preserve restart accounting, and require a successful explicit recovery action before dispatch continues.
-- Distinguish an obsolete worker/revision from a real storage failure. Retain useful diagnostics through existing logging/error patterns without raw source/provider text.
-- Cover failure after successful job creation, failure between files, final-write failure, explicit recovery, and project replacement. Use channels/injected failures, not timing sleeps or chmod-dependent tests.
+- Reuse `requestCreateDeclaration`; opening the form does not generate or mutate anything.
+- Focus the required name field first, then the behavior prompt. Name input must stay editable while the target is incomplete.
+- Make unsupported-language/no-file states informative. Support an existing valid Go file with zero declarations; no existing symbol selection is required.
+- A different active draft needs explicit discard. Cancel preserves it. Retain a secondary type-creation path.
 
 **Verification command**
+`./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.EditorWorkspaceTest' --tests 'io.miniorca.desktop.AssistantToolWindowTest' --tests 'io.miniorca.desktop.CommandPaletteTest'`
 
-    go test -race ./internal/app -run 'AnalyzeAll' -count=1
+**Execution record**
+Not started.
 
-## Task CLN-05 — Handle Performance persistence failures explicitly
+## Task CREATE-02 — Close creation validation and lifecycle gaps
 
-- [x] CLN-05 accepted after independent review and coordinator verification.
+- [ ] CREATE-02 completed with required checks and diff review.
 
 **Target files**
-- internal/app/performance_job.go — next-file admission, results, completion, and detached-project persistence.
-- internal/app/performance_job_test.go — deterministic failure and recovery tests.
-- internal/app/service.go — extend the narrow test seam only if required.
+- `desktop/src/main/kotlin/io/miniorca/desktop/FileChatState.kt` — correct Go identifier/keyword eligibility and clear creation failures.
+- `desktop/src/test/kotlin/io/miniorca/desktop/FileChatStateTest.kt` — valid/invalid names and target switching.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopWorkflowPresenterTest.kt` — create session, generate, cancel and late-response behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DraftReviewWorkflowTest.kt` — creation through validation/checks/review.
+- `internal/app/chat_session_test.go` — daemon creation acceptance/rejection and package-only file fixtures.
+- `internal/project/go_declaration_edit_test.go` — append/import preservation and no-write preview regressions.
+- `internal/app/draft_lifecycle_test.go` — creation Apply/Undo and stale-file rejection.
 
 **Inputs / dependencies**
-- CLN-04; F05; existing persistMu, generation, root, and queue identity checks.
+- CREATE-01.
 
 **Implementation rules**
-- Apply the same failure policy as CLN-04 using Performance's existing lifecycle. Do not merge controllers or their retry/budget rules.
-- Persist running admission before provider dispatch. Surface failed progress/completion persistence and stop new work while retaining reports and elapsed/request accounting.
-- A stale or detached worker must never change a replacement job, publish into another root, or consume a new job's budget.
-- Exercise write failures on admission, result, completion, and project detachment, including retry/restart behavior. Preserve cancellation and partial coverage semantics.
+- Cover blank names, Go keywords, duplicates, supported Unicode identifiers, malformed source, unsupported files and project/file changes mid-request.
+- Retain daemon name validation and exact single-declaration/import composition as the source of truth. Do not invent a second generation endpoint.
+- Verify no source write before Apply, unchanged unrelated declarations/imports, and safe rejection if the file changes after generation.
 
 **Verification command**
+```sh
+./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.FileChatStateTest' --tests 'io.miniorca.desktop.DesktopWorkflowPresenterTest' --tests 'io.miniorca.desktop.DraftReviewWorkflowTest'
+go test ./internal/project ./internal/app -run 'Test(ComposeGoDeclaration|ValidateGoDeclaration|ChatSession|Draft)' -count=1
+```
 
-    go test -race ./internal/app -run 'PerformanceJob|PerformanceReports|ReviewPerformanceFile' -count=1
+**Execution record**
+Not started.
 
-## Task CLN-06 — Preserve asynchronous scan failure diagnostics
+## Task ANA-01 — Define categorized results and unified run contracts
 
-- [x] CLN-06 accepted after independent review and coordinator verification.
+- [ ] ANA-01 completed with required checks and diff review.
 
 **Target files**
-- internal/app/go_scan.go — failed-report serialization/persistence in runStartedGoScan.
-- internal/app/go_scan_test.go — original scan failure plus failed report storage.
+- `internal/project/file_analysis.go` — explicit semantic risk category and cache compatibility.
+- `internal/project/findings.go` — preserve classification through finding reconciliation without losing triage identity.
+- `internal/project/file_analysis_test.go` — old/new report and category cases.
+- `internal/project/findings_test.go` — category, provenance and triage preservation.
+- `internal/app/analysis_run.go` — new run/queue/section types and request identities.
+- `internal/app/analysis_run_test.go` — new contract/state cases.
+- `docs/api-contract.md` — scope, result classification, run states and compatibility decisions.
+- `docs/openapi.yaml` — documented unified preview/start/status/control/result shapes.
 
 **Inputs / dependencies**
-- CLN-04; F06; failedGoScanReport and existing output sanitization.
+- D1 and D5; existing `AnalyzeAllJob`, `PerformanceJob`, `SecurityFileReport` and findings contracts.
 
 **Implementation rules**
-- Retain the original scan failure as the primary result and report secondary persistence failure through existing sanitized diagnostics/logging.
-- Do not silently convert failed report storage into durable success or drop the in-memory failure report.
-- Preserve project/revision checks and cancellation. Do not unify scan execution with model-review jobs or alter execution trust.
-- Use a controlled storage failure after scan failure; prove that another project's scan state is unaffected.
+- Define project-wide run scope and explicit Bugs/Performance/Security category enum. File filters are read-only report queries, not execution scope. Keep source-specific detail types and severity/confidence distinct from category.
+- Specify a source-free preview with immutable file identities, exclusions, provider requirements and bounded request/attempt expectations.
+- Define per-section and overall states, including completed-empty, partial, failure, unavailable, stale, pause/cancel and interrupted recovery. A section with no successful analysis cannot claim zero findings.
+- Old category-less risks remain accessible but unclassified until explicit refresh. Do not infer category from text or discard persisted dismissed/fixed states.
 
 **Verification command**
+`go test ./internal/project ./internal/app -run 'Test(FileAnalysis|Finding|AnalysisRun)' -count=1`
 
-    go test -race ./internal/app -run 'GoScan' -count=1
+**Execution record**
+Not started.
 
-## Task CLN-07 — Share file-analysis validation and evaluation diagnostics
+## Task ANA-02 — Produce and validate explicit semantic categories
 
-- [x] CLN-07 accepted after independent review and coordinator verification.
+- [ ] ANA-02 completed with required checks and diff review.
 
 **Target files**
-- internal/app/file_analysis.go — have the existing parsing boundary produce the result and bounded diagnostics together.
-- internal/app/file_analysis_evaluation.go — new narrow production adapter for evaluation prompt preparation and response assessment.
-- internal/app/engineering_insight_runner.go — consume the adapter; remove redundant optional-state decoding/validation.
-- internal/app/file_analysis_test.go — parent-response and optional-section behavior.
-- internal/app/engineering_insight_test.go — malformed nested insight behavior.
-- internal/app/engineering_insight_runner_test.go — production/evaluation parity.
+- `internal/app/file_analysis.go` — strict category schema/parser/prompt update and new prompt identity.
+- `internal/app/file_analysis_test.go` — invalid/missing/new category and category-specific grounding cases.
+- `internal/app/file_analysis_evaluation.go` — keep evaluation assessment aligned with the production contract.
+- `internal/app/engineering_insight_test.go` — schema identity and optional-insight preservation.
+- `internal/insighteval/evaluation_test.go` — offline contract fixtures.
+- `internal/insighteval/runner_test.go` — offline runner/schema parity.
 
 **Inputs / dependencies**
-- CLN-03; F07; current schema, prompt version, insight limits, task-spec validation, and private diagnostic contracts.
+- ANA-01.
 
 **Implementation rules**
-- Keep one semantic validator. Diagnostics must distinguish omission, rejection, and accepted output without persisting field text, source, or reasoning.
-- Preserve parent-failure handling, optional-section degradation, insight retention limits, and the historical diagnostic classifications even where raw accepted sections are omitted from the displayed result.
-- The adapter exposes only prompt/contract preparation and bounded assessment needed by the evaluation command. Its contract includes sanitized effective provider metadata (including remote/loopback classification), so both runner authorization checks can reuse production classification after the package move. Keep transport, retries, caching, campaign accounting, and file writes outside it.
-- Keep provider-origin/context binding in production helpers; do not duplicate those rules in evaluation.
-- Compare prompt bytes/schema identity and assessment output using synthetic fixtures. No prompt-version bump or model request is needed for a behavior-preserving extraction.
+- Newly generated risks must name their category; only actual correctness, performance or security findings enter the respective section.
+- Keep existing source grounding, strict unknown-field rejection, response bounds and optional-field degradation semantics.
+- Do not fabricate categories for historical reports. Bump the relevant prompt/cache identity and require explicit refresh to obtain the new classification.
+- Update synthetic test fixtures only; never inspect sealed evaluation material or consume provider grants for this task.
 
 **Verification command**
+`go test ./internal/app ./internal/insighteval -count=1`
 
-    go test ./internal/app -run 'Semantic|FileAnalysis|EngineeringInsight|Optional' -count=1
+**Execution record**
+Not started.
 
-## Task CLN-08 — Move evaluation tooling out of package app
+## Task ANA-03 — Compose the per-file analysis stages
 
-- [x] CLN-08 accepted after independent review and coordinator verification.
+- [ ] ANA-03 completed with required checks and diff review.
 
 **Target files**
-- internal/app/engineering_insight_runner.go → internal/insighteval/runner.go — move collection/campaign ownership.
-- internal/app/engineering_insight_evaluation.go → internal/insighteval/evaluation.go — move receipt validation/scoring.
-- internal/app/engineering_insight_runner_lock_unix.go → internal/insighteval/runner_lock_unix.go — preserve build constraint and locking.
-- internal/app/engineering_insight_runner_lock_windows.go → internal/insighteval/runner_lock_windows.go — preserve fail-closed behavior.
-- internal/app/engineering_insight_runner_test.go → internal/insighteval/runner_test.go — move tests and use the production adapter.
-- internal/app/engineering_insight_evaluation_test.go → internal/insighteval/evaluation_test.go — move receipt tests.
-- cmd/engineering-insight-eval/main.go and cmd/engineering-insight-eval/main_test.go — update imports.
-- scripts/quality.sh — keep both executable roots under reachability analysis.
+- `internal/app/analysis_file.go` — new typed stage execution over the existing analyzers.
+- `internal/app/analysis_file_test.go` — new partial, cache, cancellation and freshness tests.
+- `internal/app/file_analysis.go` — reuse existing semantic execution/publication at the narrow boundary needed by the run.
+- `internal/app/performance_review.go` — reuse the existing source review and authorized publication callback.
+- `internal/app/security_review.go` — bind advisory execution/publication to admitted run identity and fresh intent.
+- `internal/app/security_rules.go` — include passive rules for eligible Go files.
+- `internal/app/source_file_snapshot.go` — share only truly identical identity checks.
 
 **Inputs / dependencies**
-- CLN-07; F08; the explicit standby scope in PLAN.md.
+- ANA-01, ANA-02.
 
 **Implementation rules**
-- Dependency direction is insighteval → app's narrow evaluation adapter; app must not import insighteval.
-- Move existing implementations and remove their old declarations. No compatibility forwarding layer, generic experiment framework, configurable grant system, or changed CLI/wire names.
-- Preserve every fixed grant, cap, hash, manifest identity, private-file rule, recovery decision, and synthetic regression fixture. Existing fixture paths remain stable; do not inspect or relocate private sealed sources.
-- Use the existing exported prompt/schema accessors and the new adapter instead of exporting the service's internals.
-- Verify both entry points and applicable platform constraints. This separates ownership; it does not claim a reduction in reachable total code or a passing insight qualification.
+- Execute bounded stages using captured file/revision/hash identities; reuse current parsers and report stores, never call HTTP handlers internally.
+- Preserve successful sections when another stage fails. Distinguish reused matching cache evidence from newly requested results; explicit refresh can bypass valid model caches.
+- Security keeps deterministic rule matches and AI suggestions separately labeled. Unsupported rules do not suppress an otherwise eligible AI review.
+- Check cancellation, source policy, provider consent and run publication authority before dispatch/publication. No tests/vet/benchmarks run here.
+- Use stable producer IDs to avoid displaying the same stored finding twice. Do not merge unrelated findings merely because they share a line or title.
 
 **Verification command**
+`go test -race ./internal/app -run 'Test(AnalysisFile|AnalyzeFile|ReviewPerformanceFile|ReviewSecurityFile|ScanSecurityFile)' -count=1`
 
-    go test ./internal/app ./internal/insighteval ./cmd/engineering-insight-eval -count=1
-    ./scripts/quality.sh --go-only
+**Execution record**
+Not started.
 
-## Task CLN-09 — Give benchmark operations one desktop owner
+## Task ANA-04 — Implement one durable, bounded run lifecycle
 
-- [x] CLN-09 accepted after independent review and coordinator verification.
+- [ ] ANA-04 completed with required checks and diff review.
 
 **Target files**
-- desktop/src/main/kotlin/io/miniorca/desktop/DesktopBenchmarkWorkflow.kt — new internal owner of benchmark request jobs and generation checks.
-- desktop/src/main/kotlin/io/miniorca/desktop/DesktopWorkflowPresenter.kt — delegate catalog/select/compare and lifecycle invalidation.
-- desktop/src/test/kotlin/io/miniorca/desktop/DesktopWorkflowPresenterTest.kt — retain end-to-end presenter benchmark coverage.
-- desktop/src/test/kotlin/io/miniorca/desktop/DesktopBenchmarkWorkflowTest.kt — focused ownership/cancellation coverage.
+- `internal/app/analysis_run.go` — preview/admission, sequential dispatch, pause/resume/cancel and recovery.
+- `internal/app/analysis_run_store.go` — new source-free durable run metadata using shared atomic storage.
+- `internal/app/analysis_run_test.go` — lifecycle, budget, concurrency and persistence-failure tests.
+- `internal/app/analysis_run_store_test.go` — new corruption/interruption/recovery cases.
+- `internal/app/service.go` — one coordinator owner and lifecycle wiring.
+- `internal/app/project_workspace.go` — restore progress without restarting requests.
+- `internal/app/source_file_snapshot.go` — captured-run publication guard where required.
 
 **Inputs / dependencies**
-- CLN-02; F09; existing workflow identities, DesktopState reducer, and API contract tests.
+- ANA-03.
 
 **Implementation rules**
-- Move benchmark jobs, generation, catalog/comparison identity checks, and cancellation together. Keep existing event publication and the presenter API stable.
-- Keep a single authoritative state store; pass a narrow snapshot accessor/event sink, not a mutable presenter reference or copied state store.
-- Preserve explicit benchmark selection/execution consent, draft invalidation, stale-result rejection, project switch, and close behavior.
-- Remove the replaced presenter helpers. Do not create a generic workflow base class or alter Performance report polling in DesktopJobCoordinator.
+- Capture the whole project's deterministic eligible queue with existing context exclusions and per-analyzer source-size limits. File selection must not alter admission.
+- Keep explicit batch/time/attempt bounds; reuse existing 100/500 file limits for bounded dispatch batches rather than truncating total project coverage. Calculate expected stage work and retry bounds in preflight rather than multiplying hidden retries. Budget exhaustion retains pending work for explicit continuation and cannot report full completion.
+- Save admission before requests and progress before advancing work. Persistence failure stops dispatch and shows recoverable failure without overwriting completed reports or resetting attempts.
+- Cancellation stops active requests and further dispatch; pause waits for a defined stage boundary and cannot consume more queued work. Project/source changes mark the run stale.
+- Test concurrent start/control, replacement generations, restart, failed writes, provider changes and late completion with deterministic fakes.
+- A restored run never restarts itself or carries reusable remote consent. Source-changing Apply invalidates the captured run under existing revision rules.
 
 **Verification command**
+`go test -race ./internal/app -run 'Test(AnalysisRun|AnalysisRunStore|ProjectOverview)' -count=1`
 
-    ./desktop/gradlew -p desktop test --tests '*DesktopWorkflowPresenterTest' --tests '*DesktopBenchmarkWorkflowTest' --tests '*PerformanceWorkspaceTest'
+**Execution record**
+Not started.
 
-## Task CLN-10 — Give security operations one desktop owner
+## Task ANA-05 — Migrate existing jobs and expose the unified API
 
-- [x] CLN-10 accepted after independent review and coordinator verification.
+- [ ] ANA-05 completed with required checks and diff review.
 
 **Target files**
-- desktop/src/main/kotlin/io/miniorca/desktop/DesktopSecurityWorkflow.kt — new internal owner of scan/review requests and cancellation.
-- desktop/src/main/kotlin/io/miniorca/desktop/DesktopWorkflowPresenter.kt — delegate security operation lifecycle.
-- desktop/src/test/kotlin/io/miniorca/desktop/DesktopWorkflowPresenterTest.kt — retained consent and stale-result integration coverage.
-- desktop/src/test/kotlin/io/miniorca/desktop/DesktopSecurityWorkflowTest.kt — focused operation ownership tests.
+- `internal/app/analyze_all.go` — remove its independent controller/worker; retain only required public-contract adapters.
+- `internal/app/performance_job.go` — migrate scheduling ownership and retain required report/queue compatibility.
+- `internal/app/service.go` — remove superseded controller fields and wire compatibility adapters to the unified owner.
+- `internal/app/file_analysis_test.go` — migrate Analyze-all lifecycle regressions to the shared owner.
+- `internal/app/performance_job_test.go` — retain queue/budget/persistence regression coverage.
+- `internal/app/cleanup_contract_test.go` — update ownership assertions while preserving cleanup guarantees.
+- `internal/api/handlers/analysis_handler.go` — new strict unified analysis handler.
+- `internal/api/handlers/analysis_handler_test.go` — new request/identity/consent/error contracts.
+- `internal/api/handlers/project_handler.go` — route legacy entry points through the shared lifecycle.
+- `internal/api/handlers/project_handler_test.go` — legacy compatibility cases.
+- `cmd/daemon/main.go` — register unified routes through existing loopback policy.
+- `cmd/daemon/main_test.go` — route and documentation contract coverage.
+- `docs/api-contract.md` — final API/migration semantics.
+- `docs/openapi.yaml` — match implemented routes and schemas.
 
 **Inputs / dependencies**
-- CLN-09; F09; existing SecurityWorkspaceState and report/file matching helpers.
+- ANA-04.
 
 **Implementation rules**
-- Move security request ownership as one unit; reuse workflow identities and the single event/state boundary established in CLN-09.
-- Keep deterministic scan and AI review separate, including per-attempt remote consent, optional symbol scope, retained prior reports, and failure labels.
-- Preserve cancellation and stale-result rejection for rapid scan/review changes, file/project changes, and presenter close.
-- Do not move navigation or source-editing rules into this owner; do not generalize benchmark and security workflows merely because both use coroutines.
-- Keep the UI composition and layout unchanged. If a visual change becomes necessary, follow desktop/UI_DESIGN_GUIDELINES.md and record separate visual verification.
+- Expose preview, start, current run, report and explicit controls. Strictly validate project/revision/file/queue/provider identity at the boundary.
+- Existing Analyze-all and Performance starts become single-purpose adapters to the same owner, preserving their documented scope and limits. Remove obsolete locks/workers and migrated duplicate tests, retaining behavioral regressions.
+- Read old persisted jobs without dispatch; preserve attempts and progress when presenting interrupted recovery. Never overwrite historical reports to manufacture combined coverage.
+- Keep the project Go scan and benchmark execution APIs separate because they execute code. Preserve loopback/origin rules and sanitized errors.
+- If a legacy response cannot faithfully project the new lifecycle, record the exact incompatibility and migration before removing it; do not silently change public behavior.
 
 **Verification command**
+`go test -race ./internal/app ./internal/api/handlers ./cmd/daemon -count=1`
 
-    ./desktop/gradlew -p desktop test --tests '*DesktopWorkflowPresenterTest' --tests '*DesktopSecurityWorkflowTest' --tests '*SecurityWorkspaceTest'
-    ./scripts/quality.sh --desktop-only
+**Execution record**
+Not started.
 
-## Task CLN-11 — Separate current documentation from historical execution records
+## Task ANA-06 — Give the desktop one analysis owner
 
-- [x] CLN-11 accepted after independent review and coordinator verification.
-
-**Accepted documentation mapping**
-
-- PLAN.md retains current cleanup state, every accepted cleanup evidence record,
-  released-task status and standby decisions. Detailed prior instructions are in
-  [improvement history](history/improvement-plan-2026-09.md).
-- Former insights/runtime/campaign instructions and the complete recovery
-  specification from **fe4cdad:docs/tasks.md** are in
-  [insight history](history/insight-evaluation-2026-09.md).
-- The complete [old-to-new heading map](history/improvement-plan-2026-09.md#old-to-new-anchor-map)
-  covers prior PLAN.md, tasks/README.md, insights README and recovery anchors.
-  Root links continue to current docs. Release acceptance edits update navigation only.
-- UI-01 guidance describes the completed removal; its prior wording is retained in
-  history. At CLN-11 acceptance only cleanup scheduling was active; both schedulers are now paused.
-- QUAL-06/RCV-07 remain failed and RCV-08 unrun; consumption remains 60 development
-  / 24 qualification with the sealed unused conditional 24-case holdout preserved.
-
+- [ ] ANA-06 completed with required checks and diff review.
 
 **Target files**
-- PLAN.md — concise current status and cleanup task ledger.
-- docs/history/improvement-plan-2026-09.md — new retained historical task instructions/verdicts.
-- docs/insights-performance/README.md — current feature overview and historical links.
-- docs/history/insight-evaluation-2026-09.md — retained campaign/runtime instructions and prior recovery specification.
-- docs/RELEASE_ACCEPTANCE.md — preserve evidence; update navigation links only.
-- tasks/README.md — remove superseded active-looking queue instructions in favor of historical links.
-- desktop/UI_DESIGN_GUIDELINES.md — replace completed UI-01 future-tense guidance with current behavior.
-- docs/tasks.md — record completed cleanup steps and documentation mappings.
+- `desktop/src/main/kotlin/io/miniorca/desktop/Models.kt` — unified wire types.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ApiClient.kt` — unified API methods.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopState.kt` — one analysis run and typed section evidence.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopAnalysisWorkflow.kt` — new cohesive request/control owner.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopWorkflowPresenter.kt` — delegate analysis commands and remove superseded request logic.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopJobCoordinator.kt` — one analysis poller, retaining the independent verified-scan poller.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopSecurityWorkflow.kt` — remove duplicate run ownership; retain only independently required security operations.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ApiClientContractTest.kt` — unified and compatibility payloads.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAnalysisWorkflowTest.kt` — new run ownership/consent/late-result tests.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopWorkflowPresenterTest.kt` — migrated analysis lifecycle cases.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopSecurityWorkflowTest.kt` — preserve fresh intent and retained-evidence assertions.
 
 **Inputs / dependencies**
-- CLN-08 and CLN-10; F10; previous recovery specification at fe4cdad:docs/tasks.md.
+- ANA-05.
 
 **Implementation rules**
-- Preserve historical content, identifiers, outcomes, budgets, and provenance. Clearly label historical commands as non-active; do not reconstruct disposed responses or touch ignored evaluation artifacts.
-- Keep PLAN.md the sole execution/status ledger. Move detailed completed instructions into history and provide an old-to-new anchor map; update repository links to moved sections.
-- Do not relabel failed or unrun qualification as passed, resume the scheduler, or change acceptance limits.
-- Keep active documentation short and accurate; avoid a new duplicate architecture document.
+- The daemon owns job scheduling; desktop only admits actions, polls and renders authoritative state. Switching result sections must not trigger work.
+- Preserve typed Security evidence and benchmark ownership, file/project identity guards and cancellation cleanup.
+- One admission UI names all affected providers/scopes and Security intent. Consume/reset consent at the defined attempt boundary; no silent reuse after restart or changed scope.
+- Refresh and reconnect read reports; partial errors remain associated with the correct section/file and do not replace unrelated valid results.
 
 **Verification command**
+`./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.ApiClientContractTest' --tests 'io.miniorca.desktop.DesktopAnalysisWorkflowTest' --tests 'io.miniorca.desktop.DesktopWorkflowPresenterTest' --tests 'io.miniorca.desktop.DesktopSecurityWorkflowTest'`
 
-    go test ./cmd/daemon -run 'Test(ReleaseDocumentationUsesCanonicalVersion|DocumentedRoutesAreHandledByDaemon)$' -count=1
-    python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-    git diff --check
+**Execution record**
+Not started.
 
-Also manually verify moved Markdown links and retained historical status references.
+## Task ANA-07 — Separate run progress from the three result pages
 
-## Task CLN-12 — Validate the cleanup as one release-preserving change
-
-- [x] CLN-12 accepted after independent review and coordinator verification.
+- [ ] ANA-07 completed with required checks and diff review.
 
 **Target files**
-- docs/tasks.md — final results, remaining limitations, and completed task status.
-- PLAN.md — cleanup completion summary and outstanding dependencies.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisWorkspaceState.kt` — project coverage, per-analyzer progress and result-page links.
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — Analysis start/progress surface and Bugs results page.
+- `desktop/src/main/kotlin/io/miniorca/desktop/FindingsPresentation.kt` — readable result rows and visible severity/provenance.
+- `desktop/src/main/kotlin/io/miniorca/desktop/BugsWorkspaceState.kt` — retain triage/filter presentation within Bugs section.
+- `desktop/src/main/kotlin/io/miniorca/desktop/PerformanceWorkspace.kt` — section content, hypotheses and explicit measurement handoff.
+- `desktop/src/main/kotlin/io/miniorca/desktop/SecurityWorkspace.kt` — section content retaining rule/AI distinctions.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — wire unified actions and exact finding-to-editor handoffs.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ContextToolWindow.kt` — Analyze project and local View this file's results actions.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisWorkspaceStateTest.kt` — real counts/coverage/filter/state cases.
+- `desktop/src/test/kotlin/io/miniorca/desktop/BugsWorkspaceStateTest.kt` — triage retained.
+- `desktop/src/test/kotlin/io/miniorca/desktop/PerformanceWorkspaceTest.kt` — hypothesis/measurement distinction.
+- `desktop/src/test/kotlin/io/miniorca/desktop/SecurityWorkspaceTest.kt` — partial/source-aware results.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — all three sections and their important states.
 
 **Inputs / dependencies**
-- CLN-01 through CLN-11.
+- UX-02, ANA-06.
 
 **Implementation rules**
-- Review the complete diff for changed behavior, accidental public interfaces, duplicate implementations, source/privacy regressions, stale references, and removed test coverage.
-- Re-run the supported validation entry point. Distinguish executed, cached, skipped, and unavailable checks; no live evaluation is required or implied.
-- Confirm source/diff views, narrow-window behavior, keyboard navigation, and consent remain intact with a targeted native smoke of benchmark/security workflows when the desktop environment is available. Do not claim native verification from unit tests alone.
-- Compare responsibilities and removed duplication with the audit baseline; report actual deletions separately from code moved between files. Do not set a line-count quota.
-- Keep the proposed combined per-file analysis contract as a separate product decision. Cleanup requires no configuration or data migration; report any deviation before calling it complete.
+- Analysis shows Start, overall/per-analyzer progress, current file, coverage, pause/resume/cancel and operational failures only. Its Bugs/Performance/Security progress rows link to the corresponding result page; no findings list belongs on Analysis.
+- Keep results in their existing distinct workspaces, supplied by the unified run. Their file filters never start another run. Prefer a list/detail layout that becomes a single-column drill-down on narrow windows.
+- Each result shows title, explicit severity/state, concise content and source location before secondary evidence. Filters are local and never re-run analysis.
+- Do not put general suggestions in Bugs; preserve them in the file explanation. Historical unclassified risks are readable under previous-analysis detail with no fresh count.
+- Preserve existing triage, Prepare fix, exact-symbol eligibility and benchmark trust behavior. Opening a finding must not generate a draft.
 
 **Verification command**
+`./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.BugsWorkspaceStateTest' --tests 'io.miniorca.desktop.PerformanceWorkspaceTest' --tests 'io.miniorca.desktop.SecurityWorkspaceTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
 
-    ./scripts/validate.sh
-    git diff --check
+**Execution record**
+Not started.
 
-### Final cleanup review and validation — 2026-09-10
+## Task NAV-01 — Distinguish run, results and editing in the sidebar
 
-The aggregate review covers **fe4cdad → 4c1c904**, including all accepted CLN-01–11 changes. No actionable code issue was found. Cleanup repairs silent persistence failures and the reachability gate, consolidates shared semantic assessment and metadata storage, and moves evaluation, benchmark and Security responsibilities to explicit owners. API routes/JSON, prompt/schema identity, source policy, consent, one-file preview/Apply, evaluation grants/receipts and dependency configuration remain intact. No configuration or data migration is required.
+- [ ] NAV-01 completed with required checks and diff review.
 
-Responsibility moves are distinct from actual deletion:
+**Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopState.kt` — retain distinct workspaces and local per-page result filters.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopLayoutState.kt` — preserve saved navigation and pane sizes.
+- `desktop/src/main/kotlin/io/miniorca/desktop/IdeShell.kt` — grouped Results destinations with labeled count/state and selected accents.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — connect progress-page links and result destinations.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopKeyboardNavigation.kt` — preserve existing workspace shortcuts and focus behavior.
+- `desktop/src/main/kotlin/io/miniorca/desktop/CommandPalette.kt` — consistent Start analysis and result-page actions.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — project-wide Start routing and local result navigation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopStatusBar.kt` — reflect actual run/provider context.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopLayoutStateTest.kt` — preference preservation without side effects.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopShellTest.kt` — new workspace ownership.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — navigation/focus coverage.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopIntegrationCoverageTest.kt` — section-to-editor navigation.
 
-| Change | Measured result |
-| --- | --- |
-| Desktop ownership | Presenter 1,952 → 1,616 physical lines; new benchmark/security owners 279/178 lines. This is a responsibility move, with 121 more lines across the three files. |
-| Evaluation ownership | Evaluator/runner/platform locks move from app to insighteval: 2,859 → 2,738 lines. Evaluator and both locks differ only in package name. |
-| Removed duplication | Four unused desktop methods, the duplicate replaceable-metadata write sequence, and the 116-line duplicate optional-state/diagnostic runner block are removed. Shared assessment adds a 96-line app adapter; immutable artifact publication remains separate. |
-| Documentation ownership | PLAN 2,332 → 158 lines, feature guide 515 → 53, execution guide 257 → 43 at accepted CLN-11; historical files retain 2,732/775 lines and recovered specification. No verdict or budget history was deleted. |
-| Test preservation | Go Test functions 374 → 400; desktop tests 327 → 351. All 56 baseline evaluation tests survive, with seven additions. The storage failure test was renamed and expanded; no baseline desktop test names were removed. |
+**Inputs / dependencies**
+- ANA-07.
 
-Physical-line and test inventories describe scope; they are not quality scores or a deletion quota. Current app imports and duplicate helper references were checked; historical/audit paths remain intentionally retained. CLN-11's independent preservation review checked all 103 anchor mappings. The combined per-file analysis proposal remains a separate product decision and is not implemented by cleanup.
+**Implementation rules**
+- Preserve separate Analysis, Bugs, Performance and Security rail entries as requested. Make their purposes obvious: Analysis runs/tracks; the three Results destinations display findings.
+- Group the result entries with restrained spacing/separators, clear labels and real count/state badges. Do not add a second navigation system or turn category tint into severity.
+- Preserve Cmd/Ctrl+4 for Editor and existing Summary/Analysis/Bugs/Performance/Security navigation. Saved selections remain valid; keep pane widths and no-network-on-navigation behavior, with independent focus/selected accents.
 
-The writer and coordinator each ran exact `./scripts/validate.sh`; both exited zero with all nine gates passing. The writer also ran exact `git diff --check`, which passed. No production correction was needed.
+**Verification command**
+`./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.DesktopLayoutStateTest' --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopIntegrationCoverageTest'`
 
-| Gate | Writer | Coordinator |
-| --- | --- | --- |
-| Go suite | 11 packages passed: seven executed, four cached | All 11 packages cached |
-| Go race | All 11 tested packages cached | All 11 tested packages cached |
-| Daemon documentation/route contracts | One package freshly executed | Cached |
-| Python | 55 discovered, 54 executed, one opt-in runtime skip; 51.458 seconds | 55 discovered, 54 executed, one opt-in runtime skip; 57.174 seconds |
-| Formatting, vet, Go quality | Commands executed and passed | Commands executed and passed |
-| Desktop static / tests | Six / eight actionable Gradle tasks up-to-date | Six / eight actionable Gradle tasks up-to-date |
+**Execution record**
+Not started.
 
-The version package has no tests. The Go suite explicitly skipped the evaluator-sealed v2 qualification-fixture test; the coordinator's cached output repeats that skip. Retained desktop XML contains 40 suites/351 tests with zero failures/errors/skips. No fresh race or desktop test execution is claimed for these CLN-12 runs; compiler/tool caches may also be reused internally.
+## Task TERM-01 — Prove the terminal dependency and local-session boundary
 
-A subsequent coordinator validation after native smoke failed only `go-format`: the formatting target also scanned the ignored synthetic `native/fixture/main.go`, whose original source used spaces. The other eight gates passed. The stopped fixture was archived as `main.go.fixture` with identical bytes and the recorded source hash preserved; no production file or check was changed. The failed run is retained in `coordinator-final-validate.log` / `coordinator-final-validation.json`, and the scratch correction in `scratch-repair.json`. The full repaired rerun in `coordinator-final-retry-validate.log` / `coordinator-final-retry-validation.json` passed all nine gates. A final run on the refrozen documentation candidate also passed (`coordinator-frozen-validate.log` / `coordinator-frozen-validation.json`): Go/race/daemon results were cached, desktop static/test tasks up-to-date, and Python executed 54 of 55 discovered tests with one opt-in skip in 55.174 seconds. The existing sealed-fixture Go skip remains.
+- [ ] TERM-01 completed with required checks and diff review.
 
-The coordinator additionally built `createDistributable` successfully (three tasks executed, five up-to-date) and launched the current normal macOS arm64 app bundle with JBR 25 against a synthetic loopback HTTP service and in-memory preferences. Native observations establish the following limited UI smoke:
+**Target files**
+- `desktop/build.gradle.kts` — pin verified terminal/PTY dependencies and required package modules.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTerminalSession.kt` — new local shell/PTY owner independent of Compose recomposition.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopTerminalSessionTest.kt` — new lifecycle tests with injected process boundary.
+- `desktop/TERMINAL.md` — new short dependency, native packaging and supported-host record.
 
-- An initial 800 × 600 window exposed compact Files/Context drawers and a source view labeled read-only. Native zoom exposed a 1,336 × 768 layout with docked Files and right tools.
-- Ctrl+P/Enter selected a file, Ctrl+Shift+O/Enter selected an exact symbol, Ctrl+4 opened Editor, Ctrl+K opened the composer, and Ctrl+Shift+V validated the synthetic draft. The candidate view exposed read-only diff accessibility labels and BEFORE / PROPOSED labels.
-- Security Review was disabled before confirmation, enabled after checking consent, and disabled again after the synthetic attempt consumed it. Both deterministic and AI report labels remained visible.
-- Benchmark listing sent GET only; selection displayed the fixed argv. The explicit Trust and run action sent trust GET/POST followed by benchmark POST, then displayed the fixture's “Not measured · unavailable” result and explanation.
+**Inputs / dependencies**
+- D2; existing JBR 25/macOS arm64 distribution constraints.
 
-The source fixture hash remained unchanged, Apply/Undo were not invoked, and no real provider, benchmark or project code ran. Both owned app and fixture service were stopped. This is client behavior against a synthetic service, not production-daemon end-to-end validation or measured benchmark evidence.
+**Implementation rules**
+- Evaluate JediTerm/Pty4J with the pinned desktop toolchain; choose exact available artifacts and record notices/native requirements before integrating the UI.
+- Prove process startup, working directory, UTF-8, terminal resize, interrupt and bounded teardown on the supported host. Use an isolated temporary directory for smoke commands.
+- Launch the user's supported shell as an executable plus arguments, never interpolate the project path into a shell command string. Set project cwd explicitly.
+- Define Idle/Starting/Running/Exited/Failed/Closed state, a bounded scrollback policy and process cleanup. No automatic shell start during project restore.
+- Missing shell/native library/unavailable local project path gives a visible error and retry action. Do not claim a full terminal from a fake-only test.
 
-Native tooling had limits: direct Java attachment failed before the rebuilt normal bundle worked; the launch guard rejected an obsolete jar selection before launch, and the fixture was adjusted to follow the validated draft revision. Intermittent CUA scroll/window errors and a final ScreenCaptureKit invalid-parameter error prevented additional viewport checks. Cmd-specific shortcuts, exact 1000/999dp boundaries, other scaling combinations, editing resistance and spoken VoiceOver output were not established by this smoke. The synthetic overview endpoint was intentionally absent; its optional unavailable status is not evidence of a production daemon failure.
+**Verification command**
+```sh
+./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.DesktopTerminalSessionTest'
+./scripts/desktop-gradle.sh createDistributable
+```
+Also record a real packaged-host PTY smoke before TERM-02; dependency/native failure is an explicit implementation dependency, not permission to substitute an output box.
 
-Evidence: `.mini-orca/autopilot/cleanup/CLN-12/writer/`, `coordinator-validation.json`, `native/smoke.json` and `native/requests.jsonl` under the same CLN-12 directory. Fresh independent review approved the frozen candidate with no actionable findings; coordinator validation, diff checks and all 19 Markdown link checks passed. CLN-12 is accepted and all twelve cleanup tasks are complete. The cleanup scheduler is now Paused, with no next task. Candidate SHA-256: `70652874d9b6981aed0eac2c859f64974b3117f469f32968d5f937c75a38231b`; acceptance and local commit identity are recorded in `acceptance.json`.
+**Execution record**
+Not started.
 
-Live providers/evaluation, pinned-runtime conformance, distribution signing/installation, non-host runtime execution and broader accessibility were not revalidated. Historical release limits remain in force. Insight usefulness/omission remains unqualified, with QUAL-06/RCV-07 failed and RCV-08 unrun; cumulative 60 development / 24 qualification requests and the sealed unused conditional 24-case holdout are unchanged.
+## Task TERM-02 — Integrate the interactive terminal pane
+
+- [ ] TERM-02 completed with required checks and diff review.
+
+**Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/TerminalToolWindow.kt` — new themed terminal host and explicit session controls.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTerminalSession.kt` — component attach/detach and resize lifecycle.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — stable project-bound session owner/disposal.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopWorkflowPresenter.kt` — read-only freshness refresh when returning from the terminal.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopState.kt` — invalidate selected-file evidence when its observed hash changes.
+- `desktop/src/main/kotlin/io/miniorca/desktop/Main.kt` — deterministic shutdown integration where needed.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopKeyboardNavigation.kt` — terminal focus/toggle and key routing.
+- `desktop/src/test/kotlin/io/miniorca/desktop/TerminalToolWindowTest.kt` — new session/control behavior tests.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopTerminalSessionTest.kt` — hide/show/switch/close process behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — focus-aware shortcut behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopWorkflowPresenterTest.kt` — shell-originated file changes reject stale review/analysis evidence.
+
+**Inputs / dependencies**
+- UX-01, TERM-01.
+
+**Implementation rules**
+- Match source typography/colors; support input, output, ANSI colors, cursor movement, history, copy/paste, Ctrl+C, resize and scrolling through the terminal library.
+- First activation starts one shell; collapsing or switching workspaces preserves it. Closing explicitly ends it; reopening starts a new session.
+- On project switch with an active session, let the user cancel the switch or explicitly close that session. Never silently redirect a running shell into the new project.
+- Terminal focus owns shell keystrokes, including interrupt; app-wide shortcuts must not steal ordinary terminal input. Provide a deliberate way back to app focus.
+- Dispose streams/native resources/processes on restart/project close/app exit, with bounded waiting and visible launch/exit errors. Do not persist terminal transcript or automatically send it to a model.
+- On return to source/review, recheck the selected file through the existing read-only file-info boundary; a changed hash makes draft/check/analysis evidence stale. Offer explicit Reindex for changed project inventory. Do not parse terminal output to infer changes or auto-run an analysis after shell commands.
+
+**Verification command**
+`./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.TerminalToolWindowTest' --tests 'io.miniorca.desktop.DesktopTerminalSessionTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopWorkflowPresenterTest'`
+Native verification additionally covers a prompt, history, interruption, full-screen terminal redraw, focus return, resize and app-exit cleanup.
+
+**Execution record**
+Not started.
+
+## Task BOTTOM-01 — Preserve unique diagnostics in their owning workflows
+
+- [ ] BOTTOM-01 completed with required checks and diff review.
+
+**Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/BottomEvidenceToolWindows.kt` — identify/move uniquely used diagnostic formatting before deletion.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ReviewEvidencePane.kt` — all candidate check output and validation errors under Review.
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — analysis run failures in Analysis progress details; verified-scan output in Bugs details.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AssistantToolWindow.kt` — generation failures beside the request.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopStatusBar.kt` — retain actionable connection/global operation detail access.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DiagnosticText.kt` — new shared sanitizer only if it remains used by multiple owners.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ReviewEvidencePaneTest.kt` — failed/stale/skipped checks and output access.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisWorkspaceStateTest.kt` — analysis failure visibility.
+- `desktop/src/test/kotlin/io/miniorca/desktop/BugsWorkspaceStateTest.kt` — verified-scan output access.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopStatusBarTest.kt` — global failure access.
+
+**Inputs / dependencies**
+- UX-02, ANA-07.
+
+**Implementation rules**
+- Inventory the existing Output entries: generation/validation, selected-file failure, Analyze-all failures, scan phase command/output, daemon errors and latest operation.
+- Give each piece one reachable owner; reuse diagnostic sanitization/bounds and preserve Copy/detail access. No new global Output view.
+- Keep automated check output distinct from the terminal, where it did not execute. Terminal content does not become validation evidence.
+
+**Verification command**
+`./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.ReviewEvidencePaneTest' --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.BugsWorkspaceStateTest' --tests 'io.miniorca.desktop.DesktopStatusBarTest'`
+
+**Execution record**
+Not started.
+
+## Task BOTTOM-02 — Replace the bottom tools with Terminal only
+
+- [ ] BOTTOM-02 completed with required checks and diff review.
+
+**Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopLayoutState.kt` — terminal-only preference model and legacy bottom selection fallback.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — terminal dock, collapse control and bounded narrow overlay.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — remove Problems/Checks/Output construction and connect terminal.
+- `desktop/src/main/kotlin/io/miniorca/desktop/BottomEvidenceToolWindows.kt` — delete after useful shared code is moved.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProblemsToolWindow.kt` — delete if exclusively used by the removed bottom surface; move any remaining shared finding UI first.
+- `desktop/src/test/kotlin/io/miniorca/desktop/BottomEvidenceToolWindowsTest.kt` — remove obsolete surface tests after moving meaningful assertions.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ProblemsToolWindowTest.kt` — move shared finding assertions or remove obsolete tests.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopLayoutStateTest.kt` — old bottom preferences restore collapsed Terminal.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — terminal wide/narrow/collapsed/failed states.
+
+**Inputs / dependencies**
+- NAV-01, TERM-02, BOTTOM-01.
+
+**Implementation rules**
+- Remove all three obsolete bottom tabs, counts, automatic-opening callbacks and associated dead types; preserve only the terminal control and the separate integrated status bar.
+- Keep resizable docked height and the <1000dp bounded overlay. Restore pane dimensions without auto-starting a shell or reviving an old bottom selection.
+- Collapsing/opening must not recreate the process. Returning from drawers/palette restores focus predictably.
+
+**Verification command**
+`./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.DesktopLayoutStateTest' --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
+
+**Execution record**
+Not started.
+
+## Task VERIFY-01 — Validate the complete interaction and document support
+
+- [ ] VERIFY-01 completed with required checks and diff review.
+
+**Target files**
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopIntegrationCoverageTest.kt` — project-wide analysis, separate result pages/file filters and creation handoffs.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — final production-component fixture matrix.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAccessibilityTest.kt` — names, states, focus and read-only semantics.
+- `desktop/src/test/kotlin/io/miniorca/desktop/IdeUiContractBaselineTest.kt` — update the baseline to actual supported controls.
+- `desktop/KEYBOARD_SMOKE_CHECKLIST.md` — new navigation/terminal procedures.
+- `desktop/UI_CONTRAST.md` — measured final text/state/focus contrast.
+- `desktop/README.md` — actual Analysis, creation and terminal usage/shortcuts.
+- `README.md` — supported user workflow and migrations.
+- `docs/insights-performance/README.md` — new section ownership and preserved evidence distinctions.
+- `docs/RELEASE_ACCEPTANCE.md` — actual automated/native results and limitations.
+- `PLAN.md` — task status, accepted decisions and outstanding dependencies.
+
+**Inputs / dependencies**
+- CREATE-02, BOTTOM-02 and every preceding analysis/UI task.
+
+**Implementation rules**
+- Review the aggregate diff for obsolete controllers/surfaces, accidental duplicate rules, hidden actions, unhandled failures and unrelated edits. Update dependent existing tests rather than keeping obsolete UI behavior alive.
+- Native visual matrix: wide, 1000/999dp, 800×650, 1280×600, 125/150% text; long content/paths/errors; each result state and each terminal state. Verify important information is distinguishable without depending on color alone.
+- End-to-end with a fake provider/temp project: partial three-section run, cancel/resume/restart, source change, new function in a package-only file, draft preservation, Review/Apply/Undo and terminal-triggered evidence invalidation. No live provider is needed.
+- Verify terminal packaging on the supported macOS arm64/JBR 25 host, local cwd, keyboard routing, PTY resize and process cleanup. Record any untested host separately; do not broaden the accepted platform claim from compilation alone.
+- Document report/prompt identity and visual-preference migrations. No model configuration rename is assumed. Keep historical release/qualification limits intact.
+
+**Verification command**
+```sh
+./scripts/validate.sh
+./scripts/desktop-gradle.sh createDistributable
+git diff --check
+```
+`scripts/validate.sh` covers the formatting, Go, race, vet, desktop and dispatcher
+checks represented by `make check`, plus static and daemon-contract gates. Do not
+repeat equivalent full suites once they pass unless subsequent changes justify it.
+Use the existing production-component reproduction command in
+`docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks` and record native smoke
+separately. Report executed/cached/skipped/unavailable checks accurately.
+
+**Execution record**
+Not started.

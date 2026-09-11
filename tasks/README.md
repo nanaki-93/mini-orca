@@ -1,43 +1,76 @@
-# Executing the authorized cleanup
+# Executing the Mini-Orca UX implementation queue
 
-[PLAN.md](../PLAN.md) is the sole execution/status ledger.
-[docs/tasks.md](../docs/tasks.md) defines CLN-01–12 target files, dependencies,
-implementation rules and exact checks. Historical task cards and dispatcher
-commands are retained in [improvement history](../docs/history/improvement-plan-2026-09.md#implementing-the-plan-with-agents).
+[PLAN.md](../PLAN.md) owns confirmed product decisions and current status.
+[docs/tasks.md](../docs/tasks.md) is the sole ordered implementation checklist.
+The user authorized scheduled execution with **GPT-6 Astra Extra High** on
+2026-09-11. The scheduler processes one card per wake, every 20 minutes, in the
+current checkout on `codex/autopilot`.
 
-## Current execution boundaries
+Automation: **Mini-Orca UX implementation** (`mini-orca-ux-implementation`), Active,
+attached to the current Codex task. Astra Extra High is set on that task through
+the supported task continuation API; chat-attached automation has no independent
+model/effort field. Local execution requires the computer on and the app running,
+as described in the [scheduled-task documentation](https://learn.chatgpt.com/docs/automations?surface=app).
 
-The user authorized the **Mini-Orca cleanup agents** scheduler on 2026-09-10.
-It wakes the coordinator every 20 minutes, processes at most one ordered cleanup
-task per wake, and uses one implementation agent followed by a fresh independent
-reviewer and coordinator-run validation. PLAN.md records the active task and writer.
+## Per-wake procedure
 
-1. Read [AGENTS.md](../AGENTS.md), the selected cleanup card and its dependencies.
-   Inspect surrounding code and tests; preserve earlier accepted and unrelated edits.
-2. The writer edits only the listed targets and runs the exact task checks. Read
-   [UI guidelines](../desktop/UI_DESIGN_GUIDELINES.md) before UI work. Preserve
-   one-file preview/review/Apply, identity checks, consent and execution trust.
-3. Freeze a reviewable candidate. A fresh reviewer checks that exact diff and
-   the coordinator independently verifies it. A changed candidate needs fresh
-   review. A writer does not accept its own work or change coordinator status.
-4. Allow at most two focused repairs within the selected task; record failures and
-   stop on exhausted repairs or an unresolved boundary. Pause the cleanup scheduler
-   on an unresolved blocker or final completion.
-5. Only the coordinator records acceptance and commits accepted work. The user's
-   2026-09-10 authorization groups CLN-01–03 in one local commit and each later
-   accepted task in its own commit, including only its ledger/checklist updates.
-   Workers and reviewers do not commit. Pushes, releases and live Mini-Orca model
-   evaluation are outside this scope.
+1. Read current `AGENTS.md`, the status ledger and the first unchecked task card.
+   Re-read `desktop/UI_DESIGN_GUIDELINES.md` before UI work. Respect an explicit
+   user pause. Never start another writer while recorded work is still running;
+   inspect the recorded process/session before deciding it is abandoned.
+2. Record the active task and stage in PLAN.md. Inspect the current working-tree
+   diff before editing. Earlier accepted changes and the user's uncommitted UI
+   work form the baseline; never reset, stash, discard or overwrite them.
+3. Implement only that card with `gpt-6-astra` and `xhigh` reasoning. The scheduler
+   uses this Codex task directly; no detached runner or additional agents are
+   required. Necessary narrow target-list corrections follow `docs/tasks.md`.
+4. Run the exact task verification commands with the verified local toolchains.
+   For desktop changes, also run the full desktop tests required by AGENTS.md.
+   Reuse valid cached results; do not repeatedly rerun passing suites without a
+   relevant change. Perform and record any native checks required by the card.
+5. Review the actual diff for correctness, failure paths, stale results, privacy,
+   maintainability, removed obsolete code and preserved behavior. Make at most
+   two focused repairs after a concrete failure, retaining all failed attempts.
+   An interrupted validation resumes validation, not implementation from scratch.
+6. When the card passes every required check and diff review, prepare its checkbox,
+   actual test/review record and PLAN.md status update. Stage only that task's
+   implementation and related documentation, inspect the staged diff, and create
+   one local commit with the task ID in its subject. Preserve unrelated staged
+   changes and exclude unrelated pre-existing edits; never use blanket staging.
+   Verify/report the commit hash, then end the wake. If the commit fails, record
+   the pending commit stage and pause without advancing. After interruption,
+   inspect Git history and any execution receipt before retrying; do not duplicate
+   a commit or rerun completed implementation. A later wake handles the next card
+   only after the previous task's commit is verified.
+7. On an exhausted repair, missing required native capability or material product
+   ambiguity, preserve work, record the precise blocker in `docs/errors.log` and
+   pause this scheduler. When all 17 cards pass, record completion and pause it.
+   Update scheduling only with the app's automation tool, preserving its other
+   fields; do not write raw scheduler files or reactivate historical automations.
 
-## Paused historical work
+## Boundaries
 
-The repository dispatcher and insight recovery/qualification remain **Paused**.
-Their old queue instructions and commands are inactive historical reference, even
-where the retained prose says “active” or contains unchecked acceptance boxes.
-QUAL-06 and RCV-07 failed; RCV-08 was not run. Preserve all receipts, budgets and
-sealed holdout material. Only PLAN.md and a new explicit user decision can reopen
-that work; the cleanup scheduler does not resume it.
+The user authorized **one local commit per validated task** on 2026-09-11. This
+supersedes the earlier no-commit instruction for this queue. Do not push, release, publish, run live
+Mini-Orca provider/evaluation campaigns or perform destructive cleanup. The user's
+ordinary terminal is a feature being implemented, not authorization for model-driven
+commands in project terminals. Preserve source/diff read-only views and explicit
+Review/Apply for Mini-Orca candidates. Normal build dependency downloads and tests
+using fake providers/temporary fixtures are included in the implementation scope.
 
-- [Historical agent and dispatcher guide](../docs/history/improvement-plan-2026-09.md#implementing-the-plan-with-agents)
-- [Historical runtime and evaluation](../docs/history/insight-evaluation-2026-09.md)
+The existing scheduler and this task serialize execution; no extra worktrees or
+parallel coordinators should be launched. Keep Astra Extra High for this queue
+unless the user explicitly changes the requested model. Report an unavailable
+requested model rather than silently substituting another one.
+
+## Historical work
+
+The completed CLN-01–12 queue and its past agent/commit authorization are retained
+in [cleanup history](../docs/history/cleanup-tasks-2026-09-10.md). Its scheduler
+remains paused. The repository dispatcher and insight qualification remain on
+standby; their old unchecked boxes and imperative instructions are not active work.
+Keep historical receipts, verdicts, budgets and sealed holdout material unchanged.
+
+- [Historical implementation/dispatcher guide](../docs/history/improvement-plan-2026-09.md#implementing-the-plan-with-agents)
+- [Historical runtime/evaluation](../docs/history/insight-evaluation-2026-09.md)
 - [Release evidence and limits](../docs/RELEASE_ACCEPTANCE.md)
