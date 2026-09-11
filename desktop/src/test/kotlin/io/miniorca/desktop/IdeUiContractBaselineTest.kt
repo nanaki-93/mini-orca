@@ -8,6 +8,21 @@ import kotlin.test.assertTrue
 
 class IdeUiContractBaselineTest {
   @Test
+  fun acceptedNavigationSeparatesProgressResultsAndEditingWithoutStartingAShell() {
+    assertEquals(
+        listOf("Project", "Results", "Editing"), workspaceNavigationGroups.map { it.label })
+    assertEquals(
+        listOf(LeftToolWindow.Performance, LeftToolWindow.Problems, LeftToolWindow.Security),
+        workspaceNavigationGroups.single { it.label == "Results" }.destinations)
+    assertEquals(
+        listOf(AnalysisRunCommand.Start),
+        projectRunPresentation(ProjectAnalysisRunState()).commands)
+    assertTrue(DesktopLayoutStore(InMemoryPreferences()).load().bottomCollapsed)
+    assertNull(
+        declarationCreationBlockedReason(file("empty.go", "base").copy(content = "package main\n")))
+  }
+
+  @Test
   fun landingIsolationAndNarrowEditorDrawersRemainExplicit() {
     assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(DesktopState()))
     assertTrue(shortcutAvailable(DesktopShellMode.ProjectLanding, DesktopShortcut.OpenProject))

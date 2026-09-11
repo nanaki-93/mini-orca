@@ -242,10 +242,6 @@ func (s *Service) retry(ctx context.Context, runtime modelRuntime, messages []ll
 	return s.retryRequest(ctx, runtime, messages, nil)
 }
 
-func (s *Service) retryWithJSONSchema(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema llm.JSONSchema) (modelOutput, error) {
-	return s.retryRequest(ctx, runtime, messages, &schema)
-}
-
 func (s *Service) retryRequest(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema *llm.JSONSchema) (modelOutput, error) {
 	return s.retryRequestAuthorized(ctx, runtime, messages, schema, nil)
 }

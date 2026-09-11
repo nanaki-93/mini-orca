@@ -3,10 +3,10 @@
 [PLAN.md](../PLAN.md) owns confirmed product decisions and current status.
 [docs/tasks.md](../docs/tasks.md) is the sole ordered implementation checklist.
 The user authorized scheduled execution with **GPT-6 Astra Extra High** on
-2026-09-11. The scheduler processes one card per wake, every 20 minutes, in the
-current checkout on `codex/autopilot`.
+2026-09-11. All 17 cards completed on **2026-09-12**. The scheduler ran one card per wake,
+every 20 minutes, in the current checkout on `codex/autopilot`, and is now Paused.
 
-Automation: **Mini-Orca UX implementation** (`mini-orca-ux-implementation`), Active,
+Automation: **Mini-Orca UX implementation** (`mini-orca-ux-implementation`), **Paused**,
 attached to the current Codex task. Astra Extra High is set on that task through
 the supported task continuation API; chat-attached automation has no independent
 model/effort field. Local execution requires the computer on and the app running,
@@ -74,3 +74,12 @@ Keep historical receipts, verdicts, budgets and sealed holdout material unchange
 - [Historical implementation/dispatcher guide](../docs/history/improvement-plan-2026-09.md#implementing-the-plan-with-agents)
 - [Historical runtime/evaluation](../docs/history/insight-evaluation-2026-09.md)
 - [Release evidence and limits](../docs/RELEASE_ACCEPTANCE.md)
+
+## Final queue acceptance — 2026-09-12
+
+All 17 cards passed and received their authorized local commits. VERIFY-01 closes
+full validation, native macOS arm64/JBR 25 terminal proof, visual/keyboard checks
+and migration documentation. The scheduler was paused through the app; its prompt,
+interval, task target and Astra Extra High setting are retained. No future card,
+live provider campaign, push or release is scheduled. See the
+[final evidence and limits](../docs/RELEASE_ACCEPTANCE.md#ux-implementation-acceptance--2026-09-12).

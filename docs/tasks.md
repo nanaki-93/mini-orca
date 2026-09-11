@@ -1611,7 +1611,7 @@ local BOTTOM-02 commit, then end this wake with VERIFY-01 next and scheduler Act
 
 ## Task VERIFY-01 — Validate the complete interaction and document support
 
-- [ ] VERIFY-01 completed with required checks and diff review.
+- [x] VERIFY-01 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopIntegrationCoverageTest.kt` — project-wide analysis, separate result pages/file filters and creation handoffs.
@@ -1625,6 +1625,22 @@ local BOTTOM-02 commit, then end this wake with VERIFY-01 next and scheduler Act
 - `docs/insights-performance/README.md` — new section ownership and preserved evidence distinctions.
 - `docs/RELEASE_ACCEPTANCE.md` — actual automated/native results and limitations.
 - `PLAN.md` — task status, accepted decisions and outstanding dependencies.
+
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` — isolated native entry point reusing production panes and existing test data, with explicit text-scale and lifecycle selection; no provider access.
+- `tasks/README.md` — record the authorized scheduler stop after final acceptance.
+
+- `internal/app/analysis_run_preview.go` — split inventory, stage planning and resume request accounting while retaining identical admission guards.
+- `internal/app/analysis_run_store.go` — separate persisted header, file, stage and aggregate evidence validation.
+- `internal/app/analysis_run_results.go` — separate read-only semantic, performance and security evidence projection.
+- `internal/app/analysis_run.go` — separate section validation, locked controls, stage dispatch and publication guards.
+- `internal/app/analysis_compatibility.go` — factor compatibility budget/scope checks and shared queue identity validation.
+- `internal/app/analysis_file.go` — separate request validation and rejected-stage presentation.
+- `internal/app/file_analysis.go` — extract semantic risk validation without changing diagnostic behavior.
+- `internal/app/service.go` — remove unreachable schema retry wrapper.
+- `internal/app/performance_review.go` — remove unused standalone performance orchestration replaced by the shared stage pipeline.
+- `internal/app/performance_review_test.go` — run existing publication safety regressions through the production stage pipeline.
+- `internal/project/security.go` — remove unused store convenience wrapper; retain the guarded cache store.
+- `internal/app/file_analysis_test.go` — wait for canceled worker completion before deleting its temporary project; preserve cancellation assertions.
 
 **Inputs / dependencies**
 - CREATE-02, BOTTOM-02 and every preceding analysis/UI task.
@@ -1650,4 +1666,47 @@ Use the existing production-component reproduction command in
 separately. Report executed/cached/skipped/unavailable checks accurately.
 
 **Execution record**
-Not started.
+Started 2026-09-12. Verified BOTTOM-02 receipt, accepted HEAD, empty index, all ten unrelated UI hashes and absence of another writer/validator. Baselines saved under `.mini-orca/autopilot/ux/VERIFY-01/`. Review the aggregate implementation and current test coverage before adding the final integration/native fixtures; retain historical release limitations. Initial implementation; zero corrections.
+
+Preparation inventory: existing fake-provider/temp-project Go integration tests already cover partial categorized runs, cancellation, resumed generations, process-loss restoration, package-only creation through real validation/checks/Apply/Undo and source-conflict rejection. Reuse their full-gate results instead of duplicating those pipelines. Add a native visual fixture to close the formerly unverified text-scale/lifecycle matrix, and extend desktop cross-boundary tests for draft preservation and source invalidation across all result pages.
+
+**Correction 1 — 2026-09-12.** The first prescribed full gate passed Go formatting/tests/race/vet, daemon contracts, dispatcher tests and desktop static/tests, but failed Go quality: three unreachable helpers and twelve analysis functions above complexity 15. Preserve the full failure in `.mini-orca/autopilot/ux/VERIFY-01/validate.log`. Add the directly affected backend files and publication tests above before editing. Remove the obsolete wrappers, migrate their safety tests to the actual shared stage pipeline, and separate inventory/planning, stored-state validation, evidence projection and locked lifecycle steps without weakening guards or quality thresholds. No native acceptance claim yet.
+
+**Correction 2 — 2026-09-12.** The correction-1 aggregate run exposed a fixture cleanup race: `TestAnalyzeAllCancelRetainsCompletedEntries` saw the legacy Canceled projection and deleted its temporary directory while the shared worker was finishing its final save (`TempDir RemoveAll cleanup: .../.mini-orca/analysis: directory not empty`). The race suite passed. Add an explicit wait on the existing worker-completion signal after cancellation; do not add sleeps, retries, suppress the cleanup error, or change production cancellation semantics. The initial full-gate log is retained as `validate-correction-1.log`; the remaining stages passed except one residual complexity value of 16 in `runAnalysisWindow`. Extract its final queue-freshness/completion transition into a locked helper, retaining the final save and its error handling. This is the second and final focused repair.
+
+**Accepted — 2026-09-12.** The second correction passes the complete prescribed
+`./scripts/validate.sh` gate. All nine stages pass, including Go tests/race/vet,
+static/reachability/complexity/clone checks, daemon contracts and dispatcher tests
+(55, one opt-in insight-runtime conformance skip). Desktop has 403 isolated tests
+and 405 tests with the user's UI changes, zero failures/errors/skips; Spotless and
+Detekt pass in both. The explicit component reproduction passes 43 tests with fresh
+renders. `createDistributable`, the packaged-runtime PTY probe and diff checks pass.
+Cached package/Gradle results are reused where source inputs are unchanged.
+
+Native production-pane fixtures verify all eleven analysis/result states at
+800×650/150%, 1000/999dp Editor layouts at 125%, 1280×600 at 150%, long failures,
+and every terminal lifecycle label. One real shell PID survives resize/navigation
+and text-scale changes; actual PTY dimensions change. Focus return, natural exit 7,
+explicit reopen/new PID and explicit close pass; both shell PIDs and the fixture
+app are stopped. Earlier TERM-02/BOTTOM-02 full product native evidence remains
+applicable to unchanged Desktop production code. Synthetic projection values and
+fixture-injected font scale are layout evidence; real service tests separately
+prove counts, consent, cancellation/restoration and one-file creation/Apply/Undo.
+Exact evidence and remaining platform/provider limits are recorded in
+[release acceptance](RELEASE_ACCEPTANCE.md#ux-implementation-acceptance--2026-09-12).
+
+Review confirms one analysis owner; required public compatibility adapters converge
+on it. Obsolete bottom surfaces and dead backend wrappers are removed. The backend
+cleanup preserves lock boundaries, durable request reservations, source/report
+identity checks, sanitized failures and explicit provider consent. Existing
+performance publication safety tests now run the actual shared stage pipeline;
+the canceled-worker fixture uses synchronization rather than timing or retries.
+No quality limit, test or guard was weakened. No configuration rename or manual
+migration is needed; source/diff remain read-only until explicit reviewed Apply.
+
+All ten unrelated UI edits are preserved and excluded from the exact tested
+candidate; overlapping documentation/test changes round-trip against baselines.
+Code hashes remain unchanged through final documentation. The app confirmed the
+scheduler is Paused after all 17 cards passed. Create the one authorized local
+VERIFY-01 commit and verify its receipt before ending this wake; do not start any
+new task. No push, release, live provider call or destructive cleanup was performed.

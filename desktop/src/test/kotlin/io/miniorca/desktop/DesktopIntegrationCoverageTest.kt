@@ -18,18 +18,63 @@ class DesktopIntegrationCoverageTest {
             run = analysisRunFixture(),
             resultPaths = mapOf("bugs" to "main.go", "security" to "internal/"))
     controller.dispatch(DesktopEvent.AnalysisRunUpdated(run))
+    controller.dispatch(DesktopEvent.DraftLoaded(draft()))
+    val review = controller.state.review
     val selection = controller.state.selection
     listOf("open_analysis", "open_bugs", "open_performance", "open_security").forEach { action ->
       controller.dispatch(
           DesktopEvent.WorkspaceSelected(requireNotNull(commandActionWorkspace(action))))
       assertEquals(run, controller.state.analysisRun)
       assertEquals(selection, controller.state.selection)
-      assertEquals(null, controller.state.review.draft)
+      assertEquals(review, controller.state.review)
       assertTrue(controller.state.preparedRequest.isBlank())
     }
     controller.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
     assertEquals(selection, controller.state.selection)
     assertEquals(run, controller.state.analysisRun)
+  }
+
+  @Test
+  fun partialResultsAndAnOpenDraftBecomeStaleTogetherAfterObservedSourceChanges() {
+    val controller = loadedController()
+    val load = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(load, file(), listOf(symbol())))
+    controller.dispatch(DesktopEvent.DraftLoaded(draft()))
+    val run = acceptanceRun("partial")!!
+    val sections =
+        listOf("bugs", "performance", "security").associate { category ->
+          AnalysisResultKey(category) to
+              AnalysisSectionState(results = analysisResultsFixture(run, category))
+        }
+    controller.dispatch(
+        DesktopEvent.AnalysisRunUpdated(ProjectAnalysisRunState(run = run, sections = sections)))
+    val review = controller.state.review
+    listOf("bugs", "performance", "security").forEach { category ->
+      val page = controller.state.analysisResultPage(category)
+      assertEquals("Partial", page.statusLabel)
+      assertEquals(run.identity, page.results?.identity)
+      assertEquals(category, page.results?.progress?.category)
+    }
+    controller.dispatch(DesktopEvent.SelectedFileRefreshed(file(), listOf(symbol())))
+    assertEquals(review, controller.state.review)
+    controller.dispatch(
+        DesktopEvent.SelectedFileRefreshed(file(hash = "shell-change"), listOf(symbol())))
+    assertEquals(DraftEditorStatus.Stale, controller.state.review.editor?.status)
+    assertEquals(review.draft, controller.state.review.draft)
+    listOf("bugs", "performance", "security").forEach { category ->
+      val page = controller.state.analysisResultPage(category)
+      assertEquals("Stale", page.statusLabel)
+      assertNull(page.reportedCount)
+      assertEquals(run.identity, page.results?.identity)
+    }
+    assertFalse(
+        draftReviewEligibility(
+                controller.state.review.editor,
+                controller.state.review.draft,
+                controller.state.review.checks,
+                controller.state.selectedFile,
+                controller.state.project)
+            .eligible)
   }
 
   @Test

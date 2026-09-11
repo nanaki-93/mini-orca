@@ -385,14 +385,6 @@ func (c *SecurityReportCache) cachePath(path, source string) string {
 	return filepath.Join(c.root, ".mini-orca", "security", "files", hex.EncodeToString(key[:])+".json")
 }
 
-func StoreSecurityFileReport(root string, report SecurityFileReport, indexed IndexFile) error {
-	cache, err := NewSecurityReportCache(root)
-	if err != nil {
-		return err
-	}
-	return cache.Store(report, indexed)
-}
-
 func LoadSecurityFileReport(root string, input SecurityReportInput) (*SecurityFileReport, error) {
 	cache, err := NewSecurityReportCache(root)
 	if err != nil {

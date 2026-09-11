@@ -45,7 +45,7 @@ func TestReviewPerformanceFileRejectsChangedSourceOrPolicyBeforePublication(t *t
 			done := make(chan error, 1)
 			authorizationCalls := 0
 			go func() {
-				_, err := service.reviewPerformanceFile(context.Background(), "main.go", true, func(_ func() error) error {
+				_, err := reviewPerformanceStageForTest(t, service, context.Background(), func(_ func() error) error {
 					authorizationCalls++
 					return nil
 				})
@@ -90,7 +90,7 @@ func TestReviewPerformanceFileRechecksSnapshotDuringPublicationAuthorization(t *
 			server := performanceReviewResponseServer(t)
 			defer server.Close()
 			service, root := newSemanticAnalysisService(t, server.URL, 0)
-			_, err := service.reviewPerformanceFile(context.Background(), "main.go", true, func(publish func() error) error {
+			_, err := reviewPerformanceStageForTest(t, service, context.Background(), func(publish func() error) error {
 				return test.authorize(t, root, publish)
 			})
 			if !errors.Is(err, test.want) {
@@ -107,7 +107,7 @@ func TestReviewPerformanceFileRechecksCancellationDuringPublicationAuthorization
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_, err := service.reviewPerformanceFile(ctx, "main.go", true, func(publish func() error) error {
+	_, err := reviewPerformanceStageForTest(t, service, ctx, func(publish func() error) error {
 		cancel()
 		return publish()
 	})
@@ -121,7 +121,7 @@ func TestReviewPerformanceFileRequiresAuthorizedPublication(t *testing.T) {
 	server := performanceReviewResponseServer(t)
 	defer server.Close()
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
-	_, err := service.reviewPerformanceFile(context.Background(), "main.go", true, func(_ func() error) error {
+	_, err := reviewPerformanceStageForTest(t, service, context.Background(), func(_ func() error) error {
 		return nil
 	})
 	if err == nil {
@@ -144,7 +144,7 @@ func TestReviewPerformanceFileCancellationPreventsPublication(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		_, err := service.reviewPerformanceFile(ctx, "main.go", true, nil)
+		_, err := reviewPerformanceStageForTest(t, service, ctx, nil)
 		done <- err
 	}()
 	waitForTestSignal(t, started, "performance review request")
@@ -174,4 +174,22 @@ func performanceReviewResponseServer(t *testing.T) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validPerformanceReview}}}})
 	}))
+}
+
+// Retain publication-boundary regressions on the coordinator's production stage path.
+func reviewPerformanceStageForTest(t *testing.T, service *Service, ctx context.Context, authorize func(func() error) error) (analysisFileStageResult, error) {
+	t.Helper()
+	request := analysisStageRequestFor(t, service, "main.go", AnalysisStagePerformance)
+	request.ConfirmRemoteProvider = true
+	authority := analysisStageAuthorityFor(t, request)
+	publish := authority.Publish
+	authority.Publish = func(run AnalysisRunIdentity, file AnalysisFileIdentity, stage AnalysisStage, write func() error) error {
+		return publish(run, file, stage, func() error {
+			if authorize != nil {
+				return authorize(write)
+			}
+			return write()
+		})
+	}
+	return service.analyzeFileStage(ctx, request, authority)
 }

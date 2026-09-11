@@ -122,11 +122,8 @@ type analysisFileStageExecution struct {
 // the coordinator stops dispatch rather than presenting missing work as success.
 func (s *Service) analyzeFileStage(ctx context.Context, request analysisFileStageRequest, authority analysisFileStageAuthority) (analysisFileStageResult, error) {
 	result := analysisFileStageResult{Progress: AnalysisStageProgress{Stage: request.Stage, Status: AnalysisStagePending}}
-	if err := request.Run.Validate(); err != nil {
+	if err := validateAnalysisStageRequest(request, authority); err != nil {
 		return result, err
-	}
-	if len(request.Stage.Categories()) == 0 || request.File.Path == "" || request.File.ContentHash == "" || request.File.Language == "" || request.RemainingAttempts < 0 || request.RemainingAttempts > 4 || authority.Check == nil || authority.BeforeAttempt == nil || authority.Publish == nil {
-		return result, fmt.Errorf("analysis stage request or authority is incomplete")
 	}
 	if err := ctx.Err(); err != nil {
 		result.Progress.Status = AnalysisStageCanceled
@@ -149,26 +146,7 @@ func (s *Service) analyzeFileStage(ctx context.Context, request analysisFileStag
 		}
 	}
 	if err != nil {
-		// Never return a newly rejected result body or a known-zero count.
-		result = analysisFileStageResult{Progress: AnalysisStageProgress{Stage: request.Stage, Status: AnalysisStageFailed, Attempts: result.Progress.Attempts, Reason: "Analysis stage could not complete."}}
-		switch {
-		case errors.Is(err, errAnalysisAttemptBudget):
-			result.Progress.Status = AnalysisStagePending
-			result.Progress.Reason = "The stage needs an additional attempt allowance."
-		case ctx.Err() != nil:
-			result.Progress.Status = AnalysisStageCanceled
-		case errors.Is(err, project.ErrRevisionConflict):
-			result.Progress.Status = AnalysisStageStale
-		case errors.Is(err, project.ErrSecurityRulesUnavailable):
-			result.Progress.Status = AnalysisStageUnavailable
-			result.Progress.Reason = "Passive security rules require a Go source file."
-			return result, nil
-		case errors.Is(err, project.ErrExcludedFile), errors.Is(err, project.ErrUnsupportedFile):
-			result.Progress.Status = AnalysisStageSkipped
-			result.Progress.Reason = "The file is not eligible for this source analysis."
-			return result, nil
-		}
-		return result, err
+		return rejectedAnalysisStage(ctx, request.Stage, result.Progress.Attempts, err)
 	}
 	if result.Progress.FindingCount != nil {
 		identity := strings.Join([]string{request.Run.ProjectID, request.Run.ProjectRevision, request.File.Path, request.File.ContentHash, string(request.Stage)}, "\x00")
@@ -509,4 +487,37 @@ func analysisPerformanceCacheUsable(report *project.PerformanceFileReport, analy
 func analysisSecurityCacheInput(analysis project.Analysis, file project.IndexFile, runtime modelRuntime, policyVersion string) project.SecurityReportInput {
 	model := runtime.effective
 	return project.SecurityReportInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: file.ContentHash, Source: project.SecuritySourceAI, Model: runtime.profile.Model, ConfiguredModel: runtime.profile.Model, Profile: model.Profile, Scope: model.Scope, ProviderOrigin: model.ProviderOrigin, ReasoningEffort: securityReasoningEffort(model.ReasoningEffort), PromptVersion: project.SecurityPromptVersion, ContextPolicyVersion: policyVersion}
+}
+
+func validateAnalysisStageRequest(request analysisFileStageRequest, authority analysisFileStageAuthority) error {
+	if err := request.Run.Validate(); err != nil {
+		return err
+	}
+	if len(request.Stage.Categories()) == 0 || request.File.Path == "" || request.File.ContentHash == "" || request.File.Language == "" || request.RemainingAttempts < 0 || request.RemainingAttempts > 4 || authority.Check == nil || authority.BeforeAttempt == nil || authority.Publish == nil {
+		return fmt.Errorf("analysis stage request or authority is incomplete")
+	}
+	return nil
+}
+
+func rejectedAnalysisStage(ctx context.Context, stage AnalysisStage, attempts int, err error) (analysisFileStageResult, error) {
+	// Never return a newly rejected result body or a known-zero count.
+	result := analysisFileStageResult{Progress: AnalysisStageProgress{Stage: stage, Status: AnalysisStageFailed, Attempts: attempts, Reason: "Analysis stage could not complete."}}
+	switch {
+	case errors.Is(err, errAnalysisAttemptBudget):
+		result.Progress.Status = AnalysisStagePending
+		result.Progress.Reason = "The stage needs an additional attempt allowance."
+	case ctx.Err() != nil:
+		result.Progress.Status = AnalysisStageCanceled
+	case errors.Is(err, project.ErrRevisionConflict):
+		result.Progress.Status = AnalysisStageStale
+	case errors.Is(err, project.ErrSecurityRulesUnavailable):
+		result.Progress.Status = AnalysisStageUnavailable
+		result.Progress.Reason = "Passive security rules require a Go source file."
+		return result, nil
+	case errors.Is(err, project.ErrExcludedFile), errors.Is(err, project.ErrUnsupportedFile):
+		result.Progress.Status = AnalysisStageSkipped
+		result.Progress.Reason = "The file is not eligible for this source analysis."
+		return result, nil
+	}
+	return result, err
 }

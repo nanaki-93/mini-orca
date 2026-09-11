@@ -22,3 +22,29 @@ content roles directly.
 therefore first blends the translucent button fill over the panel before measuring its text.
 Normal text targets are at least 4.5:1 and focus cues at least 3:1. The muted selection surface
 and bright focus/content colors deliberately differ, so selection is not the only focus signal.
+
+## Final result and terminal roles — 2026-09-12
+
+Measured from the current `DesktopTheme.kt` token values with sRGB relative
+luminance. Result badges use the actual opaque 12% tint blended over the panel;
+foreground alpha is resolved before calculating contrast. The existing automated
+DesktopThemeTest covers these combinations.
+
+| Meaningful text / actual background | Contrast |
+| --- | ---: |
+| Result accent / editor | 8.07:1 |
+| Result accent / selected row | 5.72:1 |
+| Primary / selected row | 8.75:1 |
+| Secondary / selected row | 5.75:1 |
+| Terminal text / terminal canvas | 12.33:1 |
+| Terminal attention / panel | 9.68:1 |
+| codeType label / its badge fill | 7.42:1 |
+| success label / its badge fill | 7.14:1 |
+| warning label / its badge fill | 7.45:1 |
+| error label / its badge fill | 6.08:1 |
+| secondaryText label / its badge fill | 7.41:1 |
+
+All listed text exceeds 4.5:1. The focus indicator remains separate from selected
+fill and exceeds 3:1 on panel, overlay and selection backgrounds. Named status,
+severity and provenance labels carry meaning without color. Decorative separators
+and tinted badge borders are not the sole signal of a state or required action.
