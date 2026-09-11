@@ -157,6 +157,89 @@ func TestChatSessionRejectsInvalidTargetsAndStaleState(t *testing.T) {
 	}
 }
 
+func TestChatSessionCreateNameAndFileBoundaries(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	for _, name := range []string{"", " ", "func", "type", "var", "package", "range", "fallthrough", "interface", "2Build", "٢Build", "Worker.Build", "$Build", "e\u0301", "Build😀", "name\u200C", "Run"} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := openChatSession(t, service, project.DeclarationEditCreateSymbol, name); err == nil {
+				t.Fatalf("accepted invalid or duplicate creation target %q", name)
+			}
+		})
+	}
+	for _, name := range []string{"新規", "Écrire", "Δοκιμή٢", "𐐀Build", "_helper", "any", "Type"} {
+		t.Run(name, func(t *testing.T) {
+			session := openFixtureChatSession(t, service, project.DeclarationEditCreateSymbol, name)
+			if session.TargetSymbol != name || session.Mode != project.DeclarationEditCreateSymbol || len(session.Messages) != 0 {
+				t.Fatalf("creation session identity = %+v", session)
+			}
+		})
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\x00"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openChatSession(t, service, project.DeclarationEditCreateSymbol, "Build"); err == nil {
+		t.Fatal("accepted binary Go file")
+	}
+	if err := os.WriteFile(filepath.Join(root, "script.py"), []byte("print('hello')\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	index, err := service.Reindex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := service.manager.IndexedFile("script.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.OpenChatSession(ChatSessionCreateRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, OpenPath: file.Path, Mode: project.DeclarationEditCreateSymbol, TargetSymbol: "Build"}); err == nil {
+		t.Fatal("accepted unsupported source language")
+	}
+}
+
+func TestChatSessionCreatesAndValidatesFunctionInPackageOnlyFile(t *testing.T) {
+	for _, name := range []string{"Build", "新規", "Δοκιμή٢"} {
+		t.Run(name, func(t *testing.T) {
+			source := "package main\n"
+			service, root, draft := createGeneratedFunctionFixture(t, source, name, "func "+name+"() string { return \"ready\" }", nil)
+			if draft.Mode != project.DeclarationEditCreateSymbol || draft.TargetSymbol != name || draft.State != DraftGenerated {
+				t.Fatalf("generated creation draft = %+v", draft)
+			}
+			validated, err := service.ValidateDraft(draft.ID, draft.Revision)
+			if err != nil || validated.State != DraftValid || validated.CompositionHash == "" {
+				t.Fatalf("creation validation = %+v, %v", validated, err)
+			}
+			assertCreationSource(t, root, source)
+		})
+	}
+}
+
+func TestChatSessionInvalidCreationRemainsAnEditableNonWritingDraft(t *testing.T) {
+	for _, test := range []struct{ name, source, declaration, code string }{
+		{"malformed source", "package main\nfunc Existing( {", "func Build() {}", "original_syntax"},
+		{"malformed proposal", "package main\n", "func Build( {", "invalid_declaration"},
+		{"retargeted proposal", "package main\n", "func Other() {}", "target_mismatch"},
+		{"multiple declarations", "package main\n", "func Build() {}\nfunc Extra() {}", "invalid_declaration"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service, root, draft := createGeneratedFunctionFixture(t, test.source, "Build", test.declaration, nil)
+			invalid, err := service.ValidateDraft(draft.ID, draft.Revision)
+			if err != nil || invalid.State != DraftInvalid || invalid.Validation == nil || len(invalid.Validation.Diagnostics) == 0 || invalid.Validation.Diagnostics[0].Code != test.code {
+				t.Fatalf("invalid creation = %+v, %v", invalid, err)
+			}
+			if invalid.Declaration != test.declaration {
+				t.Fatal("validation discarded editable proposal")
+			}
+			if _, err := service.ApplyDraft(context.Background(), applyDraftRequest(invalid)); err == nil {
+				t.Fatal("applied invalid creation")
+			}
+			assertCreationSource(t, root, test.source)
+		})
+	}
+}
+
 func TestChatSessionTreatsSourceInstructionsAsDataAndRejectsRetargetedDeclaration(t *testing.T) {
 	var prompt string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -398,4 +481,42 @@ func openChatSession(t *testing.T, service *Service, mode project.DeclarationEdi
 		t.Fatal(err)
 	}
 	return service.OpenChatSession(ChatSessionCreateRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, OpenPath: "main.go", Mode: mode, TargetSymbol: target})
+}
+
+func createGeneratedFunctionFixture(t *testing.T, source, name, declaration string, imports []string) (*Service, string, *Draft) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		output, err := json.Marshal(DeclarationDraftResponse{Version: "v1", Declaration: declaration, Imports: imports, Explanation: "Creation candidate."})
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: string(output)}}}}); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	session := openFixtureChatSession(t, service, project.DeclarationEditCreateSymbol, name)
+	proposal, err := service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, Message: "Create the requested function."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCreationSource(t, root, source)
+	return service, root, &proposal.Draft
+}
+
+func assertCreationSource(t *testing.T, root, want string) {
+	t.Helper()
+	content, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil || string(content) != want {
+		t.Fatalf("creation source = %q, want %q; error = %v", content, want, err)
+	}
 }

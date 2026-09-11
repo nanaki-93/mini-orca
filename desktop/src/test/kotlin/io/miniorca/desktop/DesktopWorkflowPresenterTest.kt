@@ -1575,6 +1575,146 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun creationInAPackageOnlyFileValidatesBeforeOpeningTheExistingChatPipeline() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val requests = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, body ->
+          creationFileResponse(path)
+              ?: when (method to path) {
+                "POST" to "/api/projects/current/chat/sessions" -> {
+                  requests += path
+                  assertTrue(body.orEmpty().contains("\"mode\":\"create_symbol\""))
+                  assertTrue(body.orEmpty().contains("\"target_symbol\":\"新規\""))
+                  assertTrue(body.orEmpty().contains("\"base_file_hash\":\"base\""))
+                  response(creationSessionJson())
+                }
+                "POST" to "/api/projects/current/chat/sessions/session/messages" -> {
+                  requests += path
+                  response(creationProposalJson())
+                }
+                else -> error("unexpected request $method $path")
+              }
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      dispatcher.runPending()
+      assertTrue(presenter.snapshot.value.state.symbols.isEmpty())
+      assertNull(presenter.snapshot.value.state.selectedSymbol)
+      assertTrue(requests.isEmpty())
+      presenter.sendChatMessage(ChatEditMode.CreateSymbol, "func", "Return one.")
+      dispatcher.runPending()
+      assertTrue(requests.isEmpty())
+      assertEquals(
+          "func is a Go keyword. Choose a different name.", presenter.snapshot.value.state.error)
+      presenter.sendChatMessage(ChatEditMode.CreateSymbol, "新規", " ")
+      dispatcher.runPending()
+      assertTrue(requests.isEmpty())
+      presenter.sendChatMessage(ChatEditMode.CreateSymbol, "新規", "Return one.")
+      dispatcher.runPending()
+      val state = presenter.snapshot.value.state
+      assertEquals(2, requests.size)
+      assertEquals("create_symbol", state.chat.session?.mode)
+      assertEquals("新規", state.review.draft?.targetSymbol)
+      assertNull(state.review.draft?.validation)
+      assertNull(state.review.checks)
+      assertEquals("package main", state.selectedFile?.content)
+      assertFalse(presenter.snapshot.value.generating)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
+    }
+  }
+
+  @Test
+  fun lateCreationProposalCannotSurviveCancellationOrAFileProjectOrRevisionChange() {
+    listOf("cancel", "file", "project", "revision").forEach { change ->
+      val dispatcher = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + dispatcher)
+      var replies = 0
+      lateinit var activePresenter: DesktopWorkflowPresenter
+      activePresenter =
+          presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+            creationFileResponse(path)
+                ?: when (method to path) {
+                  "POST" to "/api/projects/current/chat/sessions" -> response(creationSessionJson())
+                  "POST" to "/api/projects/current/chat/sessions/session/messages" -> {
+                    // Deliver a valid old response after the selection/cancellation boundary.
+                    when (change) {
+                      "cancel" -> activePresenter.cancelGeneration()
+                      "file" ->
+                          activePresenter.dispatch(
+                              DesktopEvent.FileLoaded(
+                                  file().copy(path = "other.go", contentHash = "other"),
+                                  emptyList()))
+                      "project" ->
+                          activePresenter.dispatch(
+                              DesktopEvent.ProjectLoaded(
+                                  project("other"), ProjectIndex("other", "revision")))
+                      "revision" ->
+                          activePresenter.dispatch(
+                              DesktopEvent.IndexRefreshed(ProjectIndex("project", "next")))
+                    }
+                    replies++
+                    response(creationProposalJson())
+                  }
+                  else -> error("unexpected request $method $path")
+                }
+          }
+      try {
+        loadProject(activePresenter)
+        activePresenter.selectFile("main.go")
+        dispatcher.runPending()
+        activePresenter.sendChatMessage(ChatEditMode.CreateSymbol, "新規", "Return one.")
+        dispatcher.runPending()
+        assertEquals(1, replies, change)
+        assertNull(activePresenter.snapshot.value.state.review.draft, change)
+        assertNull(activePresenter.snapshot.value.state.chat.session, change)
+        assertFalse(activePresenter.snapshot.value.generating, change)
+      } finally {
+        activePresenter.close()
+        scope.cancel()
+        dispatcher.runPending()
+      }
+    }
+  }
+
+  @Test
+  fun failedCreationKeepsTheFileAndReportsTheDaemonReason() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          creationFileResponse(path)
+              ?: when (method to path) {
+                "POST" to "/api/projects/current/chat/sessions" ->
+                    TransportResponse(
+                        409,
+                        """{"type":"conflict","user_message":"The Go file changed. Reopen it before creating a function."}""")
+                else -> error("unexpected request $method $path")
+              }
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      dispatcher.runPending()
+      presenter.sendChatMessage(ChatEditMode.CreateSymbol, "新規", "Return one.")
+      dispatcher.runPending()
+      assertTrue(presenter.snapshot.value.state.error.orEmpty().contains("The Go file changed."))
+      assertEquals("package main", presenter.snapshot.value.state.selectedFile?.content)
+      assertNull(presenter.snapshot.value.state.review.draft)
+      assertFalse(presenter.snapshot.value.generating)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
+    }
+  }
+
+  @Test
   fun explicitSendMakesOneChatRequestAndPreservesFunctionRemoteConsent() {
     val dispatcher = QueuedDispatcher()
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -2222,6 +2362,22 @@ class DesktopWorkflowPresenterTest {
       """{"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","benchmark":"BenchmarkRun","scope":"$scope","status":"unavailable","reason":"displayed benchmark scope changed","command":["go","test","-benchtime","100ms","-benchmem"]}"""
 
   private fun response(body: String) = TransportResponse(200, body)
+
+  private fun creationFileResponse(path: String): TransportResponse? =
+      when {
+        path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
+        path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go"))
+        path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+        path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+        path.contains("/git") -> response("""{"available":false}""")
+        else -> null
+      }
+
+  private fun creationSessionJson() =
+      """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"create_symbol","target_symbol":"新規","state":"active","messages":[]}"""
+
+  private fun creationProposalJson() =
+      """{"session_id":"session","draft":{"id":"created","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","mode":"create_symbol","target_symbol":"新規","declaration":"func 新規() int { return 1 }","revision":1,"hash":"draft-hash","state":"generated"},"assistant_message":{"role":"assistant","content":"Ready for review"}}"""
 
   private fun explanationJson(symbol: String) =
       """{"version":"v1","project_id":"project","project_revision":"revision","base_file_hash":"base","anchor":{"path":"main.go","symbol":"$symbol","signature":"","start_line":0,"end_line":0},"summary":"Explains $symbol.","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[],"context_manifest":{"scope":"function"}}"""

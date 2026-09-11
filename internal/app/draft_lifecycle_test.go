@@ -1,14 +1,94 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
+
+func TestDraftCreationPreviewApplyUndoPreservesExistingSourceAndImports(t *testing.T) {
+	for _, source := range []string{
+		"package main\n",
+		"package main\n\nimport \"fmt\"\n\n// Existing remains unchanged.\nfunc Existing() { fmt.Println(\"keep\") }\n",
+	} {
+		t.Run(source, func(t *testing.T) {
+			service, root, generated := createGeneratedFunctionFixture(t, source, "Build", `func Build() string { return strings.TrimSpace(" ready ") }`, []string{"strings"})
+			otherPath := filepath.Join(root, "notes.txt")
+			if err := os.WriteFile(otherPath, []byte("untouched"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.ApplyDraft(context.Background(), applyDraftRequest(generated)); err == nil {
+				t.Fatal("applied creation before validation and checks")
+			}
+			validated, err := service.ValidateDraft(generated.ID, generated.Revision)
+			if err != nil || validated.State != DraftValid {
+				t.Fatalf("validation = %+v, %v", validated, err)
+			}
+			if _, err := service.ApplyDraft(context.Background(), applyDraftRequest(validated)); err == nil {
+				t.Fatal("applied creation before checks")
+			}
+			checks, err := service.CheckDraft(context.Background(), DraftCheckRequest{ID: validated.ID, ExpectedRevision: validated.Revision, ExpectedHash: validated.Hash})
+			if err != nil || !checks.Applicable || checks.CompositionHash != validated.CompositionHash {
+				t.Fatalf("creation checks = %+v, %v", checks, err)
+			}
+			assertCreationSource(t, root, source)
+			request := applyDraftRequest(validated)
+			request.Confirm = false
+			if _, err := service.ApplyDraft(context.Background(), request); err == nil {
+				t.Fatal("applied creation without confirmation")
+			}
+			assertCreationSource(t, root, source)
+			applied, err := service.ApplyDraft(context.Background(), applyDraftRequest(validated))
+			if err != nil {
+				t.Fatal(err)
+			}
+			content, err := os.ReadFile(filepath.Join(root, "main.go"))
+			if err != nil || !strings.Contains(string(content), `func Build() string { return strings.TrimSpace(" ready ") }`) || !strings.Contains(string(content), `"strings"`) {
+				t.Fatalf("applied creation = %q, %v", content, err)
+			}
+			if strings.Contains(source, "Existing") && (!strings.Contains(string(content), "// Existing remains unchanged.\nfunc Existing() { fmt.Println(\"keep\") }") || !strings.Contains(string(content), `import "fmt"`)) {
+				t.Fatalf("unrelated declarations/imports changed: %s", content)
+			}
+			if _, err := service.UndoDraft(context.Background(), UndoRequest{ProjectID: validated.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true}); err != nil {
+				t.Fatal(err)
+			}
+			assertCreationSource(t, root, source)
+			other, err := os.ReadFile(otherPath)
+			if err != nil || string(other) != "untouched" {
+				t.Fatalf("unrelated file changed: %q, %v", other, err)
+			}
+		})
+	}
+}
+
+func TestDraftCreationRejectsSourceChangeAfterChecks(t *testing.T) {
+	service, root, generated := createGeneratedFunctionFixture(t, "package main\n", "Build", "func Build() {}", nil)
+	validated, err := service.ValidateDraft(generated.ID, generated.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.CheckDraft(context.Background(), DraftCheckRequest{ID: validated.ID, ExpectedRevision: validated.Revision, ExpectedHash: validated.Hash}); err != nil {
+		t.Fatal(err)
+	}
+	external := "package main\n\nfunc AddedOutside() {}\n"
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(external), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ApplyDraft(context.Background(), applyDraftRequest(validated)); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("stale creation Apply = %v", err)
+	}
+	assertCreationSource(t, root, external)
+	stale, err := service.Draft(generated.ID)
+	if err != nil || stale.State != DraftStale {
+		t.Fatalf("stale creation draft = %+v, %v", stale, err)
+	}
+}
 
 func TestDraftLifecycleInvalidatesApprovalEvidenceAndRejectsLateValidation(t *testing.T) {
 	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)

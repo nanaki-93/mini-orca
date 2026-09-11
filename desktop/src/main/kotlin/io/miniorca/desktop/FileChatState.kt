@@ -12,7 +12,35 @@ data class ChatTargetValidation(val target: ChatTarget? = null, val message: Str
     get() = target != null
 }
 
-private val goIdentifier = Regex("[A-Za-z_][A-Za-z0-9_]*")
+// Match Go's letter/digit categories rather than Java identifier rules (which allow '$').
+private val goIdentifier = Regex("[\\p{L}_][\\p{L}\\p{Nd}_]*")
+private val goKeywords =
+    setOf(
+        "break",
+        "case",
+        "chan",
+        "const",
+        "continue",
+        "default",
+        "defer",
+        "else",
+        "fallthrough",
+        "for",
+        "func",
+        "go",
+        "goto",
+        "if",
+        "import",
+        "interface",
+        "map",
+        "package",
+        "range",
+        "return",
+        "select",
+        "struct",
+        "switch",
+        "type",
+        "var")
 
 fun validateChatTarget(
     selectedFile: ProjectFileInfo?,
@@ -23,6 +51,8 @@ fun validateChatTarget(
 ): ChatTargetValidation {
   if (selectedFile == null)
       return ChatTargetValidation(message = "Open one Go file before starting a conversation.")
+  if (selectedFile.binary)
+      return ChatTargetValidation(message = "Binary files cannot be used for declaration chat.")
   if (!selectedFile.language.equals("Go", ignoreCase = true))
       return ChatTargetValidation(
           message = "File-scoped declaration chat currently supports Go files only.")
@@ -53,6 +83,10 @@ fun validateChatTarget(
     ChatEditMode.CreateSymbol -> {
       val name = requestedSymbol.trim()
       when {
+        name.isEmpty() ->
+            ChatTargetValidation(message = "Enter a name for the new Go function or type.")
+        name in goKeywords ->
+            ChatTargetValidation(message = "$name is a Go keyword. Choose a different name.")
         !goIdentifier.matches(name) ->
             ChatTargetValidation(message = "Enter a valid new Go function or type name.")
         symbols.any { it.name == name } ->
