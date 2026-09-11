@@ -19,7 +19,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,12 +85,19 @@ internal fun AssistantToolWindow(
               if (bound && state.session != null) {
                 state.session.messages.forEach { turn ->
                   Text(
-                      turn.role.uppercase(),
-                      color = SecondaryText,
-                      fontSize = 10.sp,
-                      fontWeight = FontWeight.Bold,
-                      modifier = Modifier.padding(top = 7.dp))
-                  Text(turn.content, color = PrimaryText, fontSize = 12.sp)
+                      assistantMessageLabel(turn.role),
+                      color =
+                          if (turn.role.equals("assistant", ignoreCase = true)) ResultAccent
+                          else SelectionText,
+                      style = IdeTypography.resultHeading,
+                      modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                  if (turn.role.equals("assistant", ignoreCase = true)) {
+                    ModelResultContent(turn.content)
+                  } else {
+                    SelectionContainer {
+                      Text(turn.content, color = PrimaryText, style = IdeTypography.body)
+                    }
+                  }
                 }
               }
               if (state.mode == ChatEditMode.CreateSymbol) {
@@ -105,7 +111,7 @@ internal fun AssistantToolWindow(
                 Text(
                     "Quick change",
                     color = SecondaryText,
-                    fontSize = 10.sp,
+                    style = IdeTypography.resultLabel,
                     modifier = Modifier.padding(top = 9.dp, bottom = 5.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                   FunctionChangePreset.entries.forEach { preset ->
@@ -122,7 +128,7 @@ internal fun AssistantToolWindow(
                 Text(
                     presetBoundary,
                     color = Warning,
-                    fontSize = 10.sp,
+                    style = IdeTypography.compactBody,
                     modifier = Modifier.padding(top = 9.dp))
               }
               CompactMultilineField(
@@ -213,23 +219,22 @@ private fun AssistantDraftEditorSection(
     IdePaneHeader(
         title = "Editable draft",
         icon = DesktopIcon.Document,
-        stateLabel = editor.status.name.lowercase(),
-        stateTint = draftEditorStatusColor(editor.status))
+        stateLabel = "Candidate for review",
+        stateTint = ResultAccent,
+        actions = { IdeLabelBadge(editor.status.name, draftEditorStatusColor(editor.status)) })
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
       Text(
-          "Next: validate ${draft.targetSymbol} in ${draft.targetPath}.",
+          "Target: ${draft.targetSymbol} in ${draft.targetPath}.",
           color = SecondaryText,
           fontFamily = FontFamily.Monospace,
-          fontSize = 10.sp)
+          style = IdeTypography.resultCode)
       CompactMultilineField(
           value = declaration,
           onValueChange = actions.updateDeclarationValue,
           enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale),
           label = "Declaration only",
           minLines = 5,
-          textStyle =
-              androidx.compose.ui.text.TextStyle(
-                  fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+          textStyle = IdeTypography.resultCode,
           modifier = Modifier.fillMaxWidth().padding(top = 7.dp).focusRequester(draftFocus))
       if (requiredImportsVisible(editor)) {
         CompactSingleLineField(
@@ -240,11 +245,11 @@ private fun AssistantDraftEditorSection(
             label = "Required imports",
             modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
       }
-      AssistantValidationDiagnostics(editor.diagnostics, draft)
+      DraftValidationDiagnostics(editor.diagnostics)
       Text(
           draftEditorStatusMessage(editor.status),
           color = draftEditorStatusColor(editor.status),
-          fontSize = 10.sp,
+          style = IdeTypography.body,
           modifier = Modifier.padding(top = 5.dp))
       MiniOrcaButton(
           onClick = actions.validate,
@@ -262,36 +267,33 @@ private fun AssistantDraftEditorSection(
 }
 
 @Composable
-private fun AssistantValidationDiagnostics(
-    diagnostics: List<DeclarationFinding>,
-    draft: DeclarationDraft,
-) {
+internal fun DraftValidationDiagnostics(diagnostics: List<DeclarationFinding>) {
   if (diagnostics.isEmpty()) return
-  var expanded by rememberSaveable(draft.id, draft.revision, draft.hash) { mutableStateOf(false) }
-  Text(
-      "${diagnostics.size} validation ${if (diagnostics.size == 1) "diagnostic" else "diagnostics"} require attention.",
-      color = Error,
-      fontSize = 10.sp,
-      modifier = Modifier.padding(top = 5.dp))
-  IdeDisclosureHeader(
+  IdePaneHeader(
       title = "Validation diagnostics",
-      expanded = expanded,
-      onToggle = { expanded = !expanded },
-      stateLabel = if (expanded) "Expanded" else "Collapsed",
+      stateLabel = "${diagnostics.size} require attention",
       stateTint = Error)
-  if (expanded)
-      SelectionContainer {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-          diagnostics.forEach { diagnostic ->
-            Text(
-                "${diagnostic.code}: ${diagnostic.message}",
-                color = Error,
-                fontSize = 10.sp,
-                modifier = Modifier.padding(top = 3.dp))
-          }
-        }
+  SelectionContainer {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+      diagnostics.forEach { diagnostic ->
+        IdeLabelBadge(diagnostic.code, Error, Modifier.padding(top = 4.dp))
+        Text(
+            diagnostic.message,
+            color = PrimaryText,
+            style = IdeTypography.body,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
       }
+    }
+  }
 }
+
+internal fun assistantMessageLabel(role: String): String =
+    when (role.lowercase()) {
+      "user" -> "Your request"
+      "assistant" -> "Model response"
+      "system" -> "System context"
+      else -> role.ifBlank { "Message" }.replaceFirstChar { it.uppercase() }
+    }
 
 /** File-scoped drafting data rendered by the Assistant tool window. */
 internal data class AssistantToolWindowState(

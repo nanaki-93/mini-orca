@@ -1,12 +1,8 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import java.util.prefs.Preferences
 
 /** Compact local disclosure for advisory prose already returned with its owner. */
@@ -48,23 +43,12 @@ internal fun EngineeringInsightPanel(
         stateLabel = engineeringInsightStateLabel(scopeLabel, stale),
         stateTint = if (stale) Warning else SecondaryText)
     if (expanded) {
-      Box(
-          Modifier.fillMaxWidth()
-              .heightIn(max = 240.dp)
-              .verticalScroll(rememberScrollState())
-              .padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Column {
-              pieces.forEach { piece ->
-                Text(piece.label, color = SecondaryText, fontSize = 10.sp)
-                Text(
-                    piece.content,
-                    color = PrimaryText,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(bottom = 6.dp))
-              }
-            }
-          }
+      Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        pieces.forEach { piece ->
+          Text(piece.label, color = ResultAccent, style = IdeTypography.resultLabel)
+          ModelResultContent(piece.content, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+        }
+      }
     }
   }
   LaunchedEffect(restoreHeaderFocus) {

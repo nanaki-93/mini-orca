@@ -5,6 +5,16 @@ import kotlin.test.assertEquals
 
 class AssistantToolWindowTest {
   @Test
+  fun conversationLabelsDistinguishRequestsResponsesAndUnknownRoles() {
+    assertEquals("Your request", assistantMessageLabel("user"))
+    assertEquals("Model response", assistantMessageLabel("assistant"))
+    assertEquals("Model response", assistantMessageLabel("ASSISTANT"))
+    assertEquals("System context", assistantMessageLabel("system"))
+    assertEquals("Tool", assistantMessageLabel("tool"))
+    assertEquals("Message", assistantMessageLabel(""))
+  }
+
+  @Test
   fun compactDraftStatusCopyRetainsReviewAndStaleRecoveryGuidance() {
     assertEquals("Validate before review.", draftEditorStatusMessage(DraftEditorStatus.Generated))
     assertEquals(

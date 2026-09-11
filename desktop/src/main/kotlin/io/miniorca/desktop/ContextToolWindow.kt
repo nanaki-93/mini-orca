@@ -2,6 +2,7 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -424,58 +425,81 @@ private fun ContextDeclarationDetails(
 }
 
 @Composable
-private fun DeclarationExplanationDetails(state: DeclarationExplanationState) {
+internal fun DeclarationExplanationDetails(state: DeclarationExplanationState) {
+  var sourceExpanded by rememberSaveable(state.result) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-    SectionLabel("DECLARATION EXPLANATION · ${state.status.name.uppercase()}")
-    Text(
-        state.message,
-        color =
-            if (state.status == DeclarationExplanationStatus.Current) SecondaryText else Warning,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 4.dp))
+    val status = explanationStatusStyle(state.status)
+    IdeLabelBadge(status.label, status.color)
+    if (state.status == DeclarationExplanationStatus.Failed) {
+      Text(
+          state.message,
+          color = Error,
+          style = IdeTypography.body,
+          modifier = Modifier.padding(top = 4.dp))
+    }
     state.result
         ?.takeIf { state.status == DeclarationExplanationStatus.Current }
         ?.let { result ->
           Text(
-              result.summary,
-              color = PrimaryText,
-              fontSize = 12.sp,
-              lineHeight = 18.sp,
+              "Summary",
+              color = ResultAccent,
+              style = IdeTypography.resultHeading,
               modifier = Modifier.padding(top = 8.dp))
-          Text(
-              explanationProvenanceLabel(result.contextManifest),
-              color = SecondaryText,
-              fontSize = 11.sp,
-              modifier = Modifier.padding(top = 5.dp))
+          ModelResultContent(result.summary, Modifier.padding(top = 4.dp))
           explanationFacts(result).forEach { (label, items) ->
             if (items.isNotEmpty()) {
               Text(
-                  "$label · ${items.joinToString(" · ")}",
-                  color = SecondaryText,
-                  fontSize = 11.sp,
-                  lineHeight = 16.sp,
-                  modifier = Modifier.padding(top = 5.dp))
+                  label,
+                  color = ResultAccent,
+                  style = IdeTypography.resultLabel,
+                  modifier = Modifier.padding(top = 12.dp))
+              items.forEach { item ->
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                      Text("•", color = ResultAccent, style = IdeTypography.body)
+                      ModelResultContent(item, Modifier.weight(1f))
+                    }
+              }
             }
           }
+          IdeDisclosureHeader(
+              title = "Explanation source",
+              expanded = sourceExpanded,
+              onToggle = { sourceExpanded = !sourceExpanded },
+              modifier = Modifier.padding(top = 8.dp))
+          if (sourceExpanded)
+              CompactKeyValueRows(explanationProvenanceFacts(result.contextManifest))
           EngineeringInsightPanel(result.engineeringInsight, scopeLabel = "Declaration")
         }
   }
 }
 
+internal fun explanationStatusStyle(status: DeclarationExplanationStatus): StatusBadgeStyle =
+    when (status) {
+      DeclarationExplanationStatus.Unavailable ->
+          StatusBadgeStyle("No explanation yet", SecondaryText)
+      DeclarationExplanationStatus.Loading -> StatusBadgeStyle("Explaining…", ResultAccent)
+      DeclarationExplanationStatus.Current -> StatusBadgeStyle("Current explanation", Success)
+      DeclarationExplanationStatus.Stale -> StatusBadgeStyle("Explanation needs refresh", Warning)
+      DeclarationExplanationStatus.Canceled ->
+          StatusBadgeStyle("Explanation canceled", SecondaryText)
+      DeclarationExplanationStatus.Failed -> StatusBadgeStyle("Explanation failed", Error)
+    }
+
 internal fun explanationFacts(
     explanation: DeclarationExplanation
 ): List<Pair<String, List<String>>> =
     listOf(
-        "BEHAVIOR" to explanation.behavior,
-        "INPUTS" to explanation.inputs,
-        "OUTPUTS" to explanation.outputs,
-        "SIDE EFFECTS" to explanation.sideEffects,
-        "ERRORS" to explanation.errorBehavior)
+        "Behavior" to explanation.behavior,
+        "Inputs" to explanation.inputs,
+        "Outputs" to explanation.outputs,
+        "Side effects" to explanation.sideEffects,
+        "Error behavior" to explanation.errorBehavior)
 
-internal fun explanationProvenanceLabel(manifest: ContextManifest): String =
-    listOf("FUNCTION", manifest.model, manifest.providerOrigin)
-        .filter(String::isNotBlank)
-        .joinToString(" · ")
+internal fun explanationProvenanceFacts(manifest: ContextManifest): List<Pair<String, String>> =
+    listOf("Scope" to "Function", "Model" to manifest.model, "Provider" to manifest.providerOrigin)
+        .filter { (_, value) -> value.isNotBlank() }
 
 @Composable
 private fun ContextReadOnlySummaries(impact: ImpactPreview?, gitStatus: GitStatus?) {

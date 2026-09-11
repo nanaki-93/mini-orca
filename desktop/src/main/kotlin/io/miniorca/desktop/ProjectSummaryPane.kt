@@ -3,7 +3,6 @@ package io.miniorca.desktop
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -170,7 +167,6 @@ internal fun ProjectSummaryPane(
     onWorkspace: (Workspace) -> Unit,
 ) {
   val presentation = projectSummaryPresentation(overview, project)
-  var purposeExpanded by remember(presentation.purpose) { mutableStateOf(false) }
   var detailsExpanded by remember(presentation.details) { mutableStateOf(false) }
   BoxWithConstraints(Modifier.fillMaxSize()) {
     LazyColumn(
@@ -192,8 +188,6 @@ internal fun ProjectSummaryPane(
         item {
           SummaryInterpretation(
               presentation = presentation,
-              purposeExpanded = purposeExpanded,
-              onPurposeExpanded = { purposeExpanded = !purposeExpanded },
               detailsExpanded = detailsExpanded,
               onDetailsExpanded = { detailsExpanded = !detailsExpanded },
           )
@@ -290,8 +284,6 @@ private fun summaryMetricTint(tone: SummaryMetricTone): Color =
 @Composable
 private fun SummaryInterpretation(
     presentation: ProjectSummaryPresentation,
-    purposeExpanded: Boolean,
-    onPurposeExpanded: () -> Unit,
     detailsExpanded: Boolean,
     onDetailsExpanded: () -> Unit,
 ) {
@@ -299,32 +291,18 @@ private fun SummaryInterpretation(
     IdePaneHeader(
         title = "AI interpretation",
         icon = DesktopIcon.Analysis,
-        stateLabel = presentation.analysisStatus.replaceFirstChar { it.uppercase() },
-        stateTint = summaryStatusTint(presentation.analysisStatus),
+        stateLabel = "Project purpose",
+        stateTint = ResultAccent,
         actions = { StatusBadge(presentation.analysisStatus) },
     )
     if (presentation.analysisStatus != "fresh" || presentation.purpose == null)
         Text(
             presentation.analysisMessage,
             color = summaryStatusTint(presentation.analysisStatus),
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
+            style = IdeTypography.body,
             modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 8.dp))
     presentation.purpose?.let { purpose ->
-      Text(
-          purpose,
-          color = PrimaryText,
-          fontSize = 13.sp,
-          lineHeight = 20.sp,
-          maxLines = if (purposeExpanded) Int.MAX_VALUE else 3,
-          overflow = if (purposeExpanded) TextOverflow.Clip else TextOverflow.Ellipsis,
-          modifier = Modifier.padding(start = 8.dp, top = 8.dp, end = 8.dp))
-      ChromeButton(
-          onClick = onPurposeExpanded,
-          modifier = Modifier.padding(start = 8.dp, top = 4.dp),
-          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-            Text(if (purposeExpanded) "Show less" else "Show full purpose", fontSize = 11.sp)
-          }
+      ModelResultContent(purpose, modifier = Modifier.padding(start = 8.dp, top = 8.dp, end = 8.dp))
     }
     if (presentation.details.isNotEmpty()) {
       IdeDisclosureHeader(
@@ -351,20 +329,13 @@ private fun summaryStatusTint(status: String): Color =
 
 @Composable
 private fun SummaryDetails(details: List<ProjectSummaryDetail>) {
-  SelectionContainer {
-    Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-      details.forEach { detail ->
-        Text(detail.title, color = SecondaryText, fontSize = 11.sp)
-        detail.values.forEach { value ->
-          Text(
-              value,
-              color = PrimaryText,
-              fontSize = 12.sp,
-              lineHeight = 18.sp,
-              modifier = Modifier.padding(top = 4.dp))
-        }
-        Spacer(Modifier.height(8.dp))
+  Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+    details.forEach { detail ->
+      Text(detail.title, color = ResultAccent, style = IdeTypography.resultLabel)
+      detail.values.forEach { value ->
+        ModelResultContent(value, modifier = Modifier.padding(top = 4.dp, bottom = 4.dp))
       }
+      Spacer(Modifier.height(8.dp))
     }
   }
 }

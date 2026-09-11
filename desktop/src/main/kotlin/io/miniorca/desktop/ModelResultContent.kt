@@ -14,14 +14,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.sp
 
 private const val MAX_FORMATTED_CHARACTERS = 32_768
 private const val MAX_FORMATTED_LINES = 512
@@ -112,13 +109,11 @@ internal fun formatModelResult(source: String): AnnotatedString {
       val item = listItem.matchEntire(line)
       if (item != null) {
         val marker = if (line.first().isDigit()) line.substringBefore(' ') else "•"
-        result.withStyle(ParagraphStyle(textIndent = TextIndent(restLine = 16.sp))) {
-          withStyle(SpanStyle(color = ResultAccent, fontWeight = FontWeight.SemiBold)) {
-            append("$marker ")
-          }
-          appendResultInline(item.groupValues[1])
-          if (index < lines.lastIndex) append('\n')
+        result.withStyle(SpanStyle(color = ResultAccent, fontWeight = FontWeight.SemiBold)) {
+          append("$marker ")
         }
+        result.appendResultInline(item.groupValues[1])
+        if (index < lines.lastIndex) result.append('\n')
         index++
         continue
       }

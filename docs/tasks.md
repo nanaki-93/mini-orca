@@ -145,7 +145,7 @@ uncommitted changes.
 
 ## Task UX-02 — Apply the hierarchy to explanations and model responses
 
-- [ ] UX-02 completed with required checks and diff review.
+- [x] UX-02 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/ContextToolWindow.kt` — summary, labeled explanation facts and technical disclosures.
@@ -153,6 +153,8 @@ uncommitted changes.
 - `desktop/src/main/kotlin/io/miniorca/desktop/EngineeringInsightPanel.kt` — readable labels and single-owner scrolling.
 - `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryPane.kt` — concise project explanation with supporting detail.
 - `desktop/src/main/kotlin/io/miniorca/desktop/ReviewEvidencePane.kt` — clearer evidence and blocked-action hierarchy.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ModelResultContent.kt` — remove extra paragraph boundaries exposed by real response lists; preserve literal line breaks and colored markers.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ModelResultContentTest.kt` — update the obsolete hanging-indent assertion; production line-spacing coverage is in DesktopVisualLayoutTest.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ContextToolWindowTest.kt` — structured result and state coverage.
 - `desktop/src/test/kotlin/io/miniorca/desktop/AssistantToolWindowTest.kt` — conversation/draft distinction.
 - `desktop/src/test/kotlin/io/miniorca/desktop/EngineeringInsightPanelTest.kt` — optional/stale insight behavior.
@@ -170,7 +172,54 @@ uncommitted changes.
 `./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.ContextToolWindowTest' --tests 'io.miniorca.desktop.AssistantToolWindowTest' --tests 'io.miniorca.desktop.EngineeringInsightPanelTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
 
 **Execution record**
-Not started.
+Completed 2026-09-11 by the authorized scheduler. Validation and diff review passed;
+the local UX-02 commit is recorded in Git history and the execution receipt.
+One focused correction was used. UX-01 commit and receipt verified. Both documented
+Java toolchains remain installed. Captured the baseline and empty index in the
+ignored `.mini-orca/autopilot/ux/UX-02/baseline/` directory; the ten pre-existing
+desktop diffs are retained, with unrelated changes outside this task's commit scope.
+
+Initial prescribed verification exited 1: 42 tests, one failure at
+`EngineeringInsightPanelTest.kt:40`. The new full-response assertion compared
+untrimmed fixture text with the existing trimmed insight presentation. Correction
+1 preserves that normalization and compares its complete displayed content.
+All other formatting, lifecycle, local-navigation and interaction tests passed.
+Render inspection also exposed extra blank lines introduced by per-item paragraph
+styles; the narrowly added shared-component targets remove those boundaries and
+test actual line counts. The explanation-content component is package-internal
+for direct production-render testing, keeping its new test independent of the
+uncommitted Context-tab changes while the existing integration tests still cover
+the current working-tree tabs and consent boundaries.
+
+Commit preparation identified an overlapping dependency: the explanation status
+labels previously existed only in the uncommitted Context work. The new lifecycle
+badges require that helper, so its state mapping and current failure presentation
+are included as related UX-02 code, using the committed result-accent token.
+The existing Context tabs, layout defaults, theme/tab accents, documentation and
+their unrelated tests remain uncommitted. The complete working-tree behavior is
+preserved; only this coupled status presentation joins the task commit.
+
+Final prescribed verification exited 0: 43 tests, no failures/errors/skips.
+`./desktop/gradlew -p desktop test detekt spotlessCheck` exited 0: all 366 desktop
+tests passed, no failures/errors/skips, no Detekt findings and clean formatting.
+The isolated commit candidate also passed `test detekt spotlessCheck`: all 364
+tests passed, with no failures/errors/skips or quality findings. The working-tree
+suite contains two additional pre-existing Context tests. Commands used the
+verified Java 21 launcher and Java 25 toolchain runtime override. Logs and renders
+are retained in `.mini-orca/autopilot/ux/UX-02/`; the final focused/full runs followed
+the commit-dependency adjustment and removal of misleading always-validate copy.
+
+Reviewed production offscreen renders for narrow/wide panes and 150% text: labeled
+explanation facts, literal user requests versus formatted model replies, long-text
+disclosures, visible validation errors, prominent next actions and tight list
+spacing. Tests cover source-disclosure reset, unchanged local navigation/consent
+callbacks, stale/failed/empty states, read-only evidence and one parent scroll owner.
+Diff review and `git diff --check` passed. Nine pre-existing desktop diffs are
+retained exactly outside the commit; the Context shell/tabs and remaining context
+content are also preserved, with the coupled status block accounted for above.
+No API/model payload, daemon, dependency, configuration or migration changes.
+Go tests, live providers and native OS/screen-reader acceptance were not run;
+none is required for this presentation card. CREATE-01 remains unchecked.
 
 ## Task CREATE-01 — Expose creation in the normal file workflow
 
