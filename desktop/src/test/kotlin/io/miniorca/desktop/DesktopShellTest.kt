@@ -313,10 +313,10 @@ class DesktopShellTest {
 
   @Test
   fun analysisPollingStopsForNoContentAndTerminalJobs() {
-    assertTrue(!shouldPollAnalyzeAll(null))
-    assertTrue(shouldPollAnalyzeAll(AnalyzeAllJob(status = "running")))
-    assertTrue(!shouldPollAnalyzeAll(AnalyzeAllJob(status = "paused")))
-    assertTrue(!shouldPollAnalyzeAll(AnalyzeAllJob(status = "completed")))
+    assertTrue(analysisRunFixture().copy(status = "running").isActive())
+    assertTrue(analysisRunFixture().copy(status = "pausing").isActive())
+    assertTrue(!analysisRunFixture().copy(status = "paused").isActive())
+    assertTrue(!analysisRunFixture().copy(status = "completed").isActive())
   }
 
   @Test

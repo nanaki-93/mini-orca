@@ -7,29 +7,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SecurityWorkspaceTest {
-  private val project =
-      ProjectAnalysis(
-          "project",
-          "revision",
-          "project",
-          "/tmp/project",
-          "go",
-          fileCount = 1,
-          sourceFileCount = 1,
-          totalLines = 2,
-          summary = "",
-          aiStatus = "",
-          analyzedAt = "")
-  private val file =
-      ProjectFileInfo(
-          "main.go",
-          "hash",
-          "main.go",
-          language = "Go",
-          sizeBytes = 2,
-          lineCount = 2,
-          modifiedAt = "",
-          binary = false)
   private val finding =
       SecurityFinding(
           id = "rule-1",
@@ -44,7 +21,7 @@ class SecurityWorkspaceTest {
           remediation = "Move it out of source.")
 
   @Test
-  fun reportsStaySeparateAndBecomeStaleWhenTheSelectedFileChanges() {
+  fun reportsStaySeparateAndRequireTheCurrentIndexedFileHash() {
     val source = report("deterministic", listOf(finding))
     val ai = report("ai", emptyList(), status = "completed_empty")
     val state =
@@ -54,12 +31,11 @@ class SecurityWorkspaceTest {
 
     assertEquals(source, state.security.sourceReport)
     assertEquals(ai, state.security.aiReport)
-    assertTrue(securityReportIsCurrent(source, project, file))
-    assertFalse(securityReportIsCurrent(source, project, file.copy(contentHash = "next")))
-    assertTrue(
-        securityReportStateLabel(source, project, file.copy(contentHash = "next"))
-            .startsWith("Stale"))
-    assertTrue(securityReportStateLabel(ai, project, file).contains("does not prove"))
+    val index =
+        resultIndexFixture().copy(files = listOf(IndexedFile("main.go", "hash", "Go", false)))
+    assertTrue(securityReportMatchesIndex(source, index))
+    assertFalse(securityReportMatchesIndex(source.copy(contentHash = "next"), index))
+    assertTrue(securityReportMatchesIndex(ai, index))
   }
 
   @Test
@@ -158,10 +134,6 @@ class SecurityWorkspaceTest {
     assertEquals("", state.security.action)
     assertEquals("deterministic", state.security.sourceReport?.source)
     assertEquals(SecuritySectionOperationStatus.Canceled, state.security.sourceOperation.status)
-    assertEquals(
-        "Completed",
-        securityReportStateLabel(
-            state.security.sourceReport, project, file, state.security.sourceOperation))
   }
 
   @Test
@@ -175,15 +147,43 @@ class SecurityWorkspaceTest {
             .reduce(DesktopEvent.SecurityActionStarted("review"))
             .reduce(DesktopEvent.SecurityActionFailed("review", "provider unavailable"))
 
-    assertEquals(
-        "Canceled",
-        securityReportStateLabel(null, project, file, canceled.security.sourceOperation))
-    assertEquals(
-        "Not run", securityReportStateLabel(null, project, file, canceled.security.aiOperation))
-    assertEquals(
-        "Failed — provider unavailable",
-        securityReportStateLabel(null, project, file, failed.security.aiOperation))
+    assertEquals(SecuritySectionOperationStatus.Canceled, canceled.security.sourceOperation.status)
+    assertEquals(SecuritySectionOperationStatus.Idle, canceled.security.aiOperation.status)
+    assertEquals(SecuritySectionOperationStatus.Failed, failed.security.aiOperation.status)
+    assertEquals("provider unavailable", failed.security.aiOperation.message)
     assertEquals(SecuritySectionOperationStatus.Idle, failed.security.sourceOperation.status)
+  }
+
+  @Test
+  fun projectResultsDistinguishRulesAndAiAndDoNotDependOnTheSelectedFile() {
+    val page = securityPageFixture()
+    val rows = securityResults(page)
+    assertEquals(2, rows.size)
+    assertTrue(rows.any { it.row().source.startsWith("Source rule") })
+    assertTrue(rows.any { it.row().source.startsWith("AI suspicion") })
+    assertEquals(2, rows.map { it.row().key }.distinct().size)
+    assertTrue(securityResults(page.copy(path = "other.go")).isEmpty())
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(resultProjectFixture(), resultIndexFixture()),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = page.run,
+                    sections = mapOf(AnalysisResultKey("security") to page.section)))
+    assertTrue(securityFindingIsCurrent(rows.first().finding, state))
+    assertTrue(securityFindingCanPrepareFix(rows.first().finding, state.index))
+    assertFalse(
+        securityFindingIsCurrent(
+            rows.first().finding,
+            state.copy(
+                projectState =
+                    state.projectState.copy(index = state.index!!.copy(projectRevision = "next")))))
+    assertFalse(
+        securityFindingIsCurrent(
+            rows.first().finding,
+            state.copy(
+                analysisRun = state.analysisRun.copy(run = page.run!!.copy(status = "stale")))))
+    assertEquals("Stale", page.copy(run = page.run.copy(status = "stale")).statusLabel)
   }
 
   private fun report(
@@ -193,4 +193,41 @@ class SecurityWorkspaceTest {
   ) =
       SecurityFileReport(
           "1", "project", "revision", "main.go", "hash", status, source, findings = findings)
+}
+
+internal fun securityPageFixture(): AnalysisResultPageState {
+  val page = resultPageFixture("security")
+  val finding =
+      SecurityFinding(
+          id = "security",
+          title = "Credential-like assignment",
+          rule = "credential_literal",
+          severity = "high",
+          evidenceKind = "rule_match",
+          triage = "open",
+          verificationState = "unverified",
+          anchor = SecuritySourceAnchor("main.go", 4, 4, "Run"),
+          observedCondition = "A source rule matched this assignment.",
+          remediation = "Move the value out of source.")
+  val source =
+      SecurityFileReport(
+          projectId = "project",
+          projectRevision = "revision",
+          path = "main.go",
+          contentHash = "base",
+          status = "partial",
+          source = "deterministic",
+          findings = listOf(finding),
+          reason = "Some rules were unavailable.")
+  val ai =
+      source.copy(
+          source = "ai",
+          findings =
+              listOf(
+                  finding.copy(
+                      title = "Review input boundary",
+                      evidenceKind = "model_suspicion",
+                      confidence = "medium")))
+  return page.copy(
+      section = page.section.copy(results = page.results!!.copy(security = listOf(source, ai))))
 }

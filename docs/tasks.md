@@ -975,7 +975,7 @@ ANA-07 is next.
 
 ## Task ANA-07 — Separate run progress from the three result pages
 
-- [ ] ANA-07 completed with required checks and diff review.
+- [x] ANA-07 completed with required checks and diff review.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisWorkspaceState.kt` — project coverage, per-analyzer progress and result-page links.
@@ -985,6 +985,13 @@ ANA-07 is next.
 - `desktop/src/main/kotlin/io/miniorca/desktop/PerformanceWorkspace.kt` — section content, hypotheses and explicit measurement handoff.
 - `desktop/src/main/kotlin/io/miniorca/desktop/SecurityWorkspace.kt` — section content retaining rule/AI distinctions.
 - `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — wire unified actions and exact finding-to-editor handoffs.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — replace the old workspace input/action bindings with the unified run and typed section snapshots; sidebar grouping stays NAV-01.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopState.kt` — hold local result-page path filters for the Context handoff.
+- `desktop/src/main/kotlin/io/miniorca/desktop/BottomEvidenceToolWindows.kt` — remove its dependency on the replaced legacy Analysis presentation helper while retaining its existing historical output entries; bottom-tool removal remains BOTTOM-02.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopWorkflowPresenter.kt` — route that handoff without requests and guard result-to-editor preparation against current report identities.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopWorkflowPresenterTest.kt` — cover the local handoff and project-wide finding preparation.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopShellTest.kt` — migrate assertions for the changed workspace bindings.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ContextToolWindowTest.kt` — migrate Context action expectations without altering the pre-existing tab/style work.
 - `desktop/src/main/kotlin/io/miniorca/desktop/ContextToolWindow.kt` — Analyze project and local View this file's results actions.
 - `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisWorkspaceStateTest.kt` — real counts/coverage/filter/state cases.
 - `desktop/src/test/kotlin/io/miniorca/desktop/BugsWorkspaceStateTest.kt` — triage retained.
@@ -1006,7 +1013,99 @@ ANA-07 is next.
 `./desktop/gradlew -p desktop test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.BugsWorkspaceStateTest' --tests 'io.miniorca.desktop.PerformanceWorkspaceTest' --tests 'io.miniorca.desktop.SecurityWorkspaceTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
 
 **Execution record**
-Not started.
+Started 2026-09-11. Verified the ANA-06 commit/receipt, empty index and
+all ten unrelated desktop files. Captured both working and HEAD versions in
+the ignored ANA-07 baseline for scoped changes to overlapping Context/visual
+test files. No active writer or validator; both Java toolchains verified. Read
+the current UI guidelines. Initial preparation; zero corrections. The shell,
+local-filter state, presenter and directly affected tests are narrowly added
+because they construct the listed page models and own Context/editor handoffs.
+No sidebar regrouping, terminal work or bottom-pane removal is included.
+
+Initial implementation replaced the legacy page controls with canonical run progress
+and typed section list/detail views, local filters, and guarded editor handoffs.
+Initial prescribed verification reached test compilation: two new fixtures used
+flattened DesktopState fields instead of ProjectWorkspaceState. Initial Detekt also
+caught the added reducer branch at 65/65. Correction 1 uses the real fixture owner
+and the existing AnalysisRunUpdated event for local filter state, avoiding another
+reducer branch. No verification bypass; the same prescribed command follows.
+
+Correction 1 compiled and ran the prescribed suite: 55 tests, two visual assertions
+failed. Full desktop validation identified the same two failures (370 total tests);
+Detekt and Spotless passed. Correction 2 updates the error fixture to actually wrap
+and migrates the affected Context assertion to Analyze project, whose preview owns
+fresh consent. The correction is applied to both working and isolated candidates;
+pre-existing Context/style changes remain separate. No further corrections are
+available without explicit user direction if verification still fails.
+
+**Blocked after correction 2 — 2026-09-11.** The prescribed 55-test suite and full
+370-test working-tree suite now pass; full Detekt and Spotless also pass. Production
+component renders cover 1440, 1000/999, 800×650, 1280×600 and 125/150% text, category
+rows and detail drill-down, local path filtering, stale/empty/historical evidence
+and long operational errors. No native OS focus/screen-reader or live-provider
+verification was performed.
+
+An isolated commit candidate built from accepted HEAD (excluding the ten unrelated
+UI files) fails compileKotlin: Information is unresolved at FindingsPresentation.kt:204
+and WorkspacePanes.kt:98,120. That color exists only in the user's uncommitted theme
+work. Consequently ANA-07 is not accepted, staged or committed despite the passing
+working-tree suite. Correction accounting remains 2/2; the scheduler is paused.
+
+Proposed continuation: replace those three references with the existing SelectionText
+role in the two already listed targets, then rerun the prescribed/full desktop and
+isolated checks, review the scoped diff, and create the authorized ANA-07 commit.
+The exact unapplied patch is retained at
+`.mini-orca/autopilot/ux/ANA-07/proposed-repair.patch`. Do not start NAV-01 or reset
+correction accounting. User direction is required to continue repairing this card.
+
+Preservation audit: seven non-overlapping pre-existing files are byte-identical;
+the Context and visual test deltas are unchanged. Context's prior tab/style rewrite
+is retained; the same legacy analysis-action block was intentionally replaced in
+both the working and isolated variants. The strict line-delta audit differed only
+at that replaced block and its formatting. All task source files and both variants
+are retained in the ignored checkpoint. HEAD remains ANA-06 cb88fce; index empty.
+
+**Authorized repair continuation — 2026-09-11.** The user said “you can continue
+with the repair and task.” Verified every saved blocked-checkpoint hash, accepted
+HEAD, empty index, idle validators and both Java toolchains. Correction 3 applies
+the preserved three-reference patch using SelectionText in FindingsPresentation.kt
+and WorkspacePanes.kt, and synchronizes the isolated candidate. Prior failures and
+correction accounting remain recorded. Complete this card's prescribed/full/isolated
+validation and scoped local commit before resuming the scheduler; no later card
+starts in this continuation.
+
+**Accepted after correction 3 — 2026-09-11.** The exact prescribed suite passes
+55 tests. Full working-tree `test detekt spotlessCheck` passes all 370 desktop
+tests and both quality gates. The isolated accepted-HEAD candidate passes all 368
+tests, Detekt and Spotless without any of the ten pre-existing desktop changes.
+All three Gradle invocations used Java 21 JAVA_HOME and the explicit JBR25
+installation path recorded above. The scoped diff and `git diff --check` pass.
+Logs, counts, baseline variants, component renders and candidate hashes are
+retained under `.mini-orca/autopilot/ux/ANA-07/`.
+
+Analysis now owns the whole-project Start/progress/coverage/lifecycle surface;
+Bugs, Performance and Security own their typed result lists and details. Local
+filters and Context's View this file's results action never request analysis.
+Severity/state, source locations and provenance precede expandable evidence;
+stale and historical content stay distinct from current counts. Existing triage,
+source navigation, exact Go preparation and explicit benchmark trust remain.
+The repair uses a committed shared color role and adds no theme dependency.
+
+Reviewed production component renders across the recorded viewport/text matrix,
+including the repaired progress color and narrow result drill-down. No daemon
+code changed, so Go/race/make check were not run. Native OS focus, screen-reader
+and popup behavior, and live model providers were not exercised; offscreen
+component checks are not claims of that coverage. No configuration or migration
+steps are required; the unified daemon contract comes from accepted ANA-05.
+
+Seven untouched pre-existing files remain byte-identical; both overlapping test
+files retain exactly their unrelated deltas. Context retains the user's tab/style
+rewrite while the same analysis-action replacement is staged from the isolated
+variant. Stage only the 20 task Kotlin files plus this checklist, PLAN.md and
+errors.log. Create one authorized local ANA-07 commit, verify its file hashes and
+receipt, then resume the existing scheduler and end this continuation. NAV-01 is
+next; no additional card is implemented here. Prior correction accounting is 3,
+including this user-authorized continuation.
 
 ## Task NAV-01 — Distinguish run, results and editing in the sidebar
 

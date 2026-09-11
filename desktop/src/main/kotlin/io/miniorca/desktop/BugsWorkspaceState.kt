@@ -266,3 +266,13 @@ private fun scanWarnings(scan: GoScanReport): List<String> =
         .map { phase ->
           "${phase.name}: ${phase.state}${phase.output.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()}"
         }
+
+/** Only explicitly classified semantic bugs and tool-reported diagnostics belong on Bugs. */
+internal fun DesktopState.projectBugFindings(): List<UnifiedFinding> {
+  val page = analysisResultPage("bugs")
+  val verified =
+      findings.findings.filter {
+        classifyFinding(it) == FindingClassification.Verified && it.category in setOf("", "bugs")
+      }
+  return (page.semantic + verified).distinctBy(::findingDisplayKey)
+}

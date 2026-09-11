@@ -18,212 +18,183 @@ data class AnalyzeAllRunOptions(
       )
 }
 
-fun shouldPollAnalyzeAll(job: AnalyzeAllJob?): Boolean =
-    job?.status?.lowercase() in setOf("running", "pausing", "canceling")
-
-internal data class AnalysisCoveragePresentation(
-    val total: Int,
-    val fresh: Int,
-    val stale: Int,
-    val missing: Int,
-    val running: Int,
-    val failed: Int,
-)
-
-internal data class AnalyzeAllRunPresentation(
-    val statusLabel: String,
-    val statusDetail: String,
-    val controls: String,
-    val maxFiles: Int,
-    val maxRetries: Int,
-    val candidates: Int,
-    val completed: Int,
-    val failed: Int,
-    val running: Int,
-    val remaining: Int,
-)
-
-/** The header only exposes actions that are valid for the daemon-reported run state. */
-internal enum class AnalyzeAllToolbarAction {
-  Start,
-  Pause,
-  Resume,
-  Cancel,
+internal enum class AnalysisRunCommand(val label: String) {
+  Start("Start analysis"),
+  Pause("Pause"),
+  Resume("Resume"),
+  Cancel("Cancel")
 }
 
-internal data class AnalyzeAllToolbarActionPresentation(
-    val action: AnalyzeAllToolbarAction,
-    val enabled: Boolean,
-)
-
-internal fun analyzeAllToolbarActions(
-    run: AnalyzeAllRunPresentation,
-    model: ScopedModel,
-    remoteProviderConfirmed: Boolean,
-): List<AnalyzeAllToolbarActionPresentation> {
-  val providerConfirmed = !model.remoteProvider || remoteProviderConfirmed
-  return when (run.statusLabel) {
-    "Running" ->
-        listOf(
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Pause, enabled = true),
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, enabled = true),
-        )
-    "Pausing" ->
-        listOf(AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, enabled = true))
-    "Paused" ->
-        listOf(
-            AnalyzeAllToolbarActionPresentation(
-                AnalyzeAllToolbarAction.Resume, enabled = providerConfirmed),
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Cancel, enabled = true),
-        )
-    "Canceling" -> emptyList()
-    else ->
-        listOf(
-            AnalyzeAllToolbarActionPresentation(AnalyzeAllToolbarAction.Start, providerConfirmed))
-  }
-}
-
-internal fun analyzeAllToolbarActionLabel(action: AnalyzeAllToolbarAction): String =
-    when (action) {
-      AnalyzeAllToolbarAction.Start -> "Start Analyze-all"
-      AnalyzeAllToolbarAction.Pause -> "Pause"
-      AnalyzeAllToolbarAction.Resume -> "Resume"
-      AnalyzeAllToolbarAction.Cancel -> "Cancel"
-    }
-
-internal data class AnalysisFailurePresentation(
+internal data class AnalysisStageFailure(
     val path: String,
+    val stage: String,
     val attempts: Int,
-    val error: String,
+    val reason: String
 )
 
-/** Failed files are processed work too; an empty queue has no progress. */
-internal fun analysisRunProgress(run: AnalyzeAllRunPresentation): Float =
-    if (run.candidates <= 0) 0f
-    else ((run.completed.toFloat() + run.failed) / run.candidates).coerceIn(0f, 1f)
-
-internal data class AnalyzeAllPresentation(
-    val coverage: AnalysisCoveragePresentation,
-    val run: AnalyzeAllRunPresentation,
-    val failures: List<AnalysisFailurePresentation>,
+internal data class ProjectRunPresentation(
+    val status: String,
+    val detail: String,
+    val totalSteps: Int,
+    val finishedSteps: Int,
+    val currentFiles: List<String>,
+    val failures: List<AnalysisStageFailure>,
+    val commands: List<AnalysisRunCommand>,
 ) {
+  val progress: Float
+    get() = if (totalSteps == 0) 0f else finishedSteps.toFloat() / totalSteps
+}
+
+internal fun projectRunPresentation(analysis: ProjectAnalysisRunState): ProjectRunPresentation {
+  val run = analysis.run
+  val stages = run?.files.orEmpty().flatMap { it.stages }
+  return ProjectRunPresentation(
+      status = analysisStatusLabel(run?.status),
+      detail =
+          run?.reason?.takeIf { it.isNotBlank() }
+              ?: when (run?.status) {
+                null ->
+                    "Start one analysis of the whole project. Review its scope before sending context."
+                "queued",
+                "running" ->
+                    "Analyzing project source. Results appear in Bugs, Performance and Security."
+                "pausing" ->
+                    "Pausing at the next stage boundary. Completed results remain available."
+                "paused",
+                "interrupted" ->
+                    "Review the remaining scope and resume when ready. Completed results are retained."
+                "canceling" -> "Stopping active requests. Results already produced are retained."
+                "canceled" -> "Canceled. Review retained results or start a new analysis."
+                "stale" ->
+                    "The project or analysis configuration changed. Retained results are out of date."
+                "partial" -> "Some stages returned useful results; coverage is incomplete."
+                "failed" ->
+                    "Analysis failed. Review the operational failures before starting again."
+                "unavailable" ->
+                    "No eligible analysis work was available. Review the captured scope."
+                else -> "Analysis finished. Open a result section to inspect its evidence."
+              },
+      totalSteps = stages.size,
+      finishedSteps =
+          stages.count {
+            it.status in
+                setOf("completed", "completed_empty", "partial", "failed", "skipped", "unavailable")
+          },
+      currentFiles =
+          run?.files
+              .orEmpty()
+              .filter { file -> file.stages.any { it.status == "running" } }
+              .map { it.path },
+      failures =
+          run?.files.orEmpty().flatMap { file ->
+            file.stages
+                .filter {
+                  it.status in setOf("failed", "unavailable", "interrupted") &&
+                      it.reason.isNotBlank()
+                }
+                .map { AnalysisStageFailure(file.path, it.stage, it.attempts, it.reason) }
+          },
+      commands =
+          when (run?.status) {
+            "queued",
+            "running" -> listOf(AnalysisRunCommand.Pause, AnalysisRunCommand.Cancel)
+            "pausing" -> listOf(AnalysisRunCommand.Cancel)
+            "canceling" -> emptyList()
+            "paused",
+            "interrupted" -> listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel)
+            "stale" -> listOf(AnalysisRunCommand.Start, AnalysisRunCommand.Cancel)
+            else -> listOf(AnalysisRunCommand.Start)
+          })
+}
+
+internal fun analysisStatusLabel(status: String?): String =
+    when (status) {
+      null,
+      "" -> "Not started"
+      "completed_empty" -> "Completed · no findings"
+      else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
+    }
+
+internal fun analysisCategoryWorkspace(category: String): Workspace =
+    when (category) {
+      "bugs" -> Workspace.Bugs
+      "performance" -> Workspace.Performance
+      "security" -> Workspace.Security
+      else -> error("Unknown analysis category: $category")
+    }
+
+internal fun analysisCategoryLabel(category: String): String =
+    analysisCategoryWorkspace(category).name
+
+/**
+ * Current progress and retained evidence stay distinct; local filters cannot change project
+ * coverage.
+ */
+internal data class AnalysisResultPageState(
+    val category: String,
+    val project: ProjectAnalysis?,
+    val run: AnalysisRun?,
+    val section: AnalysisSectionState = AnalysisSectionState(),
+    val path: String = "",
+) {
+  val results: AnalysisSectionResults?
+    get() =
+        section.results?.takeIf {
+          it.identity == run?.identity &&
+              it.identity.projectId == project?.projectId &&
+              it.progress.category == category &&
+              it.path.isEmpty()
+        }
+
+  val stale: Boolean
+    get() = run?.status == "stale" || run?.identity?.projectRevision != project?.projectRevision
+
+  val progress: AnalysisSectionProgress?
+    get() =
+        run?.takeIf { it.identity.projectId == project?.projectId }
+            ?.sections
+            ?.firstOrNull { it.category == category }
+
   val statusLabel: String
-    get() = run.statusLabel
+    get() = if (stale && run != null) "Stale" else analysisStatusLabel(progress?.status)
 
-  val statusDetail: String
-    get() = run.statusDetail
+  val reportedCount: Int?
+    get() = if (stale) null else progress?.findingCount
 
-  val controls: String
-    get() = run.controls
+  val semantic: List<UnifiedFinding>
+    get() =
+        results
+            ?.semantic
+            .orEmpty()
+            .filter {
+              it.category == category &&
+                  it.projectId == project?.projectId &&
+                  it.projectRevision == run?.identity?.projectRevision &&
+                  matchesPath(it.location.path)
+            }
+            .map { if (stale) it.copy(freshness = "stale") else it }
 
-  val noErrorsMessage: String
-    get() = "No failures recorded."
+  val unclassified: List<UnifiedFinding>
+    get() =
+        results
+            ?.unclassified
+            .orEmpty()
+            .filter { matchesPath(it.location.path) }
+            .map { it.copy(freshness = "stale") }
+
+  fun matchesPath(candidate: String): Boolean =
+      path.isBlank() || candidate.contains(path, ignoreCase = true)
 }
 
-internal fun analyzeAllPresentation(
-    job: AnalyzeAllJob?,
-    coverage: AnalysisCoverage?
-): AnalyzeAllPresentation {
-  val coveragePresentation = coverage.toPresentation()
-  val fileStates = job?.files.orEmpty().map(::classifyFile)
-  val failures = fileStates.filter { it.isFailure }.map { it.file.toFailurePresentation() }
-  val completed = fileStates.count { it.isCompleted }
-  val failed = fileStates.count { it.isFailure }
-  val running = fileStates.count { it.isRunning }
-  val candidates = fileStates.size
-  val run =
-      AnalyzeAllRunPresentation(
-          statusLabel = job.statusLabel(),
-          statusDetail = job.statusDetail(),
-          controls = job.controls(),
-          maxFiles = job?.maxFiles ?: 0,
-          maxRetries = job?.maxRetries ?: 0,
-          candidates = candidates,
-          completed = completed,
-          failed = failed,
-          running = running,
-          remaining = (candidates - completed - failed - running).coerceAtLeast(0),
-      )
-  return AnalyzeAllPresentation(coveragePresentation, run, failures)
-}
+internal fun DesktopState.analysisResultPage(category: String) =
+    AnalysisResultPageState(
+        category,
+        project,
+        analysisRun.run,
+        analysisRun.sections[AnalysisResultKey(category)] ?: AnalysisSectionState(),
+        analysisRun.resultPaths[category].orEmpty())
 
-private data class AnalyzeAllFileState(
-    val file: AnalyzeAllFileJob,
-    val isFailure: Boolean,
-    val isCompleted: Boolean,
-    val isRunning: Boolean,
-)
-
-private fun classifyFile(file: AnalyzeAllFileJob): AnalyzeAllFileState {
-  val status = file.status.normalizedAnalyzeAllStatus()
-  val isFailure = status == "failed" || file.error.isNotBlank()
-  return AnalyzeAllFileState(
-      file = file,
-      isFailure = isFailure,
-      isCompleted = !isFailure && status == "completed",
-      isRunning = !isFailure && status == "running",
-  )
-}
-
-private fun AnalysisCoverage?.toPresentation() =
-    AnalysisCoveragePresentation(
-        total = this?.total ?: 0,
-        fresh = this?.fresh ?: 0,
-        stale = this?.stale ?: 0,
-        missing = this?.missing ?: 0,
-        running = this?.running ?: 0,
-        failed = this?.failed ?: 0,
-    )
-
-private fun AnalyzeAllFileJob.toFailurePresentation() =
-    AnalysisFailurePresentation(
-        path = path,
-        attempts = attempts,
-        error = error.trim().ifBlank { "Analysis failed" },
-    )
-
-private fun AnalyzeAllJob?.statusLabel() =
-    when (this?.status.normalizedAnalyzeAllStatus()) {
-      null -> "Not started"
-      "running" -> "Running"
-      "pausing" -> "Pausing"
-      "canceling" -> "Canceling"
-      "paused" -> "Paused"
-      "completed" -> "Completed"
-      "canceled" -> "Canceled"
-      "failed" -> "Failed"
-      "stale" -> "Stale"
-      else -> this?.status.orEmpty().ifBlank { "Unknown" }.replaceFirstChar { it.uppercase() }
-    }
-
-private fun AnalyzeAllJob?.statusDetail() =
-    when (this?.status.normalizedAnalyzeAllStatus()) {
-      null -> "No Analyze-all run. Importing or reindexing never starts one automatically."
-      "running" -> "Processing candidates; counts and failures update as files finish."
-      "pausing" -> "Pausing; the summary and failures remain visible."
-      "canceling" -> "Canceling; the summary and failures remain visible."
-      "paused" -> "Paused. Resume to process remaining candidates."
-      "completed" -> "Analyze-all completed. Start a new run to refresh coverage."
-      "canceled" ->
-          "Canceled. Completed reviews and failures remain available; start a new run to continue."
-      "failed" -> "Failed. Inspect failures and retry explicitly."
-      "stale" -> "Analyze-all is out of date and cannot resume. Start a new run."
-      else ->
-          "Analyze-all is ${this?.status.orEmpty().ifBlank { "in an unknown state" }}; start a new run for the current project."
-    }
-
-private fun AnalyzeAllJob?.controls() =
-    when (this?.status.normalizedAnalyzeAllStatus()) {
-      "running" -> "Pause or cancel"
-      "pausing" -> "Cancel"
-      "canceling" -> "Canceling"
-      "paused" -> "Resume or cancel"
-      "failed" -> "Retry"
-      "stale",
-      "completed",
-      "canceled" -> "Start a new run"
-      else -> "Start"
-    }
-
-private fun String?.normalizedAnalyzeAllStatus(): String? =
-    this?.trim()?.lowercase()?.ifBlank { null }
+internal fun analysisCoverageLabel(coverage: AnalysisRunCoverage?): String =
+    coverage?.let {
+      "${it.succeeded} covered · ${it.partial} partial · ${it.pending + it.running} remaining · ${it.failed} failed · ${it.skipped} skipped · ${it.unavailable} unavailable"
+    } ?: "Coverage is not available yet."

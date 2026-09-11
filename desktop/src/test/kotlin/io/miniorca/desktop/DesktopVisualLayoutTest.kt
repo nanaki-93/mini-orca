@@ -49,6 +49,254 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun analysisProgressAndResultLinksRemainReadableAcrossSupportedViewports() {
+    listOf(
+            Triple(1440, 900, 1f),
+            Triple(1000, 760, 1f),
+            Triple(999, 760, 1f),
+            Triple(800, 650, 1f),
+            Triple(1280, 600, 1.25f),
+            Triple(1280, 600, 1.5f))
+        .forEach { (width, height, scale) ->
+          var navigations = 0
+          val run =
+              analysisRunFixture()
+                  .copy(
+                      status = "running",
+                      files =
+                          listOf(
+                              AnalysisRunFile(
+                                  "internal/platform/transport/handlers/main.go",
+                                  "base",
+                                  "Go",
+                                  listOf(AnalysisStageProgress("semantic", "running", 1, false)))))
+          ComposeVisualFixture(width, height, scale) {
+                AnalysisWorkspacePane(
+                    AnalysisWorkspacePaneState(
+                        resultProjectFixture(), ProjectAnalysisRunState(run = run)),
+                    AnalysisWorkspaceActions({}, {}, {}, {}, { navigations++ }))
+              }
+              .use { fixture ->
+                fixture.render("analysis-progress-$width-$scale")
+                listOf("Pause", "Cancel", "Bugs", "Performance", "Security")
+                    .forEach(fixture::assertTextFits)
+                assertFalse(fixture.hasText("Prepare fix"))
+                fixture.clickDescription("View Bugs results")
+                assertEquals(1, navigations)
+              }
+        }
+  }
+
+  @Test
+  fun analysisLifecycleAndOperationalErrorsStayExplicit() {
+    listOf(
+            "paused" to "Resume",
+            "interrupted" to "Resume",
+            "stale" to "Start analysis",
+            "failed" to "Start analysis",
+            "canceled" to "Start analysis")
+        .forEach { (status, control) ->
+          ComposeVisualFixture(800, 650, 1.5f) {
+                AnalysisWorkspacePane(
+                    AnalysisWorkspacePaneState(
+                        resultProjectFixture(),
+                        ProjectAnalysisRunState(
+                            run = analysisRunFixture().copy(status = status),
+                            error =
+                                "Could not reach the daemon. Retry when the local service is available. Completed results remain available in their sections; no analysis request was retried.")),
+                    AnalysisWorkspaceActions({}, {}, {}, {}, {}))
+              }
+              .use { fixture ->
+                fixture.render("analysis-$status-800-1.5")
+                fixture.assertTextFits(control)
+                fixture.assertTextWrapsWithoutClipping(
+                    "Could not reach the daemon. Retry when the local service is available. Completed results remain available in their sections; no analysis request was retried.")
+              }
+        }
+    var analysis by
+        mutableStateOf(ProjectAnalysisRunState(run = analysisRunFixture().copy(status = "running")))
+    var pauses = 0
+    ComposeVisualFixture(800, 650) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(resultProjectFixture(), analysis),
+              AnalysisWorkspaceActions(
+                  {},
+                  {
+                    pauses++
+                    analysis = analysis.copy(action = "pausing")
+                  },
+                  {},
+                  {},
+                  {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Pause")
+          fixture.render()
+          assertEquals(1, pauses)
+          assertTrue(fixture.isDisabled("Pause"))
+        }
+  }
+
+  @Test
+  fun resultPagesUseReadableRowsAndLocalDrilldownWithoutModelActions() {
+    listOf(
+            Triple(1440, 900, 1f),
+            Triple(1000, 760, 1f),
+            Triple(999, 760, 1f),
+            Triple(800, 650, 1f),
+            Triple(1280, 600, 1.25f),
+            Triple(1280, 600, 1.5f))
+        .forEach { (width, height, scale) ->
+          listOf("bugs", "performance", "security").forEach { category ->
+            var externalActions = 0
+            val title =
+                when (category) {
+                  "bugs" -> "Return the missing error"
+                  "performance" -> "Avoid repeated allocation"
+                  else -> "Credential-like assignment"
+                }
+            val original =
+                when (category) {
+                  "performance" -> performancePageFixture()
+                  "security" -> securityPageFixture()
+                  else ->
+                      resultPageFixture("bugs").let { page ->
+                        page.copy(
+                            section =
+                                page.section.copy(
+                                    results =
+                                        page.results!!.copy(
+                                            semantic =
+                                                page.semantic.map {
+                                                  it.copy(
+                                                      title = title,
+                                                      severity = "high",
+                                                      message =
+                                                          "Return the error before processing the next request.",
+                                                      source = "analysis",
+                                                      confidence = "suggested",
+                                                      freshness = "fresh",
+                                                      status = "open")
+                                                })))
+                      }
+                }
+            var page by mutableStateOf(original)
+            val findingActions =
+                FindingActions(
+                    { externalActions++ }, { externalActions++ }, { _, _ -> externalActions++ })
+            ComposeVisualFixture(width, height, scale) {
+                  when (category) {
+                    "performance" ->
+                        PerformanceWorkspacePane(
+                            PerformanceWorkspacePaneState(page, resultIndexFixture()),
+                            PerformanceWorkspaceActions(
+                                { _, _ -> externalActions++ },
+                                { _, _ -> externalActions++ },
+                                { externalActions++ },
+                                { page = page.copy(path = it) },
+                                findingActions))
+                    "security" ->
+                        SecurityWorkspacePane(
+                            SecurityWorkspacePaneState(page, resultIndexFixture()),
+                            SecurityWorkspaceActions(
+                                { externalActions++ },
+                                { externalActions++ },
+                                { externalActions++ },
+                                { page = page.copy(path = it) },
+                                findingActions))
+                    else ->
+                        BugsWorkspacePane(
+                            BugsWorkspacePaneState(page.semantic, null, false, page),
+                            BugsWorkspaceActions(
+                                findingActions,
+                                { externalActions++ },
+                                { externalActions++ },
+                                { externalActions++ },
+                                { page = page.copy(path = it) }))
+                  }
+                }
+                .use { fixture ->
+                  fixture.render("results-$category-$width-$scale")
+                  fixture.assertTextFits("View analysis")
+                  fixture.assertTextFits(title)
+                  assertFalse(fixture.hasText("Start analysis"))
+                  assertFalse(fixture.hasText("Review"))
+                  fixture.clickDescription("Inspect $title")
+                  fixture.render("results-$category-detail-$width-$scale")
+                  assertTrue(
+                      fixture.hasText(if (width < 900) "Back to results" else "Clear selection"))
+                  assertTrue(
+                      fixture.hasText(
+                          if (category == "performance") "Prepare optimization"
+                          else if (category == "security") "Prepare fix" else "Open source"))
+                  assertEquals(0, externalActions)
+                  fixture.clickText(if (width < 900) "Back to results" else "Clear selection")
+                  fixture.render()
+                  page = page.copy(path = "not-in-project.go")
+                  fixture.render()
+                  assertFalse(fixture.hasDescription("Inspect $title"))
+                  fixture.clickText("All project files")
+                  fixture.render()
+                  assertTrue(fixture.hasDescription("Inspect $title"))
+                  assertEquals(0, externalActions)
+                }
+          }
+        }
+  }
+
+  @Test
+  fun stalePartialEmptyAndHistoricalEvidenceRemainDistinct() {
+    val base = performancePageFixture()
+    val stale =
+        base.copy(
+            run = base.run!!.copy(status = "stale"),
+            section =
+                base.section.copy(error = "The daemon is unavailable; retained evidence is shown."))
+    ComposeVisualFixture(800, 650, 1.25f) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(stale, resultIndexFixture()),
+              PerformanceWorkspaceActions(
+                  { _, _ -> }, { _, _ -> }, {}, {}, FindingActions({}, {}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("results-stale-error-800-1.25")
+          assertTrue(fixture.hasText("Reported findings: Not available"))
+          fixture.clickDescription("Inspect Avoid repeated allocation")
+          fixture.render()
+          assertTrue(fixture.isDisabled("Prepare optimization"))
+          assertTrue(fixture.hasText("Stale · Not measured"))
+        }
+    val empty = resultPageFixture("bugs").copy(run = null, section = AnalysisSectionState())
+    ComposeVisualFixture(800, 650, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(emptyList(), null, false, empty),
+              BugsWorkspaceActions(FindingActions({}, {}, { _, _ -> }), {}, {}))
+        }
+        .use { fixture ->
+          fixture.render("results-empty-800-1.5")
+          assertTrue(fixture.hasText("Reported findings: Not available"))
+          assertTrue(fixture.hasText("No findings yet."))
+        }
+    ComposeVisualFixture(800, 650) {
+          Column {
+            PreviousAnalysisDetails(
+                listOf(
+                    UnifiedFinding(
+                        title = "Previous uncategorized risk",
+                        message = "Historical prose retained for inspection.")))
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.hasText("Previous uncategorized risk"))
+          fixture.clickText("Previous analysis · unclassified")
+          fixture.render("results-history-800")
+          assertTrue(fixture.hasText("Previous uncategorized risk"))
+        }
+  }
+
+  @Test
   fun formattedResponseListsUseOnlyTheOriginalLineBreaks() {
     val response = "Summary.\n\n- First item\n- Second item\n\nNext paragraph.\n1. Last item"
     ComposeVisualFixture(480, 600, 1.5f) { ModelResultContent(response) }
@@ -57,20 +305,6 @@ class DesktopVisualLayoutTest {
           fixture.assertTextLineCount(formatModelResult(response).text, 7)
           assertFalse(fixture.hasText("Show full response"))
         }
-  }
-
-  @Test
-  fun securityWorkspaceKeepsActionsAndEvidenceReadableAcrossWideNarrowAndLargeText() {
-    listOf(Triple(1440, 900, 1f), Triple(999, 760, 1f), Triple(1280, 600, 1.5f)).forEach {
-        (width, height, scale) ->
-      ComposeVisualFixture(width, height, scale) { SecurityVisualFixture() }
-          .use { fixture ->
-            fixture.render("security-$width-${scale}")
-            listOf("Security", "Scan", "Review", "Source rule matches")
-                .forEach(fixture::assertTextFits)
-            assertTrue(fixture.hasScrollableContent())
-          }
-    }
   }
 
   @Test
@@ -87,309 +321,6 @@ class DesktopVisualLayoutTest {
           kotlin.test.assertEquals("repository", query)
           assertTrue(fixture.hasText("repository"))
           assertTrue(fixture.hasDescription("Search findings"))
-        }
-  }
-
-  @Test
-  fun analysisChromeFitsWideNarrowAndEnlargedTextViewports() {
-    listOf(
-            Triple(1440, 900, 1f),
-            Triple(1920, 1080, 1f),
-            Triple(1000, 760, 1f),
-            Triple(999, 760, 1f),
-            Triple(800, 650, 1f),
-            Triple(1000, 800, 1.3f))
-        .forEach { (width, height, scale) ->
-          ComposeVisualFixture(width, height, scale) { AnalysisVisualFixture(width.toFloat()) }
-              .use { fixture ->
-                fixture.render("analysis-$width-$scale")
-                listOf(if (scale > 1.15f) "Perf." else "Performance", "Pause", "Cancel").forEach {
-                    label ->
-                  fixture.assertTextFits(label)
-                }
-              }
-        }
-  }
-
-  @Test
-  fun analysisChromeRemainsReadableAtSupportedTextAndDensityScales() {
-    listOf(
-            Triple("100-1x", 1f, 1f),
-            Triple("125-1x", 1.25f, 1f),
-            Triple("150-1x", 1.5f, 1f),
-            Triple("100-2x", 1f, 2f),
-        )
-        .forEach { (label, fontScale, densityScale) ->
-          val logicalWidth = 1_280f / densityScale
-          ComposeVisualFixture(
-                  width = 1_280,
-                  height = 600,
-                  fontScale = fontScale,
-                  densityScale = densityScale,
-              ) {
-                AnalysisVisualFixture(logicalWidth)
-              }
-              .use { fixture ->
-                fixture.render("analysis-1280-600-$label")
-                listOf("Pause", "Cancel").forEach(fixture::assertTextFits)
-              }
-        }
-  }
-
-  @Test
-  fun analysisLifecycleControlsRenderAtNarrowEnlargedTextScale() {
-    val cases =
-        listOf(
-            Triple("empty", null, "Start Analyze-all"),
-            Triple("paused", visualFixtureJob.copy(status = "paused"), "Resume"),
-            Triple("failed", visualFixtureJob.copy(status = "failed"), "Failed"),
-        )
-
-    cases.forEach { (name, job, expectedControl) ->
-      ComposeVisualFixture(800, 650, 1.3f) { AnalysisPaneVisualFixture(job) }
-          .use { fixture ->
-            fixture.render("analysis-$name-800-1.3")
-            fixture.assertTextFits(expectedControl)
-          }
-    }
-  }
-
-  @Test
-  fun workspaceStatesKeepCompactCopyAndEvidenceReachableAcrossWideAndNarrowViews() {
-    var performanceActions = 0
-    val model =
-        ScopedModel(
-            scope = ModelScope.Analyze.wireValue,
-            profile = "review-profile",
-            model = "provider/reviewer",
-            remoteProvider = true,
-        )
-    val destination = modelDestinationLabel(ModelScope.Analyze, model)
-    val performanceActionsFixture =
-        PerformanceWorkspaceActions(
-            confirmRemoteProvider = { performanceActions++ },
-            preview = { performanceActions++ },
-            start = { _, _ -> performanceActions++ },
-            pause = { performanceActions++ },
-            resume = { performanceActions++ },
-            cancel = { performanceActions++ },
-            openInEditor = { _, _ -> performanceActions++ },
-            prepareOptimization = { _, _ -> performanceActions++ },
-        )
-    val performanceFinding =
-        PerformanceFinding(
-            id = "performance-1",
-            category = "allocation",
-            potentialImpact = "high",
-            confidence = "medium",
-            title = "Avoid repeated buffer allocation",
-            observedPattern = "A buffer is allocated for every request.",
-            workloadConditions = "High request volume.",
-            recommendation = "Reuse a bounded buffer.",
-            tradeoff = "Retained buffers increase memory pressure.",
-            verificationPlan = "Benchmark representative traffic.",
-            startLine = 24,
-            symbol = "Serve",
-        )
-    listOf(1440 to 900, 999 to 760).forEach { (width, height) ->
-      ComposeVisualFixture(width, height) {
-            PerformanceWorkspacePane(
-                PerformanceWorkspacePaneState(
-                    job =
-                        PerformanceJob(
-                            projectId = "project",
-                            projectRevision = "revision",
-                            queueId = "performance:current",
-                            status = "running",
-                            elapsed = 8_000_000_000),
-                    report =
-                        PerformanceReport(
-                            projectId = "project",
-                            projectRevision = "revision",
-                            queueId = "performance:current",
-                            status = "running",
-                            paths = mapOf(performanceFinding.id to "internal/api/server.go"),
-                            findings = listOf(performanceFinding)),
-                    context =
-                        PerformanceQueuePreview(
-                            files = listOf(PerformanceJobFile(path = "internal/api/server.go")),
-                            excluded = 2,
-                            oversized = 1,
-                            outsideLimit = 3),
-                    model = model,
-                    remoteProviderConfirmed = false),
-                performanceActionsFixture)
-          }
-          .use { fixture ->
-            fixture.render("performance-populated-$width-${height}-1.0")
-            assertTrue(fixture.hasText("Source-based review · Not measured"))
-            assertTrue(fixture.hasText(destination))
-            assertTrue(fixture.hasText("Running · 8s budget used"))
-            kotlin.test.assertEquals(0, performanceActions)
-            fixture.clickText(
-                "ALLOCATION · high · internal/api/server.go:24 · Avoid repeated buffer allocation")
-            fixture.render()
-            assertTrue(
-                fixture.hasText("Observed pattern: A buffer is allocated for every request."))
-            assertTrue(
-                fixture.hasText(
-                    "When it matters: High request volume.\nRecommendation: Reuse a bounded buffer.\nTrade-off: Retained buffers increase memory pressure.\nVerify: Benchmark representative traffic."))
-            kotlin.test.assertEquals(0, performanceActions)
-          }
-    }
-
-    val stalePerformanceFinding =
-        performanceFinding.copy(
-            engineeringInsight =
-                EngineeringInsight(
-                    mechanism = "The review remains bound to the reported source revision.",
-                    whyItMattersHere =
-                        "This selected opportunity came from stale review evidence."))
-    ComposeVisualFixture(800, 760, 1.3f) {
-          PerformanceWorkspacePane(
-              PerformanceWorkspacePaneState(
-                  job =
-                      PerformanceJob(
-                          projectId = "project",
-                          projectRevision = "revision",
-                          queueId = "performance:stale",
-                          status = "stale"),
-                  report =
-                      PerformanceReport(
-                          projectId = "project",
-                          projectRevision = "revision",
-                          queueId = "performance:stale",
-                          status = "stale",
-                          paths = mapOf(stalePerformanceFinding.id to "internal/api/server.go"),
-                          findings = listOf(stalePerformanceFinding)),
-                  context = null,
-                  model = model,
-                  remoteProviderConfirmed = false),
-              performanceActionsFixture)
-        }
-        .use { fixture ->
-          fixture.render("performance-stale-insight-800-1.3")
-          fixture.clickText(
-              "ALLOCATION · high · internal/api/server.go:24 · Avoid repeated buffer allocation")
-          fixture.render()
-          assertTrue(
-              fixture.hasText("AI interpretation · Selected performance opportunity · stale"))
-        }
-
-    ComposeVisualFixture(800, 900, 1.3f) {
-          PerformanceWorkspacePane(
-              PerformanceWorkspacePaneState(
-                  job = null,
-                  report = null,
-                  context =
-                      PerformanceQueuePreview(
-                          files = listOf(PerformanceJobFile(path = "internal/api/server.go"))),
-                  model = model,
-                  remoteProviderConfirmed = false),
-              performanceActionsFixture)
-        }
-        .use { fixture ->
-          fixture.render("performance-empty-800-1.3")
-          assertTrue(fixture.hasText("No performance review"))
-          assertTrue(fixture.hasText("Confirm remote destination"))
-          fixture.assertTextFits("Preview limits")
-          fixture.assertTextFits("Analyze performance")
-          kotlin.test.assertEquals(0, performanceActions)
-          fixture.clickText("Preview limits")
-          kotlin.test.assertEquals(1, performanceActions)
-        }
-
-    ComposeVisualFixture(800, 650, 1.3f) {
-          BugsWorkspacePane(
-              BugsWorkspacePaneState(
-                  findings = emptyList(),
-                  scan =
-                      GoScanReport(
-                          status = "failed",
-                          phases = listOf(GoScanPhase("go vet", "failed", output = "vet failed"))),
-                  loading = false),
-              BugsWorkspaceActions(FindingActions({}, {}, { _, _ -> }), {}, {}))
-        }
-        .use { fixture ->
-          fixture.render("bugs-failed-800-1.3")
-          assertTrue(fixture.hasText("Verified scan failed; results remain available."))
-          assertTrue(fixture.hasText("Warning: go vet: failed: vet failed"))
-          assertTrue(fixture.hasText("No findings yet."))
-        }
-
-    ComposeVisualFixture(800, 280, 1.3f) {
-          ProblemsToolWindow(
-              ProblemsToolWindowState(emptyList(), false), FindingActions({}, {}, { _, _ -> }))
-        }
-        .use { fixture ->
-          fixture.render("problems-empty-800-1.3")
-          assertTrue(fixture.hasText("No findings yet."))
-        }
-  }
-
-  @Test
-  fun analysisWrapsLongRemoteDestinationWithoutHidingActiveControls() {
-    val model =
-        ScopedModel(
-            scope = ModelScope.Bug.wireValue,
-            profile = "local-workstation-with-a-descriptive-profile-name",
-            model = "provider/model-with-a-long-qualified-destination-name",
-            remoteProvider = true,
-            reasoningEffort = "high",
-        )
-    val destination = modelDestinationLabel(ModelScope.Bug, model)
-
-    ComposeVisualFixture(1000, 800, 1.3f) { AnalysisVisualFixture(1000f, model = model) }
-        .use { fixture ->
-          fixture.render("analysis-long-destination-1000-1.3")
-          fixture.assertTextFits("Pause")
-          fixture.assertTextFits("Cancel")
-          fixture.assertTextWrapsWithoutClipping(destination)
-        }
-  }
-
-  @Test
-  fun analysisFixtureExposesOnlyItsLiveLifecycleAction() {
-    var requests = 0
-    val actions =
-        AnalysisWorkspaceActions(
-            { requests++ }, { requests++ }, { requests++ }, { requests++ }, { requests++ })
-    ComposeVisualFixture(1440, 900) { AnalysisVisualFixture(1440f, actions) }
-        .use { fixture ->
-          fixture.render()
-          fixture.clickText("Pause")
-          kotlin.test.assertEquals(1, requests)
-          assertFalse(fixture.hasText("Preview"))
-          assertFalse(fixture.hasText("New file"))
-          assertFalse(fixture.hasText("Run / Debug"))
-          kotlin.test.assertEquals(1, requests)
-        }
-  }
-
-  @Test
-  fun analysisHeaderPreventsRepeatedActionsAndKeepsErrorsReachable() {
-    var pauses = 0
-    val failedJob =
-        visualFixtureJob.copy(
-            files =
-                visualFixtureJob.files +
-                    AnalyzeAllFileJob(
-                        path = "internal/api/failed.go",
-                        status = "failed",
-                        attempts = 2,
-                        error = "sanitized analysis failure"))
-    val actions = AnalysisWorkspaceActions({}, {}, { pauses++ }, {}, {})
-
-    ComposeVisualFixture(800, 650, 1.3f) { AnalysisPaneVisualFixture(failedJob, actions) }
-        .use { fixture ->
-          fixture.render("analysis-errors-800-1.3")
-          fixture.clickText("Pause")
-          fixture.render()
-          assertEquals(1, pauses)
-          assertFalse(fixture.tryClick("Pause"))
-          fixture.clickText("Analysis errors")
-          fixture.render("analysis-errors-expanded-800-1.3")
-          assertTrue(fixture.hasText("sanitized analysis failure"))
         }
   }
 
@@ -749,7 +680,8 @@ class DesktopVisualLayoutTest {
           fixture.render("context-no-symbol-800-1.3")
           assertTrue(fixture.hasText("Focused analysis"))
           assertTrue(fixture.hasText("Actions"))
-          assertTrue(fixture.hasText("Confirm remote destination"))
+          assertTrue(fixture.hasText("Analyze project"))
+          assertFalse(fixture.hasText("Confirm remote destination"))
           assertFalse(fixture.hasText("Generate unit test"))
           assertFalse(fixture.hasText("Complexity and readability scores unavailable."))
           kotlin.test.assertEquals(0, contextActions)
@@ -1641,148 +1573,6 @@ internal class ComposeVisualFixture(
   }
 }
 
-@Composable
-private fun AnalysisVisualFixture(
-    width: Float,
-    actions: AnalysisWorkspaceActions = AnalysisWorkspaceActions({}, {}, {}, {}, {}),
-    job: AnalyzeAllJob? = visualFixtureJob,
-    model: ScopedModel = ScopedModel(),
-) {
-  val summaries =
-      mapOf(BottomToolWindow.Problems to BottomToolWindowSummary("No actionable problems"))
-  val layout = DesktopLayoutState(bottomCollapsed = true)
-  Column(Modifier.fillMaxSize().background(AppBackground)) {
-    MainToolbar(
-        ToolbarState(
-            width,
-            visualFixtureProject,
-            false,
-            "",
-            ConnectionState(connected = true),
-            GitStatus(available = true, branch = "main"),
-            false),
-        ToolbarActions({}, {}, {}, {}, {}, {}))
-    Row(Modifier.fillMaxWidth().weight(1f)) {
-      ToolWindowBar(LeftToolWindow.Analysis, {})
-      Column(Modifier.weight(1f)) {
-        Box(Modifier.weight(1f)) {
-          AnalysisWorkspacePane(
-              AnalysisWorkspacePaneState(
-                  job, AnalysisCoverage(total = 23, stale = 23), model, false),
-              actions)
-        }
-        if (useNarrowLayout(width)) {
-          NarrowBottomToolWindowSummary(layout, BottomToolWindow.entries, summaries, {})
-        } else {
-          BottomToolWindowRegion(
-              layout, BottomToolWindow.entries, summaries, {}, {}, {}, {}, { _, _ -> })
-        }
-      }
-    }
-    PersistentStatusBar(
-        DesktopStatusBarPresentation(
-            listOf(
-                DesktopStatusSegment(
-                    DesktopStatusSegmentType.Operation,
-                    "Visual fixture · no backend",
-                    "Rendered Compose layout fixture; all data is test data",
-                    0),
-                DesktopStatusSegment(
-                    DesktopStatusSegmentType.Index, "23 indexed files", "Fixture files", 1),
-            )),
-        width,
-        {})
-  }
-}
-
-@Composable
-private fun AnalysisPaneVisualFixture(
-    job: AnalyzeAllJob?,
-    actions: AnalysisWorkspaceActions = AnalysisWorkspaceActions({}, {}, {}, {}, {}),
-) {
-  Column(Modifier.fillMaxSize().background(AppBackground)) {
-    AnalysisWorkspacePane(
-        AnalysisWorkspacePaneState(
-            job, AnalysisCoverage(total = 23, stale = 23), ScopedModel(), false),
-        actions)
-  }
-}
-
-@Composable
-private fun SecurityVisualFixture() {
-  val finding =
-      SecurityFinding(
-          id = "security-fixture",
-          title = "Credential-like assignment",
-          severity = "high",
-          evidenceKind = "rule_match",
-          triage = "open",
-          verificationState = "unverified",
-          anchor = SecuritySourceAnchor("internal/service.go", 18, 18, "Run"),
-          observedCondition = "A deterministic rule matched a source condition.",
-          remediation = "Move the value out of source.")
-  val file =
-      ProjectFileInfo(
-          "internal/service.go",
-          "security-hash",
-          "service.go",
-          language = "Go",
-          sizeBytes = 10,
-          lineCount = 30,
-          modifiedAt = "",
-          binary = false)
-  val index =
-      ProjectIndex(
-          visualFixtureProject.projectId,
-          visualFixtureProject.projectRevision,
-          files =
-              listOf(
-                  IndexedFile(
-                      file.path,
-                      file.contentHash,
-                      "Go",
-                      false,
-                      lineCount = 30,
-                      symbols =
-                          listOf(
-                              SymbolInfo(
-                                  "Run",
-                                  "function",
-                                  startLine = 12,
-                                  endLine = 24,
-                                  confidence = "exact",
-                                  atomicTarget = true)))))
-  Column(Modifier.fillMaxSize().background(AppBackground)) {
-    SecurityWorkspacePane(
-        SecurityWorkspacePaneState(
-            visualFixtureProject,
-            file,
-            index,
-            SecurityFileReport(
-                "1",
-                visualFixtureProject.projectId,
-                visualFixtureProject.projectRevision,
-                file.path,
-                file.contentHash,
-                "completed",
-                "deterministic",
-                findings = listOf(finding)),
-            SecurityFileReport(
-                "1",
-                visualFixtureProject.projectId,
-                visualFixtureProject.projectRevision,
-                file.path,
-                file.contentHash,
-                "completed_empty",
-                "ai"),
-            "",
-            null,
-            ScopedModel(scope = "analyze", profile = "analyze", model = "fixture"),
-            true),
-        SecurityWorkspaceActions({}, {}, {}, {}, {}))
-  }
-}
-
 private val visualFixtureProject =
     ProjectAnalysis(
         "visual-fixture",
@@ -1922,23 +1712,6 @@ private fun SharedChromeStatesVisualFixture() {
     }
   }
 }
-
-private val visualFixtureJob =
-    AnalyzeAllJob(
-        status = "running",
-        maxFiles = 100,
-        maxRetries = 1,
-        files =
-            List(19) { index ->
-              AnalyzeAllFileJob(
-                  path = "internal/api/handler_$index.go",
-                  status =
-                      when {
-                        index < 8 -> "completed"
-                        index == 8 -> "running"
-                        else -> "pending"
-                      })
-            })
 
 @Composable
 private fun EditorVisualFixture(width: Float) {

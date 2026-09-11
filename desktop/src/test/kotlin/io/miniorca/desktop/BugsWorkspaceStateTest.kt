@@ -44,6 +44,28 @@ class BugsWorkspaceStateTest {
       )
 
   @Test
+  fun bugsPageExcludesGeneralAndOtherCategorySuggestionsButKeepsVerifiedDiagnostics() {
+    val page = resultPageFixture("bugs")
+    val section =
+        page.section.copy(
+            results =
+                page.results!!.copy(
+                    semantic = page.results!!.semantic + suggested.copy(category = "security"),
+                    unclassified = listOf(suggested)))
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = page.project),
+            findings = FindingsState(findings = listOf(verified, suggested)),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = page.run, sections = mapOf(AnalysisResultKey("bugs") to section)))
+    assertEquals(setOf("bug", "vet-1"), state.projectBugFindings().map { it.id }.toSet())
+    assertEquals(
+        listOf(suggested.copy(freshness = "stale")), state.analysisResultPage("bugs").unclassified)
+    assertEquals(1, state.analysisResultPage("bugs").reportedCount)
+  }
+
+  @Test
   fun filteringAndClassificationKeepVerifiedAndAiFindingsDistinct() {
     val findings =
         listOf(verified, suggested, suggested.copy(id = "unknown", confidence = "unknown"))

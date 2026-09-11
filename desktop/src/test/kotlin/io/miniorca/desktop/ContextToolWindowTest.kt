@@ -17,6 +17,27 @@ import kotlin.test.assertTrue
 
 class ContextToolWindowTest {
   @Test
+  fun projectAnalysisActionAndFileResultsHaveSeparateExplicitIntents() {
+    var admissions = 0
+    var navigations = 0
+    val actions =
+        ContextToolWindowActions({}, { admissions++ }, {}, {}, {}, viewResults = { navigations++ })
+    ComposeVisualFixture(320, 300, 1.5f) {
+          ContextProjectAnalysisActions(
+              ContextToolWindowState(null, ScopedModel(), false, null, null), actions)
+        }
+        .use { fixture ->
+          fixture.render("context-project-actions-320-1.5")
+          fixture.assertTextFits("Analyze project")
+          fixture.clickText("View this file’s results")
+          assertEquals(0, admissions)
+          assertEquals(1, navigations)
+          fixture.clickText("Analyze project")
+          assertEquals(1, admissions)
+        }
+  }
+
+  @Test
   fun declarationExplanationPresentationDistinguishesLifecycleAndKeepsFactsBounded() {
     assertEquals("Explain declaration", explanationActionLabel(DeclarationExplanationState()))
     assertEquals(
