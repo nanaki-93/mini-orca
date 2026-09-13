@@ -51,7 +51,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.awt.Cursor
@@ -249,9 +248,10 @@ internal fun terminalDockHeight(preferred: Float, viewportHeight: Float): Float 
 @Composable
 internal fun TerminalDock(
     layout: DesktopLayoutState,
-    session: TerminalSessionState,
+    state: TerminalWorkspaceState,
     onOpen: () -> Unit,
     onCollapse: () -> Unit,
+    tabActions: TerminalTabActions,
     onHeightDelta: (Float) -> Unit,
     onHeightCommit: () -> Unit,
     content: @Composable (Modifier) -> Unit,
@@ -265,9 +265,10 @@ internal fun TerminalDock(
           .background(ToolWindowSurface)) {
         if (!layout.bottomCollapsed) HorizontalResizableDivider(onHeightDelta, onHeightCommit)
         TerminalBar(
-            session,
+            state,
             layout.bottomCollapsed,
             if (layout.bottomCollapsed) onOpen else onCollapse,
+            tabActions = tabActions,
             controlModifier = controlModifier,
             showSeparator = layout.bottomCollapsed)
         if (!layout.bottomCollapsed) content(Modifier.fillMaxWidth().weight(1f))
@@ -276,9 +277,10 @@ internal fun TerminalDock(
 
 @Composable
 internal fun TerminalBar(
-    session: TerminalSessionState,
+    state: TerminalWorkspaceState,
     collapsed: Boolean,
     onToggle: () -> Unit,
+    tabActions: TerminalTabActions,
     modifier: Modifier = Modifier,
     controlModifier: Modifier = Modifier,
     showSeparator: Boolean = true,
@@ -304,25 +306,21 @@ internal fun TerminalBar(
                 Spacer(Modifier.width(4.dp))
                 Text("Terminal", fontSize = 12.sp)
               }
-          Text(
-              terminalSummary(session),
-              color = if (session.error != null) Warning else SecondaryText,
-              fontSize = 11.sp,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-              modifier = Modifier.weight(1f).padding(start = 8.dp))
+          if (!collapsed) TerminalTabs(state, tabActions, Modifier.weight(1f))
         }
   }
 }
 
 @Composable
 internal fun TerminalOverlay(
+    state: TerminalWorkspaceState,
+    tabActions: TerminalTabActions,
     onDismiss: () -> Unit,
     content: @Composable (Modifier) -> Unit,
 ) {
   IdeDialog(
       onDismissRequest = onDismiss,
-      title = { Text("Terminal", color = PrimaryText, fontWeight = FontWeight.SemiBold) },
+      title = { TerminalBar(state, false, onDismiss, tabActions, showSeparator = false) },
       content = {
         Box(
             Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp).semantics {

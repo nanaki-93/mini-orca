@@ -12,7 +12,11 @@ class DesktopAccessibilityTest {
   fun soleTerminalControlAnnouncesItsStateAndActivatesFromTheKeyboard() {
     var opens = 0
     ComposeVisualFixture(800, 100, 1.5f) {
-          TerminalBar(TerminalSessionState(), collapsed = true, onToggle = { opens++ })
+          TerminalBar(
+              TerminalWorkspaceState(),
+              collapsed = true,
+              onToggle = { opens++ },
+              tabActions = TerminalTabActions({}, {}, {}))
         }
         .use { fixture ->
           fixture.render()

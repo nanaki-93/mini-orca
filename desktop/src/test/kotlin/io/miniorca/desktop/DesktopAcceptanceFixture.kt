@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -86,12 +87,15 @@ private fun NativeAcceptanceScreen(terminal: DesktopTerminalWorkspace, directory
           factory =
               TerminalProcessFactory {
                 error(
-                    "Synthetic shell launch failure in a temporary project. No process was created. Use Open shell to retry; the project source remains unchanged.")
+                    "Synthetic shell launch failure in a temporary project. No process was created. Use + to retry; the project source remains unchanged.")
               })
     }
   }
   DisposableEffect(failedTerminal) { onDispose { failedTerminal.close() } }
-  LaunchedEffect(page) { if (page == "Launch failure") failedTerminal.activate(directory) }
+  LaunchedEffect(page) {
+    if (page == "Launch failure") failedTerminal.activate(directory)
+    if (page == "Shell") terminal.activate(directory)
+  }
   TerminalFocusReturnEffect(terminal) { page = "Progress" }
   CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
     Column(Modifier.fillMaxSize().background(ToolWindowSurface)) {
@@ -132,9 +136,8 @@ private fun NativeAcceptanceScreen(terminal: DesktopTerminalWorkspace, directory
             "Security" -> AcceptanceResultPane(page.lowercase(), state)
             "Editor" -> EditorVisualFixture(maxWidth.value)
             "Terminal states" -> TerminalStateMatrix()
-            "Shell" -> TerminalToolWindow(terminal, directory, {}, Modifier.fillMaxSize())
-            "Launch failure" ->
-                TerminalToolWindow(failedTerminal, directory, {}, Modifier.fillMaxSize())
+            "Shell" -> AcceptanceTerminal(terminal, directory)
+            "Launch failure" -> AcceptanceTerminal(failedTerminal, directory)
           }
         }
       }
@@ -257,16 +260,47 @@ internal fun TerminalStateMatrix() {
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
     TerminalSessionPhase.entries.forEach { phase ->
       Text(phase.name, style = IdeTypography.resultLabel, modifier = Modifier.padding(8.dp))
-      TerminalBar(
+      val session =
           TerminalSessionState(
               phase,
               exitCode = if (phase == TerminalSessionPhase.Exited) 0 else null,
               error =
-                  if (phase == TerminalSessionPhase.Failed) "Synthetic launch failure" else null),
-          true,
-          {})
+                  if (phase == TerminalSessionPhase.Failed) "Synthetic launch failure" else null)
+      TerminalBar(
+          TerminalWorkspaceState(
+              tabs = listOf(TerminalTabState(1, "Shell 1", session)), activeTabId = 1),
+          false,
+          {},
+          TerminalTabActions({}, {}, {}))
     }
     Text("Cleanup pending", style = IdeTypography.resultLabel, modifier = Modifier.padding(8.dp))
-    TerminalBar(TerminalSessionState(TerminalSessionPhase.Running, cleanupPending = true), true, {})
+    TerminalBar(
+        TerminalWorkspaceState(
+            tabs =
+                listOf(
+                    TerminalTabState(
+                        1,
+                        "Shell 1",
+                        TerminalSessionState(TerminalSessionPhase.Running, cleanupPending = true))),
+            activeTabId = 1),
+        false,
+        {},
+        TerminalTabActions({}, {}, {}))
+  }
+}
+
+@Composable
+private fun AcceptanceTerminal(terminal: DesktopTerminalWorkspace, directory: String) {
+  val state by terminal.state.collectAsState()
+  Column(Modifier.fillMaxSize()) {
+    TerminalBar(
+        state,
+        false,
+        {},
+        TerminalTabActions(
+            terminal::selectShell,
+            { terminal.createShell(directory) },
+            { terminal.closeSession(it) }))
+    TerminalToolWindow(terminal, Modifier.weight(1f).fillMaxWidth())
   }
 }

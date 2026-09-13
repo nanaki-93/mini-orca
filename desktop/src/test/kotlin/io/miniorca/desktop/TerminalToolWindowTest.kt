@@ -1,7 +1,5 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.Modifier
 import java.io.ByteArrayOutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
@@ -21,31 +19,6 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class TerminalToolWindowTest {
-  @Test
-  fun terminalControlsRemainVisibleAtNarrowWidthAndLargeTextWithoutStartingAShell() {
-    val workspace = edt { DesktopTerminalWorkspace() }
-    try {
-      listOf(800 to 1f, 800 to 1.5f, 1200 to 1f).forEach { (width, scale) ->
-        ComposeVisualFixture(width, 240, fontScale = scale) {
-              TerminalToolWindow(
-                  workspace,
-                  "/tmp/project with a long but readable name",
-                  {},
-                  Modifier.fillMaxSize())
-            }
-            .use { fixture ->
-              fixture.render("terminal-idle-$width-$scale")
-              assertTrue(fixture.hasText("Open shell"))
-              assertTrue(fixture.hasText("Reindex project"))
-              assertTrue(fixture.hasText("Back to editor · Ctrl+Shift+F12"))
-              assertEquals(TerminalSessionPhase.Idle, workspace.state.value.session.phase)
-            }
-      }
-    } finally {
-      edt { workspace.close() }
-    }
-  }
-
   @Test
   fun hiddenShellKeepsOneReaderAndBufferAcrossHostChanges() =
       withWorkspace { workspace, process, starts, path ->
@@ -83,11 +56,11 @@ class TerminalToolWindowTest {
         assertSame(widget, workspace.state.value.widget)
         assertTrue(workspace.state.value.requiresClose)
         assertEquals(1, starts.get())
-        val closing = edt { workspace.closeSession() }
+        val closing = edt { workspace.closeAllSessions() }
         assertFalse(closing.get(5, TimeUnit.SECONDS).cleanupPending)
         assertFalse(process.alive)
         assertNull(workspace.state.value.widget)
-        assertTrue(workspace.state.value.canOpen)
+        assertTrue(workspace.state.value.canCreate)
         edt { workspace.activate(path) }
         eventually { starts.get() == 2 }
       }
@@ -102,6 +75,8 @@ class TerminalToolWindowTest {
         assertEquals("Shell exited (7)", terminalSummary(workspace.state.value.session))
         assertEquals(1, starts.get())
         assertFalse(workspace.state.value.requiresClose)
+        edt { workspace.activate(path) }
+        assertEquals(1, starts.get())
       }
 
   @Test
@@ -120,10 +95,146 @@ class TerminalToolWindowTest {
       edt { workspace.activate("/mini-orca-missing-terminal-project") }
       eventually { workspace.state.value.session.phase == TerminalSessionPhase.Failed }
       assertTrue(workspace.state.value.session.error.orEmpty().isNotBlank())
-      assertTrue(workspace.state.value.canOpen)
+      assertTrue(workspace.state.value.canCreate)
       assertNull(workspace.state.value.widget)
     } finally {
       edt { workspace.close() }
+    }
+  }
+
+  @Test
+  fun independentTabsPreserveReadersAndCloseOnlyTheRequestedShell() =
+      withWorkspace { workspace, first, starts, path ->
+        edt { workspace.activate(path) }
+        eventually { workspace.state.value.widget != null }
+        val firstTab = workspace.state.value.activeTab!!
+        edt { workspace.createShell(path) }
+        eventually { workspace.state.value.tabs.size == 2 && workspace.state.value.widget != null }
+        val secondTab = workspace.state.value.activeTab!!
+        assertEquals(2, starts.get())
+        assertTrue(firstTab.id != secondTab.id)
+        first.emit("background tab output\r\n")
+        eventually {
+          firstTab.widget!!.terminalTextBuffer.getScreenLines().contains("background tab output")
+        }
+        edt { workspace.selectShell(firstTab.id) }
+        assertSame(firstTab.widget, workspace.state.value.widget)
+        edt { workspace.selectShell(secondTab.id) }
+        edt { workspace.closeSession(firstTab.id) }.get(5, TimeUnit.SECONDS)
+        assertFalse(first.alive)
+        assertSame(secondTab.widget, workspace.state.value.widget)
+        assertTrue(workspace.state.value.requiresClose)
+        assertEquals(listOf(secondTab.id), workspace.state.value.tabs.map { it.id })
+        edt { workspace.createShell(path) }
+        eventually { workspace.state.value.tabs.size == 2 && workspace.state.value.widget != null }
+        val thirdId = workspace.state.value.activeTabId!!
+        edt { workspace.closeSession(thirdId) }.get(5, TimeUnit.SECONDS)
+        assertEquals(secondTab.id, workspace.state.value.activeTabId)
+        assertEquals(3, starts.get())
+        edt { workspace.closeAllSessions() }.get(5, TimeUnit.SECONDS)
+        assertTrue(workspace.state.value.tabs.isEmpty())
+        assertNull(workspace.state.value.activeTabId)
+        assertEquals(3, starts.get())
+        edt { workspace.activate(path) }
+        eventually { starts.get() == 4 }
+      }
+
+  @Test
+  fun exitedSelectedTabCannotHideALiveShellFromProjectSwitchOrShutdown() =
+      withWorkspace { workspace, first, _, path ->
+        edt { workspace.activate(path) }
+        eventually { workspace.state.value.widget != null }
+        val firstId = workspace.state.value.activeTabId!!
+        edt { workspace.createShell(path) }
+        eventually { workspace.state.value.tabs.size == 2 && workspace.state.value.widget != null }
+        val secondWidget = workspace.state.value.widget!!
+        first.finish(9)
+        eventually {
+          workspace.state.value.tabs.first().session.phase == TerminalSessionPhase.Exited
+        }
+        edt { workspace.selectShell(firstId) }
+        assertTrue(workspace.state.value.requiresClose)
+        edt { workspace.createShell("/another-project") }
+        assertEquals(path, workspace.state.value.projectPath)
+        assertEquals(2, workspace.state.value.tabs.size)
+        val closed = edt { workspace.closeAllSessions() }.get(5, TimeUnit.SECONDS)
+        assertTrue(closed.tabs.isEmpty())
+        assertFalse(secondWidget.ttyConnector.isConnected)
+      }
+
+  @Test
+  fun closeAllWaitsForLateStartupAndPreventsAReplacement() {
+    val directory = Files.createTempDirectory("mini-orca-tabs-start-")
+    val entered = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val process = PaneProcess()
+    val workspace = edt {
+      DesktopTerminalWorkspace { path ->
+        DesktopTerminalSession(
+            path,
+            shell = "/bin/sh",
+            environment = emptyMap(),
+            factory =
+                TerminalProcessFactory {
+                  entered.countDown()
+                  release.await()
+                  process
+                })
+      }
+    }
+    try {
+      edt { workspace.activate(directory.toString()) }
+      assertTrue(entered.await(5, TimeUnit.SECONDS))
+      val closing = edt { workspace.closeAllSessions() }
+      assertFalse(closing.isDone)
+      assertTrue(workspace.state.value.cleanupPending)
+      edt { workspace.createShell(directory.toString()) }
+      assertEquals(1, workspace.state.value.tabs.size)
+      release.countDown()
+      assertTrue(closing.get(5, TimeUnit.SECONDS).tabs.isEmpty())
+      assertFalse(process.alive)
+      assertFalse(workspace.state.value.closingAll)
+    } finally {
+      release.countDown()
+      edt { workspace.closeAllSessions() }.get(5, TimeUnit.SECONDS)
+      edt { workspace.close() }
+      Files.deleteIfExists(directory)
+    }
+  }
+
+  @Test
+  fun failedCleanupRetainsTheTabAndBlocksNewShellsUntilTheProcessExits() {
+    val directory = Files.createTempDirectory("mini-orca-tabs-cleanup-")
+    val process = PaneProcess()
+    val stubborn =
+        object : TerminalProcess by process {
+          override fun terminate(): String = "Shell cleanup deadline exceeded"
+        }
+    val workspace = edt {
+      DesktopTerminalWorkspace { path ->
+        DesktopTerminalSession(
+            path,
+            shell = "/bin/sh",
+            environment = emptyMap(),
+            factory = TerminalProcessFactory { stubborn })
+      }
+    }
+    try {
+      edt { workspace.activate(directory.toString()) }
+      eventually { workspace.state.value.widget != null }
+      val closed = edt { workspace.closeAllSessions() }.get(5, TimeUnit.SECONDS)
+      assertTrue(closed.cleanupPending)
+      assertTrue(closed.requiresClose)
+      assertTrue(closed.errors.single().contains("cleanup deadline"))
+      edt { workspace.createShell(directory.toString()) }
+      assertEquals(1, workspace.state.value.tabs.size)
+      process.finish(137)
+      eventually { workspace.state.value.tabs.isEmpty() }
+      assertTrue(workspace.state.value.canCreate)
+    } finally {
+      process.terminate()
+      edt { workspace.close() }
+      Files.deleteIfExists(directory)
     }
   }
 
@@ -149,7 +260,7 @@ class TerminalToolWindowTest {
     try {
       block(workspace, process, starts, path.toString())
     } finally {
-      edt { workspace.closeSession() }.get(5, TimeUnit.SECONDS)
+      edt { workspace.closeAllSessions() }.get(5, TimeUnit.SECONDS)
       edt { workspace.close() }
       Files.deleteIfExists(path)
     }

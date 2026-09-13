@@ -52,9 +52,11 @@ separately; native accessibility names do not establish spoken reader behavior.
     file and declaration and is unavailable for stale evidence. Edit draft clears
     previous approval evidence. After explicit Apply/Undo, source refreshes and
     Undo is limited to the immediately preceding unchanged Apply.
-11. Confirm Terminal is the sole bottom control and status details remain separate.
-    Ctrl+Shift+T opens a real shell in the project. Collapse/Enter reopen, workspace
-    changes and the 1000/999dp transition preserve PID, history and scrollback.
+11. Confirm Terminal and its shell tabs share one bottom bar. Selecting Terminal
+    or Ctrl+Shift+T immediately opens a real shell in the project. Use + to create
+    independent shells, switch tabs, and × to close one without stopping others.
+    Collapse/Enter reopen, workspace changes and the 1000/999dp transition preserve
+    PID, history and scrollback.
     Resize the dock and verify real PTY dimensions change without losing content.
 12. With terminal focus, verify typing, Unicode paste, selection/copy, shell history,
     Ctrl+C, scrolling and a disposable full-screen program. App shortcuts must not
@@ -63,8 +65,9 @@ separately; native accessibility names do not establish spoken reader behavior.
 13. Change the selected temporary file from the shell. Return to Editor/Review:
     source refreshes and old draft/check/analysis evidence becomes stale. Reindex
     is explicit for added/removed/renamed files. Project switch requires closing an
-    active shell; cancel preserves it. Close shell stops its children, Open shell
-    starts a new session, and application exit cleans up owned processes.
+    active shell; cancel preserves every tab. Closing a tab stops its children; +
+    starts a new session. Closing the last tab leaves + available without restarting
+    it. Application exit and confirmed project switching clean up all shells.
 14. Inspect idle, starting, running, exited, failed, closed and cleanup-pending
     terminal labels. Failures remain visible and retry/close controls reachable.
     At short windows and large text, verify long paths/errors, headings, badges,

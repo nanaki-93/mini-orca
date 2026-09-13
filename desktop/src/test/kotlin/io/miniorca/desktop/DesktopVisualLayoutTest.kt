@@ -1281,12 +1281,14 @@ class DesktopVisualLayoutTest {
           ComposeVisualFixture(width, height, scale) {
                 TerminalDock(
                     layout,
-                    session,
+                    TerminalWorkspaceState(
+                        tabs = listOf(TerminalTabState(1, "Shell 1", session)), activeTabId = 1),
                     {
                       opens++
                       layout = layout.openTerminal()
                     },
                     { layout = layout.withBottomCollapsed(true) },
+                    TerminalTabActions({}, {}, {}),
                     {},
                     {},
                     { modifier -> Text("Synthetic shell", modifier = modifier) })
@@ -1310,9 +1312,13 @@ class DesktopVisualLayoutTest {
                 session =
                     TerminalSessionState(TerminalSessionPhase.Failed, error = "Shell launch failed")
                 fixture.render("terminal-failed-collapsed-$width-$scale")
-                assertTrue(fixture.hasText("Terminal needs attention"))
+                fixture.clickText("Terminal")
+                fixture.render("terminal-failed-expanded-$width-$scale")
+                assertTrue(fixture.hasText("Shell 1 · Terminal needs attention"))
+                fixture.clickText("Terminal")
+                fixture.render()
                 assertFalse(fixture.hasText("Synthetic shell"))
-                assertEquals(1, opens)
+                assertEquals(2, opens)
               }
         }
   }
@@ -1333,8 +1339,9 @@ class DesktopVisualLayoutTest {
     val bottomToolsFocus = FocusRequester()
     ComposeVisualFixture(800, 120) {
           TerminalBar(
-              TerminalSessionState(),
+              TerminalWorkspaceState(),
               collapsed = true,
+              tabActions = TerminalTabActions({}, {}, {}),
               onToggle = {},
               controlModifier = Modifier.focusRequester(bottomToolsFocus),
           )
@@ -1493,7 +1500,8 @@ class DesktopVisualLayoutTest {
                 onClose = { closes++ })
             TerminalDock(
                 layout = DesktopLayoutState(bottomCollapsed = true),
-                session = TerminalSessionState(),
+                state = TerminalWorkspaceState(),
+                tabActions = TerminalTabActions({}, {}, {}),
                 onOpen = { opens++ },
                 onCollapse = {},
                 onHeightDelta = {},
@@ -1512,6 +1520,8 @@ class DesktopVisualLayoutTest {
     var overlayDismissals = 0
     ComposeVisualFixture(480, 420, 1.3f) {
           TerminalOverlay(
+              state = TerminalWorkspaceState(),
+              tabActions = TerminalTabActions({}, {}, {}),
               onDismiss = { overlayDismissals++ },
               content = { modifier -> Text("Synthetic shell", modifier = modifier) })
         }
@@ -2039,13 +2049,14 @@ internal fun EditorVisualFixture(width: Float) {
               modifier = Modifier.weight(1f))
         }
         if (useNarrowLayout(width)) {
-          TerminalBar(TerminalSessionState(), true, {})
+          TerminalBar(TerminalWorkspaceState(), true, {}, TerminalTabActions({}, {}, {}))
         } else {
           TerminalDock(
               layout,
-              TerminalSessionState(),
+              TerminalWorkspaceState(),
               {},
               {},
+              TerminalTabActions({}, {}, {}),
               {},
               {},
               { modifier -> Text("Synthetic shell", modifier = modifier.padding(8.dp)) })
