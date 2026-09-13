@@ -162,7 +162,7 @@ internal fun dockedPaneWidths(
   )
 }
 
-internal const val TOOL_WINDOW_BAR_WIDTH = 120f
+internal const val TOOL_WINDOW_BAR_WIDTH = 48f
 internal const val PANE_SEPARATOR_WIDTH = 1f
 internal const val RESIZE_DIVIDER_WIDTH = 8f
 internal const val MIN_EDITOR_WIDTH = 400f

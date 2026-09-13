@@ -19,6 +19,7 @@ internal enum class DesktopIcon(private val path: String) {
   Summary("M5 3h9l5 5v13H5Z M14 3v6h5 M8 12h8 M8 16h5"),
   Analysis("M3 21V11h4v10 M10 21V7h4v14 M17 21V3h4v18 M2 7l6-4 5 1 7-3"),
   Performance("M4 18a9 9 0 1 1 16 0 M8 18h8 M12 14l5-6 M5 11H3 M12 5V3 M19 11h2"),
+  Security("M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z M8 12l3 3 5-6"),
   Problems(
       "M8 8h8v9a4 4 0 0 1-8 0Z M9 8V6a3 3 0 0 1 6 0v2 M12 9v11 M4 6l4 4 M20 6l-4 4 M3 13h5 M16 13h5 M4 21l4-4 M16 17l4 4"),
   Editor("M3 4h18v16H3Z M3 8h18 M8 11l-3 3 3 3 M16 11l3 3-3 3 M13 10l-2 8"),

@@ -49,8 +49,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.awt.Cursor
@@ -111,7 +109,7 @@ private fun WorkspaceNavigationEntry(
         onClick = onSelect,
         modifier =
             Modifier.fillMaxWidth()
-                .heightIn(min = 60.dp)
+                .height(44.dp)
                 .bringIntoViewRequester(reveal)
                 .drawWithContent {
                   drawContent()
@@ -130,21 +128,11 @@ private fun WorkspaceNavigationEntry(
         role = Role.Tab,
         selected = selected,
         focusHighlight = focused) {
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            DesktopLineIcon(
-                leftToolWindowIcon(toolWindow),
-                label,
-                iconSize = 20.dp,
-                tint = if (selected) SelectionText else SecondaryText)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                label,
-                color = if (selected) SelectionText else PrimaryText,
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.SemiBold)
-          }
+          DesktopLineIcon(
+              leftToolWindowIcon(toolWindow),
+              label,
+              iconSize = 20.dp,
+              tint = if (selected) SelectionText else SecondaryText)
         }
   }
 }
@@ -306,7 +294,7 @@ internal fun leftToolWindowIcon(toolWindow: LeftToolWindow): DesktopIcon =
       LeftToolWindow.Analysis -> DesktopIcon.Analysis
       LeftToolWindow.Performance -> DesktopIcon.Performance
       LeftToolWindow.Problems -> DesktopIcon.Problems
-      LeftToolWindow.Security -> DesktopIcon.Analysis
+      LeftToolWindow.Security -> DesktopIcon.Security
       LeftToolWindow.Editor -> DesktopIcon.Editor
     }
 

@@ -100,7 +100,10 @@ explicit discard choice; canceling keeps that draft intact.
 After generation, edit the candidate, validate it, run trusted focused checks and
 review the read-only diff. Apply and Undo retain the existing file/hash guards.
 Review keeps check diagnostics; Assistant keeps its current request failure;
-Analysis, Bugs and status details retain their own operational evidence.
+Analysis and Bugs retain their own operational evidence. The bottom bar shows only
+counts of distinct configured local and cloud models, aligned to the right;
+select the counts to view model and destination details. It has no hover tooltips.
+The compact left rail shows icons with destination names on hover.
 
 ## Terminal
 
