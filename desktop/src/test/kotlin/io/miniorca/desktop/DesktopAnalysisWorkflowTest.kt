@@ -16,6 +16,41 @@ import kotlinx.serialization.json.Json
 
 class DesktopAnalysisWorkflowTest {
   @Test
+  fun staleFailedSelectionTravelsThroughPreviewStartAndResume() {
+    Harness().use { h ->
+      h.run = h.run.copy(plan = h.run.plan.copy(retryStaleFailed = true))
+      h.workflow.preview(retryStaleFailed = true)
+      h.drain()
+      val preview = Json.decodeFromString<AnalysisPreviewRequest>(h.bodies.single())
+      assertTrue(preview.retryStaleFailed)
+      assertFalse(preview.refresh)
+      assertTrue(h.state.analysisRun.admission!!.preview.retryStaleFailed)
+      h.confirm()
+      h.workflow.admit()
+      h.drain()
+      val start = Json.decodeFromString<AnalysisRunStartRequest>(h.bodies.last())
+      assertTrue(start.retryStaleFailed)
+      h.workflow.preview(resume = true)
+      h.drain()
+      val resume = Json.decodeFromString<AnalysisPreviewRequest>(h.bodies.last())
+      assertTrue(resume.retryStaleFailed)
+      assertEquals(h.run.identity, resume.resumeRun)
+    }
+  }
+
+  @Test
+  fun mismatchedRetryPreviewIsRejectedBeforeAdmission() {
+    Harness().use { h ->
+      h.wrongRetryPreview = true
+      h.workflow.preview(retryStaleFailed = true)
+      h.drain()
+      assertNull(h.state.analysisRun.admission)
+      assertTrue(h.state.analysisRun.error!!.contains("preview no longer matches"))
+      assertFalse(h.calls.any { it.first == "POST" && it.second.endsWith("/run") })
+    }
+  }
+
+  @Test
   fun admissionRequiresEveryDestinationAndSecurityIntentAndConsumesThemBeforeDispatch() {
     Harness().use { h ->
       h.workflow.preview()
@@ -318,6 +353,7 @@ class DesktopAnalysisWorkflowTest {
     var run = analysisRunFixture()
     var failure = ""
     var wrongResult = false
+    var wrongRetryPreview = false
     val workflow =
         DesktopAnalysisWorkflow(
             ApiClient(
@@ -336,7 +372,10 @@ class DesktopAnalysisWorkflowTest {
                                   Json.encodeToString(
                                       analysisPreviewFixture()
                                           .copy(
-                                              refresh = request.refresh, limits = request.limits)))
+                                              refresh = request.refresh,
+                                              limits = request.limits,
+                                              retryStaleFailed =
+                                                  request.retryStaleFailed && !wrongRetryPreview)))
                             }
                             path.endsWith("/control") -> {
                               val request = Json.decodeFromString<AnalysisRunControlRequest>(body!!)

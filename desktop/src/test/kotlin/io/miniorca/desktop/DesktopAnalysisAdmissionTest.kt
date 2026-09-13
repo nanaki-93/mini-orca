@@ -13,6 +13,30 @@ import kotlin.test.assertTrue
 
 class DesktopAnalysisAdmissionTest {
   @Test
+  fun emptyRetryPreviewExplainsThatNoFilesNeedAnalysis() {
+    val preview =
+        analysisPreviewFixture()
+            .copy(
+                retryStaleFailed = true,
+                files = emptyList(),
+                expectedModelRequests = 0,
+                maxModelRequests = 0)
+    ComposeVisualFixture(360, 1600, 1.5f) {
+          DesktopAnalysisAdmissionContent(
+              ProjectAnalysisRunState(admission = AnalysisAdmission(preview)),
+              { _, _ -> },
+              {},
+              Modifier.fillMaxWidth())
+        }
+        .use { fixture ->
+          fixture.render("analysis-empty-retry-preview")
+          fixture.assertTextFits("No stale or failed files to analyze.")
+          assertFalse(fixture.hasDescription("Include AI Security review"))
+          assertFalse(fixture.hasDescription("Confirm bug destination"))
+        }
+  }
+
+  @Test
   fun productionPreviewNamesAllScopesAndHasSeparateKeyboardConsent() {
     for ((width, scale) in listOf(360 to 1.5f, 640 to 1f)) {
       var state by

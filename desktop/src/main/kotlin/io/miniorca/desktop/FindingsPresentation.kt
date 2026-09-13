@@ -272,7 +272,7 @@ internal fun ResultSectionHeader(page: AnalysisResultPageState, openAnalysis: ()
   IdePaneHeader(
       title = analysisCategoryLabel(page.category),
       stateLabel = page.statusLabel,
-      stateTint = if (page.stale) Warning else SecondaryText,
+      stateTint = if (page.stale) Warning else analysisStatusTint(page.progress?.status),
       actions = {
         MiniOrcaButton(
             onClick = openAnalysis, tone = ActionTone.Navigation, density = ButtonDensity.Toolbar) {

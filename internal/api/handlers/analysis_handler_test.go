@@ -68,6 +68,49 @@ func analysisHandlerRequest(t *testing.T, handler http.HandlerFunc, method, targ
 	return w
 }
 
+func TestAnalysisHandlerRetrySelectionRequiresMatchingAdmission(t *testing.T) {
+	h, _, analysis, calls := newAnalysisHandlerFixture(t)
+	request := app.AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: "project", RetryStaleFailed: true, Limits: app.AnalysisRunLimits{BatchFiles: 100, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}
+	w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", request)
+	if w.Code != 200 || calls.Load() != 0 {
+		t.Fatalf("retry preview=%d %s", w.Code, w.Body)
+	}
+	var preview app.AnalysisRunPreview
+	if err := json.Unmarshal(w.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if !preview.RetryStaleFailed || len(preview.Files) != 0 || preview.ExpectedModelRequests != 0 {
+		t.Fatalf("missing file included: %+v", preview)
+	}
+	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits}
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != 409 {
+		t.Fatalf("broader start=%d %s", w.Code, w.Body)
+	}
+	assertStructuredError(t, w)
+	request.Refresh = true
+	w = analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", request)
+	if w.Code != 400 {
+		t.Fatalf("refresh retry=%d %s", w.Code, w.Body)
+	}
+	assertStructuredError(t, w)
+	start.RetryStaleFailed, start.Refresh = true, true
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != 400 {
+		t.Fatalf("refresh start=%d %s", w.Code, w.Body)
+	}
+	assertStructuredError(t, w)
+	start.Refresh = false
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != 200 && w.Code != 202 {
+		t.Fatalf("retry start=%d %s", w.Code, w.Body)
+	}
+	run := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunUnavailable)
+	if !run.Plan.RetryStaleFailed || run.Status != app.AnalysisRunUnavailable || calls.Load() != 0 {
+		t.Fatalf("empty run=%+v calls=%d", run, calls.Load())
+	}
+}
+
 func TestAnalysisHandlerPreflightStartControlsAndReadOnlySections(t *testing.T) {
 	h, _, analysis, calls := newAnalysisHandlerFixture(t)
 	request := app.AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: "project", Limits: app.AnalysisRunLimits{BatchFiles: 100, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}
@@ -95,22 +138,7 @@ func TestAnalysisHandlerPreflightStartControlsAndReadOnlySections(t *testing.T) 
 	if w.Code != 202 {
 		t.Fatalf("start=%d %s", w.Code, w.Body)
 	}
-	query := url.Values{"project_id": {analysis.ProjectID}, "project_revision": {analysis.ProjectRevision}}
-	var run app.AnalysisRun
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		w = analysisHandlerRequest(t, h.Current, "GET", "/analysis/run?"+query.Encode(), nil)
-		if w.Code != 200 {
-			t.Fatalf("current=%d %s", w.Code, w.Body)
-		}
-		if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
-			t.Fatal(err)
-		}
-		if run.Status == app.AnalysisRunCompletedEmpty {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	run := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunCompletedEmpty)
 	if run.Status != app.AnalysisRunCompletedEmpty || calls.Load() != 3 {
 		t.Fatalf("run=%+v calls=%d", run, calls.Load())
 	}
@@ -185,4 +213,25 @@ func TestAnalysisHandlerRejectsMalformedBodiesAndAmbiguousGuards(t *testing.T) {
 	if calls.Load() != 0 {
 		t.Fatal("invalid request dispatched")
 	}
+}
+
+func waitHandlerAnalysis(t *testing.T, h *AnalysisHandler, analysis *project.Analysis, status app.AnalysisRunStatus) app.AnalysisRun {
+	t.Helper()
+	query := url.Values{"project_id": {analysis.ProjectID}, "project_revision": {analysis.ProjectRevision}}
+	var run app.AnalysisRun
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		w := analysisHandlerRequest(t, h.Current, "GET", "/analysis/run?"+query.Encode(), nil)
+		if w.Code != 200 {
+			t.Fatalf("current=%d %s", w.Code, w.Body)
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
+			t.Fatal(err)
+		}
+		if run.Status == status {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return run
 }

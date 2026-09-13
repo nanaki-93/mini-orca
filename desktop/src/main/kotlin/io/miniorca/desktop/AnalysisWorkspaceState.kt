@@ -20,6 +20,7 @@ data class AnalyzeAllRunOptions(
 
 internal enum class AnalysisRunCommand(val label: String) {
   Start("Start analysis"),
+  RetryStaleFailed("Analyze stale & failed"),
   Pause("Pause"),
   Resume("Resume"),
   Cancel("Cancel")
@@ -34,7 +35,6 @@ internal data class AnalysisStageFailure(
 
 internal data class ProjectRunPresentation(
     val status: String,
-    val detail: String,
     val totalSteps: Int,
     val finishedSteps: Int,
     val currentFiles: List<String>,
@@ -48,32 +48,9 @@ internal data class ProjectRunPresentation(
 internal fun projectRunPresentation(analysis: ProjectAnalysisRunState): ProjectRunPresentation {
   val run = analysis.run
   val stages = run?.files.orEmpty().flatMap { it.stages }
+  val plannedFiles = run?.plan?.files.orEmpty().associateBy { it.path }
   return ProjectRunPresentation(
       status = analysisStatusLabel(run?.status),
-      detail =
-          run?.reason?.takeIf { it.isNotBlank() }
-              ?: when (run?.status) {
-                null ->
-                    "Start one analysis of the whole project. Review its scope before sending context."
-                "queued",
-                "running" ->
-                    "Analyzing project source. Results appear in Bugs, Performance and Security."
-                "pausing" ->
-                    "Pausing at the next stage boundary. Completed results remain available."
-                "paused",
-                "interrupted" ->
-                    "Review the remaining scope and resume when ready. Completed results are retained."
-                "canceling" -> "Stopping active requests. Results already produced are retained."
-                "canceled" -> "Canceled. Review retained results or start a new analysis."
-                "stale" ->
-                    "The project or analysis configuration changed. Retained results are out of date."
-                "partial" -> "Some stages returned useful results; coverage is incomplete."
-                "failed" ->
-                    "Analysis failed. Review the operational failures before starting again."
-                "unavailable" ->
-                    "No eligible analysis work was available. Review the captured scope."
-                else -> "Analysis finished. Open a result section to inspect its evidence."
-              },
       totalSteps = stages.size,
       finishedSteps =
           stages.count {
@@ -87,10 +64,13 @@ internal fun projectRunPresentation(analysis: ProjectAnalysisRunState): ProjectR
               .map { it.path },
       failures =
           run?.files.orEmpty().flatMap { file ->
+            val ineligibleStages =
+                plannedFiles[file.path]?.stages.orEmpty().filterNot { it.eligible }.map { it.stage }
             file.stages
                 .filter {
                   it.status in setOf("failed", "unavailable", "interrupted") &&
-                      it.reason.isNotBlank()
+                      it.reason.isNotBlank() &&
+                      !(it.status == "unavailable" && it.stage in ineligibleStages)
                 }
                 .map { AnalysisStageFailure(file.path, it.stage, it.attempts, it.reason) }
           },
@@ -102,8 +82,12 @@ internal fun projectRunPresentation(analysis: ProjectAnalysisRunState): ProjectR
             "canceling" -> emptyList()
             "paused",
             "interrupted" -> listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel)
-            "stale" -> listOf(AnalysisRunCommand.Start, AnalysisRunCommand.Cancel)
-            else -> listOf(AnalysisRunCommand.Start)
+            "stale" ->
+                listOf(
+                    AnalysisRunCommand.Start,
+                    AnalysisRunCommand.RetryStaleFailed,
+                    AnalysisRunCommand.Cancel)
+            else -> listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed)
           })
 }
 

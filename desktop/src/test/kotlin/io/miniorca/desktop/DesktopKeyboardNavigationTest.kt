@@ -72,7 +72,7 @@ class DesktopKeyboardNavigationTest {
                   Box(Modifier.weight(1f)) {
                     AnalysisWorkspacePane(
                         AnalysisWorkspacePaneState(state.project, state.analysisRun),
-                        AnalysisWorkspaceActions({}, {}, {}, {}, {}))
+                        AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
                   }
                 }
               }

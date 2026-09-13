@@ -133,6 +133,7 @@ func (identity AnalysisRunIdentity) Validate() error {
 }
 
 type AnalysisPreviewRequest struct {
+	RetryStaleFailed    bool                 `json:"retry_stale_failed,omitempty"`
 	ProjectID           string               `json:"project_id"`
 	ProjectRevision     string               `json:"project_revision"`
 	Scope               string               `json:"scope"`
@@ -144,6 +145,9 @@ type AnalysisPreviewRequest struct {
 }
 
 func (request AnalysisPreviewRequest) Validate() error {
+	if request.RetryStaleFailed && request.Refresh {
+		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
+	}
 	if request.ProjectID == "" || request.ProjectRevision == "" || request.Scope != AnalysisRunScopeProject {
 		return fmt.Errorf("analysis requires a project identity and whole-project scope")
 	}
@@ -194,6 +198,7 @@ type AnalysisExcludedFile struct {
 }
 
 type AnalysisRunPreview struct {
+	RetryStaleFailed             bool                          `json:"retry_stale_failed,omitempty"`
 	CompatibilityStage           AnalysisStage                 `json:"compatibility_stage,omitempty"`
 	CompatibilityBudget          time.Duration                 `json:"compatibility_budget_nanoseconds,omitempty"`
 	SchemaVersion                string                        `json:"schema_version"`
@@ -218,16 +223,20 @@ type AnalysisRunConfirmations struct {
 }
 
 type AnalysisRunStartRequest struct {
-	Identity      AnalysisQueueIdentity    `json:"identity"`
-	PreviewID     string                   `json:"preview_id"`
-	Limits        AnalysisRunLimits        `json:"limits"`
-	Refresh       bool                     `json:"refresh"`
-	Confirmations AnalysisRunConfirmations `json:"confirmations"`
+	RetryStaleFailed bool                     `json:"retry_stale_failed,omitempty"`
+	Identity         AnalysisQueueIdentity    `json:"identity"`
+	PreviewID        string                   `json:"preview_id"`
+	Limits           AnalysisRunLimits        `json:"limits"`
+	Refresh          bool                     `json:"refresh"`
+	Confirmations    AnalysisRunConfirmations `json:"confirmations"`
 }
 
 // Validate checks the request shape; admission must also recompute the preview
 // and verify confirmations against its effective provider requirements.
 func (request AnalysisRunStartRequest) Validate() error {
+	if request.RetryStaleFailed && request.Refresh {
+		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
+	}
 	if err := request.Identity.Validate(); err != nil {
 		return err
 	}
@@ -437,7 +446,7 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 			return cloneAnalysisRun(c.run), errAnalysisRunBusy
 		}
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
 	if err != nil {
 		return nil, err
 	}
@@ -482,16 +491,11 @@ func (s *Service) currentAnalysisRunLocked(ctx context.Context) (*AnalysisRun, e
 	if c.run == nil {
 		return nil, nil
 	}
-	if c.run.Status != AnalysisRunStale {
-		if err := s.validateAnalysisQueue(ctx, c.root, &c.run.Plan, true); err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			s.staleAnalysisRunLocked()
-			if saveErr := s.saveAnalysisRunLocked(false); saveErr != nil {
-				return cloneAnalysisRun(c.run), saveErr
-			}
+	if err := s.refreshAnalysisRunFreshnessLocked(ctx); err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
+		return cloneAnalysisRun(c.run), err
 	}
 	s.updateAnalysisElapsedLocked()
 	return cloneAnalysisRun(c.run), c.fault
@@ -582,7 +586,7 @@ func (s *Service) resumeAnalysisRunLocked(ctx context.Context, request AnalysisR
 	if c.run.Plan.CompatibilityBudget > 0 && c.run.CompatibilityElapsed >= c.run.Plan.CompatibilityBudget {
 		return nil, fmt.Errorf("%w: performance job budget is exhausted; start a new job", project.ErrRevisionConflict)
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: c.run.Identity.ProjectID, ProjectRevision: c.run.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, Refresh: c.run.Plan.Refresh, Limits: c.run.Plan.Limits, ResumeRun: &request.Identity})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: c.run.Identity.ProjectID, ProjectRevision: c.run.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: c.run.Plan.RetryStaleFailed, Refresh: c.run.Plan.Refresh, Limits: c.run.Plan.Limits, ResumeRun: &request.Identity})
 	if err != nil {
 		return nil, err
 	}
@@ -777,14 +781,29 @@ func (s *Service) staleAnalysisRunLocked() {
 	}
 }
 
-func (s *Service) invalidateAnalysisRun() {
+func (s *Service) interruptAnalysisRunForProjectChange() {
 	c := s.analysisRun
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.run == nil {
 		return
 	}
-	s.staleAnalysisRunLocked()
+	// Leaving or restoring a project revokes dispatch authority, not the
+	// freshness of its evidence. Reads validate the captured source identity.
+	switch c.run.Status {
+	case AnalysisRunQueued, AnalysisRunRunning, AnalysisRunPausing:
+		c.run.Status = AnalysisRunInterrupted
+		c.run.Reason = "Analysis was interrupted; preview and resume explicitly."
+		interruptAnalysisStages(c.run, AnalysisStageInterrupted)
+	case AnalysisRunCanceling:
+		c.run.Status = AnalysisRunCanceled
+		interruptAnalysisStages(c.run, AnalysisStageCanceled)
+	default:
+		return
+	}
+	if c.cancel != nil {
+		c.cancel()
+	}
 	_ = s.saveAnalysisRunLocked(false) // Retained fault blocks any further dispatch.
 }
 
@@ -840,7 +859,7 @@ func (s *Service) recordAnalysisStageLocked(ctx context.Context, identity Analys
 	if c.run == nil || c.run.Identity != identity || c.fault != nil {
 		return false
 	}
-	if c.run.Status == AnalysisRunStale || c.run.Status == AnalysisRunCanceled || c.run.Status == AnalysisRunCanceling {
+	if c.run.Status == AnalysisRunStale || c.run.Status == AnalysisRunCanceled || c.run.Status == AnalysisRunCanceling || c.run.Status == AnalysisRunInterrupted {
 		s.finishAnalysisWindowLocked(ctx)
 		return false
 	}

@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -13,9 +14,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +29,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -52,6 +58,7 @@ internal fun ExplorerPane(
   val rows =
       visibleExplorerRows(state.index?.files.orEmpty(), state.filter, state.collapsedDirectories)
   var focusedPath by remember(state.index?.projectRevision) { mutableStateOf(state.selectedPath) }
+  var treeHasFocus by remember { mutableStateOf(false) }
   LaunchedEffect(state.selectedPath, rows) {
     if (state.selectedPath in rows.map(ExplorerRow::path)) focusedPath = state.selectedPath
     else if (focusedPath !in rows.map(ExplorerRow::path)) focusedPath = rows.firstOrNull()?.path
@@ -61,6 +68,7 @@ internal fun ExplorerPane(
           modifier
               .background(Panel)
               .padding(horizontal = 8.dp, vertical = 4.dp)
+              .onFocusChanged { treeHasFocus = it.hasFocus }
               .focusable()
               .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -123,7 +131,7 @@ internal fun ExplorerPane(
                   ExplorerItem(
                       row = row,
                       selected = !row.directory && row.path == state.selectedPath,
-                      focused = row.path == focusedPath,
+                      focused = treeHasFocus && row.path == focusedPath,
                       expanded = row.path !in state.collapsedDirectories,
                       onActivate = {
                         if (row.directory) actions.toggleDirectory(row.path)
@@ -274,9 +282,21 @@ private fun ExplorerItem(
                   role = Role.Button
                 }
                 .background(
-                    if (selected) StrongSurface
+                    if (selected) SelectionSurface
                     else if (focused) FocusAccent.copy(alpha = 0.14f) else Color.Transparent,
                     RoundedCornerShape(4.dp))
+                .drawWithContent {
+                  drawContent()
+                  if (selected)
+                      drawLine(
+                          SelectionAccent,
+                          Offset(1.dp.toPx(), 0f),
+                          Offset(1.dp.toPx(), size.height),
+                          2.dp.toPx())
+                }
+                .then(
+                    if (focused) Modifier.border(1.dp, FocusAccent, RoundedCornerShape(4.dp))
+                    else Modifier)
                 .clickable(onClick = onActivate)
                 .heightIn(min = 26.dp)
                 .padding(start = (8 + row.depth * 16).dp, end = 8.dp),
@@ -309,9 +329,10 @@ private fun ExplorerItem(
           overflow = TextOverflow.Ellipsis,
       )
       if (!row.directory) {
-        Spacer(Modifier.width(6.dp))
-        val status = statusBadgeStyle(row.analysisStatus)
-        Text(status.label, color = status.color, fontSize = 10.sp, maxLines = 1)
+        explorerStatusDotColor(row.analysisStatus)?.let { color ->
+          Spacer(Modifier.width(6.dp))
+          Box(Modifier.size(8.dp).background(color, CircleShape))
+        }
       }
     }
   }
@@ -376,3 +397,12 @@ private fun LoadingRows(label: String) {
     }
   }
 }
+
+internal fun explorerStatusDotColor(status: String): Color? =
+    when (status.lowercase()) {
+      "fresh",
+      "stale",
+      "failed",
+      "running" -> statusBadgeStyle(status).color
+      else -> null
+    }

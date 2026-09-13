@@ -1,50 +1,58 @@
 # IDE token contrast
 
-Task 162 centralizes the desktop palette in `DesktopTheme.kt` and makes Jewel's
-standalone `IntUiTheme` the production outer theme. Task 169 removed the temporary
-Material theme bridge; remaining text primitives receive these explicit semantic
-content roles directly.
+The shared charcoal theme separates outer chrome, tool windows, the darker source
+canvas, section headers and outlined controls. Blue identifies actions and
+selection; cyan identifies information and running work; green, amber and coral
+identify success, warnings and failures. Every state retains its text label.
 
-| Pair | Tokens | Contrast |
+Colors are owned by [DesktopTheme.kt](src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt).
+These measurements use its current sRGB values and resolved backgrounds. Meaningful
+text, including muted and disabled labels, targets 4.5:1. Essential control and
+focus indicators target 3:1; decorative pane separators are supplementary boundaries.
+
+| Pair | Foreground / background | Contrast |
 | --- | --- | ---: |
-| Primary text on tool window | `#F2F2F2` / `#1E1F22` | 14.72:1 |
-| Primary text on editor canvas | `#F2F2F2` / `#2B2D30` | 12.33:1 |
-| Primary text on overlay | `#F2F2F2` / `#26282C` | 13.19:1 |
-| Secondary text on tool window | `#C4C7C5` / `#1E1F22` | 9.67:1 |
-| Selected-content text on selection surface | `#A8C7FA` / `#2E436E` | 5.70:1 |
-| Action label on active fill | `#0B0D10` / `#3574F0` | 4.55:1 |
-| Keyboard focus on tool window | `#A8C7FA` / `#1E1F22` | 9.59:1 |
-| Keyboard focus on overlay | `#A8C7FA` / `#26282C` | 8.59:1 |
-| Success text on added diff | `#65D6A3` / `#18352C` | 7.38:1 |
-| Error text on removed diff | `#FF8F98` / `#3A232B` | 6.62:1 |
+| Primary text / tool window | `#F5F7FA` / `#24282F` | 13.78:1 |
+| Primary text / source and terminal | `#F5F7FA` / `#1B1E23` | 15.57:1 |
+| Secondary text / header and overlay | `#CCD4DF` / `#303640` | 8.13:1 |
+| Muted text / selection | `#A9B4C3` / `#263F62` | 5.08:1 |
+| Selected text / selection | `#C9DFFF` / `#263F62` | 7.86:1 |
+| Primary action label / default | `#101722` / `#78ACFF` | 7.83:1 |
+| Primary action label / hover and press | `#101722` / `#98C1FF` | 9.77:1 |
+| Primary action label / selected | `#101722` / `#619AFF` | 6.49:1 |
+| Control outline / hovered control | `#8E9EAF` / `#414E5F` | 3.09:1 |
+| Selection edge / selection fill | `#73ABFF` / `#263F62` | 4.57:1 |
+| Focus / dark inner keyline | `#D3E4FF` / `#14161A` | 14.07:1 |
+| Success text / added diff | `#74E0AC` / `#193E30` | 7.33:1 |
+| Failure text / removed diff | `#FF929E` / `#482730` | 6.13:1 |
 
-`contrastRatio` resolves a foreground alpha over its actual background. Disabled action testing
-therefore first blends the translucent button fill over the panel before measuring its text.
-Normal text targets are at least 4.5:1 and focus cues at least 3:1. The muted selection surface
-and bright focus/content colors deliberately differ, so selection is not the only focus signal.
+Primary actions have opaque default, hover/pressed and selected fills. This avoids
+the former hover label dropping to 3.66:1 when its blue fill became translucent.
+Semantic actions use tint fills resolved over the tool window, so placing them
+inside an overlay or selected row does not change their label contrast. Disabled
+controls use a neutral fill and muted border. Focus uses a light outline with a
+dark inner keyline, which remains visible against a bright primary action.
 
-## Final result and terminal roles — 2026-09-12
+Badges use an opaque 16% tint over the tool window and a stronger matching outline.
 
-Measured from the current `DesktopTheme.kt` token values with sRGB relative
-luminance. Result badges use the actual opaque 12% tint blended over the panel;
-foreground alpha is resolved before calculating contrast. The existing automated
-DesktopThemeTest covers these combinations.
-
-| Meaningful text / actual background | Contrast |
+| Badge label / its resolved fill | Contrast |
 | --- | ---: |
-| Result accent / editor | 8.07:1 |
-| Result accent / selected row | 5.72:1 |
-| Primary / selected row | 8.75:1 |
-| Secondary / selected row | 5.75:1 |
-| Terminal text / terminal canvas | 12.33:1 |
-| Terminal attention / panel | 9.68:1 |
-| codeType label / its badge fill | 7.42:1 |
-| success label / its badge fill | 7.14:1 |
-| warning label / its badge fill | 7.45:1 |
-| error label / its badge fill | 6.08:1 |
-| secondaryText label / its badge fill | 7.41:1 |
+| Information / running | 6.23:1 |
+| Success / fresh | 6.27:1 |
+| Warning / stale | 6.83:1 |
+| Failure | 5.11:1 |
+| Unavailable / neutral | 6.60:1 |
 
-All listed text exceeds 4.5:1. The focus indicator remains separate from selected
-fill and exceeds 3:1 on panel, overlay and selection backgrounds. Named status,
-severity and provenance labels carry meaning without color. Decorative separators
-and tinted badge borders are not the sole signal of a state or required action.
+[DesktopContrastTest](src/test/kotlin/io/miniorca/desktop/DesktopContrastTest.kt)
+checks all action tones in default, hover/press, selected and disabled states on
+the supported host surfaces; text and syntax on dark, selected and raised surfaces;
+and rendered action/badge labels at 100% and 150% text scale. A pixel check verifies
+that both focus keylines survive rendering. The existing layout, accessibility and
+keyboard suites retain coverage of 1000/999dp docking, 800×650, short 1280×600
+windows, larger text, and empty/stale/failed/populated result states.
+
+Visual evidence is generated with the [component reproduction procedure](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks).
+The current comparison captures are under `desktop/build/reports/ui-contrast/`.
+They are offscreen production-component renders. Native-window interaction and
+screen-reader behavior were not verified for this palette change: the available
+computer-use tool could not attach to the running Java app.

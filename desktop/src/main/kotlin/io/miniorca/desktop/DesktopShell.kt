@@ -233,7 +233,7 @@ internal data class DesktopShellEditorActions(
 )
 
 internal data class DesktopShellAnalysisActions(
-    val startAnalysis: (AnalysisRunLimits) -> Unit,
+    val startAnalysis: (AnalysisRunLimits, Boolean) -> Unit,
     val pauseAnalysis: () -> Unit,
     val resumeAnalysis: () -> Unit,
     val cancelAnalysis: () -> Unit,

@@ -1,11 +1,49 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ExplorerPaneTest {
+  @Test
+  fun fileTreeKeepsStatusDescriptionsWithCompactDots() {
+    val files =
+        listOf("fresh", "stale", "failed", "ignored", "missing").map {
+          IndexedFile("$it.go", it, "Go", false, analysisStatus = it)
+        }
+    ComposeVisualFixture(360, 500, 1.5f) {
+          ExplorerPane(
+              ExplorerPaneState(
+                  ProjectIndex("project", "revision", files = files), null, "", emptySet(), false),
+              ExplorerPaneActions({}, {}, {}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render("analysis-tree-status-dots")
+          for (row in explorerRows(files)) {
+            assertTrue(fixture.hasDescription(explorerRowDescription(row, false, true)))
+          }
+        }
+  }
+
+  @Test
+  fun ignoredAndUnanalysedFilesHaveNoDotWhileAnalysisStatesKeepTheirMeaning() {
+    for (status in listOf("ignored", "excluded", "skipped", "missing", "")) {
+      assertNull(explorerStatusDotColor(status))
+    }
+    assertEquals(Success, explorerStatusDotColor("fresh"))
+    assertEquals(Warning, explorerStatusDotColor("stale"))
+    assertEquals(Error, explorerStatusDotColor("failed"))
+    assertEquals(Information, explorerStatusDotColor("running"))
+    assertTrue(
+        explorerRowDescription(
+                ExplorerRow("ignored.go", "ignored.go", 0, false, "ignored", "Go"), false, false)
+            .contains("Ignored"))
+  }
+
   private val files =
       listOf(
           IndexedFile("src/Main.kt", "main", "Kotlin", false),

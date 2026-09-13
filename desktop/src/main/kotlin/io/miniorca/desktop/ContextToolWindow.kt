@@ -2,7 +2,6 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -127,7 +126,7 @@ internal fun ContextToolWindow(
     SystemStateMessage("Context", "Open a file to inspect its declarations.", modifier = modifier)
     return
   }
-  // A new target starts with the compact action view, even if the previous target had details open.
+  // File details reset on navigation; selected declarations have one compact view.
   var activeTab by
       rememberSaveable(inspector.file.path, inspector.selectedSymbol?.symbol) {
         mutableStateOf(ContextTab.Actions)
@@ -148,7 +147,7 @@ internal fun ContextToolWindow(
               color = FaintText,
               style = IdeTypography.compactBody)
         }
-        ContextTabs(activeTab, { activeTab = it })
+        if (inspector.selectedSymbol == null) ContextTabs(activeTab, { activeTab = it })
         IdeHorizontalSeparator()
         androidx.compose.runtime.key(
             activeTab, inspector.file.path, inspector.selectedSymbol?.symbol) {
@@ -157,21 +156,13 @@ internal fun ContextToolWindow(
                       .weight(1f)
                       .verticalScroll(rememberScrollState())
                       .padding(8.dp)) {
-                    when (activeTab) {
-                      ContextTab.Actions -> ContextActions(state, actions)
-                      ContextTab.Explain -> {
-                        if (inspector.selectedSymbol == null) {
-                          Text(
-                              "Select a declaration to explain.",
-                              color = SecondaryText,
-                              style = IdeTypography.compactBody)
-                        } else {
-                          ExplanationAction(state, actions)
-                          DeclarationExplanationDetails(state.declarationExplanation)
+                    if (inspector.selectedSymbol != null) {
+                      ContextDeclaration(state, actions)
+                    } else
+                        when (activeTab) {
+                          ContextTab.Actions -> ContextActions(state, actions)
+                          ContextTab.Details -> ContextDetails(state)
                         }
-                      }
-                      ContextTab.Details -> ContextDetails(state)
-                    }
                   }
             }
       }
@@ -179,7 +170,6 @@ internal fun ContextToolWindow(
 
 private enum class ContextTab(val label: String, val tint: Color) {
   Actions("Actions", SelectionText),
-  Explain("Explain", Information),
   Details("Details", SecondaryText),
 }
 
@@ -217,29 +207,34 @@ private fun ContextTabs(active: ContextTab, onSelect: (ContextTab) -> Unit) {
 }
 
 @Composable
-private fun ContextActions(state: ContextToolWindowState, actions: ContextToolWindowActions) {
+private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextToolWindowActions) {
   val inspector = requireNotNull(state.inspector)
-  val symbol = inspector.selectedSymbol
-  if (symbol != null) {
-    if (symbol.editEligibility.eligible) {
-      MiniOrcaButton(
-          onClick = { actions.editSelected(symbol) },
-          tone = ActionTone.Primary,
-          modifier = Modifier.fillMaxWidth()) {
-            DesktopLineIcon(
-                DesktopIcon.Editor, "Refactor declaration", iconSize = 16.dp, tint = OnActionFill)
-            Spacer(Modifier.width(8.dp))
-            Text("Refactor", style = IdeTypography.action)
-          }
-    } else {
-      Text(symbol.editEligibility.blockedReason, color = Warning, style = IdeTypography.compactBody)
+  val symbol = requireNotNull(inspector.selectedSymbol)
+  val explanation = state.declarationExplanation
+  if (explanation.status == DeclarationExplanationStatus.Unavailable &&
+      symbol.explanation != null) {
+    ModelResultContent(symbol.explanation)
+    if (inspector.analysisStatus != InspectorAnalysisStatus.Fresh) {
+      StatusBadge(inspector.analysisStatus.label, Modifier.padding(top = 4.dp))
     }
   } else {
-    ContextCreationAction(state, actions)
-    Text(
-        "Select a declaration to refactor.",
-        color = SecondaryText,
-        style = IdeTypography.compactBody)
+    DeclarationExplanationDetails(explanation)
+  }
+  Spacer(Modifier.height(8.dp))
+  ExplanationAction(state, actions)
+  Spacer(Modifier.height(8.dp))
+  if (symbol.editEligibility.eligible) {
+    MiniOrcaButton(
+        onClick = { actions.editSelected(symbol) },
+        tone = ActionTone.Primary,
+        modifier = Modifier.fillMaxWidth()) {
+          DesktopLineIcon(
+              DesktopIcon.Editor, "Refactor declaration", iconSize = 16.dp, tint = OnActionFill)
+          Spacer(Modifier.width(8.dp))
+          Text("Refactor", style = IdeTypography.action)
+        }
+  } else {
+    Text(symbol.editEligibility.blockedReason, color = Warning, style = IdeTypography.compactBody)
   }
   contextStateBadge(inspector)?.let {
     Text(
@@ -248,6 +243,12 @@ private fun ContextActions(state: ContextToolWindowState, actions: ContextToolWi
         style = IdeTypography.compactBody,
         modifier = Modifier.padding(top = 8.dp))
   }
+}
+
+@Composable
+private fun ContextActions(state: ContextToolWindowState, actions: ContextToolWindowActions) {
+  val inspector = requireNotNull(state.inspector)
+  ContextCreationAction(state, actions)
   Spacer(Modifier.height(12.dp))
   IdePaneHeader(
       title = "File analysis",
@@ -286,7 +287,6 @@ internal fun ContextCreationAction(
 private fun ExplanationAction(state: ContextToolWindowState, actions: ContextToolWindowActions) {
   val symbol = requireNotNull(state.inspector?.selectedSymbol)
   if (!symbol.editEligibility.eligible) {
-    Text(symbol.editEligibility.blockedReason, color = Warning, style = IdeTypography.compactBody)
     return
   }
   val loading = state.declarationExplanation.status == DeclarationExplanationStatus.Loading
@@ -313,7 +313,6 @@ private fun ContextDetails(state: ContextToolWindowState) {
   var projectExpanded by rememberSaveable { mutableStateOf(false) }
   var fileContextExpanded by rememberSaveable { mutableStateOf(false) }
   ContextFileDetails(inspector)
-  if (inspector.selectedSymbol != null) ContextDeclarationDetails(inspector)
   EngineeringInsightPanel(
       state.fileAnalysis?.engineeringInsight,
       stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
@@ -453,46 +452,12 @@ private fun ContextFileDetails(inspector: SymbolInspectorUiState) {
 }
 
 @Composable
-private fun ContextDeclarationDetails(
-    inspector: SymbolInspectorUiState,
-) {
-  val symbol = requireNotNull(inspector.selectedSymbol)
-  Column(Modifier.fillMaxWidth().padding(top = 16.dp)) {
-    Text(
-        "${symbol.symbol.kind} · ${symbol.symbol.name}",
-        color = PrimaryText,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp,
-        modifier = Modifier.padding(top = 6.dp))
-    if (symbol.signature.isNotBlank()) {
-      Text(
-          symbol.signature,
-          color = PrimaryText,
-          fontFamily = FontFamily.Monospace,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 8.dp))
-    }
-    Text(
-        "${symbol.rangeLabel} · ${symbol.confidenceLabel}",
-        color = SecondaryText,
-        fontSize = 11.sp,
-        modifier = Modifier.padding(top = 5.dp))
-    if (!symbol.editEligibility.eligible) {
-      Text(
-          symbol.editEligibility.blockedReason,
-          color = Warning,
-          fontSize = 11.sp,
-          modifier = Modifier.padding(top = 10.dp))
-    }
-  }
-}
-
-@Composable
 internal fun DeclarationExplanationDetails(state: DeclarationExplanationState) {
-  var sourceExpanded by rememberSaveable(state.result) { mutableStateOf(false) }
-  Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-    val status = explanationStatusStyle(state.status)
-    IdeLabelBadge(status.label, status.color)
+  Column(Modifier.fillMaxWidth()) {
+    if (state.status != DeclarationExplanationStatus.Current) {
+      val status = explanationStatusStyle(state.status)
+      IdeLabelBadge(status.label, status.color)
+    }
     if (state.status == DeclarationExplanationStatus.Failed) {
       Text(
           state.message,
@@ -502,39 +467,7 @@ internal fun DeclarationExplanationDetails(state: DeclarationExplanationState) {
     }
     state.result
         ?.takeIf { state.status == DeclarationExplanationStatus.Current }
-        ?.let { result ->
-          Text(
-              "Summary",
-              color = ResultAccent,
-              style = IdeTypography.resultHeading,
-              modifier = Modifier.padding(top = 8.dp))
-          ModelResultContent(result.summary, Modifier.padding(top = 4.dp))
-          explanationFacts(result).forEach { (label, items) ->
-            if (items.isNotEmpty()) {
-              Text(
-                  label,
-                  color = ResultAccent,
-                  style = IdeTypography.resultLabel,
-                  modifier = Modifier.padding(top = 12.dp))
-              items.forEach { item ->
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                      Text("•", color = ResultAccent, style = IdeTypography.body)
-                      ModelResultContent(item, Modifier.weight(1f))
-                    }
-              }
-            }
-          }
-          IdeDisclosureHeader(
-              title = "Explanation source",
-              expanded = sourceExpanded,
-              onToggle = { sourceExpanded = !sourceExpanded },
-              modifier = Modifier.padding(top = 8.dp))
-          if (sourceExpanded)
-              CompactKeyValueRows(explanationProvenanceFacts(result.contextManifest))
-          EngineeringInsightPanel(result.engineeringInsight, scopeLabel = "Declaration")
-        }
+        ?.let { result -> ModelResultContent(result.summary) }
   }
 }
 
@@ -549,20 +482,6 @@ internal fun explanationStatusStyle(status: DeclarationExplanationStatus): Statu
           StatusBadgeStyle("Explanation canceled", SecondaryText)
       DeclarationExplanationStatus.Failed -> StatusBadgeStyle("Explanation failed", Error)
     }
-
-internal fun explanationFacts(
-    explanation: DeclarationExplanation
-): List<Pair<String, List<String>>> =
-    listOf(
-        "Behavior" to explanation.behavior,
-        "Inputs" to explanation.inputs,
-        "Outputs" to explanation.outputs,
-        "Side effects" to explanation.sideEffects,
-        "Error behavior" to explanation.errorBehavior)
-
-internal fun explanationProvenanceFacts(manifest: ContextManifest): List<Pair<String, String>> =
-    listOf("Scope" to "Function", "Model" to manifest.model, "Provider" to manifest.providerOrigin)
-        .filter { (_, value) -> value.isNotBlank() }
 
 @Composable
 private fun ContextReadOnlySummaries(impact: ImpactPreview?, gitStatus: GitStatus?) {

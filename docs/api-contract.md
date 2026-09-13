@@ -273,8 +273,18 @@ identity includes scope, model, origin, reasoning, context/timeout/retry setting
 and prompt/rule versions. Cache availability is excluded from this stable identity:
 the run's own cache writes cannot invalidate its remaining queue. `preview_id`
 additionally binds current cache dispositions, remaining attempts/work and request
-bounds. Start echoes limits/refresh and both identities; the daemon recomputes
+bounds. Start echoes limits/refresh, `retry_stale_failed` and both identities; the daemon recomputes
 them before admission. A changed preflight yields 409 and requires a fresh preview.
+
+Preview and start accept optional `retry_stale_failed` (default false). When true,
+only eligible files with stale or failed producer evidence or durable failed stages
+are selected. Fresh stages reuse their caches; files with no prior analysis are
+excluded unless another stage on that file qualifies it. Missing, partial,
+canceled and ineligible stages alone do not qualify a file. This option cannot be
+combined with `refresh`. The selection is part of both admission fingerprints;
+resume echoes the option and retains the admitted file set even after reports
+become fresh. Excluded files remain accounted for in the inventory. An empty
+selection produces no model requests and is reported as unavailable, not clean.
 
 Resume first requests a new preview with `resume_run` identifying the existing
 run. It preserves that run's captured scope, limits and cumulative attempt counts,
@@ -367,6 +377,12 @@ pauses the run with an explicit reason. Pause stops at a stage boundary; cancel
 stops active requests and future dispatch while retaining completed reports.
 Resume applies to paused/interrupted runs. Canceled or stale runs require a new
 explicit start. Restart restores interrupted progress and never dispatches work.
+Restoring or switching projects interrupts active work without making saved
+results stale. Reindexing unchanged files preserves both results and active work;
+freshness follows captured file contents and inventory, policy, and provider
+identity, not timestamps or app sessions. Finished results incorrectly marked
+stale by older restore/reindex behavior recover in memory when all captured inputs
+still match. Changed inputs and unfinished stale work remain stale.
 Window counters reset only on an admitted resume; total elapsed/attempt counters
 and completed reports remain. Persistence failure stops dispatch before the next
 stage and exposes a recoverable operational failure.

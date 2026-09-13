@@ -147,6 +147,10 @@ internal fun IdeActionSurface(
                     BorderStroke(
                         1.dp, if (focused || focusHighlight) FocusAccent else colors.border),
                     shape)
+                // Draw the light outline outside the dark keyline, including on bright actions.
+                .then(
+                    if (focused || focusHighlight) Modifier.border(3.dp, ActivityRail, shape)
+                    else Modifier)
                 .semantics { accessibleName?.let { contentDescription = it } }
                 .then(clickBehavior)
                 .padding(contentPadding),
@@ -175,7 +179,7 @@ private fun IdeControlTooltip(label: String) {
   )
 }
 
-/** Quiet chrome has transparent hover/press treatment, separate from workflow actions. */
+/** Chrome stays unfilled at rest, with visible hover, press and selection surfaces. */
 @Composable
 internal fun ChromeButton(
     onClick: () -> Unit,
@@ -197,8 +201,8 @@ internal fun ChromeButton(
       colors =
           IdeActionColors(
               background = background,
-              hoveredBackground = OverlaySurface,
-              pressedBackground = EditorCanvas,
+              hoveredBackground = ControlHover,
+              pressedBackground = SelectionSurface,
               selectedBackground = SelectionSurface,
               disabledBackground = background,
               content = SecondaryText,
@@ -275,7 +279,7 @@ internal fun IdePaneHeader(
   require((expanded == null) == (onToggle == null)) {
     "A pane header must provide both disclosure state and toggle callback, or neither."
   }
-  BoxWithConstraints(modifier.fillMaxWidth()) {
+  BoxWithConstraints(modifier.fillMaxWidth().background(HeaderSurface)) {
     val actionLayout = paneHeaderActionLayout(maxWidth.value)
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
       Row(
@@ -383,7 +387,7 @@ internal fun IdeLabelBadge(
       modifier =
           modifier
               .background(labelBadgeBackground(tint), MiniOrcaShapes.small)
-              .border(BorderStroke(1.dp, tint.copy(alpha = 0.42f)), MiniOrcaShapes.small)
+              .border(BorderStroke(1.dp, tint.copy(alpha = 0.75f)), MiniOrcaShapes.small)
               .semantics { contentDescription = accessibleName }
               .padding(horizontal = MiniOrcaSpacing.standard, vertical = MiniOrcaSpacing.compact),
   )

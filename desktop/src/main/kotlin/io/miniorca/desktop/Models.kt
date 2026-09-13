@@ -767,6 +767,7 @@ data class AnalysisPreviewRequest(
     val refresh: Boolean,
     val limits: AnalysisRunLimits,
     @SerialName("resume_run") val resumeRun: AnalysisRunIdentity? = null,
+    @SerialName("retry_stale_failed") val retryStaleFailed: Boolean = false,
 )
 
 @Serializable
@@ -824,6 +825,7 @@ data class AnalysisRunPreview(
     @SerialName("max_model_requests") val maxModelRequests: Int,
     @SerialName("security_review_intent_required") val securityReviewIntentRequired: Boolean,
     @SerialName("compatibility_stage") val compatibilityStage: String = "",
+    @SerialName("retry_stale_failed") val retryStaleFailed: Boolean = false,
 )
 
 @Serializable
@@ -839,6 +841,7 @@ data class AnalysisRunStartRequest(
     val limits: AnalysisRunLimits,
     val refresh: Boolean,
     val confirmations: AnalysisRunConfirmations,
+    @SerialName("retry_stale_failed") val retryStaleFailed: Boolean = false,
 )
 
 @Serializable

@@ -67,7 +67,7 @@ func (s *Service) PreviewAnalysisRun(ctx context.Context, request AnalysisPrevie
 func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPreviewRequest) (*AnalysisRunPreview, error) {
 	if request.ResumeRun != nil {
 		run := s.analysisRun.run
-		if run == nil || run.Identity != *request.ResumeRun {
+		if run == nil || run.Identity != *request.ResumeRun || run.Plan.RetryStaleFailed != request.RetryStaleFailed {
 			return nil, project.ErrRevisionConflict
 		}
 		request.compatibilityStage = run.Plan.CompatibilityStage
@@ -88,7 +88,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if err != nil {
 		return nil, err
 	}
-	preview := &AnalysisRunPreview{CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
+	preview := &AnalysisRunPreview{CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
 		Identity: AnalysisQueueIdentity{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, PolicyFingerprint: policy.Version(), ProviderFingerprint: fingerprint},
 		Files:    []AnalysisPlannedFile{}, Excluded: []AnalysisExcludedFile{}, Providers: providers}
 	root := s.manager.Root()
@@ -102,6 +102,11 @@ func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string
 	var err error
 	if request.compatibilityStage != "" {
 		if err := s.scopeCompatibilityPreview(preview, request.ResumeRun); err != nil {
+			return nil, err
+		}
+	}
+	if request.RetryStaleFailed {
+		if err := s.scopeAnalysisRetryPreview(ctx, preview, request.ResumeRun); err != nil {
 			return nil, err
 		}
 	}
@@ -129,25 +134,43 @@ func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string
 	return preview, nil
 }
 
-func (s *Service) analysisStageCached(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage) (bool, error) {
+func (s *Service) analysisStageCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage) (bool, string, error) {
 	switch stage {
 	case AnalysisStageSemantic:
 		cache, input, err := s.fileAnalysisCacheInput(&analysis, &file, file.ContentHash)
 		if err != nil {
-			return false, err
+			return false, "", err
 		}
 		report, err := cache.Load(input)
-		return analysisSemanticCacheUsable(report, analysis.ProjectRevision), err
+		if err != nil {
+			return false, "", err
+		}
+		status := report.Status
+		if status == project.AnalysisStatusFresh && !analysisSemanticCacheUsable(report, analysis.ProjectRevision) {
+			status = project.AnalysisStatusStale
+		}
+		return analysisSemanticCacheUsable(report, analysis.ProjectRevision), status, nil
 	case AnalysisStagePerformance:
 		report, err := project.LoadPerformanceFileReport(s.manager.Root(), file.Path, file.ContentHash, policy)
-		return analysisPerformanceCacheUsable(report, analysis, s.runtimes.analyze), err
+		if err != nil || report == nil {
+			return false, "", err
+		}
+		cached := analysisPerformanceCacheUsable(report, analysis, s.runtimes.analyze)
+		status := report.Status
+		if status == "completed" && !cached {
+			status = "stale"
+		}
+		return cached, status, nil
 	default:
 		input := analysisSecurityCacheInput(analysis, file, s.runtimes.analyze, policy.Version())
 		if stage == AnalysisStageSecurityRules {
 			input = securityRulesInput(securityRulesSnapshot{analysis: analysis, file: file, policyVersion: policy.Version()})
 		}
 		report, err := s.loadSecurityFileReport(s.manager.Root(), input)
-		return securityStageCacheUsable(report), err
+		if err != nil || report == nil {
+			return false, "", err
+		}
+		return securityStageCacheUsable(report), report.Status, nil
 	}
 }
 
@@ -357,7 +380,7 @@ func (s *Service) planAnalysisStage(analysis project.Analysis, file project.Inde
 		plan.MaxModelRequests = min(request.Limits.MaxAttemptsPerStage, runtime.effective.MaxRetries+1)
 	}
 	if plan.Eligible {
-		plan.Cached, err = s.analysisStageCached(analysis, file, policy, stage)
+		plan.Cached, _, err = s.analysisStageCacheState(analysis, file, policy, stage)
 		if err != nil {
 			return AnalysisStagePlan{}, err
 		}

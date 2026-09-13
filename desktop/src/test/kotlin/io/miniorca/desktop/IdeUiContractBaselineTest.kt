@@ -15,7 +15,7 @@ class IdeUiContractBaselineTest {
         listOf(LeftToolWindow.Performance, LeftToolWindow.Problems, LeftToolWindow.Security),
         workspaceNavigationGroups.single { it.label == "Results" }.destinations)
     assertEquals(
-        listOf(AnalysisRunCommand.Start),
+        listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
         projectRunPresentation(ProjectAnalysisRunState()).commands)
     assertTrue(DesktopLayoutStore(InMemoryPreferences()).load().bottomCollapsed)
     assertNull(

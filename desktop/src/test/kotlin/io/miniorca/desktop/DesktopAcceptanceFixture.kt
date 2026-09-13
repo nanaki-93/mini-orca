@@ -130,7 +130,7 @@ private fun NativeAcceptanceScreen(terminal: DesktopTerminalWorkspace, directory
                     AnalysisWorkspacePaneState(
                         resultProjectFixture(),
                         ProjectAnalysisRunState(run = acceptanceRun(state))),
-                    AnalysisWorkspaceActions({}, {}, {}, {}, {}))
+                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
             "Bugs",
             "Performance",
             "Security" -> AcceptanceResultPane(page.lowercase(), state)
