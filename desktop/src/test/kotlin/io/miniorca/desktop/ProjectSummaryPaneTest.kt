@@ -34,7 +34,7 @@ class ProjectSummaryPaneTest {
     assertTrue(summary.findingMetrics.all { it.value == null })
     assertTrue(summary.coverageMetrics.all { it.value == null })
     assertFalse(summary.toString().contains("revision"))
-    assertTrue(summary.analysisMessage.contains("Deterministic facts remain available"))
+    assertEquals("Project analysis: unavailable", summary.analysisMessage)
   }
 
   @Test
@@ -51,6 +51,8 @@ class ProjectSummaryPaneTest {
                     purpose = "Coordinate requests through one handler.",
                     architecture = "Handlers call services.",
                     components = listOf("Handlers"),
+                    entryPoints = listOf("cmd/main.go"),
+                    nextSteps = listOf("Add validation."),
                     risks = listOf(ProjectAnalysisRisk("medium", "Validate inputs."))),
             analysisCoverage = AnalysisCoverage(fresh = 1, stale = 1, failed = 1),
             findingCounts = FindingCounts(verified = 2, aiSuggestions = 3),
@@ -63,13 +65,14 @@ class ProjectSummaryPaneTest {
     assertTrue(summary.analysisMessage.contains("source may have changed"))
     assertEquals(listOf(2, 20), summary.projectMetrics.map { it.value })
     assertEquals(listOf(2, 3), summary.findingMetrics.map { it.value })
+    assertEquals("Tool-reported issues", summary.findingMetrics.first().label)
     assertEquals(
-        listOf("Ready", "Stale", "Missing", "Running", "Failed"),
+        listOf("Ready", "Stale", "Failed"),
         summary.coverageMetrics.map { it.label },
     )
-    assertEquals(listOf(1, 1, 0, 0, 1), summary.coverageMetrics.map { it.value })
+    assertEquals(listOf(1, 1, 1), summary.coverageMetrics.map { it.value })
     assertEquals(
-        listOf("Architecture", "Components", "Risks · AI suggestions"),
+        listOf("Architecture", "Packages / modules", "Risks · AI suggestions"),
         summary.details.map { it.title })
     assertEquals("MEDIUM · Validate inputs.", summary.details.last().values.single())
   }
@@ -92,7 +95,7 @@ class ProjectSummaryPaneTest {
     assertTrue(zeroes.hasProject)
     assertEquals(listOf(0, 0), zeroes.projectMetrics.map { it.value })
     assertEquals(listOf(0, 0), zeroes.findingMetrics.map { it.value })
-    assertEquals(listOf(0, 0, 0, 0, 0), zeroes.coverageMetrics.map { it.value })
+    assertTrue(zeroes.coverageMetrics.isEmpty())
   }
 
   @Test
@@ -106,9 +109,32 @@ class ProjectSummaryPaneTest {
                 analysis = StructuredProjectAnalysis(status = "failed", failure = "Timed out.")),
             null)
 
-    assertTrue(running.analysisMessage.contains("is running"))
-    assertEquals("AI interpretation failed. Timed out.", failed.analysisMessage)
+    assertTrue(running.analysisMessage.contains(": running"))
+    assertEquals("Project analysis: failed · Timed out.", failed.analysisMessage)
     assertEquals(null, failed.purpose)
+  }
+
+  @Test
+  fun diagramInputsPreserveMermaidAndLegacyProse() {
+    val mermaid = "flowchart TD\n A[API] --> B[Service]"
+    assertEquals(mermaid, summaryDiagramInput(mermaid).source)
+    assertEquals(
+        SummaryDiagramInput(mermaid, "Overview"),
+        summaryDiagramInput("Overview\n```mermaid\n$mermaid\n```"))
+    assertTrue(
+        summaryDiagramInput("API → Service").source!!.contains("n0[\"API\"] --> n1[\"Service\"]"))
+    listOf("Handlers call services.", "API ->", "`API -> Service`", "API -> Service\nwith details")
+        .forEach { assertEquals(SummaryDiagramInput(null, it), summaryDiagramInput(it)) }
+  }
+
+  @Test
+  fun moduleNamesComeBeforeTheirPathsWithoutLosingDescriptions() {
+    assertEquals(
+        SummaryModule("Workflow orchestration", "internal/app", "Coordinates changes."),
+        summaryModule("`internal/app` (Workflow orchestration): Coordinates changes."))
+    assertEquals(SummaryModule("API", "internal/api", ""), summaryModule("internal/api (API)"))
+    assertEquals(SummaryModule("Legacy component", null, ""), summaryModule("Legacy component"))
+    assertEquals(SummaryModule("path (unfinished", null, ""), summaryModule("path (unfinished"))
   }
 
   @Test

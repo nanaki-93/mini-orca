@@ -799,10 +799,10 @@ components:
         project_id: {type: string}
         project_revision: {type: string}
         purpose: {type: string}
-        architecture: {type: string}
+        architecture: {type: string, description: "Advisory Mermaid flowchart for new reports; older reports may contain prose."}
         components: {type: array, items: {type: string}}
         entry_points: {type: array, items: {type: string}}
-        flows: {type: array, items: {type: string}}
+        flows: {type: array, description: "Advisory Mermaid flowcharts or sequence diagrams for new reports; older items may contain prose.", items: {type: string}}
         risks: {type: array, items: {$ref: '#/components/schemas/Finding'}}
         next_steps: {type: array, items: {type: string}}
         engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}

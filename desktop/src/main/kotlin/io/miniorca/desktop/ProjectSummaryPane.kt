@@ -7,10 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,7 +29,7 @@ import androidx.compose.ui.unit.sp
 
 internal enum class SummaryMetricTone {
   Fact,
-  Verified,
+  ToolReported,
   Suggestion,
   Ready,
   Stale,
@@ -115,18 +113,19 @@ internal fun projectSummaryPresentation(
       findingMetrics =
           listOf(
               ProjectSummaryMetric(
-                  "Verified findings", findings?.verified, SummaryMetricTone.Verified),
+                  "Tool-reported issues", findings?.verified, SummaryMetricTone.ToolReported),
               ProjectSummaryMetric(
                   "AI suggestions", findings?.aiSuggestions, SummaryMetricTone.Suggestion),
           ),
       coverageMetrics =
           listOf(
-              ProjectSummaryMetric("Ready", coverage?.fresh, SummaryMetricTone.Ready),
-              ProjectSummaryMetric("Stale", coverage?.stale, SummaryMetricTone.Stale),
-              ProjectSummaryMetric("Missing", coverage?.missing, SummaryMetricTone.Missing),
-              ProjectSummaryMetric("Running", coverage?.running, SummaryMetricTone.Running),
-              ProjectSummaryMetric("Failed", coverage?.failed, SummaryMetricTone.Failed),
-          ),
+                  ProjectSummaryMetric("Ready", coverage?.fresh, SummaryMetricTone.Ready),
+                  ProjectSummaryMetric("Stale", coverage?.stale, SummaryMetricTone.Stale),
+                  ProjectSummaryMetric("Missing", coverage?.missing, SummaryMetricTone.Missing),
+                  ProjectSummaryMetric("Running", coverage?.running, SummaryMetricTone.Running),
+                  ProjectSummaryMetric("Failed", coverage?.failed, SummaryMetricTone.Failed),
+              )
+              .filter { it.value != 0 },
       details = if (interpretationAvailable) projectSummaryDetails(analysis) else emptyList(),
       engineeringInsight = analysis?.engineeringInsight.takeIf { interpretationAvailable },
   )
@@ -141,13 +140,12 @@ internal fun summaryMetricColumnCount(availableWidth: Dp): Int =
 
 private fun summaryAnalysisMessage(status: String, failure: String): String =
     when (status) {
-      "fresh" -> "AI interpretation is advisory and separate from indexed facts."
-      "stale" ->
-          "AI interpretation is stale; source may have changed. Indexed facts remain current."
-      "failed" ->
-          "AI interpretation failed. ${failure.ifBlank { "Deterministic facts remain available." }}"
-      "running" -> "AI interpretation is running. Deterministic facts remain available."
-      else -> "No current AI interpretation is available. Deterministic facts remain available."
+      "fresh" -> "Project analysis: current · AI-generated"
+      "stale" -> "Project analysis: stale · source may have changed"
+      "failed" -> "Project analysis: failed · ${failure.ifBlank { "No failure details available" }}"
+      "running" -> "Project analysis: running"
+      "missing" -> "Project analysis: unavailable"
+      else -> "Project analysis: ${status.replace('_', ' ')}"
     }
 
 private fun projectSummaryDetails(
@@ -157,13 +155,14 @@ private fun projectSummaryDetails(
   return listOfNotNull(
       analysis.architecture
           .takeIf { it.isNotBlank() }
-          ?.let { ProjectSummaryDetail("Architecture", listOf(it)) },
+          ?.let {
+            ProjectSummaryDetail("Architecture", listOf(it), group = SummaryDetailGroup.Structure)
+          },
       analysis.components
           .takeIf { it.isNotEmpty() }
-          ?.let { ProjectSummaryDetail("Components", it, group = SummaryDetailGroup.Structure) },
-      analysis.entryPoints
-          .takeIf { it.isNotEmpty() }
-          ?.let { ProjectSummaryDetail("Entry points", it, group = SummaryDetailGroup.Structure) },
+          ?.let {
+            ProjectSummaryDetail("Packages / modules", it, group = SummaryDetailGroup.Structure)
+          },
       analysis.flows
           .takeIf { it.isNotEmpty() }
           ?.let { ProjectSummaryDetail("Flows", it, group = SummaryDetailGroup.Structure) },
@@ -172,11 +171,6 @@ private fun projectSummaryDetails(
           ?.map { risk -> "${risk.severity.ifBlank { "unknown" }.uppercase()} · ${risk.summary}" }
           ?.let {
             ProjectSummaryDetail("Risks · AI suggestions", it, Warning, SummaryDetailGroup.Guidance)
-          },
-      analysis.nextSteps
-          .takeIf { it.isNotEmpty() }
-          ?.let {
-            ProjectSummaryDetail("Next steps", it, SelectionAccent, SummaryDetailGroup.Guidance)
           },
   )
 }
@@ -209,22 +203,16 @@ internal fun ProjectSummaryPane(
               modifier = Modifier.fillMaxWidth())
         }
       } else {
+        item { SummaryUnderstandingHeader(presentation) }
         item { SummaryOverviewMetrics(presentation, readableWidth >= 1120.dp) }
-        item { SummaryInterpretationState(presentation) }
         details
             .groupBy { it.group }
             .forEach { (group, sections) ->
-              val columns =
-                  if (group == SummaryDetailGroup.Structure && readableWidth >= 960.dp) 3
-                  else detailColumns
+              val columns = if (group == SummaryDetailGroup.Structure) 1 else detailColumns
               items(sections.chunked(columns)) { row ->
-                Row(
-                    Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                      row.forEach { detail ->
-                        SummaryDetail(detail, Modifier.weight(1f).fillMaxHeight())
-                      }
-                    }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                  row.forEach { detail -> SummaryDetail(detail, Modifier.weight(1f)) }
+                }
               }
             }
         presentation.engineeringInsight?.let { insight ->
@@ -265,14 +253,16 @@ private fun SummaryOverviewMetrics(presentation: ProjectSummaryPresentation, sin
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         SummaryProjectFacts(presentation, Modifier.weight(1f))
         SummaryFindings(presentation, Modifier.weight(1f))
-        SummaryCoverage(presentation, Modifier.weight(2f))
+        if (presentation.coverageMetrics.isNotEmpty()) {
+          SummaryCoverage(presentation, Modifier.weight(2f))
+        }
       }
     } else {
       ResponsiveFieldPair(
           minimumHorizontalWidth = 640.dp * LocalDensity.current.fontScale,
           first = { SummaryProjectFacts(presentation, it) },
           second = { SummaryFindings(presentation, it) })
-      SummaryCoverage(presentation)
+      if (presentation.coverageMetrics.isNotEmpty()) SummaryCoverage(presentation)
     }
   }
 }
@@ -367,7 +357,7 @@ private fun summaryMetricTint(tone: SummaryMetricTone): Color =
     when (tone) {
       SummaryMetricTone.Fact -> SelectionText
       SummaryMetricTone.Missing -> SecondaryText
-      SummaryMetricTone.Verified,
+      SummaryMetricTone.ToolReported,
       SummaryMetricTone.Ready -> Success
       SummaryMetricTone.Suggestion,
       SummaryMetricTone.Running -> Information
@@ -376,32 +366,21 @@ private fun summaryMetricTint(tone: SummaryMetricTone): Color =
     }
 
 @Composable
-private fun SummaryInterpretationState(presentation: ProjectSummaryPresentation) {
-  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-    Text(
-        "Project understanding",
-        color = ResultAccent,
-        style = IdeTypography.resultHeading,
-        modifier = Modifier.semantics { heading() })
-    Text(
-        presentation.analysisMessage,
-        color =
-            when (presentation.analysisStatus) {
-              "failed" -> Error
-              "stale" -> Warning
-              "running" -> Information
-              else -> SecondaryText
-            },
-        style = IdeTypography.compactBody)
-  }
-}
-
-@Composable
 private fun SummaryDetail(detail: ProjectSummaryDetail, modifier: Modifier = Modifier) {
   SummarySection(detail.title, detail.tint, modifier) {
-    detail.values.forEachIndexed { index, value ->
-      if (index > 0) IdeHorizontalSeparator()
-      ModelResultContent(value, preview = false)
+    when (detail.title) {
+      "Architecture" -> MermaidDiagram(detail.values.single(), "Architecture")
+      "Packages / modules" -> SummaryModules(detail.values)
+      "Flows" ->
+          detail.values.forEachIndexed { index, value ->
+            if (index > 0) IdeHorizontalSeparator()
+            MermaidDiagram(value, "Flow ${index + 1}")
+          }
+      else ->
+          detail.values.forEachIndexed { index, value ->
+            if (index > 0) IdeHorizontalSeparator()
+            ModelResultContent(value, preview = false)
+          }
     }
   }
 }

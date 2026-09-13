@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -165,5 +166,37 @@ func TestProjectAnalysisReportRequiresGeneratedTime(t *testing.T) {
 	report.GeneratedAt = time.Time{}
 	if validStoredProjectAnalysisReport(report) {
 		t.Fatal("report without generated time is valid")
+	}
+}
+
+func TestProjectDiagramsSurvivePersistenceAndOldPromptRemainsReadable(t *testing.T) {
+	root := t.TempDir()
+	architecture := "flowchart TD\n A[API] --> B[Storage]"
+	flow := "sequenceDiagram\n Client->>API: Request\n API-->>Client: Response"
+	output, err := json.Marshal(projectAnalysisResponse{Purpose: "Service", Architecture: architecture, Components: []string{"internal/api (API): Handles requests."}, Flows: []string{flow}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := parseProjectAnalysisResponse(string(output))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := newProjectAnalysisReportWithProvenance("project", "revision", "model", "analyze", "analyze", "", "")
+	report.Purpose, report.Architecture, report.Components, report.Flows = parsed.Purpose, parsed.Architecture, parsed.Components, parsed.Flows
+	if err := StoreProjectAnalysisReport(root, report); err != nil {
+		t.Fatal(err)
+	}
+	input := ProjectAnalysisInput{ProjectID: "project", ProjectRevision: "revision", Model: "model", Profile: "analyze", Scope: "analyze", PromptVersion: projectAnalysisPromptVersion}
+	stored, err := LoadProjectAnalysisReport(root, input)
+	if err != nil || stored == nil || stored.Architecture != architecture || len(stored.Flows) != 1 || stored.Flows[0] != flow || stored.Components[0] != parsed.Components[0] {
+		t.Fatalf("diagram report = %+v, %v", stored, err)
+	}
+	report.PromptVersion, report.Architecture = "project-analysis-v3", "API delegates to storage."
+	if err := StoreProjectAnalysisReport(root, report); err != nil {
+		t.Fatal(err)
+	}
+	stored, err = LoadProjectAnalysisReport(root, input)
+	if err != nil || stored == nil || stored.Status != ProjectAnalysisStatusStale || stored.Architecture != report.Architecture {
+		t.Fatalf("legacy report = %+v, %v", stored, err)
 	}
 }

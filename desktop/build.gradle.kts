@@ -38,6 +38,9 @@ dependencies {
   implementation("org.jetbrains.jediterm:jediterm-core:3.72")
   implementation("org.jetbrains.jediterm:jediterm-ui:3.72")
   implementation("org.jetbrains.pty4j:pty4j:0.13.12")
+  implementation("com.github.weisj:jsvg:2.2.0")
+  implementation("org.graalvm.polyglot:polyglot:25.0.4")
+  runtimeOnly("org.graalvm.polyglot:js-community:25.0.4")
   testImplementation(kotlin("test"))
 }
 
@@ -50,7 +53,8 @@ compose.desktop {
     javaHome = desktopJavaLauncher.get().metadata.installationPath.asFile.absolutePath
     jvmArgs += "--enable-native-access=ALL-UNNAMED"
     nativeDistributions {
-      modules("java.net.http", "jdk.unsupported", "java.desktop", "java.management")
+      modules(
+          "java.net.http", "jdk.unsupported", "java.desktop", "java.management", "java.instrument")
       packageName = "Mini-Orca"
       packageVersion = project.version.toString()
     }

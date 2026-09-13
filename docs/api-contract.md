@@ -100,6 +100,12 @@ untrusted networks.
 | POST | `/api/projects/current/apply` | Apply one validated, checked declaration draft only after `confirm: true`. |
 | POST | `/api/projects/current/undo` | Restore only the immediately preceding unchanged apply after `confirm: true`. |
 
+Project analysis keeps the existing string fields: new `architecture` values contain
+Mermaid flowcharts and `flows` items contain flowcharts or sequence diagrams. These are
+advisory model interpretations. Older prose values remain supported. New `components`
+items use `path (Module name): responsibility` for display; clients must retain readable
+fallbacks for existing freeform strings.
+
 Declaration explanation requests bind `project_id`, `project_revision`, `base_file_hash`, `target_path`, and `target_symbol`. The target must resolve to one exact atomic declaration in an eligible indexed Go file. A non-loopback Function provider also requires `confirm_remote_provider: true` on that request. The daemon rechecks the project and file identity after provider work before returning the bounded explanation, source line anchor, optional engineering insight, and `ContextManifest` provenance.
 
 Explanation responses are transient. This route does not create chat sessions or drafts, persist chat or analysis history, run checks, or change Apply/Undo state. Cancellation, malformed provider output, and stale request identity return an error without publishing a result.
