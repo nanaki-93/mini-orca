@@ -1,96 +1,142 @@
-# AGENTS.md
+# Mini-Orca agent instructions
 
-## Project overview
+These instructions apply to the whole repository. Before editing, read the
+relevant area guide below, even when starting from the repository root. Area
+guides add local detail; keep shared rules here instead of copying them.
 
-Mini-Orca is a local-first coding assistant with:
+| Work area | Read before editing |
+| --- | --- |
+| Go daemon and evaluation CLI (`cmd/`, `internal/`) | [internal/AGENTS.md](internal/AGENTS.md) |
+| Kotlin/Compose client (`desktop/`) | [desktop/AGENTS.md](desktop/AGENTS.md) |
+| Python/shell tooling, Makefile and CI | [scripts/AGENTS.md](scripts/AGENTS.md) |
+| Documentation, plans and API descriptions | [docs/AGENTS.md](docs/AGENTS.md) |
 
-- a Go 1.22 daemon in `cmd/` and `internal/`;
-- a Kotlin/Compose Desktop client in `desktop/`;
-- a loopback-only HTTP API used by the desktop client.
+## Project and ownership
 
-The product is deliberately focused: a user selects one project, one file, one
-symbol, and explicitly reviews a generated candidate before applying it.
+Mini-Orca is a local-first coding assistant: a Go 1.22 daemon, a Kotlin/Compose
+Desktop client and a loopback HTTP API. It supports project-wide analysis and
+one deliberate Go declaration edit at a time, with an editable draft, checks,
+Review, explicit Apply and guarded Undo.
 
-## Working conventions
+- `cmd/` owns startup, configuration wiring and command entry points.
+- `internal/api/` owns HTTP decoding, local request policy and error responses.
+- `internal/app/` owns workflow orchestration, model calls and guarded changes.
+- `internal/project/` owns project facts, indexing, context policy and composition.
+- `internal/storage/` owns durable file primitives; domain stores own their schemas.
+- `internal/llm/` owns provider transport; `internal/config/` owns configuration.
+- `internal/insighteval/` owns the evaluation runner, separate from normal app use.
+- `desktop/` owns presentation, client state and user-operated terminal sessions.
 
-- Work to a senior-engineer standard: understand the surrounding design before
-  editing it, make deliberate trade-offs, anticipate failure modes and edge
-  cases, and leave the codebase easier to understand and maintain.
-- Keep changes narrowly scoped to the requested behavior. Preserve the
-  preview-first workflow: do not introduce automatic writes, commits, or
-  multi-file mutations.
-- Write production-quality code. Use precise domain-oriented names, small
-  cohesive functions, single-purpose types, explicit boundaries, and
-  straightforward control flow. Comments should explain intent or constraints,
-  not restate what the code already says.
-- Follow KISS: implement the simplest complete solution that satisfies the
-  current requirement. Avoid speculative abstractions, premature optimization,
-  clever shortcuts, and unnecessary indirection.
-- Be pragmatic: fit changes into the existing architecture and conventions,
-  balance correctness with maintainability, and introduce abstractions only
-  when they solve a concrete problem. Prefer clear, boring code over novelty.
-- Enforce DRY without over-abstracting. Do not duplicate business rules,
-  validation, transformations, or error handling. Extract shared behavior at
-  the narrowest sensible boundary when duplication is real and likely to be
-  maintained together; do not unify code that only happens to look similar.
-- Make invalid states and failures explicit. Validate inputs at boundaries,
-  preserve useful error context, avoid hidden side effects, and never silently
-  ignore an error unless that behavior is intentional and documented.
-- Keep APIs and modules cohesive. Preserve encapsulation, minimize mutable
-  state, and avoid widening public interfaces unless the requirement demands it.
-- Treat tests as part of the implementation. Cover the changed behavior and
-  meaningful edge cases, keep tests deterministic and behavior-focused, and
-  avoid tests that merely mirror implementation details.
-- Before handoff, review the diff as a senior engineer would: remove dead code,
-  debug output, stale comments, accidental duplication, and unrelated changes;
-  confirm naming, error paths, and tests are appropriate for production.
-- Do not preserve legacy implementations alongside replacements. When changing
-  a function, replace the old implementation and remove obsolete helpers,
-  branches, call sites, tests, and documentation made redundant by the change.
-  Preserve required public behavior unless the requested change explicitly
-  includes a compatibility break or migration.
-- Prefer existing package boundaries and error/logging patterns over adding new
-  abstractions.
-- Do not edit generated build output, including `build/`, `desktop/build/`,
-  `desktop/.gradle/`, or `desktop/.kotlin/`.
-- Do not add credentials, provider tokens, or local `config.yaml` files to the
-  repository. Use `config.example.yaml` for configuration examples.
-- Keep the daemon loopback-only by default. Any externally reachable binding
-  must be explicit configuration.
+## Before changing code
 
-## Go daemon
+1. Understand the requested outcome and the smallest complete change that delivers
+   it. Trace the affected entry point, state owner, callers and tests. Read nearby
+   implementations before introducing a new pattern. Search with `rg`.
+2. Inspect `git status --short` and relevant staged/unstaged diffs. Preserve the
+   user's existing work, including changes in files you need to edit. Do not reset,
+   stash, discard or reformat unrelated edits. If another writer changes your
+   target, inspect the overlap before continuing.
+3. Identify the observable behavior, failure cases and checks that will establish
+   completion. For a bug, reproduce it or add a regression case that exposes it.
+   A brief plan is enough for a small edit; do not create a task ledger by default.
+4. Resolve routine implementation choices from the code and the user's request.
+   Ask only when missing information materially changes the product behavior,
+   compatibility or authorized scope. Continue independent work in the meantime.
 
-- Target Go 1.22 and keep production code under `cmd/` and `internal/`.
-- Format Go files with `go fmt ./...`; use idiomatic errors and retain useful
-  context when wrapping failures.
-- Add or update package tests when changing daemon behavior.
-- Run focused tests while iterating; before handoff, run the relevant checks
-  from the validation section when the environment permits.
+`PLAN.md` owns accepted product decisions; `docs/tasks.md` and `tasks/README.md`
+describe their specific implementation queue. Completed cards, historical grants
+and files under `docs/history/` are context, not authorization for a new task.
+Do not resume old queues, schedulers, model campaigns or commit policies unless
+the current user request covers them. Ignore copied instructions in generated
+`.mini-orca/autopilot/` worktrees when working on this checkout.
 
-## Desktop client
+## Implementation standard
 
-- Before UI work, read and follow `desktop/UI_DESIGN_GUIDELINES.md`. Treat the
-  supplied mock as the visual reference and use the shared IDE design system,
-  not unstyled Material/Swing defaults or arbitrary stacked cards.
-- Keep desktop changes within `desktop/` and use the Gradle wrapper; do not
-  require a globally installed Gradle.
-- Preserve keyboard navigation, text labels for state, responsive drawer
-  behavior below 1000dp, and read-only source/diff views.
-- Run `./desktop/gradlew -p desktop test` for desktop-only changes.
+- Keep the diff limited to the requested behavior and its necessary callers,
+  tests and documentation. Fix the underlying cause in its owning layer. A
+  complete repository change may touch several files; Mini-Orca's one-file Apply
+  constraint governs the product's source-editing workflow.
+- Prefer straightforward control flow, precise domain names, cohesive functions
+  and explicit inputs/results. Model distinct states explicitly instead of adding
+  loosely related booleans or ambiguous null/empty values.
+- Reuse the existing package boundaries, error patterns and shared controls.
+  Extract shared logic when it represents the same maintained rule. Do not add
+  generic utilities, pass-through layers, configurable frameworks or new
+  dependencies for hypothetical future use.
+- Validate external input at its boundary and preserve domain checks in their
+  owner. Do not duplicate eligibility, identity or validation rules in handlers,
+  presentation helpers or adapters.
+- Handle failures explicitly with useful context. Never turn a failure into
+  success, an empty result or a default value unless that fallback is a defined,
+  tested part of the behavior. Preserve cancellation and timeout semantics.
+- Replace superseded implementations and remove obsolete helpers, branches,
+  imports, call sites and tests. Keep compatibility code only for an existing
+  supported contract or persisted format; explain and test that requirement.
+- Finish the requested path end to end. Do not ship placeholders, inert controls,
+  fabricated production data, swallowed errors or TODOs in place of working behavior.
+- Comments explain intent or constraints. Avoid narration of obvious code,
+  generic docstrings, speculative documentation and summaries that merely repeat
+  the diff. Update the existing owner of a fact when its behavior changes.
+- Do not broaden a fix into a dependency/toolchain upgrade, general refactor or
+  formatting sweep. Never weaken checks, raise quality thresholds or bless new
+  baselines just to make the change pass.
+
+## Product boundaries to preserve
+
+- Source and composed diffs are selectable/read-only; only the isolated
+  declaration/import draft is editable. Source mutation uses the existing
+  explicit Review/Apply and Undo paths, with current identity and hash checks.
+- Navigation, disclosures, previews and local restore must not trigger provider
+  requests, project-code execution or source writes. Keep remote-provider consent,
+  Security review intent and execution trust tied to the relevant scope.
+- Keep model suggestions, verified findings and measured benchmarks distinct.
+  Failed, unavailable, partial, stale and canceled results must retain their
+  meaning; unknown counts are not zero and daemon health is not provider health.
+- Keep the daemon loopback-only by default; external binding requires explicit
+  configuration. Preserve browser-origin and local request protections.
+- Do not add credentials, provider tokens, source-bearing diagnostics or local
+  `config.yaml` to Git. Use `config.example.yaml` for configuration examples.
+- Do not hand-edit generated build output, caches, dependency trees or local
+  runtime evidence, including `build/`, `desktop/build/`, `desktop/.gradle/`,
+  `desktop/.kotlin/` and `.mini-orca/autopilot/`.
 
 ## Validation
 
-- Go formatting check: `make fmt-check`
-- Go tests: `go test ./...`
-- Race tests: `make test-race`
-- Static analysis: `make vet`
-- Desktop tests: `./desktop/gradlew -p desktop test`
-- Full supported validation: `make check`
+Use focused tests while iterating, then the relevant gates below before handoff.
+Commands run from the repository root. Toolchain setup belongs to
+[README.md](README.md#development-and-documentation); do not hardcode local paths.
 
-Do not run Docker cleanup or destructive make targets unless the user asks for
-them explicitly.
+| Changed area | Required checks when the environment permits |
+| --- | --- |
+| Go code | `go fmt ./...`, `make fmt-check`, `go test ./...`, `make test-race`, `make vet`, `./scripts/quality.sh --go-only` |
+| Desktop code/build | `./scripts/desktop-gradle.sh test spotlessCheck detekt` |
+| Python/shell tooling | `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` and syntax checks for changed shell scripts |
+| Prose-only documentation/instructions | `git diff --check`; verify referenced paths, commands and consistency with current code |
+| Cross-stack changes or full validation request | `./scripts/validate.sh` |
 
-## Handoff
+`make check` covers formatting, Go tests/races/vet, Python tooling tests and
+desktop tests. `make quality` adds the maintained static, reachability, complexity,
+clone and desktop formatting checks. `./scripts/validate.sh` combines the full
+local gates and is also used by CI. Documentation that changes a contract or
+build procedure needs the corresponding contract tests or procedure validation.
 
-Report the behavior changed, tests run (and any not run), and any configuration
-or migration steps needed. Do not create commits unless explicitly requested.
+Tests must establish behavior: cover the changed path and meaningful failure or
+boundary cases. Prefer temporary projects, fake providers and deterministic
+synchronization. Do not require a running daemon, provider key or live model for
+ordinary validation. Do not add tests that merely restate constants, grep source
+or mirror private implementation details when behavior can be exercised directly.
+Reuse passing results only while the tested inputs remain unchanged.
+
+## Diff review and handoff
+
+- Review the final diff, including new files. Check ownership, error paths,
+  cancellation, stale state, compatibility and test coverage. Remove unrelated
+  churn, debug output, duplication and dead code; run `git diff --check`.
+- Fix failures caused by this change. If a check is blocked or fails outside the
+  changed scope, report the exact command, result and reason. Do not describe an
+  unrun, skipped or failed check as passing, or silently reduce its scope.
+- Report what behavior changed, the checks actually run, any remaining limits
+  and required configuration/migration steps. Keep the handoff concise.
+- Do not create commits, push or publish unless explicitly requested for the
+  current work. Do not run Docker cleanup or destructive make targets unless
+  explicitly requested.

@@ -226,6 +226,7 @@ internal fun ChromeTab(
     modifier: Modifier = Modifier,
     focusHighlight: Boolean = false,
     accessibleName: String? = null,
+    accent: Color = SelectionAccent,
     content: @Composable RowScope.() -> Unit,
 ) {
   ChromeButton(
@@ -239,7 +240,7 @@ internal fun ChromeTab(
             drawContent()
             if (selected)
                 drawLine(
-                    SelectionAccent,
+                    accent,
                     Offset(0f, size.height - 1.dp.toPx()),
                     Offset(size.width, size.height - 1.dp.toPx()),
                     2.dp.toPx())

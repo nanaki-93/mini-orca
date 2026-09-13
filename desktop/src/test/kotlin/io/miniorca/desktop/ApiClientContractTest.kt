@@ -74,7 +74,65 @@ class ApiClientContractTest {
   }
 
   @Test
-  fun unifiedCurrentReadHandlesAbsentAndInterruptedRunsAndNumericProviderTimeout() {
+  fun analysisPreviewAndCurrentRunDecodeProviderDurationStrings() {
+    // Keep daemon JSON independent of the client serializer to detect wire-type regressions.
+    val previewResponse =
+        """{
+          "schema_version":"1","preview_id":"preview",
+          "identity":{"project_id":"project","project_revision":"revision",
+            "policy_fingerprint":"policy","provider_fingerprint":"providers","queue_id":"queue"},
+          "scope":"project","refresh":false,
+          "limits":{"batch_files":100,"budget_seconds":900,"max_attempts_per_stage":2},
+          "files":[],"excluded":[],
+          "providers":[
+            {"id":"bug-provider","stages":["semantic"],
+              "model":{"scope":"bug","profile":"bug","model":"bug-model",
+                "provider_origin":"https://bug.example","remote_provider":true,
+                "temperature":0.2,"max_tokens":4096,"context_max_tokens":32000,
+                "timeout":"2m0s","max_retries":3},
+              "remote_confirmation_required":true},
+            {"id":"analyze-provider","stages":["performance","security_ai"],
+              "model":{"scope":"analyze","profile":"analyze","model":"review-model",
+                "provider_origin":"http://127.0.0.1:1234","remote_provider":false,
+                "temperature":0.2,"max_tokens":4096,"context_max_tokens":32000,
+                "timeout":"1m30.5s","max_retries":3},
+              "remote_confirmation_required":false}
+          ],
+          "expected_model_requests":0,"max_model_requests":0,"security_review_intent_required":false
+        }"""
+    val runResponse =
+        """{
+          "schema_version":"1",
+          "identity":{"project_id":"project","project_revision":"revision",
+            "policy_fingerprint":"policy","provider_fingerprint":"providers",
+            "queue_id":"queue","id":"run","generation":"generation"},
+          "plan":$previewResponse,"status":"paused","files":[],"sections":[]
+        }"""
+    val api =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, _ ->
+                  when (method to path) {
+                    "POST" to "/api/projects/current/analysis/preview" ->
+                        TransportResponse(200, previewResponse)
+                    "GET" to
+                        "/api/projects/current/analysis/run?project_id=project&project_revision=revision" ->
+                        TransportResponse(200, runResponse)
+                    else -> error("unexpected $method $path")
+                  }
+                })
+
+    val preview =
+        api.previewAnalysis(
+            AnalysisPreviewRequest(
+                "project", "revision", "project", false, AnalysisRunLimits(100, 900, 2)))
+    assertEquals(listOf("2m0s", "1m30.5s"), preview.providers.map { it.model.timeout })
+    assertEquals(listOf(true, false), preview.providers.map { it.remoteConfirmationRequired })
+    assertEquals(preview, api.analysisRun("project", "revision")?.plan)
+  }
+
+  @Test
+  fun unifiedCurrentReadHandlesAbsentAndInterruptedRuns() {
     val api =
         ApiClient(
             transport =
@@ -87,10 +145,6 @@ class ApiClientContractTest {
                 })
     assertNull(api.analysisRun("empty", "revision"))
     assertEquals("interrupted", api.analysisRun("project", "revision")?.status)
-    val model =
-        Json.decodeFromString<AnalysisEffectiveModel>(
-            """{"model":"review","timeout":120000000000}""")
-    assertEquals(120000000000L, model.timeout)
     val section =
         Json.decodeFromString<AnalysisSectionProgress>(
             """{"category":"bugs","status":"running","coverage":{"total":1,"running":1},"finding_count":null}""")

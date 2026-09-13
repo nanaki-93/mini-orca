@@ -777,7 +777,7 @@ data class AnalysisEffectiveModel(
     @SerialName("reasoning_effort") val reasoningEffort: String = "",
     @SerialName("provider_origin") val providerOrigin: String = "",
     @SerialName("remote_provider") val remoteProvider: Boolean = false,
-    val timeout: Long = 0,
+    val timeout: String = "",
 )
 
 @Serializable

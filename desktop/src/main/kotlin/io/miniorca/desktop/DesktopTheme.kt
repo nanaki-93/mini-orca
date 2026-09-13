@@ -66,6 +66,7 @@ internal object MiniOrcaPalette {
   val actionFill = Color(0xFF3574F0)
   val onActionFill = Color(0xFF0B0D10)
   val focusAccent = Color(0xFFA8C7FA)
+  val information = Color(0xFF71D7CA)
   val success = Color(0xFF65D6A3)
   val warning = Color(0xFFF2BE66)
   val error = Color(0xFFFF8F98)
@@ -427,6 +428,7 @@ internal val ActionFill = MiniOrcaPalette.actionFill
 internal val OnActionFill = MiniOrcaPalette.onActionFill
 internal val FocusAccent = MiniOrcaPalette.focusAccent
 internal val ResultAccent = MiniOrcaPalette.codeType
+internal val Information = MiniOrcaPalette.information
 internal val Success = MiniOrcaPalette.success
 internal val Warning = MiniOrcaPalette.warning
 internal val Error = MiniOrcaPalette.error

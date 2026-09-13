@@ -55,6 +55,12 @@ Below that width they become labeled drawers; Terminal uses a bounded overlay.
 Resizing clamps visible widths without overwriting saved preferences. Source and
 composed diffs are selectable/read-only; only the isolated draft is editable.
 
+Context opens on **Actions** for each selected declaration. **Explain** holds the
+explicit explanation request and its result; **Details** holds signatures, file
+metadata and expandable project context. Blue marks primary actions, teal marks
+informational content, and labeled warning/error states use amber/red. Opening a
+tab never sends a model request.
+
 A current draft must be discarded explicitly before changing its target. Editing
 it invalidates validation/check evidence. Review owns the guarded Apply, receipt
 and Undo. Findings and insights show freshness; daemon connectivity never proves

@@ -20,6 +20,7 @@ Runtime and dependency setup lives in [README.md](README.md#runtime-and-build).
 | Editor / content canvas | `#2B2D30` |
 | Overlay | `#26282C` |
 | Active indicator/action accent | `#3574F0` |
+| Informational text / explanation tab | `#71D7CA` |
 | Selected surface | `#2E436E` |
 | Separator | `#323438`, 1dp |
 
@@ -60,6 +61,13 @@ Context explains the selected code, Assistant prepares the request/draft, and
 Review shows the exact candidate with current validation/checks, Apply, receipt
 and Undo. Use one next valid action and a concise blocked reason; expand technical
 details on demand. Never duplicate daemon eligibility rules in a visual helper.
+
+Context starts on Actions when the selected file or declaration changes. Keep only
+identity, the primary Refactor action and file-analysis status/actions in that view.
+Use the blue Actions, teal Explain and muted Details tabs to separate priorities;
+keep labels and an active edge visible. Explanations are opt-in; signatures, project
+summaries and technical context belong in Details, with secondary sections collapsed.
+Tab navigation is local and must never request an explanation or prepare an edit.
 
 Keep empty, loading, stale, failed, partial, canceled and unavailable states
 explicit. Unknown metrics are not zero. Daemon connectivity is not provider

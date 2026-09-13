@@ -59,7 +59,7 @@ internal fun leftToolWindowLabel(toolWindow: LeftToolWindow): String =
 
 internal fun rightToolWindowLabel(toolWindow: RightToolWindow): String =
     when (toolWindow) {
-      RightToolWindow.Context -> "AI Context"
+      RightToolWindow.Context -> "Context"
       RightToolWindow.Assistant -> "Assistant"
       RightToolWindow.Review -> "Review"
     }

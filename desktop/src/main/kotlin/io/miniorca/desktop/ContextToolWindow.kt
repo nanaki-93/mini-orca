@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,7 +22,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -123,136 +127,140 @@ internal fun ContextToolWindow(
     SystemStateMessage("Context", "Open a file to inspect its declarations.", modifier = modifier)
     return
   }
-  var projectContextExpanded by rememberSaveable { mutableStateOf(true) }
-  var focusedAnalysisExpanded by rememberSaveable { mutableStateOf(true) }
-  var actionsExpanded by rememberSaveable { mutableStateOf(true) }
-  var fileContextExpanded by rememberSaveable { mutableStateOf(false) }
+  // A new target starts with the compact action view, even if the previous target had details open.
+  var activeTab by
+      rememberSaveable(inspector.file.path, inspector.selectedSymbol?.symbol) {
+        mutableStateOf(ContextTab.Actions)
+      }
   Column(
-      modifier
-          .background(Panel)
-          .verticalScroll(rememberScrollState())
-          .padding(horizontal = 8.dp)
-          .semantics { contentDescription = contextToolWindowDescription(inspector) }) {
-        ContextSection(
-            title = "Project context",
-            icon = DesktopIcon.Summary,
-            expanded = projectContextExpanded,
-            onToggle = { projectContextExpanded = !projectContextExpanded }) {
-              val project = projectSummaryPresentation(state.overview, state.project)
-              Text(
-                  project.purpose ?: project.analysisMessage,
-                  color = PrimaryText,
-                  fontSize = 13.sp,
-                  lineHeight = 20.sp)
-              if (project.purpose != null) {
-                Text(
-                    "${statusBadgeStyle(project.analysisStatus).label} · advisory interpretation",
-                    color = if (project.analysisStatus == "stale") Warning else SecondaryText,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 6.dp))
-              }
-              if (project.hasProject) {
-                Text(
-                    listOf(project.projectType, project.languages, project.buildMetadata)
-                        .filter(String::isNotBlank)
-                        .joinToString(" · "),
-                    color = SecondaryText,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(top = 6.dp))
-              }
-            }
-        ContextSection(
-            title = "Focused analysis",
-            icon = DesktopIcon.Editor,
-            expanded = focusedAnalysisExpanded,
-            onToggle = { focusedAnalysisExpanded = !focusedAnalysisExpanded }) {
-              ContextFileDetails(inspector)
-              if (inspector.mode == SymbolInspectorMode.SelectedSymbol) {
-                ContextDeclarationDetails(inspector)
-                DeclarationExplanationDetails(state.declarationExplanation)
-              } else {
-                Text(
-                    inspector.selectionPrompt,
-                    color = SecondaryText,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 12.dp))
-              }
-              contextStateBadge(inspector)?.let {
-                Text(
-                    it, color = Warning, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp))
-              }
-              EngineeringInsightPanel(
-                  state.fileAnalysis?.engineeringInsight,
-                  stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
-                  scopeLabel = "File")
-            }
-        ContextSection(
-            title = "Actions",
-            icon = DesktopIcon.Run,
-            expanded = actionsExpanded,
-            onToggle = { actionsExpanded = !actionsExpanded }) {
-              if (inspector.selectedSymbol == null) ContextCreationAction(state, actions)
-              ContextProjectAnalysisActions(state, actions)
-              inspector.selectedSymbol
-                  ?.takeIf { it.editEligibility.eligible }
-                  ?.let { symbol ->
-                    if (state.functionModel.remoteProvider &&
-                        !state.functionRemoteProviderConfirmed) {
-                      RemoteProviderConfirmation(
-                          ModelScope.Function,
-                          state.functionModel,
-                          state.functionRemoteProviderConfirmed,
-                          actions.confirmFunctionRemoteProvider)
-                    }
-                    MiniOrcaButton(
-                        onClick =
-                            if (state.declarationExplanation.status ==
-                                DeclarationExplanationStatus.Loading)
-                                actions.cancelExplanation
-                            else actions.explainSelected,
-                        enabled =
-                            !state.functionModel.remoteProvider ||
-                                state.functionRemoteProviderConfirmed,
-                        tone =
-                            if (state.declarationExplanation.status ==
-                                DeclarationExplanationStatus.Loading)
-                                ActionTone.Destructive
-                            else ActionTone.Neutral,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    ) {
-                      DesktopLineIcon(DesktopIcon.Search, "Explain declaration", iconSize = 16.dp)
-                      Spacer(Modifier.width(8.dp))
-                      Text(
-                          explanationActionLabel(state.declarationExplanation),
-                          fontSize = 12.sp,
-                          modifier = Modifier.weight(1f))
-                    }
-                    MiniOrcaButton(
-                        onClick = { actions.editSelected(symbol) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    ) {
-                      DesktopLineIcon(DesktopIcon.Editor, "Refactor declaration", iconSize = 16.dp)
-                      Spacer(Modifier.width(8.dp))
-                      Text(
-                          "Refactor ${symbol.symbol.name}",
-                          fontSize = 12.sp,
-                          maxLines = 1,
-                          overflow = TextOverflow.Ellipsis,
-                          modifier = Modifier.weight(1f))
+      modifier.background(Panel).semantics {
+        contentDescription = contextToolWindowDescription(inspector)
+      }) {
+        Column(Modifier.fillMaxWidth().padding(8.dp)) {
+          Text(
+              inspector.selectedSymbol?.symbol?.name ?: inspector.file.name,
+              color = PrimaryText,
+              style = IdeTypography.body.copy(fontWeight = FontWeight.SemiBold),
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis)
+          Text(
+              inspector.selectedSymbol?.rangeLabel ?: inspector.file.language,
+              color = FaintText,
+              style = IdeTypography.compactBody)
+        }
+        ContextTabs(activeTab, { activeTab = it })
+        IdeHorizontalSeparator()
+        androidx.compose.runtime.key(
+            activeTab, inspector.file.path, inspector.selectedSymbol?.symbol) {
+              Column(
+                  Modifier.fillMaxWidth()
+                      .weight(1f)
+                      .verticalScroll(rememberScrollState())
+                      .padding(8.dp)) {
+                    when (activeTab) {
+                      ContextTab.Actions -> ContextActions(state, actions)
+                      ContextTab.Explain -> {
+                        if (inspector.selectedSymbol == null) {
+                          Text(
+                              "Select a declaration to explain.",
+                              color = SecondaryText,
+                              style = IdeTypography.compactBody)
+                        } else {
+                          ExplanationAction(state, actions)
+                          DeclarationExplanationDetails(state.declarationExplanation)
+                        }
+                      }
+                      ContextTab.Details -> ContextDetails(state)
                     }
                   }
             }
-        if (state.impact != null || state.gitStatus != null) {
-          ContextSection(
-              title = "File context",
-              icon = DesktopIcon.Branch,
-              expanded = fileContextExpanded,
-              onToggle = { fileContextExpanded = !fileContextExpanded }) {
-                ContextReadOnlySummaries(state.impact, state.gitStatus)
-              }
-        }
       }
+}
+
+private enum class ContextTab(val label: String, val tint: Color) {
+  Actions("Actions", SelectionText),
+  Explain("Explain", Information),
+  Details("Details", SecondaryText),
+}
+
+@Composable
+private fun ContextTabs(active: ContextTab, onSelect: (ContextTab) -> Unit) {
+  val focusRequesters = remember { ContextTab.entries.associateWith { FocusRequester() } }
+  Row(Modifier.fillMaxWidth()) {
+    ContextTab.entries.forEach { tab ->
+      Box(Modifier.weight(1f)) {
+        ChromeTab(
+            onClick = { onSelect(tab) },
+            selected = active == tab,
+            accent = tab.tint,
+            accessibleName = "${tab.label} context tab",
+            modifier =
+                Modifier.fillMaxWidth()
+                    .semantics { selected = active == tab }
+                    .focusRequester(focusRequesters.getValue(tab))
+                    .onPreviewKeyEvent { event ->
+                      if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                      val key = tabGroupKey(event.key)
+                      if (key != TabGroupKey.Previous && key != TabGroupKey.Next)
+                          return@onPreviewKeyEvent false
+                      val next =
+                          tabGroupInteraction(ContextTab.entries, tab, key)
+                              ?: return@onPreviewKeyEvent false
+                      focusRequesters.getValue(next.focused).requestFocus()
+                      true
+                    }) {
+              Text(tab.label, color = tab.tint, style = IdeTypography.compactBody)
+            }
+      }
+    }
+  }
+}
+
+@Composable
+private fun ContextActions(state: ContextToolWindowState, actions: ContextToolWindowActions) {
+  val inspector = requireNotNull(state.inspector)
+  val symbol = inspector.selectedSymbol
+  if (symbol != null) {
+    if (symbol.editEligibility.eligible) {
+      MiniOrcaButton(
+          onClick = { actions.editSelected(symbol) },
+          tone = ActionTone.Primary,
+          modifier = Modifier.fillMaxWidth()) {
+            DesktopLineIcon(
+                DesktopIcon.Editor, "Refactor declaration", iconSize = 16.dp, tint = OnActionFill)
+            Spacer(Modifier.width(8.dp))
+            Text("Refactor", style = IdeTypography.action)
+          }
+    } else {
+      Text(symbol.editEligibility.blockedReason, color = Warning, style = IdeTypography.compactBody)
+    }
+  } else {
+    ContextCreationAction(state, actions)
+    Text(
+        "Select a declaration to refactor.",
+        color = SecondaryText,
+        style = IdeTypography.compactBody)
+  }
+  contextStateBadge(inspector)?.let {
+    Text(
+        it,
+        color = SelectionText,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.padding(top = 8.dp))
+  }
+  Spacer(Modifier.height(12.dp))
+  IdePaneHeader(
+      title = "File analysis",
+      stateLabel = inspector.analysisStatus.label,
+      stateTint =
+          when (inspector.analysisStatus) {
+            InspectorAnalysisStatus.Failed -> Error
+            InspectorAnalysisStatus.Stale -> Warning
+            InspectorAnalysisStatus.Running -> Information
+            InspectorAnalysisStatus.Fresh -> Success
+            InspectorAnalysisStatus.Missing -> SecondaryText
+          })
+  ContextProjectAnalysisActions(state, actions)
 }
 
 @Composable
@@ -271,6 +279,76 @@ internal fun ContextCreationAction(
           style = IdeTypography.compactBody,
           modifier = Modifier.padding(top = 4.dp))
     }
+  }
+}
+
+@Composable
+private fun ExplanationAction(state: ContextToolWindowState, actions: ContextToolWindowActions) {
+  val symbol = requireNotNull(state.inspector?.selectedSymbol)
+  if (!symbol.editEligibility.eligible) {
+    Text(symbol.editEligibility.blockedReason, color = Warning, style = IdeTypography.compactBody)
+    return
+  }
+  val loading = state.declarationExplanation.status == DeclarationExplanationStatus.Loading
+  if (state.functionModel.remoteProvider && !state.functionRemoteProviderConfirmed && !loading) {
+    RemoteProviderConfirmation(
+        ModelScope.Function,
+        state.functionModel,
+        state.functionRemoteProviderConfirmed,
+        actions.confirmFunctionRemoteProvider)
+  }
+  MiniOrcaButton(
+      onClick = if (loading) actions.cancelExplanation else actions.explainSelected,
+      enabled =
+          loading || !state.functionModel.remoteProvider || state.functionRemoteProviderConfirmed,
+      tone = if (loading) ActionTone.Destructive else ActionTone.Navigation,
+      modifier = Modifier.fillMaxWidth()) {
+        Text(explanationActionLabel(state.declarationExplanation), style = IdeTypography.action)
+      }
+}
+
+@Composable
+private fun ContextDetails(state: ContextToolWindowState) {
+  val inspector = requireNotNull(state.inspector)
+  var projectExpanded by rememberSaveable { mutableStateOf(false) }
+  var fileContextExpanded by rememberSaveable { mutableStateOf(false) }
+  ContextFileDetails(inspector)
+  if (inspector.selectedSymbol != null) ContextDeclarationDetails(inspector)
+  EngineeringInsightPanel(
+      state.fileAnalysis?.engineeringInsight,
+      stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
+      scopeLabel = "File")
+  Spacer(Modifier.height(8.dp))
+  ContextSection(
+      "Project context",
+      DesktopIcon.Summary,
+      projectExpanded,
+      { projectExpanded = !projectExpanded }) {
+        val project = projectSummaryPresentation(state.overview, state.project)
+        Text(
+            project.purpose ?: project.analysisMessage,
+            color = PrimaryText,
+            style = IdeTypography.compactBody)
+        if (project.purpose != null)
+            StatusBadge(project.analysisStatus, Modifier.padding(top = 4.dp))
+        if (project.hasProject) {
+          Text(
+              listOf(project.projectType, project.languages, project.buildMetadata)
+                  .filter(String::isNotBlank)
+                  .joinToString(" · "),
+              color = SecondaryText,
+              style = IdeTypography.compactBody,
+              modifier = Modifier.padding(top = 4.dp))
+        }
+      }
+  if (state.impact != null || state.gitStatus != null) {
+    ContextSection(
+        "File context",
+        DesktopIcon.Branch,
+        fileContextExpanded,
+        { fileContextExpanded = !fileContextExpanded }) {
+          ContextReadOnlySummaries(state.impact, state.gitStatus)
+        }
   }
 }
 
@@ -399,11 +477,6 @@ private fun ContextDeclarationDetails(
         color = SecondaryText,
         fontSize = 11.sp,
         modifier = Modifier.padding(top = 5.dp))
-    Text(
-        symbol.explanation ?: "No cached explanation is available for this declaration.",
-        color = PrimaryText,
-        fontSize = 12.sp,
-        modifier = Modifier.padding(top = 10.dp))
     if (!symbol.editEligibility.eligible) {
       Text(
           symbol.editEligibility.blockedReason,

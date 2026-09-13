@@ -350,8 +350,175 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun contextTabsKeepDefaultSelectionCompactAndDetailsReadOnly() {
+    listOf(Triple(280, 600, 1f), Triple(320, 600, 1.5f), Triple(480, 650, 1.25f)).forEach {
+        (width, height, scale) ->
+      var actions = 0
+      var outerSelections = 0
+      val initial = contextVisualState()
+      var state by mutableStateOf(initial)
+      ComposeVisualFixture(width, height, scale) {
+            RightToolWindowContainer(
+                RightToolWindow.Context,
+                { outerSelections++ },
+                content = { _, modifier ->
+                  ContextToolWindow(
+                      state,
+                      ContextToolWindowActions(
+                          { actions++ },
+                          { actions++ },
+                          { actions++ },
+                          { actions++ },
+                          { actions++ },
+                          explainSelected = { actions++ }),
+                      modifier)
+                })
+          }
+          .use { fixture ->
+            fixture.render("context-actions-$width-$scale")
+            listOf("Context", "Assistant", "Review", "Actions", "Explain", "Details", "Refactor")
+                .forEach(fixture::assertTextFits)
+            assertFalse(fixture.hasText("No explanation yet"))
+            assertFalse(fixture.hasText("Explanation needs refresh"))
+            assertFalse(fixture.hasText("Project context"))
+            assertFalse(fixture.hasText("func Run() error"))
+            fixture.clickText("Details")
+            fixture.render("context-details-$width-$scale")
+            assertTrue(fixture.hasText("func Run() error"))
+            assertFalse(fixture.hasText("Cached declaration explanation"))
+            assertEquals("Collapsed", fixture.stateDescription("Project context"))
+            fixture.clickText("Project context")
+            fixture.render()
+            assertTrue(fixture.hasText("Go service with a small HTTP API and a repository layer."))
+            fixture.clickText("Actions")
+            fixture.render()
+            assertTrue(fixture.requestFocus("Actions"))
+            assertTrue(fixture.pressKey(Key.DirectionRight))
+            fixture.render()
+            assertTrue(fixture.isFocused("Explain"))
+            assertTrue(fixture.hasText("Refactor"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render("context-explain-$width-$scale")
+            fixture.assertTextFits("Explain declaration")
+            assertTrue(fixture.hasText("Explanation needs refresh"))
+            assertEquals(0, actions)
+            assertEquals(0, outerSelections)
+            fixture.clickText("Explain declaration")
+            assertEquals(1, actions)
+            state =
+                state.copy(
+                    inspector =
+                        state.inspector!!.copy(
+                            selectedSymbol =
+                                state.inspector!!.selectedSymbol!!.let {
+                                  it.copy(symbol = it.symbol.copy(name = "Stop"))
+                                }))
+            fixture.render("context-new-selection-$width-$scale")
+            assertTrue(fixture.hasText("Stop"))
+            assertTrue(fixture.hasText("Refactor"))
+            assertFalse(fixture.hasText("Explanation needs refresh"))
+            fixture.clickText("Refactor")
+            assertEquals(2, actions)
+          }
+    }
+  }
+
+  @Test
+  fun explanationTabPreservesConsentCancellationAndLifecycleEvidence() {
+    var requests = 0
+    var cancellations = 0
+    var state by
+        mutableStateOf(
+            contextVisualState()
+                .copy(
+                    functionModel = ScopedModel(scope = "function", remoteProvider = true),
+                    declarationExplanation = DeclarationExplanationState()))
+    val result =
+        DeclarationExplanation(
+            version = "v1",
+            projectId = "visual-fixture",
+            projectRevision = "fixture-revision",
+            baseFileHash = "fixture-hash",
+            anchor =
+                DeclarationSourceAnchor("internal/api/user.go", "Run", "func Run() error", 5, 12),
+            summary = "Validates the request before dispatching work.",
+            contextManifest = ContextManifest())
+    ComposeVisualFixture(360, 650, 1.5f) {
+          ContextToolWindow(
+              state,
+              ContextToolWindowActions(
+                  {},
+                  {},
+                  {},
+                  {},
+                  {},
+                  explainSelected = { requests++ },
+                  cancelExplanation = { cancellations++ }),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Explain")
+          fixture.render("context-explain-consent")
+          assertTrue(fixture.hasText("Confirm remote destination"))
+          assertTrue(fixture.isDisabled("Explain declaration"))
+          assertTrue(fixture.hasText("No explanation yet"))
+          state = state.copy(functionRemoteProviderConfirmed = true)
+          fixture.render()
+          fixture.clickText("Explain declaration")
+          assertEquals(1, requests)
+          state =
+              state.copy(
+                  functionRemoteProviderConfirmed = false,
+                  declarationExplanation =
+                      DeclarationExplanationState(status = DeclarationExplanationStatus.Loading))
+          fixture.render("context-explain-loading")
+          fixture.assertTextFits("Cancel explanation")
+          assertFalse(fixture.isDisabled("Cancel explanation"))
+          fixture.clickText("Cancel explanation")
+          assertEquals(1, cancellations)
+          state =
+              state.copy(
+                  functionRemoteProviderConfirmed = true,
+                  declarationExplanation =
+                      DeclarationExplanationState(
+                          status = DeclarationExplanationStatus.Current, result = result))
+          fixture.render("context-explain-current")
+          assertTrue(fixture.hasText(result.summary))
+          fixture.assertTextFits("Current explanation")
+          state =
+              state.copy(
+                  declarationExplanation =
+                      state.declarationExplanation.copy(
+                          status = DeclarationExplanationStatus.Stale))
+          fixture.render("context-explain-stale")
+          assertFalse(fixture.hasText(result.summary))
+          fixture.assertTextFits("Explanation needs refresh")
+          state =
+              state.copy(
+                  declarationExplanation =
+                      state.declarationExplanation.copy(
+                          status = DeclarationExplanationStatus.Failed,
+                          message =
+                              "The provider could not complete the explanation. Retry after reconnecting to the local service."))
+          fixture.render("context-explain-failed")
+          fixture.assertTextWrapsWithoutClipping(state.declarationExplanation.message)
+          assertFalse(fixture.hasText(result.summary))
+          state =
+              state.copy(
+                  declarationExplanation =
+                      state.declarationExplanation.copy(
+                          status = DeclarationExplanationStatus.Canceled))
+          fixture.render("context-explain-canceled")
+          fixture.assertTextFits("Explanation canceled")
+          assertEquals(1, requests)
+        }
+  }
+
+  @Test
   fun editorComponentsRenderAtDockedAndDrawerWidths() {
-    listOf(1440 to 900, 1000 to 760, 999 to 760).forEach { (width, height) ->
+    listOf(1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach { (width, height)
+      ->
       ComposeVisualFixture(width, height) { EditorVisualFixture(width.toFloat()) }
           .use { fixture ->
             fixture.render("editor-$width")
@@ -702,7 +869,8 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("context-no-symbol-800-1.3")
-          assertTrue(fixture.hasText("Focused analysis"))
+          assertTrue(fixture.hasText("File analysis"))
+          assertFalse(fixture.hasText("Routes incoming requests."))
           assertTrue(fixture.hasText("Actions"))
           assertTrue(fixture.hasText("Analyze project"))
           assertFalse(fixture.hasText("Confirm remote destination"))
@@ -1965,6 +2133,44 @@ internal fun EditorVisualFixture(width: Float) {
         width,
         {})
   }
+}
+
+private fun contextVisualState(): ContextToolWindowState {
+  val file =
+      ProjectFileInfo(
+          "internal/api/user.go",
+          "fixture-hash",
+          "user.go",
+          language = "Go",
+          sizeBytes = 480,
+          lineCount = 18,
+          modifiedAt = "",
+          binary = false)
+  val symbol = SymbolInfo("Run", "function", "func Run() error", 5, 12, "exact", true)
+  val analysis =
+      FileAnalysis(
+          file.path,
+          "fresh",
+          purpose = "Routes incoming requests.",
+          symbolExplanations = mapOf("Run" to "Cached declaration explanation"))
+  return ContextToolWindowState(
+      symbolInspectorUiState(
+          file,
+          listOf(symbol),
+          symbol,
+          analysis,
+          false,
+          InspectorProviderState(false, false),
+          null),
+      ScopedModel(),
+      false,
+      null,
+      null,
+      analysis,
+      visualFixtureProject,
+      visualFixtureOverview,
+      declarationExplanation =
+          DeclarationExplanationState(status = DeclarationExplanationStatus.Stale))
 }
 
 private val visualFixtureFindings =

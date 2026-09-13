@@ -22,6 +22,110 @@ import kotlinx.coroutines.launch
 class DesktopWorkflowPresenterTest {
 
   @Test
+  fun startupWithoutARememberedProjectOnlyChecksTheConnection() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          calls.add(method to path)
+          projectStartupResponse(method, path)
+        }
+    try {
+      presenter.start()
+      dispatcher.runPending()
+
+      assertNull(presenter.snapshot.value.state.project)
+      assertNull(presenter.snapshot.value.state.error)
+      assertEquals(listOf("GET" to "/status", "GET" to "/api/models/current"), calls)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun startupRestoresTheLastSuccessfulProjectAcrossPresenterAndStoreInstances() {
+    val preferences = InMemoryPreferences()
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val first =
+        presenter(
+            parentScope = scope,
+            ioDispatcher = dispatcher,
+            lastProjectStore = LastProjectStore(preferences)) { method, path, _ ->
+              projectStartupResponse(method, path)
+            }
+    val calls = mutableListOf<Pair<String, String>>()
+    val reopened =
+        presenter(
+            parentScope = scope,
+            ioDispatcher = dispatcher,
+            lastProjectStore = LastProjectStore(preferences)) { method, path, body ->
+              calls.add(method to path)
+              if (path == "/api/projects/restore")
+                  assertEquals("""{"project_path":"/tmp/project"}""", body)
+              projectStartupResponse(method, path)
+            }
+    try {
+      first.loadProject("/tmp/project", restore = false)
+      dispatcher.runPending()
+      assertEquals("/tmp/project", first.snapshot.value.state.project?.path)
+      first.close()
+
+      reopened.start()
+      dispatcher.runPending()
+
+      val state = reopened.snapshot.value.state
+      assertEquals("/tmp/project", state.project?.path)
+      assertEquals("project", state.index?.projectId)
+      assertEquals("Reopened project", state.status)
+      assertFalse(state.loading)
+      assertNull(state.error)
+      assertEquals(listOf("POST" to "/api/projects/restore"), calls.filter { it.first != "GET" })
+    } finally {
+      first.close()
+      reopened.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun failedRestorePreservesTheRememberedProjectWithoutImportingOrCallingAModel() {
+    val preferences = InMemoryPreferences()
+    val store = LastProjectStore(preferences)
+    store.save("/tmp/missing-project")
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher, lastProjectStore = store) {
+            method,
+            path,
+            _ ->
+          calls.add(method to path)
+          if (path == "/api/projects/restore")
+              TransportResponse(400, """{"message":"project directory does not exist"}""")
+          else projectStartupResponse(method, path)
+        }
+    try {
+      presenter.start()
+      dispatcher.runPending()
+
+      val state = presenter.snapshot.value.state
+      assertNull(state.project)
+      assertFalse(state.loading)
+      assertTrue(state.error.orEmpty().contains("project directory does not exist"))
+      assertEquals("/tmp/missing-project", LastProjectStore(preferences).load())
+      assertEquals(1, preferences.flushCount)
+      assertEquals(listOf("POST" to "/api/projects/restore"), calls.filter { it.first != "GET" })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun generationFailureSurvivesOtherStatusAndClearsBeforeRetryOrFileChange() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
@@ -1677,7 +1781,7 @@ class DesktopWorkflowPresenterTest {
               ApiClient(
                   transport =
                       DaemonTransport { _, _, _ -> response(securityReportJson("deterministic")) }),
-              LastProjectStore(),
+              LastProjectStore(InMemoryPreferences()),
               scope,
               io)
       try {
@@ -1727,7 +1831,7 @@ class DesktopWorkflowPresenterTest {
                         else -> response("{}")
                       }
                     }),
-            LastProjectStore(),
+            LastProjectStore(InMemoryPreferences()),
             scope,
             io)
     try {
@@ -1876,6 +1980,7 @@ class DesktopWorkflowPresenterTest {
       parentScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
       interceptTrust: Boolean = true,
       ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
+      lastProjectStore: LastProjectStore = LastProjectStore(InMemoryPreferences()),
       responder: (String, String, String?) -> TransportResponse,
   ): DesktopWorkflowPresenter {
     return DesktopWorkflowPresenter(
@@ -1894,7 +1999,7 @@ class DesktopWorkflowPresenterTest {
                           """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}""")
                   else responder(method, path, body)
                 }),
-        LastProjectStore(),
+        lastProjectStore,
         parentScope,
         ioDispatcher,
         5)
@@ -1968,6 +2073,21 @@ class DesktopWorkflowPresenterTest {
       """{"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","benchmark":"BenchmarkRun","scope":"$scope","status":"unavailable","reason":"displayed benchmark scope changed","command":["go","test","-benchtime","100ms","-benchmem"]}"""
 
   private fun response(body: String) = TransportResponse(200, body)
+
+  private fun projectStartupResponse(method: String, path: String): TransportResponse =
+      when (method to path) {
+        "GET" to "/status" -> response("""{"status":"running","version":"test"}""")
+        "POST" to "/api/projects/import",
+        "POST" to "/api/projects/restore" -> response(projectJson())
+        "GET" to "/api/projects/current/index" -> response(indexJson())
+        "GET" to "/api/models/current",
+        "GET" to "/api/projects/current/overview?project_revision=revision",
+        "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
+        "GET" to "/api/projects/current/analysis/run?project_id=project&project_revision=revision",
+        "GET" to "/api/projects/current/scan?project_revision=revision" ->
+            TransportResponse(204, "")
+        else -> error("Unexpected request $method $path")
+      }
 
   private fun creationFileResponse(path: String): TransportResponse? =
       when {
