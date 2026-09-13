@@ -47,8 +47,15 @@ Recheck the resolved graph before an upgrade; no upgrade is needed for the new p
 The last successfully opened project is restored from local metadata without
 contacting a model. If restore fails, the landing screen offers Open project/retry.
 Summary describes the project. Analysis owns one whole-project run and progress;
-Bugs, Performance and Security own separate results. The sidebar shows only workspace titles and icons. Analysis status appears at the
+Bugs, Performance and Security own separate results. The sidebar uses icons with
+hover labels. Analysis status appears at the
 top right, immediately before daemon connectivity. Editor owns one declaration change.
+Go, Java and Kotlin projects show a type icon beside the project name in the top bar.
+
+Summary groups facts, findings and coverage above the project interpretation.
+Wide windows place Purpose beside Architecture, group Components, Entry points
+and Flows, and pair Risks with Next steps. Smaller windows and larger text stack
+these sections; all interpretation remains readable directly in the page.
 
 Editor has docked Files and Context/Assistant/Review panes at widths ≥1000dp.
 Below that width they become labeled drawers; Terminal uses a bounded overlay.

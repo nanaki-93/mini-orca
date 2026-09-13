@@ -50,7 +50,14 @@ internal data class ProjectSummaryDetail(
     val title: String,
     val values: List<String>,
     val tint: Color = ResultAccent,
+    val group: SummaryDetailGroup = SummaryDetailGroup.Overview,
 )
+
+internal enum class SummaryDetailGroup {
+  Overview,
+  Structure,
+  Guidance,
+}
 
 internal data class ProjectSummaryPresentation(
     val hasProject: Boolean,
@@ -127,8 +134,8 @@ internal fun projectSummaryPresentation(
 
 internal fun summaryMetricColumnCount(availableWidth: Dp): Int =
     when {
-      availableWidth >= 780.dp -> 5
-      availableWidth >= 480.dp -> 3
+      availableWidth >= 480.dp -> 5
+      availableWidth >= 320.dp -> 3
       else -> 2
     }
 
@@ -153,18 +160,24 @@ private fun projectSummaryDetails(
           ?.let { ProjectSummaryDetail("Architecture", listOf(it)) },
       analysis.components
           .takeIf { it.isNotEmpty() }
-          ?.let { ProjectSummaryDetail("Components", it) },
+          ?.let { ProjectSummaryDetail("Components", it, group = SummaryDetailGroup.Structure) },
       analysis.entryPoints
           .takeIf { it.isNotEmpty() }
-          ?.let { ProjectSummaryDetail("Entry points", it) },
-      analysis.flows.takeIf { it.isNotEmpty() }?.let { ProjectSummaryDetail("Flows", it) },
+          ?.let { ProjectSummaryDetail("Entry points", it, group = SummaryDetailGroup.Structure) },
+      analysis.flows
+          .takeIf { it.isNotEmpty() }
+          ?.let { ProjectSummaryDetail("Flows", it, group = SummaryDetailGroup.Structure) },
       analysis.risks
           .takeIf { it.isNotEmpty() }
           ?.map { risk -> "${risk.severity.ifBlank { "unknown" }.uppercase()} · ${risk.summary}" }
-          ?.let { ProjectSummaryDetail("Risks · AI suggestions", it, Warning) },
+          ?.let {
+            ProjectSummaryDetail("Risks · AI suggestions", it, Warning, SummaryDetailGroup.Guidance)
+          },
       analysis.nextSteps
           .takeIf { it.isNotEmpty() }
-          ?.let { ProjectSummaryDetail("Next steps", it, SelectionAccent) },
+          ?.let {
+            ProjectSummaryDetail("Next steps", it, SelectionAccent, SummaryDetailGroup.Guidance)
+          },
   )
 }
 
@@ -178,7 +191,11 @@ internal fun ProjectSummaryPane(
   val fontScale = LocalDensity.current.fontScale
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
-    val detailColumns = if (contentWidth / fontScale >= 780.dp) 2 else 1
+    val readableWidth = contentWidth / fontScale
+    val detailColumns = if (readableWidth >= 720.dp) 2 else 1
+    val details =
+        listOfNotNull(presentation.purpose?.let { ProjectSummaryDetail("Purpose", listOf(it)) }) +
+            presentation.details
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = workspacePagePadding(maxWidth, vertical = 12.dp),
@@ -192,31 +209,45 @@ internal fun ProjectSummaryPane(
               modifier = Modifier.fillMaxWidth())
         }
       } else {
-        item { SummaryOverviewMetrics(presentation) }
-        item {
-          SummarySection("Analysis coverage", statusBadgeStyle(presentation.analysisStatus).color) {
-            SummaryMetricGrid(presentation.coverageMetrics)
-          }
-        }
+        item { SummaryOverviewMetrics(presentation, readableWidth >= 1120.dp) }
         item { SummaryInterpretationState(presentation) }
-        presentation.purpose?.let { purpose ->
-          item { SummaryDetail(ProjectSummaryDetail("Purpose", listOf(purpose))) }
-        }
-        items(presentation.details.chunked(detailColumns)) { row ->
-          Row(
-              Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-              horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { detail -> SummaryDetail(detail, Modifier.weight(1f).fillMaxHeight()) }
+        details
+            .groupBy { it.group }
+            .forEach { (group, sections) ->
+              val columns =
+                  if (group == SummaryDetailGroup.Structure && readableWidth >= 960.dp) 3
+                  else detailColumns
+              items(sections.chunked(columns)) { row ->
+                Row(
+                    Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                      row.forEach { detail ->
+                        SummaryDetail(detail, Modifier.weight(1f).fillMaxHeight())
+                      }
+                    }
               }
-        }
+            }
         presentation.engineeringInsight?.let { insight ->
           val pieces = engineeringInsightPieces(insight)
           if (pieces.isNotEmpty()) {
             item {
               SummarySection("Engineering insight", ResultAccent) {
-                pieces.forEach { piece ->
-                  Text(piece.label, color = ResultAccent, style = IdeTypography.resultLabel)
-                  ModelResultContent(piece.content, preview = false)
+                pieces.chunked(detailColumns).forEach { row ->
+                  Row(
+                      Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        row.forEach { piece ->
+                          Column(
+                              Modifier.weight(1f),
+                              verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    piece.label,
+                                    color = ResultAccent,
+                                    style = IdeTypography.resultLabel)
+                                ModelResultContent(piece.content, preview = false)
+                              }
+                        }
+                      }
                 }
               }
             }
@@ -228,19 +259,47 @@ internal fun ProjectSummaryPane(
 }
 
 @Composable
-private fun SummaryOverviewMetrics(presentation: ProjectSummaryPresentation) {
-  ResponsiveFieldPair(
-      minimumHorizontalWidth = 640.dp * LocalDensity.current.fontScale,
-      first = { modifier ->
-        SummarySection("Project facts", SelectionAccent, modifier) {
-          SummaryMetricGrid(presentation.projectMetrics)
-        }
-      },
-      second = { modifier ->
-        SummarySection("Findings", ResultAccent, modifier) {
-          SummaryMetricGrid(presentation.findingMetrics)
-        }
-      })
+private fun SummaryOverviewMetrics(presentation: ProjectSummaryPresentation, singleRow: Boolean) {
+  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    if (singleRow) {
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        SummaryProjectFacts(presentation, Modifier.weight(1f))
+        SummaryFindings(presentation, Modifier.weight(1f))
+        SummaryCoverage(presentation, Modifier.weight(2f))
+      }
+    } else {
+      ResponsiveFieldPair(
+          minimumHorizontalWidth = 640.dp * LocalDensity.current.fontScale,
+          first = { SummaryProjectFacts(presentation, it) },
+          second = { SummaryFindings(presentation, it) })
+      SummaryCoverage(presentation)
+    }
+  }
+}
+
+@Composable
+private fun SummaryProjectFacts(presentation: ProjectSummaryPresentation, modifier: Modifier) {
+  SummarySection("Project facts", SelectionAccent, modifier) {
+    SummaryMetricGrid(presentation.projectMetrics)
+  }
+}
+
+@Composable
+private fun SummaryFindings(presentation: ProjectSummaryPresentation, modifier: Modifier) {
+  SummarySection("Findings", ResultAccent, modifier) {
+    SummaryMetricGrid(presentation.findingMetrics)
+  }
+}
+
+@Composable
+private fun SummaryCoverage(
+    presentation: ProjectSummaryPresentation,
+    modifier: Modifier = Modifier
+) {
+  SummarySection(
+      "Analysis coverage", statusBadgeStyle(presentation.analysisStatus).color, modifier) {
+        SummaryMetricGrid(presentation.coverageMetrics)
+      }
 }
 
 @Composable

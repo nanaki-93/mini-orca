@@ -1181,6 +1181,43 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun toolbarProjectIconsFollowTheDetectedTypeAndKeepTheProjectMenuWorking() {
+    listOf(1440 to 1f, 1000 to 1.25f, 800 to 1.5f).forEach { (width, scale) ->
+      var project by mutableStateOf<ProjectAnalysis?>(visualFixtureProject)
+      ComposeVisualFixture(width, 220, scale) {
+            ToolbarVisualFixture(width.toFloat(), project = project)
+          }
+          .use { fixture ->
+            listOf(
+                    "go" to "Go project",
+                    "JAVA" to "Java project",
+                    " kotlin " to "Kotlin project",
+                    "rust" to "Project type: rust",
+                    "unknown" to "Project type: unknown")
+                .forEach { (type, description) ->
+                  project = visualFixtureProject.copy(type = type)
+                  fixture.render("project-type-${type.trim()}-$width-$scale")
+                  assertTrue(fixture.hasDescription(description))
+                  listOf("Go project", "Java project", "Kotlin project")
+                      .filter { it != description }
+                      .forEach { assertFalse(fixture.hasDescription(it)) }
+                }
+            project = visualFixtureProject.copy(type = "go")
+            fixture.render()
+            fixture.clickDescription("Go project")
+            fixture.render()
+            assertTrue(fixture.hasText("Open project"))
+            assertTrue(fixture.hasText("Re-index project"))
+            fixture.dismissPopup()
+            project = null
+            fixture.render()
+            assertTrue(fixture.hasDescription("Project"))
+            assertFalse(fixture.hasDescription("Go project"))
+          }
+    }
+  }
+
+  @Test
   fun popupMenusUseProductionRowsForLiveProjectFlows() {
     var imports = 0
     var reindexes = 0
@@ -1417,7 +1454,11 @@ class DesktopVisualLayoutTest {
             analysis =
                 visualFixtureOverview.analysis.copy(
                     engineeringInsight =
-                        EngineeringInsight(mechanism = "Validate before storage.")))
+                        EngineeringInsight(
+                            mechanism = "Validate before storage.",
+                            whyItMattersHere = "Keep invalid input out of the repository.",
+                            tradeoffOrFailureMode = "Validation rules must stay consistent.",
+                            transferableLesson = "Validate at the request boundary.")))
     ComposeVisualFixture(1440, 1100) { ProjectSummaryPane(overview, visualFixtureProject) }
         .use { fixture ->
           fixture.render("summary-dashboard-1440")
@@ -1438,6 +1479,15 @@ class DesktopVisualLayoutTest {
               .forEach { assertTrue(fixture.hasText(it), it) }
           assertTrue(fixture.hasText("23"))
           assertTrue(fixture.hasText("Verified findings"))
+          fixture.assertTextBefore("Project facts", "Findings")
+          fixture.assertTextBefore("Findings", "Analysis coverage")
+          fixture.assertTextBefore("Purpose", "Architecture")
+          fixture.assertTextBefore("Components", "Entry points")
+          fixture.assertTextBefore("Entry points", "Flows")
+          fixture.assertTextBefore("Risks · AI suggestions", "Next steps")
+          fixture.assertTextBefore("Mechanism", "Why it matters here")
+          fixture.assertTextBefore("Trade-off or failure mode", "Transferable lesson")
+          assertFalse(fixture.hasText("Type: Go · Build: go.mod · Languages: Go · Markdown"))
           assertFalse(fixture.hasText(visualFixtureProject.name))
           assertFalse(fixture.hasText("AI interpretation"))
           assertFalse(fixture.hasText("Project purpose"))
