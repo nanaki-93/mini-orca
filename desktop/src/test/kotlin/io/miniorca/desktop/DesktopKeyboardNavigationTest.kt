@@ -207,7 +207,7 @@ class DesktopKeyboardNavigationTest {
         toolWindowSemanticsLabel(LeftToolWindow.Editor, selected = true, focused = true),
     )
     assertEquals(
-        "AI Context tool window tab, not selected, focused",
+        "Context tool window tab, not selected, focused",
         rightToolWindowTabDescription(
             RightToolWindow.Context,
             selected = false,

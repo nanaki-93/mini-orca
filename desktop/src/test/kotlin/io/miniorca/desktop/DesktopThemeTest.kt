@@ -158,6 +158,10 @@ class DesktopThemeTest {
 
   @Test
   fun essentialTextActionAndFocusColorsMeetTheIdeContrastTargetsOnResolvedSurfaces() {
+    listOf(Panel, OverlaySurface, SelectionSurface).forEach { surface ->
+      assertTrue(contrastRatio(Information, surface) >= 4.5)
+      assertTrue(contrastRatio(SecondaryText, surface) >= 4.5)
+    }
     assertTrue(contrastRatio(PrimaryText, AppBackground) >= 4.5)
     assertTrue(contrastRatio(SecondaryText, Panel) >= 4.5)
     assertTrue(contrastRatio(PrimaryText, EditorCanvas) >= 4.5)
