@@ -1025,7 +1025,7 @@ components:
         scope: {type: string, enum: [analyze]}
         provider_origin: {type: string}
         reasoning_effort: {type: string}
-        prompt_version: {type: string, enum: [security-file-v1]}
+        prompt_version: {type: string, enum: [security-file-v1, security-file-v2]}
         context_policy_version: {type: string}
         generated_at: {type: string, format: date-time}
       oneOf:

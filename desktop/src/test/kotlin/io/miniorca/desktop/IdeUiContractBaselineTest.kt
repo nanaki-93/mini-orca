@@ -10,11 +10,6 @@ class IdeUiContractBaselineTest {
   @Test
   fun acceptedNavigationSeparatesProgressResultsAndEditingWithoutStartingAShell() {
     assertEquals(
-        listOf("Project", "Results", "Editing"), workspaceNavigationGroups.map { it.label })
-    assertEquals(
-        listOf(LeftToolWindow.Performance, LeftToolWindow.Problems, LeftToolWindow.Security),
-        workspaceNavigationGroups.single { it.label == "Results" }.destinations)
-    assertEquals(
         listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
         projectRunPresentation(ProjectAnalysisRunState()).commands)
     assertTrue(DesktopLayoutStore(InMemoryPreferences()).load().bottomCollapsed)

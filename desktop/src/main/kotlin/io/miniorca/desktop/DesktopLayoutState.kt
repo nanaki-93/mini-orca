@@ -11,22 +11,6 @@ internal enum class LeftToolWindow {
   Editor,
 }
 
-/** Grouping changes presentation only; stored enum names and shortcut order stay stable. */
-internal data class WorkspaceNavigationGroup(
-    val label: String,
-    val destinations: List<LeftToolWindow>
-)
-
-internal val workspaceNavigationGroups =
-    listOf(
-        WorkspaceNavigationGroup(
-            "Project", listOf(LeftToolWindow.Summary, LeftToolWindow.Analysis)),
-        WorkspaceNavigationGroup(
-            "Results",
-            listOf(LeftToolWindow.Performance, LeftToolWindow.Problems, LeftToolWindow.Security)),
-        WorkspaceNavigationGroup("Editing", listOf(LeftToolWindow.Editor)),
-    )
-
 internal enum class RightToolWindow {
   Context,
   Assistant,

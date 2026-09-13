@@ -2,9 +2,7 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -13,12 +11,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-
-internal data class SecurityFilters(
-    val query: String = "",
-    val severity: String = "",
-    val triage: String = ""
-)
 
 internal data class SecurityWorkspacePaneState(
     val page: AnalysisResultPageState,
@@ -29,7 +21,6 @@ internal data class SecurityWorkspaceActions(
     val openSource: (SecurityFinding) -> Unit,
     val prepareFix: (SecurityFinding) -> Unit,
     val openAnalysis: () -> Unit,
-    val pathChanged: (String) -> Unit,
     val semanticActions: FindingActions,
 )
 
@@ -55,20 +46,16 @@ internal data class SecurityResult(
               .joinToString(" · "))
 }
 
-internal fun securityResults(
-    page: AnalysisResultPageState,
-    filters: SecurityFilters = SecurityFilters()
-): List<SecurityResult> =
+internal fun securityResults(page: AnalysisResultPageState): List<SecurityResult> =
     page.results
         ?.security
         .orEmpty()
         .filter {
           it.projectId == page.project?.projectId &&
-              it.projectRevision == page.run?.identity?.projectRevision &&
-              page.matchesPath(it.path)
+              it.projectRevision == page.run?.identity?.projectRevision
         }
         .flatMap { report ->
-          filterSecurityFindings(report.findings, filters)
+          report.findings
               .filter { it.anchor.path == report.path }
               .map { SecurityResult(report, it, page.stale || report.status == "stale") }
         }
@@ -91,7 +78,7 @@ internal fun securityReportMatchesIndex(report: SecurityFileReport, index: Proje
         index.files.any { it.path == report.path && it.contentHash == report.contentHash }
 
 internal fun securityFindingIsCurrent(finding: SecurityFinding, state: DesktopState): Boolean {
-  val page = state.analysisResultPage("security").copy(path = "")
+  val page = state.analysisResultPage("security")
   val current =
       securityResults(page).any {
         it.finding == finding && !it.stale && securityReportMatchesIndex(it.report, state.index)
@@ -105,21 +92,6 @@ internal fun securityFindingIsCurrent(finding: SecurityFinding, state: DesktopSt
       }
   return (current || scanned) && securityFindingNavigationTarget(finding, state.index) != null
 }
-
-internal fun filterSecurityFindings(
-    findings: List<SecurityFinding>,
-    filters: SecurityFilters,
-): List<SecurityFinding> =
-    findings.filter {
-      val query = filters.query.trim()
-      (query.isBlank() ||
-          listOf(it.title, it.rule, it.category, it.observedCondition, it.anchor.symbol).any { text
-            ->
-            text.contains(query, ignoreCase = true)
-          }) &&
-          (filters.severity.isBlank() || it.severity.equals(filters.severity.trim(), true)) &&
-          (filters.triage.isBlank() || it.triage.equals(filters.triage.trim(), true))
-    }
 
 internal fun securityFindingNavigationTarget(
     finding: SecurityFinding,
@@ -168,61 +140,19 @@ internal fun SecurityWorkspacePane(
     state: SecurityWorkspacePaneState,
     actions: SecurityWorkspaceActions
 ) {
-  var filters by remember(state.page.project?.projectId) { mutableStateOf(SecurityFilters()) }
-  var filtersExpanded by remember { mutableStateOf(false) }
-  var selectedKey by remember(state.page.run?.identity) { mutableStateOf<String?>(null) }
-  val results = securityResults(state.page, filters)
-  val semantic =
-      state.page.semantic.filter {
-        (filters.query.isBlank() ||
-            it.title.contains(filters.query, true) ||
-            it.message.contains(filters.query, true)) &&
-            (filters.severity.isBlank() || it.severity.equals(filters.severity, true)) &&
-            (filters.triage.isBlank() || it.status.equals(filters.triage, true))
+  val results = securityResults(state.page)
+  val semantic = state.page.semantic
+  AnalysisResultsPane(
+      page = state.page,
+      rows = results.map { it.row() } + semantic.map(::semanticResultRow),
+      openAnalysis = actions.openAnalysis) { key ->
+        val result = results.firstOrNull { it.row().key == key }
+        if (result != null) SecurityFindingDetails(result, state.index, actions)
+        else
+            semantic
+                .firstOrNull { semanticResultRow(it).key == key }
+                ?.let { FindingDetailsRegion(it, actions.semanticActions) }
       }
-  Column(Modifier.fillMaxSize()) {
-    ResultSectionHeader(state.page, actions.openAnalysis)
-    Text(
-        "Source rules and AI suspicions · Findings do not establish that the project is secure.",
-        color = SecondaryText,
-        style = IdeTypography.compactBody,
-        modifier = Modifier.padding(horizontal = 8.dp))
-    ResultPathFilter(state.page.path, actions.pathChanged)
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-      IdeDisclosureHeader("Filters", filtersExpanded, { filtersExpanded = !filtersExpanded })
-      if (filtersExpanded) {
-        CompactSingleLineField(
-            filters.query,
-            { filters = filters.copy(query = it) },
-            "Search Security",
-            Modifier.fillMaxWidth())
-        ResponsiveFieldPair(
-            Modifier.fillMaxWidth(),
-            first = { field ->
-              CompactSingleLineField(
-                  filters.severity, { filters = filters.copy(severity = it) }, "Severity", field)
-            },
-            second = { field ->
-              CompactSingleLineField(
-                  filters.triage, { filters = filters.copy(triage = it) }, "Triage", field)
-            })
-      }
-      PreviousAnalysisDetails(state.page.unclassified)
-    }
-    ResultListDetail(
-        results.map { it.row() } + semantic.map(::semanticResultRow),
-        selectedKey,
-        { selectedKey = it },
-        "No security results match this view. Coverage is shown above.",
-        Modifier.weight(1f).fillMaxWidth()) { key ->
-          val result = results.firstOrNull { it.row().key == key }
-          if (result != null) SecurityFindingDetails(result, state.index, actions)
-          else
-              semantic
-                  .firstOrNull { semanticResultRow(it).key == key }
-                  ?.let { FindingDetailsRegion(it, actions.semanticActions) }
-        }
-  }
 }
 
 @Composable

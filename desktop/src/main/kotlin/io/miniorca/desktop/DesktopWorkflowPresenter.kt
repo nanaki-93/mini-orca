@@ -431,26 +431,17 @@ class DesktopWorkflowPresenter(
     openFileInEditor(target.path, target, requirement, finding.taskSpec)
   }
 
-  fun setAnalysisResultPath(category: String, path: String) {
-    if (category !in setOf("bugs", "performance", "security")) return
-    val current = snapshot.value.state.analysisRun
-    dispatch(
-        DesktopEvent.AnalysisRunUpdated(
-            current.copy(resultPaths = current.resultPaths + (category to path))))
-  }
-
   fun viewAnalysisResults(category: String, path: String) {
     if (category !in setOf("bugs", "performance", "security")) return
     if (path.isNotBlank() && snapshot.value.state.index?.files?.none { it.path == path } != false)
         return
-    setAnalysisResultPath(category, path)
     dispatch(DesktopEvent.WorkspaceSelected(analysisCategoryWorkspace(category)))
   }
 
   fun preparePerformanceFinding(path: String, finding: PerformanceFinding) {
     val state = snapshot.value.state
     val result =
-        performanceResults(state.analysisResultPage("performance").copy(path = "")).firstOrNull {
+        performanceResults(state.analysisResultPage("performance")).firstOrNull {
           it.report.path == path && it.finding == finding
         }
     if (result == null || !performanceCanPrepare(result, state.index)) {
@@ -474,7 +465,7 @@ class DesktopWorkflowPresenter(
     val target =
         finding
             .takeIf {
-              securityResults(state.analysisResultPage("security").copy(path = "")).any { result ->
+              securityResults(state.analysisResultPage("security")).any { result ->
                 result.finding == it
               } || securityFindingIsCurrent(it, state)
             }

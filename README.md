@@ -22,9 +22,9 @@ The Kotlin/Compose Desktop client talks to a Go daemon on loopback.
    the project. Hiding it preserves the process; **Close shell** ends it.
    **Ctrl+Shift+F12** returns keyboard focus to the editor.
 
-A file filter changes the result view, never the analysis scope. Pause waits for
-an active stage; Cancel stops further work. Resume uses a fresh preview and intent;
-completed or canceled runs need a new Start. The run coordinates specialized
+Bugs, Performance and Security show all loaded category results without search or
+filters. Pause waits for an active stage; Cancel stops further work. Resume uses a
+fresh preview and intent; completed or canceled runs need a new Start. The run coordinates specialized
 semantic, Performance, Security-rule and advisory Security stages and can make
 multiple model requests. Security intent is explicit even with a local provider.
 Verified Go scans, focused checks and selected benchmarks remain separate trusted

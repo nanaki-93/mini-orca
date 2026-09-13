@@ -572,7 +572,6 @@ internal fun MiniOrcaApp(
               pauseAnalysis = presenter::pauseAnalysis,
               resumeAnalysis = presenter::resumeAnalysis,
               cancelAnalysis = presenter::cancelAnalysis,
-              resultPathChanged = presenter::setAnalysisResultPath,
               startScan = presenter::runVerifiedScan,
               cancelScan = presenter::cancelVerifiedScan,
               openPerformanceFinding = { path, finding ->

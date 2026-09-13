@@ -32,82 +32,6 @@ internal class FindingActions(
       triageFinding(finding, action)
 }
 
-/** Local UI input only; the shared [FindingsPresentation] owns all filter interpretation. */
-internal class FindingsFilterState {
-  var query by mutableStateOf("")
-  var source by mutableStateOf("")
-  var severity by mutableStateOf("")
-  var freshness by mutableStateOf("")
-  var lifecycle by mutableStateOf("")
-  var advancedFiltersVisible by mutableStateOf(false)
-
-  val filters: BugsFilters
-    get() = BugsFilters(query, source, severity, freshness, lifecycle)
-}
-
-@Composable
-internal fun rememberFindingsFilterState(): FindingsFilterState = remember { FindingsFilterState() }
-
-@Composable
-internal fun FindingsFilterControls(
-    state: FindingsFilterState,
-    presentation: FindingsPresentation,
-    modifier: Modifier = Modifier,
-) {
-  Column(modifier) {
-    CompactSingleLineField(
-        state.query,
-        { state.query = it },
-        label = "Search findings",
-        showLabel = false,
-        modifier = Modifier.fillMaxWidth())
-    IdeDisclosureHeader(
-        title = "Filters",
-        expanded = state.advancedFiltersVisible,
-        onToggle = { state.advancedFiltersVisible = !state.advancedFiltersVisible },
-        stateLabel = findingsFilterStateLabel(presentation.activeFilters),
-        modifier = Modifier.padding(top = 6.dp))
-    if (state.advancedFiltersVisible) {
-      ResponsiveFieldPair(
-          modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-          minimumHorizontalWidth = 520.dp,
-          first = { fieldModifier ->
-            CompactSingleLineField(
-                state.source, { state.source = it }, label = "Source", modifier = fieldModifier)
-          },
-          second = { fieldModifier ->
-            CompactSingleLineField(
-                state.severity,
-                { state.severity = it },
-                label = "Severity",
-                modifier = fieldModifier)
-          },
-      )
-      ResponsiveFieldPair(
-          modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-          minimumHorizontalWidth = 520.dp,
-          first = { fieldModifier ->
-            CompactSingleLineField(
-                state.freshness,
-                { state.freshness = it },
-                label = "Freshness",
-                modifier = fieldModifier)
-          },
-          second = { fieldModifier ->
-            CompactSingleLineField(
-                state.lifecycle,
-                { state.lifecycle = it },
-                label = "Lifecycle",
-                modifier = fieldModifier)
-          },
-      )
-    }
-  }
-}
-
-internal fun findingsFilterStateLabel(activeFilters: List<String>): String? =
-    activeFilters.size.takeIf { it > 0 }?.let { "$it active" }
-
 @Composable
 internal fun FindingActionButtons(
     finding: UnifiedFinding,
@@ -304,23 +228,6 @@ internal fun ResultSectionHeader(page: AnalysisResultPageState, openAnalysis: ()
                 color = Warning,
                 style = IdeTypography.compactBody)
       }
-}
-
-@Composable
-internal fun ResultPathFilter(path: String, onPath: (String) -> Unit) {
-  ResponsiveFieldPair(
-      Modifier.fillMaxWidth().padding(8.dp),
-      minimumHorizontalWidth = 600.dp,
-      first = { field -> CompactSingleLineField(path, onPath, "Filter by file path", field) },
-      second = { field ->
-        MiniOrcaButton(
-            onClick = { onPath("") },
-            enabled = path.isNotBlank(),
-            tone = ActionTone.Neutral,
-            modifier = field) {
-              Text("All project files")
-            }
-      })
 }
 
 @Composable

@@ -7,11 +7,7 @@ import kotlin.test.assertTrue
 
 class DesktopLayoutStateTest {
   @Test
-  fun navigationGroupsPreserveStoredDestinationsAndPreferredPaneWidths() {
-    assertEquals(
-        listOf("Project", "Results", "Editing"), workspaceNavigationGroups.map { it.label })
-    assertEquals(
-        LeftToolWindow.entries.toList(), workspaceNavigationGroups.flatMap { it.destinations })
+  fun navigationPreservesStoredDestinationsAndPreferredPaneWidths() {
     withPreferences { preferences ->
       LeftToolWindow.entries.forEach { destination ->
         val saved =

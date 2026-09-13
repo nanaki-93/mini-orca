@@ -30,7 +30,7 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
-  fun groupedRailKeepsFullLabelsAndKeyboardReachabilityAtEverySupportedSize() {
+  fun flatRailKeepsOnlyTitlesAndKeyboardReachabilityAtEverySupportedSize() {
     listOf(
             Triple(1440, 900, 1f),
             Triple(1000, 760, 1f),
@@ -42,23 +42,6 @@ class DesktopKeyboardNavigationTest {
           var active by mutableStateOf(LeftToolWindow.Summary)
           var selections = 0
           val focus = FocusRequester()
-          val fixtureRun =
-              analysisRunFixture()
-                  .copy(
-                      status = "running",
-                      sections =
-                          analysisRunFixture().sections.map {
-                            when (it.category) {
-                              "bugs" -> it.copy(status = "completed", findingCount = 12)
-                              "performance" -> it.copy(status = "running", findingCount = null)
-                              else -> it.copy(status = "partial", findingCount = 3)
-                            }
-                          })
-          val state =
-              DesktopState(
-                  projectState =
-                      ProjectWorkspaceState(resultProjectFixture(), resultIndexFixture()),
-                  analysisRun = ProjectAnalysisRunState(run = fixtureRun))
           ComposeVisualFixture(width, height, scale) {
                 Row(Modifier.fillMaxSize()) {
                   ToolWindowBar(
@@ -67,25 +50,25 @@ class DesktopKeyboardNavigationTest {
                         active = it
                         selections++
                       },
-                      Modifier.focusRequester(focus),
-                      workspaceNavigationBadges(state))
-                  Box(Modifier.weight(1f)) {
-                    AnalysisWorkspacePane(
-                        AnalysisWorkspacePaneState(state.project, state.analysisRun),
-                        AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
-                  }
+                      Modifier.focusRequester(focus))
+                  Box(Modifier.weight(1f))
                 }
               }
               .use { fixture ->
-                fixture.render("navigation-groups-$width-$scale")
+                fixture.render("navigation-titles-$width-$scale")
                 fixture.assertTextFits("Performance")
                 assertFalse(fixture.hasText("Perf."))
-                assertTrue(fixture.hasText("Results"))
-                assertTrue(fixture.hasText("Editing"))
-                assertTrue(fixture.hasDescription("12 findings"))
-                fixture.assertTextFits("12")
-                fixture.assertTextFits("Completed")
-                assertTrue(fixture.stateDescription("Performance")!!.contains("Count unknown"))
+                LeftToolWindow.entries.forEach { fixture.assertTextFits(leftToolWindowLabel(it)) }
+                listOf(
+                        "Project",
+                        "Results",
+                        "Editing",
+                        "Run & progress",
+                        "findings",
+                        "Running",
+                        "Completed")
+                    .forEach { assertFalse(fixture.hasText(it)) }
+                assertEquals(null, fixture.stateDescription("Performance"))
                 focus.requestFocus()
                 fixture.render()
                 repeat(5) {

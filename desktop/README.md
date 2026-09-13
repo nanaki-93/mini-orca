@@ -47,8 +47,8 @@ Recheck the resolved graph before an upgrade; no upgrade is needed for the new p
 The last successfully opened project is restored from local metadata without
 contacting a model. If restore fails, the landing screen offers Open project/retry.
 Summary describes the project. Analysis owns one whole-project run and progress;
-Bugs, Performance and Security own separate results. The sidebar groups these as
-Project, Results and Editing. Editor owns one declaration change.
+Bugs, Performance and Security own separate results. The sidebar shows only workspace titles and icons. Analysis status appears at the
+top right, immediately before daemon connectivity. Editor owns one declaration change.
 
 Editor has docked Files and Context/Assistant/Review panes at widths ≥1000dp.
 Below that width they become labeled drawers; Terminal uses a bounded overlay.
@@ -71,17 +71,19 @@ that a provider is connected. Non-loopback scopes require their own confirmation
 Use **Start analysis** to preview the whole project, or **Analyze stale & failed**
 to include only files with stale or failed analysis. Both actions preview their
 scope before starting; fresh stages reuse cached results. Ignored and unanalysed
-files have no status dot in the file tree. File selection and result-path
-filters do not change its scope. The preview shows exclusions, stage eligibility,
-cache use, expected requests and inclusive retry bounds. Confirm each displayed
+files have no status dot in the file tree. File selection does not change its scope.
+The preview shows exclusions, stage eligibility, cache use, expected requests and
+inclusive retry bounds. Confirm each displayed
 remote destination and explicit Security review intent. One admission coordinates
 the existing specialized producers; it can make multiple model requests.
 
 The default 100-file/900-second window limits dispatch, not captured inventory.
 Pause/Resume/Cancel retain truthful partial coverage and cumulative attempts.
 Resume requires a fresh preview; startup never silently resumes a model request.
-Analysis shows progress, stage failures and links to results. Each result page owns
-its file filter, summary, labeled severity/provenance, source link and detail view.
+Analysis shows progress, stage failures and links to results. Bugs, Performance and
+Security use a shared results view with no search or filters: each page shows all
+loaded findings for its category across the project, including when opened from a
+file link. Rows retain their summary, severity/provenance, source link and details.
 An unavailable or failed report is never presented as zero findings. Verified Go
 scans live in Bugs; source hypotheses, advisory Security and measured benchmarks
 keep distinct labels and execution requirements.
@@ -139,7 +141,7 @@ reader observations and limits are in [acceptance](../docs/RELEASE_ACCEPTANCE.md
 the [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) owns the operator procedure. [Visual reproduction](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks) describes
 fixture captures; these are not native-window evidence.
 
-Security entry, filtering and selection stay local. Whole-project analysis owns
+Security entry and selection stay local. Whole-project analysis owns
 passive rules and explicitly admitted advisory review. Prepare fix opens the
 existing Assistant composer only for current, exact Go declarations; it does not
 send a request or change source. No file-scoped start controls or duplicate bottom

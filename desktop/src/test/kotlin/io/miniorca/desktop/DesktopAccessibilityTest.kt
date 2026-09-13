@@ -76,9 +76,7 @@ class DesktopAccessibilityTest {
     assertEquals(DesktopShortcut.AnalysisWorkspace, desktopShortcut("2", primaryModifier = true))
     assertEquals(DesktopShortcut.BugsWorkspace, desktopShortcut("3", primaryModifier = true))
     assertEquals(DesktopShortcut.EditorWorkspace, desktopShortcut("4", primaryModifier = true))
-    assertEquals(
-        DesktopShortcut.FocusBugsFilters,
-        desktopShortcut("F", primaryModifier = true, shift = true))
+    assertNull(desktopShortcut("F", primaryModifier = true, shift = true))
     assertEquals(
         DesktopShortcut.FocusDraft, desktopShortcut("D", primaryModifier = true, shift = true))
     assertEquals(

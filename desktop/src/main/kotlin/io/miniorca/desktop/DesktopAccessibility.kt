@@ -16,7 +16,6 @@ enum class DesktopShortcut {
   AnalysisWorkspace,
   BugsWorkspace,
   EditorWorkspace,
-  FocusBugsFilters,
   FocusChat,
   FocusDraft,
   ValidateDraft,
@@ -38,7 +37,6 @@ fun desktopShortcut(
       primaryModifier && shift && key == "O" -> DesktopShortcut.OpenSymbol
       primaryModifier && key == "O" -> DesktopShortcut.OpenProject
       primaryModifier && key == "K" -> DesktopShortcut.FocusChat
-      primaryModifier && shift && key == "F" -> DesktopShortcut.FocusBugsFilters
       primaryModifier && shift && key == "D" -> DesktopShortcut.FocusDraft
       primaryModifier && shift && key == "V" -> DesktopShortcut.ValidateDraft
       primaryModifier && shift && key == "C" -> DesktopShortcut.RunDraftChecks

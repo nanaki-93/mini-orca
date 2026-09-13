@@ -9,14 +9,11 @@ import kotlinx.serialization.json.Json
 
 class PerformanceWorkspaceTest {
   @Test
-  fun typedResultsKeepPathIdentityFiltersAndUnmeasuredState() {
+  fun typedResultsKeepPathIdentityAndUnmeasuredState() {
     val page = performancePageFixture()
     val result = performanceResults(page).single()
     assertEquals("main.go", result.report.path)
     assertEquals("Not measured", result.row().state)
-    assertEquals(1, performanceResults(page, "allocation", "high").size)
-    assertTrue(performanceResults(page.copy(path = "other.go")).isEmpty())
-    assertTrue(performanceResults(page, impact = "low").isEmpty())
     assertTrue(
         performanceResults(page.copy(project = page.project!!.copy(projectId = "other"))).isEmpty())
     assertTrue(

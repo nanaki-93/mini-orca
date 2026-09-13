@@ -237,7 +237,6 @@ internal data class DesktopShellAnalysisActions(
     val pauseAnalysis: () -> Unit,
     val resumeAnalysis: () -> Unit,
     val cancelAnalysis: () -> Unit,
-    val resultPathChanged: (String, String) -> Unit,
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
     val openPerformanceFinding: (String, PerformanceFinding) -> Unit,
@@ -588,6 +587,7 @@ internal fun DesktopShell(
                         connection = appState.connection,
                         gitStatus = appState.gitStatus,
                         showEditorDrawerActions = showEditorDrawers,
+                        analysisStatus = toolbarAnalysisStatus(appState),
                     ),
                 actions =
                     ToolbarActions(
@@ -618,7 +618,6 @@ internal fun DesktopShell(
                   leftToolWindowForWorkspace(workspace),
                   ::selectToolWindow,
                   Modifier.focusRequester(focusRequesters.leftToolWindow),
-                  badges = workspaceNavigationBadges(appState),
               )
               IdeVerticalSeparator()
               val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
@@ -829,10 +828,6 @@ private fun handleDesktopShortcut(
         editor.contextualActions.canFocusChat.also { if (it) editorActions.focusChat() }
     DesktopShortcut.FocusDraft ->
         editor.contextualActions.canFocusDraft.also { if (it) editorActions.focusDraft() }
-    DesktopShortcut.FocusBugsFilters -> {
-      onWorkspaceSelected(Workspace.Bugs)
-      true
-    }
     DesktopShortcut.ValidateDraft ->
         editor.contextualActions.canValidateDraft.also { if (it) editorActions.validateDraft() }
     DesktopShortcut.RunDraftChecks ->
@@ -997,12 +992,10 @@ private fun DesktopCanvas(
                     startScan = analysisActions.startScan,
                     cancelScan = analysisActions.cancelScan,
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
-                    pathChanged = { analysisActions.resultPathChanged("bugs", it) },
                 ),
             performanceActions =
                 PerformanceWorkspaceActions(
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
-                    pathChanged = { analysisActions.resultPathChanged("performance", it) },
                     semanticActions = findingActions,
                     openInEditor = analysisActions.openPerformanceFinding,
                     prepareOptimization = analysisActions.preparePerformanceFinding,
@@ -1012,7 +1005,6 @@ private fun DesktopCanvas(
             securityActions =
                 SecurityWorkspaceActions(
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
-                    pathChanged = { analysisActions.resultPathChanged("security", it) },
                     semanticActions = findingActions,
                     openSource = analysisActions.openSecurityFinding,
                     prepareFix = analysisActions.prepareSecurityFinding),

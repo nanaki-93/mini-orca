@@ -26,26 +26,6 @@ class FindingsPresentationTest {
       )
 
   @Test
-  fun presentationKeepsBugsOrderingAndFiltersAligned() {
-    val mediumDismissed = highOpen.copy(id = "medium", severity = "medium", status = "dismissed")
-    val lowOpen = highOpen.copy(id = "low", severity = "low")
-
-    val presentation =
-        findingsPresentation(
-            listOf(lowOpen, mediumDismissed, highOpen), BugsFilters(source = "vet"))
-
-    assertEquals(
-        listOf(FindingPriority.High, FindingPriority.Medium, FindingPriority.Low),
-        presentation.priorityGroups.map { it.priority })
-    assertEquals(listOf(highOpen), presentation.priorityGroups.first().findings)
-    assertEquals(listOf("Source: vet"), presentation.activeFilters)
-    assertEquals(
-        groupFindingsByPriority(
-            filterFindings(listOf(lowOpen, mediumDismissed, highOpen), presentation.filters)),
-        presentation.priorityGroups)
-  }
-
-  @Test
   fun selectingAProblemOnlyNavigatesAndNeverPreparesAFix() {
     var selected: UnifiedFinding? = null
     var prepared = false
@@ -68,12 +48,5 @@ class FindingsPresentationTest {
     assertEquals(
         EditorNavigationTarget("internal/main.go", "Run", 12),
         findingNavigationTarget(highOpen, index))
-  }
-
-  @Test
-  fun filterDisclosureReportsActiveFilterCountWithoutRepeatingFieldValues() {
-    assertEquals(null, findingsFilterStateLabel(emptyList()))
-    assertEquals("1 active", findingsFilterStateLabel(listOf("Search")))
-    assertEquals("3 active", findingsFilterStateLabel(listOf("Search", "Source: vet", "Fresh")))
   }
 }
