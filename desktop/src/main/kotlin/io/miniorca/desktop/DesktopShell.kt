@@ -263,7 +263,8 @@ internal data class DesktopShellPanes(
     val rightToolWindows: @Composable (RightToolWindow, Modifier) -> Unit,
     val rightToolWindowBadges: Map<RightToolWindow, RightToolWindowBadge>,
     val terminalContent: @Composable (Modifier) -> Unit,
-    val terminalSession: TerminalSessionState,
+    val terminalState: TerminalWorkspaceState,
+    val terminalTabActions: TerminalTabActions,
 )
 
 private data class ShellFocusRequesters(
@@ -660,7 +661,8 @@ internal fun DesktopShell(
                       layout =
                           layout.copy(
                               bottomHeight = terminalDockHeight(layout.bottomHeight, heightDp)),
-                      session = panes.terminalSession,
+                      state = panes.terminalState,
+                      tabActions = panes.terminalTabActions,
                       onOpen = ::openTerminal,
                       onCollapse = ::collapseTerminal,
                       onHeightDelta = {
@@ -673,7 +675,8 @@ internal fun DesktopShell(
                   )
                 } else {
                   TerminalBar(
-                      session = panes.terminalSession,
+                      state = panes.terminalState,
+                      tabActions = panes.terminalTabActions,
                       collapsed = true,
                       onToggle = ::openTerminal,
                       controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
@@ -712,6 +715,8 @@ internal fun DesktopShell(
           }
           if (narrow && !layout.bottomCollapsed) {
             TerminalOverlay(
+                state = panes.terminalState,
+                tabActions = panes.terminalTabActions,
                 onDismiss = ::collapseTerminal,
                 content = panes.terminalContent,
             )

@@ -29,27 +29,25 @@ internal fun miniOrcaApplication(
     DisposableEffect(terminal) { onDispose { terminal.close() } }
     LaunchedEffect(exitRequested) {
       if (exitRequested)
-          terminal.closeSession().thenAccept {
+          terminal.closeAllSessions().thenAccept {
             if (exitRequested && !it.cleanupPending) exitApplication()
           }
     }
-    LaunchedEffect(exitRequested, terminalState.session.cleanupPending) {
-      if (exitRequested &&
-          terminalState.session.phase == TerminalSessionPhase.Closed &&
-          !terminalState.session.cleanupPending)
+    LaunchedEffect(exitRequested, terminalState.cleanupPending) {
+      if (exitRequested && terminalState.tabs.isEmpty() && !terminalState.cleanupPending)
           exitApplication()
     }
     Window(onCloseRequest = { exitRequested = true }, title = "Mini-Orca", resizable = true) {
       MiniOrcaTheme {
         content(terminal)
-        if (exitRequested && terminalState.session.cleanupPending) {
+        if (exitRequested && terminalState.cleanupPending) {
           IdeDialog(
               onDismissRequest = { exitRequested = false },
               title = { Text("Closing the terminal") },
               content = {
                 Text(
-                    terminalState.session.error
-                        ?: "Waiting for the shell and its child processes to stop…")
+                    terminalState.errors.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                        ?: "Waiting for the shells and their child processes to stop…")
               },
               actions = {
                 MiniOrcaButton(onClick = { exitRequested = false }, tone = ActionTone.Neutral) {

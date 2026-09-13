@@ -99,16 +99,19 @@ Analysis, Bugs and status details retain their own operational evidence.
 
 ## Terminal
 
-Terminal is the sole bottom control. **Ctrl+Shift+T** opens a real shell rooted in
-the project; collapsing the dock, hiding the overlay or changing workspaces keeps
-its process and in-memory scrollback. **Close shell** ends it. A project switch
-requires closing an active shell explicitly, and application exit cleans it up.
+Selecting **Terminal** or pressing **Ctrl+Shift+T** opens a shell rooted in the
+project. Shell tabs share the Terminal bar: **+** starts another shell and **×**
+closes its tab and process. Selecting tabs, collapsing the dock, hiding the overlay
+or changing workspaces preserves each shell's process and in-memory scrollback.
+Project switching explicitly closes all active shells; application exit cleans
+up every owned session.
 
 Terminal owns ordinary shell keystrokes, including Ctrl+C. Use **Ctrl+Shift+F12**
-or **Back to editor** to restore app focus. Returning to source/Review rechecks
-file content and marks old evidence stale. **Reindex project** is explicit after
-inventory changes. Saved dimensions restore with the terminal collapsed, without
-starting a shell. See [terminal support and reproduction](TERMINAL.md).
+to restore app focus. Returning to source/Review rechecks file content and marks
+old evidence stale. Use **Re-index project** in the project menu after inventory
+changes. Saved dimensions restore with the terminal collapsed, without starting
+a shell.
+See [terminal support and reproduction](TERMINAL.md).
 
 ## Keys
 

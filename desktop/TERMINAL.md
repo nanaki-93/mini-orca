@@ -98,31 +98,39 @@ TERM-01 execution record in [docs/tasks.md](../docs/tasks.md).
 
 ## Terminal pane
 
-Select the sole **Terminal** control at the bottom to start one local interactive shell in
-the open project. **Ctrl+Shift+T** opens that pane from the application. A restored
-layout restores pane dimensions with Terminal collapsed. Old Problems, Checks and
-Output selections are discarded; no layout preference launches a shell.
+Select **Terminal** at the bottom to open the pane and immediately start a local
+interactive shell in the open project. **Ctrl+Shift+T** opens or focuses the pane.
+Shell tabs sit alongside Terminal in the same bar: **+** starts another independent
+shell, selecting a tab focuses that shell, and its **×** closes that shell and its
+children. Closing the last tab leaves **+** available; reopening the collapsed pane
+starts a shell if no tabs remain. Exited and failed tabs retain their state until
+closed; reopening the pane does not automatically restart them. Use **+** to retry
+with a new shell. No replacement can start while cleanup is pending.
+
 Select **Terminal** again to collapse the dock, or **Hide terminal** to dismiss
-the bounded overlay below 1000dp. Collapsing the pane or navigating to another
-workspace keeps its session and bounded in-memory scrollback. **Focus terminal**
-returns input to it. **Close shell** stops the shell and its children; **Open shell**
-then starts a new session. Launch, exit and cleanup errors remain visible.
+the bounded overlay below 1000dp. Collapsing, changing workspaces, or switching
+shell tabs keeps each session's reader and bounded in-memory scrollback. Launch,
+exit and cleanup states remain visible in their tabs, with errors in the selected
+terminal. A restored layout restores pane dimensions with Terminal collapsed.
+Old Problems, Checks and Output selections are discarded; no layout preference
+launches a shell.
 
 The terminal owns shell keys, including Ctrl+C. On macOS, Cmd+C copies the current
 selection and Cmd+V pastes; shell history, ANSI/full-screen programs, cursor motion
-and scrolling are provided by JediTerm. **Ctrl+Shift+F12** or **Back to editor**
-returns to the application and dismisses a narrow terminal overlay. Resizing the
+and scrolling are provided by JediTerm. **Ctrl+Shift+F12** returns to the
+application and dismisses a narrow terminal overlay. Resizing the
 pane updates the real PTY dimensions; terminal text follows the source palette and
 application text scale.
 
-Opening another project while a shell is active requires **Cancel switch** or
-**Close shell and switch**. Closing the application waits for terminal cleanup;
-a shell that cannot stop keeps the window open with the failure visible. A running
-shell is never silently moved to another project's directory.
+Opening another project while any shell is active requires **Cancel switch** or
+**Close shells and switch**. Confirming closes every tab, including hidden shells.
+Closing the application also waits for all terminal sessions to clean up; a shell
+that cannot stop keeps the window open with the failure visible. A running shell
+is never silently moved to another project's directory.
 
 Returning from the terminal, or later entering Editor/Review, reads the selected
 file again. Changed content invalidates old draft/check/file-analysis evidence
 and marks the captured project analysis stale until reindexing. A failed read also
-blocks the old draft. Use **Reindex project** after shell commands add, remove or
-rename files. No terminal output is parsed, persisted by Mini-Orca or sent to a
+blocks the old draft. Use **Re-index project** in the project menu after shell
+commands add, remove or rename files. No terminal output is parsed, persisted by Mini-Orca or sent to a
 model; shell programs may maintain their own files according to their settings.

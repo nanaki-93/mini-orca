@@ -485,9 +485,7 @@ internal fun MiniOrcaApp(
           triageFinding = presenter::triageFinding,
       )
   val terminalContent: @Composable (Modifier) -> Unit = { modifier ->
-    appState.project?.let { project ->
-      TerminalToolWindow(terminal, project.path, presenter::reanalyze, modifier)
-    }
+    if (appState.project != null) TerminalToolWindow(terminal, modifier)
   }
   val terminalState by terminal.state.collectAsState()
   val contextualActions =
@@ -632,7 +630,11 @@ internal fun MiniOrcaApp(
               rightToolWindows,
               rightToolWindowBadges,
               terminalContent,
-              terminalState.session),
+              terminalState,
+              TerminalTabActions(
+                  terminal::selectShell,
+                  { appState.project?.path?.let { terminal.createShell(it) } },
+                  { terminal.closeSession(it) })),
   )
   TerminalProjectSwitchDialog(pendingTerminalSwitch, terminal, { pendingTerminalSwitch = null }) {
       path ->
