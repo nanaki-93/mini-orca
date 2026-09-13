@@ -52,31 +52,37 @@ import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 
 /** Every desktop color is derived from this single dark semantic palette. */
 internal object MiniOrcaPalette {
-  val activityRail = Color(0xFF18191B)
-  val toolWindow = Color(0xFF1E1F22)
-  val editorCanvas = Color(0xFF2B2D30)
-  val overlay = Color(0xFF26282C)
-  val paneSeparator = Color(0xFF323438)
-  val primaryText = Color(0xFFF2F2F2)
-  val secondaryText = Color(0xFFC4C7C5)
-  val faintText = Color(0xFF9FA2A6)
-  val selectionAccent = Color(0xFF3574F0)
-  val selectionSurface = Color(0xFF2E436E)
-  val selectionText = Color(0xFFA8C7FA)
-  val actionFill = Color(0xFF3574F0)
-  val onActionFill = Color(0xFF0B0D10)
-  val focusAccent = Color(0xFFA8C7FA)
-  val information = Color(0xFF71D7CA)
-  val success = Color(0xFF65D6A3)
-  val warning = Color(0xFFF2BE66)
-  val error = Color(0xFFFF8F98)
-  val diffAddedBackground = Color(0xFF18352C)
-  val diffRemovedBackground = Color(0xFF3A232B)
-  val codeKeyword = Color(0xFFD7A4D8)
-  val codeFunction = Color(0xFFE8C987)
-  val codeString = Color(0xFFA8D59D)
-  val codeComment = Color(0xFF93A38F)
-  val codeType = Color(0xFF71D7CA)
+  val activityRail = Color(0xFF14161A)
+  val toolWindow = Color(0xFF24282F)
+  val editorCanvas = Color(0xFF1B1E23)
+  val overlay = Color(0xFF303640)
+  val header = Color(0xFF303640)
+  val control = Color(0xFF343E4A)
+  val controlHover = Color(0xFF414E5F)
+  val paneSeparator = Color(0xFF4B5665)
+  val controlBorder = Color(0xFF8E9EAF)
+  val primaryText = Color(0xFFF5F7FA)
+  val secondaryText = Color(0xFFCCD4DF)
+  val faintText = Color(0xFFA9B4C3)
+  val selectionAccent = Color(0xFF73ABFF)
+  val selectionSurface = Color(0xFF263F62)
+  val selectionText = Color(0xFFC9DFFF)
+  val actionFill = Color(0xFF78ACFF)
+  val actionHover = Color(0xFF98C1FF)
+  val actionSelected = Color(0xFF619AFF)
+  val onActionFill = Color(0xFF101722)
+  val focusAccent = Color(0xFFD3E4FF)
+  val information = Color(0xFF66DBEB)
+  val success = Color(0xFF74E0AC)
+  val warning = Color(0xFFFFD078)
+  val error = Color(0xFFFF929E)
+  val diffAddedBackground = Color(0xFF193E30)
+  val diffRemovedBackground = Color(0xFF482730)
+  val codeKeyword = Color(0xFFE5ADFA)
+  val codeFunction = Color(0xFFFFD078)
+  val codeString = Color(0xFFB4E393)
+  val codeComment = Color(0xFFA9B4C3)
+  val codeType = Color(0xFF66DBEB)
 }
 
 internal object MiniOrcaSpacing {
@@ -156,10 +162,10 @@ internal object IdeTypography {
   val resultCode = compactBody.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
   val section =
       androidx.compose.ui.text.TextStyle(
-          fontWeight = FontWeight.SemiBold, fontSize = 11.sp, lineHeight = 16.sp)
+          fontWeight = FontWeight.SemiBold, fontSize = 12.sp, lineHeight = 18.sp)
   val action =
       androidx.compose.ui.text.TextStyle(
-          fontWeight = FontWeight.Normal,
+          fontWeight = FontWeight.Medium,
           fontSize = 12.sp,
           lineHeight = 16.sp,
           letterSpacing = 0.15.sp)
@@ -194,57 +200,57 @@ internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
       ActionTone.Primary ->
           ActionToneStyle(
               ActionFill,
-              ActionFill.copy(alpha = 0.84f),
-              ActionFill.copy(alpha = 0.92f),
+              MiniOrcaPalette.actionHover,
+              MiniOrcaPalette.actionSelected,
               OnActionFill,
-              ActionFill.copy(alpha = 0.18f),
+              Panel,
               FaintText,
-              ActionFill.copy(alpha = 0.72f))
+              ActionFill)
       ActionTone.Navigation ->
           ActionToneStyle(
-              Card,
-              SelectionAccent.copy(alpha = 0.25f),
+              labelBadgeBackground(SelectionAccent),
+              blendOver(SelectionAccent.copy(alpha = 0.24f), Panel),
               SelectionSurface,
               SelectionText,
               Panel,
               FaintText,
-              Border)
+              SelectionAccent)
       ActionTone.Positive ->
           ActionToneStyle(
-              Card,
-              Success.copy(alpha = 0.25f),
-              Success.copy(alpha = 0.28f),
+              labelBadgeBackground(Success),
+              blendOver(Success.copy(alpha = 0.24f), Panel),
+              blendOver(Success.copy(alpha = 0.28f), Panel),
               Success,
               Panel,
               FaintText,
-              Border)
+              Success)
       ActionTone.Attention ->
           ActionToneStyle(
-              Card,
-              Warning.copy(alpha = 0.25f),
-              Warning.copy(alpha = 0.28f),
+              labelBadgeBackground(Warning),
+              blendOver(Warning.copy(alpha = 0.24f), Panel),
+              blendOver(Warning.copy(alpha = 0.28f), Panel),
               Warning,
               Panel,
               FaintText,
-              Border)
+              Warning)
       ActionTone.Destructive ->
           ActionToneStyle(
-              Card,
-              Error.copy(alpha = 0.25f),
-              Error.copy(alpha = 0.28f),
+              labelBadgeBackground(Error),
+              blendOver(Error.copy(alpha = 0.20f), Panel),
+              blendOver(Error.copy(alpha = 0.21f), Panel),
               Error,
               Panel,
               FaintText,
-              Border)
+              Error)
       ActionTone.Neutral ->
           ActionToneStyle(
-              Card,
               StrongSurface,
-              StrongSurface,
+              ControlHover,
+              SelectionSurface,
               PrimaryText,
               Panel,
               FaintText,
-              Border.copy(alpha = 0.9f))
+              ControlBorder)
     }
 
 internal data class ButtonDensityStyle(
@@ -291,9 +297,11 @@ internal fun CompactSingleLineField(
         modifier =
             Modifier.fillMaxWidth()
                 .heightIn(min = 34.dp)
-                .background(Panel, MiniOrcaShapes.small)
+                .background(EditorCanvas, MiniOrcaShapes.small)
                 .border(
-                    BorderStroke(1.dp, if (focused) FocusAccent else Border), MiniOrcaShapes.small)
+                    BorderStroke(
+                        if (focused) 2.dp else 1.dp, if (focused) FocusAccent else ControlBorder),
+                    MiniOrcaShapes.small)
                 .semantics { contentDescription = label },
         decorationBox = { input ->
           Box(
@@ -344,9 +352,11 @@ internal fun CompactMultilineField(
         modifier =
             Modifier.fillMaxWidth()
                 .heightIn(min = (minLines * 20).dp)
-                .background(Panel, MiniOrcaShapes.small)
+                .background(EditorCanvas, MiniOrcaShapes.small)
                 .border(
-                    BorderStroke(1.dp, if (focused) FocusAccent else Border), MiniOrcaShapes.small)
+                    BorderStroke(
+                        if (focused) 2.dp else 1.dp, if (focused) FocusAccent else ControlBorder),
+                    MiniOrcaShapes.small)
                 .semantics { contentDescription = label },
         decorationBox = { input ->
           Box(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
@@ -384,7 +394,7 @@ internal fun MiniOrcaButton(
               content = style.content,
               selectedContent = style.content,
               disabledContent = style.disabledContent,
-              border = style.border),
+              border = if (enabled) style.border else Border),
       modifier = modifier,
       enabled = enabled,
       selected = selected,
@@ -410,13 +420,16 @@ internal val ActivityRail = MiniOrcaPalette.activityRail
 internal val ToolWindowSurface = MiniOrcaPalette.toolWindow
 internal val EditorCanvas = MiniOrcaPalette.editorCanvas
 internal val OverlaySurface = MiniOrcaPalette.overlay
+internal val HeaderSurface = MiniOrcaPalette.header
 internal val PaneSeparator = MiniOrcaPalette.paneSeparator
+internal val ControlBorder = MiniOrcaPalette.controlBorder
+internal val ControlHover = MiniOrcaPalette.controlHover
 
 internal val AppBackground = ToolWindowSurface
 internal val Chrome = ActivityRail
 internal val Panel = ToolWindowSurface
 internal val Card = OverlaySurface
-internal val StrongSurface = EditorCanvas
+internal val StrongSurface = MiniOrcaPalette.control
 internal val Border = PaneSeparator
 internal val PrimaryText = MiniOrcaPalette.primaryText
 internal val SecondaryText = MiniOrcaPalette.secondaryText
@@ -427,7 +440,7 @@ internal val SelectionText = MiniOrcaPalette.selectionText
 internal val ActionFill = MiniOrcaPalette.actionFill
 internal val OnActionFill = MiniOrcaPalette.onActionFill
 internal val FocusAccent = MiniOrcaPalette.focusAccent
-internal val ResultAccent = MiniOrcaPalette.codeType
+internal val ResultAccent = MiniOrcaPalette.information
 internal val Information = MiniOrcaPalette.information
 internal val Success = MiniOrcaPalette.success
 internal val Warning = MiniOrcaPalette.warning
@@ -443,15 +456,34 @@ internal val CodeType = MiniOrcaPalette.codeType
 data class StatusBadgeStyle(val label: String, val color: Color)
 
 // Resolve against the panel so a selected or highlighted parent cannot reduce label contrast.
-internal fun labelBadgeBackground(tint: Color): Color = blendOver(tint.copy(alpha = 0.12f), Panel)
+internal fun labelBadgeBackground(tint: Color): Color = blendOver(tint.copy(alpha = 0.16f), Panel)
 
 internal fun statusBadgeStyle(status: String): StatusBadgeStyle =
     when (status.lowercase()) {
       "fresh" -> StatusBadgeStyle("Fresh", Success)
       "stale" -> StatusBadgeStyle("Stale", Warning)
-      "running" -> StatusBadgeStyle("Running", Warning)
+      "running" -> StatusBadgeStyle("Running", Information)
       "failed" -> StatusBadgeStyle("Failed", Error)
+      "ignored",
+      "excluded",
+      "skipped" -> StatusBadgeStyle("Ignored", SecondaryText)
       else -> StatusBadgeStyle("Not analyzed", SecondaryText)
+    }
+
+internal fun analysisStatusTint(status: String?): Color =
+    when (status) {
+      "completed",
+      "completed_empty" -> Success
+      "queued",
+      "running",
+      "pausing",
+      "canceling" -> Information
+      "stale",
+      "partial",
+      "paused",
+      "interrupted" -> Warning
+      "failed" -> Error
+      else -> SecondaryText
     }
 
 @Composable
@@ -510,7 +542,7 @@ internal fun IdeProgressBar(
 
 @Composable
 internal fun SectionLabel(label: String, modifier: Modifier = Modifier) {
-  Text(label, color = SecondaryText, style = IdeTypography.section, modifier = modifier)
+  Text(label, color = PrimaryText, style = IdeTypography.section, modifier = modifier)
 }
 
 @Composable

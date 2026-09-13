@@ -55,10 +55,10 @@ Below that width they become labeled drawers; Terminal uses a bounded overlay.
 Resizing clamps visible widths without overwriting saved preferences. Source and
 composed diffs are selectable/read-only; only the isolated draft is editable.
 
-Context opens on **Actions** for each selected declaration. **Explain** holds the
-explicit explanation request and its result; **Details** holds signatures, file
-metadata and expandable project context. Blue marks primary actions, teal marks
-informational content, and labeled warning/error states use amber/red. Opening a
+Context shows a short description for the selected declaration, with explicit
+explanation and **Refactor** actions. Without a selected declaration, **Actions**
+and **Details** provide file actions, metadata and expandable project context.
+Labeled warning/error states use amber/red. Selecting a declaration or opening a
 tab never sends a model request.
 
 A current draft must be discarded explicitly before changing its target. Editing
@@ -68,7 +68,10 @@ that a provider is connected. Non-loopback scopes require their own confirmation
 
 ## Analysis and results
 
-Use **Start analysis** to preview the whole project. File selection and result-path
+Use **Start analysis** to preview the whole project, or **Analyze stale & failed**
+to include only files with stale or failed analysis. Both actions preview their
+scope before starting; fresh stages reuse cached results. Ignored and unanalysed
+files have no status dot in the file tree. File selection and result-path
 filters do not change its scope. The preview shows exclusions, stage eligibility,
 cache use, expected requests and inclusive retry bounds. Confirm each displayed
 remote destination and explicit Security review intent. One admission coordinates

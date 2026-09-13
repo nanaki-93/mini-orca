@@ -1620,6 +1620,7 @@ components:
         project_revision: {type: string, minLength: 1}
         scope: {type: string, enum: [project]}
         refresh: {type: boolean}
+        retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
         resume_run: {$ref: '#/components/schemas/AnalysisRunIdentity'}
     AnalysisFileIdentity:
@@ -1672,8 +1673,9 @@ components:
         identity: {$ref: '#/components/schemas/AnalysisQueueIdentity'}
         scope: {type: string, enum: [project]}
         refresh: {type: boolean}
+        retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
-        files: {type: array, description: Entire captured inventory, items: {$ref: '#/components/schemas/AnalysisPlannedFile'}}
+        files: {type: array, description: Selected files; remaining inventory is accounted for in excluded, items: {$ref: '#/components/schemas/AnalysisPlannedFile'}}
         excluded: {type: array, items: {$ref: '#/components/schemas/AnalysisExcludedFile'}}
         providers: {type: array, items: {$ref: '#/components/schemas/AnalysisProviderRequirement'}}
         expected_model_requests: {type: integer, minimum: 0}
@@ -1695,6 +1697,7 @@ components:
         preview_id: {type: string, minLength: 1}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
         refresh: {type: boolean}
+        retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
         confirmations: {$ref: '#/components/schemas/AnalysisRunConfirmations'}
     AnalysisRunControlRequest:
       type: object

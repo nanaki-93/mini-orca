@@ -833,7 +833,7 @@ internal fun checkStatus(state: String): ReviewEvidenceStatus =
 internal fun evidenceColor(status: ReviewEvidenceStatus): Color =
     when (status) {
       ReviewEvidenceStatus.Passed -> Success
-      ReviewEvidenceStatus.Running,
+      ReviewEvidenceStatus.Running -> Information
       ReviewEvidenceStatus.Skipped,
       ReviewEvidenceStatus.Missing,
       ReviewEvidenceStatus.Stale -> Warning

@@ -225,6 +225,14 @@ internal fun visibleDesktopStatusSegments(
 internal fun desktopStatusBarDescription(segments: List<DesktopStatusSegment>): String =
     segments.joinToString(separator = ". ") { it.detail }
 
+internal fun desktopStatusSegmentTint(segment: DesktopStatusSegment) =
+    when {
+      segment.type == DesktopStatusSegmentType.Error -> Error
+      segment.type == DesktopStatusSegmentType.Operation && segment.attention -> Information
+      segment.attention -> Warning
+      else -> SecondaryText
+    }
+
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 internal fun PersistentStatusBar(
@@ -270,7 +278,7 @@ private fun StatusBarSegment(
       ) {
         Text(
             segment.label,
-            color = if (segment.attention) Warning else SecondaryText,
+            color = desktopStatusSegmentTint(segment),
             fontSize = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis)
@@ -278,7 +286,7 @@ private fun StatusBarSegment(
     } else {
       Text(
           segment.label,
-          color = if (segment.attention) Warning else SecondaryText,
+          color = desktopStatusSegmentTint(segment),
           fontSize = 11.sp,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
@@ -314,7 +322,7 @@ internal fun DesktopStatusDetailsDialog(
           presentation.segments.forEach { segment ->
             DiagnosticText(
                 segment.detail,
-                color = if (segment.attention) Warning else SecondaryText,
+                color = desktopStatusSegmentTint(segment),
                 modifier = Modifier.padding(bottom = 6.dp),
             )
           }

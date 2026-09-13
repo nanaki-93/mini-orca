@@ -118,12 +118,12 @@ func (s *Service) Reindex() (*project.ProjectIndex, error) {
 }
 
 func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
-	s.invalidateAnalysisRun()
 	s.cancelGoScan()
 	index, err := s.manager.Reindex()
 	if err == nil {
 		s.clearExecutionTrust()
 		s.ExpireDraftsForOpenFile(index.ProjectID, index.ProjectRevision, "", "")
+		s.refreshAnalysisRunAfterReindex()
 	}
 	return index, err
 }
@@ -144,7 +144,7 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 }
 
 func (s *Service) invalidateJobsForProjectChange() {
-	s.invalidateAnalysisRun()
+	s.interruptAnalysisRunForProjectChange()
 	s.cancelGoScan()
 	s.clearDraftsForProjectChange()
 	s.clearChatSessions()

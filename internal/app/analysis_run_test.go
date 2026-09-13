@@ -283,7 +283,7 @@ func analysisStartFor(preview *AnalysisRunPreview) AnalysisRunStartRequest {
 	for _, provider := range preview.Providers {
 		confirmations.ProviderIDs = append(confirmations.ProviderIDs, provider.ID)
 	}
-	return AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, Refresh: preview.Refresh, Confirmations: confirmations}
+	return AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, RetryStaleFailed: preview.RetryStaleFailed, Refresh: preview.Refresh, Confirmations: confirmations}
 }
 
 func waitAnalysisWindow(t *testing.T, s *Service) {
@@ -631,6 +631,9 @@ func TestAnalysisRunRejectsSourcePolicyProviderAndProjectReplacement(t *testing.
 				s.runtimes.analyze.effective.ReasoningEffort = "replacement"
 				s.analysisRun.mu.Unlock()
 			case "reindex":
+				if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Changed(){}\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
 				if _, err := s.Reindex(); err != nil {
 					t.Fatal(err)
 				}

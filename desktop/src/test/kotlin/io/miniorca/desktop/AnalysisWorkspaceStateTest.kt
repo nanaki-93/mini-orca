@@ -9,6 +9,35 @@ import kotlin.test.assertTrue
 class AnalysisWorkspaceStateTest {
 
   @Test
+  fun retryButtonPreviewsOnlyStaleAndFailedFilesAtSupportedSizes() {
+    for ((width, height, scale) in
+        listOf(
+            Triple(1440, 900, 1f),
+            Triple(1000, 760, 1f),
+            Triple(999, 760, 1f),
+            Triple(800, 650, 1.5f),
+            Triple(1280, 600, 1.5f))) {
+      val starts = mutableListOf<Pair<AnalysisRunLimits, Boolean>>()
+      ComposeVisualFixture(width, height, scale) {
+            AnalysisWorkspacePane(
+                AnalysisWorkspacePaneState(resultProjectFixture(), ProjectAnalysisRunState()),
+                AnalysisWorkspaceActions(
+                    { limits, retry -> starts.add(limits to retry) }, {}, {}, {}, {}))
+          }
+          .use { fixture ->
+            fixture.render("analysis-retry-$width-$scale")
+            fixture.assertTextFits("Start analysis")
+            fixture.assertTextFits("Analyze stale & failed")
+            assertTrue(starts.isEmpty())
+            fixture.clickText("Analyze stale & failed")
+            assertEquals(listOf(AnalysisRunLimits(100, 900, 2) to true), starts)
+            fixture.clickText("Start analysis")
+            assertEquals(false, starts.last().second)
+          }
+    }
+  }
+
+  @Test
   fun analysisOwnsBoundedRunAndFileStageFailuresWithoutDispatchOnOpen() {
     val failure = "scan\u0000 unavailable\n" + "context ".repeat(700)
     val run =
@@ -31,7 +60,7 @@ class AnalysisWorkspaceStateTest {
                   resultProjectFixture(),
                   ProjectAnalysisRunState(run = run, error = "Cannot resume\u0000 run")),
               AnalysisWorkspaceActions(
-                  { calls++ }, { calls++ }, { calls++ }, { calls++ }, { calls++ }))
+                  { _, _ -> calls++ }, { calls++ }, { calls++ }, { calls++ }, { calls++ }))
         }
         .use { fixture ->
           fixture.render("bottom-analysis-failures-800-1.5")
@@ -54,7 +83,7 @@ class AnalysisWorkspaceStateTest {
   @Test
   fun lifecycleCommandsFollowTheDaemonAndResumeRequiresFreshAdmission() {
     assertEquals(
-        listOf(AnalysisRunCommand.Start),
+        listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
         projectRunPresentation(ProjectAnalysisRunState()).commands)
     val expected =
         mapOf(
@@ -64,7 +93,11 @@ class AnalysisWorkspaceStateTest {
             "canceling" to emptyList(),
             "paused" to listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel),
             "interrupted" to listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel),
-            "stale" to listOf(AnalysisRunCommand.Start, AnalysisRunCommand.Cancel))
+            "stale" to
+                listOf(
+                    AnalysisRunCommand.Start,
+                    AnalysisRunCommand.RetryStaleFailed,
+                    AnalysisRunCommand.Cancel))
     expected.forEach { (status, commands) ->
       assertEquals(
           commands,
@@ -74,7 +107,7 @@ class AnalysisWorkspaceStateTest {
     }
     listOf("completed", "completed_empty", "failed", "partial", "canceled", "unavailable").forEach {
       assertEquals(
-          listOf(AnalysisRunCommand.Start),
+          listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
           projectRunPresentation(
                   ProjectAnalysisRunState(run = analysisRunFixture().copy(status = it)))
               .commands)
@@ -111,6 +144,96 @@ class AnalysisWorkspaceStateTest {
     assertEquals(
         AnalysisStageFailure("main.go", "security_source", 2, "source scanner unavailable"),
         result.failures.single())
+  }
+
+  @Test
+  fun stagesUnavailableByPlanDoNotAppearAsOperationalFailures() {
+    val files =
+        listOf(
+                "README.md" to "Markdown",
+                ".gitignore" to "Text",
+                "config.yaml" to "YAML",
+                "package.json" to "JSON",
+                "settings.xml" to "XML",
+                "App.kt" to "Kotlin")
+            .map { (path, language) ->
+              AnalysisPlannedFile(
+                  path,
+                  "base",
+                  language,
+                  20,
+                  listOf(
+                      AnalysisStagePlan(
+                          "security_source",
+                          eligible = false,
+                          cached = false,
+                          reason = "Passive security rules require a Go source file.",
+                          maxModelRequests = 0)))
+            }
+    val run =
+        analysisRunFixture()
+            .copy(
+                plan = analysisPreviewFixture().copy(files = files),
+                files =
+                    files.map { file ->
+                      AnalysisRunFile(
+                          file.path,
+                          file.contentHash,
+                          file.language,
+                          file.stages.map {
+                            AnalysisStageProgress(
+                                it.stage, "unavailable", 0, false, reason = it.reason)
+                          })
+                    })
+
+    val result = projectRunPresentation(ProjectAnalysisRunState(run = run))
+
+    assertTrue(result.failures.isEmpty())
+    assertEquals(files.size, result.totalSteps)
+    assertEquals(files.size, result.finishedSteps)
+    assertEquals(1f, result.progress)
+  }
+
+  @Test
+  fun operationalFailuresRemainVisibleIncludingUnavailableEligibleStagesWithoutAttempts() {
+    val stages =
+        listOf(
+            AnalysisStageProgress("semantic", "failed", 2, false, reason = "Request failed."),
+            AnalysisStageProgress(
+                "performance", "unavailable", 0, false, reason = "Model not configured."),
+            AnalysisStageProgress(
+                "security_source", "failed", 0, false, reason = "Source scanner failed."),
+            AnalysisStageProgress(
+                "security_ai", "interrupted", 1, false, reason = "Request interrupted."))
+    val run =
+        analysisRunFixture()
+            .copy(
+                plan =
+                    analysisPreviewFixture()
+                        .copy(
+                            files =
+                                listOf(
+                                    AnalysisPlannedFile(
+                                        "main.go",
+                                        "base",
+                                        "Go",
+                                        20,
+                                        stages.map {
+                                          AnalysisStagePlan(
+                                              it.stage,
+                                              eligible = true,
+                                              cached = false,
+                                              maxModelRequests = 0)
+                                        }))),
+                files = listOf(AnalysisRunFile("main.go", "base", "Go", stages)))
+    val expected = stages.map { AnalysisStageFailure("main.go", it.stage, it.attempts, it.reason) }
+
+    assertEquals(expected, projectRunPresentation(ProjectAnalysisRunState(run = run)).failures)
+    assertEquals(
+        expected,
+        projectRunPresentation(
+                ProjectAnalysisRunState(run = run.copy(plan = analysisPreviewFixture())))
+            .failures)
   }
 
   @Test

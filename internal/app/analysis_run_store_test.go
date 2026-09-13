@@ -223,8 +223,8 @@ func TestAnalysisRunDetachmentRetainsFailureOnlyForCapturedProject(t *testing.T)
 	s.writeAnalysisRun = func(path string, data []byte, mode os.FileMode) error {
 		var run AnalysisRun
 		_ = json.Unmarshal(data, &run)
-		if path == filepath.Join(root, analysisRunRelativePath) && run.Status == AnalysisRunStale {
-			return errors.New("private stale write failure")
+		if path == filepath.Join(root, analysisRunRelativePath) && run.Status == AnalysisRunInterrupted {
+			return errors.New("private interruption write failure")
 		}
 		return storage.WriteFile(path, data, mode)
 	}
@@ -245,7 +245,7 @@ func TestAnalysisRunDetachmentRetainsFailureOnlyForCapturedProject(t *testing.T)
 		t.Fatal(err)
 	}
 	retained, err := s.CurrentAnalysisRun(context.Background())
-	if err != errAnalysisRunPersistence || retained == nil || retained.Status != AnalysisRunStale {
+	if err != errAnalysisRunPersistence || retained == nil || retained.Status != AnalysisRunInterrupted {
 		t.Fatalf("lost detached fault: %+v %v", retained, err)
 	}
 	s.writeAnalysisRun = nil

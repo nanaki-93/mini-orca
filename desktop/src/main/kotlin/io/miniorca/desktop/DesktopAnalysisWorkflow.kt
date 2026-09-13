@@ -93,13 +93,15 @@ internal class DesktopAnalysisWorkflow(
   fun preview(
       refresh: Boolean = false,
       limits: AnalysisRunLimits = AnalysisRunLimits(100, 900, 2),
-      resume: Boolean = false
+      resume: Boolean = false,
+      retryStaleFailed: Boolean = false
   ) {
     val project = project() ?: return
     val run = current.run
     val resumeRun = if (resume) run ?: return else null
     val capturedLimits = resumeRun?.plan?.limits ?: limits
     val capturedRefresh = resumeRun?.plan?.refresh ?: refresh
+    val capturedRetry = resumeRun?.plan?.retryStaleFailed ?: retryStaleFailed
     val token = begin("preview")
     actionJob =
         scope.launch {
@@ -112,7 +114,8 @@ internal class DesktopAnalysisWorkflow(
                       "project",
                       capturedRefresh,
                       capturedLimits,
-                      resumeRun?.identity))
+                      resumeRun?.identity,
+                      capturedRetry))
             }
             if (!isCurrent(project, token)) return@launch
             require(
@@ -122,6 +125,7 @@ internal class DesktopAnalysisWorkflow(
                     preview.identity.projectRevision == project.revision &&
                     preview.limits == capturedLimits &&
                     preview.refresh == capturedRefresh &&
+                    preview.retryStaleFailed == capturedRetry &&
                     (resumeRun == null || preview.identity == resumeRun.identity.queue())) {
                   "The analysis preview no longer matches this project. Request a fresh preview."
                 }
@@ -171,7 +175,8 @@ internal class DesktopAnalysisWorkflow(
                           preview.previewId,
                           preview.limits,
                           preview.refresh,
-                          confirmations))
+                          confirmations,
+                          preview.retryStaleFailed))
               else
                   api.controlAnalysis(
                       AnalysisRunControlRequest(

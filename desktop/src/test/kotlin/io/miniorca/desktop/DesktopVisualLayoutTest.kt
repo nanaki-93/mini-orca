@@ -20,6 +20,7 @@ import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.Key
@@ -55,7 +56,7 @@ class DesktopVisualLayoutTest {
             AnalysisWorkspacePane(
                 AnalysisWorkspacePaneState(
                     resultProjectFixture(), ProjectAnalysisRunState(run = acceptanceRun(status))),
-                AnalysisWorkspaceActions({}, {}, {}, {}, {}))
+                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
           }
           .use { fixture ->
             fixture.render("final-progress-$status-800-150")
@@ -99,7 +100,7 @@ class DesktopVisualLayoutTest {
                 AnalysisWorkspacePane(
                     AnalysisWorkspacePaneState(
                         resultProjectFixture(), ProjectAnalysisRunState(run = run)),
-                    AnalysisWorkspaceActions({}, {}, {}, {}, { navigations++ }))
+                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, { navigations++ }))
               }
               .use { fixture ->
                 fixture.render("analysis-progress-$width-$scale")
@@ -129,7 +130,7 @@ class DesktopVisualLayoutTest {
                             run = analysisRunFixture().copy(status = status),
                             error =
                                 "Could not reach the daemon. Retry when the local service is available. Completed results remain available in their sections; no analysis request was retried.")),
-                    AnalysisWorkspaceActions({}, {}, {}, {}, {}))
+                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
               }
               .use { fixture ->
                 fixture.render("analysis-$status-800-1.5")
@@ -145,7 +146,7 @@ class DesktopVisualLayoutTest {
           AnalysisWorkspacePane(
               AnalysisWorkspacePaneState(resultProjectFixture(), analysis),
               AnalysisWorkspaceActions(
-                  {},
+                  { _, _ -> },
                   {
                     pauses++
                     analysis = analysis.copy(action = "pausing")
@@ -350,7 +351,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun contextTabsKeepDefaultSelectionCompactAndDetailsReadOnly() {
+  fun selectedDeclarationShowsDescriptionAndExplicitActionsWithoutDetailTabs() {
     listOf(Triple(280, 600, 1f), Triple(320, 600, 1.5f), Triple(480, 650, 1.25f)).forEach {
         (width, height, scale) ->
       var actions = 0
@@ -375,34 +376,21 @@ class DesktopVisualLayoutTest {
                 })
           }
           .use { fixture ->
-            fixture.render("context-actions-$width-$scale")
-            listOf("Context", "Assistant", "Review", "Actions", "Explain", "Details", "Refactor")
+            fixture.render("context-description-$width-$scale")
+            listOf("Context", "Assistant", "Review", "Explain declaration", "Refactor")
                 .forEach(fixture::assertTextFits)
-            assertFalse(fixture.hasText("No explanation yet"))
-            assertFalse(fixture.hasText("Explanation needs refresh"))
-            assertFalse(fixture.hasText("Project context"))
-            assertFalse(fixture.hasText("func Run() error"))
-            fixture.clickText("Details")
-            fixture.render("context-details-$width-$scale")
-            assertTrue(fixture.hasText("func Run() error"))
-            assertFalse(fixture.hasText("Cached declaration explanation"))
-            assertEquals("Collapsed", fixture.stateDescription("Project context"))
-            fixture.clickText("Project context")
-            fixture.render()
-            assertTrue(fixture.hasText("Go service with a small HTTP API and a repository layer."))
-            fixture.clickText("Actions")
-            fixture.render()
-            assertTrue(fixture.requestFocus("Actions"))
-            assertTrue(fixture.pressKey(Key.DirectionRight))
-            fixture.render()
-            assertTrue(fixture.isFocused("Explain"))
-            assertTrue(fixture.hasText("Refactor"))
-            assertTrue(fixture.pressKey(Key.Enter))
-            fixture.render("context-explain-$width-$scale")
-            fixture.assertTextFits("Explain declaration")
-            assertTrue(fixture.hasText("Explanation needs refresh"))
+            assertTrue(fixture.hasText("Cached declaration explanation"))
+            listOf(
+                    "Actions",
+                    "Explain",
+                    "Details",
+                    "File analysis",
+                    "Project context",
+                    "func Run() error")
+                .forEach { assertFalse(fixture.hasText(it), it) }
             assertEquals(0, actions)
             assertEquals(0, outerSelections)
+            assertTrue(fixture.requestFocus("Explain declaration"))
             fixture.clickText("Explain declaration")
             assertEquals(1, actions)
             state =
@@ -411,10 +399,14 @@ class DesktopVisualLayoutTest {
                         state.inspector!!.copy(
                             selectedSymbol =
                                 state.inspector!!.selectedSymbol!!.let {
-                                  it.copy(symbol = it.symbol.copy(name = "Stop"))
+                                  it.copy(
+                                      symbol = it.symbol.copy(name = "Stop"),
+                                      explanation = "Stops the worker.")
                                 }))
             fixture.render("context-new-selection-$width-$scale")
             assertTrue(fixture.hasText("Stop"))
+            assertTrue(fixture.hasText("Stops the worker."))
+            assertFalse(fixture.hasText("Cached declaration explanation"))
             assertTrue(fixture.hasText("Refactor"))
             assertFalse(fixture.hasText("Explanation needs refresh"))
             fixture.clickText("Refactor")
@@ -424,7 +416,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun explanationTabPreservesConsentCancellationAndLifecycleEvidence() {
+  fun declarationDescriptionPreservesConsentCancellationAndLifecycleEvidence() {
     var requests = 0
     var cancellations = 0
     var state by
@@ -458,11 +450,10 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render()
-          fixture.clickText("Explain")
           fixture.render("context-explain-consent")
           assertTrue(fixture.hasText("Confirm remote destination"))
           assertTrue(fixture.isDisabled("Explain declaration"))
-          assertTrue(fixture.hasText("No explanation yet"))
+          assertTrue(fixture.hasText("Cached declaration explanation"))
           state = state.copy(functionRemoteProviderConfirmed = true)
           fixture.render()
           fixture.clickText("Explain declaration")
@@ -485,7 +476,7 @@ class DesktopVisualLayoutTest {
                           status = DeclarationExplanationStatus.Current, result = result))
           fixture.render("context-explain-current")
           assertTrue(fixture.hasText(result.summary))
-          fixture.assertTextFits("Current explanation")
+          assertFalse(fixture.hasText("Current explanation"))
           state =
               state.copy(
                   declarationExplanation =
@@ -1751,6 +1742,32 @@ internal class ComposeVisualFixture(
     assertTextLayout(label, mustWrap = false)
   }
 
+  fun assertTextContrast(label: String, background: Color) {
+    val matches = textNodes(label)
+    assertTrue(matches.isNotEmpty(), "$label must be rendered")
+    matches.forEach { node ->
+      val layouts = mutableListOf<TextLayoutResult>()
+      node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+      assertTrue(layouts.isNotEmpty())
+      layouts.forEach { layout ->
+        assertTrue(
+            contrastRatio(layout.layoutInput.style.color, background) >= 4.5,
+            "$label must retain readable text on $background")
+      }
+    }
+  }
+
+  fun assertColorVisible(color: Color) {
+    val rendered =
+        surface.makeImageSnapshot().use { snapshot ->
+          requireNotNull(snapshot.encodeToData()).use { data ->
+            javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(data.bytes))
+          }
+        }
+    val pixels = rendered.getRGB(0, 0, width, height, null, 0, width)
+    assertTrue(pixels.count { it == color.toArgb() } >= 10, "$color must be visible in the render")
+  }
+
   fun assertTextWrapsWithoutClipping(label: String) {
     assertTextLayout(label, mustWrap = true)
   }
@@ -2180,8 +2197,7 @@ private fun contextVisualState(): ContextToolWindowState {
       analysis,
       visualFixtureProject,
       visualFixtureOverview,
-      declarationExplanation =
-          DeclarationExplanationState(status = DeclarationExplanationStatus.Stale))
+      declarationExplanation = DeclarationExplanationState())
 }
 
 private val visualFixtureFindings =

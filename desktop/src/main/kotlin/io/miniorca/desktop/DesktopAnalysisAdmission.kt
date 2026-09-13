@@ -35,6 +35,7 @@ internal fun DesktopAnalysisAdmissionDialog(
       title = {
         Text(
             if (state.admission?.resumeRun != null) "Continue project analysis"
+            else if (state.admission?.preview?.retryStaleFailed == true) "Analyze stale & failed"
             else "Analyze whole project")
       },
       content = {
@@ -51,7 +52,7 @@ internal fun DesktopAnalysisAdmissionDialog(
         if (state.admission != null) {
           MiniOrcaButton(
               onClick = presenter::startAnalysis,
-              enabled = state.admission.isConfirmed(),
+              enabled = state.admission.isConfirmed() && state.admission.preview.files.isNotEmpty(),
               tone = ActionTone.Primary) {
                 Text(if (state.admission.resumeRun == null) "Start analysis" else "Resume analysis")
               }
@@ -86,12 +87,22 @@ internal fun DesktopAnalysisAdmissionContent(
           color = SecondaryText)
       Text(
           "Expected model requests: ${preview.expectedModelRequests} · Maximum: ${preview.maxModelRequests}")
+      if (preview.files.isEmpty()) {
+        Text(
+            if (preview.retryStaleFailed) "No stale or failed files to analyze."
+            else "No eligible files to analyze.")
+        return@Column
+      }
       Text(
           "This window: ${preview.limits.batchFiles} files, ${preview.limits.budgetSeconds} seconds, up to ${preview.limits.maxAttemptsPerStage} attempts per stage. Remaining work requires an explicit continuation.")
       if (preview.compatibilityStage.isNotBlank())
           Text(
               "This saved run covers only ${analysisStageLabel(preview.compatibilityStage)}.",
               color = Warning)
+      if (preview.retryStaleFailed) {
+        Text(
+            "Only files with stale or failed analysis are included. Fresh stages reuse their results.")
+      }
       if (preview.refresh) Text("Refresh requests fresh evidence for eligible stages.")
       for (provider in preview.providers) {
         IdeHorizontalSeparator()

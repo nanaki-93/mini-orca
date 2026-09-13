@@ -15,17 +15,22 @@ Runtime and dependency setup lives in [README.md](README.md#runtime-and-build).
 
 | Role | Current target |
 | --- | --- |
-| Activity rail / outer chrome | `#18191B` |
-| Tool windows / sidebars / bottom panes | `#1E1F22` |
-| Editor / content canvas | `#2B2D30` |
-| Overlay | `#26282C` |
-| Active indicator/action accent | `#3574F0` |
-| Informational text / explanation tab | `#71D7CA` |
-| Selected surface | `#2E436E` |
-| Separator | `#323438`, 1dp |
+| Activity rail / outer chrome | `#14161A` |
+| Tool windows / sidebars / bottom panes | `#24282F` |
+| Editor / input canvas | `#1B1E23` |
+| Section headers / overlay | `#303640` |
+| Contained neutral controls / hover | `#343E4A` / `#414E5F` |
+| Active indicator / primary action | `#73ABFF` / `#78ACFF` |
+| Information / explanation / running | `#66DBEB` |
+| Success / warning / failure | `#74E0AC` / `#FFD078` / `#FF929E` |
+| Selected surface / selected text | `#263F62` / `#C9DFFF` |
+| Pane separator / control outline | `#4B5665` / `#8E9EAF`, 1dp |
 
 Keep text, disabled, success/warning/error, diff and focus as separate semantic
-roles. Verify actual blended backgrounds, including selection and disabled fills.
+roles. Use tinted fills and matching outlines for semantic actions and badges. Keep
+primary action fills opaque in every interaction state so their dark labels retain
+contrast. Verify actual backgrounds, including hover, press, selection and disabled
+fills.
 Normal meaningful text targets 4.5:1; focus/control indicators target 3:1. Current
 measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces labels.
 
@@ -37,13 +42,15 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
 - Align to a 4dp grid; normal content inset 8dp and internal gaps 4–8dp. Avoid
   nested 16–20dp padding. Headers/actions default to 28–32dp; rows to 24–28dp.
 - Body 12–13sp with explicit 18–20sp line height; secondary chrome 11–12sp;
-  breadcrumbs 12sp; source/diff monospaced and readable. Grow at 125/150% text
+  section labels 12sp semibold; breadcrumbs 12sp; source/diff monospaced and readable. Grow at 125/150% text
   scale rather than clipping or shrinking the font to fit.
 - Keep restrained titles and labeled state. Headers own their actions, especially
   Start/Pause/Resume/Cancel. Trailing actions never toggle an adjacent disclosure.
   Use short labels/tooltips/accessibility names when an icon is ambiguous.
-- Selection has an active fill and accent edge; keyboard focus is independently
-  visible. Tool-window and source tabs share that policy.
+- Selection has a blue fill and accent edge, including the file tree; keyboard
+  focus is independently visible. Focused buttons add a dark inner keyline so the
+  light focus outline remains visible on bright actions. Tool-window and source
+  tabs share that policy.
 
 ## Shell and task flow
 
@@ -62,12 +69,11 @@ Review shows the exact candidate with current validation/checks, Apply, receipt
 and Undo. Use one next valid action and a concise blocked reason; expand technical
 details on demand. Never duplicate daemon eligibility rules in a visual helper.
 
-Context starts on Actions when the selected file or declaration changes. Keep only
-identity, the primary Refactor action and file-analysis status/actions in that view.
-Use the blue Actions, teal Explain and muted Details tabs to separate priorities;
-keep labels and an active edge visible. Explanations are opt-in; signatures, project
-summaries and technical context belong in Details, with secondary sections collapsed.
-Tab navigation is local and must never request an explanation or prepare an edit.
+Selected declarations show a short description with explicit explanation and Refactor
+actions in one compact view. Omit technical breakdowns, provenance and teaching copy.
+Use the cached description when available; requesting or refreshing one stays explicit.
+File context starts on Actions after navigation, with metadata and collapsed project
+context in Details. Navigation must never request an explanation or prepare an edit.
 
 Keep empty, loading, stale, failed, partial, canceled and unavailable states
 explicit. Unknown metrics are not zero. Daemon connectivity is not provider

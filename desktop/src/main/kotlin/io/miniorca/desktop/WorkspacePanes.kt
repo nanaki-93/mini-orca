@@ -56,21 +56,22 @@ internal fun AnalysisWorkspacePane(
           IdePaneHeader(
               title = "Analysis",
               icon = DesktopIcon.Analysis,
-              stateLabel = "Whole project · ${presentation.status}",
-              stateTint =
-                  if (analysis.run?.status in setOf("failed", "stale", "partial")) Warning
-                  else SecondaryText,
+              stateLabel =
+                  "${if (analysis.run?.plan?.retryStaleFailed == true) "Stale & failed files" else "Whole project"} · ${presentation.status}",
+              stateTint = analysisStatusTint(analysis.run?.status),
               actions = {
                 presentation.commands.forEach { command ->
                   MiniOrcaButton(
                       onClick = {
                         when (command) {
-                          AnalysisRunCommand.Start ->
+                          AnalysisRunCommand.Start,
+                          AnalysisRunCommand.RetryStaleFailed ->
                               actions.start(
                                   AnalysisRunLimits(
                                       (batchFiles.toIntOrNull() ?: 100).coerceIn(1, 500),
                                       (budget.toIntOrNull() ?: 900).coerceIn(1, 3600),
-                                      (attempts.toIntOrNull() ?: 2).coerceIn(1, 4)))
+                                      (attempts.toIntOrNull() ?: 2).coerceIn(1, 4)),
+                                  command == AnalysisRunCommand.RetryStaleFailed)
                           AnalysisRunCommand.Pause -> actions.pause()
                           AnalysisRunCommand.Resume -> actions.resume()
                           AnalysisRunCommand.Cancel -> actions.cancel()
@@ -79,17 +80,18 @@ internal fun AnalysisWorkspacePane(
                       enabled = state.project != null && !busy,
                       tone =
                           if (command == AnalysisRunCommand.Cancel) ActionTone.Destructive
+                          else if (command == AnalysisRunCommand.RetryStaleFailed)
+                              ActionTone.Neutral
                           else ActionTone.Primary,
                       density = ButtonDensity.Toolbar) {
                         Text(command.label)
                       }
                 }
               })
-          Text(
-              sanitizedOutputText(presentation.detail),
-              style = IdeTypography.body,
-              color = PrimaryText,
-              modifier = Modifier.padding(8.dp))
+          analysis.run
+              ?.reason
+              ?.takeIf { it.isNotBlank() }
+              ?.let { DiagnosticText(it, color = Warning) }
           if (busy)
               Text(
                   "${analysis.action.replaceFirstChar { it.uppercase() }}…",
@@ -100,10 +102,7 @@ internal fun AnalysisWorkspacePane(
         item {
           val run = analysis.run
           if (run == null)
-              Text(
-                  "No project run yet. File selection does not limit analysis.",
-                  color = SecondaryText,
-                  style = IdeTypography.body)
+              Text("No analysis yet.", color = SecondaryText, style = IdeTypography.body)
           else {
             Text(
                 "${run.files.size} captured files · ${run.plan.excluded.size} excluded",
@@ -146,7 +145,7 @@ internal fun AnalysisWorkspacePane(
                   Text(
                       analysisStatusLabel(progress?.status),
                       style = IdeTypography.resultLabel,
-                      color = SecondaryText)
+                      color = analysisStatusTint(progress?.status))
                   Text(
                       analysisCoverageLabel(progress?.coverage),
                       style = IdeTypography.compactBody,
@@ -191,10 +190,6 @@ internal fun AnalysisWorkspacePane(
                     "Total attempts per stage (1–4)",
                     Modifier.fillMaxWidth(),
                     enabled = !busy)
-                Text(
-                    "Bounds apply to one dispatch window. Remaining project work requires an explicit resume.",
-                    color = SecondaryText,
-                    style = IdeTypography.compactBody)
               }
         }
       }
@@ -218,7 +213,7 @@ internal data class AnalysisWorkspacePaneState(
 )
 
 internal data class AnalysisWorkspaceActions(
-    val start: (AnalysisRunLimits) -> Unit,
+    val start: (AnalysisRunLimits, Boolean) -> Unit,
     val pause: () -> Unit,
     val resume: () -> Unit,
     val cancel: () -> Unit,

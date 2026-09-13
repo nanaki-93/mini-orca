@@ -538,8 +538,9 @@ class DesktopWorkflowPresenter(
 
   fun previewAnalysis(
       refresh: Boolean = false,
-      limits: AnalysisRunLimits = AnalysisRunLimits(100, 900, 2)
-  ) = analysisWorkflow.preview(refresh, limits)
+      limits: AnalysisRunLimits = AnalysisRunLimits(100, 900, 2),
+      retryStaleFailed: Boolean = false
+  ) = analysisWorkflow.preview(refresh, limits, retryStaleFailed = retryStaleFailed)
 
   fun resumeAnalysis() = analysisWorkflow.preview(resume = true)
 

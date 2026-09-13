@@ -8,7 +8,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -38,7 +37,7 @@ class ContextToolWindowTest {
   }
 
   @Test
-  fun declarationExplanationPresentationDistinguishesLifecycleAndKeepsFactsBounded() {
+  fun declarationExplanationActionsDistinguishLifecycle() {
     assertEquals("Explain declaration", explanationActionLabel(DeclarationExplanationState()))
     assertEquals(
         "Cancel explanation",
@@ -48,33 +47,10 @@ class ContextToolWindowTest {
         "Refresh explanation",
         explanationActionLabel(
             DeclarationExplanationState(status = DeclarationExplanationStatus.Current)))
-    val facts =
-        explanationFacts(
-            DeclarationExplanation(
-                version = "v1",
-                projectId = "project",
-                projectRevision = "revision",
-                baseFileHash = "hash",
-                anchor =
-                    DeclarationSourceAnchor(
-                        "main.go", "Run", "func Run()", startLine = 2, endLine = 4),
-                summary = "Runs.",
-                behavior = listOf("dispatches work"),
-                sideEffects = listOf("writes output"),
-                contextManifest = ContextManifest()))
-
-    assertEquals("Behavior", facts.first().first)
-    assertEquals(listOf("dispatches work"), facts.first().second)
-    assertEquals(listOf("writes output"), facts[3].second)
-    assertEquals(
-        listOf("Scope" to "Function", "Model" to "model-a", "Provider" to "http://127.0.0.1:8080"),
-        explanationProvenanceFacts(
-            ContextManifest(model = "model-a", providerOrigin = "http://127.0.0.1:8080")))
-    assertEquals(listOf("Scope" to "Function"), explanationProvenanceFacts(ContextManifest()))
   }
 
   @Test
-  fun explanationFactsStaySeparateAndSourceDisclosureIsLocalAndResetsWithTheResponse() {
+  fun declarationExplanationShowsOnlyItsSummaryAndUpdatesWithTheResponse() {
     val result =
         DeclarationExplanation(
             version = "v1",
@@ -91,7 +67,7 @@ class ContextToolWindowTest {
         mutableStateOf(
             DeclarationExplanationState(
                 status = DeclarationExplanationStatus.Current, result = result))
-    ComposeVisualFixture(360, 1100, 1.5f) {
+    ComposeVisualFixture(360, 400, 1.5f) {
           Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             DeclarationExplanationDetails(state)
           }
@@ -106,20 +82,15 @@ class ContextToolWindowTest {
                   "Read request.ID.",
                   "Dispatch valid requests.",
                   "Missing input returns an error.")
-              .forEach { assertTrue(fixture.hasText(it), it) }
+              .forEach { assertFalse(fixture.hasText(it), it) }
           fixture.assertTextWrapsWithoutClipping("Validate the request before dispatching work.")
           assertFalse(fixture.hasText("Outputs"))
           assertFalse(fixture.hasText("model-a"))
           assertEquals(1, fixture.scrollableContentCount())
-          assertTrue(fixture.requestFocus("Explanation source"))
-          fixture.pressKey(Key.Enter)
-          fixture.render("context-explanation-source-360-1.5")
-          assertEquals("Expanded", fixture.stateDescription("Explanation source"))
-          assertTrue(fixture.hasText("model-a"))
-          assertTrue(fixture.hasText("local-provider"))
+          assertFalse(fixture.hasText("Explanation source"))
+          assertFalse(fixture.hasText("Current explanation"))
           state = state.copy(result = result.copy(summary = "Replacement explanation."))
           fixture.render()
-          assertEquals("Collapsed", fixture.stateDescription("Explanation source"))
           assertFalse(fixture.hasText("model-a"))
           assertTrue(fixture.hasText("Replacement explanation."))
         }
