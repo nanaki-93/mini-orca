@@ -53,9 +53,29 @@ top right, immediately before daemon connectivity. Editor owns one declaration c
 Go, Java and Kotlin projects show a type icon beside the project name in the top bar.
 
 Summary groups facts, findings and coverage above the project interpretation.
-Wide windows place Purpose beside Architecture, group Components, Entry points
-and Flows, and pair Risks with Next steps. Smaller windows and larger text stack
-these sections; all interpretation remains readable directly in the page.
+Zero-count coverage tiles are hidden; unavailable counts retain a dash. Tool-reported
+issues are counted separately from AI suggestions. A top-right light shows project
+analysis status: green for current, red for failed, yellow for other states, with
+status and failure details on hover or keyboard focus.
+Architecture and Flows have a **Show diagram** button, disabled when a diagram is
+unavailable. Diagrams start collapsed and render Mermaid flowcharts and sequence diagrams
+locally, with zoom controls and selectable Mermaid source when expanded.
+No browser, network request, provider call
+or project-code execution is needed to display a diagram. Packages / modules use flat
+rows: the parenthesized module name is the title, followed by its project-relative path
+and responsibility. Entry points and next steps are omitted from Summary.
+
+New Analysis results request Mermaid diagrams. Older prose reports remain readable and
+are marked stale after the prompt update; run Analysis explicitly to replace them.
+Previously saved arrow chains also render as Mermaid. Invalid or unsupported diagrams
+keep their source visible with an error instead of an invented diagram.
+
+The diagram renderer bundles beautiful-mermaid and its licenses, using the embedded
+GraalJS community runtime and JSVG for SVG text and arrow rendering. Normal Gradle builds use the checked-in bundle and do not
+require Node.js. To rebuild it after changing `desktop/mermaid/renderer.js` or its pinned
+dependencies, run `npm ci --prefix desktop/mermaid --ignore-scripts` and
+`npm run build --prefix desktop/mermaid`. Commit the lockfile and generated resource
+bundle together; do not edit `src/main/resources/mermaid/renderer.js` manually.
 
 Editor has docked Files and Context/Assistant/Review panes at widths ≥1000dp.
 Below that width they become labeled drawers; Terminal uses a bounded overlay.

@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -1448,7 +1449,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryDashboardShowsGroupedInterpretationWithoutHeadersNavigationOrDisclosures() {
+  fun summaryDashboardShowsGroupedInterpretationWithDiagramDisclosures() {
     val overview =
         visualFixtureOverview.copy(
             analysis =
@@ -1459,8 +1460,17 @@ class DesktopVisualLayoutTest {
                             whyItMattersHere = "Keep invalid input out of the repository.",
                             tradeoffOrFailureMode = "Validation rules must stay consistent.",
                             transferableLesson = "Validate at the request boundary.")))
-    ComposeVisualFixture(1440, 1100) { ProjectSummaryPane(overview, visualFixtureProject) }
+    ComposeVisualFixture(1440, 1600) { ProjectSummaryPane(overview, visualFixtureProject) }
         .use { fixture ->
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
+          fixture.render("summary-dashboard-collapsed-1440")
+          fixture.clickDescription("Show Architecture diagram")
+          fixture.clickDescription("Show Flow 1 diagram")
+          fixture.awaitDescription(
+              "Architecture diagram\n" + visualFixtureOverview.analysis.architecture)
+          fixture.awaitDescription(
+              "Flow 1 diagram\n" + visualFixtureOverview.analysis.flows.first())
           fixture.render("summary-dashboard-1440")
           listOf(
                   "Project facts",
@@ -1469,22 +1479,23 @@ class DesktopVisualLayoutTest {
                   "Project understanding",
                   "Purpose",
                   "Architecture",
-                  "Components",
-                  "Entry points",
+                  "Packages / modules",
                   "Flows",
                   "Risks · AI suggestions",
-                  "Next steps",
                   "Engineering insight",
                   "Validate before storage.")
               .forEach { assertTrue(fixture.hasText(it), it) }
           assertTrue(fixture.hasText("23"))
-          assertTrue(fixture.hasText("Verified findings"))
+          assertTrue(fixture.hasText("Tool-reported issues"))
           fixture.assertTextBefore("Project facts", "Findings")
           fixture.assertTextBefore("Findings", "Analysis coverage")
-          fixture.assertTextBefore("Purpose", "Architecture")
-          fixture.assertTextBefore("Components", "Entry points")
-          fixture.assertTextBefore("Entry points", "Flows")
-          fixture.assertTextBefore("Risks · AI suggestions", "Next steps")
+          fixture.assertTextAbove("Purpose", "Architecture")
+          fixture.assertTextAbove("Packages / modules", "Flows")
+          assertFalse(fixture.hasText("Entry points"))
+          assertFalse(fixture.hasText("Next steps"))
+          assertFalse(fixture.hasText("cmd/server/main.go"))
+          assertFalse(fixture.hasText("Review boundary validation."))
+          assertTrue(fixture.hasDescription("Project analysis: current · AI-generated"))
           fixture.assertTextBefore("Mechanism", "Why it matters here")
           fixture.assertTextBefore("Trade-off or failure mode", "Transferable lesson")
           assertFalse(fixture.hasText("Type: Go · Build: go.mod · Languages: Go · Markdown"))
@@ -1519,14 +1530,15 @@ class DesktopVisualLayoutTest {
             fixture.scrollBy(500f)
             fixture.render()
           }
-          assertTrue(fixture.hasText("Next steps"))
-          assertTrue(fixture.hasText("Review boundary validation."))
+          assertTrue(fixture.hasText("Risks · AI suggestions"))
+          assertTrue(fixture.hasText("MEDIUM · Input validation is incomplete."))
+          assertFalse(fixture.hasText("Next steps"))
           assertFalse(fixture.hasText("Interpretation details"))
         }
   }
 
   @Test
-  fun summaryDashboardCoverageUsesLabeledStatusColorsWithoutAnOverallBadge() {
+  fun summaryDashboardCoverageHidesZerosAndExposesAnalysisStateInLightDescription() {
     listOf("fresh", "stale", "failed", "missing", "running").forEach { status ->
       val overview =
           visualFixtureOverview.copy(
@@ -1536,25 +1548,149 @@ class DesktopVisualLayoutTest {
       ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject) }
           .use { fixture ->
             fixture.render("summary-dashboard-$status-1280-600")
-            listOf(
-                    "Ready" to Success,
-                    "Stale" to Warning,
-                    "Failed" to Error,
-                    "Missing" to SecondaryText,
-                    "Running" to Information)
-                .forEach { (label, tint) ->
-                  assertEquals(1, fixture.textCount(label))
-                  fixture.assertColorVisible(tint)
-                  fixture.assertTextContrast(label, blendOver(tint.copy(alpha = 0.08f), Panel))
-                }
-            if (status == "stale")
-                assertTrue(
-                    fixture.hasText(
-                        "AI interpretation is stale; source may have changed. Indexed facts remain current."))
-            if (status == "failed") {
-              assertTrue(fixture.hasText("AI interpretation failed. Provider timed out."))
-              assertFalse(fixture.hasText(overview.analysis.purpose))
+            listOf("Ready" to Success, "Stale" to Warning, "Missing" to SecondaryText).forEach {
+                (label, tint) ->
+              assertEquals(1, fixture.textCount(label))
+              fixture.assertColorVisible(tint)
+              fixture.assertTextContrast(label, blendOver(tint.copy(alpha = 0.08f), Panel))
             }
+            assertFalse(fixture.hasText("Failed"))
+            assertFalse(fixture.hasText("Running"))
+            assertTrue(
+                fixture.hasDescription(projectSummaryPresentation(overview, null).analysisMessage))
+            assertFalse(fixture.hasText(projectSummaryPresentation(overview, null).analysisMessage))
+            fixture.assertColorVisible(
+                when (status) {
+                  "fresh" -> Success
+                  "failed" -> Error
+                  else -> Warning
+                })
+            if (status == "failed") assertFalse(fixture.hasText(overview.analysis.purpose))
+          }
+    }
+  }
+
+  @Test
+  fun summaryDashboardOmitsEmptyCoverageButRetainsUnavailableCounts() {
+    ComposeVisualFixture(1440, 1100) {
+          ProjectSummaryPane(
+              visualFixtureOverview.copy(analysisCoverage = AnalysisCoverage()),
+              visualFixtureProject)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.hasText("Analysis coverage"))
+          assertTrue(fixture.hasText("Tool-reported issues"))
+          assertTrue(fixture.hasText("Purpose"))
+        }
+    ComposeVisualFixture(1440, 1100) { ProjectSummaryPane(null, visualFixtureProject) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Analysis coverage"))
+          assertTrue(fixture.hasText("Missing"))
+          assertTrue(fixture.hasText("—"))
+        }
+  }
+
+  @Test
+  fun summaryStatusLightExposesFailureOnKeyboardFocus() {
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                StructuredProjectAnalysis(status = "failed", failure = "Provider timed out."))
+    val description = "Project analysis: failed · Provider timed out."
+    ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, visualFixtureProject) }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.hasText(description))
+          fixture.pressKey(Key.Tab)
+          fixture.render("summary-status-keyboard-focus")
+          assertTrue(fixture.isDescriptionFocused(description))
+          assertTrue(fixture.hasText(description))
+          fixture.assertColorVisible(FocusAccent)
+        }
+  }
+
+  @Test
+  fun summaryModulesShowNamesPathsAndDescriptionsInFlatRows() {
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SummaryModules(
+              listOf(
+                  "internal/project (Project indexing): Builds the project context.",
+                  "internal/app (Workflow orchestration): Coordinates guarded changes."))
+        }
+        .use { fixture ->
+          fixture.render("summary-modules-800-150")
+          listOf(
+                  "Project indexing",
+                  "internal/project",
+                  "Builds the project context.",
+                  "Workflow orchestration",
+                  "internal/app")
+              .forEach(fixture::assertTextFits)
+          fixture.assertTextAbove("Project indexing", "internal/project")
+          assertFalse(fixture.hasEditableText())
+        }
+  }
+
+  @Test
+  fun summaryMermaidDiagramsRenderAndExposeTheirSource() {
+    val source =
+        "flowchart TD\n A[Client] --> B{Valid?}\n B -->|yes| C[Store]\n B -->|no| D[Reject]"
+    listOf(1440 to 1f, 800 to 1.5f).forEach { (width, scale) ->
+      ComposeVisualFixture(width, 800, scale) { MermaidDiagram(source, "Architecture") }
+          .use { fixture ->
+            fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+            assertFalse(fixture.isDisabled("Show diagram"))
+            assertFalse(fixture.hasDescription("Architecture diagram\n$source"))
+            assertFalse(fixture.hasText("Mermaid source"))
+            assertTrue(fixture.requestFocus("Show diagram"))
+            fixture.pressKey(Key.Enter)
+            fixture.awaitDescription("Architecture diagram\n$source")
+            assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
+            fixture.render("summary-mermaid-$width-$scale")
+            assertFalse(fixture.hasText("Rendering diagram…"))
+            fixture.clickText("Mermaid source")
+            fixture.render()
+            assertTrue(fixture.hasText(source))
+            assertFalse(fixture.hasEditableText())
+            fixture.clickText("Hide diagram")
+            fixture.render()
+            assertFalse(fixture.hasDescription("Architecture diagram\n$source"))
+            assertFalse(fixture.hasText(source))
+            assertEquals("Collapsed", fixture.stateDescription("Show diagram"))
+          }
+    }
+  }
+
+  @Test
+  fun summaryDiagramsDisableDisclosureWhenUnavailableAndResetForNewResults() {
+    listOf("Architecture", "Flow 1").forEach { label ->
+      var value by mutableStateOf("This result describes the project in prose.")
+      ComposeVisualFixture(800, 650, 1.5f) { MermaidDiagram(value, label) }
+          .use { fixture ->
+            fixture.render("summary-diagram-unavailable-${label.replace(' ', '-')}")
+            assertTrue(fixture.hasText(value))
+            assertTrue(fixture.isDisabled("Show diagram"))
+            assertEquals("Diagram unavailable", fixture.stateDescription("Show diagram"))
+            assertFalse(fixture.hasText("Run Analysis again to generate this diagram."))
+            assertFalse(fixture.tryClick("Show diagram"))
+
+            value = "flowchart TD\n A[Client] --> B[Server]"
+            fixture.awaitDescription("Show $label diagram", "Collapsed")
+            fixture.clickText("Show diagram")
+            fixture.awaitDescription("$label diagram\n$value")
+
+            value = "flowchart TD\n A[Replacement]"
+            fixture.awaitDescription("Show $label diagram", "Collapsed")
+            assertFalse(fixture.hasDescription("$label diagram\n$value"))
+            assertFalse(fixture.isDisabled("Show diagram"))
+
+            value = "flowchart TD\n A[Node]\n click A \"https://example.com\""
+            fixture.awaitDescription("Show $label diagram", "Diagram unavailable")
+            assertTrue(fixture.isDisabled("Show diagram"))
+            assertTrue(fixture.hasText(value))
+            assertFalse(fixture.tryClick("Show diagram"))
           }
     }
   }
@@ -1573,11 +1709,11 @@ class DesktopVisualLayoutTest {
                       "Project facts",
                       "Findings",
                       "Analysis coverage",
-                      "Verified findings",
+                      "Tool-reported issues",
                       "AI suggestions",
                       "Ready",
                       "Stale",
-                      "Failed")
+                      "Missing")
                   .forEach(fixture::assertTextFits)
               assertTrue(fixture.hasScrollableContent())
             }
@@ -1804,6 +1940,23 @@ internal class ComposeVisualFixture(
         }
   }
 
+  fun awaitDescription(label: String, state: String? = null) {
+    fun matches(): Boolean =
+        nodes().any { node ->
+          node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+              (state == null ||
+                  generateSequence(node) { it.parent }
+                      .any { it.config.getOrNull(SemanticsProperties.StateDescription) == state })
+        }
+    val deadline = System.nanoTime() + 20_000_000_000L
+    render()
+    while (!matches() && System.nanoTime() < deadline) {
+      Thread.sleep(20)
+      render()
+    }
+    assertTrue(matches(), "Timed out waiting for $label${state?.let { " ($it)" }.orEmpty()}")
+  }
+
   fun hasText(label: String): Boolean =
       textNodes(label).isNotEmpty() ||
           nodes().any { it.config.getOrNull(SemanticsProperties.EditableText)?.text == label }
@@ -1956,6 +2109,12 @@ internal class ComposeVisualFixture(
         "$label and $following must share a row")
   }
 
+  fun assertTextAbove(label: String, following: String) {
+    val first = textNodes(label).single().boundsInRoot
+    val second = textNodes(following).single().boundsInRoot
+    assertTrue(first.bottom < second.top, "$label must be above $following")
+  }
+
   fun assertTextContrast(label: String, background: Color) {
     val matches = textNodes(label)
     assertTrue(matches.isNotEmpty(), "$label must be rendered")
@@ -2054,10 +2213,16 @@ private val visualFixtureOverview =
             StructuredProjectAnalysis(
                 status = "fresh",
                 purpose = "Go service with a small HTTP API and a repository layer.",
-                architecture = "HTTP handlers delegate through services to repository adapters.",
-                components = listOf("API handlers", "Repository adapters"),
+                architecture =
+                    "flowchart LR\n A[HTTP handlers] --> B[Services]\n B --> C[Repository adapters]",
+                components =
+                    listOf(
+                        "internal/api (API handlers): Receives requests.",
+                        "internal/storage (Repository adapters): Persists records."),
                 entryPoints = listOf("cmd/server/main.go"),
-                flows = listOf("HTTP request to handler to service to repository"),
+                flows =
+                    listOf(
+                        "sequenceDiagram\n participant C as Client\n participant A as API\n participant S as Storage\n C->>A: HTTP request\n A->>S: Store record\n S-->>A: Result\n A-->>C: Response"),
                 risks = listOf(ProjectAnalysisRisk("medium", "Input validation is incomplete.")),
                 nextSteps = listOf("Review boundary validation.")),
         analysisCoverage = AnalysisCoverage(total = 23, fresh = 16, stale = 4, missing = 3),
