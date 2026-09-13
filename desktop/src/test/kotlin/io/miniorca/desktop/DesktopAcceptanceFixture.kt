@@ -236,22 +236,21 @@ internal fun acceptanceResultPage(category: String, status: String): AnalysisRes
 
 @Composable
 internal fun AcceptanceResultPane(category: String, status: String) {
-  var page by remember(category, status) { mutableStateOf(acceptanceResultPage(category, status)) }
+  val page = acceptanceResultPage(category, status)
   val actions = FindingActions({}, {}, { _, _ -> })
   when (category) {
     "performance" ->
         PerformanceWorkspacePane(
             PerformanceWorkspacePaneState(page, resultIndexFixture()),
-            PerformanceWorkspaceActions(
-                { _, _ -> }, { _, _ -> }, {}, { page = page.copy(path = it) }, actions))
+            PerformanceWorkspaceActions({ _, _ -> }, { _, _ -> }, {}, actions))
     "security" ->
         SecurityWorkspacePane(
             SecurityWorkspacePaneState(page, resultIndexFixture()),
-            SecurityWorkspaceActions({}, {}, {}, { page = page.copy(path = it) }, actions))
+            SecurityWorkspaceActions({}, {}, {}, actions))
     else ->
         BugsWorkspacePane(
             BugsWorkspacePaneState(page.semantic, null, false, page),
-            BugsWorkspaceActions(actions, {}, {}, {}, { page = page.copy(path = it) }))
+            BugsWorkspaceActions(actions, {}, {}, {}))
   }
 }
 

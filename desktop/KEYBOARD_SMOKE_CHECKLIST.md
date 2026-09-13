@@ -15,11 +15,11 @@ separately; native accessibility names do not establish spoken reader behavior.
 2. Verify Project, Results and Editing groups have distinct labeled destinations.
    Cmd/Ctrl+1–4 select Summary, Analysis, Bugs and Editor. Cmd/Ctrl+Tab cycles all
    workspaces. Commands offers View Performance results and View Security results;
-   navigation preserves the selected file, draft and result filters.
+   navigation preserves the selected file, draft and loaded results.
 3. In Analysis, Start analysis opens a whole-project preview with file/stage scope,
    exclusions, cache use, limits and request bounds. Confirm every required remote
    destination and explicit Security intent. Admission is one operation; starting
-   a result page or applying a path filter must never launch another analysis.
+   a result page must show the whole category and never launch another analysis.
 4. Verify Analysis contains progress, per-section states, failures and result
    links. Pause settles at a stage boundary, Cancel stops further requests, and
    Resume requires a fresh preview. After restart, retained progress is interrupted

@@ -207,7 +207,8 @@ class DesktopVisualLayoutTest {
                                                 })))
                       }
                 }
-            var page by mutableStateOf(original)
+            var page by
+                mutableStateOf(original.copy(section = AnalysisSectionState(loading = true)))
             val findingActions =
                 FindingActions(
                     { externalActions++ }, { externalActions++ }, { _, _ -> externalActions++ })
@@ -220,7 +221,6 @@ class DesktopVisualLayoutTest {
                                 { _, _ -> externalActions++ },
                                 { _, _ -> externalActions++ },
                                 { externalActions++ },
-                                { page = page.copy(path = it) },
                                 findingActions))
                     "security" ->
                         SecurityWorkspacePane(
@@ -229,7 +229,6 @@ class DesktopVisualLayoutTest {
                                 { externalActions++ },
                                 { externalActions++ },
                                 { externalActions++ },
-                                { page = page.copy(path = it) },
                                 findingActions))
                     else ->
                         BugsWorkspacePane(
@@ -238,14 +237,19 @@ class DesktopVisualLayoutTest {
                                 findingActions,
                                 { externalActions++ },
                                 { externalActions++ },
-                                { externalActions++ },
-                                { page = page.copy(path = it) }))
+                                { externalActions++ }))
                   }
                 }
                 .use { fixture ->
+                  fixture.render()
+                  assertTrue(fixture.hasText("Loading results…"))
+                  assertFalse(fixture.hasDescription("Inspect $title"))
+                  page = original
                   fixture.render("results-$category-$width-$scale")
                   fixture.assertTextFits("View analysis")
                   fixture.assertTextFits(title)
+                  assertFalse(
+                      fixture.hasEditableText(), "Result pages must show the unfiltered list")
                   assertFalse(fixture.hasText("Start analysis"))
                   assertFalse(fixture.hasText("Review"))
                   fixture.clickDescription("Inspect $title")
@@ -259,12 +263,20 @@ class DesktopVisualLayoutTest {
                   assertEquals(0, externalActions)
                   fixture.clickText(if (width < 900) "Back to results" else "Clear selection")
                   fixture.render()
-                  page = page.copy(path = "not-in-project.go")
-                  fixture.render()
-                  assertFalse(fixture.hasDescription("Inspect $title"))
-                  fixture.clickText("All project files")
+                  assertTrue(fixture.hasDescription("Inspect $title"))
+                  fixture.clickDescription("Inspect $title")
+                  val nextRun =
+                      original.run!!.copy(identity = original.run.identity.copy(id = "next-run"))
+                  page =
+                      original.copy(
+                          run = nextRun,
+                          section =
+                              original.section.copy(
+                                  results = original.results!!.copy(identity = nextRun.identity)))
                   fixture.render()
                   assertTrue(fixture.hasDescription("Inspect $title"))
+                  assertFalse(fixture.hasText("Back to results"))
+                  assertFalse(fixture.hasText("Clear selection"))
                   assertEquals(0, externalActions)
                 }
           }
@@ -283,7 +295,7 @@ class DesktopVisualLayoutTest {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(stale, resultIndexFixture()),
               PerformanceWorkspaceActions(
-                  { _, _ -> }, { _, _ -> }, {}, {}, FindingActions({}, {}, { _, _ -> })))
+                  { _, _ -> }, { _, _ -> }, {}, FindingActions({}, {}, { _, _ -> })))
         }
         .use { fixture ->
           fixture.render("results-stale-error-800-1.25")
@@ -1237,6 +1249,58 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun analysisStatusStaysImmediatelyBeforeDaemonAcrossToolbarSizesAndRunChanges() {
+    listOf(
+            Triple(1440, 900, 1f),
+            Triple(1000, 760, 1f),
+            Triple(999, 760, 1f),
+            Triple(800, 650, 1f),
+            Triple(800, 650, 1.5f),
+            Triple(1280, 600, 1.25f),
+            Triple(1280, 600, 1.5f))
+        .forEach { (width, height, scale) ->
+          var state by
+              mutableStateOf(
+                  DesktopState(
+                      projectState = ProjectWorkspaceState(resultProjectFixture()),
+                      analysisRun =
+                          ProjectAnalysisRunState(
+                              run = analysisRunFixture().copy(status = "running"))))
+          ComposeVisualFixture(width, height, scale) {
+                ToolbarVisualFixture(
+                    width.toFloat(),
+                    analysisStatus = toolbarAnalysisStatus(state),
+                    showEditorDrawerActions = useNarrowLayout(width.toFloat()))
+              }
+              .use { fixture ->
+                val daemon = if (width < 1000) "Connected" else "Daemon connected"
+                fixture.render("toolbar-analysis-$width-$scale")
+                fixture.assertTextFits("Analysis · Running")
+                fixture.assertTextFits(daemon)
+                fixture.assertTextBefore("Analysis · Running", daemon)
+                fixture.assertTextFits(
+                    if (width < 1220) "Search" else "Search files, symbols, commands")
+                listOf("paused", "completed").forEach { status ->
+                  state =
+                      state.copy(
+                          analysisRun =
+                              state.analysisRun.copy(
+                                  run = state.analysisRun.run!!.copy(status = status)))
+                  fixture.render()
+                  val label = "Analysis · ${status.replaceFirstChar { it.uppercase() }}"
+                  fixture.assertTextFits(label)
+                  fixture.assertTextBefore(label, daemon)
+                  assertFalse(fixture.hasText("Analysis · Running"))
+                }
+                state = state.copy(analysisRun = ProjectAnalysisRunState())
+                fixture.render()
+                assertFalse(fixture.hasText("Analysis · Completed"))
+                fixture.assertTextFits(daemon)
+              }
+        }
+  }
+
+  @Test
   fun toolbarKeepsOnlyLiveProjectSearchBranchAndConnectionChrome() {
     ComposeVisualFixture(1440, 220) { ToolbarVisualFixture(1440f) }
         .use { fixture ->
@@ -1451,7 +1515,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun filtersAndToolWindowHeadersKeepInteractionLocalAtNarrowScale() {
+  fun resultToolsAndToolWindowHeadersKeepInteractionLocalAtNarrowScale() {
     var workflowActions = 0
     ComposeVisualFixture(480, 650, 1.3f) {
           BugsWorkspacePane(
@@ -1465,18 +1529,18 @@ class DesktopVisualLayoutTest {
                   {}))
         }
         .use { fixture ->
-          fixture.render("findings-filters-collapsed-480-1.3")
-          assertTrue(fixture.stateDescription("Filters") == "Collapsed")
-          assertTrue(fixture.requestFocus("Filters"))
+          fixture.render("findings-tools-collapsed-480-1.3")
+          assertTrue(fixture.stateDescription("Verified checks") == "Collapsed")
+          assertTrue(fixture.requestFocus("Verified checks"))
           assertTrue(fixture.pressKey(Key.Spacebar))
-          fixture.render("findings-filters-expanded-480-1.3")
-          assertTrue(fixture.stateDescription("Filters") == "Expanded")
-          assertTrue(fixture.hasText("Source"))
-          assertTrue(fixture.hasText("Lifecycle"))
+          fixture.render("findings-tools-expanded-480-1.3")
+          assertTrue(fixture.stateDescription("Verified checks") == "Expanded")
+          assertTrue(fixture.hasText("Trust local execution & run scan"))
+          assertFalse(fixture.hasEditableText())
           assertTrue(fixture.hasScrollableContent())
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
-          assertTrue(fixture.stateDescription("Filters") == "Collapsed")
+          assertTrue(fixture.stateDescription("Verified checks") == "Collapsed")
           kotlin.test.assertEquals(0, workflowActions)
         }
 
@@ -1614,6 +1678,9 @@ internal class ComposeVisualFixture(
 
   fun textCount(label: String): Int = textNodes(label).size
 
+  fun hasEditableText(): Boolean =
+      nodes().any { it.config.getOrNull(SemanticsActions.SetText) != null }
+
   fun hasDescription(label: String): Boolean =
       nodes().any {
         it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
@@ -1742,6 +1809,15 @@ internal class ComposeVisualFixture(
     assertTextLayout(label, mustWrap = false)
   }
 
+  fun assertTextBefore(label: String, following: String) {
+    val first = textNodes(label).single().boundsInRoot
+    val second = textNodes(following).single().boundsInRoot
+    assertTrue(first.right < second.left, "$label must be left of $following")
+    assertTrue(
+        kotlin.math.abs(first.center.y - second.center.y) < 2f,
+        "$label and $following must share a row")
+  }
+
   fun assertTextContrast(label: String, background: Color) {
     val matches = textNodes(label)
     assertTrue(matches.isNotEmpty(), "$label must be rendered")
@@ -1856,6 +1932,8 @@ private fun ToolbarVisualFixture(
     connection: ConnectionState = ConnectionState(connected = true),
     actions: ToolbarActions = ToolbarActions({}, {}, {}, {}, {}, {}),
     paletteFocusRequester: FocusRequester? = null,
+    analysisStatus: ToolbarAnalysisStatus? = null,
+    showEditorDrawerActions: Boolean = false,
 ) {
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
@@ -1866,7 +1944,8 @@ private fun ToolbarVisualFixture(
             "",
             connection,
             GitStatus(available = true, branch = "main"),
-            false),
+            showEditorDrawerActions,
+            analysisStatus),
         actions,
         paletteFocusRequester = paletteFocusRequester)
   }

@@ -270,7 +270,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun resultNavigationAndFiltersNeverRequestAnalysisOrChangeTheSelectedFile() {
+  fun resultNavigationShowsAllFilesWithoutRequestingAnalysisOrChangingTheSelectedFile() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
     val scope = CoroutineScope(SupervisorJob() + main)
@@ -282,14 +282,37 @@ class DesktopWorkflowPresenterTest {
         }
     try {
       presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
-      presenter.viewAnalysisResults("security", "main.go")
-      presenter.setAnalysisResultPath("performance", "src/")
+      val run = analysisRunFixture()
+      val sections =
+          listOf("bugs", "performance", "security").associate { category ->
+            val result = analysisResultsFixture(run, category)
+            val findings =
+                listOf("main.go", "other.go").map { path ->
+                  UnifiedFinding(
+                      id = path,
+                      category = category,
+                      projectId = run.identity.projectId,
+                      projectRevision = run.identity.projectRevision,
+                      location = FindingLocation(path))
+                }
+            AnalysisResultKey(category) to
+                AnalysisSectionState(results = result.copy(semantic = findings))
+          }
+      val analysis = ProjectAnalysisRunState(run = run, sections = sections)
+      presenter.dispatch(DesktopEvent.AnalysisRunUpdated(analysis))
+      for (category in listOf("bugs", "performance", "security")) {
+        presenter.viewAnalysisResults(category, "main.go")
+        val state = presenter.snapshot.value.state
+        assertEquals(analysisCategoryWorkspace(category), state.workspace)
+        assertEquals(
+            listOf("main.go", "other.go"),
+            state.analysisResultPage(category).semantic.map { it.location.path })
+        assertEquals(analysis, state.analysisRun)
+      }
       main.runPending()
       io.runPending()
       main.runPending()
       assertEquals(Workspace.Security, presenter.snapshot.value.state.workspace)
-      assertEquals("main.go", presenter.snapshot.value.state.analysisRun.resultPaths["security"])
-      assertEquals("src/", presenter.snapshot.value.state.analysisRun.resultPaths["performance"])
       assertNull(presenter.snapshot.value.state.selectedFile)
       assertTrue(calls.isEmpty())
       presenter.viewAnalysisResults("bugs", "missing.go")

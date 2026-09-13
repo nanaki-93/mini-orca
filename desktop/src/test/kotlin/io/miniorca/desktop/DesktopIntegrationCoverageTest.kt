@@ -9,14 +9,11 @@ import kotlin.test.assertTrue
 /** Deterministic cross-boundary smoke coverage; no daemon, model, or UI window is required. */
 class DesktopIntegrationCoverageTest {
   @Test
-  fun resultNavigationPreservesFileSelectionFiltersAndAnalysisOwnership() {
+  fun resultNavigationPreservesFileSelectionAndAnalysisOwnership() {
     val controller = loadedController()
     val request = controller.beginFileLoad("main.go")!!
     assertTrue(controller.fileLoaded(request, file(), listOf(symbol())))
-    val run =
-        ProjectAnalysisRunState(
-            run = analysisRunFixture(),
-            resultPaths = mapOf("bugs" to "main.go", "security" to "internal/"))
+    val run = ProjectAnalysisRunState(run = analysisRunFixture())
     controller.dispatch(DesktopEvent.AnalysisRunUpdated(run))
     controller.dispatch(DesktopEvent.DraftLoaded(draft()))
     val review = controller.state.review

@@ -71,7 +71,6 @@ data class ProjectAnalysisRunState(
     val action: String = "",
     val error: String? = null,
     val sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
-    val resultPaths: Map<String, String> = emptyMap(),
 )
 
 enum class SecuritySectionOperationStatus {
@@ -1017,58 +1016,4 @@ private fun DesktopState.withFindingStatus(event: DesktopEvent.FindingStatusUpda
                                   unclassified = it.unclassified.updated())
                             })
                   }))
-}
-
-/** A project snapshot supplies badges; rendering or selecting navigation never loads results. */
-internal data class WorkspaceNavigationBadge(
-    val status: String,
-    val count: Int? = null,
-    val detail: String,
-    val attention: Boolean = false
-)
-
-internal fun workspaceNavigationBadges(
-    state: DesktopState
-): Map<LeftToolWindow, WorkspaceNavigationBadge> {
-  val project = state.project ?: return emptyMap()
-  val run = state.analysisRun.run?.takeIf { it.identity.projectId == project.projectId }
-  val stale =
-      run != null &&
-          (run.status == "stale" || run.identity.projectRevision != project.projectRevision)
-  val status =
-      when {
-        state.analysisRun.action.isNotBlank() -> analysisStatusLabel(state.analysisRun.action)
-        state.analysisRun.admission != null -> "Review scope"
-        stale -> "Stale"
-        else -> analysisStatusLabel(run?.status)
-      }
-  return buildMap {
-    put(
-        LeftToolWindow.Analysis,
-        WorkspaceNavigationBadge(
-            status,
-            detail =
-                "Whole-project analysis · $status" +
-                    state.analysisRun.error?.let { ". $it" }.orEmpty(),
-            attention =
-                stale ||
-                    state.analysisRun.error != null ||
-                    run?.status in setOf("failed", "partial", "interrupted")))
-    listOf("bugs", "performance", "security").forEach { category ->
-      val page =
-          if (run == null) AnalysisResultPageState(category, project, null)
-          else state.analysisResultPage(category)
-      put(
-          leftToolWindowForWorkspace(analysisCategoryWorkspace(category)),
-          WorkspaceNavigationBadge(
-              page.statusLabel,
-              page.reportedCount,
-              "${analysisCategoryLabel(category)} results · ${page.reportedCount?.let { "$it findings" } ?: "Count unknown"} · ${page.statusLabel}. ${analysisCoverageLabel(page.progress?.coverage)}" +
-                  page.section.error?.let { ". Results refresh failed: $it" }.orEmpty(),
-              page.stale && page.run != null ||
-                  page.section.error != null ||
-                  page.progress?.status in
-                      setOf("failed", "partial", "unavailable", "interrupted")))
-    }
-  }
 }

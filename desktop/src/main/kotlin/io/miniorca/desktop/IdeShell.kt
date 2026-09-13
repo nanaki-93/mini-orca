@@ -61,7 +61,6 @@ internal fun ToolWindowBar(
     activeToolWindow: LeftToolWindow,
     onSelect: (LeftToolWindow) -> Unit,
     modifier: Modifier = Modifier,
-    badges: Map<LeftToolWindow, WorkspaceNavigationBadge> = emptyMap(),
 ) {
   var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
   var tabGroupHasFocus by remember { mutableStateOf(false) }
@@ -86,23 +85,12 @@ internal fun ToolWindowBar(
           },
       horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    workspaceNavigationGroups.forEachIndexed { index, group ->
-      if (index > 0) IdeHorizontalSeparator(Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-      Text(
-          group.label,
-          color = SecondaryText,
-          fontSize = 10.sp,
-          lineHeight = 14.sp,
-          fontWeight = FontWeight.SemiBold,
-          modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
-      group.destinations.forEach { toolWindow ->
-        WorkspaceNavigationEntry(
-            toolWindow,
-            activeToolWindow == toolWindow,
-            tabGroupHasFocus && toolWindow == focusedToolWindow,
-            badges[toolWindow],
-            { onSelect(toolWindow) })
-      }
+    LeftToolWindow.entries.forEach { toolWindow ->
+      WorkspaceNavigationEntry(
+          toolWindow,
+          activeToolWindow == toolWindow,
+          tabGroupHasFocus && toolWindow == focusedToolWindow,
+          { onSelect(toolWindow) })
     }
   }
 }
@@ -113,13 +101,12 @@ private fun WorkspaceNavigationEntry(
     toolWindow: LeftToolWindow,
     selected: Boolean,
     focused: Boolean,
-    badge: WorkspaceNavigationBadge?,
     onSelect: () -> Unit
 ) {
   val label = leftToolWindowLabel(toolWindow)
   val reveal = remember { BringIntoViewRequester() }
   LaunchedEffect(focused) { if (focused) reveal.bringIntoView() }
-  TooltipArea(tooltip = { ToolWindowTooltip(badge?.detail ?: label) }) {
+  TooltipArea(tooltip = { ToolWindowTooltip(label) }) {
     ChromeButton(
         onClick = onSelect,
         modifier =
@@ -138,7 +125,6 @@ private fun WorkspaceNavigationEntry(
                 .semantics {
                   contentDescription = toolWindowSemanticsLabel(toolWindow, selected, focused)
                   this.selected = selected
-                  badge?.let { stateDescription = it.detail }
                 },
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
         role = Role.Tab,
@@ -158,26 +144,6 @@ private fun WorkspaceNavigationEntry(
                 lineHeight = 16.sp,
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.SemiBold)
-            if (toolWindow == LeftToolWindow.Analysis)
-                Text(
-                    "Run & progress",
-                    color = SecondaryText,
-                    fontSize = 10.sp,
-                    lineHeight = 14.sp,
-                    textAlign = TextAlign.Center)
-            badge?.let {
-              Spacer(Modifier.height(4.dp))
-              it.count?.let { count ->
-                IdeLabelBadge(count.toString(), SecondaryText, accessibleName = "$count findings")
-                Text("findings", color = SecondaryText, fontSize = 10.sp, lineHeight = 14.sp)
-              }
-              Text(
-                  it.status,
-                  color = if (it.attention) Warning else SecondaryText,
-                  fontSize = 11.sp,
-                  lineHeight = 16.sp,
-                  textAlign = TextAlign.Center)
-            }
           }
         }
   }

@@ -254,63 +254,49 @@ internal fun RemoteProviderConfirmation(
 
 @Composable
 internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorkspaceActions) {
-  val filters = rememberFindingsFilterState()
-  val page = state.page
-  val findings = state.findings.filter { page == null || page.matchesPath(it.location.path) }
-  val presentation = findingsPresentation(findings, filters.filters, state.loading)
-  val visible = presentation.priorityGroups.flatMap { it.findings }
-  var selectedKey by remember(page?.run?.identity) { mutableStateOf<String?>(null) }
+  val visible = groupFindingsByPriority(state.findings).flatMap { it.findings }
   var scanExpanded by remember { mutableStateOf(false) }
-  Column(Modifier.fillMaxSize()) {
-    if (page != null) {
-      ResultSectionHeader(page, actions.openAnalysis)
-      ResultPathFilter(page.path, actions.pathChanged)
-    } else WorkspacePaneHeader("Bugs")
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-      FindingsFilterControls(filters, presentation)
-      val scan = verifiedScanProgress(state.scan)
-      IdeDisclosureHeader(
-          "Verified checks",
-          scanExpanded,
-          { scanExpanded = !scanExpanded },
-          stateLabel = state.scan?.status ?: "Not run")
-      if (scanExpanded)
-          Column(
-              Modifier.fillMaxWidth()
-                  .heightIn(max = 180.dp)
-                  .verticalScroll(rememberScrollState())
-                  .padding(8.dp)) {
-                Text(scan.summary, style = IdeTypography.compactBody, color = SecondaryText)
-                Text(
-                    "Explicit local execution: go test ./... runs in a copied workspace; go vet ./... reads source.",
-                    style = IdeTypography.compactBody,
-                    color = SecondaryText)
-                if (scan.canCancel)
-                    MiniOrcaButton(
-                        onClick = actions.cancelScan,
-                        enabled = state.scan?.status == "running",
-                        tone = ActionTone.Destructive) {
-                          Text("Cancel scan")
-                        }
-                else
-                    MiniOrcaButton(onClick = actions.startScan, tone = ActionTone.Neutral) {
-                      Text("Trust local execution & run scan")
-                    }
-                state.scan?.let { VerifiedScanDiagnostics(it) }
-              }
-      page?.let { PreviousAnalysisDetails(it.unclassified) }
-    }
-    ResultListDetail(
-        visible.map(::semanticResultRow),
-        selectedKey,
-        { selectedKey = it },
-        presentation.emptyMessage,
-        Modifier.weight(1f).fillMaxWidth()) { key ->
-          visible
-              .firstOrNull { semanticResultRow(it).key == key }
-              ?.let { FindingDetailsRegion(it, actions.findingActions) }
-        }
-  }
+  AnalysisResultsPane(
+      page = state.page,
+      rows = visible.map(::semanticResultRow),
+      openAnalysis = actions.openAnalysis,
+      emptyMessage = if (state.loading) "Loading findings…" else "No findings yet.",
+      tools = {
+        val scan = verifiedScanProgress(state.scan)
+        IdeDisclosureHeader(
+            "Verified checks",
+            scanExpanded,
+            { scanExpanded = !scanExpanded },
+            stateLabel = state.scan?.status ?: "Not run")
+        if (scanExpanded)
+            Column(
+                Modifier.fillMaxWidth()
+                    .heightIn(max = 180.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(8.dp)) {
+                  Text(scan.summary, style = IdeTypography.compactBody, color = SecondaryText)
+                  Text(
+                      "Explicit local execution: go test ./... runs in a copied workspace; go vet ./... reads source.",
+                      style = IdeTypography.compactBody,
+                      color = SecondaryText)
+                  if (scan.canCancel)
+                      MiniOrcaButton(
+                          onClick = actions.cancelScan,
+                          enabled = state.scan?.status == "running",
+                          tone = ActionTone.Destructive) {
+                            Text("Cancel scan")
+                          }
+                  else
+                      MiniOrcaButton(onClick = actions.startScan, tone = ActionTone.Neutral) {
+                        Text("Trust local execution & run scan")
+                      }
+                  state.scan?.let { VerifiedScanDiagnostics(it) }
+                }
+      }) { key ->
+        visible
+            .firstOrNull { semanticResultRow(it).key == key }
+            ?.let { FindingDetailsRegion(it, actions.findingActions) }
+      }
 }
 
 @Composable
@@ -373,7 +359,8 @@ internal data class BugsWorkspacePaneState(
     val findings: List<UnifiedFinding>,
     val scan: GoScanReport?,
     val loading: Boolean,
-    val page: AnalysisResultPageState? = null,
+    val page: AnalysisResultPageState =
+        AnalysisResultPageState(AnalysisResultType.Bugs, null, null),
 )
 
 /** Finding navigation, task preparation, triage, and scan intents. */
@@ -382,5 +369,4 @@ internal data class BugsWorkspaceActions(
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
     val openAnalysis: () -> Unit = {},
-    val pathChanged: (String) -> Unit = {},
 )

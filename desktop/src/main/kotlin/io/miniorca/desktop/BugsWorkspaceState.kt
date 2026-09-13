@@ -1,14 +1,5 @@
 package io.miniorca.desktop
 
-/** Client-side filters keep the loaded, revision-bound finding set inspectable without a scan. */
-data class BugsFilters(
-    val query: String = "",
-    val source: String = "",
-    val severity: String = "",
-    val freshness: String = "",
-    val lifecycle: String = "",
-)
-
 enum class FindingClassification(val provenanceLabel: String) {
   Verified("VERIFIED / TOOL-REPORTED"),
   Suggested("AI SUGGESTIONS"),
@@ -27,17 +18,6 @@ data class FindingPriorityGroup(
     val findings: List<UnifiedFinding>,
 )
 
-/**
- * The read-only finding view used by the Bugs workspace. Filtering, grouping, and lifecycle labels
- * are deliberately resolved once here.
- */
-internal data class FindingsPresentation(
-    val filters: BugsFilters,
-    val activeFilters: List<String>,
-    val priorityGroups: List<FindingPriorityGroup>,
-    val emptyMessage: String,
-)
-
 data class FindingLifecycleAction(val label: String, val status: String)
 
 data class VerifiedScanProgress(
@@ -51,35 +31,6 @@ fun classifyFinding(finding: UnifiedFinding): FindingClassification =
       "suggested" -> FindingClassification.Suggested
       else -> FindingClassification.Unclassified
     }
-
-fun filterFindings(findings: List<UnifiedFinding>, filters: BugsFilters): List<UnifiedFinding> =
-    findings.filter { finding ->
-      matchesFindingQuery(finding, filters.query) &&
-          matchesFindingField(finding.source, filters.source) &&
-          matchesFindingField(finding.severity, filters.severity) &&
-          matchesFindingField(finding.freshness, filters.freshness) &&
-          matchesFindingField(finding.status, filters.lifecycle)
-    }
-
-internal fun findingsPresentation(
-    findings: List<UnifiedFinding>,
-    filters: BugsFilters,
-    loading: Boolean = false,
-): FindingsPresentation {
-  val activeFilters = activeBugsFilters(filters)
-  val filteredFindings = filterFindings(findings, filters)
-  return FindingsPresentation(
-      filters = filters,
-      activeFilters = activeFilters,
-      priorityGroups = groupFindingsByPriority(filteredFindings),
-      emptyMessage =
-          when {
-            loading && findings.isEmpty() -> "Loading findings…"
-            activeFilters.isNotEmpty() -> "No findings match these filters."
-            else -> "No findings yet."
-          },
-  )
-}
 
 internal fun findingPriority(finding: UnifiedFinding): FindingPriority =
     when (finding.severity.trim().lowercase()) {
@@ -104,25 +55,6 @@ internal fun findingDisplayKey(finding: UnifiedFinding): String =
             finding.title,
         )
         .joinToString(separator = ":")
-
-internal fun visibleFindingByDisplayKey(
-    presentation: FindingsPresentation,
-    displayKey: String?,
-): UnifiedFinding? =
-    displayKey?.let { key ->
-      presentation.priorityGroups
-          .asSequence()
-          .flatMap { it.findings.asSequence() }
-          .firstOrNull { findingDisplayKey(it) == key }
-    }
-
-internal fun activeBugsFilters(filters: BugsFilters): List<String> = buildList {
-  filters.query.trim().takeIf { it.isNotBlank() }?.let { add("Search") }
-  filters.source.trim().takeIf { it.isNotBlank() }?.let { add("Source: $it") }
-  filters.severity.trim().takeIf { it.isNotBlank() }?.let { add("Severity: $it") }
-  filters.freshness.trim().takeIf { it.isNotBlank() }?.let { add("Freshness: $it") }
-  filters.lifecycle.trim().takeIf { it.isNotBlank() }?.let { add("Lifecycle: $it") }
-}
 
 fun findingLifecycleActions(finding: UnifiedFinding): List<FindingLifecycleAction> =
     when (finding.status.lowercase()) {
@@ -195,23 +127,6 @@ internal fun findingProvenanceLabel(finding: UnifiedFinding): String =
 
 internal fun findingStatusLabel(finding: UnifiedFinding): String =
     "${finding.status.ifBlank { "unknown" }} · ${finding.freshness.ifBlank { "unknown" }}"
-
-private fun matchesFindingQuery(finding: UnifiedFinding, query: String): Boolean {
-  val normalized = query.trim()
-  if (normalized.isBlank()) return true
-  return listOf(
-          finding.title,
-          finding.message,
-          finding.evidence,
-          finding.source,
-          finding.rule,
-          finding.location.path,
-          finding.location.symbol)
-      .any { value -> value.contains(normalized, ignoreCase = true) }
-}
-
-private fun matchesFindingField(value: String, filter: String): Boolean =
-    filter.trim().isBlank() || value.equals(filter.trim(), ignoreCase = true)
 
 /** Only explicitly classified semantic bugs and tool-reported diagnostics belong on Bugs. */
 internal fun DesktopState.projectBugFindings(): List<UnifiedFinding> {

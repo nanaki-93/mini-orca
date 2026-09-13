@@ -99,28 +99,34 @@ internal fun analysisStatusLabel(status: String?): String =
       else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
     }
 
+internal enum class AnalysisResultType(val category: String, val workspace: Workspace) {
+  Bugs("bugs", Workspace.Bugs),
+  Performance("performance", Workspace.Performance),
+  Security("security", Workspace.Security);
+
+  companion object {
+    fun fromCategory(category: String): AnalysisResultType =
+        entries.firstOrNull { it.category == category }
+            ?: error("Unknown analysis category: $category")
+  }
+}
+
 internal fun analysisCategoryWorkspace(category: String): Workspace =
-    when (category) {
-      "bugs" -> Workspace.Bugs
-      "performance" -> Workspace.Performance
-      "security" -> Workspace.Security
-      else -> error("Unknown analysis category: $category")
-    }
+    AnalysisResultType.fromCategory(category).workspace
 
 internal fun analysisCategoryLabel(category: String): String =
     analysisCategoryWorkspace(category).name
 
-/**
- * Current progress and retained evidence stay distinct; local filters cannot change project
- * coverage.
- */
+/** Current progress and retained evidence stay distinct across all project files. */
 internal data class AnalysisResultPageState(
-    val category: String,
+    val type: AnalysisResultType,
     val project: ProjectAnalysis?,
     val run: AnalysisRun?,
     val section: AnalysisSectionState = AnalysisSectionState(),
-    val path: String = "",
 ) {
+  val category: String
+    get() = type.category
+
   val results: AnalysisSectionResults?
     get() =
         section.results?.takeIf {
@@ -153,30 +159,20 @@ internal data class AnalysisResultPageState(
             .filter {
               it.category == category &&
                   it.projectId == project?.projectId &&
-                  it.projectRevision == run?.identity?.projectRevision &&
-                  matchesPath(it.location.path)
+                  it.projectRevision == run?.identity?.projectRevision
             }
             .map { if (stale) it.copy(freshness = "stale") else it }
 
   val unclassified: List<UnifiedFinding>
-    get() =
-        results
-            ?.unclassified
-            .orEmpty()
-            .filter { matchesPath(it.location.path) }
-            .map { it.copy(freshness = "stale") }
-
-  fun matchesPath(candidate: String): Boolean =
-      path.isBlank() || candidate.contains(path, ignoreCase = true)
+    get() = results?.unclassified.orEmpty().map { it.copy(freshness = "stale") }
 }
 
 internal fun DesktopState.analysisResultPage(category: String) =
     AnalysisResultPageState(
-        category,
+        AnalysisResultType.fromCategory(category),
         project,
         analysisRun.run,
-        analysisRun.sections[AnalysisResultKey(category)] ?: AnalysisSectionState(),
-        analysisRun.resultPaths[category].orEmpty())
+        analysisRun.sections[AnalysisResultKey(category)] ?: AnalysisSectionState())
 
 internal fun analysisCoverageLabel(coverage: AnalysisRunCoverage?): String =
     coverage?.let {

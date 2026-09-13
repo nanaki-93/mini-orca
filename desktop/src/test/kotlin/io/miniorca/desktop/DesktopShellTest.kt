@@ -7,61 +7,52 @@ import kotlin.test.assertTrue
 
 class DesktopShellTest {
   @Test
-  fun navigationBadgesUseWholeProjectCountsAndKeepUnknownStaleAndErrorStates() {
+  fun toolbarAnalysisStatusFollowsTheCurrentRunAndRetainsStaleAndErrorStates() {
     val run = analysisRunFixture().copy(status = "running")
     val initial =
         DesktopState(
             projectState = ProjectWorkspaceState(resultProjectFixture(), resultIndexFixture()),
             analysisRun = ProjectAnalysisRunState(run = run))
-    val badges = workspaceNavigationBadges(initial)
-    assertEquals(1, badges[LeftToolWindow.Problems]?.count)
-    assertEquals("Running", badges[LeftToolWindow.Analysis]?.status)
-    val filtered =
-        initial.copy(
-            analysisRun = initial.analysisRun.copy(resultPaths = mapOf("bugs" to "missing.go")))
-    assertEquals(badges, workspaceNavigationBadges(filtered))
-    val unknown =
-        initial.copy(
-            analysisRun =
-                initial.analysisRun.copy(
-                    run =
-                        run.copy(
-                            sections =
-                                run.sections.map {
-                                  it.copy(findingCount = null, status = "running")
-                                })))
-    assertEquals(null, workspaceNavigationBadges(unknown)[LeftToolWindow.Problems]?.count)
-    assertTrue(
-        workspaceNavigationBadges(unknown)[LeftToolWindow.Problems]!!
-            .detail
-            .contains("Count unknown"))
+    val running = toolbarAnalysisStatus(initial)!!
+    assertEquals("Analysis · Running", running.label)
+    assertTrue(running.running)
+    listOf("paused", "completed", "failed", "partial", "canceled", "interrupted").forEach { status
+      ->
+      val result =
+          toolbarAnalysisStatus(
+              initial.copy(
+                  analysisRun = initial.analysisRun.copy(run = run.copy(status = status))))!!
+      assertEquals("Analysis · ${status.replaceFirstChar { it.uppercase() }}", result.label)
+      assertEquals(false, result.running)
+      assertEquals(status in setOf("failed", "partial", "interrupted"), result.attention)
+    }
     val stale =
-        initial.copy(
-            projectState =
-                initial.projectState.copy(
-                    project = initial.project!!.copy(projectRevision = "next")))
-    assertEquals("Stale", workspaceNavigationBadges(stale)[LeftToolWindow.Problems]?.status)
-    assertEquals(null, workspaceNavigationBadges(stale)[LeftToolWindow.Problems]?.count)
+        toolbarAnalysisStatus(
+            initial.copy(
+                projectState =
+                    initial.projectState.copy(
+                        project = initial.project!!.copy(projectRevision = "next"))))!!
+    assertEquals("Analysis · Stale", stale.label)
+    assertEquals(false, stale.running)
+    assertTrue(stale.attention)
+    val failedRead =
+        toolbarAnalysisStatus(
+            initial.copy(analysisRun = initial.analysisRun.copy(error = "Read failed")))!!
+    assertTrue(failedRead.attention)
+    assertTrue(failedRead.detail.contains("Read failed"))
+    val pending =
+        toolbarAnalysisStatus(
+            initial.copy(analysisRun = ProjectAnalysisRunState(action = "starting")))!!
+    assertEquals("Analysis · Starting", pending.label)
+    assertTrue(pending.running)
     val foreign =
         initial.copy(
             analysisRun =
                 initial.analysisRun.copy(
                     run = run.copy(identity = run.identity.copy(projectId = "other"))))
-    assertEquals("Not started", workspaceNavigationBadges(foreign)[LeftToolWindow.Problems]?.status)
-    val failedRead =
-        initial.copy(
-            analysisRun =
-                initial.analysisRun.copy(
-                    sections =
-                        mapOf(
-                            AnalysisResultKey("security") to
-                                AnalysisSectionState(error = "Read failed"))))
-    assertTrue(workspaceNavigationBadges(failedRead)[LeftToolWindow.Security]!!.attention)
-    assertTrue(
-        workspaceNavigationBadges(failedRead)[LeftToolWindow.Security]!!
-            .detail
-            .contains("Read failed"))
-    assertTrue(workspaceNavigationBadges(DesktopState()).isEmpty())
+    assertEquals(null, toolbarAnalysisStatus(foreign))
+    assertEquals(null, toolbarAnalysisStatus(initial.copy(analysisRun = ProjectAnalysisRunState())))
+    assertEquals(null, toolbarAnalysisStatus(DesktopState()))
   }
 
   @Test

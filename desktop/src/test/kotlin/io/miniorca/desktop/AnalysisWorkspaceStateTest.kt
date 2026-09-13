@@ -237,12 +237,9 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
-  fun localFiltersNeverChangeCoverageAndUnknownCountsAreNotZero() {
+  fun wholeProjectCoverageKeepsUnknownCountsDistinctFromZero() {
     val page = resultPageFixture("bugs")
     assertEquals(1, page.reportedCount)
-    assertTrue(page.copy(path = "missing").semantic.isEmpty())
-    assertEquals(page.progress, page.copy(path = "missing").progress)
-    assertEquals(page.reportedCount, page.copy(path = "missing").reportedCount)
     assertNull(
         page
             .copy(
@@ -319,7 +316,7 @@ internal fun resultPageFixture(category: String): AnalysisResultPageState {
               status = "partial",
               sections = analysisRunFixture().sections.map { it.copy(status = "partial") })
   return AnalysisResultPageState(
-      category,
+      AnalysisResultType.fromCategory(category),
       resultProjectFixture(),
       run,
       AnalysisSectionState(results = analysisResultsFixture(run, category)))

@@ -104,19 +104,13 @@ class BugsWorkspaceStateTest {
   }
 
   @Test
-  fun filteringAndClassificationKeepVerifiedAndAiFindingsDistinct() {
+  fun classificationKeepsVerifiedAndAiFindingsDistinct() {
     val findings =
         listOf(verified, suggested, suggested.copy(id = "unknown", confidence = "unknown"))
 
     assertEquals(FindingClassification.Verified, classifyFinding(verified))
     assertEquals(FindingClassification.Suggested, classifyFinding(suggested))
     assertEquals(FindingClassification.Unclassified, classifyFinding(findings.last()))
-    assertEquals(
-        listOf(verified),
-        filterFindings(findings, BugsFilters(query = "ignored", severity = "warning")))
-    assertEquals(
-        findings.drop(1),
-        filterFindings(findings, BugsFilters(lifecycle = "dismissed", freshness = "stale")))
   }
 
   @Test
@@ -141,53 +135,6 @@ class BugsWorkspaceStateTest {
     assertEquals(listOf(medium), groups[1].findings)
     assertEquals(listOf(low), groups[2].findings)
     assertEquals(listOf(unknown, blank), groups[3].findings)
-  }
-
-  @Test
-  fun filtersApplyBeforePriorityGroupingWithoutEmptySections() {
-    val highVerified = verified.copy(id = "high-verified", severity = "high")
-    val highSuggested = suggested.copy(id = "high-suggested", severity = "high")
-    val filtered =
-        filterFindings(
-            listOf(highSuggested, highVerified, suggested.copy(id = "low", severity = "low")),
-            BugsFilters(source = "vet"))
-    val groups = groupFindingsByPriority(filtered)
-
-    assertEquals(listOf(highVerified), filtered)
-    assertEquals(listOf(FindingPriority.High), groups.map { it.priority })
-    assertEquals(listOf(highVerified), groups.single().findings)
-  }
-
-  @Test
-  fun activeFiltersStayVisibleWhenAdvancedControlsAreCollapsed() {
-    assertEquals(
-        listOf("Search", "Source: vet", "Lifecycle: open"),
-        activeBugsFilters(BugsFilters(query = "error", source = "vet", lifecycle = "open")),
-    )
-    assertTrue(activeBugsFilters(BugsFilters()).isEmpty())
-  }
-
-  @Test
-  fun detailsSelectionUsesTheVisibleSharedFindingPresentation() {
-    val presentation =
-        findingsPresentation(listOf(verified, suggested), BugsFilters(source = "vet"))
-
-    assertEquals(verified, visibleFindingByDisplayKey(presentation, findingDisplayKey(verified)))
-    assertEquals(null, visibleFindingByDisplayKey(presentation, findingDisplayKey(suggested)))
-    assertEquals(null, visibleFindingByDisplayKey(presentation, null))
-  }
-
-  @Test
-  fun compactEmptyMessagesRetainFilterContextAndVerifiedScanBoundary() {
-    assertEquals("No findings yet.", findingsPresentation(emptyList(), BugsFilters()).emptyMessage)
-    assertEquals(
-        "No findings match these filters.",
-        findingsPresentation(emptyList(), BugsFilters(source = "vet")).emptyMessage)
-    assertTrue(verifiedScanProgress(null).summary.contains("never starts one automatically"))
-    assertTrue(
-        verifiedScanProgress(GoScanReport(status = "running"))
-            .summary
-            .contains("temporary copied workspace; source remains unchanged"))
   }
 
   @Test
@@ -233,6 +180,11 @@ class BugsWorkspaceStateTest {
   @Test
   fun verifiedScanProgressOnlyPollsActiveScansAndRetainsCompletionStatus() {
     assertFalse(shouldPollVerifiedScan(null))
+    assertTrue(verifiedScanProgress(null).summary.contains("never starts one automatically"))
+    assertTrue(
+        verifiedScanProgress(GoScanReport(status = "running"))
+            .summary
+            .contains("temporary copied workspace; source remains unchanged"))
     assertTrue(shouldPollVerifiedScan(GoScanReport(status = "running")))
     assertFalse(shouldPollVerifiedScan(GoScanReport(status = "completed")))
 

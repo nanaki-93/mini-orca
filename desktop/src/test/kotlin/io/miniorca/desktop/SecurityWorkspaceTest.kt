@@ -39,13 +39,7 @@ class SecurityWorkspaceTest {
   }
 
   @Test
-  fun filtersAndNavigationAreReadOnlyAndUseTheRealAnchor() {
-    assertEquals(
-        emptyList(), filterSecurityFindings(listOf(finding), SecurityFilters(severity = "low")))
-    assertEquals(
-        listOf(finding),
-        filterSecurityFindings(
-            listOf(finding), SecurityFilters(query = "credential", triage = "open")))
+  fun navigationIsReadOnlyAndUsesTheRealAnchor() {
     val index =
         ProjectIndex(
             "project",
@@ -162,7 +156,6 @@ class SecurityWorkspaceTest {
     assertTrue(rows.any { it.row().source.startsWith("Source rule") })
     assertTrue(rows.any { it.row().source.startsWith("AI suspicion") })
     assertEquals(2, rows.map { it.row().key }.distinct().size)
-    assertTrue(securityResults(page.copy(path = "other.go")).isEmpty())
     val state =
         DesktopState(
             projectState = ProjectWorkspaceState(resultProjectFixture(), resultIndexFixture()),

@@ -2,7 +2,6 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -25,80 +24,47 @@ internal fun PerformanceWorkspacePane(
     state: PerformanceWorkspacePaneState,
     actions: PerformanceWorkspaceActions
 ) {
-  var category by remember(state.page.project?.projectId) { mutableStateOf("") }
-  var impact by remember(state.page.project?.projectId) { mutableStateOf("") }
-  var selectedKey by remember(state.page.run?.identity) { mutableStateOf<String?>(null) }
-  var filtersExpanded by remember { mutableStateOf(false) }
   var benchmarksExpanded by remember { mutableStateOf(false) }
-  val results = performanceResults(state.page, category, impact)
-  val semantic =
-      state.page.semantic.filter {
-        (impact.isBlank() || it.severity.equals(impact, true)) &&
-            (category.isBlank() ||
-                it.title.contains(category, true) ||
-                it.message.contains(category, true))
-      }
-  val rows = results.map { it.row() } + semantic.map(::semanticResultRow)
-  Column(Modifier.fillMaxSize()) {
-    ResultSectionHeader(state.page, actions.openAnalysis)
-    Text(
-        "Source-based hypotheses · Not measured",
-        color = Warning,
-        style = IdeTypography.resultLabel,
-        modifier = Modifier.padding(horizontal = 8.dp))
-    ResultPathFilter(state.page.path, actions.pathChanged)
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-      IdeDisclosureHeader("Filters", filtersExpanded, { filtersExpanded = !filtersExpanded })
-      if (filtersExpanded)
-          ResponsiveFieldPair(
-              Modifier.fillMaxWidth(),
-              first = { field ->
-                CompactSingleLineField(category, { category = it }, "Category or text", field)
-              },
-              second = { field ->
-                CompactSingleLineField(impact, { impact = it }, "Potential impact", field)
-              })
-      if (state.expectedBenchmarkIdentity != null ||
-          state.benchmarkCatalog != null ||
-          state.benchmarkComparison != null) {
-        IdeDisclosureHeader(
-            "Benchmark evidence",
-            benchmarksExpanded,
-            { benchmarksExpanded = !benchmarksExpanded },
-            stateLabel = if (state.benchmarkRunning) "Running" else "Explicit local execution")
-        if (benchmarksExpanded)
-            Column(
-                Modifier.fillMaxWidth()
-                    .heightIn(max = 260.dp)
-                    .verticalScroll(rememberScrollState())) {
-                  PerformanceBenchmarkControls(
-                      state.benchmarkCatalog,
-                      state.selectedBenchmark,
-                      state.expectedBenchmarkIdentity != null,
-                      state.benchmarkRunning,
-                      actions)
-                  state.benchmarkComparison?.let {
-                    PerformanceBenchmarkEvidence(
-                        it, state.expectedBenchmarkIdentity, state.selectedBenchmark)
+  val results = performanceResults(state.page)
+  val semantic = state.page.semantic
+  AnalysisResultsPane(
+      page = state.page,
+      rows = results.map { it.row() } + semantic.map(::semanticResultRow),
+      openAnalysis = actions.openAnalysis,
+      tools = {
+        if (state.expectedBenchmarkIdentity != null ||
+            state.benchmarkCatalog != null ||
+            state.benchmarkComparison != null) {
+          IdeDisclosureHeader(
+              "Benchmark evidence",
+              benchmarksExpanded,
+              { benchmarksExpanded = !benchmarksExpanded },
+              stateLabel = if (state.benchmarkRunning) "Running" else "Explicit local execution")
+          if (benchmarksExpanded)
+              Column(
+                  Modifier.fillMaxWidth()
+                      .heightIn(max = 260.dp)
+                      .verticalScroll(rememberScrollState())) {
+                    PerformanceBenchmarkControls(
+                        state.benchmarkCatalog,
+                        state.selectedBenchmark,
+                        state.expectedBenchmarkIdentity != null,
+                        state.benchmarkRunning,
+                        actions)
+                    state.benchmarkComparison?.let {
+                      PerformanceBenchmarkEvidence(
+                          it, state.expectedBenchmarkIdentity, state.selectedBenchmark)
+                    }
                   }
-                }
-      }
-      PreviousAnalysisDetails(state.page.unclassified)
-    }
-    ResultListDetail(
-        rows,
-        selectedKey,
-        { selectedKey = it },
-        "No performance results match this view. Coverage is shown above.",
-        Modifier.weight(1f).fillMaxWidth()) { key ->
-          val result = results.firstOrNull { it.row().key == key }
-          if (result != null) PerformanceFindingDetails(result, state.index, actions)
-          else
-              semantic
-                  .firstOrNull { semanticResultRow(it).key == key }
-                  ?.let { FindingDetailsRegion(it, actions.semanticActions) }
         }
-  }
+      }) { key ->
+        val result = results.firstOrNull { it.row().key == key }
+        if (result != null) PerformanceFindingDetails(result, state.index, actions)
+        else
+            semantic
+                .firstOrNull { semanticResultRow(it).key == key }
+                ?.let { FindingDetailsRegion(it, actions.semanticActions) }
+      }
 }
 
 internal data class PerformanceResult(
@@ -117,28 +83,18 @@ internal data class PerformanceResult(
           if (stale) "Stale · Not measured" else "Not measured")
 }
 
-internal fun performanceResults(
-    page: AnalysisResultPageState,
-    category: String = "",
-    impact: String = ""
-): List<PerformanceResult> =
+internal fun performanceResults(page: AnalysisResultPageState): List<PerformanceResult> =
     page.results
         ?.performance
         .orEmpty()
         .filter {
           it.projectId == page.project?.projectId &&
-              it.projectRevision == page.run?.identity?.projectRevision &&
-              page.matchesPath(it.path)
+              it.projectRevision == page.run?.identity?.projectRevision
         }
         .flatMap { report ->
-          report.findings
-              .filter {
-                (category.isBlank() ||
-                    it.category.contains(category, true) ||
-                    it.title.contains(category, true)) &&
-                    (impact.isBlank() || it.potentialImpact.equals(impact, true))
-              }
-              .map { PerformanceResult(report, it, page.stale || report.status == "stale") }
+          report.findings.map {
+            PerformanceResult(report, it, page.stale || report.status == "stale")
+          }
         }
         .sortedWith(
             compareByDescending<PerformanceResult> {
@@ -376,7 +332,6 @@ internal data class PerformanceWorkspaceActions(
     val openInEditor: (String, PerformanceFinding) -> Unit,
     val prepareOptimization: (String, PerformanceFinding) -> Unit,
     val openAnalysis: () -> Unit,
-    val pathChanged: (String) -> Unit,
     val semanticActions: FindingActions,
     val loadBenchmarks: () -> Unit = {},
     val selectBenchmark: (GoBenchmarkChoice) -> Unit = {},

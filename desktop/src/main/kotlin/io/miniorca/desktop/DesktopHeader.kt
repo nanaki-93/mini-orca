@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +47,9 @@ internal fun MainToolbar(
 ) {
   val connectionPresentation = connectionPresentation(state.connection)
   val presentation = toolbarPresentation(state.widthDp)
+  val separateStatusRow =
+      state.analysisStatus != null &&
+          state.widthDp / LocalDensity.current.fontScale < COMPACT_TOOLBAR_WIDTH
   Column(modifier.fillMaxWidth().background(ActivityRail)) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -95,14 +100,15 @@ internal fun MainToolbar(
         TopBarButton("Context", actions.onOpenContext)
         Spacer(Modifier.width(6.dp))
       }
-      if (state.busy) {
-        IdeBusyIndicator(
-            Modifier.size(14.dp).semantics { contentDescription = state.operationStatus },
-            color = FocusAccent,
-            strokeWidth = 2.dp)
-        Spacer(Modifier.width(10.dp))
-      }
-      ConnectionChip(connectionPresentation, compact = !presentation.showProductName)
+      if (!separateStatusRow) ToolbarStatus(state, connectionPresentation, presentation)
+    }
+    if (separateStatusRow) {
+      Row(
+          Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+          horizontalArrangement = Arrangement.End,
+          verticalAlignment = Alignment.CenterVertically) {
+            ToolbarStatus(state, connectionPresentation, presentation)
+          }
     }
     IdeHorizontalSeparator()
   }
@@ -116,7 +122,75 @@ internal data class ToolbarState(
     val connection: ConnectionState,
     val gitStatus: GitStatus?,
     val showEditorDrawerActions: Boolean,
+    val analysisStatus: ToolbarAnalysisStatus? = null,
 )
+
+internal data class ToolbarAnalysisStatus(
+    val label: String,
+    val detail: String,
+    val running: Boolean,
+    val attention: Boolean,
+)
+
+internal fun toolbarAnalysisStatus(state: DesktopState): ToolbarAnalysisStatus? {
+  val project = state.project ?: return null
+  val analysis = state.analysisRun
+  val run = analysis.run?.takeIf { it.identity.projectId == project.projectId }
+  if (run == null &&
+      analysis.action.isBlank() &&
+      analysis.admission == null &&
+      analysis.error == null)
+      return null
+  val stale =
+      run != null &&
+          (run.status == "stale" || run.identity.projectRevision != project.projectRevision)
+  val status =
+      when {
+        analysis.action.isNotBlank() -> analysisStatusLabel(analysis.action)
+        analysis.admission != null -> "Review scope"
+        stale -> "Stale"
+        analysis.error != null -> "Error"
+        else -> analysisStatusLabel(run?.status)
+      }
+  return ToolbarAnalysisStatus(
+      label = "Analysis · $status",
+      detail = "Whole-project analysis · $status" + analysis.error?.let { ". $it" }.orEmpty(),
+      running = analysis.action.isNotBlank() || (!stale && run?.isActive() == true),
+      attention =
+          stale ||
+              analysis.error != null ||
+              run?.status in setOf("failed", "partial", "interrupted"))
+}
+
+@Composable
+private fun ToolbarStatus(
+    state: ToolbarState,
+    connection: ConnectionPresentation,
+    presentation: ToolbarPresentation,
+) {
+  if (state.busy) {
+    IdeBusyIndicator(
+        Modifier.size(14.dp).semantics { contentDescription = state.operationStatus },
+        color = FocusAccent,
+        strokeWidth = 2.dp)
+    Spacer(Modifier.width(10.dp))
+  }
+  state.analysisStatus?.let { analysis ->
+    val color =
+        if (analysis.attention) Warning else if (analysis.running) Information else SecondaryText
+    Row(
+        Modifier.semantics { contentDescription = analysis.detail },
+        verticalAlignment = Alignment.CenterVertically) {
+          if (analysis.running) {
+            IdeBusyIndicator(Modifier.size(12.dp), color = color, strokeWidth = 2.dp)
+            Spacer(Modifier.width(6.dp))
+          }
+          Text(analysis.label, color = color, fontSize = 11.sp)
+        }
+    Spacer(Modifier.width(10.dp))
+  }
+  ConnectionChip(connection, compact = !presentation.showProductName)
+}
 
 internal data class ToolbarActions(
     val onImport: () -> Unit,
