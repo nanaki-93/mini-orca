@@ -114,9 +114,9 @@ class ProjectSummaryPaneTest {
   @Test
   fun coverageMetricsKeepFiveColumnsWhenWideAndWrapAtNarrowWidths() {
     assertEquals(5, summaryMetricColumnCount(1040.dp))
-    assertEquals(5, summaryMetricColumnCount(780.dp))
-    assertEquals(3, summaryMetricColumnCount(779.dp))
-    assertEquals(3, summaryMetricColumnCount(480.dp))
-    assertEquals(2, summaryMetricColumnCount(479.dp))
+    assertEquals(5, summaryMetricColumnCount(480.dp))
+    assertEquals(3, summaryMetricColumnCount(479.dp))
+    assertEquals(3, summaryMetricColumnCount(320.dp))
+    assertEquals(2, summaryMetricColumnCount(319.dp))
   }
 }

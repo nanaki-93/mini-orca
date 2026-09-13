@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -64,6 +65,7 @@ internal fun MainToolbar(
       IdeVerticalSeparator(Modifier.height(22.dp))
       Spacer(Modifier.width(16.dp))
       ProjectActionsMenu(
+          projectType = state.project?.type,
           projectLabel = projectBreadcrumbLabel(state.project),
           projectAvailable = state.project != null,
           reconnectAvailable = connectionPresentation.canReconnect,
@@ -216,6 +218,7 @@ internal fun toolbarPresentation(widthDp: Float): ToolbarPresentation =
 
 @Composable
 private fun ProjectActionsMenu(
+    projectType: String?,
     projectLabel: String,
     projectAvailable: Boolean,
     reconnectAvailable: Boolean,
@@ -224,6 +227,7 @@ private fun ProjectActionsMenu(
     onReconnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+  val typePresentation = projectTypePresentation(projectType)
   val triggerFocus = remember { FocusRequester() }
   var expanded by remember { mutableStateOf(false) }
   var restoreFocus by remember { mutableStateOf(false) }
@@ -231,7 +235,9 @@ private fun ProjectActionsMenu(
     TopBarButton(
         projectLabel,
         { expanded = true },
-        icon = DesktopIcon.Project,
+        icon = typePresentation.icon,
+        iconDescription = typePresentation.description,
+        iconTint = typePresentation.tint,
         modifier = Modifier.fillMaxWidth().focusRequester(triggerFocus))
     IdeDropdownMenu(
         expanded = expanded,
@@ -281,13 +287,15 @@ private fun TopBarButton(
     onClick: () -> Unit,
     icon: DesktopIcon? = null,
     modifier: Modifier = Modifier,
+    iconDescription: String = label,
+    iconTint: Color = SecondaryText,
 ) {
   ChromeButton(
       onClick = onClick,
       modifier = modifier,
   ) {
     icon?.let {
-      DesktopLineIcon(it, label, iconSize = 18.dp)
+      DesktopLineIcon(it, iconDescription, iconSize = 18.dp, tint = iconTint)
       Spacer(Modifier.width(8.dp))
     }
     Text(
@@ -299,6 +307,24 @@ private fun TopBarButton(
     if (icon != null) DesktopLineIcon(DesktopIcon.ChevronDown, "Project menu", iconSize = 12.dp)
   }
 }
+
+internal data class ProjectTypePresentation(
+    val icon: DesktopIcon,
+    val description: String,
+    val tint: Color,
+)
+
+internal fun projectTypePresentation(type: String?): ProjectTypePresentation =
+    when (type?.trim()?.lowercase()) {
+      "go" -> ProjectTypePresentation(DesktopIcon.Go, "Go project", Information)
+      "java" -> ProjectTypePresentation(DesktopIcon.Java, "Java project", Warning)
+      "kotlin" -> ProjectTypePresentation(DesktopIcon.Kotlin, "Kotlin project", SelectionAccent)
+      else ->
+          ProjectTypePresentation(
+              DesktopIcon.Project,
+              type?.takeIf { it.isNotBlank() }?.let { "Project type: $it" } ?: "Project",
+              SecondaryText)
+    }
 
 @Composable
 internal fun MiniOrcaMark() {

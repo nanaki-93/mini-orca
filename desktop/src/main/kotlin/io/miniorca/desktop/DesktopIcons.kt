@@ -16,6 +16,10 @@ import androidx.compose.ui.unit.dp
 /** Shared 24-unit line drawings keep small chrome icons legible and consistent. */
 internal enum class DesktopIcon(private val path: String) {
   Project("M3 5h6l2 2h10v13H3Z"),
+  Go("M2 9h3 M1 12h3 M2 15h3 M13 8H9l-2 4 2 4h4v-4h-3 M19 8h-2l-2 4 2 4h2l3-4Z"),
+  Java(
+      "M5 10h12v5a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4Z M17 11h2a2 2 0 0 1 0 4h-2 M3 22h16 M10 7c-5-3 5-3 1-6 M14 8c-3-2 4-3 3-5"),
+  Kotlin("M4 3h16l-9 9 9 9H4Z M4 12l9-9 M4 12l9 9"),
   Summary("M5 3h9l5 5v13H5Z M14 3v6h5 M8 12h8 M8 16h5"),
   Analysis("M3 21V11h4v10 M10 21V7h4v14 M17 21V3h4v18 M2 7l6-4 5 1 7-3"),
   Performance("M4 18a9 9 0 1 1 16 0 M8 18h8 M12 14l5-6 M5 11H3 M12 5V3 M19 11h2"),
