@@ -38,11 +38,16 @@ private val inlineMarkup =
             "|(?<![\\\\_\\p{L}\\p{N}])_([^_\\n]+)_(?![_\\p{L}\\p{N}])")
 
 /**
- * Selectable model prose with a local disclosure. The parent owns vertical scrolling; this
- * component neither requests a model response nor interprets links, HTML or executable content.
+ * Selectable model prose, optionally previewed with a local disclosure. The parent owns scrolling;
+ * this component neither requests a model response nor interprets links, HTML or executable
+ * content.
  */
 @Composable
-internal fun ModelResultContent(response: String, modifier: Modifier = Modifier) {
+internal fun ModelResultContent(
+    response: String,
+    modifier: Modifier = Modifier,
+    preview: Boolean = true,
+) {
   val formatted = remember(response) { formatModelResult(response) }
   var expanded by remember(response) { mutableStateOf(false) }
   var overflowsPreview by remember(response) { mutableStateOf(false) }
@@ -53,12 +58,12 @@ internal fun ModelResultContent(response: String, modifier: Modifier = Modifier)
           modifier = Modifier.fillMaxWidth(),
           color = PrimaryText,
           style = IdeTypography.body,
-          maxLines = if (expanded) Int.MAX_VALUE else PREVIEW_LINES,
+          maxLines = if (!preview || expanded) Int.MAX_VALUE else PREVIEW_LINES,
           overflow = TextOverflow.Ellipsis,
-          onTextLayout = { if (!expanded) overflowsPreview = it.hasVisualOverflow },
+          onTextLayout = { if (preview && !expanded) overflowsPreview = it.hasVisualOverflow },
       )
     }
-    if (expanded || overflowsPreview) {
+    if (preview && (expanded || overflowsPreview)) {
       ChromeButton(
           onClick = { expanded = !expanded },
           accessibleName = if (expanded) "Collapse full response" else "Expand full response",

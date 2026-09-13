@@ -525,7 +525,8 @@ class DesktopVisualLayoutTest {
       ComposeVisualFixture(width, height) { EditorVisualFixture(width.toFloat()) }
           .use { fixture ->
             fixture.render("editor-$width")
-            fixture.assertTextFits("Performance")
+            assertTrue(fixture.hasDescription("Performance tool window, not selected"))
+            assertFalse(fixture.hasText("Performance"))
             fixture.assertTextFits("user.go")
             if (width >= 1_000) {
               fixture.assertTextFits("Files")
@@ -582,19 +583,19 @@ class DesktopVisualLayoutTest {
   fun keyboardEventsNavigateAndActivateTheProductionRailAndCommandPalette() {
     var activeToolWindow by mutableStateOf(LeftToolWindow.Summary)
     val railFocus = FocusRequester()
-    ComposeVisualFixture(120, 650, 1.3f) {
+    ComposeVisualFixture(48, 650, 1.3f) {
           ToolWindowBar(
               activeToolWindow, { activeToolWindow = it }, Modifier.focusRequester(railFocus))
         }
         .use { fixture ->
-          fixture.render("rail-keyboard-initial-120-1.3")
+          fixture.render("rail-keyboard-initial-48-1.3")
           railFocus.requestFocus()
           fixture.render()
           assertTrue(fixture.pressKey(Key.DirectionDown))
-          fixture.render("rail-keyboard-arrow-120-1.3")
+          fixture.render("rail-keyboard-arrow-48-1.3")
           assertTrue(fixture.hasDescription("Analysis tool window, not selected, focused"))
           assertTrue(fixture.pressKey(Key.Enter))
-          fixture.render("rail-keyboard-activated-120-1.3")
+          fixture.render("rail-keyboard-activated-48-1.3")
           kotlin.test.assertEquals(LeftToolWindow.Analysis, activeToolWindow)
           assertTrue(fixture.hasDescription("Analysis tool window, selected, focused"))
         }
@@ -1160,13 +1161,13 @@ class DesktopVisualLayoutTest {
   @Test
   fun baselineCapturesSummaryAndExercisesOnlyTheLiveProjectMenu() {
     ComposeVisualFixture(1440, 900) {
-          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject)
         }
         .use { fixture ->
           fixture.render("summary-1440")
           assertTrue(fixture.hasText("Project facts"))
           assertTrue(fixture.hasText("Analysis coverage"))
-          assertTrue(fixture.hasText("AI interpretation"))
+          assertTrue(fixture.hasText("Project understanding"))
         }
 
     ComposeVisualFixture(1440, 900) { ToolbarVisualFixture(1440f) }
@@ -1410,52 +1411,133 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryDashboardKeepsLongInterpretationExpandableAndNavigationLocal() {
-    val longPurpose =
-        "This returned purpose stays intact when the compact dashboard only previews it. "
-            .repeat(24)
+  fun summaryDashboardShowsGroupedInterpretationWithoutHeadersNavigationOrDisclosures() {
     val overview =
         visualFixtureOverview.copy(
             analysis =
                 visualFixtureOverview.analysis.copy(
-                    purpose = longPurpose,
-                    architecture = "Handlers delegate to services and repository adapters.",
-                    components = listOf("HTTP handlers", "Repository adapters"),
-                    risks = listOf(ProjectAnalysisRisk("medium", "Validate boundary input."))))
-    val destinations = mutableListOf<Workspace>()
-    ComposeVisualFixture(1440, 900) {
-          ProjectSummaryPane(overview, visualFixtureProject) { destinations += it }
-        }
+                    engineeringInsight =
+                        EngineeringInsight(mechanism = "Validate before storage.")))
+    ComposeVisualFixture(1440, 1100) { ProjectSummaryPane(overview, visualFixtureProject) }
         .use { fixture ->
           fixture.render("summary-dashboard-1440")
+          listOf(
+                  "Project facts",
+                  "Findings",
+                  "Analysis coverage",
+                  "Project understanding",
+                  "Purpose",
+                  "Architecture",
+                  "Components",
+                  "Entry points",
+                  "Flows",
+                  "Risks · AI suggestions",
+                  "Next steps",
+                  "Engineering insight",
+                  "Validate before storage.")
+              .forEach { assertTrue(fixture.hasText(it), it) }
           assertTrue(fixture.hasText("23"))
           assertTrue(fixture.hasText("Verified findings"))
-          assertFalse(fixture.hasText("Handlers delegate to services and repository adapters."))
-          fixture.clickText("Analysis")
-          fixture.clickText("Bugs")
-          kotlin.test.assertEquals(listOf(Workspace.Analysis, Workspace.Bugs), destinations)
-          fixture.clickText("Show full response")
-          fixture.render("summary-purpose-expanded-1440")
-          assertTrue(fixture.hasText(longPurpose))
-          fixture.clickText("Interpretation details")
-          fixture.render("summary-details-expanded-1440")
-          assertTrue(fixture.hasText("Architecture"))
-          assertTrue(fixture.hasText("MEDIUM · Validate boundary input."))
+          assertFalse(fixture.hasText(visualFixtureProject.name))
+          assertFalse(fixture.hasText("AI interpretation"))
+          assertFalse(fixture.hasText("Project purpose"))
+          assertFalse(fixture.hasText("Interpretation details"))
+          assertFalse(fixture.hasText("Analysis"))
+          assertFalse(fixture.hasText("Bugs"))
+          assertFalse(fixture.hasText("Show full response"))
+          assertFalse(fixture.tryClick("Architecture"))
+          assertFalse(fixture.tryClick("Engineering insight"))
+          assertFalse(fixture.hasEditableText())
         }
+  }
 
-    ComposeVisualFixture(800, 650, 1.3f) {
-          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
-        }
+  @Test
+  fun summaryDashboardShowsCompleteLongProseInThePage() {
+    val longPurpose = "This purpose remains readable directly in the dashboard. ".repeat(60)
+    val overview =
+        visualFixtureOverview.copy(
+            analysis = visualFixtureOverview.analysis.copy(purpose = longPurpose))
+    ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(overview, visualFixtureProject) }
         .use { fixture ->
-          fixture.render("summary-dashboard-800-1.3")
-          fixture.assertTextFits("Project facts")
-          fixture.assertTextFits("Analysis coverage")
+          fixture.render()
+          fixture.scrollBy(500f)
+          fixture.render("summary-dashboard-long-purpose-800-150")
+          fixture.assertTextWrapsWithoutClipping(longPurpose)
+          assertFalse(fixture.hasText("Show full response"))
+          assertEquals(1, fixture.scrollableContentCount())
+          repeat(12) {
+            fixture.scrollBy(500f)
+            fixture.render()
+          }
+          assertTrue(fixture.hasText("Next steps"))
+          assertTrue(fixture.hasText("Review boundary validation."))
+          assertFalse(fixture.hasText("Interpretation details"))
         }
+  }
 
-    ComposeVisualFixture(800, 300) { ProjectSummaryPane(null, null, {}) }
+  @Test
+  fun summaryDashboardCoverageUsesLabeledStatusColorsWithoutAnOverallBadge() {
+    listOf("fresh", "stale", "failed", "missing", "running").forEach { status ->
+      val overview =
+          visualFixtureOverview.copy(
+              analysis =
+                  visualFixtureOverview.analysis.copy(
+                      status = status, failure = "Provider timed out."))
+      ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject) }
+          .use { fixture ->
+            fixture.render("summary-dashboard-$status-1280-600")
+            listOf(
+                    "Ready" to Success,
+                    "Stale" to Warning,
+                    "Failed" to Error,
+                    "Missing" to SecondaryText,
+                    "Running" to Information)
+                .forEach { (label, tint) ->
+                  assertEquals(1, fixture.textCount(label))
+                  fixture.assertColorVisible(tint)
+                  fixture.assertTextContrast(label, blendOver(tint.copy(alpha = 0.08f), Panel))
+                }
+            if (status == "stale")
+                assertTrue(
+                    fixture.hasText(
+                        "AI interpretation is stale; source may have changed. Indexed facts remain current."))
+            if (status == "failed") {
+              assertTrue(fixture.hasText("AI interpretation failed. Provider timed out."))
+              assertFalse(fixture.hasText(overview.analysis.purpose))
+            }
+          }
+    }
+  }
+
+  @Test
+  fun summaryDashboardAdaptsToNarrowShortAndLargeTextViews() {
+    listOf(1440 to 900, 1000 to 650, 999 to 650, 800 to 650, 1280 to 600).forEach { (width, height)
+      ->
+      listOf(1f, 1.25f, 1.5f).forEach { scale ->
+        ComposeVisualFixture(width, height, scale) {
+              ProjectSummaryPane(visualFixtureOverview, visualFixtureProject)
+            }
+            .use { fixture ->
+              fixture.render("summary-dashboard-$width-$height-$scale")
+              listOf(
+                      "Project facts",
+                      "Findings",
+                      "Analysis coverage",
+                      "Verified findings",
+                      "AI suggestions",
+                      "Ready",
+                      "Stale",
+                      "Failed")
+                  .forEach(fixture::assertTextFits)
+              assertTrue(fixture.hasScrollableContent())
+            }
+      }
+    }
+    ComposeVisualFixture(800, 300) { ProjectSummaryPane(null, null) }
         .use { fixture ->
           fixture.render("summary-dashboard-empty-800")
           assertTrue(fixture.hasText("No project selected"))
+          assertFalse(fixture.hasText("Project facts"))
         }
   }
 
@@ -1776,6 +1858,12 @@ internal class ComposeVisualFixture(
 
   fun hasScrollableContent(): Boolean =
       nodes().any { it.config.getOrNull(SemanticsActions.ScrollBy) != null }
+
+  fun scrollBy(pixels: Float) {
+    val scroll =
+        nodes().firstNotNullOfOrNull { it.config.getOrNull(SemanticsActions.ScrollBy)?.action }
+    assertTrue(requireNotNull(scroll).invoke(0f, pixels))
+  }
 
   fun scrollableContentCount(): Int =
       nodes().count { it.config.getOrNull(SemanticsActions.ScrollBy) != null }
@@ -2231,13 +2319,10 @@ internal fun EditorVisualFixture(width: Float) {
     }
     PersistentStatusBar(
         DesktopStatusBarPresentation(
-            listOf(
-                DesktopStatusSegment(
-                    DesktopStatusSegmentType.Operation,
-                    "Visual fixture · no backend",
-                    "Rendered Compose layout fixture; all data is test data",
-                    0))),
-        width,
+            DesktopStatusProviderPresentation(
+                "Visual fixture · local-function-model · no backend", remoteProvider = false),
+            "Models: 1 local · 2 cloud",
+            "Visual fixture · no backend"),
         {})
   }
 }

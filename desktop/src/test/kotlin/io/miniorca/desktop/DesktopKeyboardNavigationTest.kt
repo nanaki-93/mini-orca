@@ -30,7 +30,7 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
-  fun flatRailKeepsOnlyTitlesAndKeyboardReachabilityAtEverySupportedSize() {
+  fun iconRailKeepsAccessibleNamesAndKeyboardReachabilityAtEverySupportedSize() {
     listOf(
             Triple(1440, 900, 1f),
             Triple(1000, 760, 1f),
@@ -55,10 +55,12 @@ class DesktopKeyboardNavigationTest {
                 }
               }
               .use { fixture ->
-                fixture.render("navigation-titles-$width-$scale")
-                fixture.assertTextFits("Performance")
+                fixture.render("navigation-icons-$width-$scale")
                 assertFalse(fixture.hasText("Perf."))
-                LeftToolWindow.entries.forEach { fixture.assertTextFits(leftToolWindowLabel(it)) }
+                LeftToolWindow.entries.forEach {
+                  assertFalse(fixture.hasText(leftToolWindowLabel(it)))
+                  assertTrue(fixture.hasDescription(toolWindowSemanticsLabel(it, it == active)))
+                }
                 listOf(
                         "Project",
                         "Results",
@@ -79,7 +81,7 @@ class DesktopKeyboardNavigationTest {
                 assertEquals(0, selections)
                 assertEquals(LeftToolWindow.Summary, active)
                 assertTrue(fixture.hasDescription("Editor tool window, not selected, focused"))
-                fixture.assertTextFits("Editor")
+                assertFalse(fixture.hasText("Editor"))
                 fixture.pressKey(Key.Enter)
                 fixture.render()
                 assertEquals(LeftToolWindow.Editor, active)

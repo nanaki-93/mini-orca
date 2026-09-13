@@ -162,7 +162,7 @@ class DesktopLayoutStateTest {
         dockedPaneWidths(1_000f, preferredExplorerWidth = 520f, preferredActionWidth = 560f)
 
     assertEquals(DesktopLayoutState.MIN_EXPLORER_WIDTH, constrained.explorer)
-    assertEquals(283f, constrained.action)
+    assertEquals(355f, constrained.action)
     assertEquals(MIN_EDITOR_WIDTH, constrained.editor)
     assertEquals(520f, DesktopLayoutState().withExplorerWidth(520f).explorerWidth)
     assertEquals(560f, DesktopLayoutState().withActionWidth(560f).actionWidth)
@@ -175,7 +175,7 @@ class DesktopLayoutStateTest {
 
     assertEquals(220f, preferred.explorer)
     assertEquals(300f, preferred.action)
-    assertEquals(783f, preferred.editor)
+    assertEquals(855f, preferred.editor)
   }
 
   @Test
@@ -183,9 +183,9 @@ class DesktopLayoutStateTest {
     val defaults = DesktopLayoutState()
     val constrained = dockedPaneWidths(1_000f, defaults.explorerWidth, defaults.actionWidth)
 
-    assertEquals(MIN_EDITOR_WIDTH, constrained.editor)
-    assertEquals(180f, constrained.explorer)
-    assertEquals(283f, constrained.action)
+    assertEquals(415f, constrained.editor)
+    assertEquals(defaults.explorerWidth, constrained.explorer)
+    assertEquals(defaults.actionWidth, constrained.action)
   }
 
   @Test

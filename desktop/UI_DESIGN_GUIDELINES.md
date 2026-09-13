@@ -54,7 +54,8 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
 
 ## Shell and task flow
 
-Keep the labeled activity rail, primary workspace, Editor-only Files/inspector
+Keep the 48dp icon-only activity rail with hover labels and accessible names,
+primary workspace, Editor-only Files/inspector
 panes and integrated status bar. At ≥1000dp use resizable docked panes; below it
 use labeled Files/Context drawers and a bounded bottom overlay. Preserve saved
 widths when temporarily clamping and keep essential source/actions reachable in

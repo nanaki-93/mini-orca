@@ -28,10 +28,10 @@ class ProjectSummaryPaneTest {
     val summary = projectSummaryPresentation(null, project)
 
     assertTrue(summary.hasProject)
-    assertEquals("Mini", summary.projectName)
     assertEquals("go · go.mod", "${summary.projectType} · ${summary.buildMetadata}")
     assertEquals("Go", summary.languages)
-    assertEquals(listOf(4, 120, null, null), summary.projectMetrics.map { it.value })
+    assertEquals(listOf(4, 120), summary.projectMetrics.map { it.value })
+    assertTrue(summary.findingMetrics.all { it.value == null })
     assertTrue(summary.coverageMetrics.all { it.value == null })
     assertFalse(summary.toString().contains("revision"))
     assertTrue(summary.analysisMessage.contains("Deterministic facts remain available"))
@@ -61,9 +61,10 @@ class ProjectSummaryPaneTest {
     assertEquals("stale", summary.analysisStatus)
     assertEquals("Coordinate requests through one handler.", summary.purpose)
     assertTrue(summary.analysisMessage.contains("source may have changed"))
-    assertEquals(listOf(2, 20, 2, 3), summary.projectMetrics.map { it.value })
+    assertEquals(listOf(2, 20), summary.projectMetrics.map { it.value })
+    assertEquals(listOf(2, 3), summary.findingMetrics.map { it.value })
     assertEquals(
-        listOf("Fresh", "Stale", "Missing", "Running", "Failed"),
+        listOf("Ready", "Stale", "Missing", "Running", "Failed"),
         summary.coverageMetrics.map { it.label },
     )
     assertEquals(listOf(1, 1, 0, 0, 1), summary.coverageMetrics.map { it.value })
@@ -86,9 +87,11 @@ class ProjectSummaryPaneTest {
 
     assertFalse(unavailable.hasProject)
     assertTrue(unavailable.projectMetrics.all { it.value == null })
+    assertTrue(unavailable.findingMetrics.all { it.value == null })
     assertTrue(unavailable.coverageMetrics.all { it.value == null })
     assertTrue(zeroes.hasProject)
-    assertEquals(listOf(0, 0, 0, 0), zeroes.projectMetrics.map { it.value })
+    assertEquals(listOf(0, 0), zeroes.projectMetrics.map { it.value })
+    assertEquals(listOf(0, 0), zeroes.findingMetrics.map { it.value })
     assertEquals(listOf(0, 0, 0, 0, 0), zeroes.coverageMetrics.map { it.value })
   }
 
@@ -104,14 +107,16 @@ class ProjectSummaryPaneTest {
             null)
 
     assertTrue(running.analysisMessage.contains("is running"))
-    assertEquals("Timed out.", failed.analysisMessage)
+    assertEquals("AI interpretation failed. Timed out.", failed.analysisMessage)
     assertEquals(null, failed.purpose)
   }
 
   @Test
-  fun summaryMetricsUseTheSharedWideAndNarrowGridPolicy() {
+  fun coverageMetricsKeepFiveColumnsWhenWideAndWrapAtNarrowWidths() {
     assertEquals(5, summaryMetricColumnCount(1040.dp))
-    assertEquals(4, summaryMetricColumnCount(780.dp))
-    assertEquals(2, summaryMetricColumnCount(779.dp))
+    assertEquals(5, summaryMetricColumnCount(780.dp))
+    assertEquals(3, summaryMetricColumnCount(779.dp))
+    assertEquals(3, summaryMetricColumnCount(480.dp))
+    assertEquals(2, summaryMetricColumnCount(479.dp))
   }
 }

@@ -325,10 +325,7 @@ internal fun DesktopShell(
   val editor = state.editor
   val context = state.context
   val palette = state.palette
-  val statusPresentation =
-      desktopStatusBarPresentation(
-          desktopStatusBarState(
-              appState, statusProviderForWorkspace(appState.workspace, state.statusProviders)))
+  val statusPresentation = desktopStatusBarPresentation(appState, state.statusProviders)
   val workspace = appState.workspace
   val shellMode = desktopShellMode(appState)
   val scope = rememberCoroutineScope()
@@ -706,7 +703,6 @@ internal fun DesktopShell(
             if (desktopStatusBarVisible(appState.project)) {
               PersistentStatusBar(
                   presentation = statusPresentation,
-                  widthDp = widthDp,
                   onOpenDetails = ::showStatusDetails,
                   modifier = Modifier.focusRequester(focusRequesters.statusBar).focusable(),
               )
@@ -1027,8 +1023,7 @@ private fun ContentPane(
 ) {
   Column(modifier.background(EditorCanvas)) {
     when (state.workspace) {
-      Workspace.Summary ->
-          ProjectSummaryPane(state.overview, state.project, navigation.selectWorkspace)
+      Workspace.Summary -> ProjectSummaryPane(state.overview, state.project)
       Workspace.Editor ->
           EditorWorkspace(
               chrome = state.editorChrome,
