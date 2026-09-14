@@ -299,6 +299,13 @@ func analysisStageModelFailure(ctx context.Context, result *analysisFileStageRes
 	}
 	result.Progress.Status = AnalysisStageFailed
 	result.Progress.Reason = "The model request or response failed. Other analysis results remain available."
+	var failure project.PerformanceReviewFailure
+	if errors.As(err, &failure) && failure.Valid() {
+		result.Progress.Reason = failure.Error()
+	}
+	if result.Progress.Stage == AnalysisStagePerformance && errors.Is(err, llm.ErrStructuredRequestRejected) {
+		result.Progress.Reason = "The provider rejected the Performance response format."
+	}
 	return nil
 }
 

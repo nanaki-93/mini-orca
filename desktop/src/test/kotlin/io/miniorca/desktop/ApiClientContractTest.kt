@@ -369,7 +369,7 @@ class ApiClientContractTest {
                     "GET" to "/api/projects/current/overview?project_revision=revision" ->
                         TransportResponse(
                             200,
-                            """{"project_id":"project","project_revision":"revision","metrics":{"type":"go","file_count":3,"unknown_metric":"ignored"},"analysis":{"purpose":"Builds the daemon","components":null,"future_field":"ignored"},"analysis_coverage":{"total":3,"fresh":2},"finding_counts":{"verified":1,"ai_suggestions":2},"source":"must not become a model field"}""",
+                            """{"project_id":"project","project_revision":"revision","metrics":{"type":"go","file_count":3,"unknown_metric":"ignored"},"analysis":{"purpose":"Builds the daemon","components":null,"future_field":"ignored"},"analysis_coverage":{"total":4,"fresh":2,"partial":1,"unavailable":1},"finding_counts":{"verified":1,"ai_suggestions":2},"source":"must not become a model field"}""",
                         )
                     "GET" to "/api/projects/current/findings?project_revision=revision" ->
                         TransportResponse(
@@ -385,6 +385,8 @@ class ApiClientContractTest {
 
     assertEquals("go", overview.metrics.type)
     assertEquals(emptyList(), overview.analysis.components)
+    assertEquals(1, overview.analysisCoverage.partial)
+    assertEquals(1, overview.analysisCoverage.unavailable)
     assertEquals(2, overview.findingCounts.aiSuggestions)
     assertEquals("main.go", findings.findings.single().location.path)
     assertEquals(7, findings.findings.single().location.startLine)

@@ -10,7 +10,15 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Serializable data class AnalysisSelectableFile(val path: String, val reason: String)
+@Serializable
+data class AnalysisSelectableFile(
+    val path: String,
+    val reason: String,
+    val stages: List<AnalysisFileStageStatus> = emptyList(),
+)
+
+@Serializable
+data class AnalysisFileStageStatus(val stage: String, val status: String, val reason: String)
 
 @Serializable
 data class AnalysisFileSelection(

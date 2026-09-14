@@ -286,7 +286,9 @@ them before admission. A changed preflight yields 409 and requires a fresh previ
 
 Preview and start accept optional `retry_stale_failed` (default false). When true,
 only eligible files with stale or failed producer evidence or durable failed stages
-are selected. Fresh stages reuse their caches; files with no prior analysis are
+are selected. A failed refresh overrides older cached evidence and is retried even when an
+older report remains available. A later saved review supersedes that failure.
+Fresh stages reuse their caches; files with no prior analysis are
 excluded unless another stage on that file qualifies it. Missing, partial,
 canceled and ineligible stages alone do not qualify a file. This option cannot be
 combined with `refresh`. The selection is part of both admission fingerprints;
@@ -364,7 +366,11 @@ the progress owner; result prose belongs only to the three result reads.
 
 Coverage counts captured file-stage units relevant to the section: total, pending,
 running, succeeded, partial, failed, skipped and unavailable. These sum to total;
-excluded files are separately visible in the plan. Cached current evidence counts
+excluded files are separately visible in the plan. Ineligible stages are marked
+`skipped` with a reason and omitted from section totals. Stages omitted by legacy
+single-section actions still count as incomplete coverage. Existing schema-1 runs
+that counted them as unavailable are validated and normalized when restored.
+Cached current evidence counts
 as succeeded. A partial/truncated report retains findings but cannot claim full
 coverage. Pending means unfinished, including abandoned work in canceled/stale
 runs; it is not permission to dispatch. A successful stage shared by sections is
@@ -373,12 +379,27 @@ counted in each section's coverage, but only once in request/attempt budgets.
 `finding_count` is JSON null until there is successful or partial evidence. Zero
 means that such evidence returned no findings, not that the project is safe.
 `completed_empty` requires nonzero, fully successful coverage and zero findings;
-`completed` requires fully successful coverage with findings. A terminal `partial`
+`completed` requires fully successful coverage with findings. Performance and
+Security accept an empty findings array (including a bare `[]`) or blank final
+content as no findings. Blank provider content requires an explicit normal
+completion; refusals, truncation, missing completions and malformed nonempty
+findings remain failures. An empty review is not proof of safety or performance.
+Performance sends a strict `json_schema` response format with required finding
+fields and file-bounded line numbers. The model supplies line ranges only;
+the app derives an unambiguous innermost enclosing declaration from the index.
+Ranges spanning declarations remain valid file/line findings without a symbol
+label. Legacy responses containing a symbol still require that declaration to
+contain the complete range; invalid labels are never silently discarded. Provider
+rejection fails the stage without falling back to unconstrained output.
+The Performance prompt is `performance-file-v5`; older saved reports remain
+readable but require refresh for current coverage. Failed Performance stages
+retain source-free explanations for malformed JSON, invalid fields or values,
+invalid anchors, and oversized responses. A terminal `partial`
 section has useful evidence and incomplete coverage, with no work still pending
 or running. An all-failed/unavailable section cannot claim zero findings. Stale
 counts are historical and must not contribute to fresh navigation badges.
 
-Overall completion requires all three sections to be completely covered. A mixed
+Overall completion requires all eligible file-stage units to be completely covered. A mixed
 terminal outcome with useful evidence is partial; no successful evidence yields
 failed or unavailable. Reaching a window file/time/attempt budget with work pending
 pauses the run with an explicit reason. Pause stops at a stage boundary; cancel
@@ -420,8 +441,8 @@ results do not merge unrelated producers merely because line/title text matches.
 
 `GET /api/projects/current/analysis/selection?project_id=…&project_revision=…`
 returns `project_id`, `project_revision`, `selection_id`, `excluded_paths`,
-`editable`, and `files` (`path`, `reason`). An empty reason means the file is
-eligible for selection. The checklist uses the project inventory, omitting build,
+`editable`, and `files` (`path`, `reason`, `stages`). An empty reason means the
+file is eligible for selection. The checklist uses the project inventory, omitting build,
 dependency and metadata directories; source-policy exclusions and unsupported
 files remain visible with a reason and cannot be enabled by the checklist.
 
@@ -440,3 +461,22 @@ New files default to selected. Selection changes invalidate pending admission
 through the existing preview/queue identity. The checklist scopes new unified
 project analysis runs, including stale/failed retries; it does not erase existing
 results or change explicit single-file actions or the shared context policy.
+
+Each selectable file's `stages` contains `stage`, `status`, and an explanation in
+`reason`. Status reads inspect current source hashes, cache freshness and retained
+run progress without model calls. Fresh cache evidence is required for `fresh`;
+historic completion alone is insufficient. Changed unindexed files are `stale`.
+Missing, failed, partial, unavailable, skipped, pending, paused, canceled and
+interrupted analysis remain distinct. Unreadable file/cache evidence is reported
+as unavailable with a reason. New unindexed files remain visible with a prompt
+to refresh project facts. Ineligible files have an empty stage list and the
+file-level exclusion reason. Selection for the next run does not erase saved
+analysis status. The desktop classifies paths in `excluded_paths` as excluded,
+just like files with a policy exclusion reason, and omits both from freshness
+counts. Retained stage evidence becomes visible again when a file is re-selected.
+
+Overview `analysis_coverage` counts the same selected, eligible files as the file
+checklist across applicable stages. Config and saved selection exclusions do not
+contribute to coverage. `partial` retains incomplete, paused, interrupted and
+canceled files; `unavailable` retains unreadable or unavailable evidence. Captured
+run coverage and the project description retain their own historical status.

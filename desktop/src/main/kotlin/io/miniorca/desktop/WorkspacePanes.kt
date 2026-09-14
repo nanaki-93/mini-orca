@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
@@ -47,6 +46,7 @@ internal fun AnalysisWorkspacePane(
   var budget by remember { mutableStateOf("900") }
   var attempts by remember { mutableStateOf("2") }
   var optionsExpanded by remember { mutableStateOf(false) }
+  var detailsExpanded by remember { mutableStateOf(false) }
   val busy = analysis.action.isNotEmpty() || analysis.fileSelection.saving
   LazyColumn(
       Modifier.fillMaxSize(),
@@ -56,8 +56,7 @@ internal fun AnalysisWorkspacePane(
           IdePaneHeader(
               title = "Analysis",
               icon = DesktopIcon.Analysis,
-              stateLabel =
-                  "${if (analysis.run?.plan?.retryStaleFailed == true) "Stale & failed files" else "Whole project"} · ${presentation.status}",
+              stateLabel = presentation.status,
               stateTint = analysisStatusTint(analysis.run?.status),
               actions = {
                 presentation.commands.forEach { command ->
@@ -99,18 +98,13 @@ internal fun AnalysisWorkspacePane(
                   color = SelectionText)
           analysis.error?.let { DiagnosticText(it, color = Error) }
         }
-        item { AnalysisFileSelector(analysis, actions) }
         item {
           val run = analysis.run
           if (run == null)
               Text("No analysis yet.", color = SecondaryText, style = IdeTypography.body)
           else {
             Text(
-                "${run.files.size} captured files · ${run.plan.excluded.size} excluded",
-                style = IdeTypography.resultHeading,
-                color = PrimaryText)
-            Text(
-                "${presentation.finishedSteps} of ${presentation.totalSteps} stage steps finished",
+                "${if (run.isActive()) "Current run" else "Last run"} · ${presentation.finishedSteps} / ${presentation.totalSteps} stages finished",
                 style = IdeTypography.compactBody,
                 color = SecondaryText)
             IdeProgressBar(
@@ -118,10 +112,6 @@ internal fun AnalysisWorkspacePane(
                 Modifier.fillMaxWidth().padding(vertical = 8.dp).height(4.dp),
                 color = SelectionText,
                 trackColor = StrongSurface)
-            Text(
-                "${run.windowFilesCompleted} files processed in this window · ${run.windowElapsedSeconds}s / ${run.plan.limits.budgetSeconds}s",
-                style = IdeTypography.compactBody,
-                color = SecondaryText)
             presentation.currentFiles.forEach {
               Text("Current: $it", style = IdeTypography.resultCode, color = SelectionText)
             }
@@ -132,38 +122,43 @@ internal fun AnalysisWorkspacePane(
                     style = IdeTypography.compactBody)
           }
         }
-        items(listOf("bugs", "performance", "security")) { category ->
-          val progress = analysis.run?.sections?.firstOrNull { it.category == category }
-          ChromeButton(
-              onClick = { actions.openResults(analysisCategoryWorkspace(category)) },
-              accessibleName = "View ${analysisCategoryLabel(category)} results",
-              modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        item { AnalysisCategoryPanels(state, actions.openResults) }
+        item { AnalysisFileSelector(analysis, actions) }
+        analysis.run?.let { run ->
+          item {
+            IdeDisclosureHeader(
+                "Run details",
+                detailsExpanded,
+                { detailsExpanded = !detailsExpanded },
+                stateLabel =
+                    if (presentation.failures.isEmpty()) null
+                    else "${presentation.failures.size} failures",
+                stateTint = if (presentation.failures.isEmpty()) SecondaryText else Error)
+            if (detailsExpanded) {
+              Column(Modifier.padding(8.dp)) {
+                if (run.plan.retryStaleFailed)
+                    Text(
+                        "Scope: stale & failed files",
+                        style = IdeTypography.compactBody,
+                        color = SecondaryText)
+                Text(
+                    "${run.files.size} captured files · ${run.plan.excluded.size} excluded",
+                    style = IdeTypography.compactBody,
+                    color = SecondaryText)
+                Text(
+                    "${run.windowFilesCompleted} files processed in this window · ${run.windowElapsedSeconds}s / ${run.plan.limits.budgetSeconds}s",
+                    style = IdeTypography.compactBody,
+                    color = SecondaryText)
+                run.sections.forEach { section ->
                   Text(
-                      analysisCategoryLabel(category),
-                      style = IdeTypography.resultHeading,
-                      color = PrimaryText)
-                  Text(
-                      analysisStatusLabel(progress?.status),
-                      style = IdeTypography.resultLabel,
-                      color = analysisStatusTint(progress?.status))
-                  Text(
-                      analysisCoverageLabel(progress?.coverage),
+                      "${analysisCategoryLabel(section.category)} · ${analysisCoverageLabel(section.coverage)}",
                       style = IdeTypography.compactBody,
                       color = SecondaryText)
-                  Text("Open results →", style = IdeTypography.compactBody, color = SelectionText)
                 }
+                presentation.failures.forEach { failure -> AnalysisFailureDetails(failure) }
               }
-          IdeHorizontalSeparator()
-        }
-        if (presentation.failures.isNotEmpty()) {
-          item {
-            Text(
-                "Operational failures · ${presentation.failures.size}",
-                style = IdeTypography.resultHeading,
-                color = Error)
+            }
           }
-          items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
         }
         item {
           IdeDisclosureHeader(

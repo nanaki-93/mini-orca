@@ -31,9 +31,8 @@ class DesktopContrastTest {
               }
               .use { fixture ->
                 fixture.render("analysis-state-color-$status")
-                fixture.assertTextFits("Whole project · ${analysisStatusLabel(status)}")
-                fixture.assertTextContrast(
-                    "Whole project · ${analysisStatusLabel(status)}", HeaderSurface)
+                fixture.assertTextFits(analysisStatusLabel(status))
+                fixture.assertTextContrast(analysisStatusLabel(status), HeaderSurface)
                 fixture.assertColorVisible(color)
               }
         }

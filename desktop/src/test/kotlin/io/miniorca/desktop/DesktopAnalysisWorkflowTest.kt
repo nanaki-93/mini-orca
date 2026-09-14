@@ -16,6 +16,29 @@ import kotlinx.serialization.json.Json
 
 class DesktopAnalysisWorkflowTest {
   @Test
+  fun startRefreshesIncludedFilesAndResumePreservesTheRefreshChoice() {
+    Harness().use { h ->
+      h.workflow.preview()
+      h.drain()
+      val preview = Json.decodeFromString<AnalysisPreviewRequest>(h.bodies.single())
+      assertTrue(preview.refresh)
+      assertFalse(preview.retryStaleFailed)
+      assertFalse(h.calls.any { it.first == "POST" && it.second.endsWith("/run") })
+      h.confirm()
+      h.workflow.admit()
+      h.drain()
+      val start = Json.decodeFromString<AnalysisRunStartRequest>(h.bodies.last())
+      assertTrue(start.refresh)
+      assertFalse(start.retryStaleFailed)
+      h.workflow.preview(resume = true)
+      h.drain()
+      val resume = Json.decodeFromString<AnalysisPreviewRequest>(h.bodies.last())
+      assertTrue(resume.refresh)
+      assertEquals(h.run.identity, resume.resumeRun)
+    }
+  }
+
+  @Test
   fun staleFailedSelectionTravelsThroughPreviewStartAndResume() {
     Harness().use { h ->
       h.run = h.run.copy(plan = h.run.plan.copy(retryStaleFailed = true))
@@ -402,8 +425,19 @@ class DesktopAnalysisWorkflowTest {
                             path.contains("/overview?") ->
                                 TransportResponse(
                                     200, Json.encodeToString(ProjectOverview(analysisRun = run)))
-                            path.contains("/analysis/run") ->
-                                TransportResponse(200, Json.encodeToString(run))
+                            path.contains("/analysis/run") -> {
+                              if (method == "POST") {
+                                val request = Json.decodeFromString<AnalysisRunStartRequest>(body!!)
+                                run =
+                                    run.copy(
+                                        plan =
+                                            run.plan.copy(
+                                                refresh = request.refresh,
+                                                retryStaleFailed = request.retryStaleFailed,
+                                                limits = request.limits))
+                              }
+                              TransportResponse(200, Json.encodeToString(run))
+                            }
                             else -> error("unexpected $method $path")
                           }
                     }),

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -50,5 +53,82 @@ func TestProjectOverviewSeparatesFindingSourcesAndKeepsMissingAnalysisUseful(t *
 	}
 	if err := service.UpdateFindingStatus("stale", findings[0].ID, project.FindingStatusOpen); err != project.ErrRevisionConflict {
 		t.Fatalf("stale update = %v", err)
+	}
+}
+
+func TestOverviewCoverageMatchesSelectedFilesAndRetainsDescriptionStatus(t *testing.T) {
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, root := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
+	// Include a file eligible for Performance/Security but not semantic analysis.
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module fixture\n\ngo 1.22\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	analysis, _ := s.manager.Analysis()
+	analysis.Report.Status = project.ProjectAnalysisStatusStale
+	if err := s.manager.Set(root, analysis); err != nil {
+		t.Fatal(err)
+	}
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 900, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	completedAnalysisRun(t, s)
+	if err := os.WriteFile(filepath.Join(root, "helper.go"), []byte("package main\nfunc Changed() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	selection := readSelectionFor(t, s)
+	if _, err := s.SaveAnalysisSelection(context.Background(), AnalysisSelectionRequest{selection.ProjectID, selection.ProjectRevision, selection.SelectionID, []string{"helper.go"}}); err != nil {
+		t.Fatal(err)
+	}
+	before := calls.Load()
+	overview, err := s.ProjectOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Coverage != (AnalysisCoverage{Total: 2, Fresh: 2}) {
+		t.Fatalf("excluded or ineligible stages counted: %+v", overview.Coverage)
+	}
+	if overview.Analysis.Status != project.ProjectAnalysisStatusStale {
+		t.Fatal("description freshness rewritten")
+	}
+	selection = readSelectionFor(t, s)
+	if _, err := s.SaveAnalysisSelection(context.Background(), AnalysisSelectionRequest{selection.ProjectID, selection.ProjectRevision, selection.SelectionID, []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	overview, err = s.ProjectOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Coverage != (AnalysisCoverage{Total: 3, Fresh: 2, Stale: 1}) {
+		t.Fatalf("real source change hidden: %+v", overview.Coverage)
+	}
+	if calls.Load() != before {
+		t.Fatal("coverage read dispatched model work")
+	}
+}
+
+func TestOverviewCoverageDoesNotHidePartialOrUnavailableAnalysis(t *testing.T) {
+	for _, test := range []struct {
+		statuses []string
+		want     string
+	}{
+		{[]string{"fresh", "skipped"}, "fresh"},
+		{[]string{"skipped"}, "excluded"},
+		{[]string{"fresh", "missing"}, "partial"},
+		{[]string{"fresh", "partial"}, "partial"},
+		{[]string{"fresh", "unavailable"}, "unavailable"},
+		{[]string{"fresh", "failed"}, "failed"},
+		{[]string{"fresh", "stale"}, "stale"},
+		{[]string{"pending"}, "running"},
+		{[]string{"paused"}, "partial"},
+		{[]string{"unrecognized"}, "unavailable"},
+	} {
+		stages := []AnalysisFileStageStatus{}
+		for _, status := range test.statuses {
+			stages = append(stages, AnalysisFileStageStatus{Status: status})
+		}
+		if got := analysisFileCoverageStatus(stages); got != test.want {
+			t.Fatalf("%v: %s, want %s", test.statuses, got, test.want)
+		}
 	}
 }

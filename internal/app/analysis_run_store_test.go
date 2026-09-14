@@ -310,3 +310,71 @@ func TestAnalysisRunStorePreservesPerformanceBudgetAcrossProcessLoss(t *testing.
 		})
 	}
 }
+
+func TestAnalysisRunSkipsIneligibleStagesAndRestoresLegacyCoverage(t *testing.T) {
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.test/fixture\n\ngo 1.22\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 1}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	completed := completedAnalysisRun(t, s)
+	if completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 5 {
+		t.Fatalf("run=%+v calls=%d", completed, calls.Load())
+	}
+	for _, section := range completed.Sections {
+		if section.Coverage.Unavailable != 0 || section.Status != AnalysisRunCompletedEmpty {
+			t.Fatalf("ineligible stages affected coverage: %+v", section)
+		}
+	}
+	for i, file := range completed.Files {
+		for j := range file.Stages {
+			if !completed.Plan.Files[i].Stages[j].Eligible {
+				if file.Stages[j].Status != AnalysisStageSkipped {
+					t.Fatalf("ineligible stage=%+v", file.Stages[j])
+				}
+				completed.Files[i].Stages[j].Status = AnalysisStageUnavailable
+			}
+		}
+	}
+	// Original schema-1 files counted these unavailable stages in the denominator.
+	refreshAnalysisSectionsWithEligibility(completed, true)
+	completed.Status = analysisFinishedStatus(completed)
+	refreshAnalysisSectionsWithEligibility(completed, true)
+	if completed.Status != AnalysisRunPartial {
+		t.Fatal("invalid legacy fixture")
+	}
+	writeLegacy := func(run *AnalysisRun) {
+		t.Helper()
+		data, err := json.Marshal(run)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, analysisRunRelativePath), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeLegacy(completed)
+	restored, err := loadAnalysisRun(root)
+	if err != nil || restored.Status != AnalysisRunCompletedEmpty {
+		t.Fatalf("restore=%+v err=%v", restored, err)
+	}
+	if err := validateStoredAnalysisRun(restored); err != nil {
+		t.Fatalf("normalized run invalid: %v", err)
+	}
+	// Compatibility must not discard corrupt aggregate counts while normalizing.
+	completed.Sections[0].Coverage.Total++
+	writeLegacy(completed)
+	if _, err := loadAnalysisRun(root); !errors.Is(err, errAnalysisRunCorrupt) {
+		t.Fatalf("corrupt legacy aggregate accepted: %v", err)
+	}
+	if calls.Load() != 5 {
+		t.Fatal("restore dispatched model requests")
+	}
+}

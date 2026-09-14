@@ -674,10 +674,7 @@ func (s *Service) runAnalysisWindow(ctx context.Context, identity AnalysisRunIde
 			c.mu.Unlock()
 			return
 		}
-		plan := c.admission.Files[fileIndex].Stages[stageIndex]
-		confirmed := analysisProviderConfirmed(c.confirmations, plan.ProviderID)
-		request := analysisFileStageRequest{Run: identity, File: c.run.Files[fileIndex].AnalysisFileIdentity, Stage: stage.Stage, Refresh: c.run.Plan.Refresh,
-			RemainingAttempts: min(plan.MaxModelRequests, c.run.Plan.Limits.MaxAttemptsPerStage-stage.Attempts), ConfirmRemoteProvider: confirmed, SecurityReview: c.confirmations.SecurityReview}
+		request := c.stageRequest(fileIndex, stageIndex)
 		authority := s.analysisRunAuthority(fileIndex, stageIndex)
 		c.mu.Unlock()
 		result, err := s.analyzeFileStage(ctx, request, authority)
@@ -687,6 +684,19 @@ func (s *Service) runAnalysisWindow(ctx context.Context, identity AnalysisRunIde
 		if !keepRunning {
 			return
 		}
+	}
+}
+
+func (c *analysisRunController) stageRequest(fileIndex, stageIndex int) analysisFileStageRequest {
+	file := c.run.Files[fileIndex]
+	stage := file.Stages[stageIndex]
+	plan := c.admission.Files[fileIndex].Stages[stageIndex]
+	return analysisFileStageRequest{
+		Run: c.run.Identity, File: file.AnalysisFileIdentity, Stage: stage.Stage,
+		Refresh:               c.run.Plan.Refresh || (c.run.Plan.RetryStaleFailed && !plan.Cached),
+		RemainingAttempts:     min(plan.MaxModelRequests, c.run.Plan.Limits.MaxAttemptsPerStage-stage.Attempts),
+		ConfirmRemoteProvider: analysisProviderConfirmed(c.confirmations, plan.ProviderID),
+		SecurityReview:        c.confirmations.SecurityReview,
 	}
 }
 

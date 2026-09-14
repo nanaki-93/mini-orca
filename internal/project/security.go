@@ -136,13 +136,13 @@ type securityFindingWire struct {
 	Insight           json.RawMessage      `json:"engineering_insight"`
 }
 
-// ParseSecurityFindings accepts one bounded JSON object. Findings must be an
-// explicit array; invalid non-empty results are rejected as a whole.
+// ParseSecurityFindings accepts an empty section or one bounded findings object.
+// Invalid non-empty results are rejected as a whole.
 func ParseSecurityFindings(output string, indexed IndexFile, source string) ([]SecurityFinding, error) {
 	if !validSecurityReviewInput(output, indexed, source) {
 		return nil, fmt.Errorf("security review input is invalid or too large")
 	}
-	wire, err := decodeSecurityWire(output)
+	wire, err := decodeSecurityWire(normalizeEmptyFindingsOutput(output))
 	if err != nil {
 		return nil, err
 	}
@@ -164,8 +164,7 @@ func securitySourceLineCount(source string) int {
 }
 
 func validSecurityReviewInput(output string, indexed IndexFile, source string) bool {
-	return len(output) > 0 &&
-		len(output) <= maxSecurityOutputBytes &&
+	return len(output) <= maxSecurityOutputBytes &&
 		validSecurityIndex(indexed) &&
 		len(source) <= SecurityMaxSourceBytes &&
 		contentHash([]byte(source)) == indexed.ContentHash

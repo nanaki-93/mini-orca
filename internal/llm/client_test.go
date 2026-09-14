@@ -383,3 +383,36 @@ func waitForTestError(t *testing.T, done <-chan error, description string) error
 		return nil
 	}
 }
+
+func TestOptionalFinalContentRequiresNormalCompletionAndRemainsScoped(t *testing.T) {
+	for _, test := range []struct {
+		name, content, finish, refusal string
+		wantErr                        bool
+	}{
+		{"empty completed", "", "stop", "", false},
+		{"blank completed", " \n", "stop", "", false},
+		{"missing completion", "", "", "", true},
+		{"truncated empty", "", "length", "", true},
+		{"truncated findings", `{"findings":[]}`, "length", "", true},
+		{"filtered", "", "content_filter", "", true},
+		{"tool call", "", "tool_calls", "", true},
+		{"refused", "", "stop", "Cannot review", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(ChatResponse{Choices: []ChatChoice{{Message: ChatMessage{Role: "assistant", Content: test.content, Refusal: test.refusal}, FinishReason: test.finish}}})
+			}))
+			defer server.Close()
+			client := NewClient(testProfile(server.URL, ""))
+			messages := []ChatMessage{{Role: "user", Content: "Review"}}
+			if _, err := client.WithOptionalFinalContent().Chat(context.Background(), messages); (err != nil) != test.wantErr {
+				t.Fatalf("err=%v", err)
+			}
+			if test.content == "" {
+				if _, err := client.Chat(context.Background(), messages); !errors.Is(err, ErrUnusableResponse) {
+					t.Fatalf("ordinary empty output passed: %v", err)
+				}
+			}
+		})
+	}
+}

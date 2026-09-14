@@ -95,10 +95,14 @@ that a provider is connected. Non-loopback scopes require their own confirmation
 
 ## Analysis and results
 
-Use **Start analysis** to preview the whole project, or **Analyze stale & failed**
-to include only files with stale or failed analysis. Both actions preview their
-scope before starting; fresh stages reuse cached results. Ignored and unanalysed
-files have no status dot in the file tree. File selection does not change its scope.
+Use **Start analysis** to refresh model analysis for every included project file,
+or **Analyze stale & failed** to include only files with stale or failed analysis.
+Both actions preview their scope before starting. Start bypasses saved model
+results; selective retries can reuse fresh stages. Unchanged deterministic
+Security rules can reuse their saved results. Resume continues the admitted run
+with its original refresh choice and retained progress. Ignored and unanalysed
+files have no status dot in the file tree. Opening a file does not change the
+project analysis scope.
 The preview shows exclusions, stage eligibility, cache use, expected requests and
 inclusive retry bounds. Confirm each displayed
 remote destination and explicit Security review intent. One admission coordinates
@@ -183,13 +187,27 @@ UI work follows [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and the
 
 ### Choose files for project analysis
 
-In **Analysis**, expand **Files to analyze** to search the project file list and
-select or ignore files. **Select all** and **Ignore all** apply to all eligible
+In **Analysis**, use **Files** to search the project file list
+and select or ignore files. **Select all** and **Exclude all** apply to all eligible
 files, regardless of the search filter. Changes save automatically per project
-and survive closing the project or app. Newly discovered files start selected;
+and survive closing the project or app. Newly indexed files start selected;
 ignored paths remain saved even if temporarily absent.
 
 Excluded or unsupported files show their reason. Build, dependency and metadata
 folders are omitted from the list. Use **Refresh files** to reload the checklist.
 Finish or cancel an active/paused run before changing its files; start a new
 analysis to use the saved selection. Existing results remain available.
+
+The file list shows whether saved analysis is up to date and explains each
+outstanding stage. Use **Needs attention** to see missing, outdated, failed,
+or incomplete files. Unchecked files and files excluded by configuration appear
+under **Excluded** and do not count as up to date or needing attention. **Details**
+shows every stage and its explanation. Re-selecting a file restores its saved
+analysis status. Bugs, Performance and Security panels use tinted surfaces like
+Summary, with colors indicating analysis completion, partial coverage or failure,
+independently of finding counts. **Run details** contains captured coverage and
+operational failures; changing the selection does not rewrite a previous run.
+
+Summary's overall status and coverage follow the current selected files, including
+selection changes. The saved project description keeps its own freshness in the
+status details; an older description does not mark current file analysis outdated.

@@ -386,7 +386,9 @@ data class AnalysisCoverage(
     val stale: Int = 0,
     val missing: Int = 0,
     val failed: Int = 0,
-    val running: Int = 0
+    val running: Int = 0,
+    val partial: Int = 0,
+    val unavailable: Int = 0
 )
 
 @Serializable

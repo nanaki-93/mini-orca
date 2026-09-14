@@ -93,10 +93,10 @@ internal class DesktopAnalysisWorkflow(
   }
 
   fun preview(
-      refresh: Boolean = false,
       limits: AnalysisRunLimits = AnalysisRunLimits(100, 900, 2),
       resume: Boolean = false,
-      retryStaleFailed: Boolean = false
+      retryStaleFailed: Boolean = false,
+      refresh: Boolean = !retryStaleFailed
   ) {
     val project = project() ?: return
     val run = current.run

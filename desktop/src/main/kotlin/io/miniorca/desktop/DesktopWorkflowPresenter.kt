@@ -523,15 +523,17 @@ class DesktopWorkflowPresenter(
     }
   }
 
-  fun analyzeSelected(refresh: Boolean) = previewAnalysis(refresh)
+  fun analyzeSelected(refresh: Boolean) = previewAnalysis(refresh = refresh)
 
   fun cancelAnalysis() = analysisWorkflow.control("cancel")
 
   fun previewAnalysis(
-      refresh: Boolean = false,
       limits: AnalysisRunLimits = AnalysisRunLimits(100, 900, 2),
-      retryStaleFailed: Boolean = false
-  ) = analysisWorkflow.preview(refresh, limits, retryStaleFailed = retryStaleFailed)
+      retryStaleFailed: Boolean = false,
+      refresh: Boolean = !retryStaleFailed
+  ) =
+      analysisWorkflow.preview(
+          refresh = refresh, limits = limits, retryStaleFailed = retryStaleFailed)
 
   fun resumeAnalysis() = analysisWorkflow.preview(resume = true)
 
