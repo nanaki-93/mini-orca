@@ -180,3 +180,16 @@ Problems/Checks/Output panels remain.
 UI work follows [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and the
 [single plan](../PLAN.md). Existing metadata and visual-preference migration is documented in the
 [root guide](../README.md#existing-projects-and-preferences); model-scope names are unchanged.
+
+### Choose files for project analysis
+
+In **Analysis**, expand **Files to analyze** to search the project file list and
+select or ignore files. **Select all** and **Ignore all** apply to all eligible
+files, regardless of the search filter. Changes save automatically per project
+and survive closing the project or app. Newly discovered files start selected;
+ignored paths remain saved even if temporarily absent.
+
+Excluded or unsupported files show their reason. Build, dependency and metadata
+folders are omitted from the list. Use **Refresh files** to reload the checklist.
+Finish or cancel an active/paused run before changing its files; start a new
+analysis to use the saved selection. Existing results remain available.

@@ -22,6 +22,29 @@ tags:
   - name: Chat
   - name: Drafts
 paths:
+  /api/projects/current/analysis/selection:
+    get:
+      tags: [Projects]
+      description: Read project inventory and saved exclusions without dispatching analysis.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+        - {in: query, name: project_revision, required: true, schema: {type: string, minLength: 1, maxLength: 4096}}
+      responses:
+        '200': {description: Saved selection and file eligibility, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisFileSelection'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      description: Atomically save exclusions for future project analysis. Requires matching project and selection identities and no active, paused or interrupted run. Does not write source or dispatch analysis.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisSelectionRequest'}}}}
+      responses:
+        '200': {description: Saved selection, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisFileSelection'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
   /api/projects/current/analysis/preview:
     post:
       tags: [Projects]
@@ -1611,6 +1634,32 @@ components:
           properties:
             id: {type: string, minLength: 1}
             generation: {type: string, minLength: 1}
+    AnalysisSelectionRequest:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, selection_id, excluded_paths]
+      properties:
+        project_id: {type: string, minLength: 1}
+        project_revision: {type: string, minLength: 1}
+        selection_id: {type: string, minLength: 1}
+        excluded_paths: {type: array, maxItems: 20000, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 4096}, description: Canonical project-relative paths. Empty selects all eligible files.}
+    AnalysisFileSelection:
+      type: object
+      required: [project_id, project_revision, selection_id, excluded_paths, files, editable]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        selection_id: {type: string}
+        excluded_paths: {type: array, items: {type: string}}
+        editable: {type: boolean}
+        files:
+          type: array
+          items:
+            type: object
+            required: [path, reason]
+            properties:
+              path: {type: string}
+              reason: {type: string, description: Empty when selectable; otherwise the eligibility exclusion reason.}
     AnalysisPreviewRequest:
       type: object
       additionalProperties: false

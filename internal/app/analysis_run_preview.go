@@ -279,6 +279,14 @@ func analysisQueueFingerprint(preview *AnalysisRunPreview) (string, error) {
 }
 
 func (s *Service) planAnalysisFiles(ctx context.Context, root string, analysis project.Analysis, indexedFiles []project.IndexFile, policy *project.ContextPolicy, request AnalysisPreviewRequest, preview *AnalysisRunPreview) error {
+	excludedPaths, err := loadAnalysisSelection(root)
+	if err != nil {
+		return err
+	}
+	ignored := make(map[string]bool, len(excludedPaths))
+	for _, path := range excludedPaths {
+		ignored[path] = true
+	}
 	files := append([]project.IndexFile(nil), indexedFiles...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	if err := collectAnalysisInventoryExclusions(ctx, root, files, policy, preview); err != nil {
@@ -289,6 +297,9 @@ func (s *Service) planAnalysisFiles(ctx context.Context, root string, analysis p
 			return err
 		}
 		reason := analysisFileExclusion(file, policy)
+		if reason == "" && ignored[file.Path] {
+			reason = analysisSelectionExclusion
+		}
 		if reason == "Excluded by source policy." {
 			continue
 		}

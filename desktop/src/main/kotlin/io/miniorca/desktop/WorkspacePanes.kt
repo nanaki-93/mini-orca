@@ -47,7 +47,7 @@ internal fun AnalysisWorkspacePane(
   var budget by remember { mutableStateOf("900") }
   var attempts by remember { mutableStateOf("2") }
   var optionsExpanded by remember { mutableStateOf(false) }
-  val busy = analysis.action.isNotEmpty()
+  val busy = analysis.action.isNotEmpty() || analysis.fileSelection.saving
   LazyColumn(
       Modifier.fillMaxSize(),
       contentPadding = PaddingValues(8.dp),
@@ -92,13 +92,14 @@ internal fun AnalysisWorkspacePane(
               ?.reason
               ?.takeIf { it.isNotBlank() }
               ?.let { DiagnosticText(it, color = Warning) }
-          if (busy)
+          if (analysis.action.isNotEmpty())
               Text(
                   "${analysis.action.replaceFirstChar { it.uppercase() }}…",
                   style = IdeTypography.compactBody,
                   color = SelectionText)
           analysis.error?.let { DiagnosticText(it, color = Error) }
         }
+        item { AnalysisFileSelector(analysis, actions) }
         item {
           val run = analysis.run
           if (run == null)
@@ -218,6 +219,8 @@ internal data class AnalysisWorkspaceActions(
     val resume: () -> Unit,
     val cancel: () -> Unit,
     val openResults: (Workspace) -> Unit,
+    val refreshSelection: () -> Unit = {},
+    val saveSelection: (List<String>) -> Unit = {},
 )
 
 @Composable

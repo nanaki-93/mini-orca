@@ -57,6 +57,8 @@ untrusted networks.
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
 | GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, coverage, and finding counts for `project_revision`. |
+| GET | `/api/projects/current/analysis/selection` | Read the file checklist and saved exclusions with project/revision guards; no dispatch. |
+| POST | `/api/projects/current/analysis/selection` | Save excluded paths with project/revision and selection identity guards; no source changes. |
 | POST | `/api/projects/current/analysis/preview` | Whole-project, read-only preflight with strict project/revision guards. |
 | POST | `/api/projects/current/analysis/run` | Durably admit the previewed run with fresh provider and Security intent. |
 | GET | `/api/projects/current/analysis/run` | Read progress with `project_id` and `project_revision`; 204 when absent. |
@@ -413,3 +415,28 @@ Finding IDs intentionally exclude category as well as revision/hash, so adding
 or correcting a category preserves existing dismissed/fixed triage for unchanged
 evidence. Typed Security triage/verification and Performance hypotheses are retained;
 results do not merge unrelated producers merely because line/title text matches.
+
+### Analysis file selection
+
+`GET /api/projects/current/analysis/selection?project_id=…&project_revision=…`
+returns `project_id`, `project_revision`, `selection_id`, `excluded_paths`,
+`editable`, and `files` (`path`, `reason`). An empty reason means the file is
+eligible for selection. The checklist uses the project inventory, omitting build,
+dependency and metadata directories; source-policy exclusions and unsupported
+files remain visible with a reason and cannot be enabled by the checklist.
+
+`POST` on the same route accepts `project_id`, `project_revision`, `selection_id`,
+and a required `excluded_paths` array (an empty array selects all eligible files).
+Paths must be unique canonical project-relative paths, up to 20,000 entries.
+New exclusions must occur in the inventory; previously saved exclusions for
+absent files may be retained. Stale project/selection guards and unknown new paths
+return 409. Malformed input returns 400. An active, paused or interrupted run
+must finish or be canceled before editing its selection (409 otherwise).
+
+Exclusions are saved atomically in `.mini-orca/analysis/selection.json`, schema
+version `1`, and restored across project/app/daemon restarts. Corrupt or unreadable
+selection metadata fails explicitly; it never silently selects everything.
+New files default to selected. Selection changes invalidate pending admission
+through the existing preview/queue identity. The checklist scopes new unified
+project analysis runs, including stale/failed retries; it does not erase existing
+results or change explicit single-file actions or the shared context policy.

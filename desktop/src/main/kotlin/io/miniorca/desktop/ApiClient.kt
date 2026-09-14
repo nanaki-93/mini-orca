@@ -345,6 +345,15 @@ class ApiClient(
   fun cancelGoScan(revision: String): GoScanReport =
       decode(send("DELETE", "/api/projects/current/scan?project_revision=${encode(revision)}"))
 
+  fun analysisSelection(projectId: String, revision: String): AnalysisFileSelection =
+      decode(
+          send(
+              "GET",
+              "/api/projects/current/analysis/selection?project_id=${encode(projectId)}&project_revision=${encode(revision)}"))
+
+  fun saveAnalysisSelection(request: AnalysisSelectionRequest): AnalysisFileSelection =
+      decode(send("POST", "/api/projects/current/analysis/selection", requestBody(request)))
+
   fun previewAnalysis(request: AnalysisPreviewRequest): AnalysisRunPreview =
       decode(send("POST", "/api/projects/current/analysis/preview", requestBody(request)))
 

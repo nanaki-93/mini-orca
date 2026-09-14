@@ -8,12 +8,9 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,8 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -34,27 +31,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 
-@Composable
-internal fun SummaryUnderstandingHeader(presentation: ProjectSummaryPresentation) {
-  Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-    Text(
-        "Project understanding",
-        color = ResultAccent,
-        style = IdeTypography.resultHeading,
-        modifier = Modifier.weight(1f).semantics { heading() })
-    SummaryStatusLight(presentation)
-  }
-}
+internal fun summaryAnalysisTint(status: String): Color =
+    when (status) {
+      "failed" -> Error
+      "fresh" -> Success
+      else -> Warning
+    }
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun SummaryStatusLight(presentation: ProjectSummaryPresentation) {
-  val tint =
-      when (presentation.analysisStatus) {
-        "fresh" -> Success
-        "failed" -> Error
-        else -> Warning
+internal fun SummaryAnalysisStatus(presentation: ProjectSummaryPresentation) {
+  val label =
+      when (presentation.summaryStatus) {
+        "stale" -> "Outdated"
+        "missing" -> "Not analyzed"
+        "failed" -> "Failed"
+        "running" -> "Updating"
+        "fresh" -> "Updated"
+        else -> analysisStatusLabel(presentation.summaryStatus)
       }
+  val tint = summaryAnalysisTint(presentation.summaryStatus)
   var focused by remember { mutableStateOf(false) }
   val description = presentation.analysisMessage
   val tooltip: @Composable () -> Unit = {
@@ -70,13 +66,42 @@ private fun SummaryStatusLight(presentation: ProjectSummaryPresentation) {
   }
   TooltipArea(tooltip = tooltip) {
     Box(
-        Modifier.size(28.dp)
+        Modifier.padding(end = 6.dp)
             .then(if (focused) Modifier.border(1.dp, FocusAccent) else Modifier)
             .semantics { contentDescription = description }
             .onFocusChanged { focused = it.isFocused }
             .focusable(),
         contentAlignment = Alignment.Center) {
-          Box(Modifier.size(10.dp).background(tint, CircleShape))
+          Text(label, color = tint, style = IdeTypography.resultLabel)
+          if (focused)
+              Popup(popupPositionProvider = SummaryStatusTooltipPosition, content = tooltip)
+        }
+  }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+internal fun SummaryIssueIcon(metric: SummaryIssueMetric, tint: Color) {
+  val icon =
+      when (metric.type) {
+        AnalysisResultType.Bugs -> DesktopIcon.Problems
+        AnalysisResultType.Performance -> DesktopIcon.Performance
+        AnalysisResultType.Security -> DesktopIcon.Security
+      }
+  var focused by remember { mutableStateOf(false) }
+  val tooltip: @Composable () -> Unit = {
+    Text(
+        metric.label,
+        color = PrimaryText,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.background(OverlaySurface).border(1.dp, PaneSeparator).padding(8.dp))
+  }
+  TooltipArea(tooltip = tooltip) {
+    Box(
+        Modifier.onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .then(if (focused) Modifier.border(1.dp, FocusAccent) else Modifier)) {
+          DesktopLineIcon(icon, metric.label, tint = tint)
           if (focused)
               Popup(popupPositionProvider = SummaryStatusTooltipPosition, content = tooltip)
         }
