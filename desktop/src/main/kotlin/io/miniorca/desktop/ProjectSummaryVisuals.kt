@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -33,7 +34,10 @@ import androidx.compose.ui.window.PopupPositionProvider
 
 internal fun summaryAnalysisTint(status: String): Color =
     when (status) {
-      "failed" -> Error
+      "failed",
+      "unavailable" -> Error
+      "running" -> Information
+      "excluded" -> SecondaryText
       "fresh" -> Success
       else -> Warning
     }
@@ -48,6 +52,7 @@ internal fun SummaryAnalysisStatus(presentation: ProjectSummaryPresentation) {
         "failed" -> "Failed"
         "running" -> "Updating"
         "fresh" -> "Updated"
+        "excluded" -> "No files selected"
         else -> analysisStatusLabel(presentation.summaryStatus)
       }
   val tint = summaryAnalysisTint(presentation.summaryStatus)
@@ -66,7 +71,8 @@ internal fun SummaryAnalysisStatus(presentation: ProjectSummaryPresentation) {
   }
   TooltipArea(tooltip = tooltip) {
     Box(
-        Modifier.padding(end = 6.dp)
+        Modifier.testTag("summary-analysis-status")
+            .padding(end = 6.dp)
             .then(if (focused) Modifier.border(1.dp, FocusAccent) else Modifier)
             .semantics { contentDescription = description }
             .onFocusChanged { focused = it.isFocused }

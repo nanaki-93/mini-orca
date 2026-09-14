@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	PerformancePromptVersion  = "performance-file-v2"
+	PerformancePromptVersion  = "performance-file-v5"
 	PerformanceMaxSourceBytes = 64 * 1024
 	maxPerformanceOutputBytes = 64 * 1024
 	maxPerformanceFindings    = 5
@@ -79,22 +79,22 @@ type performanceFindingWire struct {
 
 // ParsePerformanceFindings rejects malformed parent output but omits malformed optional insights.
 func ParsePerformanceFindings(output, path, source string, symbols []SymbolInfo) ([]PerformanceFinding, string, error) {
-	if len(output) == 0 || len(output) > maxPerformanceOutputBytes {
-		return nil, "", fmt.Errorf("performance review output is empty or too large")
+	if len(output) > maxPerformanceOutputBytes {
+		return nil, "", PerformanceOutputTooLarge
 	}
 	var wire performanceWire
-	decoder := json.NewDecoder(strings.NewReader(output))
+	decoder := json.NewDecoder(strings.NewReader(normalizeEmptyFindingsOutput(output)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&wire); err != nil {
-		return nil, "", fmt.Errorf("parse performance review JSON: %w", err)
+		return nil, "", PerformanceInvalidJSON
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return nil, "", fmt.Errorf("performance review JSON must contain one object")
+		return nil, "", PerformanceInvalidJSON
 	}
-	if len(wire.Findings) > maxPerformanceFindings {
-		return nil, "", fmt.Errorf("performance review has too many findings")
+	if wire.Findings == nil || len(wire.Findings) > maxPerformanceFindings {
+		return nil, "", PerformanceInvalidShape
 	}
-	lines := strings.Count(source, "\n") + 1
+	lines := countLines([]byte(source))
 	valid := make([]PerformanceFinding, 0, len(wire.Findings))
 	dropped := performanceFindingValidationFailures{}
 	for _, item := range wire.Findings {
@@ -103,13 +103,16 @@ func ParsePerformanceFindings(output, path, source string, symbols []SymbolInfo)
 			dropped.add(failure)
 			continue
 		}
+		if finding.Symbol == "" {
+			finding.Symbol = performanceSymbolForRange(symbols, finding.StartLine, finding.EndLine)
+		}
 		finding.EngineeringInsight, _ = ParseOptionalEngineeringInsight(item.Insight)
 		sum := sha256.Sum256([]byte(path + fmt.Sprintf(":%d:%d:%s:%s", finding.StartLine, finding.EndLine, finding.Category, finding.Title)))
 		finding.ID = "performance:" + hex.EncodeToString(sum[:8])
 		valid = append(valid, finding)
 	}
 	if len(wire.Findings) > 0 && len(valid) == 0 {
-		return nil, "", fmt.Errorf("performance review had no usable findings")
+		return nil, "", dropped.failure()
 	}
 	warning := ""
 	if dropped.any() {

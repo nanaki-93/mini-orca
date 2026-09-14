@@ -48,6 +48,7 @@ type ChatMessage struct {
 	Content          string `json:"content"`
 	ReasoningContent string `json:"reasoning_content,omitempty"`
 	Reasoning        string `json:"reasoning,omitempty"`
+	Refusal          string `json:"refusal,omitempty"`
 }
 
 // ChatRequest is the OpenAI-compatible chat-completions request payload.
@@ -149,6 +150,7 @@ type Client struct {
 	transport             http.RoundTripper
 	suppressCompletionLog bool
 	allowEmptyFinal       bool
+	optionalFinalContent  bool
 }
 
 // NewEvaluationClient creates a client for private evaluation work.  Provider
@@ -167,6 +169,15 @@ func NewClient(profile config.ModelProfile) *Client {
 		profile:   profile,
 		transport: http.DefaultTransport,
 	}
+}
+
+// WithOptionalFinalContent returns an independent client for reviews whose final
+// content may be empty. Blank output requires an explicit normal completion;
+// refusal, truncation and tool-call responses remain unusable.
+func (c *Client) WithOptionalFinalContent() *Client {
+	copy := *c
+	copy.optionalFinalContent = true
+	return &copy
 }
 
 // Chat sends one OpenAI-compatible Chat Completions request and validates the
@@ -223,16 +234,28 @@ func (c *Client) chat(ctx context.Context, messages []ChatMessage, responseForma
 	if err := json.Unmarshal(responseBody, &response); err != nil {
 		return nil, fmt.Errorf("llm client: decode chat response: %w", err)
 	}
-	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("llm client: %w: chat response has no content", ErrUnusableResponse)
-	}
-	if strings.TrimSpace(response.Choices[0].Message.Content) == "" && !c.allowEmptyFinal {
-		return nil, fmt.Errorf("llm client: %w: chat response has no final content", ErrUnusableResponse)
+	if err := c.validateFinalResponse(response); err != nil {
+		return nil, err
 	}
 	if !c.suppressCompletionLog {
 		logging.Info("Chat completed", "model", response.Model, "tokens", response.Usage.TotalTokens)
 	}
 	return &response, nil
+}
+
+func (c *Client) validateFinalResponse(response ChatResponse) error {
+	if len(response.Choices) == 0 {
+		return fmt.Errorf("llm client: %w: chat response has no content", ErrUnusableResponse)
+	}
+	choice := response.Choices[0]
+	if c.optionalFinalContent && (choice.Message.Refusal != "" || (choice.FinishReason != "" && choice.FinishReason != "stop")) {
+		return fmt.Errorf("llm client: %w: review did not complete normally", ErrUnusableResponse)
+	}
+	optionalEmpty := c.optionalFinalContent && choice.FinishReason == "stop" && choice.Message.Role == "assistant"
+	if strings.TrimSpace(choice.Message.Content) == "" && !c.allowEmptyFinal && !optionalEmpty {
+		return fmt.Errorf("llm client: %w: chat response has no final content", ErrUnusableResponse)
+	}
+	return nil
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {

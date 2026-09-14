@@ -20,6 +20,9 @@ func TestAnalysisSelectionHandlerGuardsAndPersistence(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &selection); err != nil {
 		t.Fatal(err)
 	}
+	if len(selection.Files) != 1 || len(selection.Files[0].Stages) != 4 || selection.Files[0].Stages[0].Status != "missing" || selection.Files[0].Stages[0].Reason == "" {
+		t.Fatalf("missing per-file analysis status: %+v", selection.Files)
+	}
 	request := app.AnalysisSelectionRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, SelectionID: selection.SelectionID, ExcludedPaths: []string{"main.go"}}
 	w = analysisHandlerRequest(t, h.SaveSelection, "POST", "/analysis/selection", request)
 	if w.Code != 200 || calls.Load() != 0 {

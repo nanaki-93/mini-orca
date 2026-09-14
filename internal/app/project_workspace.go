@@ -31,12 +31,14 @@ type ProjectMetrics struct {
 }
 
 type AnalysisCoverage struct {
-	Total   int `json:"total"`
-	Fresh   int `json:"fresh"`
-	Stale   int `json:"stale"`
-	Missing int `json:"missing"`
-	Failed  int `json:"failed"`
-	Running int `json:"running"`
+	Total       int `json:"total"`
+	Fresh       int `json:"fresh"`
+	Stale       int `json:"stale"`
+	Missing     int `json:"missing"`
+	Failed      int `json:"failed"`
+	Running     int `json:"running"`
+	Partial     int `json:"partial"`
+	Unavailable int `json:"unavailable"`
 }
 
 type FindingCounts struct {
@@ -66,7 +68,11 @@ func (s *Service) ProjectOverview() (*ProjectOverview, error) {
 	if runErr != nil && !errors.Is(runErr, errAnalysisRunPersistence) {
 		return nil, runErr
 	}
-	analysis, index, input, coverage, err := s.workspaceState()
+	analysis, index, input, err := s.workspaceState()
+	if err != nil {
+		return nil, err
+	}
+	coverage, err := s.analysisOverviewCoverage(analysis.ProjectID, analysis.ProjectRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +100,7 @@ func (s *Service) ProjectOverview() (*ProjectOverview, error) {
 // ListFindings returns sanitized persisted tool reports and fresh cached AI
 // suggestions. AI suggestions are refreshed independently of explicit scans.
 func (s *Service) ListFindings(filter FindingFilter) ([]project.UnifiedFinding, error) {
-	analysis, index, input, _, err := s.workspaceState()
+	analysis, index, input, err := s.workspaceState()
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +110,7 @@ func (s *Service) ListFindings(filter FindingFilter) ([]project.UnifiedFinding, 
 // UpdateFindingStatus records an explicit triage decision only for the active
 // project revision.
 func (s *Service) UpdateFindingStatus(revision, id, status string) error {
-	_, _, input, _, err := s.workspaceState()
+	_, _, input, err := s.workspaceState()
 	if err != nil {
 		return err
 	}
@@ -118,64 +124,23 @@ func (s *Service) UpdateFindingStatus(revision, id, status string) error {
 	return store.SetStatus(id, status)
 }
 
-func (s *Service) workspaceState() (*project.Analysis, *project.ProjectIndex, project.FindingInput, AnalysisCoverage, error) {
+func (s *Service) workspaceState() (*project.Analysis, *project.ProjectIndex, project.FindingInput, error) {
 	analysis, err := s.manager.Analysis()
 	if err != nil {
-		return nil, nil, project.FindingInput{}, AnalysisCoverage{}, err
+		return nil, nil, project.FindingInput{}, err
 	}
 	index, err := s.manager.Index()
 	if err != nil {
-		return nil, nil, project.FindingInput{}, AnalysisCoverage{}, err
+		return nil, nil, project.FindingInput{}, err
 	}
 	if index.ProjectID != analysis.ProjectID || index.ProjectRevision != analysis.ProjectRevision {
-		return nil, nil, project.FindingInput{}, AnalysisCoverage{}, project.ErrRevisionConflict
+		return nil, nil, project.FindingInput{}, project.ErrRevisionConflict
 	}
 	input := project.FindingInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, FileHashes: make(map[string]string, len(index.Files))}
-	coverage, err := s.analysisCoverage(analysis, index, input.FileHashes)
-	if err != nil {
-		return nil, nil, project.FindingInput{}, AnalysisCoverage{}, err
+	for _, file := range index.Files {
+		input.FileHashes[file.Path] = file.ContentHash
 	}
-	return analysis, index, input, coverage, nil
-}
-
-func (s *Service) analysisCoverage(analysis *project.Analysis, index *project.ProjectIndex, hashes map[string]string) (AnalysisCoverage, error) {
-	cache, err := project.NewFileAnalysisCache(s.manager.Root())
-	if err != nil {
-		return AnalysisCoverage{}, err
-	}
-	coverage := AnalysisCoverage{}
-	for i := range index.Files {
-		file := &index.Files[i]
-		hashes[file.Path] = file.ContentHash
-		if file.Binary {
-			continue
-		}
-		_, input, err := s.fileAnalysisCacheInput(analysis, file, file.ContentHash)
-		if err != nil {
-			return AnalysisCoverage{}, err
-		}
-		cached, err := cache.Load(input)
-		if err != nil {
-			return AnalysisCoverage{}, err
-		}
-		if err := s.syncFileAnalysisStatus(input, cached.Status); err != nil {
-			return AnalysisCoverage{}, err
-		}
-		coverage.Total++
-		switch cached.Status {
-		case project.AnalysisStatusFresh:
-			coverage.Fresh++
-		case project.AnalysisStatusStale:
-			coverage.Stale++
-		case project.AnalysisStatusFailed:
-			coverage.Failed++
-		case project.AnalysisStatusRunning:
-			coverage.Running++
-		default:
-			coverage.Missing++
-		}
-	}
-	return coverage, nil
+	return analysis, index, input, nil
 }
 
 func (s *Service) listFindings(analysis *project.Analysis, index *project.ProjectIndex, input project.FindingInput, filter FindingFilter) ([]project.UnifiedFinding, error) {
@@ -219,6 +184,9 @@ func (s *Service) refreshAISuggestions(analysis *project.Analysis, index *projec
 		}
 		cached, err := cache.Load(cacheInput)
 		if err != nil {
+			return err
+		}
+		if err := s.syncFileAnalysisStatus(cacheInput, cached.Status); err != nil {
 			return err
 		}
 		reported = append(reported, project.SuggestedFindingsForFile(*cached)...)

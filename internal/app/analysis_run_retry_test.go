@@ -188,4 +188,94 @@ func TestAnalysisRetryDoesNotOverrideNewerPartialEvidence(t *testing.T) {
 	if retry := retryPreviewFor(t, s, nil); len(retry.Files) != 0 {
 		t.Fatalf("old failure overrode newer partial evidence: %+v", retry)
 	}
+	selection := readSelectionFor(t, s)
+	if selection.Files[0].Stages[1].Status != "partial" {
+		t.Fatalf("partial evidence mislabeled: %+v", selection)
+	}
+	report.Status = "completed"
+	runtime := s.runtimes.analyze
+	report.Model = runtime.profile.Model
+	report.Profile, report.Scope = runtime.effective.Profile, runtime.effective.Scope
+	report.ProviderOrigin, report.ReasoningEffort = runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort
+	report.Findings = []project.PerformanceFinding{}
+	if err := project.StorePerformanceFileReport(root, *report); err != nil {
+		t.Fatal(err)
+	}
+	assertSelectionStages(t, readSelectionFor(t, s), "main.go", "fresh", "up to date")
+	if retry := retryPreviewFor(t, s, nil); len(retry.Files) != 0 {
+		t.Fatalf("newer success still requires retry: %+v", retry)
+	}
+}
+
+func TestAnalysisRetryRefreshFailuresOverrideOlderCachesAcrossResume(t *testing.T) {
+	var fail atomic.Bool
+	server, calls := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if fail.Load() && (stage == AnalysisStagePerformance || stage == AnalysisStageSecurityAI) {
+			return "invalid model output"
+		}
+		return emptyAnalysisReply(stage)
+	})
+	s, _ := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
+	ctx := context.Background()
+	initial := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 1}, nil)
+	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(initial)); err != nil {
+		t.Fatal(err)
+	}
+	completedAnalysisRun(t, s)
+	fail.Store(true)
+	refresh, err := s.PreviewAnalysisRun(ctx, AnalysisPreviewRequest{ProjectID: initial.Identity.ProjectID, ProjectRevision: initial.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, Refresh: true, Limits: initial.Limits})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(refresh)); err != nil {
+		t.Fatal(err)
+	}
+	failed := completedAnalysisRun(t, s)
+	if failed.Status != AnalysisRunPartial || calls.Load() != 12 {
+		t.Fatalf("refresh=%+v calls=%d", failed, calls.Load())
+	}
+	s.analysisRun = &analysisRunController{}
+	selection := readSelectionFor(t, s)
+	for _, file := range selection.Files {
+		for _, stage := range file.Stages {
+			if (stage.Stage == AnalysisStagePerformance || stage.Stage == AnalysisStageSecurityAI) && stage.Status != "failed" {
+				t.Fatalf("older cache hid failed refresh: %+v", stage)
+			}
+		}
+	}
+	overview, err := s.ProjectOverview()
+	if err != nil || overview.Coverage.Failed != 2 {
+		t.Fatalf("summary hid failed refresh: %+v err=%v", overview, err)
+	}
+	fail.Store(false)
+	retry := retryPreviewFor(t, s, nil)
+	if len(retry.Files) != 2 || retry.ExpectedModelRequests != 4 {
+		t.Fatalf("retry=%+v", retry)
+	}
+	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(retry)); err != nil {
+		t.Fatal(err)
+	}
+	paused := completedAnalysisRun(t, s)
+	if paused.Status != AnalysisRunPaused || calls.Load() != 14 {
+		t.Fatalf("paused=%+v calls=%d", paused, calls.Load())
+	}
+	s.analysisRun = &analysisRunController{}
+	resume := retryPreviewFor(t, s, &paused.Identity)
+	if resume.ExpectedModelRequests != 2 {
+		t.Fatalf("resume=%+v", resume)
+	}
+	confirmations := analysisStartFor(resume).Confirmations
+	if _, err := s.ControlAnalysisRun(ctx, AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations}); err != nil {
+		t.Fatal(err)
+	}
+	completed := completedAnalysisRun(t, s)
+	if completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 16 {
+		t.Fatalf("completed=%+v calls=%d", completed, calls.Load())
+	}
+	for _, path := range []string{"main.go", "helper.go"} {
+		assertSelectionStages(t, readSelectionFor(t, s), path, "fresh", "up to date")
+	}
+	if retry := retryPreviewFor(t, s, nil); len(retry.Files) != 0 {
+		t.Fatalf("successful retries still need work: %+v", retry)
+	}
 }

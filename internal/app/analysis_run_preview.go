@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -134,33 +135,24 @@ func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string
 	return preview, nil
 }
 
-func (s *Service) analysisStageCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage) (bool, string, error) {
+func (s *Service) analysisStageCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage) (bool, string, time.Time, error) {
 	switch stage {
 	case AnalysisStageSemantic:
 		cache, input, err := s.fileAnalysisCacheInput(&analysis, &file, file.ContentHash)
 		if err != nil {
-			return false, "", err
+			return false, "", time.Time{}, err
 		}
 		report, err := cache.Load(input)
 		if err != nil {
-			return false, "", err
+			return false, "", time.Time{}, err
 		}
 		status := report.Status
 		if status == project.AnalysisStatusFresh && !analysisSemanticCacheUsable(report, analysis.ProjectRevision) {
 			status = project.AnalysisStatusStale
 		}
-		return analysisSemanticCacheUsable(report, analysis.ProjectRevision), status, nil
+		return analysisSemanticCacheUsable(report, analysis.ProjectRevision), status, report.GeneratedAt, nil
 	case AnalysisStagePerformance:
-		report, err := project.LoadPerformanceFileReport(s.manager.Root(), file.Path, file.ContentHash, policy)
-		if err != nil || report == nil {
-			return false, "", err
-		}
-		cached := analysisPerformanceCacheUsable(report, analysis, s.runtimes.analyze)
-		status := report.Status
-		if status == "completed" && !cached {
-			status = "stale"
-		}
-		return cached, status, nil
+		return s.analysisPerformanceCacheState(analysis, file, policy)
 	default:
 		input := analysisSecurityCacheInput(analysis, file, s.runtimes.analyze, policy.Version())
 		if stage == AnalysisStageSecurityRules {
@@ -168,10 +160,26 @@ func (s *Service) analysisStageCacheState(analysis project.Analysis, file projec
 		}
 		report, err := s.loadSecurityFileReport(s.manager.Root(), input)
 		if err != nil || report == nil {
-			return false, "", err
+			return false, "", time.Time{}, err
 		}
-		return securityStageCacheUsable(report), report.Status, nil
+		return securityStageCacheUsable(report), report.Status, report.GeneratedAt, nil
 	}
+}
+
+func (s *Service) analysisPerformanceCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy) (bool, string, time.Time, error) {
+	report, err := project.LoadPerformanceFileReport(s.manager.Root(), file.Path, file.ContentHash, policy)
+	if err != nil || report == nil {
+		return false, "", time.Time{}, err
+	}
+	cached := analysisPerformanceCacheUsable(report, analysis, s.runtimes.analyze)
+	status := report.Status
+	if status == "completed" && !cached {
+		status = "stale"
+	}
+	if cached && report.Warning != "" {
+		status = "partial"
+	}
+	return cached, status, report.GeneratedAt, nil
 }
 
 func (s *Service) validateAnalysisQueue(ctx context.Context, root string, plan *AnalysisRunPreview, sources bool) error {
@@ -385,13 +393,13 @@ func (s *Service) planAnalysisStage(analysis project.Analysis, file project.Inde
 			runtime = s.runtimes.bug
 		}
 		plan.ProviderID = provider.ID
-		if runtime.client == nil {
+		if plan.Eligible && !s.analysisStageModelAvailable(stage) {
 			plan.Reason = "The model for this stage is not configured."
 		}
 		plan.MaxModelRequests = min(request.Limits.MaxAttemptsPerStage, runtime.effective.MaxRetries+1)
 	}
 	if plan.Eligible {
-		plan.Cached, _, err = s.analysisStageCacheState(analysis, file, policy, stage)
+		plan.Cached, _, _, err = s.analysisStageCacheState(analysis, file, policy, stage)
 		if err != nil {
 			return AnalysisStagePlan{}, err
 		}

@@ -74,7 +74,11 @@ func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityRe
 	if err := requireSecurityRuntimeConfirmation(snapshot.runtime, snapshot.request.ConfirmRemoteProvider); err != nil {
 		return modelOutput{}, nil, err
 	}
-	result, err := s.requestAnalysisModel(timed, snapshot.runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, &schema, dispatch)
+	runtime := snapshot.runtime
+	if runtime.client != nil {
+		runtime.client = runtime.client.WithOptionalFinalContent()
+	}
+	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, &schema, dispatch)
 	if timed.Err() != nil {
 		return modelOutput{}, nil, &analysisModelError{timed.Err()}
 	}

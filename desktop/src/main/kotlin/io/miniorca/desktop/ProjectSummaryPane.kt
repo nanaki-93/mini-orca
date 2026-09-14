@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
@@ -75,6 +74,7 @@ internal fun projectSummaryPresentation(
     project: ProjectAnalysis?,
     run: AnalysisRun? = overview?.analysisRun,
     bugSection: AnalysisSectionState = AnalysisSectionState(),
+    fileSelection: AnalysisFileSelection? = null,
 ): ProjectSummaryPresentation {
   val metrics =
       overview?.metrics
@@ -95,12 +95,20 @@ internal fun projectSummaryPresentation(
           ?: "missing"
   val normalizedStatus = analysisStatus.lowercase()
   val interpretationAvailable = normalizedStatus in setOf("fresh", "stale")
-  val coverage = overview?.analysisCoverage
+  val selection =
+      fileSelection?.takeIf {
+        it.projectId == (project?.projectId ?: overview?.projectId) &&
+            it.projectRevision == (project?.projectRevision ?: overview?.projectRevision)
+      }
+  val coverage = selection?.let(::analysisSelectionCoverage) ?: overview?.analysisCoverage
+  val hasCoverage = selection != null || coverage != null && coverage != AnalysisCoverage()
   val findings = overview?.findingCounts
   val outdated =
-      normalizedStatus == "stale" ||
-          (coverage?.stale ?: 0) > 0 ||
-          (run != null && AnalysisResultPageState(AnalysisResultType.Bugs, project, run).stale)
+      if (hasCoverage) (coverage?.stale ?: 0) > 0
+      else
+          normalizedStatus == "stale" ||
+              (coverage?.stale ?: 0) > 0 ||
+              (run != null && AnalysisResultPageState(AnalysisResultType.Bugs, project, run).stale)
   return ProjectSummaryPresentation(
       hasProject = hasProject,
       projectType = metrics?.type?.ifBlank { "Unknown project type" } ?: "Unavailable",
@@ -109,12 +117,16 @@ internal fun projectSummaryPresentation(
       analysisStatus = normalizedStatus,
       summaryStatus =
           when {
+            hasCoverage -> analysisCoverageStatus(requireNotNull(coverage))
             normalizedStatus == "failed" || run?.status == "failed" -> "failed"
             outdated -> "stale"
             else -> normalizedStatus
           },
       analysisMessage =
           listOfNotNull(
+                  if (hasCoverage)
+                      "Selected files: ${analysisStatusLabel(analysisCoverageStatus(requireNotNull(coverage)))}"
+                  else null,
                   summaryAnalysisMessage(normalizedStatus, analysis?.failure.orEmpty()),
                   if (run?.status == "failed" && normalizedStatus != "failed")
                       "Analysis run failed · ${run.reason.ifBlank { "No failure details available" }}"
@@ -144,6 +156,9 @@ internal fun projectSummaryPresentation(
                   ProjectSummaryMetric("Missing", coverage?.missing, SummaryMetricTone.Missing),
                   ProjectSummaryMetric("Running", coverage?.running, SummaryMetricTone.Running),
                   ProjectSummaryMetric("Failed", coverage?.failed, SummaryMetricTone.Failed),
+                  ProjectSummaryMetric("Incomplete", coverage?.partial, SummaryMetricTone.Stale),
+                  ProjectSummaryMetric(
+                      "Unavailable", coverage?.unavailable, SummaryMetricTone.Failed),
               )
               .filter { it.value != 0 },
       issueMetrics = summaryIssueMetrics(project, run, bugSection),
@@ -154,12 +169,13 @@ internal fun projectSummaryPresentation(
 
 private fun summaryAnalysisMessage(status: String, failure: String): String =
     when (status) {
-      "fresh" -> "Project analysis: current · AI-generated"
-      "stale" -> "Project analysis: stale · source may have changed"
-      "failed" -> "Project analysis: failed · ${failure.ifBlank { "No failure details available" }}"
-      "running" -> "Project analysis: running"
-      "missing" -> "Project analysis: unavailable"
-      else -> "Project analysis: ${status.replace('_', ' ')}"
+      "fresh" -> "Project description: current · AI-generated"
+      "stale" -> "Project description: stale · source may have changed"
+      "failed" ->
+          "Project description: failed · ${failure.ifBlank { "No failure details available" }}"
+      "running" -> "Project description: running"
+      "missing" -> "Project description: unavailable"
+      else -> "Project description: ${status.replace('_', ' ')}"
     }
 
 private fun projectSummaryDetails(
@@ -184,8 +200,9 @@ internal fun ProjectSummaryPane(
     project: ProjectAnalysis?,
     run: AnalysisRun? = overview?.analysisRun,
     bugSection: AnalysisSectionState = AnalysisSectionState(),
+    fileSelection: AnalysisFileSelection? = null,
 ) {
-  val presentation = projectSummaryPresentation(overview, project, run, bugSection)
+  val presentation = projectSummaryPresentation(overview, project, run, bugSection, fileSelection)
   val fontScale = LocalDensity.current.fontScale
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
@@ -246,25 +263,11 @@ internal fun ProjectSummaryPane(
 @Composable
 private fun SummaryOverviewMetrics(presentation: ProjectSummaryPresentation) {
   val tint = summaryAnalysisTint(presentation.summaryStatus)
-  Column(
-      Modifier.fillMaxWidth()
-          .background(blendOver(tint.copy(alpha = 0.08f), Panel))
-          .border(1.dp, tint.copy(alpha = 0.45f))
-          .testTag("analysis-summary"),
-      verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            Modifier.fillMaxWidth()
-                .background(blendOver(tint.copy(alpha = 0.16f), Panel))
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-              Text(
-                  "Analysis summary",
-                  color = tint,
-                  style = IdeTypography.section,
-                  modifier = Modifier.semantics { heading() })
-              SummaryAnalysisStatus(presentation)
-            }
+  AccentPanel(
+      "Analysis summary",
+      tint,
+      Modifier.testTag("analysis-summary"),
+      trailing = { SummaryAnalysisStatus(presentation) }) {
         SummaryMetricGrid(
             Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp)) {
               (presentation.projectMetrics +

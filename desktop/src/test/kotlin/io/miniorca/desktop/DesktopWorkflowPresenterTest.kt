@@ -408,25 +408,34 @@ class DesktopWorkflowPresenterTest {
   @Test
   fun everyAnalysisEntryPreviewsTheWholeProjectAndNavigationNeverStartsIt() {
     val calls = mutableListOf<Pair<String, String>>()
+    val requests = mutableListOf<AnalysisPreviewRequest>()
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
     val scope = CoroutineScope(SupervisorJob() + main)
     val presenter =
-        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, body ->
           calls.add(method to path)
           assertEquals("/api/projects/current/analysis/preview", path)
+          val request =
+              kotlinx.serialization.json.Json.decodeFromString<AnalysisPreviewRequest>(body!!)
+          requests.add(request)
           response(
               kotlinx.serialization.json.Json.encodeToString(
-                  AnalysisRunPreview.serializer(), analysisPreviewFixture()))
+                  AnalysisRunPreview.serializer(),
+                  analysisPreviewFixture()
+                      .copy(
+                          refresh = request.refresh, retryStaleFailed = request.retryStaleFailed)))
         }
     try {
       loadProject(presenter)
       for (entry in
           listOf<() -> Unit>(
+              { presenter.previewAnalysis() },
               { presenter.startAnalyzeAll(AnalyzeAllRunOptions()) },
               { presenter.previewPerformance() },
               { presenter.reviewSecurity() },
-              { presenter.analyzeSelected(false) })) {
+              { presenter.analyzeSelected(false) },
+              { presenter.previewAnalysis(retryStaleFailed = true) })) {
         entry()
         main.runPending()
         io.runPending()
@@ -439,7 +448,10 @@ class DesktopWorkflowPresenterTest {
       main.runPending()
       io.runPending()
       main.runPending()
-      assertEquals(4, calls.size)
+      assertEquals(6, calls.size)
+      assertEquals(listOf(true, true, true, true, false, false), requests.map { it.refresh })
+      assertEquals(
+          listOf(false, false, false, false, false, true), requests.map { it.retryStaleFailed })
       assertTrue(calls.all { it.first == "POST" && it.second.endsWith("/preview") })
     } finally {
       presenter.close()

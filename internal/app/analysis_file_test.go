@@ -101,7 +101,7 @@ func analysisResponseServer(t *testing.T, reply func(AnalysisStage) string) (*ht
 			stage = AnalysisStagePerformance
 		}
 		calls.Add(1)
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: reply(stage)}}}})
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: reply(stage)}, FinishReason: "stop"}}})
 	}))
 	t.Cleanup(server.Close)
 	return server, calls
@@ -495,5 +495,35 @@ func TestAnalysisFileStandalonePreparationFailureDoesNotStoreModelFailure(t *tes
 	}
 	if len(entries) != 0 {
 		t.Fatalf("input preparation wrote a model-failure report: %v", entries)
+	}
+}
+
+func TestAnalysisEmptyReviewSectionsCompleteAndRemainCached(t *testing.T) {
+	for _, output := range []string{"", " \n", "[]", `{"findings":[]}`} {
+		t.Run(output, func(t *testing.T) {
+			server, calls := analysisResponseServer(t, func(stage AnalysisStage) string {
+				if stage == AnalysisStageSemantic {
+					return emptyAnalysisReply(stage)
+				}
+				return output
+			})
+			s, _ := newSemanticAnalysisService(t, server.URL, 0)
+			for pass := 0; pass < 2; pass++ {
+				preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 1}, nil)
+				if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+					t.Fatal(err)
+				}
+				run := completedAnalysisRun(t, s)
+				if run.Status != AnalysisRunCompletedEmpty || calls.Load() != 3 {
+					t.Fatalf("run=%+v calls=%d", run, calls.Load())
+				}
+				for _, section := range run.Sections {
+					if section.Status != AnalysisRunCompletedEmpty || section.FindingCount == nil || *section.FindingCount != 0 {
+						t.Fatalf("empty section=%+v", section)
+					}
+				}
+				assertSelectionStages(t, readSelectionFor(t, s), "main.go", "fresh", "up to date")
+			}
+		})
 	}
 }

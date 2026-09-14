@@ -100,7 +100,9 @@ class DesktopVisualLayoutTest {
           ComposeVisualFixture(width, height, scale) {
                 AnalysisWorkspacePane(
                     AnalysisWorkspacePaneState(
-                        resultProjectFixture(), ProjectAnalysisRunState(run = run)),
+                        resultProjectFixture(),
+                        ProjectAnalysisRunState(
+                            run = run, fileSelection = AnalysisSelectionState(selectionFixture()))),
                     AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, { navigations++ }))
               }
               .use { fixture ->
@@ -1558,9 +1560,9 @@ class DesktopVisualLayoutTest {
               fixture.assertColorVisible(tint)
               fixture.assertTextContrast(label, blendOver(tint.copy(alpha = 0.08f), Panel))
             }
-            assertEquals(status == "failed", fixture.hasText("Failed"))
+            assertFalse(fixture.hasText("Failed"))
             assertFalse(fixture.hasText("Running"))
-            assertEquals(status != "failed", fixture.hasText("Outdated"))
+            assertTrue(fixture.hasText("Outdated"))
             assertTrue(
                 fixture.hasDescription(projectSummaryPresentation(overview, null).analysisMessage))
             assertFalse(fixture.hasText(projectSummaryPresentation(overview, null).analysisMessage))
@@ -1604,7 +1606,12 @@ class DesktopVisualLayoutTest {
           val overview =
               visualFixtureOverview.copy(
                   analysis = visualFixtureOverview.analysis.copy(status = status),
-                  analysisCoverage = AnalysisCoverage(fresh = 23))
+                  analysisCoverage =
+                      when (status) {
+                        "fresh" -> AnalysisCoverage(total = 23, fresh = 23)
+                        "stale" -> AnalysisCoverage(total = 23, stale = 23)
+                        else -> AnalysisCoverage(total = 23, failed = 23)
+                      })
           ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject) }
               .use { fixture ->
                 fixture.render("summary-panel-$status")
@@ -1623,7 +1630,7 @@ class DesktopVisualLayoutTest {
             analysis =
                 StructuredProjectAnalysis(status = "failed", failure = "Provider timed out."),
             analysisCoverage = AnalysisCoverage())
-    val description = "Project analysis: failed · Provider timed out."
+    val description = "Project description: failed · Provider timed out."
     ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, visualFixtureProject) }
         .use { fixture ->
           fixture.render()
@@ -1643,7 +1650,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Outdated"))
-          overview = overview.copy(analysisCoverage = AnalysisCoverage(fresh = 23))
+          overview = overview.copy(analysisCoverage = AnalysisCoverage(total = 23, fresh = 23))
           fixture.render()
           assertFalse(fixture.hasText("Outdated"))
           repeat(8) {
@@ -1685,7 +1692,8 @@ class DesktopVisualLayoutTest {
     val overview =
         visualFixtureOverview.copy(
             analysisCoverage =
-                AnalysisCoverage(fresh = 1, stale = 1, missing = 1, running = 1, failed = 1))
+                AnalysisCoverage(
+                    total = 5, fresh = 1, stale = 1, missing = 1, running = 1, failed = 1))
     listOf(1440 to 1f, 1000 to 1.5f, 999 to 1.5f, 800 to 1.5f).forEach { (width, scale) ->
       ComposeVisualFixture(width, 650, scale) {
             ProjectSummaryPane(overview, resultProjectFixture(), run, section)
@@ -1707,8 +1715,8 @@ class DesktopVisualLayoutTest {
               assertFalse(fixture.hasText(it))
             }
             assertFalse(fixture.hasText("Partial"))
-            fixture.assertTextFits("Outdated")
-            fixture.assertSummaryStatusPlacement("Outdated")
+            fixture.assertTextFits("Updating")
+            fixture.assertSummaryStatusPlacement("Updating")
             fixture.assertUniformSummaryCards(12)
           }
     }
@@ -2277,12 +2285,16 @@ internal class ComposeVisualFixture(
   }
 
   fun assertSummaryStatusPlacement(label: String) {
-    val status = textNodes(label).single()
+    val status =
+        textNodes(label).single { node ->
+          generateSequence(node) { it.parent }
+              .any { it.config.getOrNull(SemanticsProperties.TestTag) == "summary-analysis-status" }
+        }
     assertTrue(
         generateSequence(status) { it.parent }
             .any { it.config.getOrNull(SemanticsProperties.TestTag) == "analysis-summary" },
         "The status must belong to Analysis summary")
-    assertTextAbove("Purpose", label)
+    assertTrue(textNodes("Purpose").single().boundsInRoot.bottom <= status.boundsInRoot.top)
   }
 
   fun assertTextBefore(label: String, following: String) {

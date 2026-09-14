@@ -554,6 +554,10 @@ func TestAnalysisRunFailedSavesStopRequestsAndRecoverWithoutResettingEvidence(t 
 			if calls.Load() != expected || strings.Contains(stopped.Reason, "private") || strings.Contains(stopped.Reason, "secret-provider") {
 				t.Fatalf("fault calls=%d progress=%+v", calls.Load(), stopped)
 			}
+			overview, err := s.ProjectOverview()
+			if err != nil || overview.Run.Status != AnalysisRunInterrupted || overview.Coverage.Total != 1 || calls.Load() != expected {
+				t.Fatalf("overview lost retained progress after save failure: %+v %v", overview, err)
+			}
 			if point == "result" {
 				cached, err := s.CachedFileAnalysis("main.go")
 				if err != nil || cached.Status != project.AnalysisStatusFresh {
@@ -804,7 +808,7 @@ func TestAnalysisCompatibilityUsesOneOwnerAndOnlyItsRequestedStage(t *testing.T)
 				t.Fatal(err)
 			}
 			done := completedAnalysisRun(t, s)
-			if calls.Load() != 1 || done.Identity.Generation == paused.Identity.Generation {
+			if calls.Load() != 1 || done.Status != AnalysisRunPartial || done.Identity.Generation == paused.Identity.Generation {
 				t.Fatalf("calls=%d run=%+v", calls.Load(), done)
 			}
 			for _, progress := range done.Files[0].Stages {

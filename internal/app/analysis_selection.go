@@ -9,8 +9,9 @@ import (
 )
 
 type AnalysisSelectableFile struct {
-	Path   string `json:"path"`
-	Reason string `json:"reason"`
+	Path   string                    `json:"path"`
+	Reason string                    `json:"reason"`
+	Stages []AnalysisFileStageStatus `json:"stages"`
 }
 
 type AnalysisFileSelection struct {
@@ -41,13 +42,14 @@ func (s *Service) ReadAnalysisSelection(ctx context.Context, id, revision string
 	defer s.jobLifecycleMu.Unlock()
 	s.analysisRun.mu.Lock()
 	defer s.analysisRun.mu.Unlock()
-	return s.analysisSelectionLocked(ctx, id, revision)
-}
-
-func (s *Service) analysisSelectionLocked(ctx context.Context, id, revision string) (*AnalysisFileSelection, error) {
 	if err := s.restoreAnalysisRunLocked(); err != nil {
 		return nil, err
 	}
+	return s.analysisSelectionLocked(ctx, id, revision)
+}
+
+// The caller holds lifecycle/run locks and has restored the current run.
+func (s *Service) analysisSelectionLocked(ctx context.Context, id, revision string) (*AnalysisFileSelection, error) {
 	analysis, index, policy, err := s.performanceInputs()
 	if err != nil {
 		return nil, err
@@ -72,17 +74,26 @@ func (s *Service) analysisSelectionLocked(ctx context.Context, id, revision stri
 	for _, file := range index.Files {
 		indexed[file.Path] = file
 	}
+	evidence := selectionEvidence(s.analysisRun.run, *analysis)
 	for _, path := range paths {
 		decision := policy.Decide(path)
 		reason := decision.Reason
 		if decision.Include {
 			file, ok := indexed[path]
 			if !ok {
-				return nil, project.ErrRevisionConflict
+				reason = "Not indexed yet. Refresh project facts before selecting this file."
+			} else {
+				reason = analysisFileExclusion(file, policy)
 			}
-			reason = analysisFileExclusion(file, policy)
 		}
-		result.Files = append(result.Files, AnalysisSelectableFile{Path: path, Reason: reason})
+		entry := AnalysisSelectableFile{Path: path, Reason: reason, Stages: []AnalysisFileStageStatus{}}
+		if reason == "" {
+			entry.Stages, err = s.analysisSelectionStages(ctx, *analysis, indexed[path], policy, evidence)
+			if err != nil {
+				return nil, err
+			}
+		}
+		result.Files = append(result.Files, entry)
 	}
 	return result, nil
 }
@@ -109,6 +120,9 @@ func (s *Service) SaveAnalysisSelection(ctx context.Context, request AnalysisSel
 	defer s.jobLifecycleMu.Unlock()
 	s.analysisRun.mu.Lock()
 	defer s.analysisRun.mu.Unlock()
+	if err := s.restoreAnalysisRunLocked(); err != nil {
+		return nil, err
+	}
 	current, err := s.analysisSelectionLocked(ctx, request.ProjectID, request.ProjectRevision)
 	if err != nil {
 		return nil, err

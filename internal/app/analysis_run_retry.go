@@ -16,12 +16,13 @@ func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, preview *Analys
 	for _, file := range index.Files {
 		indexed[file.Path] = file
 	}
-	retained := make(map[string]AnalysisRunFile)
+	retained := make(map[string]AnalysisPlannedFile)
 	if run := s.analysisRun.run; run != nil && run.Identity.ProjectID == preview.Identity.ProjectID {
-		for _, file := range run.Files {
+		for _, file := range run.Plan.Files {
 			retained[file.Path] = file
 		}
 	}
+	evidence := selectionEvidence(s.analysisRun.run, *analysis)
 	selected := []AnalysisPlannedFile{}
 	for _, file := range preview.Files {
 		if err := ctx.Err(); err != nil {
@@ -30,9 +31,13 @@ func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, preview *Analys
 		previous, captured := retained[file.Path]
 		include := captured
 		if resume == nil {
-			include, err = s.analysisFileNeedsRetry(*analysis, indexed[file.Path], policy, file, previous)
-			if err != nil {
-				return err
+			include = s.planAnalysisRetryFile(*analysis, indexed[file.Path], policy, &file, evidence, preview.Limits)
+		}
+		if resume != nil && include {
+			for j := range file.Stages {
+				if !previous.Stages[j].Cached {
+					s.planAnalysisRetryStage(&file.Stages[j], preview.Limits)
+				}
 			}
 		}
 		if include {
@@ -45,28 +50,31 @@ func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, preview *Analys
 	return nil
 }
 
-func (s *Service) analysisFileNeedsRetry(analysis project.Analysis, indexed project.IndexFile, policy *project.ContextPolicy, file AnalysisPlannedFile, previous AnalysisRunFile) (bool, error) {
-	for _, stage := range file.Stages {
-		if !stage.Eligible || stage.Cached {
+func (s *Service) planAnalysisRetryFile(analysis project.Analysis, indexed project.IndexFile, policy *project.ContextPolicy, file *AnalysisPlannedFile, evidence analysisSelectionEvidence, limits AnalysisRunLimits) bool {
+	include := false
+	for i := range file.Stages {
+		stage := &file.Stages[i]
+		if !stage.Eligible {
 			continue
 		}
-		_, status, err := s.analysisStageCacheState(analysis, indexed, policy, stage.Stage)
-		if err != nil {
-			return false, err
-		}
+		status := s.analysisSelectionStage(analysis, indexed, policy, stage.Stage, evidence).Status
 		if status == "stale" || status == "failed" {
-			return true, nil
-		}
-		if status != "" && status != project.AnalysisStatusMissing {
-			continue
-		}
-		// Transport failures can leave no producer report. Durable stage failures
-		// still qualify, while missing, partial and canceled work remain distinct.
-		for _, progress := range previous.Stages {
-			if progress.Stage == stage.Stage && (progress.Status == AnalysisStageFailed || progress.Status == AnalysisStageStale) {
-				return true, nil
-			}
+			include = true
+			s.planAnalysisRetryStage(stage, limits)
 		}
 	}
-	return false, nil
+	return include
+}
+
+func (s *Service) planAnalysisRetryStage(stage *AnalysisStagePlan, limits AnalysisRunLimits) {
+	// Retain this cache bypass in the admitted plan, including across resume.
+	stage.Cached = false
+	if !stage.Eligible || stage.Stage == AnalysisStageSecurityRules || !s.analysisStageModelAvailable(stage.Stage) {
+		return
+	}
+	runtime := s.runtimes.analyze
+	if stage.Stage == AnalysisStageSemantic {
+		runtime = s.runtimes.bug
+	}
+	stage.MaxModelRequests = min(limits.MaxAttemptsPerStage, runtime.effective.MaxRetries+1)
 }

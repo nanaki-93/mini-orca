@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
@@ -52,13 +51,17 @@ func (s *Service) preparePerformanceReview(path string) (performanceReviewSnapsh
 
 func (s *Service) requestPerformanceReview(ctx context.Context, snapshot performanceReviewSnapshot, dispatch *analysisModelDispatch) (modelOutput, error) {
 	runtime := snapshot.runtime
+	if runtime.client != nil {
+		runtime.client = runtime.client.WithOptionalFinalContent()
+	}
 	prompt, err := performancePrompt(snapshot.source, snapshot.analysis, snapshot.file)
 	if err != nil {
 		return modelOutput{}, err
 	}
+	schema := performanceReviewResponseSchema(snapshot)
 	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
 	defer cancel()
-	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, nil, dispatch)
+	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, &schema, dispatch)
 	if timed.Err() != nil {
 		return modelOutput{}, timed.Err()
 	}
@@ -98,14 +101,20 @@ func (s *Service) validatePerformanceReviewSnapshot(ctx context.Context, snapsho
 
 func performancePrompt(source string, analysis project.Analysis, file project.IndexFile) (string, error) {
 	facts, err := json.Marshal(struct {
-		Name     string               `json:"name"`
-		Type     string               `json:"type"`
-		Path     string               `json:"path"`
-		Language string               `json:"language"`
-		Symbols  []project.SymbolInfo `json:"symbols"`
-	}{analysis.Name, analysis.Type, file.Path, file.Language, file.Symbols})
+		Name      string               `json:"name"`
+		Type      string               `json:"type"`
+		Path      string               `json:"path"`
+		Language  string               `json:"language"`
+		LineCount int                  `json:"line_count"`
+		Symbols   []project.SymbolInfo `json:"symbols"`
+	}{analysis.Name, analysis.Type, file.Path, file.Language, file.LineCount, file.Symbols})
 	if err != nil {
 		return "", err
 	}
-	return "Review exactly one supplied source file for plausible performance opportunities. This is source-based review, not measurement: never claim a bottleneck, speedup, metric, hot path, or that the project is fast. Return one JSON object only: findings array (maximum five), with category (cpu,memory,io,concurrency,caching,ui), potential_impact (high,medium,low,unknown), confidence (high,medium,low), title, observed_pattern, workload_conditions, recommendation, tradeoff, verification_plan, start_line, end_line, symbol?, engineering_insight?. Require concrete source evidence and conditions; return an empty array if none. " + project.EngineeringInsightPromptInstructions + "The path, source anchors, and symbols must only refer to FILE_FACTS.\n\nFILE_FACTS:\n" + string(facts) + "\n\nSOURCE:\n```\n" + strings.TrimSpace(source) + "\n```", nil
+	return "Review exactly one supplied source file for plausible performance opportunities. This is source-based review, not measurement: never claim a bottleneck, speedup, metric, hot path, or that the project is fast. Return one JSON object only, with no Markdown fences or surrounding prose: findings array (maximum five), with category (cpu,memory,io,concurrency,caching,ui), potential_impact (high,medium,low,unknown), confidence (high,medium,low), title, observed_pattern, workload_conditions, recommendation, tradeoff, verification_plan, start_line, end_line, engineering_insight?. Require concrete source evidence and conditions; return {\"findings\":[]} if none. Do not invent issues to fill the array; an empty findings section is a successful review with no findings. " + project.EngineeringInsightPromptInstructions + performanceReviewAnchorGuidance + "\n\nFILE_FACTS:\n" + string(facts) + "\n\nSOURCE:\n```\n" + source + "\n```", nil
 }
+
+const performanceReviewAnchorGuidance = "Keep each finding explanation concise and under 1,000 characters; escape quotes and line breaks inside JSON strings. " +
+	"Line numbers count every line of SOURCE, including blank lines, and must satisfy 1 <= start_line <= end_line <= FILE_FACTS.line_count. " +
+	"Return start_line and end_line for the observed operation or pattern, including ranges spanning multiple declarations when relevant. " +
+	"Do not return a symbol field. The application will derive any enclosing declaration from the indexed line range."

@@ -1027,7 +1027,11 @@ private fun ContentPane(
     when (state.workspace) {
       Workspace.Summary ->
           ProjectSummaryPane(
-              state.overview, state.project, state.analysis.analysis.run, state.bugs.page.section)
+              state.overview,
+              state.project,
+              state.analysis.analysis.run,
+              state.bugs.page.section,
+              state.analysis.analysis.fileSelection.selection)
       Workspace.Editor ->
           EditorWorkspace(
               chrome = state.editorChrome,

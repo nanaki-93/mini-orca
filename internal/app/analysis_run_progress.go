@@ -19,7 +19,7 @@ func newAnalysisRun(preview AnalysisRunPreview) *AnalysisRun {
 		for _, stage := range file.Stages {
 			status := AnalysisStagePending
 			if !stage.Eligible {
-				status = AnalysisStageUnavailable
+				status = AnalysisStageSkipped
 			}
 			if stage.Reason == "The model for this stage is not configured." && !stage.Cached {
 				status = AnalysisStageUnavailable
@@ -33,6 +33,11 @@ func newAnalysisRun(preview AnalysisRunPreview) *AnalysisRun {
 }
 
 func refreshAnalysisSections(run *AnalysisRun) {
+	refreshAnalysisSectionsWithEligibility(run, false)
+}
+
+// includeIneligible validates the original schema-1 aggregate before upgrading it.
+func refreshAnalysisSectionsWithEligibility(run *AnalysisRun, includeIneligible bool) {
 	counts := make(map[project.FindingCategory]int, len(run.Sections))
 	for _, section := range run.Sections {
 		if section.FindingCount != nil {
@@ -42,29 +47,17 @@ func refreshAnalysisSections(run *AnalysisRun) {
 	run.Sections = make([]AnalysisSectionProgress, 0, 3)
 	for _, category := range []project.FindingCategory{project.FindingCategoryBugs, project.FindingCategoryPerformance, project.FindingCategorySecurity} {
 		section := AnalysisSectionProgress{Category: category}
-		for _, file := range run.Files {
-			for _, stage := range file.Stages {
+		for i, file := range run.Files {
+			for j, stage := range file.Stages {
+				plan := run.Plan.Files[i].Stages[j]
+				if !includeIneligible && !plan.Eligible && plan.Reason != "Not requested by this compatibility action." {
+					continue
+				}
 				for _, consumer := range stage.Stage.Categories() {
 					if consumer != category {
 						continue
 					}
-					section.Coverage.Total++
-					switch stage.Status {
-					case AnalysisStagePending, AnalysisStageInterrupted:
-						section.Coverage.Pending++
-					case AnalysisStageRunning:
-						section.Coverage.Running++
-					case AnalysisStageCompleted, AnalysisStageCompletedEmpty:
-						section.Coverage.Succeeded++
-					case AnalysisStagePartial:
-						section.Coverage.Partial++
-					case AnalysisStageFailed:
-						section.Coverage.Failed++
-					case AnalysisStageUnavailable:
-						section.Coverage.Unavailable++
-					default:
-						section.Coverage.Skipped++
-					}
+					countAnalysisStage(&section.Coverage, stage.Status)
 				}
 			}
 		}
@@ -74,6 +67,26 @@ func refreshAnalysisSections(run *AnalysisRun) {
 		}
 		section.Status = analysisCoverageStatus(section.Coverage, section.FindingCount, run.Status)
 		run.Sections = append(run.Sections, section)
+	}
+}
+
+func countAnalysisStage(coverage *AnalysisRunCoverage, status AnalysisStageStatus) {
+	coverage.Total++
+	switch status {
+	case AnalysisStagePending, AnalysisStageInterrupted:
+		coverage.Pending++
+	case AnalysisStageRunning:
+		coverage.Running++
+	case AnalysisStageCompleted, AnalysisStageCompletedEmpty:
+		coverage.Succeeded++
+	case AnalysisStagePartial:
+		coverage.Partial++
+	case AnalysisStageFailed:
+		coverage.Failed++
+	case AnalysisStageUnavailable:
+		coverage.Unavailable++
+	default:
+		coverage.Skipped++
 	}
 }
 

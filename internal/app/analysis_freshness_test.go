@@ -95,14 +95,21 @@ func TestAnalysisFreshnessDetectsChangesAcrossProjectLifecycle(t *testing.T) {
 				if overview.Run == nil || overview.Run.Status != AnalysisRunStale || overview.Run.Identity != completed.Identity || calls.Load() != 6 {
 					t.Fatalf("changed run=%+v calls=%d", overview.Run, calls.Load())
 				}
-				wantFresh, wantStale := 1, 0
-				if change == "edit" {
-					wantStale = 1
-				} else if change == "add" {
-					wantFresh = 2
+				// File-local semantic descriptions remain reusable, but full-stage
+				// coverage includes reports tied to the changed project revision.
+				helper, err := s.CachedFileAnalysis("helper.go")
+				if err != nil || helper.Status != project.AnalysisStatusFresh {
+					t.Fatalf("unchanged semantic description invalidated: %+v %v", helper, err)
 				}
-				if overview.Coverage.Fresh != wantFresh || overview.Coverage.Stale != wantStale {
-					t.Fatalf("file coverage=%+v", overview.Coverage)
+				want := AnalysisCoverage{Total: 2, Stale: 2}
+				if change == "add" {
+					want.Total, want.Missing = 3, 1
+				}
+				if change == "delete" {
+					want.Total, want.Stale = 1, 1
+				}
+				if overview.Coverage != want {
+					t.Fatalf("full-stage coverage=%+v, want %+v", overview.Coverage, want)
 				}
 			})
 		}

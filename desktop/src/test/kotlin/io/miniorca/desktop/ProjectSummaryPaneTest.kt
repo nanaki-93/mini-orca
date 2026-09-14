@@ -33,7 +33,7 @@ class ProjectSummaryPaneTest {
     assertTrue(summary.findingMetrics.all { it.value == null })
     assertTrue(summary.coverageMetrics.all { it.value == null })
     assertFalse(summary.toString().contains("revision"))
-    assertEquals("Project analysis: unavailable", summary.analysisMessage)
+    assertEquals("Project description: unavailable", summary.analysisMessage)
   }
 
   @Test
@@ -106,7 +106,7 @@ class ProjectSummaryPaneTest {
             null)
 
     assertTrue(running.analysisMessage.contains(": running"))
-    assertEquals("Project analysis: failed · Timed out.", failed.analysisMessage)
+    assertEquals("Project description: failed · Timed out.", failed.analysisMessage)
     assertEquals(null, failed.purpose)
   }
 
@@ -180,7 +180,7 @@ class ProjectSummaryPaneTest {
     assertEquals(Warning, summaryAnalysisTint(outdated.summaryStatus))
     val failed =
         projectSummaryPresentation(
-            overview.copy(analysisCoverage = AnalysisCoverage(stale = 1)),
+            overview.copy(analysisCoverage = AnalysisCoverage(stale = 1, failed = 1)),
             project,
             analysisRunFixture()
                 .copy(status = "failed", reason = "Run interrupted by a storage failure."))
@@ -192,6 +192,57 @@ class ProjectSummaryPaneTest {
             projectSummaryPresentation(
                     overview.copy(analysis = StructuredProjectAnalysis(status = "failed")), project)
                 .summaryStatus))
+  }
+
+  @Test
+  fun selectedFileEvidenceOverridesOldOverviewAndDescriptionWithoutHidingChanges() {
+    val project = analysisProjectFixture()
+    val overview =
+        ProjectOverview(
+            projectId = "project",
+            projectRevision = "revision",
+            analysis = StructuredProjectAnalysis(status = "stale", purpose = "Saved description"),
+            analysisCoverage = AnalysisCoverage(total = 3, fresh = 1, stale = 2))
+    val selection = selectionFixture().copy(excludedPaths = listOf("main.go"))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ProjectSummaryPane(overview, project, fileSelection = selection)
+        }
+        .use { fixture ->
+          fixture.render("summary-current-selection-old-description-800-150")
+          fixture.assertSummaryStatusPlacement("Updated")
+          assertFalse(fixture.hasText("Outdated"))
+        }
+    val current = projectSummaryPresentation(overview, project, fileSelection = selection)
+    assertEquals("fresh", current.summaryStatus)
+    assertFalse(current.outdated)
+    assertEquals("stale", current.analysisStatus)
+    assertEquals("Saved description", current.purpose)
+    assertTrue(current.analysisMessage.contains("source may have changed"))
+    assertEquals(listOf("Ready"), current.coverageMetrics.map { it.label })
+    val included =
+        projectSummaryPresentation(
+            overview, project, fileSelection = selection.copy(excludedPaths = emptyList()))
+    assertEquals("partial", included.summaryStatus)
+    val staleFile =
+        selection.files.last().copy(stages = selectionStageFixture("stale", "Source changed."))
+    val stale =
+        projectSummaryPresentation(
+            overview,
+            project,
+            fileSelection = selection.copy(excludedPaths = emptyList(), files = listOf(staleFile)))
+    assertTrue(stale.outdated)
+    assertEquals("stale", stale.summaryStatus)
+    val allExcluded =
+        projectSummaryPresentation(
+            overview,
+            project,
+            fileSelection = selection.copy(excludedPaths = listOf("helper.go", "main.go")))
+    assertEquals("excluded", allExcluded.summaryStatus)
+    assertTrue(allExcluded.coverageMetrics.isEmpty())
+    val otherProject =
+        projectSummaryPresentation(
+            overview, project, fileSelection = selection.copy(projectId = "other"))
+    assertEquals("stale", otherProject.summaryStatus)
   }
 
   @Test

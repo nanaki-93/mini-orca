@@ -837,7 +837,7 @@ components:
         generated_at: {type: string, format: date-time}
     AnalysisCoverage:
       type: object
-      required: [total, fresh, stale, missing, failed, running]
+      required: [total, fresh, stale, missing, failed, running, partial, unavailable]
       properties:
         total: {type: integer}
         fresh: {type: integer}
@@ -845,6 +845,8 @@ components:
         missing: {type: integer}
         failed: {type: integer}
         running: {type: integer}
+        partial: {type: integer}
+        unavailable: {type: integer}
     FindingCounts:
       type: object
       required: [verified, ai_suggestions]
@@ -1656,10 +1658,20 @@ components:
           type: array
           items:
             type: object
-            required: [path, reason]
+            required: [path, reason, stages]
             properties:
               path: {type: string}
               reason: {type: string, description: Empty when selectable; otherwise the eligibility exclusion reason.}
+              stages:
+                type: array
+                description: Read-only current analysis status per stage. Empty for ineligible files. Does not dispatch analysis.
+                items:
+                  type: object
+                  required: [stage, status, reason]
+                  properties:
+                    stage: {$ref: '#/components/schemas/AnalysisStage'}
+                    status: {type: string, enum: [fresh, stale, missing, failed, partial, running, pending, paused, interrupted, canceled, skipped, unavailable]}
+                    reason: {type: string, description: Explanation of the current cache or retained run state.}
     AnalysisPreviewRequest:
       type: object
       additionalProperties: false

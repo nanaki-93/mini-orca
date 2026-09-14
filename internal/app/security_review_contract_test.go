@@ -57,12 +57,12 @@ func TestSecurityAIRequestsStructuredOutputForTextAndGoFiles(t *testing.T) {
 			if format == nil || format.Type != "json_schema" || format.JSONSchema == nil || !format.JSONSchema.Strict {
 				t.Fatalf("security response format = %+v", format)
 			}
-			schema := compileSecurityReviewSchema(t, format.JSONSchema.Schema)
+			schema := compileReviewSchema(t, format.JSONSchema.Schema)
 			output := `{"findings":[]}`
 			if path == "main.go" {
 				output = validSecurityReview
 			}
-			assertSecuritySchemaAccepts(t, schema, output, true)
+			assertReviewSchemaAccepts(t, schema, output, true)
 		})
 	}
 }
@@ -77,9 +77,9 @@ func TestSecurityReviewSchemaConstrainsFindingFieldsAndFileAnchors(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	schema := compileSecurityReviewSchema(t, response.Schema)
-	assertSecuritySchemaAccepts(t, schema, validSecurityReview, true)
-	assertSecuritySchemaAccepts(t, schema, `{"findings":[]}`, true)
+	schema := compileReviewSchema(t, response.Schema)
+	assertReviewSchemaAccepts(t, schema, validSecurityReview, true)
+	assertReviewSchemaAccepts(t, schema, `{"findings":[]}`, true)
 	for _, test := range []struct{ name, from, to string }{
 		{"uppercase rule", "go.input.validation", "VULN_SCAN_GENERIC"},
 		{"uppercase category", "input-validation", "Input Validation"},
@@ -95,17 +95,17 @@ func TestSecurityReviewSchemaConstrainsFindingFieldsAndFileAnchors(t *testing.T)
 		{"unsafe reference", `"rule":`, `"reference":"http://example.test","rule":`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			assertSecuritySchemaAccepts(t, schema, strings.Replace(validSecurityReview, test.from, test.to, 1), false)
+			assertReviewSchemaAccepts(t, schema, strings.Replace(validSecurityReview, test.from, test.to, 1), false)
 		})
 	}
 	for _, output := range []string{`{}`, `{"findings":null}`, `{"findings":{}}`, `{"findings":[],"summary":"none"}`} {
-		assertSecuritySchemaAccepts(t, schema, output, false)
+		assertReviewSchemaAccepts(t, schema, output, false)
 	}
 	var report map[string][]json.RawMessage
 	if err := json.Unmarshal([]byte(validSecurityReview), &report); err != nil {
 		t.Fatal(err)
 	}
-	assertSecuritySchemaAccepts(t, schema, `{"findings":[`+strings.TrimSuffix(strings.Repeat(string(report["findings"][0])+",", 6), ",")+`]}`, false)
+	assertReviewSchemaAccepts(t, schema, `{"findings":[`+strings.TrimSuffix(strings.Repeat(string(report["findings"][0])+",", 6), ",")+`]}`, false)
 }
 
 func TestSecurityReviewSchemaPinsFocusAndSupportsFilesWithoutSymbols(t *testing.T) {
@@ -125,11 +125,11 @@ func TestSecurityReviewSchemaPinsFocusAndSupportsFilesWithoutSymbols(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			schema := compileSecurityReviewSchema(t, response.Schema)
-			assertSecuritySchemaAccepts(t, schema, validSecurityReview, test.allowed)
-			assertSecuritySchemaAccepts(t, schema, `{"findings":[]}`, true)
+			schema := compileReviewSchema(t, response.Schema)
+			assertReviewSchemaAccepts(t, schema, validSecurityReview, test.allowed)
+			assertReviewSchemaAccepts(t, schema, `{"findings":[]}`, true)
 			withoutSymbol := strings.Replace(validSecurityReview, `,"symbol":"Run"`, "", 1)
-			assertSecuritySchemaAccepts(t, schema, withoutSymbol, test.focus == nil && test.file.LineCount > 0)
+			assertReviewSchemaAccepts(t, schema, withoutSymbol, test.focus == nil && test.file.LineCount > 0)
 		})
 	}
 }
@@ -196,7 +196,7 @@ func TestSecurityAIStopsWhenProviderRejectsStructuredRequest(t *testing.T) {
 	assertNoSecurityReport(t, root)
 }
 
-func compileSecurityReviewSchema(t *testing.T, raw json.RawMessage) *jsonschema.Schema {
+func compileReviewSchema(t *testing.T, raw json.RawMessage) *jsonschema.Schema {
 	t.Helper()
 	document, err := jsonschema.UnmarshalJSON(strings.NewReader(string(raw)))
 	if err != nil {
@@ -213,7 +213,7 @@ func compileSecurityReviewSchema(t *testing.T, raw json.RawMessage) *jsonschema.
 	return schema
 }
 
-func assertSecuritySchemaAccepts(t *testing.T, schema *jsonschema.Schema, output string, want bool) {
+func assertReviewSchemaAccepts(t *testing.T, schema *jsonschema.Schema, output string, want bool) {
 	t.Helper()
 	instance, err := jsonschema.UnmarshalJSON(strings.NewReader(output))
 	if err != nil {
