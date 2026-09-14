@@ -209,7 +209,7 @@ func analysisMetadataPath(value string) bool {
 
 func analysisMetadataReason(value string) bool {
 	switch value {
-	case "No stale or failed analysis for this file.", "Outside this compatibility queue.", "Not requested by this compatibility action.", "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
+	case analysisSelectionExclusion, "No stale or failed analysis for this file.", "Outside this compatibility queue.", "Not requested by this compatibility action.", "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
 		"Passive security rules require a Go source file.", "The model for this stage is not configured.",
 		"Analysis stage could not complete.", "The stage needs an additional attempt allowance.", "The file is not eligible for this source analysis.",
 		"The report contains incomplete evidence; review its details.", "The model request or response failed. Other analysis results remain available.",

@@ -118,3 +118,29 @@ func analysisQuery(w http.ResponseWriter, r *http.Request, required, optional []
 	}
 	return query, true
 }
+
+func (h *AnalysisHandler) Selection(w http.ResponseWriter, r *http.Request) {
+	query, ok := analysisQuery(w, r, []string{"project_id", "project_revision"}, nil)
+	if !ok {
+		return
+	}
+	selection, err := h.service.ReadAnalysisSelection(r.Context(), query.Get("project_id"), query.Get("project_revision"))
+	if err != nil {
+		writeProjectError(w, "analysis selection unavailable", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, selection)
+}
+
+func (h *AnalysisHandler) SaveSelection(w http.ResponseWriter, r *http.Request) {
+	var request app.AnalysisSelectionRequest
+	if !decodeStrictJSON(w, r, &request, "invalid analysis selection", "Provide project and selection identities and excluded_paths.") || !validAnalysisRequest(w, request.Validate()) {
+		return
+	}
+	selection, err := h.service.SaveAnalysisSelection(r.Context(), request)
+	if err != nil {
+		writeProjectError(w, "analysis selection could not be saved", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, selection)
+}

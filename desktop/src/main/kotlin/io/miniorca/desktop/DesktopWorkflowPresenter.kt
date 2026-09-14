@@ -541,6 +541,11 @@ class DesktopWorkflowPresenter(
 
   fun refreshAnalysis() = analysisWorkflow.refresh()
 
+  fun refreshAnalysisSelection() = analysisWorkflow.fileSelection.refresh()
+
+  fun saveAnalysisSelection(excludedPaths: List<String>) =
+      analysisWorkflow.fileSelection.save(excludedPaths)
+
   fun dismissAnalysisAdmission() = analysisWorkflow.dismissAdmission()
 
   fun confirmAnalysisProvider(id: String, confirmed: Boolean) =

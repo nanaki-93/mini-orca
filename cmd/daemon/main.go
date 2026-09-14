@@ -147,6 +147,8 @@ func newHTTPMux(
 	mux.HandleFunc("GET /api/projects/current/context", contextHandler.Preview)
 
 	analysisHandler := handlers.NewAnalysisHandler(application)
+	mux.HandleFunc("GET /api/projects/current/analysis/selection", analysisHandler.Selection)
+	mux.HandleFunc("POST /api/projects/current/analysis/selection", analysisHandler.SaveSelection)
 	mux.HandleFunc("POST /api/projects/current/analysis/preview", analysisHandler.Preview)
 	mux.HandleFunc("POST /api/projects/current/analysis/run", analysisHandler.Start)
 	mux.HandleFunc("GET /api/projects/current/analysis/run", analysisHandler.Current)

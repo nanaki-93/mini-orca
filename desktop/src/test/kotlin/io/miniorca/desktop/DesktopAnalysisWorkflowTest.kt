@@ -397,6 +397,8 @@ class DesktopAnalysisWorkflowTest {
                               if (wrongResult) result = result.copy(path = "wrong.go")
                               TransportResponse(200, Json.encodeToString(result))
                             }
+                            path.contains("/analysis/selection?") ->
+                                TransportResponse(200, Json.encodeToString(selectionFixture()))
                             path.contains("/overview?") ->
                                 TransportResponse(
                                     200, Json.encodeToString(ProjectOverview(analysisRun = run)))

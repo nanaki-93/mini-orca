@@ -233,6 +233,8 @@ internal data class DesktopShellEditorActions(
 )
 
 internal data class DesktopShellAnalysisActions(
+    val refreshAnalysisSelection: () -> Unit,
+    val saveAnalysisSelection: (List<String>) -> Unit,
     val startAnalysis: (AnalysisRunLimits, Boolean) -> Unit,
     val pauseAnalysis: () -> Unit,
     val resumeAnalysis: () -> Unit,
@@ -1023,7 +1025,9 @@ private fun ContentPane(
 ) {
   Column(modifier.background(EditorCanvas)) {
     when (state.workspace) {
-      Workspace.Summary -> ProjectSummaryPane(state.overview, state.project)
+      Workspace.Summary ->
+          ProjectSummaryPane(
+              state.overview, state.project, state.analysis.analysis.run, state.bugs.page.section)
       Workspace.Editor ->
           EditorWorkspace(
               chrome = state.editorChrome,
@@ -1078,7 +1082,13 @@ private data class ContentPaneNavigationActions(
 
 private fun DesktopShellAnalysisActions.toWorkspaceActions(openResults: (Workspace) -> Unit) =
     AnalysisWorkspaceActions(
-        startAnalysis, pauseAnalysis, resumeAnalysis, cancelAnalysis, openResults)
+        startAnalysis,
+        pauseAnalysis,
+        resumeAnalysis,
+        cancelAnalysis,
+        openResults,
+        refreshAnalysisSelection,
+        saveAnalysisSelection)
 
 internal fun modelDestinationLabel(scope: ModelScope, model: ScopedModel): String {
   val reasoningEffort =

@@ -17,6 +17,7 @@ internal class DesktopAnalysisWorkflow(
     private val state: () -> DesktopState,
     private val dispatch: (DesktopEvent) -> Unit,
 ) {
+  val fileSelection = DesktopAnalysisSelectionWorkflow(api, scope, ioDispatcher, state, dispatch)
   private var actionJob: Job? = null
   private var generation = 0L
   private val resultJobs = mutableMapOf<AnalysisResultKey, Job>()
@@ -38,6 +39,7 @@ internal class DesktopAnalysisWorkflow(
 
   /** Disconnects this client without canceling the durable daemon run. */
   fun detach() {
+    fileSelection.detach()
     generation++
     actionJob?.cancel()
     coordinator.stopAnalysisPolling()
@@ -224,6 +226,7 @@ internal class DesktopAnalysisWorkflow(
   }
 
   fun refresh() {
+    fileSelection.refresh()
     if (actionJob?.isActive == true) return
     val project = project() ?: return
     val token = begin("refresh")
@@ -290,12 +293,14 @@ internal class DesktopAnalysisWorkflow(
       update(current.copy(error = "The returned analysis belongs to another project revision."))
       return false
     }
+    val statusChanged = current.run?.status != run?.status
     if (current.run?.identity != run?.identity) {
       resultJobs.values.forEach(Job::cancel)
       resultJobs.clear()
       resultGenerations.clear()
       update(current.copy(run = run, sections = emptyMap(), admission = null))
     } else update(current.copy(run = run))
+    if (statusChanged) fileSelection.refresh()
     if (run != null && run.identity.projectRevision == project.revision) {
       (listOf("bugs", "performance", "security").map { AnalysisResultKey(it) } +
               current.sections.keys)

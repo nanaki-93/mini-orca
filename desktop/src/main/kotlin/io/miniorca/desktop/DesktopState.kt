@@ -71,6 +71,7 @@ data class ProjectAnalysisRunState(
     val action: String = "",
     val error: String? = null,
     val sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
+    val fileSelection: AnalysisSelectionState = AnalysisSelectionState(),
 )
 
 enum class SecuritySectionOperationStatus {

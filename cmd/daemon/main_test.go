@@ -421,7 +421,7 @@ func TestUnifiedAnalysisRoutesUseLocalOriginPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	mux := newHTTPMux(service, manager)
-	for _, route := range []string{"/api/projects/current/analysis/preview", "/api/projects/current/analysis/run", "/api/projects/current/analysis/run/control"} {
+	for _, route := range []string{"/api/projects/current/analysis/selection", "/api/projects/current/analysis/preview", "/api/projects/current/analysis/run", "/api/projects/current/analysis/run/control"} {
 		request := httptest.NewRequest(http.MethodPost, route, strings.NewReader(`{}`))
 		request.Host = "localhost:9090"
 		request.Header.Set("Content-Type", "application/json")

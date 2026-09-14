@@ -1,6 +1,5 @@
 package io.miniorca.desktop
 
-import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -71,10 +70,7 @@ class ProjectSummaryPaneTest {
         summary.coverageMetrics.map { it.label },
     )
     assertEquals(listOf(1, 1, 1), summary.coverageMetrics.map { it.value })
-    assertEquals(
-        listOf("Architecture", "Packages / modules", "Risks · AI suggestions"),
-        summary.details.map { it.title })
-    assertEquals("MEDIUM · Validate inputs.", summary.details.last().values.single())
+    assertEquals(listOf("Architecture", "Packages / modules"), summary.details.map { it.title })
   }
 
   @Test
@@ -115,6 +111,41 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun issueCountsUseCurrentAnalysisSectionsAndKeepPartialAndUnavailableStates() {
+    val project = resultProjectFixture()
+    val run =
+        analysisRunFixture()
+            .copy(
+                sections =
+                    listOf(
+                        AnalysisSectionProgress(
+                            "bugs", "completed_empty", AnalysisRunCoverage(succeeded = 1), 0),
+                        AnalysisSectionProgress(
+                            "performance", "partial", AnalysisRunCoverage(partial = 1), 3),
+                        AnalysisSectionProgress(
+                            "security", "failed", AnalysisRunCoverage(failed = 1))))
+    val summary = projectSummaryPresentation(null, project, run)
+    assertEquals(
+        listOf("Bugs", "Performance Issues", "Security Issues"),
+        summary.issueMetrics.map { it.label })
+    assertEquals(listOf(0, 3, null), summary.issueMetrics.map { it.value })
+    assertEquals(
+        listOf("Completed · no findings", "Partial", "Failed"),
+        summary.issueMetrics.map { it.status })
+    assertTrue(projectSummaryPresentation(null, project).issueMetrics.all { it.value == null })
+    listOf(
+            run.copy(status = "stale"),
+            run.copy(identity = run.identity.copy(projectRevision = "old")),
+            run.copy(identity = run.identity.copy(projectId = "other")))
+        .forEach { stale ->
+          assertTrue(
+              projectSummaryPresentation(null, project, stale).issueMetrics.all {
+                it.value == null
+              })
+        }
+  }
+
+  @Test
   fun diagramInputsPreserveMermaidAndLegacyProse() {
     val mermaid = "flowchart TD\n A[API] --> B[Service]"
     assertEquals(mermaid, summaryDiagramInput(mermaid).source)
@@ -138,11 +169,55 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
-  fun coverageMetricsKeepFiveColumnsWhenWideAndWrapAtNarrowWidths() {
-    assertEquals(5, summaryMetricColumnCount(1040.dp))
-    assertEquals(5, summaryMetricColumnCount(480.dp))
-    assertEquals(3, summaryMetricColumnCount(479.dp))
-    assertEquals(3, summaryMetricColumnCount(320.dp))
-    assertEquals(2, summaryMetricColumnCount(319.dp))
+  fun analysisFailureTakesPrecedenceOverOutdatedAndUpdatedColors() {
+    val project = resultProjectFixture()
+    val overview = ProjectOverview(analysis = StructuredProjectAnalysis(status = "fresh"))
+    val updated = projectSummaryPresentation(overview, project)
+    assertEquals(Success, summaryAnalysisTint(updated.summaryStatus))
+    val outdated =
+        projectSummaryPresentation(
+            overview.copy(analysisCoverage = AnalysisCoverage(stale = 1)), project)
+    assertEquals(Warning, summaryAnalysisTint(outdated.summaryStatus))
+    val failed =
+        projectSummaryPresentation(
+            overview.copy(analysisCoverage = AnalysisCoverage(stale = 1)),
+            project,
+            analysisRunFixture()
+                .copy(status = "failed", reason = "Run interrupted by a storage failure."))
+    assertEquals(Error, summaryAnalysisTint(failed.summaryStatus))
+    assertTrue(failed.analysisMessage.contains("Run interrupted by a storage failure."))
+    assertEquals(
+        Error,
+        summaryAnalysisTint(
+            projectSummaryPresentation(
+                    overview.copy(analysis = StructuredProjectAnalysis(status = "failed")), project)
+                .summaryStatus))
+  }
+
+  @Test
+  fun outdatedSummaryIncludesStaleFilesAndMismatchedRuns() {
+    val project = resultProjectFixture()
+    val overview = ProjectOverview(analysis = StructuredProjectAnalysis(status = "fresh"))
+    assertFalse(projectSummaryPresentation(overview, project).outdated)
+    assertTrue(
+        projectSummaryPresentation(
+                overview.copy(analysis = StructuredProjectAnalysis(status = "stale")), project)
+            .outdated)
+    assertTrue(
+        projectSummaryPresentation(
+                overview.copy(analysisCoverage = AnalysisCoverage(stale = 1)), project)
+            .outdated)
+    assertTrue(
+        projectSummaryPresentation(overview, project, analysisRunFixture().copy(status = "stale"))
+            .outdated)
+    assertTrue(
+        projectSummaryPresentation(
+                overview,
+                project,
+                analysisRunFixture().let {
+                  it.copy(identity = it.identity.copy(projectRevision = "old"))
+                })
+            .outdated)
+    assertFalse(projectSummaryPresentation(overview, project, analysisRunFixture()).outdated)
   }
 }
