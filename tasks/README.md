@@ -18,10 +18,12 @@ POLISH-02 also passed after Astra High repair 1/1: Summary alignment, whole-box
 navigation and live counts, with all 460 desktop tests and quality checks passing.
 Its [card evidence](../docs/tasks.md#task-polish-02--summary-alignment-navigation-and-live-data)
 records the interrupted handoff and completed repair. POLISH-03 passed Astra High
-repair 1/1, all 462 desktop tests and quality checks. POLISH-04 is next; no later
-card has started. Scheduled implementation uses SOL High and repairs use Astra High.
+repair 1/1, all 462 desktop tests and quality checks. POLISH-04 passed with SOL
+High, including first-click recovery and packaged offline Mermaid checks. POLISH-05
+is next; no later card has started. Scheduled implementation uses SOL High and repairs use Astra High.
 The user's follow-up authorizes local commits after each accepted card;
-POLISH-01/02 are committed together as `d67ab5a`, and POLISH-03 is committed separately.
+POLISH-01/02 are committed together as `d67ab5a`, POLISH-03 as `fb53e5f`, and
+POLISH-04 receives its own verified local commit.
 
 ## Per-wake procedure
 
