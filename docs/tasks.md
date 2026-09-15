@@ -2,7 +2,7 @@
 
 Implement the user's Summary, Analysis and Bugs / Performance / Security cleanup:
 rounded shared controls, live clickable category boxes, simpler results and working
-offline diagrams. POLISH-01–03 are accepted; POLISH-04–06 remain planned work.
+offline diagrams. POLISH-01–04 are accepted; POLISH-05–06 remain planned work.
 
 ## Current execution scope
 
@@ -326,9 +326,41 @@ the daemon admission and consent workflow is unchanged.
 
 ## Task POLISH-04 — Repair Summary diagrams end to end
 
-**Status:** [ ] Pending; repair attempts: 0/1.
+**Status:** [x] Complete with SOL High; repair attempts: 0/1. POLISH-05 is next.
+
+**Reproduction.** Existing renderer, grouped-flowchart, branched-sequence and SVG
+decode checks pass, so the GraalJS/SVG pipeline is working. The first-frame UI
+regression `validDiagramDisclosureAcceptsTheFirstClickWhileRenderingStarts` fails:
+**Show diagram** is disabled while the valid source renders asynchronously, so an
+immediate user click is discarded. This deliberate failing regression establishes
+the reported interaction defect and does not consume the Astra repair allowance.
+
+**Acceptance — 2026-09-16.** Valid Mermaid sources now accept the first disclosure
+click while the offline render starts; the expanded disclosure visibly transitions
+from Rendering to the decoded image. Loading stays hidden while collapsed. Invalid
+inputs still disable disclosure and retain the bounded error/source, and replacing
+one with a valid diagram recovers without a model or network request. Fenced input
+also accepts case/spacing and CRLF variants. No JS bundle or dependency changed.
+
+- Focused command: **59 passed**, zero failures/errors/skips, covering multiline,
+  grouped/branching flowcharts, sequence branches, image pixels, legacy arrows,
+  fenced/prose input, first-click behavior, zoom/source and failure recovery.
+- `./scripts/desktop-gradle.sh test spotlessCheck detekt`: **464 passed**, zero
+  failures/errors/skips; Spotless and Detekt passed. `git diff --check`: PASS.
+- `./scripts/desktop-gradle.sh createDistributable`: PASS. The first manual smoke
+  invocation omitted the package launcher's Skiko resource path and failed before
+  rendering; the corrected JBR 25 invocation used the packaged app jars and
+  `Contents/app` native resource path. Updated grouped-flowchart and branched-
+  sequence `MermaidRuntimeSmokeKt`: **Packaged Mermaid rendering passed.**
+- Reviewed 1440px and 800px/150% production renders plus the initial, unavailable
+  and recovery states: labels, nodes and edges are legible; source remains
+  selectable. Native pointer/focus and screen-reader checks were not repeated.
+
+Add `PLAN.md` and `tasks/README.md` as narrow status/commit-record targets. Commit
+this accepted card locally and resume the scheduler for POLISH-05.
 
 **Target files**
+- `PLAN.md` and `tasks/README.md` — accepted-card status and scheduler commit record.
 - `desktop/src/main/kotlin/io/miniorca/desktop/MermaidDiagram.kt` — input/disclosure/render state and recovery.
 - `desktop/src/main/kotlin/io/miniorca/desktop/MermaidRenderer.kt` — embedded renderer failure if reproduced here.
 - `desktop/src/main/kotlin/io/miniorca/desktop/MermaidImage.kt` — SVG/image conversion failure if reproduced here.

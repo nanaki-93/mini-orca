@@ -30,7 +30,7 @@ import kotlinx.coroutines.CancellationException
 internal data class SummaryDiagramInput(val source: String?, val prose: String)
 
 internal fun summaryDiagramInput(value: String): SummaryDiagramInput {
-  val fence = Regex("(?s)```mermaid\\s*\\n(.*?)\\n```").find(value)
+  val fence = Regex("(?is)```[ \\t]*mermaid[ \\t]*\\r?\\n(.*?)\\r?\\n[ \\t]*```").find(value)
   if (fence != null)
       return SummaryDiagramInput(fence.groupValues[1].trim(), value.removeRange(fence.range).trim())
   if (Regex("^(flowchart|graph|sequenceDiagram)\\b").containsMatchIn(value.trim())) {
@@ -91,7 +91,7 @@ private fun MermaidDiagramSource(source: String?, label: String) {
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
     ChromeButton(
         onClick = { showDiagram = !showDiagram },
-        enabled = state is DiagramState.Ready,
+        enabled = source != null && state !is DiagramState.Failed,
         accessibleName = "${if (showDiagram) "Hide" else "Show"} $label diagram",
         modifier =
             Modifier.semantics {
@@ -130,7 +130,8 @@ private fun MermaidDiagramSource(source: String?, label: String) {
   when (val current = state) {
     DiagramState.Unavailable -> Unit
     DiagramState.Loading ->
-        Text("Rendering diagram…", color = SecondaryText, style = IdeTypography.compactBody)
+        if (showDiagram)
+            Text("Rendering diagram…", color = SecondaryText, style = IdeTypography.compactBody)
     is DiagramState.Failed -> {
       Text(
           "Diagram unavailable: ${current.message}",

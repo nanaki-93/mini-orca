@@ -152,6 +152,9 @@ class ProjectSummaryPaneTest {
     assertEquals(
         SummaryDiagramInput(mermaid, "Overview"),
         summaryDiagramInput("Overview\n```mermaid\n$mermaid\n```"))
+    assertEquals(
+        SummaryDiagramInput(mermaid, "Overview"),
+        summaryDiagramInput("Overview\r\n``` Mermaid\r\n$mermaid\r\n```"))
     assertTrue(
         summaryDiagramInput("API → Service").source!!.contains("n0[\"API\"] --> n1[\"Service\"]"))
     listOf("Handlers call services.", "API ->", "`API -> Service`", "API -> Service\nwith details")

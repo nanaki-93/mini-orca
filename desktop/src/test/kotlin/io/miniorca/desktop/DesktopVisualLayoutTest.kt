@@ -1913,6 +1913,20 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun validDiagramDisclosureAcceptsTheFirstClickWhileRenderingStarts() {
+    val source = "flowchart TD\n A[Client] --> B[Server]"
+    ComposeVisualFixture(800, 650, 1.5f) { MermaidDiagram(source, "Architecture") }
+        .use { fixture ->
+          fixture.render("summary-mermaid-first-frame")
+          assertTrue(
+              fixture.tryClick("Show diagram"),
+              "A valid diagram must not ignore the first disclosure click while rendering")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
+        }
+  }
+
+  @Test
   fun summaryDiagramsDisableDisclosureWhenUnavailableAndResetForNewResults() {
     listOf("Architecture", "Flow 1").forEach { label ->
       var value by mutableStateOf("This result describes the project in prose.")
@@ -1940,6 +1954,12 @@ class DesktopVisualLayoutTest {
             assertTrue(fixture.isDisabled("Show diagram"))
             assertTrue(fixture.hasText(value))
             assertFalse(fixture.tryClick("Show diagram"))
+
+            value = "sequenceDiagram\n Client->>API: Retry\n API-->>Client: Ready"
+            fixture.awaitDescription("Show $label diagram", "Rendering diagram")
+            assertTrue(fixture.tryClick("Show diagram"))
+            fixture.awaitDescription("$label diagram\n$value")
+            assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
           }
     }
   }

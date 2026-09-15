@@ -34,6 +34,37 @@ class MermaidRendererTest {
   }
 
   @Test
+  fun rendersAndDecodesModelShapedGroupedArchitectureAndBranchedFlow() = runBlocking {
+    val sources =
+        listOf(
+            """flowchart TD
+              subgraph Client["Desktop client"]
+                Summary["Summary"] --> ApiClient["API client"]
+              end
+              subgraph Daemon["Go daemon"]
+                Http["Loopback HTTP API"] --> App["App service"]
+              end
+              ApiClient --> Http""",
+            """sequenceDiagram
+              participant C as Desktop client
+              participant A as Loopback API
+              C->>A: Request analysis
+              alt accepted
+                A-->>C: Current results
+              else rejected
+                A-->>C: Failure reason
+              end""",
+        )
+    sources.forEach { source ->
+      val document = MermaidRenderer.render(source)
+      val image = renderMermaidImage(document.svg)
+      assertTrue(image.bitmap.width > 1)
+      assertTrue(image.bitmap.height > 1)
+      assertTrue(document.svg.contains("Desktop client"))
+    }
+  }
+
+  @Test
   fun invalidActiveAndOversizedInputsRetainFailureMeaning() = runBlocking {
     listOf(
             "Not a Mermaid diagram",
