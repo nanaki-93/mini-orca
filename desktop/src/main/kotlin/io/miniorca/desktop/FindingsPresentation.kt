@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -221,54 +222,26 @@ internal fun ResultListDetail(
 internal fun ResultSectionHeader(
     page: AnalysisResultPageState,
     openAnalysis: () -> Unit,
-    openResults: (Workspace) -> Unit,
 ) {
+  val status = if (page.stale && page.run != null) "stale" else page.progress?.status
   Column(
       Modifier.fillMaxWidth().padding(8.dp),
       verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
-          val pages =
-              AnalysisResultType.entries.map { AnalysisResultPageState(it, page.project, page.run) }
-          if (maxWidth >= 640.dp)
-              Row(
-                  Modifier.fillMaxWidth(),
-                  horizontalArrangement =
-                      androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                    pages.forEach { category ->
-                      AnalysisCategoryBox(
-                          category.type,
-                          category.reportedCount,
-                          if (category.stale && category.run != null) "stale"
-                          else category.progress?.status,
-                          analysisStatusTint(
-                              if (category.stale && category.run != null) "stale"
-                              else category.progress?.status),
-                          { openResults(category.type.workspace) },
-                          Modifier.weight(1f),
-                          selected = category.type == page.type)
-                    }
-                  }
-          else
-              Column(
-                  verticalArrangement =
-                      androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                    pages.forEach { category ->
-                      AnalysisCategoryBox(
-                          category.type,
-                          category.reportedCount,
-                          if (category.stale && category.run != null) "stale"
-                          else category.progress?.status,
-                          analysisStatusTint(
-                              if (category.stale && category.run != null) "stale"
-                              else category.progress?.status),
-                          { openResults(category.type.workspace) },
-                          selected = category.type == page.type)
-                    }
-                  }
-        }
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+              Column(Modifier.weight(1f)) {
+                page.reportedCount?.let { count ->
+                  Text(
+                      "$count ${if (count == 1) "finding" else "findings"}",
+                      color = PrimaryText,
+                      style = IdeTypography.compactBody)
+                }
+                analysisResultStatusLabel(status)?.let {
+                  Text(it, color = analysisStatusTint(status), style = IdeTypography.compactBody)
+                }
+              }
               MiniOrcaButton(
                   onClick = openAnalysis,
                   tone = ActionTone.Navigation,

@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -79,6 +80,7 @@ internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
   SelectionContainer {
     Column(
         modifier
+            .clip(MiniOrcaShapes.control)
             .background(Card)
             .horizontalScroll(rememberScrollState())
             .semantics { contentDescription = "Read-only composed diff" }

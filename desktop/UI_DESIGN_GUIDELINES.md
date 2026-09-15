@@ -82,9 +82,13 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
 
 ## Geometry and hierarchy
 
-- Keep structural panes flat and without elevation. Use 8dp corners for interactive
-  category/result surfaces and 6dp corners for contained controls, inputs, popups
-  and dialogs. Do not wrap ordinary sections in repeated decorative cards.
+- Keep structural panes without elevation, with a rounded outer perimeter. Use the
+  shared 10dp corners for controls, inputs, file rows and tooltips; 14dp for panes,
+  sections and category/result surfaces; and 18dp for popups, drawers and dialogs.
+  Use pill-shaped badges and progress tracks, and 4dp corners for small checkbox
+  indicators. Clip child fills to the same shape as their containing surface.
+  Keep selection strokes inset with rounded ends. Do not wrap ordinary sections
+  in repeated decorative cards.
   One owner per 1dp boundary; keep larger invisible splitter hit targets and keys.
 - Align to a 4dp grid; normal content inset 8dp and internal gaps 4–8dp. Avoid
   nested 16–20dp padding. Headers/actions default to 28–32dp; rows to 24–28dp.

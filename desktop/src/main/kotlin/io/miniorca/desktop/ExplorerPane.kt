@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,10 +28,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -272,7 +273,7 @@ private fun ExplorerItem(
 ) {
   val description = explorerRowDescription(row, selected, expanded)
   val nodeColor = explorerNodeColor(row, selected)
-  TooltipArea(tooltip = { ExplorerPathTooltip(description) }) {
+  TooltipArea(tooltip = { IdeControlTooltip(description) }) {
     Row(
         modifier =
             Modifier.fillMaxWidth()
@@ -281,21 +282,23 @@ private fun ExplorerItem(
                   this.selected = selected
                   role = Role.Button
                 }
+                .clip(MiniOrcaShapes.control)
                 .background(
                     if (selected) SelectionSurface
                     else if (focused) FocusAccent.copy(alpha = 0.14f) else Color.Transparent,
-                    RoundedCornerShape(4.dp))
+                    MiniOrcaShapes.control)
                 .drawWithContent {
                   drawContent()
                   if (selected)
                       drawLine(
                           SelectionAccent,
-                          Offset(1.dp.toPx(), 0f),
-                          Offset(1.dp.toPx(), size.height),
-                          2.dp.toPx())
+                          Offset(2.dp.toPx(), 6.dp.toPx()),
+                          Offset(2.dp.toPx(), size.height - 6.dp.toPx()),
+                          2.dp.toPx(),
+                          cap = StrokeCap.Round)
                 }
                 .then(
-                    if (focused) Modifier.border(1.dp, FocusAccent, RoundedCornerShape(4.dp))
+                    if (focused) Modifier.border(1.dp, FocusAccent, MiniOrcaShapes.control)
                     else Modifier)
                 .clickable(onClick = onActivate)
                 .heightIn(min = 26.dp)
@@ -336,16 +339,6 @@ private fun ExplorerItem(
       }
     }
   }
-}
-
-@Composable
-private fun ExplorerPathTooltip(description: String) {
-  Text(
-      description,
-      color = PrimaryText,
-      fontSize = 11.sp,
-      modifier = Modifier.background(OverlaySurface).padding(horizontal = 6.dp, vertical = 4.dp),
-  )
 }
 
 private fun explorerNodeColor(row: ExplorerRow, selected: Boolean): Color =
@@ -393,7 +386,7 @@ private fun LoadingRows(label: String) {
           Modifier.fillMaxWidth()
               .height(20.dp)
               .padding(top = 6.dp)
-              .background(Card, RoundedCornerShape(4.dp)))
+              .background(Card, MiniOrcaShapes.control))
     }
   }
 }

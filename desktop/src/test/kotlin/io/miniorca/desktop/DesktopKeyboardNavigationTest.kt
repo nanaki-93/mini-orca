@@ -27,15 +27,14 @@ class DesktopKeyboardNavigationTest {
               PerformanceWorkspacePaneState(page, resultIndexFixture()),
               PerformanceWorkspaceActions(
                   prepareOptimization = { _, _ -> preparations++ },
-                  openAnalysis = {},
-                  semanticActions = FindingActions({}, { _, _ -> }),
-                  openResults = { destination = it }))
+                  openAnalysis = { destination = Workspace.Analysis },
+                  semanticActions = FindingActions({}, { _, _ -> })))
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.requestDescriptionFocus("View Security results"))
+          assertTrue(fixture.requestFocus("View analysis"))
           assertTrue(fixture.pressKey(Key.Enter))
-          assertEquals(Workspace.Security, destination)
+          assertEquals(Workspace.Analysis, destination)
           assertEquals(0, preparations)
 
           assertTrue(fixture.requestDescriptionFocus("Inspect Avoid repeated allocation"))

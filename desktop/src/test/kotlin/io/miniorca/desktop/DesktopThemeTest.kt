@@ -1,6 +1,5 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.test.Test
@@ -101,8 +100,7 @@ class DesktopThemeTest {
   }
 
   @Test
-  fun containedControlsUseTheSixDpBaselineAndKeepFocusDistinctFromSelection() {
-    assertEquals(RoundedCornerShape(6.dp), MiniOrcaShapes.small)
+  fun keyboardFocusRemainsDistinctFromSelection() {
     assertNotEquals(SelectionSurface, FocusAccent)
     assertNotEquals(SelectionAccent, FocusAccent)
   }

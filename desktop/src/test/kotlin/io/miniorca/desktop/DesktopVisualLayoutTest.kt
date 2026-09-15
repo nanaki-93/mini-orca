@@ -83,7 +83,9 @@ class DesktopVisualLayoutTest {
               else
                   fixture.assertTextFits(
                       if (status == "completed_empty") "No results" else page.statusLabel)
-              assertTrue(fixture.isDescriptionSelected("View ${page.type.workspace.name} results"))
+              AnalysisResultType.entries.forEach { type ->
+                assertFalse(fixture.hasDescription("View ${type.workspace.name} results"))
+              }
               assertFalse(fixture.hasText("Start analysis"))
             }
       }
@@ -143,9 +145,8 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun categoryBoxesExposeNamesSelectionAndSingleKeyboardActions() {
+  fun categoryBoxesExposeNamesAndSingleKeyboardActions() {
     val navigations = mutableListOf<Workspace>()
-    var selected by mutableStateOf(Workspace.Bugs)
     ComposeVisualFixture(480, 650, 1.5f) {
           Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             AnalysisResultType.entries.forEach { type ->
@@ -154,11 +155,7 @@ class DesktopVisualLayoutTest {
                   count = null,
                   status = null,
                   tint = SecondaryText,
-                  selected = selected == type.workspace,
-                  onClick = {
-                    selected = type.workspace
-                    navigations += type.workspace
-                  })
+                  onClick = { navigations += type.workspace })
             }
             ChromeButton(onClick = {}) { Text("After categories") }
           }
@@ -168,9 +165,6 @@ class DesktopVisualLayoutTest {
           fixture.assertCategoryBoxesFit()
           assertEquals(3, fixture.textCount("—"))
           assertEquals(3, fixture.textCount("Not started"))
-          assertTrue(fixture.isDescriptionSelected("View Bugs results"))
-          assertFalse(fixture.isDescriptionSelected("View Security results"))
-          assertTrue(fixture.hasDescription("Selected"))
           AnalysisResultType.entries.forEachIndexed { index, type ->
             val name = type.workspace.name
             assertTrue(fixture.pressKey(Key.Tab))
@@ -185,10 +179,6 @@ class DesktopVisualLayoutTest {
             fixture.render()
             assertEquals(List(2) { type.workspace }, navigations.takeLast(2))
             assertEquals((index + 1) * 2, navigations.size)
-            AnalysisResultType.entries.forEach {
-              assertEquals(
-                  it == type, fixture.isDescriptionSelected("View ${it.workspace.name} results"))
-            }
           }
           assertTrue(fixture.pressKey(Key.Tab))
           fixture.render()
@@ -309,17 +299,15 @@ class DesktopVisualLayoutTest {
                             PerformanceWorkspacePaneState(page, resultIndexFixture()),
                             PerformanceWorkspaceActions(
                                 { _, _ -> externalActions++ },
-                                { externalActions++ },
-                                findingActions,
-                                openResults = { navigation += it }))
+                                { navigation += Workspace.Analysis },
+                                findingActions))
                     "security" ->
                         SecurityWorkspacePane(
                             SecurityWorkspacePaneState(page, resultIndexFixture()),
                             SecurityWorkspaceActions(
                                 { externalActions++ },
-                                { externalActions++ },
-                                findingActions,
-                                openResults = { navigation += it }))
+                                { navigation += Workspace.Analysis },
+                                findingActions))
                     else ->
                         BugsWorkspacePane(
                             BugsWorkspacePaneState(page.semantic, null, false, page),
@@ -327,8 +315,7 @@ class DesktopVisualLayoutTest {
                                 findingActions,
                                 { externalActions++ },
                                 { externalActions++ },
-                                { externalActions++ },
-                                openResults = { navigation += it }))
+                                { navigation += Workspace.Analysis }))
                   }
                 }
                 .use { fixture ->
@@ -339,9 +326,9 @@ class DesktopVisualLayoutTest {
                   fixture.render("results-$category-$width-$scale")
                   fixture.assertTextFits("View analysis")
                   fixture.assertTextFits(title)
-                  assertTrue(fixture.hasDescription("View Bugs results"))
-                  assertTrue(fixture.hasDescription("View Performance results"))
-                  assertTrue(fixture.hasDescription("View Security results"))
+                  assertFalse(fixture.hasDescription("View Bugs results"))
+                  assertFalse(fixture.hasDescription("View Performance results"))
+                  assertFalse(fixture.hasDescription("View Security results"))
                   assertFalse(fixture.hasText("AI SUGGESTIONS"))
                   assertFalse(fixture.hasText("AI suspicion"))
                   assertFalse(fixture.hasText("Performance review"))
@@ -376,10 +363,8 @@ class DesktopVisualLayoutTest {
                   assertFalse(fixture.hasText("Back to results"))
                   assertFalse(fixture.hasText("Clear selection"))
                   assertEquals(0, externalActions)
-                  listOf(Workspace.Bugs, Workspace.Performance, Workspace.Security).forEach {
-                    fixture.clickVisibleDescription("View ${it.name} results")
-                    assertEquals(it, navigation.last())
-                  }
+                  fixture.clickText("View analysis")
+                  assertEquals(listOf(Workspace.Analysis), navigation)
                   assertEquals(0, externalActions)
                   fixture.clickVisibleDescription("Inspect $title")
                   fixture.render()
@@ -2412,14 +2397,6 @@ internal class ComposeVisualFixture(
         "$label must be anchored to $action: $tooltip vs $anchor")
     assertTrue(tooltip.right <= width && tooltip.bottom <= height, "$label must stay in the window")
   }
-
-  fun isDescriptionSelected(label: String): Boolean =
-      nodes()
-          .single {
-            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
-          }
-          .config
-          .getOrNull(SemanticsProperties.Selected) == true
 
   fun tryClick(label: String): Boolean =
       nodes()

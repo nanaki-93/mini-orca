@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -201,15 +202,17 @@ internal object IdeTooltipPosition : PopupPositionProvider {
 }
 
 @Composable
-private fun IdeControlTooltip(label: String) {
+internal fun IdeControlTooltip(label: String, modifier: Modifier = Modifier) {
   Text(
       label,
       color = PrimaryText,
       style = IdeTypography.section,
       modifier =
-          Modifier.background(OverlaySurface)
-              .border(BorderStroke(1.dp, PaneSeparator))
-              .padding(horizontal = 6.dp, vertical = 4.dp),
+          modifier
+              .clip(MiniOrcaShapes.control)
+              .background(OverlaySurface)
+              .border(BorderStroke(1.dp, PaneSeparator), MiniOrcaShapes.control)
+              .padding(horizontal = 8.dp, vertical = 6.dp),
   )
 }
 
@@ -280,9 +283,10 @@ internal fun ChromeTab(
             if (selected)
                 drawLine(
                     accent,
-                    Offset(0f, size.height - 1.dp.toPx()),
-                    Offset(size.width, size.height - 1.dp.toPx()),
-                    2.dp.toPx())
+                    Offset(10.dp.toPx(), size.height - 2.dp.toPx()),
+                    Offset(size.width - 10.dp.toPx(), size.height - 2.dp.toPx()),
+                    2.dp.toPx(),
+                    cap = StrokeCap.Round)
           },
       content = content,
   )
@@ -314,7 +318,9 @@ internal fun IdePaneHeader(
   require((expanded == null) == (onToggle == null)) {
     "A pane header must provide both disclosure state and toggle callback, or neither."
   }
-  BoxWithConstraints(modifier.fillMaxWidth().background(HeaderSurface)) {
+  val headerModifier =
+      modifier.fillMaxWidth().clip(MiniOrcaShapes.control).background(HeaderSurface)
+  BoxWithConstraints(headerModifier) {
     val actionLayout = paneHeaderActionLayout(maxWidth.value)
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
       Row(
@@ -421,8 +427,8 @@ internal fun IdeLabelBadge(
       style = IdeTypography.resultLabel,
       modifier =
           modifier
-              .background(labelBadgeBackground(tint), MiniOrcaShapes.small)
-              .border(BorderStroke(1.dp, tint.copy(alpha = 0.75f)), MiniOrcaShapes.small)
+              .background(labelBadgeBackground(tint), MiniOrcaShapes.pill)
+              .border(BorderStroke(1.dp, tint.copy(alpha = 0.75f)), MiniOrcaShapes.pill)
               .semantics { contentDescription = accessibleName }
               .padding(horizontal = MiniOrcaSpacing.standard, vertical = MiniOrcaSpacing.compact),
   )
@@ -477,8 +483,9 @@ internal fun IdeDialog(
   Dialog(onDismissRequest = onDismissRequest) {
     Column(
         Modifier.widthIn(min = 320.dp, max = 640.dp)
-            .background(OverlaySurface, MiniOrcaShapes.medium)
-            .border(BorderStroke(1.dp, PaneSeparator), MiniOrcaShapes.medium)
+            .clip(MiniOrcaShapes.overlay)
+            .background(OverlaySurface)
+            .border(BorderStroke(1.dp, PaneSeparator), MiniOrcaShapes.overlay)
             .padding(16.dp)) {
           title()
           IdeHorizontalSeparator(Modifier.padding(vertical = 12.dp))
@@ -516,7 +523,8 @@ internal fun IdeDropdownMenu(
       modifier =
           modifier
               .widthIn(min = IdePopupMenuDefaults.minWidth, max = IdePopupMenuDefaults.maxWidth)
-              .heightIn(max = IdePopupMenuDefaults.maxHeight),
+              .heightIn(max = IdePopupMenuDefaults.maxHeight)
+              .clip(MiniOrcaShapes.overlay),
       properties = PopupProperties(focusable = true),
       scrollState = rememberScrollState(),
   ) {
@@ -533,10 +541,10 @@ internal fun IdePopupMenuSurface(
   Column(
       modifier
           .fillMaxWidth()
-          .shadow(6.dp, MiniOrcaShapes.medium)
-          .clip(MiniOrcaShapes.medium)
+          .shadow(6.dp, MiniOrcaShapes.overlay)
+          .clip(MiniOrcaShapes.overlay)
           .background(Card)
-          .border(BorderStroke(1.dp, Border), MiniOrcaShapes.medium)
+          .border(BorderStroke(1.dp, Border), MiniOrcaShapes.overlay)
           .semantics {
             onDismissRequest?.let { onDismiss ->
               dismiss {
@@ -545,7 +553,7 @@ internal fun IdePopupMenuSurface(
               }
             }
           }
-          .padding(vertical = 4.dp),
+          .padding(4.dp),
       content = content,
   )
 }

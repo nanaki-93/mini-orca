@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -392,10 +391,9 @@ internal fun connectionPresentation(connection: ConnectionState): ConnectionPres
 private fun ConnectionChip(presentation: ConnectionPresentation, compact: Boolean) {
   Row(
       modifier =
-          Modifier.background(presentation.color.copy(alpha = 0.07f), RoundedCornerShape(20.dp))
+          Modifier.background(presentation.color.copy(alpha = 0.07f), MiniOrcaShapes.pill)
               .border(
-                  BorderStroke(1.dp, presentation.color.copy(alpha = 0.20f)),
-                  RoundedCornerShape(20.dp))
+                  BorderStroke(1.dp, presentation.color.copy(alpha = 0.20f)), MiniOrcaShapes.pill)
               .semantics {
                 contentDescription =
                     "${presentation.label}; this is daemon status, not model connectivity"

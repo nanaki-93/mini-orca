@@ -2,7 +2,6 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,21 +53,15 @@ internal fun SummaryAnalysisStatus(presentation: ProjectSummaryPresentation) {
   var focused by remember { mutableStateOf(false) }
   val description = presentation.analysisMessage
   val tooltip: @Composable () -> Unit = {
-    Text(
-        description,
-        color = PrimaryText,
-        style = IdeTypography.compactBody,
-        modifier =
-            Modifier.widthIn(max = 360.dp)
-                .background(OverlaySurface)
-                .border(1.dp, PaneSeparator)
-                .padding(8.dp))
+    IdeControlTooltip(description, Modifier.widthIn(max = 360.dp))
   }
   TooltipArea(tooltip = tooltip) {
     Box(
         Modifier.testTag("summary-analysis-status")
             .padding(end = 6.dp)
-            .then(if (focused) Modifier.border(1.dp, FocusAccent) else Modifier)
+            .then(
+                if (focused) Modifier.border(1.dp, FocusAccent, MiniOrcaShapes.control)
+                else Modifier)
             .semantics { contentDescription = description }
             .onFocusChanged { focused = it.isFocused }
             .focusable(),

@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
@@ -324,21 +325,26 @@ private fun SummarySection(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-  Column(modifier.fillMaxWidth().background(Panel).border(1.dp, PaneSeparator)) {
-    Text(
-        title,
-        color = tint,
-        style = IdeTypography.section,
-        modifier =
-            Modifier.fillMaxWidth()
-                .background(blendOver(tint.copy(alpha = 0.08f), Panel))
-                .semantics { heading() }
-                .padding(8.dp))
-    Column(
-        Modifier.fillMaxWidth().padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        content = content)
-  }
+  Column(
+      modifier
+          .fillMaxWidth()
+          .clip(MiniOrcaShapes.interactiveCard)
+          .background(Panel)
+          .border(1.dp, PaneSeparator, MiniOrcaShapes.interactiveCard)) {
+        Text(
+            title,
+            color = tint,
+            style = IdeTypography.section,
+            modifier =
+                Modifier.fillMaxWidth()
+                    .background(blendOver(tint.copy(alpha = 0.08f), Panel))
+                    .semantics { heading() }
+                    .padding(8.dp))
+        Column(
+            Modifier.fillMaxWidth().padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content)
+      }
 }
 
 @Composable
@@ -347,6 +353,7 @@ private fun SummaryMetric(metric: ProjectSummaryMetric, modifier: Modifier = Mod
   Column(
       modifier
           .testTag("summary-metric-${metric.label}")
+          .clip(MiniOrcaShapes.control)
           .background(blendOver(tint.copy(alpha = 0.08f), Panel))) {
         Box(Modifier.fillMaxWidth().height(4.dp).background(tint))
         Column(Modifier.padding(6.dp)) {

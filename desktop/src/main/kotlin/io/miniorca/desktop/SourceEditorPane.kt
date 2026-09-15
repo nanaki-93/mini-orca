@@ -307,7 +307,7 @@ private fun SourceGutter(
             modifier = Modifier.width(38.dp),
         )
         markersByLine[row.line].orEmpty().forEach { marker ->
-          TooltipArea(tooltip = { GutterMarkerTooltip(marker.description) }) {
+          TooltipArea(tooltip = { IdeControlTooltip(marker.description) }) {
             Text(
                 marker.kind.glyph,
                 color = gutterMarkerColor(marker.kind),
@@ -321,16 +321,6 @@ private fun SourceGutter(
       }
     }
   }
-}
-
-@Composable
-private fun GutterMarkerTooltip(description: String) {
-  Text(
-      description,
-      color = PrimaryText,
-      fontSize = 11.sp,
-      modifier = Modifier.background(StrongSurface).padding(6.dp),
-  )
 }
 
 private fun gutterMarkerColor(kind: SourceGutterMarkerKind): Color =

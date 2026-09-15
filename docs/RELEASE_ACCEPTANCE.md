@@ -5,6 +5,26 @@ and its scheduler is Paused.** REL-01 and REL-02 retain their previously accepte
 limited release scope. Insight qualification remains user-deferred. This ledger
 owns evidence and limitations; [PLAN.md](../PLAN.md) owns task status.
 
+## Rounded component styling — 2026-09-16
+
+The shared geometry now uses 10dp controls, 14dp panels and 18dp overlays,
+with pill badges/progress tracks and inset rounded selection strokes. Summary
+sections, file rows, tooltips and nested surface fills use the shared shapes.
+The current geometry policy lives in [UI guidelines](../desktop/UI_DESIGN_GUIDELINES.md#geometry-and-hierarchy).
+
+`./scripts/desktop-gradle.sh test spotlessCheck detekt
+-PvisualOutput="$PWD/desktop/build/reports/rounded-ui/after"` passed all 467 desktop
+tests with zero failures, errors or skips; Spotless and Detekt passed with zero
+smells. Offscreen production-component captures cover the existing responsive,
+large-text and lifecycle matrix. Inspected Summary, Editor, Analysis, Security,
+Review, shared control states and wrapped menu rows against the prior captures
+and dark reference. Captures remain ignored under `desktop/build/reports/rounded-ui/`.
+
+The synthetic native fixture launched on JBR 25.0.4 and appeared in the computer-use
+inventory, but attachment by both its bundle ID and app name returned `Invalid app`.
+The temporary preview process was stopped. Native focus, popup placement and
+screen-reader behavior were not verified for this styling change.
+
 ## UI polish acceptance — 2026-09-16
 
 POLISH-01–06 deliver the rounded shared category controls, right-aligned Summary

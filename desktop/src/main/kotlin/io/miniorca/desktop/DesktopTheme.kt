@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
@@ -149,11 +150,11 @@ internal fun ResponsiveFieldPair(
 }
 
 internal object MiniOrcaShapes {
-  val control = RoundedCornerShape(6.dp)
-  val interactiveCard = RoundedCornerShape(8.dp)
-  val small = control
-  val medium = control
-  val large = interactiveCard
+  val control = RoundedCornerShape(10.dp)
+  val interactiveCard = RoundedCornerShape(14.dp)
+  val overlay = RoundedCornerShape(18.dp)
+  val indicator = RoundedCornerShape(4.dp)
+  val pill = RoundedCornerShape(50)
 }
 
 internal object IdeTypography {
@@ -299,11 +300,12 @@ internal fun CompactSingleLineField(
         modifier =
             Modifier.fillMaxWidth()
                 .heightIn(min = 34.dp)
-                .background(EditorCanvas, MiniOrcaShapes.small)
+                .clip(MiniOrcaShapes.control)
+                .background(EditorCanvas)
                 .border(
                     BorderStroke(
                         if (focused) 2.dp else 1.dp, if (focused) FocusAccent else ControlBorder),
-                    MiniOrcaShapes.small)
+                    MiniOrcaShapes.control)
                 .semantics { contentDescription = label },
         decorationBox = { input ->
           Box(
@@ -354,11 +356,12 @@ internal fun CompactMultilineField(
         modifier =
             Modifier.fillMaxWidth()
                 .heightIn(min = (minLines * 20).dp)
-                .background(EditorCanvas, MiniOrcaShapes.small)
+                .clip(MiniOrcaShapes.control)
+                .background(EditorCanvas)
                 .border(
                     BorderStroke(
                         if (focused) 2.dp else 1.dp, if (focused) FocusAccent else ControlBorder),
-                    MiniOrcaShapes.small)
+                    MiniOrcaShapes.control)
                 .semantics { contentDescription = label },
         decorationBox = { input ->
           Box(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
@@ -403,7 +406,7 @@ internal fun MiniOrcaButton(
       focusHighlight = focusHighlight,
       minimumHeight = densityStyle.height,
       contentPadding = densityStyle.contentPadding,
-      shape = MiniOrcaShapes.small,
+      shape = MiniOrcaShapes.control,
       content = content,
   )
 }
@@ -497,8 +500,9 @@ internal fun MiniOrcaPanel(
 ) {
   Column(
       modifier
-          .background(if (raised) Card else Panel, MiniOrcaShapes.small)
-          .border(BorderStroke(1.dp, Border), MiniOrcaShapes.small)
+          .clip(MiniOrcaShapes.interactiveCard)
+          .background(if (raised) Card else Panel)
+          .border(BorderStroke(1.dp, Border), MiniOrcaShapes.interactiveCard)
           .padding(contentPadding)) {
         content()
       }
@@ -525,7 +529,9 @@ internal fun IdeBusyIndicator(
         startAngle = rotation.value - 90f,
         sweepAngle = 250f,
         useCenter = false,
-        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke),
+        style =
+            androidx.compose.ui.graphics.drawscope.Stroke(
+                width = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
     )
   }
 }
@@ -537,8 +543,11 @@ internal fun IdeProgressBar(
     color: Color = FocusAccent,
     trackColor: Color = StrongSurface,
 ) {
-  Box(modifier.background(trackColor)) {
-    Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(color))
+  Box(modifier.clip(MiniOrcaShapes.pill).background(trackColor)) {
+    Box(
+        Modifier.fillMaxWidth(progress.coerceIn(0f, 1f))
+            .fillMaxHeight()
+            .background(color, MiniOrcaShapes.pill))
   }
 }
 

@@ -346,37 +346,28 @@ private fun EditorBreadcrumbs(
     fullPath: String,
     modifier: Modifier = Modifier,
 ) {
-  TooltipArea(
-      tooltip = {
-        Text(
-            fullPath,
-            color = PrimaryText,
-            fontSize = 11.sp,
-            modifier =
-                Modifier.background(OverlaySurface).padding(horizontal = 6.dp, vertical = 4.dp),
-        )
-      }) {
-        Row(
-            modifier.horizontalScroll(rememberScrollState()).semantics {
-              contentDescription = "Project-relative path: $fullPath"
-            },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-          segments.forEachIndexed { index, segment ->
-            if (index > 0) {
-              Text(
-                  "›",
-                  color = FaintText,
-                  fontSize = 12.sp,
-                  modifier = Modifier.padding(horizontal = 4.dp),
-              )
-            }
-            segment.kind.icon?.let { icon ->
-              DesktopLineIcon(icon, segment.kind.name.lowercase(), iconSize = 12.dp)
-              Spacer(Modifier.width(4.dp))
-            }
-            Text(segment.label, color = SecondaryText, fontSize = 12.sp, maxLines = 1)
-          }
+  TooltipArea(tooltip = { IdeControlTooltip(fullPath) }) {
+    Row(
+        modifier.horizontalScroll(rememberScrollState()).semantics {
+          contentDescription = "Project-relative path: $fullPath"
+        },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      segments.forEachIndexed { index, segment ->
+        if (index > 0) {
+          Text(
+              "›",
+              color = FaintText,
+              fontSize = 12.sp,
+              modifier = Modifier.padding(horizontal = 4.dp),
+          )
         }
+        segment.kind.icon?.let { icon ->
+          DesktopLineIcon(icon, segment.kind.name.lowercase(), iconSize = 12.dp)
+          Spacer(Modifier.width(4.dp))
+        }
+        Text(segment.label, color = SecondaryText, fontSize = 12.sp, maxLines = 1)
       }
+    }
+  }
 }
