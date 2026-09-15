@@ -186,7 +186,6 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
       page = state.page,
       rows = visible.map(::semanticResultRow),
       openAnalysis = actions.openAnalysis,
-      openResults = actions.openResults,
       emptyMessage = if (state.loading) "Loading findings…" else "No findings yet.",
       tools = {
         val scan = verifiedScanProgress(state.scan)
@@ -303,5 +302,4 @@ internal data class BugsWorkspaceActions(
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
     val openAnalysis: () -> Unit = {},
-    val openResults: (Workspace) -> Unit = {},
 )

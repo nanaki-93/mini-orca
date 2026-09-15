@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,8 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -82,7 +79,7 @@ private fun AnalysisCategoryPanel(
   )
 }
 
-internal fun analysisCategoryBoxStatus(status: String?): String? =
+internal fun analysisResultStatusLabel(status: String?): String? =
     when (status) {
       "completed" -> null
       "completed_empty" -> "No results"
@@ -97,19 +94,17 @@ internal fun AnalysisCategoryBox(
     tint: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    selected: Boolean = false,
     details: @Composable () -> Unit = {},
 ) {
   val name = type.workspace.name
   IdeActionSurface(
       onClick = onClick,
       colors = analysisCategoryBoxColors(tint),
-      selected = selected,
       accessibleName = "View $name results",
       tooltip = name,
       shape = MiniOrcaShapes.interactiveCard,
       minimumHeight = 88.dp,
-      modifier = modifier.fillMaxWidth().semantics { this.selected = selected },
+      modifier = modifier.fillMaxWidth(),
       contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
   ) {
     Column(
@@ -128,10 +123,8 @@ internal fun AnalysisCategoryBox(
             color = tint,
             style = IdeTypography.resultHeading,
         )
-        Spacer(Modifier.weight(1f))
-        if (selected) DesktopLineIcon(DesktopIcon.Check, "Selected", tint = SelectionAccent)
       }
-      analysisCategoryBoxStatus(status)?.let {
+      analysisResultStatusLabel(status)?.let {
         Text(
             it,
             color = if (status == "completed_empty") SecondaryText else tint,

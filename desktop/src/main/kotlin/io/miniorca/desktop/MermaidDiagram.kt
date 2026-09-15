@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -144,6 +145,7 @@ private fun MermaidDiagramSource(source: String?, label: String) {
           val scale = LocalDensity.current.fontScale * zoom
           Box(
               Modifier.fillMaxWidth()
+                  .clip(MiniOrcaShapes.control)
                   .background(EditorCanvas)
                   .horizontalScroll(rememberScrollState())
                   .padding(8.dp),

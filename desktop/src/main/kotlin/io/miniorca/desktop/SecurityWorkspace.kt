@@ -21,7 +21,6 @@ internal data class SecurityWorkspaceActions(
     val prepareFix: (SecurityFinding) -> Unit,
     val openAnalysis: () -> Unit,
     val semanticActions: FindingActions,
-    val openResults: (Workspace) -> Unit = {},
 )
 
 internal data class SecurityResult(
@@ -144,8 +143,7 @@ internal fun SecurityWorkspacePane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
       openAnalysis = actions.openAnalysis,
-      emptyMessage = "No security findings reported in the analyzed scope.",
-      openResults = actions.openResults) { key ->
+      emptyMessage = "No security findings reported in the analyzed scope.") { key ->
         val result = results.firstOrNull { it.row().key == key }
         if (result != null) SecurityFindingDetails(result, state.index, actions)
         else

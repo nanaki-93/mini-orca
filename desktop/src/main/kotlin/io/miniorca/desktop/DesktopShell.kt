@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.DrawerValue
@@ -31,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -539,7 +539,7 @@ internal fun DesktopShell(
             drawerState = drawerState,
             // Compose Desktop supplies the responsive drawer gesture and dismissal boundary; its
             // visual roles stay explicit so it does not depend on the retired Material theme.
-            drawerShape = RoundedCornerShape(0.dp),
+            drawerShape = MiniOrcaShapes.overlay,
             drawerElevation = 0.dp,
             drawerBackgroundColor = ToolWindowSurface,
             drawerContentColor = PrimaryText,
@@ -610,7 +610,12 @@ internal fun DesktopShell(
                 modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
                 paletteFocusRequester = focusRequesters.paletteTrigger,
             )
-            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            val workspaceChrome =
+                Modifier.weight(1f)
+                    .fillMaxWidth()
+                    .background(ActivityRail)
+                    .padding(top = 4.dp, end = 8.dp, bottom = 4.dp)
+            Row(modifier = workspaceChrome) {
               ToolWindowBar(
                   leftToolWindowForWorkspace(workspace),
                   ::selectToolWindow,
@@ -618,67 +623,73 @@ internal fun DesktopShell(
               )
               IdeVerticalSeparator()
               val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
-              Column(Modifier.weight(1f).fillMaxHeight()) {
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                  if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
-                    DockedToolWindow(
-                        "Files",
-                        content = { modifier -> panes.explorer(modifier) {} },
-                        modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight(),
-                        // Explorer owns its Files heading and actions in a docked layout.
-                        showHeader = false)
-                    ResizableDivider(
-                        onDelta = {
-                          layoutActions.updateLayout(
-                              layout.withExplorerWidth(layout.explorerWidth + it))
-                        },
-                        onCommit = { layoutActions.saveLayout(layout) })
+              Column(
+                  Modifier.weight(1f)
+                      .fillMaxHeight()
+                      .padding(start = 4.dp)
+                      .clip(MiniOrcaShapes.interactiveCard)) {
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                      if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
+                        DockedToolWindow(
+                            "Files",
+                            content = { modifier -> panes.explorer(modifier) {} },
+                            modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight(),
+                            // Explorer owns its Files heading and actions in a docked layout.
+                            showHeader = false)
+                        ResizableDivider(
+                            onDelta = {
+                              layoutActions.updateLayout(
+                                  layout.withExplorerWidth(layout.explorerWidth + it))
+                            },
+                            onCommit = { layoutActions.saveLayout(layout) })
+                      }
+                      DesktopCanvas(
+                          appState = appState,
+                          layout = layout,
+                          editor = editor,
+                          context = context,
+                          widthDp = widthDp,
+                          editorActions = editorActions,
+                          analysisActions = analysisActions,
+                          findingActions = findingActions,
+                          onWorkspaceSelected = ::selectWorkspace,
+                          onOpenNarrowDrawer = ::openDrawer,
+                          modifier =
+                              Modifier.weight(1f)
+                                  .fillMaxHeight()
+                                  .focusRequester(focusRequesters.editor)
+                                  .focusable(),
+                      )
+                    }
+                    if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
+                      TerminalDock(
+                          layout =
+                              layout.copy(
+                                  bottomHeight = terminalDockHeight(layout.bottomHeight, heightDp)),
+                          state = panes.terminalState,
+                          tabActions = panes.terminalTabActions,
+                          onOpen = ::openTerminal,
+                          onCollapse = ::collapseTerminal,
+                          onHeightDelta = {
+                            layoutActions.updateLayout(
+                                layout.withBottomHeight(layout.bottomHeight + it))
+                          },
+                          onHeightCommit = { layoutActions.saveLayout(layout) },
+                          content = panes.terminalContent,
+                          controlModifier =
+                              Modifier.focusRequester(focusRequesters.bottomToolWindow),
+                      )
+                    } else {
+                      TerminalBar(
+                          state = panes.terminalState,
+                          tabActions = panes.terminalTabActions,
+                          collapsed = true,
+                          onToggle = ::openTerminal,
+                          controlModifier =
+                              Modifier.focusRequester(focusRequesters.bottomToolWindow),
+                      )
+                    }
                   }
-                  DesktopCanvas(
-                      appState = appState,
-                      layout = layout,
-                      editor = editor,
-                      context = context,
-                      widthDp = widthDp,
-                      editorActions = editorActions,
-                      analysisActions = analysisActions,
-                      findingActions = findingActions,
-                      onWorkspaceSelected = ::selectWorkspace,
-                      onOpenNarrowDrawer = ::openDrawer,
-                      modifier =
-                          Modifier.weight(1f)
-                              .fillMaxHeight()
-                              .focusRequester(focusRequesters.editor)
-                              .focusable(),
-                  )
-                }
-                if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
-                  TerminalDock(
-                      layout =
-                          layout.copy(
-                              bottomHeight = terminalDockHeight(layout.bottomHeight, heightDp)),
-                      state = panes.terminalState,
-                      tabActions = panes.terminalTabActions,
-                      onOpen = ::openTerminal,
-                      onCollapse = ::collapseTerminal,
-                      onHeightDelta = {
-                        layoutActions.updateLayout(
-                            layout.withBottomHeight(layout.bottomHeight + it))
-                      },
-                      onHeightCommit = { layoutActions.saveLayout(layout) },
-                      content = panes.terminalContent,
-                      controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
-                  )
-                } else {
-                  TerminalBar(
-                      state = panes.terminalState,
-                      tabActions = panes.terminalTabActions,
-                      collapsed = true,
-                      onToggle = ::openTerminal,
-                      controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
-                  )
-                }
-              }
               if (!narrow && showsEditorChrome && layout.rightToolWindowVisible) {
                 ResizableDivider(
                     onDelta = {
@@ -988,7 +999,6 @@ private fun DesktopCanvas(
                     startScan = analysisActions.startScan,
                     cancelScan = analysisActions.cancelScan,
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
-                    openResults = onWorkspaceSelected,
                 ),
             performanceActions =
                 PerformanceWorkspaceActions(
@@ -997,14 +1007,12 @@ private fun DesktopCanvas(
                     prepareOptimization = analysisActions.preparePerformanceFinding,
                     loadBenchmarks = analysisActions.loadGoBenchmarks,
                     selectBenchmark = analysisActions.selectGoBenchmark,
-                    runBenchmark = analysisActions.compareSelectedGoBenchmark,
-                    openResults = onWorkspaceSelected),
+                    runBenchmark = analysisActions.compareSelectedGoBenchmark),
             securityActions =
                 SecurityWorkspaceActions(
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
                     semanticActions = findingActions,
-                    prepareFix = analysisActions.prepareSecurityFinding,
-                    openResults = onWorkspaceSelected),
+                    prepareFix = analysisActions.prepareSecurityFinding),
             modifier = Modifier.fillMaxSize(),
         )
       },

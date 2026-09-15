@@ -17,7 +17,6 @@ internal fun AnalysisResultsPane(
     page: AnalysisResultPageState,
     rows: List<ResultRowPresentation>,
     openAnalysis: () -> Unit,
-    openResults: (Workspace) -> Unit,
     emptyMessage: String = "No findings yet.",
     tools: @Composable () -> Unit = {},
     detail: @Composable (String) -> Unit,
@@ -27,7 +26,7 @@ internal fun AnalysisResultsPane(
         mutableStateOf<String?>(null)
       }
   Column(Modifier.fillMaxSize()) {
-    ResultSectionHeader(page, openAnalysis, openResults)
+    ResultSectionHeader(page, openAnalysis)
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
       tools()
       PreviousAnalysisDetails(page.unclassified)

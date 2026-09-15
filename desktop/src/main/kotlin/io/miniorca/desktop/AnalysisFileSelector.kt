@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -146,10 +147,15 @@ private fun AnalysisFileRow(
   val tint = row.status.tint
   Row(
       Modifier.fillMaxWidth()
+          .clip(MiniOrcaShapes.control)
           .background(if (alternate) EditorCanvas else Panel)
           .padding(end = 8.dp),
       horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.width(3.dp).heightIn(min = 40.dp).background(tint))
+        Box(
+            Modifier.padding(vertical = 8.dp)
+                .width(3.dp)
+                .heightIn(min = 24.dp)
+                .background(tint, MiniOrcaShapes.pill))
         AnalysisFileCheckbox(row.file.path, selected, editable, toggle)
         Column(
             Modifier.weight(1f).padding(vertical = 8.dp),
@@ -199,8 +205,10 @@ private fun AnalysisFileCheckbox(
           }) {
         Box(
             Modifier.size(18.dp)
-                .background(if (selected) SelectionSurface else EditorCanvas)
-                .border(1.dp, if (selected) SelectionText else ControlBorder),
+                .background(
+                    if (selected) SelectionSurface else EditorCanvas, MiniOrcaShapes.indicator)
+                .border(
+                    1.dp, if (selected) SelectionText else ControlBorder, MiniOrcaShapes.indicator),
             contentAlignment = Alignment.Center) {
               if (selected)
                   DesktopLineIcon(

@@ -13,6 +13,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -30,8 +31,9 @@ internal fun AccentPanel(
   Column(
       modifier
           .fillMaxWidth()
+          .clip(MiniOrcaShapes.interactiveCard)
           .background(blendOver(tint.copy(alpha = 0.08f), Panel))
-          .border(1.dp, tint.copy(alpha = 0.45f)),
+          .border(1.dp, tint.copy(alpha = 0.45f), MiniOrcaShapes.interactiveCard),
       verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             Modifier.fillMaxWidth()

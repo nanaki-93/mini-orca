@@ -31,7 +31,6 @@ internal fun PerformanceWorkspacePane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
       openAnalysis = actions.openAnalysis,
-      openResults = actions.openResults,
       tools = {
         if (state.expectedBenchmarkIdentity != null ||
             state.benchmarkCatalog != null ||
@@ -341,7 +340,6 @@ internal data class PerformanceWorkspaceActions(
     val loadBenchmarks: () -> Unit = {},
     val selectBenchmark: (GoBenchmarkChoice) -> Unit = {},
     val runBenchmark: () -> Unit = {},
-    val openResults: (Workspace) -> Unit = {},
 )
 
 internal data class GoBenchmarkComparisonIdentity(

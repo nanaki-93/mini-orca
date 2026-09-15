@@ -3,7 +3,6 @@ package io.miniorca.desktop
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -32,9 +31,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -104,21 +105,23 @@ private fun WorkspaceNavigationEntry(
   val label = leftToolWindowLabel(toolWindow)
   val reveal = remember { BringIntoViewRequester() }
   LaunchedEffect(focused) { if (focused) reveal.bringIntoView() }
-  TooltipArea(tooltip = { ToolWindowTooltip(label) }) {
+  TooltipArea(tooltip = { IdeControlTooltip(label) }) {
     ChromeButton(
         onClick = onSelect,
         modifier =
             Modifier.fillMaxWidth()
-                .height(44.dp)
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .height(40.dp)
                 .bringIntoViewRequester(reveal)
                 .drawWithContent {
                   drawContent()
                   if (selected)
                       drawLine(
                           SelectionAccent,
-                          Offset(1.dp.toPx(), 0f),
-                          Offset(1.dp.toPx(), size.height),
-                          2.dp.toPx())
+                          Offset(2.dp.toPx(), 12.dp.toPx()),
+                          Offset(2.dp.toPx(), size.height - 12.dp.toPx()),
+                          2.dp.toPx(),
+                          cap = StrokeCap.Round)
                 }
                 .semantics {
                   contentDescription = toolWindowSemanticsLabel(toolWindow, selected, focused)
@@ -138,18 +141,6 @@ private fun WorkspaceNavigationEntry(
 }
 
 @Composable
-private fun ToolWindowTooltip(label: String) {
-  Text(
-      label,
-      color = PrimaryText,
-      fontSize = 11.sp,
-      modifier =
-          Modifier.background(StrongSurface)
-              .border(androidx.compose.foundation.BorderStroke(1.dp, Border))
-              .padding(6.dp))
-}
-
-@Composable
 internal fun DockedToolWindow(
     title: String,
     content: @Composable (Modifier) -> Unit,
@@ -158,9 +149,11 @@ internal fun DockedToolWindow(
     showHeader: Boolean = true,
 ) {
   Column(
-      modifier.fillMaxHeight().background(ToolWindowSurface).semantics {
-        contentDescription = "$title tool window"
-      },
+      modifier
+          .fillMaxHeight()
+          .clip(MiniOrcaShapes.interactiveCard)
+          .background(ToolWindowSurface)
+          .semantics { contentDescription = "$title tool window" },
   ) {
     if (showHeader) ToolWindowHeader(title, onClose)
     content(Modifier.fillMaxWidth().weight(1f))
@@ -188,9 +181,11 @@ private fun ToolWindowHeader(title: String, onClose: (() -> Unit)?) {
 @Composable
 internal fun EditorArea(content: @Composable () -> Unit, modifier: Modifier = Modifier) {
   Box(
-      modifier.fillMaxHeight().background(EditorCanvas).semantics {
-        contentDescription = "Editor area"
-      }) {
+      modifier
+          .fillMaxHeight()
+          .clip(MiniOrcaShapes.interactiveCard)
+          .background(EditorCanvas)
+          .semantics { contentDescription = "Editor area" }) {
         content()
       }
 }
@@ -216,6 +211,7 @@ internal fun TerminalDock(
       modifier
           .fillMaxWidth()
           .then(if (layout.bottomCollapsed) Modifier else Modifier.height(layout.bottomHeight.dp))
+          .clip(MiniOrcaShapes.interactiveCard)
           .background(ToolWindowSurface)) {
         if (!layout.bottomCollapsed) HorizontalResizableDivider(onHeightDelta, onHeightCommit)
         TerminalBar(
