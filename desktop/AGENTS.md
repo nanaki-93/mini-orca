@@ -27,6 +27,10 @@ components and visual reference. [README.md](README.md) owns desktop setup and u
 
 ## UI implementation
 
+- Apply the [self-explanatory UI and copy rules](UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy)
+  before adding text. Let existing tabs, headers and controls identify the task;
+  omit default subtitles and repeated explanations. If a control needs teaching
+  copy, improve its label, placement or interaction first.
 - Extend Jewel and `DesktopTheme.kt`, `ChromeControls.kt`, `DesktopIcons.kt`.
   Use shared semantic colors, type and spacing. Do not add a parallel theme,
   copied per-pane styles, stock Material/Swing appearance or repeated rounded cards.
@@ -61,7 +65,8 @@ merely to hide a regression.
 
 For substantive visual changes, render affected production components and compare
 them to the reference. Follow the UI guidelines' width, short-window, text-scale
-and state checks. Use the existing `DesktopVisualLayoutTest` fixtures and
+and state checks, including the review with optional help collapsed. Use the
+existing `DesktopVisualLayoutTest` fixtures and
 [reproduction procedure](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks).
 Use [KEYBOARD_SMOKE_CHECKLIST.md](KEYBOARD_SMOKE_CHECKLIST.md) for affected native
 behavior. Report offscreen rendering and native-window evidence separately;

@@ -1,3 +1,283 @@
+# Mini-Orca UI polish — 2026-09-15
+
+Implement the user's Summary, Analysis and Bugs / Performance / Security cleanup:
+rounded shared controls, live clickable category boxes, simpler results and working
+offline diagrams. This is planned work; none of the six cards below is implemented yet.
+
+## Current execution scope
+
+- Only **POLISH-01–06** are active. The completed 2026-09-11 queue is retained
+  verbatim below as history, including its receipts; its model and commit grants
+  do not apply. POLISH-01 synchronizes the current product/execution guides.
+- Use **SOL High** (`gpt-5.6-sol`, `high`) for implementation and validation.
+  After a concrete code/test/review failure, allow **one Astra High repair**
+  (`gpt-6-astra`, `high`) per card, retaining the failure and repair count across
+  wakes. A failed repair pauses the scheduler with the candidate preserved.
+- Reuse `mini-orca-ux-implementation` every 20 minutes, attached to the current
+  task. Work serially in this checkout, one card per wake; resume an interrupted
+  stage before taking another card. Pause after POLISH-06 or an actionable blocker.
+- Follow root/area `AGENTS.md` and the UI guidelines. Preserve the existing
+  uncommitted documentation edits. No commits, pushes, releases or historical
+  dispatcher/model-evaluation campaigns are authorized by this request.
+- Record each card's stage, actual model/effort, repair count, commands/results
+  and concise review evidence here. Mark it complete only after its checks and
+  the applicable AGENTS gates pass. Add a narrowly necessary target before editing
+  it; do not broaden into unrelated cleanup or dependency upgrades.
+- Remove the **Run limits UI**, retaining existing daemon bounds and explicit
+  continuation/consent. Remove repeated **findings labels**, preserving findings.
+  Remove routine provenance/status badges, preserving evidence, uncertainty and
+  meaningful failed, partial, stale, unavailable and canceled states.
+- Navigation/disclosures remain local. Keep source/diff read-only, existing
+  eligibility owners, explicit provider consent, execution trust and guarded
+  Review/Apply/Undo. No automatic analysis, benchmark or fix request on selection.
+- Use the documented JDK 21/JBR 25 setup from `README.md`. Every desktop card
+  also requires `./scripts/desktop-gradle.sh test spotlessCheck detekt` and
+  `git diff --check`; focused commands below are iteration checks, not substitutes.
+
+## Task POLISH-01 — Shared rounded category boxes
+
+**Status:** [ ] Pending; repair attempts: 0/1.
+
+**Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt` — shared shape tokens.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ChromeControls.kt` — reusable rounded action surfaces.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisCategoryPanels.kt` — common icon/count/progress boxes and whole-box activation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryVisuals.kt` — reuse category icons without nested focus targets.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ChromeControlsTest.kt` — action/focus behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — real component interaction and shape checks.
+- `PLAN.md` — concise current product decisions and links to this queue, preserving history.
+- `tasks/README.md` — current scheduler procedure, with earlier grants clearly historical.
+- `desktop/UI_DESIGN_GUIDELINES.md` — document the requested rounding and copy refinement.
+- `desktop/AGENTS.md` — align its geometry sentence with the updated guideline.
+
+**Inputs / dependencies**
+- None. Use the existing dark reference and current shared Jewel controls.
+
+**Implementation rules**
+- Refine the existing system: approximately 8dp category/result surfaces and 6dp
+  contained controls. Keep structural panes flat, spacing dense and semantic colors
+  intact; avoid wrapping every section in another card. Update the conflicting
+  blanket prohibition on rounded cards only for these requested interactive surfaces.
+- Reuse one responsive box component: category icon, count, optional existing Bugs
+  priority breakdown and useful progress/state. Icons replace repeated titles;
+  expose category names on hover/focus and through accessibility semantics.
+- Remove the nested **Open results** button and repeated **finding(s)** caption.
+  The entire box activates once by mouse, Enter or Space with visible focus.
+  A selected category stays identifiable. Unknown counts remain an em dash.
+- Keep important state visible without color alone; omit routine **Complete /
+  Completed** copy where redundant. Keep completed-empty distinguishable from
+  missing, failed or partial work. Remove superseded rendering helpers as migrated.
+
+**Verification command**
+`./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ChromeControlsTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
+
+## Task POLISH-02 — Summary alignment, navigation and live data
+
+**Status:** [ ] Pending; repair attempts: 0/1.
+
+**Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryPane.kt` — trailing Updated status and shared boxes.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryIssues.kt` — current category metrics and removal of duplicate box rendering.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryVisuals.kt` — status presentation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — real category navigation and current state wiring.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisWorkspaceState.kt` — shared progress presentation where necessary.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopAnalysisWorkflow.kt` — fix an evidenced progress-publication gap only if needed.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ProjectSummaryPaneTest.kt` — summary lifecycle states.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ProjectSummaryIssuesTest.kt` — count/evidence identity agreement.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAnalysisWorkflowTest.kt` — progressive updates and late-result rejection.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — alignment and category activation.
+
+**Inputs / dependencies**
+- POLISH-01; existing `AnalysisRun`, section results and presenter-owned polling.
+
+**Implementation rules**
+- Align **Updated** to the right edge of its available header; keep meaningful
+  alternative states. Remove redundant **Complete** text and routine duplicate
+  labels around metrics without discarding purpose, modules or explanation content.
+- Summary Bugs, Performance and Security boxes use the shared component and open
+  their actual workspace. Navigation performs no provider request or source edit.
+- Summary and Analysis derive live counts/progress from the same current run.
+  Reuse existing polling, which already loads all three result categories, rather
+  than adding a timer or fetching in composition. Preserve cached useful content.
+- Test progress changing while Summary remains open, pending result reads,
+  mismatched count/evidence snapshots, completion, failure, project/revision changes
+  and replacement runs. Late data cannot overwrite the current project/run.
+
+**Verification command**
+`./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ProjectSummaryPaneTest' --tests 'io.miniorca.desktop.ProjectSummaryIssuesTest' --tests 'io.miniorca.desktop.DesktopAnalysisWorkflowTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
+
+## Task POLISH-03 — Compact Analysis and collapsible exclusions
+
+**Status:** [ ] Pending; repair attempts: 0/1.
+
+**Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — compact run header, controls and removal of Run details / Run limits.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisCategoryPanels.kt` — shared live coverage presentation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisWorkspaceState.kt` — necessary run facts and failure presentation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisFileSelector.kt` — local disclosure and compact selection rows.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisWorkspaceStateTest.kt` — active/last-run and failure behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisFileSelectionTest.kt` — preserve saved exclusions and active-run locking.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — disclosure, default limits and responsive controls.
+
+**Inputs / dependencies**
+- POLISH-01 and POLISH-02; existing admission, selection and bounded run contracts.
+
+**Implementation rules**
+- Use one first line: **Last run** with available stored time/summary when idle,
+  or current run progress while active, with Start/Pause/Resume/Cancel reachable.
+  Show only relevant live facts (processed/remaining work and useful elapsed time),
+  using the same boxes as Summary. Never invent missing dates or progress.
+- Remove **Run details** and migrate useful coverage into the boxes/header;
+  keep failure reasons and recovery visible in their owning flow. Remove duplicate
+  introductory text and count captions; Analysis remains a progress page.
+- Remove **Run limits** and its editing state. Start uses existing
+  `AnalysisRunLimits` defaults; preserve the admission's actual scope/destination
+  disclosure, daemon limits, paused/partial meaning and explicit continuation.
+- Make the exclusions/file-selection section collapsible, initially closed, with
+  a useful selected/excluded count. Expand/collapse only changes local UI state.
+  Keep selection/filter/bulk actions; remove per-file Details toggles and verbose
+  stage breakdowns. Retain path, checkbox and concise actionable disabled/error
+  reasons. Saving failures and active-run restrictions remain visible when closed.
+- Verify collapse does not save, refresh, start work or lose exclusions; selection
+  still persists through its existing explicit action and resets for a new project.
+
+**Verification command**
+`./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.AnalysisFileSelectionTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
+
+## Task POLISH-04 — Repair Summary diagrams end to end
+
+**Status:** [ ] Pending; repair attempts: 0/1.
+
+**Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/MermaidDiagram.kt` — input/disclosure/render state and recovery.
+- `desktop/src/main/kotlin/io/miniorca/desktop/MermaidRenderer.kt` — embedded renderer failure if reproduced here.
+- `desktop/src/main/kotlin/io/miniorca/desktop/MermaidImage.kt` — SVG/image conversion failure if reproduced here.
+- `desktop/mermaid/renderer.js` — authored SVG adapter, only if implicated.
+- `desktop/mermaid/runtime.js` — embedded runtime adapter, only if implicated.
+- `desktop/src/main/resources/mermaid/renderer.js` — regenerated bundle only, never hand-edit.
+- `desktop/build.gradle.kts` — packaged runtime wiring only if required by reproduction.
+- `desktop/src/test/kotlin/io/miniorca/desktop/MermaidRendererTest.kt` — regression using the failing input/runtime path.
+- `desktop/src/test/kotlin/io/miniorca/desktop/MermaidRuntimeSmoke.kt` — packaged-runtime regression.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ProjectSummaryPaneTest.kt` — input/prose compatibility.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — working expand/collapse and visible rendering.
+
+**Inputs / dependencies**
+- POLISH-02. Root cause is unverified: reproduce a failure before choosing which
+  renderer targets to change. Existing tests render simple graphs and sequences;
+  passing those alone does not resolve the user's report.
+
+**Implementation rules**
+- Trace Summary Architecture / Flows through input extraction, GraalJS, SVG
+  conversion and **Show diagram**. Use a captured failing local input if available,
+  otherwise representative supported inputs and native/runtime reproduction.
+- Valid supported diagrams must display legible nodes, edges and labels, with
+  usable expand/collapse, zoom and selectable source. Check fenced Mermaid,
+  multiline graphs, branching/sequence diagrams and supported legacy arrow chains.
+- Preserve complete prose and explicit unsupported/malformed errors. No stuck
+  loading state, silent empty rendering, network renderer or new model request.
+  Keep resource bounds, cancellation and no active links/HTML/external resources.
+- Rebuild an affected JS bundle using `npm ci --prefix desktop/mermaid --ignore-scripts`
+  then `npm run build --prefix desktop/mermaid`; preserve pinned dependencies.
+  If an application runtime defect is involved, build the distributable and run
+  the existing `MermaidRuntimeSmokeKt` with its actual bundled runtime/jars.
+
+**Verification command**
+`./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.MermaidRendererTest' --tests 'io.miniorca.desktop.ProjectSummaryPaneTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
+
+## Task POLISH-05 — Cleaner result pages and one Prepare fix action
+
+**Status:** [ ] Pending; repair attempts: 0/1.
+
+**Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/FindingsPresentation.kt` — common rows/detail layout, metadata and actions.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisResultsPane.kt` — shared first-line boxes and removal of repeated banners.
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — Bugs detail cleanup and category navigation inputs.
+- `desktop/src/main/kotlin/io/miniorca/desktop/BugsWorkspaceState.kt` — separate retained evidence from routine visible labels.
+- `desktop/src/main/kotlin/io/miniorca/desktop/PerformanceWorkspace.kt` — typed performance rows/detail and Prepare fix wording.
+- `desktop/src/main/kotlin/io/miniorca/desktop/SecurityWorkspace.kt` — typed security rows/detail and guarded fix preparation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — shared category/header navigation wiring.
+- `desktop/src/test/kotlin/io/miniorca/desktop/FindingsPresentationTest.kt` — selection versus explicit fix preparation.
+- `desktop/src/test/kotlin/io/miniorca/desktop/PerformanceWorkspaceTest.kt` — evidence and eligibility behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/SecurityWorkspaceTest.kt` — evidence and eligibility behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — all three result pages, narrow back navigation and actions.
+
+**Inputs / dependencies**
+- POLISH-01, POLISH-02 and POLISH-03; existing semantic, performance and security
+  evidence types and their action/eligibility owners.
+
+**Implementation rules**
+- Reuse the same three category boxes in the first line, with current category
+  selection, real counts/status and local cross-category navigation. Keep the
+  Analysis entry action accessible without repeating titles and coverage paragraphs.
+- Remove routine labels from lists and details: **AI suggestions**, **Source AI**,
+  **Confidence suggested**, **Performance review**, **AI suspicion**, **Open**,
+  **Fresh**, **Not measured**, **Unverified** and their composite badges.
+  Preserve severity, useful explanations, source location and actual evidence.
+- Convey material evidence differences through the existing evidence/verification
+  content and relevant action state, without reinstating the removed badge wall.
+  Never turn a suggestion into a verified bug, an unmeasured hypothesis into a
+  benchmark result or Security's empty result into assurance. Show stale/failed/
+  partial conditions and blocked-action reasons where needed to decide or recover.
+- Improve list spacing/alignment with shared rounded selectable rows, readable
+  titles, restrained severity and path hierarchy, hover and distinct focus/selection.
+  Preserve stable selection keys, long-content access and responsive detail panes.
+- Remove **Clear selection** in wide details. Keep **Back to results** in narrow
+  layouts so removing the action cannot trap users in the detail pane.
+- Remove the redundant **Open source** button; retain exact source location.
+  Use **Prepare fix** consistently, including the existing Performance optimization
+  preparation callback. It opens/prepares the existing Assistant workflow only;
+  do not auto-generate/apply, navigate on ordinary row selection or weaken eligibility.
+  Remove obsolete callbacks only after checking all supported callers.
+
+**Verification command**
+`./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.FindingsPresentationTest' --tests 'io.miniorca.desktop.PerformanceWorkspaceTest' --tests 'io.miniorca.desktop.SecurityWorkspaceTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
+
+## Task POLISH-06 — Validate the complete flow and close the queue
+
+**Status:** [ ] Pending; repair attempts: 0/1.
+
+**Target files**
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — complete production-component acceptance matrix.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAccessibilityTest.kt` — meaningful names, selected/expanded states and focus.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — relevant navigation regressions.
+- `desktop/README.md` — resulting user-visible interactions and any runtime procedure changes.
+- `desktop/KEYBOARD_SMOKE_CHECKLIST.md` — changed native checks.
+- `docs/RELEASE_ACCEPTANCE.md` — actual visual/native/check results and limitations.
+- `PLAN.md` — concise accepted scope/status with evidence link.
+- `tasks/README.md` — final scheduler state.
+- `docs/tasks.md` — final card evidence and completion state.
+
+**Inputs / dependencies**
+- POLISH-01, POLISH-02, POLISH-03, POLISH-04 and POLISH-05.
+
+**Implementation rules**
+- Review all changed production panes with optional details collapsed against the
+  existing reference/guidelines. Check wide, 1000/999dp, 800×650, 1280×600,
+  100/125/150% text, long paths/errors and empty/running/partial/stale/failed states.
+- Exercise mouse/keyboard box navigation, live updates without leaving the page,
+  exclusions, diagram show/zoom, result detail/back and Prepare fix. Verify absence
+  of provider/execution/source-write side effects in local inspection controls.
+- Capture offscreen evidence using the maintained `-PvisualOutput` procedure.
+  Perform the affected native keyboard/window checks separately; fixture success
+  does not prove OS focus or packaged diagram behavior. Report unavailable checks.
+- Run relevant final gates; use `./scripts/validate.sh` if implementation required
+  any cross-stack changes. Fix change-caused failures within this queue's repair
+  policy. No baseline blessing, unrelated refactor or invented passing evidence.
+- Record final review and pause this scheduler through the app when complete.
+
+**Verification command**
+`./scripts/desktop-gradle.sh test spotlessCheck detekt`
+
+Also run `git diff --check`; inspect rendered artifacts and record native results.
+
+---
+
+## Historical queue — completed 2026-09-12
+
+Everything below is retained historical evidence. Its unchecked intermediate
+notes, imperative instructions, model choices and commit grants are inactive.
+Only POLISH-01–06 above belong to the 2026-09-15 request.
+
 # Mini-Orca UX, project analysis and terminal implementation
 
 Implement the approved 2026-09-11 product scope in [PLAN.md](../PLAN.md): readable

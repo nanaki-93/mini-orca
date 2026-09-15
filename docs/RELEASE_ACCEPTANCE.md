@@ -1766,6 +1766,12 @@ Its references to incomplete acceptance describe that historical attempt.
 
 ## Reproduce UI component checks
 
+For changed flows, review rendered components against the
+[UI copy checks](../desktop/UI_DESIGN_GUIDELINES.md#verification) with optional
+details collapsed. Verify clear actions and state, useful labels and no repeated
+introductory copy. This is a review requirement for future changes; historical
+captures do not establish compliance with the 2026-09-15 UI direction.
+
 Use the JDK 21/JBR 25 setup in [Desktop runtime instructions](../desktop/README.md).
 From the repository root:
 

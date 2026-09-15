@@ -5,6 +5,9 @@ canvas, section headers and outlined controls. Blue identifies actions and
 selection; cyan identifies information and running work; green, amber and coral
 identify success, warnings and failures. Every state retains its text label.
 
+Use the [UI copy rules](UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy) for
+concise labels; reducing copy does not relax contrast or state-label requirements.
+
 Colors are owned by [DesktopTheme.kt](src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt).
 These measurements use its current sRGB values and resolved backgrounds. Meaningful
 text, including muted and disabled labels, targets 4.5:1. Essential control and

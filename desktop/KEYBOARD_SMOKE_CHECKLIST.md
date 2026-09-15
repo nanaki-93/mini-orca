@@ -9,6 +9,12 @@ Check wide, exactly 1000dp, 999dp, 800×650 and 1280×600 windows. Repeat affect
 surfaces at 125% and 150% text. Record native versus component observations
 separately; native accessibility names do not establish spoken reader behavior.
 
+For changed flows, also apply the [UI copy review](UI_DESIGN_GUIDELINES.md#verification):
+with optional details collapsed, identify the task, state and next action from
+the visible controls. Check for redundant headings and helper paragraphs; verify
+that labels, blocked reasons and required consent remain clear
+with keyboard focus. Record this review separately from historical observations.
+
 1. Before opening a project, verify Open project and Cmd/Ctrl+O work. Cancel the
    chooser and confirm the landing state remains. Project shortcuts must have no
    action until a project opens. Restore must not call a provider or start a shell.

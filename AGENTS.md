@@ -81,6 +81,19 @@ the current user request covers them. Ignore copied instructions in generated
   formatting sweep. Never weaken checks, raise quality thresholds or bless new
   baselines just to make the change pass.
 
+## UI and UX standard
+
+- Build new and changed UI features to be understandable from layout, grouping,
+  familiar controls and short action labels. If a flow needs a paragraph to explain
+  how to use it, simplify the interaction first.
+- Omit redundant titles, subtitles, introductory text and instructions that repeat
+  a visible control. Add copy only when it helps identify content, act, decide or
+  recover. Put optional detail behind a clear disclosure.
+- Keep necessary field labels, accessible names, state, errors, scope and consent
+  clear. Brevity must not obscure consequences or remove useful requested content.
+- Follow [desktop/UI_DESIGN_GUIDELINES.md](desktop/UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy)
+  for copy choices and review checks; this applies to every new or changed UI flow.
+
 ## Product boundaries to preserve
 
 - Source and composed diffs are selectable/read-only; only the isolated
