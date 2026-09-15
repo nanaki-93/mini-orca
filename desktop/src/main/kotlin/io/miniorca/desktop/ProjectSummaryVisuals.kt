@@ -24,13 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
 
 internal fun summaryAnalysisTint(status: String): Color =
     when (status) {
@@ -79,54 +74,24 @@ internal fun SummaryAnalysisStatus(presentation: ProjectSummaryPresentation) {
             .focusable(),
         contentAlignment = Alignment.Center) {
           Text(label, color = tint, style = IdeTypography.resultLabel)
-          if (focused)
-              Popup(popupPositionProvider = SummaryStatusTooltipPosition, content = tooltip)
+          if (focused) Popup(popupPositionProvider = IdeTooltipPosition, content = tooltip)
         }
   }
 }
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
-internal fun SummaryIssueIcon(metric: SummaryIssueMetric, tint: Color) {
+internal fun AnalysisCategoryIcon(
+    type: AnalysisResultType,
+    tint: Color,
+    description: String = type.workspace.name,
+) {
   val icon =
-      when (metric.type) {
+      when (type) {
         AnalysisResultType.Bugs -> DesktopIcon.Problems
         AnalysisResultType.Performance -> DesktopIcon.Performance
         AnalysisResultType.Security -> DesktopIcon.Security
       }
-  var focused by remember { mutableStateOf(false) }
-  val tooltip: @Composable () -> Unit = {
-    Text(
-        metric.label,
-        color = PrimaryText,
-        style = IdeTypography.compactBody,
-        modifier = Modifier.background(OverlaySurface).border(1.dp, PaneSeparator).padding(8.dp))
-  }
-  TooltipArea(tooltip = tooltip) {
-    Box(
-        Modifier.onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .then(if (focused) Modifier.border(1.dp, FocusAccent) else Modifier)) {
-          DesktopLineIcon(icon, metric.label, tint = tint)
-          if (focused)
-              Popup(popupPositionProvider = SummaryStatusTooltipPosition, content = tooltip)
-        }
-  }
-}
-
-private object SummaryStatusTooltipPosition : PopupPositionProvider {
-  override fun calculatePosition(
-      anchorBounds: IntRect,
-      windowSize: IntSize,
-      layoutDirection: LayoutDirection,
-      popupContentSize: IntSize,
-  ): IntOffset =
-      IntOffset(
-          (anchorBounds.right - popupContentSize.width).coerceIn(
-              0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
-          anchorBounds.bottom.coerceIn(
-              0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
-      )
+  DesktopLineIcon(icon, description, tint = tint)
 }
 
 internal data class SummaryModule(val name: String, val path: String?, val description: String)

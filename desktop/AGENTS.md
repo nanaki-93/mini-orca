@@ -33,7 +33,8 @@ components and visual reference. [README.md](README.md) owns desktop setup and u
   copy, improve its label, placement or interaction first.
 - Extend Jewel and `DesktopTheme.kt`, `ChromeControls.kt`, `DesktopIcons.kt`.
   Use shared semantic colors, type and spacing. Do not add a parallel theme,
-  copied per-pane styles, stock Material/Swing appearance or repeated rounded cards.
+  copied per-pane styles, stock Material/Swing appearance or decorative card stacks.
+  Use the shared 6dp control and 8dp interactive-card shapes; keep structural panes flat.
 - Preserve workspace/tool-window ownership in the UI guidelines. Keep the next
   valid action reachable, errors visible and technical details available on demand.
   Do not add decorative metrics, dummy callbacks or unsupported controls.

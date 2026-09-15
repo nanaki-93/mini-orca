@@ -2,7 +2,7 @@
 
 Implement the user's Summary, Analysis and Bugs / Performance / Security cleanup:
 rounded shared controls, live clickable category boxes, simpler results and working
-offline diagrams. This is planned work; none of the six cards below is implemented yet.
+offline diagrams. POLISH-01–02 are accepted; POLISH-03–06 remain planned work.
 
 ## Current execution scope
 
@@ -17,8 +17,10 @@ offline diagrams. This is planned work; none of the six cards below is implement
   task. Work serially in this checkout, one card per wake; resume an interrupted
   stage before taking another card. Pause after POLISH-06 or an actionable blocker.
 - Follow root/area `AGENTS.md` and the UI guidelines. Preserve the existing
-  uncommitted documentation edits. No commits, pushes, releases or historical
-  dispatcher/model-evaluation campaigns are authorized by this request.
+  uncommitted documentation edits. The user's 2026-09-15 follow-up authorizes a
+  local commit after each completed task passes its checks, including the already
+  accepted POLISH-01/02 work. Stage only reviewed task changes and report the hash.
+  Pushes, releases and historical dispatcher/model-evaluation campaigns remain out of scope.
 - Record each card's stage, actual model/effort, repair count, commands/results
   and concise review evidence here. Mark it complete only after its checks and
   the applicable AGENTS gates pass. Add a narrowly necessary target before editing
@@ -36,7 +38,89 @@ offline diagrams. This is planned work; none of the six cards below is implement
 
 ## Task POLISH-01 — Shared rounded category boxes
 
-**Status:** [ ] Pending; repair attempts: 0/1.
+**Status:** [x] Complete after user-authorized repair; original repair attempts: 1/1, followed by the explicit continuation below.
+
+**SOL candidate — 2026-09-15.** Shared 6dp control and 8dp interactive-card
+shape tokens, the reusable whole-box category control, icon/count/status content,
+keyboard semantics, documentation alignment and focused regressions are present in
+the working tree. `spotlessApply` passed. The focused verification failed during
+`:compileKotlin` at `ProjectSummaryVisuals.kt:110`: the refactored
+`SummaryIssueIcon` still calls experimental `TooltipArea` but lost its
+`ExperimentalFoundationApi` opt-in when the annotation moved to the new icon
+helper. Astra High repair 1/1 is limited to restoring the correct opt-in (and any
+directly resulting compile/test correction) in the listed targets, then rerunning
+the focused command and the required desktop gate. No application test executed
+past compilation; no card is accepted yet.
+
+**Astra repair and final review — 2026-09-15.** Restored the experimental API
+opt-in to `SummaryIssueIcon`. The first focused run then exposed three Summary
+regressions because the extracted icon had replaced the existing accessible
+names `Performance Issues` and `Security Issues`; restoring the wrapper's metric
+label completed the same icon-extraction repair. No attempt counter was reset.
+
+- Focused verification above, with
+  `-PvisualOutput="$PWD/desktop/build/reports/ui-polish/polish-01"`: **passed, 44 tests**.
+- `./scripts/desktop-gradle.sh test spotlessCheck detekt`: **failed, 455/456 tests
+  passed**. `AnalysisFileStatusTest.categoryColorsFollowAnalysisOutcomeRegardlessOfFindingCount`
+  fails at line 123: `Bugs must be visible at 1280`. That existing regression still
+  requires visible category titles and Completed copy removed by this card; its
+  assertions need migration to icon semantics while preserving outcome-color and
+  actual visibility checks. It was omitted from the card's target list.
+- The combined gate stopped before lint; separate
+  `./scripts/desktop-gradle.sh spotlessCheck detekt`: **passed**, zero Detekt smells.
+  `git diff --check`: **passed**.
+- **Visual review failed independently of the outdated test.** In
+  `desktop/build/reports/ui-polish/polish-01/analysis-progress-1280-1.5.png`, only
+  the full-width Bugs box is visible. `AnalysisCategoryPanels.kt:34` passes row
+  weight to the inner action surface, but `ChromeControls.kt:164` wraps it in an
+  unweighted TooltipArea. Performance/Security render outside the available row.
+  The focused test invokes semantics directly and misses the offscreen controls.
+  A repair must size the immediate row children and assert all three clickable
+  bounds and keyboard activation, not merely semantics-tree presence.
+- Keyboard-focus category-name disclosure and selected-state semantics also need
+  explicit verification before accepting the new shared box. No native-window,
+  packaging or screen-reader acceptance is claimed by these offscreen results.
+
+The candidate remains uncommitted. The app confirmed the scheduler **Paused**;
+POLISH-02–06 have not started. Failure evidence is retained in `docs/errors.log`.
+The user's subsequent request, “repair the task POLISH-01,” authorizes this
+continuation beyond the original repair limit. Keep the earlier failures above.
+Repair the tooltip surface's layout ownership, verify real pointer/keyboard
+interaction and selected/focus disclosure, and migrate the affected outcome test.
+`AnalysisFileStatusTest.kt` is added below because its existing category regression
+exercises the changed production control. No later card starts during this repair.
+
+**Accepted repair — 2026-09-15.** The manual continuation ran on the current task's
+`gpt-6-astra` / `xhigh` setting (verified in its turn metadata); this differs from
+the scheduler's Astra High repair setting, which remains unchanged. The original
+repair count and failures above remain historical evidence.
+
+- Reproduced the layout defect before repairing it with
+  `./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.DesktopVisualLayoutTest.analysisProgressAndResultLinksRemainReadableAcrossSupportedViewports'`:
+  Performance had empty visible bounds at 1440×900. The clickable Row now owns
+  the caller's sizing modifiers; its delayed hover/focus popup adds no sizing
+  wrapper. Category names are available on hover/focus; selection has a checkmark
+  and selected semantics independently of the focus outline.
+- Migrated the existing outcome regression to category names, actual clickable
+  bounds, counts and meaningful states. The first resumed combined selection
+  passed 47/48 tests; the new stale-count assertion incorrectly expected the old
+  count. Corrected it to require an em dash, preserving the existing state owner.
+  Visual review also found missing window dimensions in the offscreen fixture;
+  supplying its actual window size now permits checking tooltip placement.
+- `./scripts/desktop-gradle.sh spotlessApply test --tests 'io.miniorca.desktop.ChromeControlsTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' --tests 'io.miniorca.desktop.AnalysisFileStatusTest' -PvisualOutput="$PWD/desktop/build/reports/ui-polish/polish-01-repair"`:
+  **passed, 48 tests**, zero failures/errors/skips.
+- `./scripts/desktop-gradle.sh test spotlessCheck detekt`: **passed, 456 tests**,
+  zero failures/errors/skips and zero Detekt smells. `git diff --check`: **passed**.
+- Reviewed production renders against the dark reference: all three equal-size
+  boxes remain visible at wide, 1000/999dp, 800×650 and 1280×600 views, 125/150%
+  text and the 640/639dp row/column boundary. Verified whole-box pointer clicks,
+  Tab order, Enter/Space exactly-once activation, focus/hover names, independent
+  selection, empty/failed/stale/unknown states and removal of redundant copy.
+  Offscreen evidence is under `desktop/build/reports/ui-polish/polish-01-repair/`;
+  native-window, packaging and spoken screen-reader checks were not performed.
+- Final diff preserves source/provider/execution guards and the existing work;
+  no commits or later-card implementation. Scheduler restoration uses SOL High
+  for the next POLISH-02 wake and Astra High for its configured repair.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt` — shared shape tokens.
@@ -45,6 +129,7 @@ offline diagrams. This is planned work; none of the six cards below is implement
 - `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryVisuals.kt` — reuse category icons without nested focus targets.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ChromeControlsTest.kt` — action/focus behavior.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — real component interaction and shape checks.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisFileStatusTest.kt` — preserve outcome colors and visible category/count/state behavior with the new icon presentation.
 - `PLAN.md` — concise current product decisions and links to this queue, preserving history.
 - `tasks/README.md` — current scheduler procedure, with earlier grants clearly historical.
 - `desktop/UI_DESIGN_GUIDELINES.md` — document the requested rounding and copy refinement.
@@ -69,13 +154,57 @@ offline diagrams. This is planned work; none of the six cards below is implement
   missing, failed or partial work. Remove superseded rendering helpers as migrated.
 
 **Verification command**
-`./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ChromeControlsTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest'`
+`./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ChromeControlsTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' --tests 'io.miniorca.desktop.AnalysisFileStatusTest'`
 
 ## Task POLISH-02 — Summary alignment, navigation and live data
 
-**Status:** [ ] Pending; repair attempts: 0/1.
+**Status:** [x] Complete after Astra High repair 1/1. POLISH-03 is next.
+
+**SOL candidate — 2026-09-15.** Wired Summary's three shared category boxes to
+the real workspace selector and the current run's complete section map, moved the
+compact status to the trailing header edge, and preserved live counts plus report
+loading/error state. Added current-run recomposition, whole-box navigation,
+identity/evidence and polling regressions. This turn ran on the configured
+`gpt-5.6-sol` / `high` setting.
+
+`./scripts/desktop-gradle.sh spotlessApply test --tests 'io.miniorca.desktop.ProjectSummaryPaneTest' --tests 'io.miniorca.desktop.ProjectSummaryIssuesTest' --tests 'io.miniorca.desktop.DesktopAnalysisWorkflowTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ui-polish/polish-02"`
+passed **75/76 tests**. The sole failure is
+`DesktopVisualLayoutTest.summaryMetricFlowKeepsEveryCoverageBoxVisibleAndRemovesPartialText`:
+its old assertion expects **Partial** to be hidden. The shared box now visibly
+labels that meaningful state, as the current card and AGENTS rules require.
+Astra repair 1/1 is limited to correcting that superseded expectation, rerunning
+the focused command and required desktop gate, reviewing the POLISH-02 diff and
+renders, and recording acceptance or a concrete blocker. No product threshold or
+state distinction may be weakened, and no later card may start in this repair.
+
+**Astra repair and acceptance — 2026-09-15.** Verified actual task configuration
+`gpt-6-astra` / `high`. The handoff had switched the model but stopped after a
+status reply; no repair process was active when the user asked. Resumed the same
+repair, renamed the outdated Partial regression and asserted that its text fits.
+Earlier SOL iterations also exposed incomplete test call-site migration and three
+old accessible-name expectations; those were corrected before the final 75/76 run.
+
+- Focused verification command above, without `spotlessApply` and with
+  `-PvisualOutput="$PWD/desktop/build/reports/ui-polish/polish-02-repair"`:
+  **76 tests, zero failures/errors/skips**.
+- `./scripts/desktop-gradle.sh test spotlessCheck detekt`: **PASS**, all **460
+  desktop tests**, zero failures/errors/skips; a subsequent status recovery run
+  confirmed unchanged inputs and all tasks up-to-date.
+- Reviewed production-component renders for the 1440px completed/live Summary
+  and 800px Summary at 150% text: trailing status, fitting category boxes, visible
+  partial/paused states and retained metrics. Pointer regression activates every
+  category and updates counts within the same mounted Summary.
+- Reviewed real workspace navigation, shared run/section ownership, report
+  identity checks, stale evidence and removed duplicate icon rendering. Existing
+  polling already publishes all categories; no additional timer or backend change.
+- `git diff --check`: PASS. Native-window, packaged-app and screen-reader checks
+  were not repeated; this acceptance covers desktop tests and offscreen renders.
+
+Only POLISH-02 was repaired. Resume the existing scheduler for POLISH-03 and
+restore SOL High after recording acceptance; no commit or later-card edits.
 
 **Target files**
+- `PLAN.md` and `tasks/README.md` — narrowly necessary updates to their existing queue status and scheduler handoff records.
 - `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryPane.kt` — trailing Updated status and shared boxes.
 - `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryIssues.kt` — current category metrics and removal of duplicate box rendering.
 - `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryVisuals.kt` — status presentation.
@@ -108,7 +237,26 @@ offline diagrams. This is planned work; none of the six cards below is implement
 
 ## Task POLISH-03 — Compact Analysis and collapsible exclusions
 
-**Status:** [ ] Pending; repair attempts: 0/1.
+**Status:** [ ] Astra High repair 1/1 dispatched after the SOL High candidate compile failure. Scheduler paused during the sequential repair.
+
+**Continuation:** The user's status/commit request arrived before the repair ran.
+Resume this same attempt with Astra High; commit each accepted card and include
+the hash in its completion notification. Add `PLAN.md` and `tasks/README.md` as
+necessary status/commit-policy targets before editing their existing records.
+
+**SOL candidate — 2026-09-15.** Replaced the editable Run limits UI with the
+existing `AnalysisRunLimits(100, 900, 2)` defaults, condensed active/last-run facts,
+removed the Run details disclosure, kept operational failures visible, and made
+Files a project-keyed disclosure that starts closed. File rows retain the path,
+checkbox, status and concise reason while removing per-file stage details.
+
+The focused command failed at `:compileKotlin` in `WorkspacePanes.kt:112` because
+`items(presentation.failures)` resolved to the count overload: the list overload's
+`androidx.compose.foundation.lazy.items` import is missing. Astra repair 1/1 is
+limited to restoring that import, completing the specified focused tests and
+necessary expectation updates for the intentional compact UI, running the full
+desktop gate and `git diff --check`, reviewing renders/diff, and recording
+acceptance or a concrete blocker. No POLISH-04 work may start in this repair.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — compact run header, controls and removal of Run details / Run limits.

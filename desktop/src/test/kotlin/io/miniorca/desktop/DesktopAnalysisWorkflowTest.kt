@@ -361,6 +361,47 @@ class DesktopAnalysisWorkflowTest {
     }
   }
 
+  @Test
+  fun refreshedProgressPublishesAllCategoryCountsForSummaryAndAnalysisTogether() {
+    Harness().use { h ->
+      fun withCounts(status: String, first: Int) =
+          h.run.copy(
+              status = status,
+              sections =
+                  AnalysisResultType.entries.mapIndexed { index, type ->
+                    AnalysisSectionProgress(
+                        type.category,
+                        status,
+                        AnalysisRunCoverage(running = if (status == "running") 1 else 0),
+                        first + index)
+                  })
+
+      h.run = withCounts("running", 11)
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(
+          listOf(11, 12, 13),
+          summaryIssueMetrics(
+                  h.state.project, h.state.analysisRun.run, h.state.analysisRun.sections)
+              .map { it.value })
+      assertEquals(
+          AnalysisResultType.entries.map { it.category }.toSet(),
+          h.state.analysisRun.sections.keys
+              .filter { it.path.isEmpty() }
+              .map { it.category }
+              .toSet())
+
+      h.run = withCounts("completed", 21)
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(
+          listOf(21, 22, 23),
+          summaryIssueMetrics(
+                  h.state.project, h.state.analysisRun.run, h.state.analysisRun.sections)
+              .map { it.value })
+    }
+  }
+
   private class Harness(pollMillis: Long = 100_000) : AutoCloseable {
     val main = AnalysisQueuedDispatcher()
     val io = AnalysisQueuedDispatcher()

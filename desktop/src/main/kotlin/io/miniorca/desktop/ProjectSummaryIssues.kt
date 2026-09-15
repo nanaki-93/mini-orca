@@ -1,23 +1,12 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 internal data class SummaryBugPriorities(
     val high: Int,
@@ -34,6 +23,8 @@ internal data class SummaryIssueMetric(
     val value: Int?,
     val score: Int?,
     val status: String,
+    val statusCode: String?,
+    val detailStatus: String?,
     val type: AnalysisResultType,
     val priorities: SummaryBugPriorities? = null,
 )
@@ -41,21 +32,25 @@ internal data class SummaryIssueMetric(
 internal fun summaryIssueMetrics(
     project: ProjectAnalysis?,
     run: AnalysisRun?,
-    bugSection: AnalysisSectionState,
+    sections: Map<AnalysisResultKey, AnalysisSectionState>,
 ): List<SummaryIssueMetric> =
     AnalysisResultType.entries.map { type ->
-      val page = AnalysisResultPageState(type, project, run, bugSection)
+      val section = sections[AnalysisResultKey(type.category)] ?: AnalysisSectionState()
+      val page = AnalysisResultPageState(type, project, run, section)
       val priorities = if (type == AnalysisResultType.Bugs) summaryBugPriorities(page) else null
+      val statusCode = if (page.stale && page.run != null) "stale" else page.progress?.status
       SummaryIssueMetric(
-          label =
-              when (type) {
-                AnalysisResultType.Bugs -> "Bugs"
-                AnalysisResultType.Performance -> "Performance Issues"
-                AnalysisResultType.Security -> "Security Issues"
-              },
+          label = type.workspace.name,
           value = page.reportedCount,
           score = if (type == AnalysisResultType.Bugs) priorities?.score else page.reportedCount,
           status = page.statusLabel,
+          statusCode = statusCode,
+          detailStatus =
+              when {
+                section.loading -> "Loading details"
+                section.error != null -> "Details unavailable"
+                else -> null
+              },
           type = type,
           priorities = priorities)
     }
@@ -85,31 +80,28 @@ internal fun summaryIssueTint(score: Int?) =
     }
 
 @Composable
-internal fun SummaryIssue(metric: SummaryIssueMetric, modifier: Modifier = Modifier) {
+internal fun SummaryIssue(
+    metric: SummaryIssueMetric,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
   val tint = summaryIssueTint(metric.score)
-  Column(
-      modifier
-          .testTag("summary-metric-${metric.label}")
-          .semantics { stateDescription = metric.status }
-          .background(blendOver(tint.copy(alpha = 0.08f), Panel))) {
-        Box(Modifier.fillMaxWidth().height(4.dp).background(tint))
-        Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          Row(
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SummaryIssueIcon(metric, tint)
-                Text(
-                    metric.value?.toString() ?: "—",
-                    color = tint,
-                    fontSize = 18.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.SemiBold)
-              }
-          if (metric.type == AnalysisResultType.Bugs) SummaryBugBreakdown(metric)
-          if (metric.status != "Partial")
-              Text(metric.status, color = SecondaryText, style = IdeTypography.compactBody)
+  AnalysisCategoryBox(
+      type = metric.type,
+      count = metric.value,
+      status = metric.statusCode,
+      tint = tint,
+      onClick = onClick,
+      modifier =
+          modifier.testTag("summary-metric-${metric.label}").semantics {
+            stateDescription = metric.status
+          },
+      details = {
+        metric.detailStatus?.let {
+          Text(it, color = SecondaryText, style = IdeTypography.compactBody)
         }
-      }
+        if (metric.type == AnalysisResultType.Bugs) SummaryBugBreakdown(metric)
+      })
 }
 
 @Composable

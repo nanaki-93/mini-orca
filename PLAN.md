@@ -26,6 +26,30 @@ the implementation and review rules. This is design guidance, not a claim that
 existing screens have been revised. The completed queue and its evidence remain
 historical records.
 
+### Active polish queue
+
+The user approved six ordered cards for the Summary, Analysis and Bugs /
+Performance / Security surfaces. Use 8dp rounded interactive category and result
+surfaces, 6dp contained controls, fewer repeated labels and local whole-box
+navigation. Structural panes remain flat. Unknown, failed, partial, stale,
+unavailable and canceled states retain their meaning.
+
+[POLISH-01–06](docs/tasks.md#mini-orca-ui-polish--2026-09-15) are the current
+implementation queue. The scheduler runs one card every 20 minutes using SOL High,
+with one Astra High repair after a concrete failed candidate. The user's follow-up
+authorizes a local commit for each completed, validated task and catch-up commits
+for accepted POLISH-01/02 progress. Report each commit hash. Pushes, releases and
+live provider campaigns remain out of scope. Earlier queues remain historical.
+
+**Current status:** 2/6 accepted. POLISH-01 delivers rounded category controls;
+POLISH-02 aligns Summary status to the right, opens category workspaces from the
+whole box and displays current run counts. All 460 desktop tests, Spotless and
+Detekt pass. Reviewed offscreen renders and the Astra High repair 1/1 are recorded
+in the [card evidence](docs/tasks.md#task-polish-02--summary-alignment-navigation-and-live-data).
+POLISH-03 is undergoing Astra High repair 1/1 after a missing-import compile
+failure; POLISH-04–06 have not started. The scheduler is paused during repair,
+then resumes every 20 minutes with SOL High and one Astra High repair per card.
+
 ## Planning baseline — 2026-09-11
 
 | Request | What exists | What needs to change |

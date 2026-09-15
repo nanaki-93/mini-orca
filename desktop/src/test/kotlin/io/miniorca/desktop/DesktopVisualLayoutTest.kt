@@ -21,13 +21,18 @@ import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.platform.PlatformContext
+import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.scene.CanvasLayersComposeScene
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -38,6 +43,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import java.io.File
@@ -85,7 +91,7 @@ class DesktopVisualLayoutTest {
             Triple(1280, 600, 1.25f),
             Triple(1280, 600, 1.5f))
         .forEach { (width, height, scale) ->
-          var navigations = 0
+          val navigations = mutableListOf<Workspace>()
           val run =
               analysisRunFixture()
                   .copy(
@@ -103,16 +109,81 @@ class DesktopVisualLayoutTest {
                         resultProjectFixture(),
                         ProjectAnalysisRunState(
                             run = run, fileSelection = AnalysisSelectionState(selectionFixture()))),
-                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, { navigations++ }))
+                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, navigations::add))
               }
               .use { fixture ->
                 fixture.render("analysis-progress-$width-$scale")
-                listOf("Pause", "Cancel", "Bugs", "Performance", "Security")
-                    .forEach(fixture::assertTextFits)
+                listOf("Pause", "Cancel").forEach(fixture::assertTextFits)
                 assertFalse(fixture.hasText("Prepare fix"))
-                fixture.clickDescription("View Bugs results")
-                assertEquals(1, navigations)
+                assertFalse(fixture.hasText("Open results"))
+                assertFalse(fixture.hasText("findings"))
+                fixture.assertCategoryBoxesFit()
+                AnalysisResultType.entries.forEach { type ->
+                  fixture.clickVisibleDescription("View ${type.workspace.name} results")
+                }
+                assertEquals(AnalysisResultType.entries.map { it.workspace }, navigations)
               }
+        }
+  }
+
+  @Test
+  fun categoryBoxesExposeNamesSelectionAndSingleKeyboardActions() {
+    val navigations = mutableListOf<Workspace>()
+    var selected by mutableStateOf(Workspace.Bugs)
+    ComposeVisualFixture(480, 650, 1.5f) {
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AnalysisResultType.entries.forEach { type ->
+              AnalysisCategoryBox(
+                  type = type,
+                  count = null,
+                  status = null,
+                  tint = SecondaryText,
+                  selected = selected == type.workspace,
+                  onClick = {
+                    selected = type.workspace
+                    navigations += type.workspace
+                  })
+            }
+            ChromeButton(onClick = {}) { Text("After categories") }
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.assertCategoryBoxesFit()
+          assertEquals(3, fixture.textCount("—"))
+          assertEquals(3, fixture.textCount("Not started"))
+          assertTrue(fixture.isDescriptionSelected("View Bugs results"))
+          assertFalse(fixture.isDescriptionSelected("View Security results"))
+          assertTrue(fixture.hasDescription("Selected"))
+          AnalysisResultType.entries.forEachIndexed { index, type ->
+            val name = type.workspace.name
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render("category-focus-${type.category}-480-1.5")
+            assertTrue(fixture.isDescriptionFocused("View $name results"))
+            fixture.assertTextFits(name)
+            fixture.assertTooltipBelowAction(name, "View $name results")
+            fixture.assertColorVisible(FocusAccent)
+            assertEquals(index * 2, navigations.size, "Focus must only disclose the name")
+            assertTrue(fixture.pressKey(Key.Enter))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+            assertEquals(List(2) { type.workspace }, navigations.takeLast(2))
+            assertEquals((index + 1) * 2, navigations.size)
+            AnalysisResultType.entries.forEach {
+              assertEquals(
+                  it == type, fixture.isDescriptionSelected("View ${it.workspace.name} results"))
+            }
+          }
+          assertTrue(fixture.pressKey(Key.Tab))
+          fixture.render()
+          assertTrue(
+              fixture.isFocused("After categories"), "Icons and tooltips must not add tab stops")
+          assertFalse(fixture.hasText("Security"))
+          fixture.hoverVisibleDescription("View Performance results", "Performance")
+          fixture.render("category-hover-480-1.5")
+          fixture.assertTextFits("Performance")
+          fixture.assertTooltipBelowAction("Performance", "View Performance results")
+          assertEquals(6, navigations.size, "Hover must only disclose the name")
         }
   }
 
@@ -1164,7 +1235,7 @@ class DesktopVisualLayoutTest {
   @Test
   fun baselineCapturesSummaryAndExercisesOnlyTheLiveProjectMenu() {
     ComposeVisualFixture(1440, 900) {
-          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject)
+          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
         }
         .use { fixture ->
           fixture.render("summary-1440")
@@ -1462,7 +1533,7 @@ class DesktopVisualLayoutTest {
                             whyItMattersHere = "Keep invalid input out of the repository.",
                             tradeoffOrFailureMode = "Validation rules must stay consistent.",
                             transferableLesson = "Validate at the request boundary.")))
-    ComposeVisualFixture(1440, 1600) { ProjectSummaryPane(overview, visualFixtureProject) }
+    ComposeVisualFixture(1440, 1600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
@@ -1487,8 +1558,8 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("Tool-reported issues"))
           fixture.assertTextAbove("Purpose", "Analysis summary")
           fixture.assertSummaryStatusPlacement("Outdated")
-          listOf("Bugs", "Performance Issues", "Security Issues").forEach {
-            assertTrue(fixture.hasDescription(it))
+          listOf("Bugs", "Performance", "Security").forEach {
+            assertTrue(fixture.hasDescription("View $it results"))
             assertFalse(fixture.hasText(it))
           }
           fixture.assertTextAbove("Packages / modules", "Flows")
@@ -1523,7 +1594,7 @@ class DesktopVisualLayoutTest {
     val overview =
         visualFixtureOverview.copy(
             analysis = visualFixtureOverview.analysis.copy(purpose = longPurpose))
-    ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(overview, visualFixtureProject) }
+    ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render()
           fixture.scrollBy(500f)
@@ -1551,7 +1622,7 @@ class DesktopVisualLayoutTest {
               analysis =
                   visualFixtureOverview.analysis.copy(
                       status = status, failure = "Provider timed out."))
-      ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject) }
+      ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
           .use { fixture ->
             fixture.render("summary-dashboard-$status-1280-600")
             listOf("Ready" to Success, "Stale" to Warning, "Missing" to SecondaryText).forEach {
@@ -1577,7 +1648,8 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(1440, 1100) {
           ProjectSummaryPane(
               visualFixtureOverview.copy(analysisCoverage = AnalysisCoverage()),
-              visualFixtureProject)
+              visualFixtureProject,
+              {})
         }
         .use { fixture ->
           fixture.render()
@@ -1587,7 +1659,7 @@ class DesktopVisualLayoutTest {
           fixture.assertUniformSummaryCards(7)
           fixture.assertSummaryStatusPlacement("Updated")
         }
-    ComposeVisualFixture(1440, 1100) { ProjectSummaryPane(null, visualFixtureProject) }
+    ComposeVisualFixture(1440, 1100) { ProjectSummaryPane(null, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Analysis summary"))
@@ -1612,7 +1684,7 @@ class DesktopVisualLayoutTest {
                         "stale" -> AnalysisCoverage(total = 23, stale = 23)
                         else -> AnalysisCoverage(total = 23, failed = 23)
                       })
-          ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject) }
+          ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
               .use { fixture ->
                 fixture.render("summary-panel-$status")
                 fixture.assertSummaryStatusPlacement(label)
@@ -1631,7 +1703,7 @@ class DesktopVisualLayoutTest {
                 StructuredProjectAnalysis(status = "failed", failure = "Provider timed out."),
             analysisCoverage = AnalysisCoverage())
     val description = "Project description: failed · Provider timed out."
-    ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, visualFixtureProject) }
+    ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render()
           assertFalse(fixture.hasText(description))
@@ -1644,9 +1716,69 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryCategoryBoxesNavigateAndRefreshFromTheCurrentRun() {
+    val navigations = mutableListOf<Workspace>()
+    var run by
+        mutableStateOf(
+            analysisRunFixture()
+                .copy(
+                    status = "running",
+                    sections =
+                        AnalysisResultType.entries.mapIndexed { index, type ->
+                          AnalysisSectionProgress(
+                              type.category,
+                              "running",
+                              AnalysisRunCoverage(running = 1),
+                              17 + index)
+                        }))
+    var sections by
+        mutableStateOf(
+            mapOf(AnalysisResultKey("performance") to AnalysisSectionState(loading = true)))
+    val overview =
+        visualFixtureOverview.copy(
+            analysis = StructuredProjectAnalysis(status = "fresh", purpose = "Current purpose"),
+            analysisCoverage = AnalysisCoverage(total = 3, fresh = 3))
+    ComposeVisualFixture(1440, 900) {
+          ProjectSummaryPane(
+              overview, resultProjectFixture(), navigations::add, run = run, sections = sections)
+        }
+        .use { fixture ->
+          fixture.render("summary-live-running-1440")
+          fixture.assertSummaryStatusPlacement("Updating")
+          fixture.assertCategoryBoxesFit()
+          listOf("17", "18", "19").forEach(fixture::assertTextFits)
+          fixture.assertTextFits("Loading details")
+          AnalysisResultType.entries.forEach { type ->
+            fixture.clickVisibleDescription("View ${type.workspace.name} results")
+          }
+          assertEquals(AnalysisResultType.entries.map { it.workspace }, navigations)
+          assertFalse(fixture.hasText("Complete"))
+          assertFalse(fixture.hasText("Completed"))
+
+          run =
+              run.copy(
+                  status = "completed",
+                  sections =
+                      AnalysisResultType.entries.mapIndexed { index, type ->
+                        AnalysisSectionProgress(
+                            type.category,
+                            "completed",
+                            AnalysisRunCoverage(succeeded = 1),
+                            27 + index)
+                      })
+          sections = emptyMap()
+          fixture.render("summary-live-completed-1440")
+          listOf("17", "18", "19", "Loading details").forEach { assertFalse(fixture.hasText(it)) }
+          listOf("27", "28", "29").forEach(fixture::assertTextFits)
+          fixture.assertSummaryStatusPlacement("Updated")
+          fixture.assertCategoryBoxesFit()
+        }
+  }
+
+  @Test
   fun summaryOutdatedBadgeClearsAfterRefreshAndIconsExplainThemselvesOnFocus() {
     var overview by mutableStateOf(visualFixtureOverview)
-    ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject) }
+    ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Outdated"))
@@ -1662,7 +1794,7 @@ class DesktopVisualLayoutTest {
           fixture.render("summary-bug-icon-keyboard-label")
           assertTrue(fixture.hasText("Bugs"))
           assertTrue(fixture.hasDescription("Bugs"))
-          assertFalse(fixture.hasText("Performance Issues"))
+          assertFalse(fixture.hasText("Performance"))
         }
   }
 
@@ -1671,7 +1803,8 @@ class DesktopVisualLayoutTest {
     val project = resultProjectFixture()
     val overview = visualFixtureOverview.copy(analysisCoverage = AnalysisCoverage())
     ComposeVisualFixture(800, 650, 1.5f) {
-          ProjectSummaryPane(overview, project, analysisRunFixture().copy(status = "stale"))
+          ProjectSummaryPane(
+              overview, project, {}, run = analysisRunFixture().copy(status = "stale"))
         }
         .use { fixture ->
           fixture.render("summary-outdated-run-800-150")
@@ -1681,7 +1814,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryMetricFlowKeepsEveryCoverageBoxVisibleAndRemovesPartialText() {
+  fun summaryMetricFlowKeepsEveryCoverageBoxAndPartialStateVisible() {
     val (base, section) = summaryBugFixture(listOf("high", "medium", "low"))
     val run =
         base.copy(
@@ -1696,7 +1829,8 @@ class DesktopVisualLayoutTest {
                     total = 5, fresh = 1, stale = 1, missing = 1, running = 1, failed = 1))
     listOf(1440 to 1f, 1000 to 1.5f, 999 to 1.5f, 800 to 1.5f).forEach { (width, scale) ->
       ComposeVisualFixture(width, 650, scale) {
-            ProjectSummaryPane(overview, resultProjectFixture(), run, section)
+            ProjectSummaryPane(
+                overview, resultProjectFixture(), {}, run = run, sections = bugSections(section))
           }
           .use { fixture ->
             fixture.render("summary-all-metrics-$width-$scale")
@@ -1710,11 +1844,11 @@ class DesktopVisualLayoutTest {
                     "Medium: 1",
                     "Low: 1")
                 .forEach(fixture::assertTextFits)
-            listOf("Bugs", "Performance Issues", "Security Issues").forEach {
-              assertTrue(fixture.hasDescription(it))
+            listOf("Bugs", "Performance", "Security").forEach {
+              assertTrue(fixture.hasDescription("View $it results"))
               assertFalse(fixture.hasText(it))
             }
-            assertFalse(fixture.hasText("Partial"))
+            fixture.assertTextFits("Partial")
             fixture.assertTextFits("Updating")
             fixture.assertSummaryStatusPlacement("Updating")
             fixture.assertUniformSummaryCards(12)
@@ -1823,7 +1957,12 @@ class DesktopVisualLayoutTest {
       ->
       listOf(1f, 1.5f).forEach { scale ->
         ComposeVisualFixture(width, height, scale) {
-              ProjectSummaryPane(visualFixtureOverview, resultProjectFixture(), run, section)
+              ProjectSummaryPane(
+                  visualFixtureOverview,
+                  resultProjectFixture(),
+                  {},
+                  run = run,
+                  sections = bugSections(section))
             }
             .use { fixture ->
               fixture.render()
@@ -1833,12 +1972,12 @@ class DesktopVisualLayoutTest {
               assertFalse(fixture.hasText("Score: 10 points"))
               assertFalse(fixture.hasText("Score unavailable"))
               assertFalse(fixture.hasText("Bug priorities"))
-              listOf("Bugs" to Error, "Performance Issues" to Warning, "Security Issues" to Success)
-                  .forEach { (label, tint) ->
-                    fixture.assertColorVisible(tint)
-                    assertTrue(fixture.hasDescription(label))
-                    assertFalse(fixture.hasText(label))
-                  }
+              listOf("Bugs" to Error, "Performance" to Warning, "Security" to Success).forEach {
+                  (label, tint) ->
+                fixture.assertColorVisible(tint)
+                assertTrue(fixture.hasDescription("View $label results"))
+                assertFalse(fixture.hasText(label))
+              }
             }
       }
     }
@@ -1850,7 +1989,7 @@ class DesktopVisualLayoutTest {
       ->
       listOf(1f, 1.25f, 1.5f).forEach { scale ->
         ComposeVisualFixture(width, height, scale) {
-              ProjectSummaryPane(visualFixtureOverview, visualFixtureProject)
+              ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
             }
             .use { fixture ->
               fixture.render("summary-dashboard-$width-$height-$scale")
@@ -1871,7 +2010,7 @@ class DesktopVisualLayoutTest {
             }
       }
     }
-    ComposeVisualFixture(800, 300) { ProjectSummaryPane(null, null) }
+    ComposeVisualFixture(800, 300) { ProjectSummaryPane(null, null, {}) }
         .use { fixture ->
           fixture.render("summary-dashboard-empty-800")
           assertTrue(fixture.hasText("No project selected"))
@@ -2046,6 +2185,13 @@ internal class ComposeVisualFixture(
   private val owners = mutableListOf<SemanticsOwner>()
   private val platform =
       object : PlatformContext by PlatformContext.Empty() {
+        override val windowInfo =
+            object : WindowInfo {
+              override val isWindowFocused = true
+              override val containerSize = IntSize(width, height)
+              override val containerDpSize =
+                  DpSize((width / densityScale).dp, (height / densityScale).dp)
+            }
         override val semanticsOwnerListener =
             object : PlatformContext.SemanticsOwnerListener {
               override fun onSemanticsOwnerAppended(semanticsOwner: SemanticsOwner) {
@@ -2152,6 +2298,73 @@ internal class ComposeVisualFixture(
         },
         label)
   }
+
+  fun assertCategoryBoxesFit() {
+    val bounds =
+        AnalysisResultType.entries.map { visibleActionBounds("View ${it.workspace.name} results") }
+    bounds.forEach {
+      assertEquals(bounds.first().width, it.width, 1f, "Category widths must match")
+      assertEquals(bounds.first().height, it.height, 1f, "Category heights must match")
+    }
+    bounds.zipWithNext().forEach { (first, next) ->
+      assertTrue(
+          first.right <= next.left || first.bottom <= next.top, "Categories must not overlap")
+    }
+  }
+
+  private fun visibleActionBounds(label: String): Rect {
+    val node =
+        nodes().single {
+          it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+              it.config.getOrNull(SemanticsActions.OnClick) != null
+        }
+    val bounds = node.boundsInRoot
+    assertTrue(
+        bounds.width > 0 &&
+            bounds.height > 0 &&
+            bounds.left >= 0 &&
+            bounds.top >= 0 &&
+            bounds.right <= width &&
+            bounds.bottom <= height,
+        "$label must be fully visible: $bounds in ${width}x$height")
+    return bounds
+  }
+
+  fun clickVisibleDescription(label: String) {
+    val bounds = visibleActionBounds(label)
+    // Click empty space near the trailing edge, away from the icon/count text.
+    val position = Offset(bounds.right - 12f, bounds.center.y)
+    scene.sendPointerEvent(PointerEventType.Press, position, button = PointerButton.Primary)
+    scene.sendPointerEvent(PointerEventType.Release, position, button = PointerButton.Primary)
+    render()
+  }
+
+  fun hoverVisibleDescription(label: String, tooltip: String) {
+    scene.sendPointerEvent(PointerEventType.Move, visibleActionBounds(label).center)
+    val deadline = System.nanoTime() + 2_000_000_000L
+    do {
+      Thread.sleep(20)
+      render()
+    } while (!hasText(tooltip) && System.nanoTime() < deadline)
+    assertTrue(hasText(tooltip), "$label must disclose $tooltip on hover")
+  }
+
+  fun assertTooltipBelowAction(label: String, action: String) {
+    val tooltip = textNodes(label).single().boundsInWindow
+    val anchor = visibleActionBounds(action)
+    assertTrue(
+        tooltip.top >= anchor.bottom - 8f,
+        "$label must be anchored to $action: $tooltip vs $anchor")
+    assertTrue(tooltip.right <= width && tooltip.bottom <= height, "$label must stay in the window")
+  }
+
+  fun isDescriptionSelected(label: String): Boolean =
+      nodes()
+          .single {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          }
+          .config
+          .getOrNull(SemanticsProperties.Selected) == true
 
   fun tryClick(label: String): Boolean =
       nodes()
@@ -2295,6 +2508,11 @@ internal class ComposeVisualFixture(
             .any { it.config.getOrNull(SemanticsProperties.TestTag) == "analysis-summary" },
         "The status must belong to Analysis summary")
     assertTrue(textNodes("Purpose").single().boundsInRoot.bottom <= status.boundsInRoot.top)
+    val panel =
+        nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == "analysis-summary" }
+    assertTrue(
+        panel.boundsInRoot.right - status.boundsInRoot.right <= 20f,
+        "$label must align to the right edge of Analysis summary")
   }
 
   fun assertTextBefore(label: String, following: String) {

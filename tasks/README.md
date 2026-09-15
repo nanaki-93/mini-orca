@@ -1,16 +1,26 @@
-# Executing the Mini-Orca UX implementation queue
+# Executing the Mini-Orca UI polish queue
 
 [PLAN.md](../PLAN.md) owns confirmed product decisions and current status.
 [docs/tasks.md](../docs/tasks.md) is the sole ordered implementation checklist.
-The user authorized scheduled execution with **GPT-6 Astra Extra High** on
-2026-09-11. All 17 cards completed on **2026-09-12**. The scheduler ran one card per wake,
-every 20 minutes, in the current checkout on `codex/autopilot`, and is now Paused.
+The active 2026-09-15 scope is **POLISH-01–06** at the top of the task file. The
+completed 17-card queue from 2026-09-12 is historical evidence below that queue.
 
-Automation: **Mini-Orca UX implementation** (`mini-orca-ux-implementation`), **Paused**,
-attached to the current Codex task. Astra Extra High is set on that task through
-the supported task continuation API; chat-attached automation has no independent
-model/effort field. Local execution requires the computer on and the app running,
-as described in the [scheduled-task documentation](https://learn.chatgpt.com/docs/automations?surface=app).
+Automation: **Mini-Orca UI polish** (`mini-orca-ux-implementation`), **Paused during POLISH-03 repair**,
+every 20 minutes and attached to the current Codex task. Local execution requires
+the computer on and the app running, as described in the
+[scheduled-task documentation](https://learn.chatgpt.com/docs/automations?surface=app).
+
+POLISH-01 passed its user-authorized continuation: category layout, real pointer
+and keyboard activation, names/selection, all 456 desktop tests and quality checks.
+The [card evidence](../docs/tasks.md#task-polish-01--shared-rounded-category-boxes)
+retains previous failures and distinguishes component checks from native evidence.
+POLISH-02 also passed after Astra High repair 1/1: Summary alignment, whole-box
+navigation and live counts, with all 460 desktop tests and quality checks passing.
+Its [card evidence](../docs/tasks.md#task-polish-02--summary-alignment-navigation-and-live-data)
+records the interrupted handoff and completed repair. POLISH-03 is undergoing
+Astra High repair 1/1; no later card has started. Scheduled implementation uses
+SOL High and the configured repair uses Astra High. The user's follow-up authorizes
+local commits after each accepted card, including the completed POLISH-01/02 work.
 
 ## Per-wake procedure
 
@@ -21,7 +31,7 @@ as described in the [scheduled-task documentation](https://learn.chatgpt.com/doc
 2. Record the active task and stage in PLAN.md. Inspect the current working-tree
    diff before editing. Earlier accepted changes and the user's uncommitted UI
    work form the baseline; never reset, stash, discard or overwrite them.
-3. Implement only that card with `gpt-6-astra` and `xhigh` reasoning. The scheduler
+3. Implement only that card with SOL High (`gpt-5.6-sol`, `high`). The scheduler
    uses this Codex task directly; no detached runner or additional agents are
    required. Necessary narrow target-list corrections follow `docs/tasks.md`.
 4. Run the exact task verification commands with the verified local toolchains.
@@ -29,29 +39,24 @@ as described in the [scheduled-task documentation](https://learn.chatgpt.com/doc
    Reuse valid cached results; do not repeatedly rerun passing suites without a
    relevant change. Perform and record any native checks required by the card.
 5. Review the actual diff for correctness, failure paths, stale results, privacy,
-   maintainability, removed obsolete code and preserved behavior. Make at most
-   two focused repairs after a concrete failure, retaining all failed attempts.
-   An interrupted validation resumes validation, not implementation from scratch.
-6. When the card passes every required check and diff review, prepare its checkbox,
-   actual test/review record and PLAN.md status update. Stage only that task's
-   implementation and related documentation, inspect the staged diff, and create
-   one local commit with the task ID in its subject. Preserve unrelated staged
-   changes and exclude unrelated pre-existing edits; never use blanket staging.
-   Verify/report the commit hash, then end the wake. If the commit fails, record
-   the pending commit stage and pause without advancing. After interruption,
-   inspect Git history and any execution receipt before retrying; do not duplicate
-   a commit or rerun completed implementation. A later wake handles the next card
-   only after the previous task's commit is verified.
-7. On an exhausted repair, missing required native capability or material product
+   maintainability, removed obsolete code and preserved behavior. After a concrete
+   failed SOL candidate, record the failure and hand off one focused repair to
+   Astra High (`gpt-6-astra`, `high`). An interrupted repair resumes that attempt.
+6. When the card passes every required check and diff review, update its checkbox,
+   actual test/review record and PLAN.md status, stage only reviewed task changes,
+   and create a descriptive local commit naming the POLISH task. Verify the commit
+   and report its short hash, then end the wake. A later wake handles the next card.
+7. On a failed Astra repair, missing required native capability or material product
    ambiguity, preserve work, record the precise blocker in `docs/errors.log` and
-   pause this scheduler. When all 17 cards pass, record completion and pause it.
+   pause this scheduler. When all six cards pass, record completion and pause it.
    Update scheduling only with the app's automation tool, preserving its other
    fields; do not write raw scheduler files or reactivate historical automations.
 
 ## Boundaries
 
-The user authorized **one local commit per validated task** on 2026-09-11. This
-supersedes the earlier no-commit instruction for this queue. Do not push, release, publish, run live
+The 2026-09-11 local-commit grant belongs only to the completed historical queue.
+The current user explicitly authorizes local commits for completed polish tasks.
+Do not push, release, publish, run live
 Mini-Orca provider/evaluation campaigns or perform destructive cleanup. The user's
 ordinary terminal is a feature being implemented, not authorization for model-driven
 commands in project terminals. Preserve source/diff read-only views and explicit
@@ -59,9 +64,9 @@ Review/Apply for Mini-Orca candidates. Normal build dependency downloads and tes
 using fake providers/temporary fixtures are included in the implementation scope.
 
 The existing scheduler and this task serialize execution; no extra worktrees or
-parallel coordinators should be launched. Keep Astra Extra High for this queue
-unless the user explicitly changes the requested model. Report an unavailable
-requested model rather than silently substituting another one.
+parallel coordinators should be launched. Keep SOL High for normal wakes and Astra
+High for the single recorded repair. Report an unavailable requested model rather
+than silently substituting another one.
 
 ## Historical work
 

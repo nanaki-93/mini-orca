@@ -111,25 +111,32 @@ class AnalysisFileStatusTest {
                         AnalysisSectionProgress(
                             it.category, status, AnalysisRunCoverage(total = 1), findings)
                       })
-      listOf(1280 to 1f, 1000 to 1.25f, 999 to 1.5f, 800 to 1.5f).forEach { (width, scale) ->
-        ComposeVisualFixture(width, 600, scale) {
-              AnalysisCategoryPanels(
-                  AnalysisWorkspacePaneState(
-                      analysisProjectFixture(), ProjectAnalysisRunState(run = run)),
-                  navigations::add)
-            }
-            .use { fixture ->
-              fixture.render("analysis-category-$status-$width-$scale")
-              listOf("Bugs", "Performance", "Security").forEach(fixture::assertTextFits)
-              fixture.assertColorVisible(tint)
-              assertTrue(
-                  fixture.hasText(
-                      if (status == "completed_empty") "Completed"
-                      else analysisStatusLabel(status)))
-              fixture.clickDescription("View Security results")
-              assertEquals(Workspace.Security, navigations.last())
-            }
-      }
+      listOf(1280 to 1f, 1000 to 1.25f, 999 to 1.5f, 800 to 1.5f, 640 to 1.5f, 639 to 1.5f)
+          .forEach { (width, scale) ->
+            ComposeVisualFixture(width, 600, scale) {
+                  AnalysisCategoryPanels(
+                      AnalysisWorkspacePaneState(
+                          analysisProjectFixture(), ProjectAnalysisRunState(run = run)),
+                      navigations::add)
+                }
+                .use { fixture ->
+                  fixture.render("analysis-category-$status-$width-$scale")
+                  fixture.assertCategoryBoxesFit()
+                  fixture.assertColorVisible(tint)
+                  val count = if (status == "stale") "—" else findings?.toString() ?: "—"
+                  assertEquals(3, fixture.textCount(count), "$status count at $width")
+                  assertFalse(fixture.hasText("Completed"))
+                  if (status != "completed") {
+                    val label =
+                        if (status == "completed_empty") "No results"
+                        else analysisStatusLabel(status)
+                    assertEquals(3, fixture.textCount(label))
+                    fixture.assertTextFits(label)
+                  }
+                  fixture.clickVisibleDescription("View Security results")
+                  assertEquals(Workspace.Security, navigations.last())
+                }
+          }
     }
   }
 }
