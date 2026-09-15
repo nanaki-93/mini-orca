@@ -75,6 +75,8 @@ class AnalysisFileSelectionTest {
           }
           .use { fixture ->
             fixture.render()
+            assertFalse(fixture.hasText("Select all"))
+            fixture.clickDescription("Expand Files")
             fixture.render("analysis-files-$width-$height-150")
             fixture.assertTextFits("Select all")
             fixture.assertTextFits("Exclude all")
@@ -104,7 +106,7 @@ class AnalysisFileSelectionTest {
   }
 
   @Test
-  fun togglingAStaleFileUpdatesCoverageAndKeepsReasonsAvailableOnDemand() {
+  fun togglingAStaleFileUpdatesSelectionWithoutVerboseStageDetails() {
     val file =
         AnalysisSelectableFile(
             "main.go",
@@ -131,23 +133,23 @@ class AnalysisFileSelectionTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasText("0 up to date · 1 need attention · 0 excluded"))
+          assertTrue(fixture.hasText("1 selected · 0 excluded"))
+          fixture.clickDescription("Expand Files")
+          fixture.render()
           assertTrue(fixture.hasText("Source changed."))
           assertFalse(
               fixture.hasText("Performance review · Unavailable — Model is not configured."))
-          fixture.clickDescription("Analysis details for main.go")
-          fixture.render()
-          assertTrue(fixture.hasText("Performance review · Unavailable — Model is not configured."))
+          assertFalse(fixture.hasDescription("Analysis details for main.go"))
           assertEquals(0, saves)
           fixture.clickDescription("Analyze main.go")
           fixture.render("analysis-files-excluded-800-150")
-          assertTrue(fixture.hasText("0 up to date · 0 need attention · 1 excluded"))
+          assertTrue(fixture.hasText("0 selected · 1 excluded"))
           assertTrue(fixture.hasText("Excluded by you."))
           assertFalse(fixture.hasText("Outdated"))
           assertFalse(fixture.hasText("Source changed."))
           fixture.clickDescription("Analyze main.go")
           fixture.render()
-          assertTrue(fixture.hasText("0 up to date · 1 need attention · 0 excluded"))
+          assertTrue(fixture.hasText("1 selected · 0 excluded"))
           assertTrue(fixture.hasText("Outdated"))
           assertEquals(2, saves)
         }
@@ -168,9 +170,67 @@ class AnalysisFileSelectionTest {
         }
         .use { fixture ->
           fixture.render()
+          assertTrue(fixture.hasText("Selection could not be saved. Refresh files and retry."))
+          fixture.clickDescription("Expand Files")
           fixture.render("analysis-files-long-path-error-800-150")
           fixture.assertTextFits(path, maxLines = 5)
           assertTrue(fixture.hasText("Selection could not be saved. Refresh files and retry."))
+        }
+  }
+
+  @Test
+  fun disclosureIsLocalPreservesSelectionAndResetsForAnotherProject() {
+    val state =
+        mutableStateOf(
+            ProjectAnalysisRunState(
+                fileSelection =
+                    AnalysisSelectionState(
+                        selectionFixture().copy(excludedPaths = listOf("main.go")))))
+    var calls = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisFileSelector(
+              state.value,
+              AnalysisWorkspaceActions(
+                  { _, _ -> calls++ },
+                  { calls++ },
+                  { calls++ },
+                  { calls++ },
+                  { calls++ },
+                  { calls++ },
+                  { calls++ }))
+        }
+        .use { fixture ->
+          fixture.render("analysis-files-collapsed")
+          assertFalse(fixture.hasDescription("Analyze main.go"))
+          repeat(2) {
+            fixture.clickDescription("Expand Files")
+            fixture.render()
+            assertTrue(fixture.hasText("Excluded by you."))
+            fixture.clickDescription("Collapse Files")
+            fixture.render()
+          }
+          assertEquals(0, calls)
+          assertEquals(listOf("main.go"), state.value.fileSelection.selection!!.excludedPaths)
+          state.value =
+              state.value.copy(
+                  run = analysisRunFixture().copy(status = "running"),
+                  fileSelection = state.value.fileSelection.copy(error = "Save failed"))
+          fixture.render("analysis-files-locked-collapsed")
+          assertTrue(fixture.hasText("Save failed"))
+          assertTrue(fixture.hasText("Finish or cancel the current run to change selection."))
+          fixture.clickDescription("Expand Files")
+          fixture.render()
+          assertTrue(fixture.isDisabled("Select all"))
+          assertTrue(fixture.isDisabled("Exclude all"))
+          state.value =
+              state.value.copy(
+                  run = null,
+                  fileSelection =
+                      AnalysisSelectionState(selectionFixture().copy(projectId = "other")))
+          fixture.render()
+          assertTrue(fixture.hasDescription("Expand Files"))
+          assertFalse(fixture.hasDescription("Analyze main.go"))
+          assertEquals(0, calls)
         }
   }
 

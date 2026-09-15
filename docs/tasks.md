@@ -2,7 +2,7 @@
 
 Implement the user's Summary, Analysis and Bugs / Performance / Security cleanup:
 rounded shared controls, live clickable category boxes, simpler results and working
-offline diagrams. POLISH-01–02 are accepted; POLISH-03–06 remain planned work.
+offline diagrams. POLISH-01–03 are accepted; POLISH-04–06 remain planned work.
 
 ## Current execution scope
 
@@ -237,12 +237,18 @@ restore SOL High after recording acceptance; no commit or later-card edits.
 
 ## Task POLISH-03 — Compact Analysis and collapsible exclusions
 
-**Status:** [ ] Astra High repair 1/1 dispatched after the SOL High candidate compile failure. Scheduler paused during the sequential repair.
+**Status:** [x] Complete after Astra High repair 1/1. POLISH-04 is next.
 
 **Continuation:** The user's status/commit request arrived before the repair ran.
 Resume this same attempt with Astra High; commit each accepted card and include
 the hash in its completion notification. Add `PLAN.md` and `tasks/README.md` as
 necessary status/commit-policy targets before editing their existing records.
+The full gate exposed one additional dependent test:
+`DesktopContrastTest.analysisHeadersRenderDistinctLabeledLifecycleStates` still
+requires the removed Completed label. Add
+`desktop/src/test/kotlin/io/miniorca/desktop/DesktopContrastTest.kt` to this card's
+targets to check the new header's rendered contrast and meaningful category states
+without restoring redundant completion text. Keep all contrast thresholds intact.
 
 **SOL candidate — 2026-09-15.** Replaced the editable Run limits UI with the
 existing `AnalysisRunLimits(100, 900, 2)` defaults, condensed active/last-run facts,
@@ -257,6 +263,32 @@ limited to restoring that import, completing the specified focused tests and
 necessary expectation updates for the intentional compact UI, running the full
 desktop gate and `git diff --check`, reviewing renders/diff, and recording
 acceptance or a concrete blocker. No POLISH-04 work may start in this repair.
+
+**Acceptance — 2026-09-15.** Verified the actual repair model as
+`gpt-6-astra` / `high`. Restored the missing list import, moved current/last-run
+facts into the first header, kept lifecycle actions and explicit failure reasons,
+and moved category coverage into the existing rounded boxes. Files now starts
+collapsed, retains selection/filter/bulk actions, shows save failures and run
+restrictions while closed, and resets local disclosure state for another project.
+Start and retry still use the existing 100-file / 900-second / 2-attempt defaults;
+the daemon admission and consent workflow is unchanged.
+
+- Card's focused tests: **58 passed**. With the dependent contrast suite added:
+  **63 passed**. Commands used `spotlessApply` and
+  `-PvisualOutput="$PWD/desktop/build/reports/ui-polish/polish-03-repair"`.
+- First full gate: **461/462 passed**; the old contrast test required Completed.
+  Migrated it to rendered header contrast and meaningful category states, retaining
+  all contrast thresholds. Final `./scripts/desktop-gradle.sh test spotlessCheck
+  detekt`: **462 passed**, zero failures/errors/skips; Spotless and Detekt passed.
+- Reviewed production renders at wide, 1000/999px, 800×650 and 1280×600 layouts
+  including 150% text, collapsed/expanded Files, long paths, errors and lifecycle
+  states. Tests prove local disclosure has no requests or saves, exclusions persist,
+  project changes reset disclosure, and active-run selection remains locked.
+- Reviewed the complete diff and ran `git diff --check`. Native-window, packaged
+  app and screen-reader checks were not repeated; no native acceptance is claimed.
+- User-authorized catch-up commit for POLISH-01/02: `d67ab5a`. POLISH-03 receives
+  its own local commit after acceptance. Resume the scheduler for POLISH-04 with
+  the new per-task commit policy, then restore SOL High.
 
 **Target files**
 - `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — compact run header, controls and removal of Run details / Run limits.

@@ -22,17 +22,24 @@ class DesktopContrastTest {
             "partial" to Warning,
             "failed" to Error)
         .forEach { (status, color) ->
+          val run =
+              analysisRunFixture().let {
+                it.copy(
+                    status = status,
+                    sections = it.sections.map { section -> section.copy(status = status) })
+              }
+          val presentation = projectRunPresentation(ProjectAnalysisRunState(run = run))
           ComposeVisualFixture(800, 650, 1.5f) {
                 AnalysisWorkspacePane(
                     AnalysisWorkspacePaneState(
-                        resultProjectFixture(),
-                        ProjectAnalysisRunState(run = analysisRunFixture().copy(status = status))),
+                        resultProjectFixture(), ProjectAnalysisRunState(run = run)),
                     AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
               }
               .use { fixture ->
                 fixture.render("analysis-state-color-$status")
-                fixture.assertTextFits(analysisStatusLabel(status))
-                fixture.assertTextContrast(analysisStatusLabel(status), HeaderSurface)
+                fixture.assertTextFits(presentation.headline)
+                fixture.assertTextContrast(presentation.headline, HeaderSurface)
+                if (status != "completed") fixture.assertTextFits(analysisStatusLabel(status))
                 fixture.assertColorVisible(color)
               }
         }

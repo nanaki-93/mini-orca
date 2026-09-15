@@ -41,14 +41,15 @@ authorizes a local commit for each completed, validated task and catch-up commit
 for accepted POLISH-01/02 progress. Report each commit hash. Pushes, releases and
 live provider campaigns remain out of scope. Earlier queues remain historical.
 
-**Current status:** 2/6 accepted. POLISH-01 delivers rounded category controls;
-POLISH-02 aligns Summary status to the right, opens category workspaces from the
-whole box and displays current run counts. All 460 desktop tests, Spotless and
-Detekt pass. Reviewed offscreen renders and the Astra High repair 1/1 are recorded
-in the [card evidence](docs/tasks.md#task-polish-02--summary-alignment-navigation-and-live-data).
-POLISH-03 is undergoing Astra High repair 1/1 after a missing-import compile
-failure; POLISH-04–06 have not started. The scheduler is paused during repair,
-then resumes every 20 minutes with SOL High and one Astra High repair per card.
+**Current status:** 3/6 accepted. POLISH-01/02 deliver rounded controls and live,
+clickable Summary boxes (catch-up commit `d67ab5a`). POLISH-03 compacts Analysis,
+removes Run limits/details, and collapses Files while preserving selection and
+failure state. All 462 desktop tests, Spotless and Detekt pass; reviewed offscreen
+renders and Astra High repair 1/1 are recorded in the
+[card evidence](docs/tasks.md#task-polish-03--compact-analysis-and-collapsible-exclusions).
+POLISH-04 is next; POLISH-04–06 have not started. The scheduler resumes every
+20 minutes with SOL High, one Astra High repair per card and a local commit after
+each accepted task.
 
 ## Planning baseline — 2026-09-11
 

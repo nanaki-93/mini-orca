@@ -4,6 +4,7 @@ internal const val defaultAnalyzeAllFileLimit = 100
 private const val maximumAnalyzeAllFileLimit = 500
 internal const val defaultAnalyzeAllRetryLimit = 1
 private const val maximumAnalyzeAllRetryLimit = 3
+internal val defaultAnalysisRunLimits = AnalysisRunLimits(100, 900, 2)
 
 /** The bounded, user-confirmed options for one explicit Analyze-all run. */
 data class AnalyzeAllRunOptions(
@@ -35,6 +36,7 @@ internal data class AnalysisStageFailure(
 
 internal data class ProjectRunPresentation(
     val status: String,
+    val headline: String,
     val totalSteps: Int,
     val finishedSteps: Int,
     val currentFiles: List<String>,
@@ -49,14 +51,16 @@ internal fun projectRunPresentation(analysis: ProjectAnalysisRunState): ProjectR
   val run = analysis.run
   val stages = run?.files.orEmpty().flatMap { it.stages }
   val plannedFiles = run?.plan?.files.orEmpty().associateBy { it.path }
+  val finishedSteps =
+      stages.count {
+        it.status in
+            setOf("completed", "completed_empty", "partial", "failed", "skipped", "unavailable")
+      }
   return ProjectRunPresentation(
       status = analysisStatusLabel(run?.status),
+      headline = analysisRunHeadline(run, finishedSteps, stages.size),
       totalSteps = stages.size,
-      finishedSteps =
-          stages.count {
-            it.status in
-                setOf("completed", "completed_empty", "partial", "failed", "skipped", "unavailable")
-          },
+      finishedSteps = finishedSteps,
       currentFiles =
           run?.files
               .orEmpty()
@@ -89,6 +93,28 @@ internal fun projectRunPresentation(analysis: ProjectAnalysisRunState): ProjectR
                     AnalysisRunCommand.Cancel)
             else -> listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed)
           })
+}
+
+internal fun analysisRunHeadline(run: AnalysisRun?, finishedSteps: Int, totalSteps: Int): String {
+  if (run == null) return "Last run · None"
+  val facts = mutableListOf(if (run.isActive()) "Current run" else "Last run")
+  if (run.isActive()) {
+    if (totalSteps > 0) {
+      facts += "$finishedSteps finished"
+      facts += "${(totalSteps - finishedSteps).coerceAtLeast(0)} remaining"
+    }
+    if (run.windowFilesCompleted > 0) {
+      facts +=
+          "${run.windowFilesCompleted} ${if (run.windowFilesCompleted == 1) "file" else "files"} processed"
+    }
+    if (run.windowElapsedSeconds > 0) facts += "${run.windowElapsedSeconds}s elapsed"
+  } else {
+    if (run.status !in setOf("completed", "completed_empty"))
+        facts += analysisStatusLabel(run.status)
+    if (totalSteps > 0) facts += "$finishedSteps of $totalSteps stages"
+    run.updatedAt.takeIf { it.isNotBlank() }?.let { facts += it }
+  }
+  return facts.joinToString(" · ")
 }
 
 internal fun analysisStatusLabel(status: String?): String =

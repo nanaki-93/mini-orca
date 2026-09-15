@@ -67,7 +67,11 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("final-progress-$status-800-150")
-            assertTrue(fixture.hasText("Analysis"))
+            val run = acceptanceRun(status)
+            fixture.assertTextFits(
+                projectRunPresentation(ProjectAnalysisRunState(run = run)).headline)
+            assertFalse(fixture.hasText("Run details"))
+            assertFalse(fixture.hasText("Run limits"))
           }
       listOf("bugs", "performance", "security").forEach { category ->
         ComposeVisualFixture(800, 650, 1.5f) { AcceptanceResultPane(category, status) }

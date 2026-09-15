@@ -28,13 +28,57 @@ class AnalysisWorkspaceStateTest {
             fixture.render("analysis-retry-$width-$scale")
             fixture.assertTextFits("Start analysis")
             fixture.assertTextFits("Analyze stale & failed")
+            assertFalse(fixture.hasText("Run limits"))
+            fixture.assertTextFits("Last run · None")
             assertTrue(starts.isEmpty())
             fixture.clickText("Analyze stale & failed")
             assertEquals(listOf(AnalysisRunLimits(100, 900, 2) to true), starts)
             fixture.clickText("Start analysis")
             assertEquals(false, starts.last().second)
+            assertEquals(AnalysisRunLimits(100, 900, 2), starts.last().first)
           }
     }
+  }
+
+  @Test
+  fun headerUsesStoredProgressAndTimeWithoutInventingMissingFacts() {
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                windowElapsedSeconds = 42,
+                windowFilesCompleted = 3,
+                updatedAt = "2026-09-15T15:30:00Z",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress("semantic", "completed", 1, false),
+                                AnalysisStageProgress("performance", "pending", 0, false)))))
+    assertEquals(
+        "Current run · 1 finished · 1 remaining · 3 files processed · 42s elapsed",
+        projectRunPresentation(ProjectAnalysisRunState(run = run)).headline)
+    assertEquals(
+        "Last run · Paused · 1 of 2 stages · 2026-09-15T15:30:00Z",
+        projectRunPresentation(ProjectAnalysisRunState(run = run.copy(status = "paused"))).headline)
+    assertEquals(
+        "Last run · 1 of 2 stages",
+        projectRunPresentation(
+                ProjectAnalysisRunState(run = run.copy(status = "completed", updatedAt = "")))
+            .headline)
+    assertEquals(
+        "Current run",
+        projectRunPresentation(
+                ProjectAnalysisRunState(
+                    run =
+                        run.copy(
+                            files = emptyList(),
+                            windowFilesCompleted = 0,
+                            windowElapsedSeconds = 0)))
+            .headline)
   }
 
   @Test
