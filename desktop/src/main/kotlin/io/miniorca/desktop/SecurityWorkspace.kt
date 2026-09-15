@@ -18,10 +18,10 @@ internal data class SecurityWorkspacePaneState(
 )
 
 internal data class SecurityWorkspaceActions(
-    val openSource: (SecurityFinding) -> Unit,
     val prepareFix: (SecurityFinding) -> Unit,
     val openAnalysis: () -> Unit,
     val semanticActions: FindingActions,
+    val openResults: (Workspace) -> Unit = {},
 )
 
 internal data class SecurityResult(
@@ -36,13 +36,11 @@ internal data class SecurityResult(
           "${finding.anchor.path}:${finding.anchor.startLine}",
           finding.observedCondition,
           finding.severity,
-          if (finding.evidenceKind == "model_suspicion")
-              "AI suspicion · ${finding.confidence.ifBlank { "unknown confidence" }}"
-          else "Source rule · ${finding.rule}",
+          if (finding.evidenceKind == "model_suspicion") "" else "Rule · ${finding.rule}",
           listOfNotNull(
-                  if (stale) "Stale" else null,
-                  finding.triage.ifBlank { "untriaged" },
-                  finding.verificationState.ifBlank { "unverified" })
+                  "Stale".takeIf { stale },
+                  finding.triage.takeIf { it.isNotBlank() && it !in setOf("open", "untriaged") },
+                  finding.verificationState.takeIf { it.isNotBlank() && it != "unverified" })
               .joinToString(" · "))
 }
 
@@ -145,7 +143,9 @@ internal fun SecurityWorkspacePane(
   AnalysisResultsPane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
-      openAnalysis = actions.openAnalysis) { key ->
+      openAnalysis = actions.openAnalysis,
+      emptyMessage = "No security findings reported in the analyzed scope.",
+      openResults = actions.openResults) { key ->
         val result = results.firstOrNull { it.row().key == key }
         if (result != null) SecurityFindingDetails(result, state.index, actions)
         else
@@ -162,6 +162,10 @@ private fun SecurityFindingDetails(
     actions: SecurityWorkspaceActions
 ) {
   val finding = result.finding
+  val canPrepare =
+      !result.stale &&
+          securityReportMatchesIndex(result.report, index) &&
+          securityFindingCanPrepareFix(finding, index)
   var technical by remember(result.row().key) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     ResultRowContent(result.row().copy(summary = ""))
@@ -171,25 +175,28 @@ private fun SecurityFindingDetails(
     ModelResultContent(finding.remediation)
     ResponsiveActionGroup(Modifier.fillMaxWidth()) {
       MiniOrcaButton(
-          onClick = { actions.openSource(finding) },
-          enabled = securityFindingNavigationTarget(finding, index) != null,
-          tone = ActionTone.Navigation) {
-            Text("Open source")
-          }
-      MiniOrcaButton(
           onClick = { actions.prepareFix(finding) },
-          enabled =
-              !result.stale &&
-                  securityReportMatchesIndex(result.report, index) &&
-                  securityFindingCanPrepareFix(finding, index),
+          enabled = canPrepare,
           tone = ActionTone.Primary) {
             Text("Prepare fix")
           }
     }
+    if (!canPrepare)
+        Text(
+            if (result.stale) "Analyze again to prepare a fix from current source."
+            else "Fix preparation requires a matching indexed Go declaration.",
+            color = SecondaryText,
+            style = IdeTypography.compactBody)
     if (result.report.reason.isNotBlank())
         Text(result.report.reason, color = Warning, style = IdeTypography.compactBody)
     IdeDisclosureHeader("Evidence and safe verification", technical, { technical = !technical })
     if (technical) {
+      Text(
+          if (finding.evidenceKind == "model_suspicion")
+              "Model hypothesis; verify the preconditions and source evidence."
+          else "Matched source rule: ${finding.rule}. Verify the preconditions before remediation.",
+          color = SecondaryText,
+          style = IdeTypography.compactBody)
       Text("Preconditions / unknowns", style = IdeTypography.resultLabel, color = PrimaryText)
       ModelResultContent(finding.preconditions.ifBlank { "Not provided" })
       Text("Safe verification idea", style = IdeTypography.resultLabel, color = PrimaryText)

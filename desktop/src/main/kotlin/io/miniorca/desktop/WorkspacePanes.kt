@@ -186,6 +186,7 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
       page = state.page,
       rows = visible.map(::semanticResultRow),
       openAnalysis = actions.openAnalysis,
+      openResults = actions.openResults,
       emptyMessage = if (state.loading) "Loading findings…" else "No findings yet.",
       tools = {
         val scan = verifiedScanProgress(state.scan)
@@ -248,17 +249,24 @@ internal fun FindingDetailsRegion(finding: UnifiedFinding, actions: FindingActio
         finding.title.ifBlank { "Untitled finding" },
         style = IdeTypography.resultHeading,
         color = PrimaryText)
-    ResponsiveActionGroup(Modifier.fillMaxWidth()) {
-      IdeLabelBadge(
-          finding.severity.ifBlank { "Unknown severity" }, resultSeverityTint(finding.severity))
-      IdeLabelBadge(findingStatusLabel(finding), SecondaryText)
-    }
+    IdeLabelBadge(
+        finding.severity.ifBlank { "Unknown severity" }, resultSeverityTint(finding.severity))
     Text(findingLocationLabel(finding), style = IdeTypography.resultCode, color = SelectionText)
-    Text(findingProvenanceLabel(finding), style = IdeTypography.compactBody, color = SecondaryText)
+    findingMaterialStateLabel(finding).takeIf(String::isNotBlank)?.let {
+      Text(it, style = IdeTypography.compactBody, color = Warning)
+    }
     ModelResultContent(finding.message.ifBlank { "No summary supplied." })
     FindingActionButtons(finding, actions)
+    if (!findingCanPrepareFix(finding))
+        Text(
+            if (finding.freshness == "stale") "Analyze again to prepare a fix from current source."
+            else "Fix preparation requires a current declaration task with acceptance criteria.",
+            style = IdeTypography.compactBody,
+            color = SecondaryText)
     IdeDisclosureHeader("Evidence and fix criteria", technical, { technical = !technical })
     if (technical) {
+      Text(
+          findingEvidenceSummary(finding), style = IdeTypography.compactBody, color = SecondaryText)
       if (finding.evidence.isNotBlank()) ModelResultContent(finding.evidence)
       finding.taskSpec?.let { task ->
         Text(
@@ -295,4 +303,5 @@ internal data class BugsWorkspaceActions(
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
     val openAnalysis: () -> Unit = {},
+    val openResults: (Workspace) -> Unit = {},
 )

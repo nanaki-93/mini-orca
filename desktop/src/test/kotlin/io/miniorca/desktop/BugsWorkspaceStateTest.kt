@@ -30,7 +30,7 @@ class BugsWorkspaceStateTest {
           BugsWorkspacePane(
               BugsWorkspacePaneState(emptyList(), report, false),
               BugsWorkspaceActions(
-                  FindingActions({}, {}, { _, _ -> }), { executions++ }, { executions++ }))
+                  FindingActions({}, { _, _ -> }), { executions++ }, { executions++ }))
         }
         .use { fixture ->
           fixture.render()
@@ -170,10 +170,10 @@ class BugsWorkspaceStateTest {
 
   @Test
   fun findingPresentationLabelsExposeProvenanceLocationLifecycleAndFreshness() {
-    assertTrue(findingProvenanceLabel(verified).contains("VERIFIED / TOOL-REPORTED"))
-    assertTrue(findingProvenanceLabel(verified).contains("source vet"))
-    assertEquals("open · fresh", findingStatusLabel(verified))
-    assertFalse(findingStatusLabel(verified).contains("revision"))
+    assertEquals(FindingClassification.Verified, classifyFinding(verified))
+    assertTrue(findingEvidenceSummary(verified).contains("vet"))
+    assertEquals("", findingMaterialStateLabel(verified))
+    assertEquals("Stale", findingMaterialStateLabel(verified.copy(freshness = "stale")))
     assertEquals("main.go:7 · Run", findingLocationLabel(verified))
   }
 

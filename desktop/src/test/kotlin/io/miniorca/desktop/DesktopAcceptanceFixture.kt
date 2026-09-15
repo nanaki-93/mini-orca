@@ -237,16 +237,16 @@ internal fun acceptanceResultPage(category: String, status: String): AnalysisRes
 @Composable
 internal fun AcceptanceResultPane(category: String, status: String) {
   val page = acceptanceResultPage(category, status)
-  val actions = FindingActions({}, {}, { _, _ -> })
+  val actions = FindingActions({}, { _, _ -> })
   when (category) {
     "performance" ->
         PerformanceWorkspacePane(
             PerformanceWorkspacePaneState(page, resultIndexFixture()),
-            PerformanceWorkspaceActions({ _, _ -> }, { _, _ -> }, {}, actions))
+            PerformanceWorkspaceActions({ _, _ -> }, {}, actions))
     "security" ->
         SecurityWorkspacePane(
             SecurityWorkspacePaneState(page, resultIndexFixture()),
-            SecurityWorkspaceActions({}, {}, {}, actions))
+            SecurityWorkspaceActions({}, {}, actions))
     else ->
         BugsWorkspacePane(
             BugsWorkspacePaneState(page.semantic, null, false, page),

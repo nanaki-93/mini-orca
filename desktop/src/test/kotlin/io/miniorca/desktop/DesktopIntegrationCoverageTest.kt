@@ -115,8 +115,8 @@ class DesktopIntegrationCoverageTest {
     assertEquals(
         FindingPriority.High,
         groupFindingsByPriority(listOf(verified, suggested)).single().priority)
-    assertTrue(findingProvenanceLabel(verified).contains("VERIFIED / TOOL-REPORTED"))
-    assertTrue(findingProvenanceLabel(suggested).contains("AI SUGGESTIONS"))
+    assertTrue(findingEvidenceSummary(verified).startsWith("Reported by"))
+    assertTrue(findingEvidenceSummary(suggested).startsWith("Model proposal"))
 
     controller.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
     val load = controller.beginFileLoad("main.go")!!

@@ -1,9 +1,9 @@
 package io.miniorca.desktop
 
-enum class FindingClassification(val provenanceLabel: String) {
-  Verified("VERIFIED / TOOL-REPORTED"),
-  Suggested("AI SUGGESTIONS"),
-  Unclassified("UNCLASSIFIED FINDINGS"),
+enum class FindingClassification {
+  Verified,
+  Suggested,
+  Unclassified,
 }
 
 enum class FindingPriority(val sectionLabel: String) {
@@ -122,11 +122,13 @@ fun findingTaskRequirement(finding: UnifiedFinding): String? {
       .trim()
 }
 
-internal fun findingProvenanceLabel(finding: UnifiedFinding): String =
-    "${classifyFinding(finding).provenanceLabel} · source ${finding.source.ifBlank { "unknown" }} · confidence ${finding.confidence.ifBlank { "unknown" }}"
-
-internal fun findingStatusLabel(finding: UnifiedFinding): String =
-    "${finding.status.ifBlank { "unknown" }} · ${finding.freshness.ifBlank { "unknown" }}"
+internal fun findingEvidenceSummary(finding: UnifiedFinding): String =
+    when (classifyFinding(finding)) {
+      FindingClassification.Verified -> "Reported by ${finding.source.ifBlank { "a local tool" }}."
+      FindingClassification.Suggested ->
+          "Model proposal; validate against source before preparing a change."
+      FindingClassification.Unclassified -> "Evidence origin was not classified."
+    }
 
 /** Only explicitly classified semantic bugs and tool-reported diagnostics belong on Bugs. */
 internal fun DesktopState.projectBugFindings(): List<UnifiedFinding> {

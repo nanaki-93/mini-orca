@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,17 +16,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** Explicit finding intents keep ordinary inspection separate from fix preparation. */
 internal class FindingActions(
-    private val openFinding: (UnifiedFinding) -> Unit,
     private val prepareFinding: (UnifiedFinding) -> Unit,
     private val triageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
 ) {
-  fun select(finding: UnifiedFinding) = openFinding(finding)
-
   fun prepareFix(finding: UnifiedFinding) = prepareFinding(finding)
 
   fun triage(finding: UnifiedFinding, action: FindingLifecycleAction) =
@@ -38,13 +38,6 @@ internal fun FindingActionButtons(
     actions: FindingActions,
 ) {
   ResponsiveActionGroup(Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact)) {
-    MiniOrcaButton(
-        onClick = { actions.select(finding) },
-        enabled = finding.location.path.isNotBlank(),
-        tone = ActionTone.Navigation,
-        density = ButtonDensity.Toolbar) {
-          Text("Open source", fontSize = 11.sp)
-        }
     MiniOrcaButton(
         onClick = { actions.prepareFix(finding) },
         enabled = findingCanPrepareFix(finding),
@@ -89,8 +82,22 @@ internal fun semanticResultRow(finding: UnifiedFinding) =
         findingLocationLabel(finding),
         finding.message,
         finding.severity.ifBlank { "Unknown severity" },
-        findingProvenanceLabel(finding),
-        findingStatusLabel(finding))
+        "",
+        findingMaterialStateLabel(finding))
+
+internal fun findingMaterialStateLabel(finding: UnifiedFinding): String =
+    buildList {
+          finding.status
+              .trim()
+              .lowercase()
+              .takeIf {
+                it in setOf("failed", "partial", "unavailable", "canceled", "fixed", "dismissed")
+              }
+              ?.let { add(it.replaceFirstChar(Char::uppercase)) }
+          if (finding.freshness.equals("stale", ignoreCase = true)) add("Stale")
+        }
+        .distinct()
+        .joinToString(" · ")
 
 internal fun resultSeverityTint(severity: String) =
     when (severity.lowercase()) {
@@ -110,10 +117,11 @@ internal fun ResultRowContent(row: ResultRowPresentation) {
         ResponsiveActionGroup(Modifier.fillMaxWidth()) {
           IdeLabelBadge(
               row.severity.replaceFirstChar { it.uppercase() }, resultSeverityTint(row.severity))
-          IdeLabelBadge(row.state, SecondaryText)
+          if (row.state.isNotBlank()) IdeLabelBadge(row.state, SecondaryText)
         }
         Text(row.location, color = SelectionText, style = IdeTypography.resultCode)
-        Text(row.source, color = SecondaryText, style = IdeTypography.compactBody)
+        if (row.source.isNotBlank())
+            Text(row.source, color = SecondaryText, style = IdeTypography.compactBody)
         if (row.summary.isNotBlank())
             Text(
                 row.summary,
@@ -140,7 +148,8 @@ internal fun ResultListDetail(
     Row(Modifier.fillMaxWidth()) {
       if (wide || selected == null) {
         androidx.compose.foundation.lazy.LazyColumn(
-            Modifier.weight(if (wide) 0.42f else 1f).fillMaxHeight()) {
+            Modifier.weight(if (wide) 0.42f else 1f).fillMaxHeight(),
+            contentPadding = PaddingValues(vertical = 4.dp)) {
               if (rows.isEmpty())
                   item {
                     Text(
@@ -151,16 +160,32 @@ internal fun ResultListDetail(
                   }
               items(rows.size, key = { rows[it].key }) { index ->
                 val row = rows[index]
-                Column {
-                  ChromeButton(
-                      onClick = { onSelection(row.key) },
-                      selected = row.key == selectedKey,
-                      accessibleName = "Inspect ${row.title}",
-                      modifier = Modifier.fillMaxWidth()) {
-                        ResultRowContent(row)
-                      }
-                  IdeHorizontalSeparator()
-                }
+                IdeActionSurface(
+                    onClick = { onSelection(row.key) },
+                    colors =
+                        IdeActionColors(
+                            background = Panel,
+                            hoveredBackground = ControlHover,
+                            pressedBackground = SelectionSurface,
+                            selectedBackground = SelectionSurface,
+                            disabledBackground = Panel,
+                            content = PrimaryText,
+                            selectedContent = PrimaryText,
+                            disabledContent = FaintText,
+                            border =
+                                if (row.key == selectedKey) SelectionAccent
+                                else ControlBorder.copy(alpha = 0.45f)),
+                    selected = row.key == selectedKey,
+                    accessibleName = "Inspect ${row.title}",
+                    shape = MiniOrcaShapes.interactiveCard,
+                    minimumHeight = 72.dp,
+                    contentPadding = PaddingValues(10.dp),
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .semantics { this.selected = row.key == selectedKey }) {
+                      ResultRowContent(row)
+                    }
               }
             }
       }
@@ -177,12 +202,13 @@ internal fun ResultListDetail(
                       color = SecondaryText,
                       style = IdeTypography.body)
               else {
-                MiniOrcaButton(
-                    onClick = { onSelection(null) },
-                    tone = ActionTone.Neutral,
-                    density = ButtonDensity.Toolbar) {
-                      Text(if (wide) "Clear selection" else "Back to results")
-                    }
+                if (!wide)
+                    MiniOrcaButton(
+                        onClick = { onSelection(null) },
+                        tone = ActionTone.Neutral,
+                        density = ButtonDensity.Toolbar) {
+                          Text("Back to results")
+                        }
                 detail(selected.key)
               }
             }
@@ -192,28 +218,64 @@ internal fun ResultListDetail(
 }
 
 @Composable
-internal fun ResultSectionHeader(page: AnalysisResultPageState, openAnalysis: () -> Unit) {
-  IdePaneHeader(
-      title = analysisCategoryLabel(page.category),
-      stateLabel = page.statusLabel,
-      stateTint = if (page.stale) Warning else analysisStatusTint(page.progress?.status),
-      actions = {
-        MiniOrcaButton(
-            onClick = openAnalysis, tone = ActionTone.Navigation, density = ButtonDensity.Toolbar) {
-              Text("View analysis")
-            }
-      })
+internal fun ResultSectionHeader(
+    page: AnalysisResultPageState,
+    openAnalysis: () -> Unit,
+    openResults: (Workspace) -> Unit,
+) {
   Column(
-      Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-      verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
-        Text(
-            "Reported findings: ${page.reportedCount?.toString() ?: "Not available"}",
-            style = IdeTypography.resultLabel,
-            color = PrimaryText)
-        Text(
-            analysisCoverageLabel(page.progress?.coverage),
-            style = IdeTypography.compactBody,
-            color = SecondaryText)
+      Modifier.fillMaxWidth().padding(8.dp),
+      verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+          val pages =
+              AnalysisResultType.entries.map { AnalysisResultPageState(it, page.project, page.run) }
+          if (maxWidth >= 640.dp)
+              Row(
+                  Modifier.fillMaxWidth(),
+                  horizontalArrangement =
+                      androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                    pages.forEach { category ->
+                      AnalysisCategoryBox(
+                          category.type,
+                          category.reportedCount,
+                          if (category.stale && category.run != null) "stale"
+                          else category.progress?.status,
+                          analysisStatusTint(
+                              if (category.stale && category.run != null) "stale"
+                              else category.progress?.status),
+                          { openResults(category.type.workspace) },
+                          Modifier.weight(1f),
+                          selected = category.type == page.type)
+                    }
+                  }
+          else
+              Column(
+                  verticalArrangement =
+                      androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                    pages.forEach { category ->
+                      AnalysisCategoryBox(
+                          category.type,
+                          category.reportedCount,
+                          if (category.stale && category.run != null) "stale"
+                          else category.progress?.status,
+                          analysisStatusTint(
+                              if (category.stale && category.run != null) "stale"
+                              else category.progress?.status),
+                          { openResults(category.type.workspace) },
+                          selected = category.type == page.type)
+                    }
+                  }
+        }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+              MiniOrcaButton(
+                  onClick = openAnalysis,
+                  tone = ActionTone.Navigation,
+                  density = ButtonDensity.Toolbar) {
+                    Text("View analysis")
+                  }
+            }
         page.section.error?.let {
           Text(
               "Results could not be refreshed: $it",
