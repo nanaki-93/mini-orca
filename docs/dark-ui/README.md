@@ -8,6 +8,10 @@ only for tab hierarchy and readable context grouping.
 
 Current rules and tokens live in
 [desktop/UI_DESIGN_GUIDELINES.md](../../desktop/UI_DESIGN_GUIDELINES.md).
+For new or changed flows, follow its
+[self-explanatory UI and copy rules](../../desktop/UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy).
+Use the mocks for visual hierarchy; their titles, subtitles and explanatory text
+are not required content for every pane.
 The dark theme, navigation and Jewel migration are already implemented. Do not
 repeat those migrations or restore the older navy/purple palette.
 

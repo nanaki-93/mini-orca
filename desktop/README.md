@@ -182,7 +182,10 @@ send a request or change source. No file-scoped start controls or duplicate bott
 Problems/Checks/Output panels remain.
 
 UI work follows [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and the
-[single plan](../PLAN.md). Existing metadata and visual-preference migration is documented in the
+[current product decisions](../PLAN.md#current-ui-direction--2026-09-15), including
+the [self-explanatory UI and copy rules](UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy)
+for new and changed features. Existing metadata and visual-preference migration
+is documented in the
 [root guide](../README.md#existing-projects-and-preferences); model-scope names are unchanged.
 
 ### Choose files for project analysis

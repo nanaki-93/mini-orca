@@ -5,6 +5,52 @@ and [dark UI direction](../docs/dark-ui/README.md). Build a dense, coherent deve
 tool with source, context and evidence. [PLAN.md](../PLAN.md) owns implementation
 priorities; the screenshot's sample facts and unsupported controls are illustrative.
 
+## Self-explanatory UI and copy
+
+For every new or changed feature, make the task, current state and next action
+clear through layout, grouping, familiar controls and direct labels. Simplify an
+unclear interaction before adding instructions to explain it.
+
+- **Titles are optional.** Use a short title when it identifies a pane, dialog or
+  distinct content group. Omit headings that repeat the active tab, nearby label
+  or the same information at another level. Do not add subtitles or introductory
+  paragraphs by default.
+- **Actions say what they do.** Prefer familiar verb/object labels such as
+  **Open project**, **Start analysis** and **New function**. Keep names consistent
+  across entry points; avoid generic labels when the outcome is unclear. Do not
+  add a sentence telling users to click an already clear button.
+- **Fields remain identifiable.** Keep concise persistent labels. Add a hint or
+  example only for a non-obvious format or constraint; placeholders must not be
+  the only label. Put validation beside the affected field when it is relevant.
+- **Show state where it matters.** Use a compact status and the relevant action.
+  Empty states need only the missing context and a useful next step when one
+  exists; failures and blocked actions need a specific reason and recovery when
+  available. Avoid repeating the same message in a banner, header and body.
+- **Reveal optional detail on demand.** Put metadata, provenance detail, logs and
+  longer explanations in an existing details view or labeled disclosure. Tooltips
+  can clarify secondary controls or show shortcuts; essential instructions,
+  errors and decisions must not depend on hover or opening optional help.
+- **Keep decision-critical information visible.** Show the relevant target,
+  consequence, consent and trust requirements before an action. Preserve distinct
+  result states, evidence types and uncertainty. Do not add generic warnings or
+  implementation details that do not affect the user's decision.
+- **Keep controls accessible.** Retain visible labels for unfamiliar actions,
+  accessible names/states for every control and visible keyboard focus. Icon-only
+  controls are appropriate when familiar and unambiguous in context, with names
+  available on hover/focus. Color alone cannot communicate meaning.
+- **Preserve useful content.** Requested code explanations, findings, evidence
+  and diagnostics are task content. Keep their meaning and full content available;
+  remove repetitive interface scaffolding around them, without inventing a shorter
+  result or silently discarding information.
+
+Illustrative copy choices for future changes:
+
+| Situation | Preferred presentation |
+| --- | --- |
+| Analysis already identified by navigation | **Start analysis** and current status; omit another Analysis heading and “Click Start analysis to begin.” |
+| No project open | **Open project**; add a short empty-state label only if the surrounding view does not explain what is missing. |
+| Apply blocked by an edited draft | A concise stale-validation reason beside the relevant action; optional diagnostics in Details. |
+
 ## One design system
 
 Jewel standalone is already adopted. Use `DesktopTheme.kt`, `ChromeControls.kt`
@@ -44,8 +90,9 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
 - Body 12–13sp with explicit 18–20sp line height; secondary chrome 11–12sp;
   section labels 12sp semibold; breadcrumbs 12sp; source/diff monospaced and readable. Grow at 125/150% text
   scale rather than clipping or shrinking the font to fit.
-- Keep restrained titles and labeled state. Headers own their actions, especially
-  Start/Pause/Resume/Cancel. Trailing actions never toggle an adjacent disclosure.
+- Use headings only where they add orientation; keep labeled state. Headers own
+  their actions, especially Start/Pause/Resume/Cancel. Trailing actions never toggle
+  an adjacent disclosure.
   Use short labels/tooltips/accessibility names when an icon is ambiguous.
 - Selection has a blue fill and accent edge, including the file tree; keyboard
   focus is independently visible. Focused buttons add a dark inner keyline so the
@@ -80,8 +127,9 @@ Keep empty, loading, stale, failed, partial, canceled and unavailable states
 explicit. Unknown metrics are not zero. Daemon connectivity is not provider
 connectivity. No fabricated findings, project facts or scores in normal usage.
 
-Model results use primary body text, 13sp semibold headings and 12sp semibold
-labels. Keep the supported summary, severity/state and useful action visible;
+Model results use primary body text; where needed, headings use 13sp semibold
+and labels use 12sp semibold. These styles do not require a heading or label on
+every block. Keep the supported summary, severity/state and useful action visible;
 place metadata and optional technical details behind a labeled disclosure. Use
 the teal result accent for explanation identity, not as a severity verdict.
 Badges always include a text label and wrap rather than clipping their meaning.
@@ -103,6 +151,15 @@ preview or preset may send a provider request, execute code or mutate source.
 Fresh AI requests require explicit scope-specific consent where applicable.
 
 ## Verification
+
+Review each changed flow with optional help and details collapsed:
+
+- Can a user identify the content, scope, current state and next action from the
+  controls and layout, without reading introductory instructions?
+- Does each title, subtitle, hint and sentence add information needed to act,
+  decide or recover? Remove repetition; fix unclear interactions before adding copy.
+- Are required labels, errors, consequences and consent still available at the
+  point of action, including with keyboard focus and without relying on color?
 
 Compare rendered production components to the references for every substantive
 visual change. Check wide views, 1000/999dp, 800×650, 1280×600, large text, long

@@ -92,7 +92,9 @@ explicitly after adding, removing or renaming files in the terminal.
 
 ## Development and documentation
 
-Follow [AGENTS.md](AGENTS.md). Run focused tests while editing. For a clean checkout,
+Follow [AGENTS.md](AGENTS.md). UI contributions follow the
+[self-explanatory UI and copy guidelines](desktop/UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy).
+Run focused tests while editing. For a clean checkout,
 install Go 1.22 and use the checked-in Gradle wrapper. The full local gate is:
 
 ```sh

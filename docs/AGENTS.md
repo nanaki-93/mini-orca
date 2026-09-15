@@ -13,6 +13,11 @@ Read [../AGENTS.md](../AGENTS.md) first. Use these rules for root Markdown and
 - Keep agent instructions short and actionable. Shared rules belong in root
   `AGENTS.md`; area rules belong in the relevant area file and must be linked from
   the root. Update affected instructions when ownership or commands change.
+- UI specifications and acceptance criteria must follow the
+  [UI copy rules](../desktop/UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy).
+  Describe the interaction and necessary labels/states; do not prescribe a title,
+  subtitle or explanatory paragraph for every surface. Keep developer rationale in
+  documentation and distinguish proposed copy from text already in the product.
 - Do not turn an ordinary edit into a new plan, completion report or historical
   transcript. Update a task ledger only when the request belongs to that ledger.
   Preserve historical receipts, budgets, verdicts and sealed evaluation material.

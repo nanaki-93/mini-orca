@@ -11,6 +11,21 @@ This file owns product decisions and the execution/status ledger. `docs/tasks.md
 owns the current implementation cards. Previous status and acceptance records
 remain below; their automation and commit instructions do not extend this scope.
 
+## Current UI direction — 2026-09-15
+
+The user requested self-explanatory UI with fewer explanations, titles and
+subtitles. For future UI work and changes to existing flows, use clear layout,
+familiar controls and short labels; add text only when it helps users identify
+content, act, decide or recover. This refines the earlier presentation rules:
+headings, summaries and introductory copy are not mandatory interface layers.
+Keep useful requested content, accessible names, truthful states and the scope,
+consequences and consent needed for an action.
+
+[UI guidelines](desktop/UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy) own
+the implementation and review rules. This is design guidance, not a claim that
+existing screens have been revised. The completed queue and its evidence remain
+historical records.
+
 ## Planning baseline — 2026-09-11
 
 | Request | What exists | What needs to change |
