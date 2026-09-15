@@ -105,6 +105,13 @@ class DesktopVisualLayoutTest {
               analysisRunFixture()
                   .copy(
                       status = "running",
+                      sections =
+                          analysisRunFixture().sections.map {
+                            it.copy(
+                                status = "running",
+                                coverage = AnalysisRunCoverage(total = 1, running = 1),
+                                findingCount = null)
+                          },
                       files =
                           listOf(
                               AnalysisRunFile(
@@ -2467,6 +2474,17 @@ internal class ComposeVisualFixture(
   fun requestFocus(label: String): Boolean =
       textNodes(label)
           .asSequence()
+          .flatMap { node -> generateSequence(node) { it.parent } }
+          .mapNotNull { it.config.getOrNull(SemanticsActions.RequestFocus)?.action }
+          .firstOrNull()
+          ?.invoke() ?: false
+
+  fun requestDescriptionFocus(label: String): Boolean =
+      nodes()
+          .asSequence()
+          .filter {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          }
           .flatMap { node -> generateSequence(node) { it.parent } }
           .mapNotNull { it.config.getOrNull(SemanticsActions.RequestFocus)?.action }
           .firstOrNull()

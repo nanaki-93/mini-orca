@@ -2,7 +2,7 @@
 
 Implement the user's Summary, Analysis and Bugs / Performance / Security cleanup:
 rounded shared controls, live clickable category boxes, simpler results and working
-offline diagrams. POLISH-01–05 are accepted; POLISH-06 remains planned work.
+offline diagrams. POLISH-01–06 are accepted; the scheduler is paused.
 
 ## Current execution scope
 
@@ -398,7 +398,7 @@ this accepted card locally and resume the scheduler for POLISH-05.
 
 ## Task POLISH-05 — Cleaner result pages and one Prepare fix action
 
-**Status:** [x] Complete after Astra High repair 1/1. POLISH-06 is next.
+**Status:** [x] Complete after Astra High repair 1/1.
 
 **SOL candidate — 2026-09-16.** Result pages now use the shared category boxes,
 rounded selectable rows, compact evidence copy and one **Prepare fix** action.
@@ -492,7 +492,34 @@ commit and return the task configuration to SOL High without starting another ca
 
 ## Task POLISH-06 — Validate the complete flow and close the queue
 
-**Status:** [ ] Pending; repair attempts: 0/1.
+**Status:** [x] Complete with SOL High; repair attempts: 0/1. Queue closed.
+
+**Execution — 2026-09-16.** Verified `gpt-5.6-sol`, effort `high`; clean baseline
+at POLISH-05 commit `296657f`. Final acceptance adds direct accessibility and
+keyboard coverage for selected category boxes, local row inspection and explicit
+Prepare fix, then runs the complete rendered matrix and repository gates below.
+
+**Acceptance — 2026-09-16.** Added direct accessible-name/selected-state checks
+for every category box and keyboard separation of navigation, row inspection and
+explicit Prepare fix. Corrected the running visual fixture so its category state
+matches the running header; no production code changed in this card.
+
+- `./scripts/desktop-gradle.sh test spotlessCheck detekt
+  -PvisualOutput="$PWD/desktop/build/reports/ui-polish/polish-06"`: **467 passed**,
+  zero failures/errors/skips; Spotless and Detekt passed with zero smells.
+- `./scripts/validate.sh`: PASS, all nine stages. Go formatting/tests/race/vet,
+  contracts/quality, 55 dispatcher tests (one existing opt-in conformance skip),
+  desktop static analysis and desktop tests passed. No live provider call ran.
+- `git diff --check`: PASS. Reviewed 390 production-component captures across the
+  required sizes/scales/states, long failures, live updates, exclusions, diagrams,
+  result detail/back and Prepare fix. Local navigation/disclosures kept workflow
+  callbacks at zero until the explicit fix action.
+- Native-window focus, screen-reader speech and system display scaling were not
+  repeated in this scheduled environment. POLISH-04's packaged Mermaid evidence
+  remains valid because its runtime/package inputs are unchanged.
+
+All six cards are accepted. Save this closure in its required local commit and
+pause `mini-orca-ux-implementation`; no later task is queued.
 
 **Target files**
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — complete production-component acceptance matrix.

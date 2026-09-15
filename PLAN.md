@@ -41,7 +41,7 @@ authorizes a local commit for each completed, validated task and catch-up commit
 for accepted POLISH-01/02 progress. Report each commit hash. Pushes, releases and
 live provider campaigns remain out of scope. Earlier queues remain historical.
 
-**Current status:** 5/6 accepted. POLISH-01/02 deliver rounded controls and live,
+**Current status:** 6/6 accepted. POLISH-01/02 deliver rounded controls and live,
 clickable Summary boxes (catch-up commit `d67ab5a`). POLISH-03 compacts Analysis,
 removes Run limits/details, and collapses Files while preserving selection and
 failure state (commit `fb53e5f`). POLISH-04 repairs the ignored first diagram click
@@ -52,8 +52,11 @@ POLISH-04 is committed as `96fcad9`. POLISH-05 cleans result rows/details, adds
 shared category navigation and keeps one Prepare fix action. Its final gate passed
 all 465 desktop tests, Spotless and Detekt after Astra High repair 1/1; see its
 [card evidence](docs/tasks.md#task-polish-05--cleaner-result-pages-and-one-prepare-fix-action).
-POLISH-06 is next. The scheduler is Active every 20 minutes with SOL High, one
-Astra High repair per card and a local commit after each accepted task.
+POLISH-06 adds direct keyboard/accessibility coverage and closes the queue after
+all 467 desktop tests and the nine-stage repository validation pass. The final
+[acceptance record](docs/RELEASE_ACCEPTANCE.md#ui-polish-acceptance--2026-09-16)
+separates component evidence from unavailable native observations. The scheduler
+is Paused; every completed card is retained in a local commit.
 
 ## Planning baseline — 2026-09-11
 
