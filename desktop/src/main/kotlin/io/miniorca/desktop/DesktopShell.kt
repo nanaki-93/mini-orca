@@ -241,12 +241,10 @@ internal data class DesktopShellAnalysisActions(
     val cancelAnalysis: () -> Unit,
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
-    val openPerformanceFinding: (String, PerformanceFinding) -> Unit,
     val preparePerformanceFinding: (String, PerformanceFinding) -> Unit,
     val loadGoBenchmarks: () -> Unit,
     val selectGoBenchmark: (GoBenchmarkChoice) -> Unit,
     val compareSelectedGoBenchmark: () -> Unit,
-    val openSecurityFinding: (SecurityFinding) -> Unit,
     val prepareSecurityFinding: (SecurityFinding) -> Unit,
 )
 
@@ -990,22 +988,23 @@ private fun DesktopCanvas(
                     startScan = analysisActions.startScan,
                     cancelScan = analysisActions.cancelScan,
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
+                    openResults = onWorkspaceSelected,
                 ),
             performanceActions =
                 PerformanceWorkspaceActions(
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
                     semanticActions = findingActions,
-                    openInEditor = analysisActions.openPerformanceFinding,
                     prepareOptimization = analysisActions.preparePerformanceFinding,
                     loadBenchmarks = analysisActions.loadGoBenchmarks,
                     selectBenchmark = analysisActions.selectGoBenchmark,
-                    runBenchmark = analysisActions.compareSelectedGoBenchmark),
+                    runBenchmark = analysisActions.compareSelectedGoBenchmark,
+                    openResults = onWorkspaceSelected),
             securityActions =
                 SecurityWorkspaceActions(
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
                     semanticActions = findingActions,
-                    openSource = analysisActions.openSecurityFinding,
-                    prepareFix = analysisActions.prepareSecurityFinding),
+                    prepareFix = analysisActions.prepareSecurityFinding,
+                    openResults = onWorkspaceSelected),
             modifier = Modifier.fillMaxSize(),
         )
       },

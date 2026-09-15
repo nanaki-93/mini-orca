@@ -20,10 +20,12 @@ Its [card evidence](../docs/tasks.md#task-polish-02--summary-alignment-navigatio
 records the interrupted handoff and completed repair. POLISH-03 passed Astra High
 repair 1/1, all 462 desktop tests and quality checks. POLISH-04 passed with SOL
 High, including first-click recovery and packaged offline Mermaid checks. POLISH-05
-is next; no later card has started. Scheduled implementation uses SOL High and repairs use Astra High.
+passed Astra High repair 1/1, all 465 desktop tests and quality checks. POLISH-06
+is next; no later card has started. The scheduler is Active again after the repair.
+Scheduled implementation uses SOL High and repairs use Astra High.
 The user's follow-up authorizes local commits after each accepted card;
 POLISH-01/02 are committed together as `d67ab5a`, POLISH-03 as `fb53e5f`, and
-POLISH-04 receives its own verified local commit.
+POLISH-04 as `96fcad9`. POLISH-05 is saved in its own task commit after acceptance.
 
 ## Per-wake procedure
 

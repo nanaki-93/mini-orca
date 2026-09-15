@@ -2,7 +2,7 @@ package io.miniorca.desktop
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class FindingsPresentationTest {
   private val highOpen =
@@ -26,13 +26,11 @@ class FindingsPresentationTest {
       )
 
   @Test
-  fun selectingAProblemOnlyNavigatesAndNeverPreparesAFix() {
-    var selected: UnifiedFinding? = null
-    var prepared = false
+  fun fixPreparationUsesTheSelectedFindingAndItsExactTarget() {
+    var prepared: UnifiedFinding? = null
     val actions =
         FindingActions(
-            openFinding = { selected = it },
-            prepareFinding = { prepared = true },
+            prepareFinding = { prepared = it },
             triageFinding = { _, _ -> },
         )
     val index =
@@ -41,12 +39,22 @@ class FindingsPresentationTest {
             "revision",
             files = listOf(IndexedFile("internal/main.go", "hash", "Go", false)))
 
-    actions.select(highOpen)
+    actions.prepareFix(highOpen)
 
-    assertEquals(highOpen, selected)
-    assertFalse(prepared)
+    assertEquals(highOpen, prepared)
     assertEquals(
         EditorNavigationTarget("internal/main.go", "Run", 12),
         findingNavigationTarget(highOpen, index))
+  }
+
+  @Test
+  fun routineProvenanceAndOpenFreshLabelsStayOutOfRows() {
+    val current = semanticResultRow(highOpen)
+    val stale = semanticResultRow(highOpen.copy(freshness = "stale", status = "partial"))
+
+    assertEquals("", current.source)
+    assertEquals("", current.state)
+    assertEquals("Partial · Stale", stale.state)
+    assertTrue(current.location.contains("internal/main.go:12"))
   }
 }

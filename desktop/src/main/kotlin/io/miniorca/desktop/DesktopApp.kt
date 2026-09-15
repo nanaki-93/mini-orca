@@ -474,10 +474,6 @@ internal fun MiniOrcaApp(
   }
   val findingActions =
       FindingActions(
-          openFinding = {
-            clearComposerInput()
-            presenter.openFinding(it)
-          },
           prepareFinding = {
             clearComposerInput()
             presenter.prepareFinding(it)
@@ -576,11 +572,6 @@ internal fun MiniOrcaApp(
               cancelAnalysis = presenter::cancelAnalysis,
               startScan = presenter::runVerifiedScan,
               cancelScan = presenter::cancelVerifiedScan,
-              openPerformanceFinding = { path, finding ->
-                clearComposerInput()
-                presenter.openFileInEditor(
-                    path, EditorNavigationTarget(path, finding.symbol, finding.startLine))
-              },
               preparePerformanceFinding = { path, finding ->
                 clearComposerInput()
                 presenter.preparePerformanceFinding(path, finding)
@@ -588,7 +579,6 @@ internal fun MiniOrcaApp(
               loadGoBenchmarks = presenter::loadGoBenchmarks,
               selectGoBenchmark = presenter::selectGoBenchmark,
               compareSelectedGoBenchmark = presenter::compareSelectedGoBenchmark,
-              openSecurityFinding = presenter::openSecurityFinding,
               prepareSecurityFinding = { finding ->
                 clearComposerInput()
                 presenter.prepareSecurityFinding(finding)

@@ -13,11 +13,15 @@ class PerformanceWorkspaceTest {
     val page = performancePageFixture()
     val result = performanceResults(page).single()
     assertEquals("main.go", result.report.path)
-    assertEquals("Not measured", result.row().state)
+    assertEquals("", result.row().state)
+    assertEquals("", result.row().source)
     assertTrue(
         performanceResults(page.copy(project = page.project!!.copy(projectId = "other"))).isEmpty())
     assertTrue(
         performanceResults(page.copy(run = page.run!!.copy(status = "stale"))).single().stale)
+    assertEquals(
+        "Stale",
+        performanceResults(page.copy(run = page.run.copy(status = "stale"))).single().row().state)
   }
 
   @Test

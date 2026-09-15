@@ -2,7 +2,7 @@
 
 Implement the user's Summary, Analysis and Bugs / Performance / Security cleanup:
 rounded shared controls, live clickable category boxes, simpler results and working
-offline diagrams. POLISH-01–04 are accepted; POLISH-05–06 remain planned work.
+offline diagrams. POLISH-01–05 are accepted; POLISH-06 remains planned work.
 
 ## Current execution scope
 
@@ -398,9 +398,55 @@ this accepted card locally and resume the scheduler for POLISH-05.
 
 ## Task POLISH-05 — Cleaner result pages and one Prepare fix action
 
-**Status:** [ ] Pending; repair attempts: 0/1.
+**Status:** [x] Complete after Astra High repair 1/1. POLISH-06 is next.
+
+**SOL candidate — 2026-09-16.** Result pages now use the shared category boxes,
+rounded selectable rows, compact evidence copy and one **Prepare fix** action.
+The focused command failed during `:compileKotlin` before tests ran:
+`FindingsPresentation.kt:189` resolves the semantics receiver's `selected` name
+to the surrounding selected row value, producing a val reassignment/type mismatch.
+Astra High repair 1/1 is limited to disambiguating that selected-state semantics,
+then completing focused/full checks, visual review and the authorized task commit.
+
+**Repair continuation — 2026-09-16.** Qualifying `this.selected` restores compilation.
+The focused suite reaches 63 tests: 61 pass; two legacy visual expectations still
+require the removed Open source action and Completed header. Migrate these checks
+within this repair, retaining action isolation and all meaningful lifecycle states.
+Review also requires retaining evidence distinctions in disclosures and removing
+the now-unused source action wiring. Add the exact dependent targets below before
+editing; the repair count remains 1/1.
+
+**Acceptance — 2026-09-16.** Verified model `gpt-6-astra`, effort `high`.
+All three result pages use rounded selectable rows, shared selected category boxes
+and local cross-category navigation. Routine provenance/lifecycle labels and the
+Open source action are removed; Prepare fix retains existing eligibility owners.
+Evidence distinctions remain in disclosures, meaningful states remain visible,
+and narrow layouts retain Back to results. Removed the obsolete action callbacks
+and presentation helpers, including their dependent app/test inputs.
+
+- Focused command with `-PvisualOutput="$PWD/desktop/build/reports/ui-polish/polish-05"`:
+  **63 passed**, zero failures/errors/skips. Actual pointer clicks exercise all
+  category boxes and rows; preparation callbacks fire only on explicit actions.
+- Initial full gate: **464/465 passed**. An unchanged diagram regression observed
+  failed-state semantics before the disabled button recomposed. Its fixture now
+  renders that transition before asserting disabled, and no longer waits for a
+  transient Loading state on recovery. No diagram implementation changed.
+- Final `./scripts/desktop-gradle.sh test spotlessCheck detekt`: **465 passed**,
+  zero failures/errors/skips; Spotless and Detekt passed, zero smells.
+  `git diff --check`: PASS.
+- Reviewed production renders at 800px and 1280px/150% text against the dark
+  reference: category selection, readable rows, detail/back and Prepare fix are
+  visible. Matrix checks cover wide/narrow, loading, partial, stale, failed and
+  empty results. Native-window and screen-reader checks were not repeated.
+
+Scheduler resumed for POLISH-06. Save this accepted card in its required local
+commit and return the task configuration to SOL High without starting another card.
 
 **Target files**
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — remove unused result-source callbacks.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` — migrate result action inputs.
+- `desktop/src/test/kotlin/io/miniorca/desktop/BugsWorkspaceStateTest.kt` and `desktop/src/test/kotlin/io/miniorca/desktop/DesktopIntegrationCoverageTest.kt` — migrate removed presentation helpers without weakening classification checks.
+- `PLAN.md` and `tasks/README.md` — current repair, commit and scheduler status.
 - `desktop/src/main/kotlin/io/miniorca/desktop/FindingsPresentation.kt` — common rows/detail layout, metadata and actions.
 - `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisResultsPane.kt` — shared first-line boxes and removal of repeated banners.
 - `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — Bugs detail cleanup and category navigation inputs.

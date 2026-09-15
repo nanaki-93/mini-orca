@@ -31,6 +31,7 @@ internal fun PerformanceWorkspacePane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
       openAnalysis = actions.openAnalysis,
+      openResults = actions.openResults,
       tools = {
         if (state.expectedBenchmarkIdentity != null ||
             state.benchmarkCatalog != null ||
@@ -79,8 +80,8 @@ internal data class PerformanceResult(
           "${report.path}:${finding.startLine}",
           finding.observedPattern,
           finding.potentialImpact.ifBlank { "Unknown impact" },
-          "Performance review · ${finding.confidence.ifBlank { "unknown confidence" }}",
-          if (stale) "Stale · Not measured" else "Not measured")
+          "",
+          if (stale) "Stale" else "")
 }
 
 internal fun performanceResults(page: AnalysisResultPageState): List<PerformanceResult> =
@@ -140,20 +141,25 @@ private fun PerformanceFindingDetails(
     ModelResultContent(finding.recommendation)
     ResponsiveActionGroup(Modifier.fillMaxWidth()) {
       MiniOrcaButton(
-          onClick = { actions.openInEditor(result.report.path, finding) },
-          tone = ActionTone.Navigation) {
-            Text("Open source")
-          }
-      MiniOrcaButton(
           onClick = { actions.prepareOptimization(result.report.path, finding) },
           enabled = performanceCanPrepare(result, index),
           tone = ActionTone.Primary) {
-            Text("Prepare optimization")
+            Text("Prepare fix")
           }
     }
+    if (!performanceCanPrepare(result, index))
+        Text(
+            if (result.stale) "Analyze again to prepare a fix from current source."
+            else "Fix preparation requires a matching indexed Go declaration.",
+            color = SecondaryText,
+            style = IdeTypography.compactBody)
     IdeDisclosureHeader(
         "Workload, trade-offs and verification", technical, { technical = !technical })
     if (technical) {
+      Text(
+          "Potential improvement; benchmark the affected workload to verify its impact.",
+          color = SecondaryText,
+          style = IdeTypography.compactBody)
       Text("When it matters", style = IdeTypography.resultLabel, color = PrimaryText)
       ModelResultContent(finding.workloadConditions)
       Text("Trade-offs", style = IdeTypography.resultLabel, color = PrimaryText)
@@ -329,13 +335,13 @@ internal data class PerformanceWorkspacePaneState(
 )
 
 internal data class PerformanceWorkspaceActions(
-    val openInEditor: (String, PerformanceFinding) -> Unit,
     val prepareOptimization: (String, PerformanceFinding) -> Unit,
     val openAnalysis: () -> Unit,
     val semanticActions: FindingActions,
     val loadBenchmarks: () -> Unit = {},
     val selectBenchmark: (GoBenchmarkChoice) -> Unit = {},
     val runBenchmark: () -> Unit = {},
+    val openResults: (Workspace) -> Unit = {},
 )
 
 internal data class GoBenchmarkComparisonIdentity(

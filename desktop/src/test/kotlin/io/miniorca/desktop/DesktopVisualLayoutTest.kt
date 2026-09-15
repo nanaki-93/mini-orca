@@ -78,7 +78,12 @@ class DesktopVisualLayoutTest {
             .use { fixture ->
               fixture.render("final-$category-$status-800-150")
               fixture.assertTextFits("View analysis")
-              assertTrue(fixture.hasText(acceptanceResultPage(category, status).statusLabel))
+              val page = acceptanceResultPage(category, status)
+              if (status == "completed") assertFalse(fixture.hasText("Completed"))
+              else
+                  fixture.assertTextFits(
+                      if (status == "completed_empty") "No results" else page.statusLabel)
+              assertTrue(fixture.isDescriptionSelected("View ${page.type.workspace.name} results"))
               assertFalse(fixture.hasText("Start analysis"))
             }
       }
@@ -254,6 +259,7 @@ class DesktopVisualLayoutTest {
         .forEach { (width, height, scale) ->
           listOf("bugs", "performance", "security").forEach { category ->
             var externalActions = 0
+            val navigation = mutableListOf<Workspace>()
             val title =
                 when (category) {
                   "bugs" -> "Return the missing error"
@@ -288,8 +294,7 @@ class DesktopVisualLayoutTest {
             var page by
                 mutableStateOf(original.copy(section = AnalysisSectionState(loading = true)))
             val findingActions =
-                FindingActions(
-                    { externalActions++ }, { externalActions++ }, { _, _ -> externalActions++ })
+                FindingActions({ externalActions++ }, { _, _ -> externalActions++ })
             ComposeVisualFixture(width, height, scale) {
                   when (category) {
                     "performance" ->
@@ -297,17 +302,17 @@ class DesktopVisualLayoutTest {
                             PerformanceWorkspacePaneState(page, resultIndexFixture()),
                             PerformanceWorkspaceActions(
                                 { _, _ -> externalActions++ },
-                                { _, _ -> externalActions++ },
                                 { externalActions++ },
-                                findingActions))
+                                findingActions,
+                                openResults = { navigation += it }))
                     "security" ->
                         SecurityWorkspacePane(
                             SecurityWorkspacePaneState(page, resultIndexFixture()),
                             SecurityWorkspaceActions(
                                 { externalActions++ },
                                 { externalActions++ },
-                                { externalActions++ },
-                                findingActions))
+                                findingActions,
+                                openResults = { navigation += it }))
                     else ->
                         BugsWorkspacePane(
                             BugsWorkspacePaneState(page.semantic, null, false, page),
@@ -315,7 +320,8 @@ class DesktopVisualLayoutTest {
                                 findingActions,
                                 { externalActions++ },
                                 { externalActions++ },
-                                { externalActions++ }))
+                                { externalActions++ },
+                                openResults = { navigation += it }))
                   }
                 }
                 .use { fixture ->
@@ -326,23 +332,30 @@ class DesktopVisualLayoutTest {
                   fixture.render("results-$category-$width-$scale")
                   fixture.assertTextFits("View analysis")
                   fixture.assertTextFits(title)
+                  assertTrue(fixture.hasDescription("View Bugs results"))
+                  assertTrue(fixture.hasDescription("View Performance results"))
+                  assertTrue(fixture.hasDescription("View Security results"))
+                  assertFalse(fixture.hasText("AI SUGGESTIONS"))
+                  assertFalse(fixture.hasText("AI suspicion"))
+                  assertFalse(fixture.hasText("Performance review"))
+                  assertFalse(fixture.hasText("Not measured"))
                   assertFalse(
                       fixture.hasEditableText(), "Result pages must show the unfiltered list")
                   assertFalse(fixture.hasText("Start analysis"))
                   assertFalse(fixture.hasText("Review"))
                   fixture.clickDescription("Inspect $title")
                   fixture.render("results-$category-detail-$width-$scale")
-                  assertTrue(
-                      fixture.hasText(if (width < 900) "Back to results" else "Clear selection"))
-                  assertTrue(
-                      fixture.hasText(
-                          if (category == "performance") "Prepare optimization"
-                          else if (category == "security") "Prepare fix" else "Open source"))
+                  assertEquals(width < 900, fixture.hasText("Back to results"))
+                  assertFalse(fixture.hasText("Clear selection"))
+                  assertTrue(fixture.hasText("Prepare fix"))
+                  assertFalse(fixture.hasText("Open source"))
                   assertEquals(0, externalActions)
-                  fixture.clickText(if (width < 900) "Back to results" else "Clear selection")
-                  fixture.render()
-                  assertTrue(fixture.hasDescription("Inspect $title"))
-                  fixture.clickDescription("Inspect $title")
+                  if (width < 900) {
+                    fixture.clickText("Back to results")
+                    fixture.render()
+                    assertTrue(fixture.hasDescription("Inspect $title"))
+                    fixture.clickDescription("Inspect $title")
+                  }
                   val nextRun =
                       original.run!!.copy(identity = original.run.identity.copy(id = "next-run"))
                   page =
@@ -356,6 +369,17 @@ class DesktopVisualLayoutTest {
                   assertFalse(fixture.hasText("Back to results"))
                   assertFalse(fixture.hasText("Clear selection"))
                   assertEquals(0, externalActions)
+                  listOf(Workspace.Bugs, Workspace.Performance, Workspace.Security).forEach {
+                    fixture.clickVisibleDescription("View ${it.name} results")
+                    assertEquals(it, navigation.last())
+                  }
+                  assertEquals(0, externalActions)
+                  fixture.clickVisibleDescription("Inspect $title")
+                  fixture.render()
+                  if (category != "bugs") {
+                    fixture.clickText("Prepare fix")
+                    assertEquals(1, externalActions)
+                  }
                 }
           }
         }
@@ -372,26 +396,25 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 650, 1.25f) {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(stale, resultIndexFixture()),
-              PerformanceWorkspaceActions(
-                  { _, _ -> }, { _, _ -> }, {}, FindingActions({}, {}, { _, _ -> })))
+              PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> })))
         }
         .use { fixture ->
           fixture.render("results-stale-error-800-1.25")
-          assertTrue(fixture.hasText("Reported findings: Not available"))
+          assertFalse(fixture.hasText("Reported findings"))
           fixture.clickDescription("Inspect Avoid repeated allocation")
           fixture.render()
-          assertTrue(fixture.isDisabled("Prepare optimization"))
-          assertTrue(fixture.hasText("Stale · Not measured"))
+          assertTrue(fixture.isDisabled("Prepare fix"))
+          assertTrue(fixture.hasText("Stale"))
         }
     val empty = resultPageFixture("bugs").copy(run = null, section = AnalysisSectionState())
     ComposeVisualFixture(800, 650, 1.5f) {
           BugsWorkspacePane(
               BugsWorkspacePaneState(emptyList(), null, false, empty),
-              BugsWorkspaceActions(FindingActions({}, {}, { _, _ -> }), {}, {}))
+              BugsWorkspaceActions(FindingActions({}, { _, _ -> }), {}, {}))
         }
         .use { fixture ->
           fixture.render("results-empty-800-1.5")
-          assertTrue(fixture.hasText("Reported findings: Not available"))
+          assertFalse(fixture.hasText("Reported findings"))
           assertTrue(fixture.hasText("No findings yet."))
         }
     ComposeVisualFixture(800, 650) {
@@ -1951,12 +1974,14 @@ class DesktopVisualLayoutTest {
 
             value = "flowchart TD\n A[Node]\n click A \"https://example.com\""
             fixture.awaitDescription("Show $label diagram", "Diagram unavailable")
+            // State semantics can observe the render result before enabled recomposes.
+            fixture.render()
             assertTrue(fixture.isDisabled("Show diagram"))
             assertTrue(fixture.hasText(value))
             assertFalse(fixture.tryClick("Show diagram"))
 
             value = "sequenceDiagram\n Client->>API: Retry\n API-->>Client: Ready"
-            fixture.awaitDescription("Show $label diagram", "Rendering diagram")
+            fixture.render()
             assertTrue(fixture.tryClick("Show diagram"))
             fixture.awaitDescription("$label diagram\n$value")
             assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
@@ -2105,7 +2130,6 @@ class DesktopVisualLayoutTest {
               BugsWorkspacePaneState(visualFixtureFindings, null, false),
               BugsWorkspaceActions(
                   FindingActions(
-                      openFinding = { workflowActions++ },
                       prepareFinding = { workflowActions++ },
                       triageFinding = { _, _ -> workflowActions++ }),
                   {},
@@ -2174,24 +2198,24 @@ class DesktopVisualLayoutTest {
 
   @Test
   fun problemRowsRevealDetailsBeforeAnyWorkflowAction() {
-    var sourceRequests = 0
     var mutations = 0
     ComposeVisualFixture(900, 500) {
           BugsWorkspacePane(
               BugsWorkspacePaneState(visualFixtureFindings, null, false),
               BugsWorkspaceActions(
-                  FindingActions({ sourceRequests++ }, { mutations++ }, { _, _ -> mutations++ }),
-                  {},
-                  {}))
+                  FindingActions({ mutations++ }, { _, _ -> mutations++ }), {}, {}))
         }
         .use { fixture ->
           fixture.render()
           fixture.clickText("Validate the user identifier")
           fixture.render()
-          kotlin.test.assertEquals(0, sourceRequests)
           kotlin.test.assertEquals(0, mutations)
-          fixture.clickText("Open source")
-          kotlin.test.assertEquals(1, sourceRequests)
+          assertFalse(fixture.hasText("Open source"))
+          assertTrue(fixture.isDisabled("Prepare fix"))
+          fixture.clickText("Evidence and fix criteria")
+          fixture.render()
+          assertTrue(
+              fixture.hasText("Model proposal; validate against source before preparing a change."))
           kotlin.test.assertEquals(0, mutations)
         }
   }

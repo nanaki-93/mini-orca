@@ -153,8 +153,9 @@ class SecurityWorkspaceTest {
     val page = securityPageFixture()
     val rows = securityResults(page)
     assertEquals(2, rows.size)
-    assertTrue(rows.any { it.row().source.startsWith("Source rule") })
-    assertTrue(rows.any { it.row().source.startsWith("AI suspicion") })
+    assertTrue(rows.any { it.row().source == "Rule · credential_literal" })
+    assertTrue(rows.any { it.row().source.isBlank() })
+    assertTrue(rows.all { it.row().state.isBlank() })
     assertEquals(2, rows.map { it.row().key }.distinct().size)
     val state =
         DesktopState(
