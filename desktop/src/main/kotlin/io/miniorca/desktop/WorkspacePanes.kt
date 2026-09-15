@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
@@ -42,11 +42,6 @@ internal fun AnalysisWorkspacePane(
 ) {
   val analysis = state.analysis
   val presentation = projectRunPresentation(analysis)
-  var batchFiles by remember { mutableStateOf("100") }
-  var budget by remember { mutableStateOf("900") }
-  var attempts by remember { mutableStateOf("2") }
-  var optionsExpanded by remember { mutableStateOf(false) }
-  var detailsExpanded by remember { mutableStateOf(false) }
   val busy = analysis.action.isNotEmpty() || analysis.fileSelection.saving
   LazyColumn(
       Modifier.fillMaxSize(),
@@ -54,9 +49,9 @@ internal fun AnalysisWorkspacePane(
       verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
           IdePaneHeader(
-              title = "Analysis",
+              title = presentation.headline,
               icon = DesktopIcon.Analysis,
-              stateLabel = presentation.status,
+              stateLabel = if (analysis.run?.isActive() == true) presentation.status else null,
               stateTint = analysisStatusTint(analysis.run?.status),
               actions = {
                 presentation.commands.forEach { command ->
@@ -66,10 +61,7 @@ internal fun AnalysisWorkspacePane(
                           AnalysisRunCommand.Start,
                           AnalysisRunCommand.RetryStaleFailed ->
                               actions.start(
-                                  AnalysisRunLimits(
-                                      (batchFiles.toIntOrNull() ?: 100).coerceIn(1, 500),
-                                      (budget.toIntOrNull() ?: 900).coerceIn(1, 3600),
-                                      (attempts.toIntOrNull() ?: 2).coerceIn(1, 4)),
+                                  defaultAnalysisRunLimits,
                                   command == AnalysisRunCommand.RetryStaleFailed)
                           AnalysisRunCommand.Pause -> actions.pause()
                           AnalysisRunCommand.Resume -> actions.resume()
@@ -99,19 +91,13 @@ internal fun AnalysisWorkspacePane(
           analysis.error?.let { DiagnosticText(it, color = Error) }
         }
         item {
-          val run = analysis.run
-          if (run == null)
-              Text("No analysis yet.", color = SecondaryText, style = IdeTypography.body)
-          else {
-            Text(
-                "${if (run.isActive()) "Current run" else "Last run"} · ${presentation.finishedSteps} / ${presentation.totalSteps} stages finished",
-                style = IdeTypography.compactBody,
-                color = SecondaryText)
-            IdeProgressBar(
-                presentation.progress,
-                Modifier.fillMaxWidth().padding(vertical = 8.dp).height(4.dp),
-                color = SelectionText,
-                trackColor = StrongSurface)
+          analysis.run?.let { run ->
+            if (run.isActive())
+                IdeProgressBar(
+                    presentation.progress,
+                    Modifier.fillMaxWidth().padding(vertical = 8.dp).height(4.dp),
+                    color = SelectionText,
+                    trackColor = StrongSurface)
             presentation.currentFiles.forEach {
               Text("Current: $it", style = IdeTypography.resultCode, color = SelectionText)
             }
@@ -120,74 +106,16 @@ internal fun AnalysisWorkspacePane(
                     "Saved limited run: ${analysisStageLabel(run.plan.compatibilityStage)}",
                     color = Warning,
                     style = IdeTypography.compactBody)
+            if (run.plan.retryStaleFailed)
+                Text(
+                    "Scope: stale & failed files",
+                    color = SecondaryText,
+                    style = IdeTypography.compactBody)
           }
         }
         item { AnalysisCategoryPanels(state, actions.openResults) }
         item { AnalysisFileSelector(analysis, actions) }
-        analysis.run?.let { run ->
-          item {
-            IdeDisclosureHeader(
-                "Run details",
-                detailsExpanded,
-                { detailsExpanded = !detailsExpanded },
-                stateLabel =
-                    if (presentation.failures.isEmpty()) null
-                    else "${presentation.failures.size} failures",
-                stateTint = if (presentation.failures.isEmpty()) SecondaryText else Error)
-            if (detailsExpanded) {
-              Column(Modifier.padding(8.dp)) {
-                if (run.plan.retryStaleFailed)
-                    Text(
-                        "Scope: stale & failed files",
-                        style = IdeTypography.compactBody,
-                        color = SecondaryText)
-                Text(
-                    "${run.files.size} captured files · ${run.plan.excluded.size} excluded",
-                    style = IdeTypography.compactBody,
-                    color = SecondaryText)
-                Text(
-                    "${run.windowFilesCompleted} files processed in this window · ${run.windowElapsedSeconds}s / ${run.plan.limits.budgetSeconds}s",
-                    style = IdeTypography.compactBody,
-                    color = SecondaryText)
-                run.sections.forEach { section ->
-                  Text(
-                      "${analysisCategoryLabel(section.category)} · ${analysisCoverageLabel(section.coverage)}",
-                      style = IdeTypography.compactBody,
-                      color = SecondaryText)
-                }
-                presentation.failures.forEach { failure -> AnalysisFailureDetails(failure) }
-              }
-            }
-          }
-        }
-        item {
-          IdeDisclosureHeader(
-              "Run limits",
-              optionsExpanded,
-              { optionsExpanded = !optionsExpanded },
-              stateLabel = "Applied to the next new run")
-          if (optionsExpanded)
-              Column(Modifier.padding(8.dp)) {
-                CompactSingleLineField(
-                    batchFiles,
-                    { batchFiles = it },
-                    "File batch (1–500)",
-                    Modifier.fillMaxWidth(),
-                    enabled = !busy)
-                CompactSingleLineField(
-                    budget,
-                    { budget = it },
-                    "Window seconds (1–3600)",
-                    Modifier.fillMaxWidth(),
-                    enabled = !busy)
-                CompactSingleLineField(
-                    attempts,
-                    { attempts = it },
-                    "Total attempts per stage (1–4)",
-                    Modifier.fillMaxWidth(),
-                    enabled = !busy)
-              }
-        }
+        items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
       }
 }
 

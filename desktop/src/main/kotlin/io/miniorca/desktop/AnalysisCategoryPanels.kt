@@ -59,6 +59,26 @@ private fun AnalysisCategoryPanel(
       tint = tint,
       onClick = { openResults(page.type.workspace) },
       modifier = modifier.testTag("analysis-category-${page.type.category}"),
+      details = {
+        page.progress
+            ?.coverage
+            ?.takeIf { !page.stale && it.total > 0 }
+            ?.let { coverage ->
+              val facts = buildList {
+                add("${coverage.succeeded} covered")
+                if (coverage.pending + coverage.running > 0)
+                    add("${coverage.pending + coverage.running} remaining")
+                if (coverage.partial > 0) add("${coverage.partial} partial")
+                if (coverage.failed > 0) add("${coverage.failed} failed")
+                if (coverage.skipped > 0) add("${coverage.skipped} skipped")
+                if (coverage.unavailable > 0) add("${coverage.unavailable} unavailable")
+              }
+              Text(
+                  facts.joinToString(" · "),
+                  color = SecondaryText,
+                  style = IdeTypography.compactBody)
+            }
+      },
   )
 }
 

@@ -5,7 +5,7 @@
 The active 2026-09-15 scope is **POLISH-01–06** at the top of the task file. The
 completed 17-card queue from 2026-09-12 is historical evidence below that queue.
 
-Automation: **Mini-Orca UI polish** (`mini-orca-ux-implementation`), **Paused during POLISH-03 repair**,
+Automation: **Mini-Orca UI polish** (`mini-orca-ux-implementation`), **Active**,
 every 20 minutes and attached to the current Codex task. Local execution requires
 the computer on and the app running, as described in the
 [scheduled-task documentation](https://learn.chatgpt.com/docs/automations?surface=app).
@@ -17,10 +17,11 @@ retains previous failures and distinguishes component checks from native evidenc
 POLISH-02 also passed after Astra High repair 1/1: Summary alignment, whole-box
 navigation and live counts, with all 460 desktop tests and quality checks passing.
 Its [card evidence](../docs/tasks.md#task-polish-02--summary-alignment-navigation-and-live-data)
-records the interrupted handoff and completed repair. POLISH-03 is undergoing
-Astra High repair 1/1; no later card has started. Scheduled implementation uses
-SOL High and the configured repair uses Astra High. The user's follow-up authorizes
-local commits after each accepted card, including the completed POLISH-01/02 work.
+records the interrupted handoff and completed repair. POLISH-03 passed Astra High
+repair 1/1, all 462 desktop tests and quality checks. POLISH-04 is next; no later
+card has started. Scheduled implementation uses SOL High and repairs use Astra High.
+The user's follow-up authorizes local commits after each accepted card;
+POLISH-01/02 are committed together as `d67ab5a`, and POLISH-03 is committed separately.
 
 ## Per-wake procedure
 
