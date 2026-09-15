@@ -13,7 +13,7 @@ class ProjectSummaryIssuesTest {
               analysisRunFixture().let { run ->
                 run.copy(sections = run.sections.map { it.copy(findingCount = count) })
               }
-          val metrics = summaryIssueMetrics(resultProjectFixture(), run, AnalysisSectionState())
+          val metrics = summaryIssueMetrics(resultProjectFixture(), run, emptyMap())
           metrics.drop(1).forEach {
             assertEquals(count, it.score)
             assertEquals(tint, summaryIssueTint(it.score))
@@ -31,7 +31,8 @@ class ProjectSummaryIssuesTest {
             listOf("high", "high", "high", "low") to (10 to Error))
         .forEach { (severities, expected) ->
           val (run, section) = summaryBugFixture(severities)
-          val metric = summaryIssueMetrics(resultProjectFixture(), run, section).first()
+          val metric =
+              summaryIssueMetrics(resultProjectFixture(), run, bugSections(section)).first()
           assertEquals(severities.size, metric.value)
           assertEquals(severities.count { it == "high" }, metric.priorities?.high)
           assertEquals(severities.count { it == "medium" }, metric.priorities?.medium)
@@ -61,17 +62,21 @@ class ProjectSummaryIssuesTest {
                     results.copy(
                         semantic = results.semantic.map { it.copy(category = "security") })))
         .forEach { incomplete ->
-          val metric = summaryIssueMetrics(resultProjectFixture(), run, incomplete).first()
+          val metric =
+              summaryIssueMetrics(resultProjectFixture(), run, bugSections(incomplete)).first()
           assertNull(metric.priorities)
           assertNull(metric.score)
           assertEquals(FaintText, summaryIssueTint(metric.score))
         }
     val (otherRun, otherSection) = summaryBugFixture(listOf("critical"))
-    val other = summaryIssueMetrics(resultProjectFixture(), otherRun, otherSection).first()
+    val other =
+        summaryIssueMetrics(resultProjectFixture(), otherRun, bugSections(otherSection)).first()
     assertEquals(1, other.priorities?.other)
     assertNull(other.score)
     val stale =
-        summaryIssueMetrics(resultProjectFixture(), run.copy(status = "stale"), section).first()
+        summaryIssueMetrics(
+                resultProjectFixture(), run.copy(status = "stale"), bugSections(section))
+            .first()
     assertNull(stale.score)
     assertEquals("Stale", stale.status)
   }
@@ -79,12 +84,43 @@ class ProjectSummaryIssuesTest {
   @Test
   fun completedEmptyBugsHaveZeroPrioritiesAndZeroScore() {
     val (run, _) = summaryBugFixture(emptyList())
-    val metric = summaryIssueMetrics(resultProjectFixture(), run, AnalysisSectionState()).first()
+    val metric = summaryIssueMetrics(resultProjectFixture(), run, emptyMap()).first()
     assertEquals(SummaryBugPriorities(0, 0, 0, 0), metric.priorities)
     assertEquals(0, metric.score)
     assertEquals(Success, summaryIssueTint(metric.score))
   }
+
+  @Test
+  fun eachCategoryKeepsRunCountsWhileItsOwnReportDetailsLoadOrFail() {
+    val (baseRun, bugs) = summaryBugFixture(listOf("high"))
+    val run =
+        baseRun.copy(
+            sections =
+                baseRun.sections.map {
+                  when (it.category) {
+                    "bugs" -> it.copy(findingCount = 7)
+                    "performance" -> it.copy(findingCount = 8)
+                    "security" -> it.copy(findingCount = 9)
+                    else -> it
+                  }
+                })
+    val sections =
+        mapOf(
+            AnalysisResultKey("bugs") to bugs,
+            AnalysisResultKey("performance") to AnalysisSectionState(loading = true),
+            AnalysisResultKey("security") to AnalysisSectionState(error = "Result read failed"))
+
+    val metrics = summaryIssueMetrics(resultProjectFixture(), run, sections)
+
+    assertEquals(listOf(7, 8, 9), metrics.map { it.value })
+    assertNull(metrics.first().priorities, "Mismatched evidence cannot classify a newer count")
+    assertEquals(
+        listOf(null, "Loading details", "Details unavailable"), metrics.map { it.detailStatus })
+  }
 }
+
+internal fun bugSections(section: AnalysisSectionState) =
+    mapOf(AnalysisResultKey("bugs") to section)
 
 internal fun summaryBugFixture(severities: List<String>): Pair<AnalysisRun, AnalysisSectionState> {
   val run =

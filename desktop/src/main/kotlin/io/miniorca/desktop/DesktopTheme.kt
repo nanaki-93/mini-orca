@@ -149,9 +149,11 @@ internal fun ResponsiveFieldPair(
 }
 
 internal object MiniOrcaShapes {
-  val small = RoundedCornerShape(6.dp)
-  val medium = RoundedCornerShape(6.dp)
-  val large = RoundedCornerShape(8.dp)
+  val control = RoundedCornerShape(6.dp)
+  val interactiveCard = RoundedCornerShape(8.dp)
+  val small = control
+  val medium = control
+  val large = interactiveCard
 }
 
 internal object IdeTypography {

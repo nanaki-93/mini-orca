@@ -73,7 +73,7 @@ internal fun projectSummaryPresentation(
     overview: ProjectOverview?,
     project: ProjectAnalysis?,
     run: AnalysisRun? = overview?.analysisRun,
-    bugSection: AnalysisSectionState = AnalysisSectionState(),
+    sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     fileSelection: AnalysisFileSelection? = null,
 ): ProjectSummaryPresentation {
   val metrics =
@@ -117,9 +117,12 @@ internal fun projectSummaryPresentation(
       analysisStatus = normalizedStatus,
       summaryStatus =
           when {
+            run?.isActive() == true -> "running"
+            run?.status == "failed" -> "failed"
             hasCoverage -> analysisCoverageStatus(requireNotNull(coverage))
-            normalizedStatus == "failed" || run?.status == "failed" -> "failed"
+            normalizedStatus == "failed" -> "failed"
             outdated -> "stale"
+            run?.status in setOf("completed", "completed_empty") -> "fresh"
             else -> normalizedStatus
           },
       analysisMessage =
@@ -161,7 +164,7 @@ internal fun projectSummaryPresentation(
                       "Unavailable", coverage?.unavailable, SummaryMetricTone.Failed),
               )
               .filter { it.value != 0 },
-      issueMetrics = summaryIssueMetrics(project, run, bugSection),
+      issueMetrics = summaryIssueMetrics(project, run, sections),
       details = if (interpretationAvailable) projectSummaryDetails(analysis) else emptyList(),
       engineeringInsight = analysis?.engineeringInsight.takeIf { interpretationAvailable },
   )
@@ -198,11 +201,12 @@ private fun projectSummaryDetails(
 internal fun ProjectSummaryPane(
     overview: ProjectOverview?,
     project: ProjectAnalysis?,
+    openResults: (Workspace) -> Unit,
     run: AnalysisRun? = overview?.analysisRun,
-    bugSection: AnalysisSectionState = AnalysisSectionState(),
+    sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     fileSelection: AnalysisFileSelection? = null,
 ) {
-  val presentation = projectSummaryPresentation(overview, project, run, bugSection, fileSelection)
+  val presentation = projectSummaryPresentation(overview, project, run, sections, fileSelection)
   val fontScale = LocalDensity.current.fontScale
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
@@ -227,7 +231,7 @@ internal fun ProjectSummaryPane(
                 ?: Text("No purpose available.", color = SecondaryText, style = IdeTypography.body)
           }
         }
-        item { SummaryOverviewMetrics(presentation) }
+        item { SummaryOverviewMetrics(presentation, openResults) }
         items(presentation.details) { detail -> SummaryDetail(detail) }
         presentation.engineeringInsight?.let { insight ->
           val pieces = engineeringInsightPieces(insight)
@@ -261,20 +265,28 @@ internal fun ProjectSummaryPane(
 }
 
 @Composable
-private fun SummaryOverviewMetrics(presentation: ProjectSummaryPresentation) {
+private fun SummaryOverviewMetrics(
+    presentation: ProjectSummaryPresentation,
+    openResults: (Workspace) -> Unit,
+) {
   val tint = summaryAnalysisTint(presentation.summaryStatus)
   AccentPanel(
       "Analysis summary",
       tint,
       Modifier.testTag("analysis-summary"),
-      trailing = { SummaryAnalysisStatus(presentation) }) {
+      trailing = {
+        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+        SummaryAnalysisStatus(presentation)
+      }) {
         SummaryMetricGrid(
             Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp)) {
               (presentation.projectMetrics +
                       presentation.findingMetrics +
                       presentation.coverageMetrics)
                   .forEach { SummaryMetric(it) }
-              presentation.issueMetrics.forEach { SummaryIssue(it) }
+              presentation.issueMetrics.forEach { metric ->
+                SummaryIssue(metric, onClick = { openResults(metric.type.workspace) })
+              }
             }
       }
 }

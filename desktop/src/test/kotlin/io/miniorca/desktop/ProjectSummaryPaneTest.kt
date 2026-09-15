@@ -125,13 +125,13 @@ class ProjectSummaryPaneTest {
                         AnalysisSectionProgress(
                             "security", "failed", AnalysisRunCoverage(failed = 1))))
     val summary = projectSummaryPresentation(null, project, run)
-    assertEquals(
-        listOf("Bugs", "Performance Issues", "Security Issues"),
-        summary.issueMetrics.map { it.label })
+    assertEquals(listOf("Bugs", "Performance", "Security"), summary.issueMetrics.map { it.label })
     assertEquals(listOf(0, 3, null), summary.issueMetrics.map { it.value })
     assertEquals(
         listOf("Completed · no findings", "Partial", "Failed"),
         summary.issueMetrics.map { it.status })
+    assertEquals(
+        listOf("completed_empty", "partial", "failed"), summary.issueMetrics.map { it.statusCode })
     assertTrue(projectSummaryPresentation(null, project).issueMetrics.all { it.value == null })
     listOf(
             run.copy(status = "stale"),
@@ -195,6 +195,23 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun activeCurrentRunTakesPrecedenceOverCachedOverviewCoverage() {
+    val project = resultProjectFixture()
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis = StructuredProjectAnalysis(status = "fresh"),
+            analysisCoverage = AnalysisCoverage(total = 3, fresh = 3))
+    val running = analysisRunFixture().copy(status = "running")
+
+    val summary = projectSummaryPresentation(overview, project, running)
+
+    assertEquals("running", summary.summaryStatus)
+    assertEquals(Information, summaryAnalysisTint(summary.summaryStatus))
+  }
+
+  @Test
   fun selectedFileEvidenceOverridesOldOverviewAndDescriptionWithoutHidingChanges() {
     val project = analysisProjectFixture()
     val overview =
@@ -205,7 +222,7 @@ class ProjectSummaryPaneTest {
             analysisCoverage = AnalysisCoverage(total = 3, fresh = 1, stale = 2))
     val selection = selectionFixture().copy(excludedPaths = listOf("main.go"))
     ComposeVisualFixture(800, 650, 1.5f) {
-          ProjectSummaryPane(overview, project, fileSelection = selection)
+          ProjectSummaryPane(overview, project, {}, fileSelection = selection)
         }
         .use { fixture ->
           fixture.render("summary-current-selection-old-description-800-150")

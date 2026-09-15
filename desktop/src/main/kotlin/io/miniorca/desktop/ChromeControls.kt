@@ -2,10 +2,10 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -27,15 +27,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.LocalContentColor
 import androidx.compose.material.ProvideTextStyle
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,9 +54,16 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import kotlinx.coroutines.delay
 
 /** Shared visual policy for all compact controls; Material is not the control implementation. */
 internal data class IdeActionColors(
@@ -91,8 +100,7 @@ internal fun ideActionBackground(
 /**
  * The one interactive surface used by dense buttons, tabs, and disclosure toggles.
  *
- * It intentionally keeps ordinary chrome flat and square while allowing contained workflow actions
- * to supply their small control corner radius.
+ * Structural panes stay flat; interactive controls use the shared compact corner radius.
  */
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -106,7 +114,7 @@ internal fun IdeActionSurface(
     minimumHeight: Dp = 32.dp,
     contentPadding: PaddingValues = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
     role: Role = Role.Button,
-    shape: Shape = RoundedCornerShape(0.dp),
+    shape: Shape = MiniOrcaShapes.control,
     accessibleName: String? = null,
     tooltip: String? = accessibleName,
     interactionSource: MutableInteractionSource? = null,
@@ -135,35 +143,61 @@ internal fun IdeActionSurface(
               role = role,
               onClickLabel = accessibleName,
               onClick = onClick)
-      else Modifier.semantics { disabled() }
-  val surface: @Composable () -> Unit = {
-    Row(
-        modifier =
-            modifier
-                .heightIn(min = minimumHeight)
-                .clip(shape)
-                .background(background)
-                .border(
-                    BorderStroke(
-                        1.dp, if (focused || focusHighlight) FocusAccent else colors.border),
-                    shape)
-                // Draw the light outline outside the dark keyline, including on bright actions.
-                .then(
-                    if (focused || focusHighlight) Modifier.border(3.dp, ActivityRail, shape)
-                    else Modifier)
-                .semantics { accessibleName?.let { contentDescription = it } }
-                .then(clickBehavior)
-                .padding(contentPadding),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-      CompositionLocalProvider(LocalContentColor provides contentColor) {
-        ProvideTextStyle(IdeTypography.action) { content() }
-      }
+      else Modifier.hoverable(interactions).semantics { disabled() }
+  Row(
+      modifier =
+          modifier
+              .heightIn(min = minimumHeight)
+              .clip(shape)
+              .background(background)
+              .border(
+                  BorderStroke(1.dp, if (focused || focusHighlight) FocusAccent else colors.border),
+                  shape)
+              // Draw the light outline outside the dark keyline, including on bright actions.
+              .then(
+                  if (focused || focusHighlight) Modifier.border(3.dp, ActivityRail, shape)
+                  else Modifier)
+              .semantics { accessibleName?.let { contentDescription = it } }
+              .then(clickBehavior)
+              .padding(contentPadding),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.Center,
+  ) {
+    CompositionLocalProvider(LocalContentColor provides contentColor) {
+      ProvideTextStyle(IdeTypography.action) { content() }
+    }
+    if (tooltip != null) IdeActionTooltip(tooltip, focused, observedHovered && !observedPressed)
+  }
+}
+
+@Composable
+private fun IdeActionTooltip(label: String, focused: Boolean, hovered: Boolean) {
+  var showOnHover by remember { mutableStateOf(false) }
+  LaunchedEffect(hovered, focused) {
+    showOnHover = false
+    if (hovered && !focused) {
+      delay(500)
+      showOnHover = true
     }
   }
-  if (tooltip == null) surface()
-  else TooltipArea(tooltip = { IdeControlTooltip(tooltip) }) { surface() }
+  // Keep the action itself as the layout child so row weights and minimum sizes survive.
+  if (focused || showOnHover)
+      Popup(popupPositionProvider = IdeTooltipPosition) { IdeControlTooltip(label) }
+}
+
+internal object IdeTooltipPosition : PopupPositionProvider {
+  override fun calculatePosition(
+      anchorBounds: IntRect,
+      windowSize: IntSize,
+      layoutDirection: LayoutDirection,
+      popupContentSize: IntSize,
+  ): IntOffset =
+      IntOffset(
+          (anchorBounds.right - popupContentSize.width).coerceIn(
+              0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
+          anchorBounds.bottom.coerceIn(
+              0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
+      )
 }
 
 @Composable
@@ -219,6 +253,7 @@ internal fun ChromeButton(
       tooltip = tooltip,
       interactionSource = interactionSource,
       interactionOverride = interactionOverride,
+      shape = MiniOrcaShapes.control,
       content = content,
   )
 }
