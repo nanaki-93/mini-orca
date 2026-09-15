@@ -9,6 +9,21 @@ import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
   @Test
+  fun resultCategoryBoxesNameEveryDestinationAndExposeTheCurrentSelection() {
+    AnalysisResultType.entries.forEach { current ->
+      ComposeVisualFixture(1_000, 760, 1.25f) { AcceptanceResultPane(current.category, "partial") }
+          .use { fixture ->
+            fixture.render()
+            AnalysisResultType.entries.forEach { candidate ->
+              val label = "View ${candidate.workspace.name} results"
+              assertTrue(fixture.hasDescription(label))
+              assertEquals(candidate == current, fixture.isDescriptionSelected(label))
+            }
+          }
+    }
+  }
+
+  @Test
   fun soleTerminalControlAnnouncesItsStateAndActivatesFromTheKeyboard() {
     var opens = 0
     ComposeVisualFixture(800, 100, 1.5f) {

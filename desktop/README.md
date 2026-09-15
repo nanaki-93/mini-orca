@@ -108,16 +108,21 @@ inclusive retry bounds. Confirm each displayed
 remote destination and explicit Security review intent. One admission coordinates
 the existing specialized producers; it can make multiple model requests.
 
-The default 100-file/900-second window limits dispatch, not captured inventory.
+The daemon retains its default 100-file/900-second dispatch bounds; the desktop
+does not expose Run limits controls.
 Pause/Resume/Cancel retain truthful partial coverage and cumulative attempts.
 Resume requires a fresh preview; startup never silently resumes a model request.
-Analysis shows progress, stage failures and links to results. Bugs, Performance and
-Security use a shared results view with no search or filters: each page shows all
-loaded findings for its category across the project, including when opened from a
-file link. Rows retain their summary, severity/provenance, source link and details.
-An unavailable or failed report is never presented as zero findings. Verified Go
-scans live in Bugs; source hypotheses, advisory Security and measured benchmarks
-keep distinct labels and execution requirements.
+Analysis shows a compact current/last-run line, live category boxes, stage failures
+and a collapsed Files disclosure. Bugs, Performance and Security reuse the same
+three boxes with the current category selected; clicking a box only navigates.
+Each page shows all loaded findings for its category. Rounded rows retain severity,
+summary and exact source location. Optional disclosures retain evidence and
+verification details. The single **Prepare fix** action opens the existing
+Assistant workflow only when the current declaration is eligible; row selection
+does not prepare a fix. An unavailable or failed report is never presented as zero
+findings, and an empty Security result is not assurance. Verified Go scans,
+performance hypotheses, measured benchmarks, source rules and model hypotheses
+retain distinct evidence and execution requirements without routine badge labels.
 
 ## New Go functions
 
@@ -201,15 +206,14 @@ folders are omitted from the list. Use **Refresh files** to reload the checklist
 Finish or cancel an active/paused run before changing its files; start a new
 analysis to use the saved selection. Existing results remain available.
 
-The file list shows whether saved analysis is up to date and explains each
-outstanding stage. Use **Needs attention** to see missing, outdated, failed,
+The file list shows whether saved analysis is up to date and gives a concise reason
+for outstanding states. Use **Needs attention** to see missing, outdated, failed,
 or incomplete files. Unchecked files and files excluded by configuration appear
-under **Excluded** and do not count as up to date or needing attention. **Details**
-shows every stage and its explanation. Re-selecting a file restores its saved
-analysis status. Bugs, Performance and Security panels use tinted surfaces like
-Summary, with colors indicating analysis completion, partial coverage or failure,
-independently of finding counts. **Run details** contains captured coverage and
-operational failures; changing the selection does not rewrite a previous run.
+under **Excluded** and do not count as up to date or needing attention. Re-selecting
+a file restores its saved analysis status. Bugs, Performance and Security boxes use
+tinted surfaces like Summary, with text states for completion, partial coverage or
+failure independently of finding counts. Changing the selection does not rewrite a
+previous run.
 
 Summary's overall status and coverage follow the current selected files, including
 selection changes. The saved project description keeps its own freshness in the

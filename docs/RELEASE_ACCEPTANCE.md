@@ -1,9 +1,40 @@
 # Release acceptance
 
-**Current engineering state: the 17-card UX implementation queue is accepted and
-its scheduler is Paused.** REL-01 and REL-02 retain their previously accepted
+**Current engineering state: the six-card 2026-09-15 UI polish queue is accepted
+and its scheduler is Paused.** REL-01 and REL-02 retain their previously accepted
 limited release scope. Insight qualification remains user-deferred. This ledger
 owns evidence and limitations; [PLAN.md](../PLAN.md) owns task status.
+
+## UI polish acceptance — 2026-09-16
+
+POLISH-01–06 deliver the rounded shared category controls, right-aligned Summary
+status, live result navigation, compact Analysis view, collapsible Files selection,
+offline diagram disclosure and the simplified Bugs / Performance / Security result
+pages described in [the active plan](../PLAN.md#active-polish-queue). POLISH-01/02
+are committed as `d67ab5a`, POLISH-03 as `fb53e5f`, POLISH-04 as `96fcad9` and
+POLISH-05 as `296657f`. POLISH-06 adds final acceptance coverage and documentation;
+no production behavior changed in the closure card.
+
+### Final checks
+
+| Check | Result |
+| --- | --- |
+| Desktop gate | `./scripts/desktop-gradle.sh test spotlessCheck detekt -PvisualOutput="$PWD/desktop/build/reports/ui-polish/polish-06"` passed all 467 tests, Spotless and Detekt with zero failures/errors/skips and zero Detekt smells. |
+| Full validation | `./scripts/validate.sh` passed all nine stages: Go formatting/tests/race/vet/contracts/quality, 55 dispatcher tests with the single existing opt-in conformance skip, and desktop static/tests. No live provider call ran. |
+| Component matrix | 390 ignored PNG captures cover the changed production panes at wide, 1000/999dp, 800×650 and 1280×600 layouts; 100/125/150% text; long paths/errors; and empty/running/partial/stale/failed/canceled/unavailable states. Reviewed Summary live updates, Analysis progress/Files, result detail/back and disabled/eligible Prepare fix against the dark reference. |
+| Interaction and accessibility | Component tests exercise pointer and keyboard activation for category boxes, result rows, exclusions, diagram disclosure/zoom and Prepare fix. Selected/expanded/disabled semantics, accessible destination names and local action isolation pass. |
+| Source safety | Category navigation, disclosures and row selection keep provider, execution and source-write callbacks at zero. Prepare fix is explicit and retains current source/declaration eligibility; Review/Apply/Undo guards are unchanged. |
+| Diff | `git diff --check` passed. The final card changes acceptance tests and documentation only. |
+
+The Analysis running fixture was corrected to publish running category progress,
+so the reviewed capture no longer combines a Running run header with Paused boxes.
+This was test-data accuracy; production state projection did not change.
+
+The scheduled environment did not repeat native-window focus, screen-reader speech
+or system display scaling for the changed result panes. Component semantics do not
+establish those claims. The packaged offline Mermaid smoke from POLISH-04 remains
+applicable because no renderer, runtime bundle or packaging input changed after it.
+No release, push or live model campaign was performed.
 
 ## UX implementation acceptance — 2026-09-12
 

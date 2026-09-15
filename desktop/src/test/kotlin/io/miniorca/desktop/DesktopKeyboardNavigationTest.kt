@@ -18,6 +18,39 @@ import kotlin.test.assertTrue
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun resultNavigationAndFixPreparationStaySeparateFromKeyboardInspection() {
+    var destination: Workspace? = null
+    var preparations = 0
+    val page = performancePageFixture()
+    ComposeVisualFixture(1_000, 760, 1.25f) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(page, resultIndexFixture()),
+              PerformanceWorkspaceActions(
+                  prepareOptimization = { _, _ -> preparations++ },
+                  openAnalysis = {},
+                  semanticActions = FindingActions({}, { _, _ -> }),
+                  openResults = { destination = it }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("View Security results"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(Workspace.Security, destination)
+          assertEquals(0, preparations)
+
+          assertTrue(fixture.requestDescriptionFocus("Inspect Avoid repeated allocation"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.hasText("Prepare fix"))
+          assertEquals(0, preparations)
+
+          assertTrue(fixture.requestFocus("Prepare fix"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, preparations)
+        }
+  }
+
+  @Test
   fun terminalInputOwnsInterruptAndOrdinaryAppChordsUntilExplicitFocusReturn() {
     assertFalse(appShortcutAllowed(terminalFocused = true))
     assertTrue(appShortcutAllowed(terminalFocused = false))

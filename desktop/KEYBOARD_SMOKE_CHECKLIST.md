@@ -23,20 +23,24 @@ with keyboard focus. Record this review separately from historical observations.
    workspaces. Commands offers View Performance results and View Security results;
    navigation preserves the selected file, draft and loaded results.
 3. In Analysis, Start analysis opens a whole-project preview with file/stage scope,
-   exclusions, cache use, limits and request bounds. Confirm every required remote
+   exclusions, cache use and request bounds. Confirm every required remote
    destination and explicit Security intent. Admission is one operation; starting
    a result page must show the whole category and never launch another analysis.
+   The daemon's dispatch bounds remain enforced without Run limits controls.
 4. Verify Analysis contains progress, per-section states, failures and result
    links. Pause settles at a stage boundary, Cancel stops further requests, and
    Resume requires a fresh preview. After restart, retained progress is interrupted
    or paused without dispatch authority. Check partial, failed, unavailable,
    canceled and completed-empty evidence retain their distinct labels/counts.
-5. In each result page, inspect severity, provenance, source location, state and
-   detail disclosure. Filter by path without changing project-wide coverage.
-   Select a row, open source, then return; navigation must not prepare or apply a
-   fix. Only the explicit preparation action prefills Assistant. Performance source
-   hypotheses never claim measured speedup; Security rule matches and advisory
-   findings remain distinct. Bugs keeps separately trusted verified Go scans.
+5. In each result page, verify the three category boxes name their destinations,
+   mark the current category and navigate with Enter/Space without starting work.
+   Select a rounded result row and inspect severity, exact source location and its
+   evidence disclosure. At narrow widths, **Back to results** restores the list;
+   wide details have no Clear selection action. Row selection must not prepare or
+   apply a fix. Only **Prepare fix** prefills Assistant, and its disabled reason
+   remains visible when the source identity is ineligible. Performance hypotheses
+   never claim measured speedup; Security rule matches and model hypotheses remain
+   distinct in their evidence. Bugs keeps separately trusted verified Go scans.
 6. Use Cmd/Ctrl+P to choose a file and Cmd/Ctrl+Shift+O to choose a declaration.
    Source and diff must remain selectable/read-only. Relative paths disambiguate
    equal basenames. Source drag selects text without changing the draft target.
@@ -78,7 +82,8 @@ with keyboard focus. Record this review separately from historical observations.
     terminal labels. Failures remain visible and retry/close controls reachable.
     At short windows and large text, verify long paths/errors, headings, badges,
     disclosure controls, row actions and status details remain readable. Color
-    must supplement text labels for selection, severity, provenance and freshness.
+    must supplement text labels for selection, severity and meaningful lifecycle
+    states.
 
 Use Escape to dismiss only the top transient surface before canceling a request.
 With no transient surface or active request, Escape leaves source unchanged.
