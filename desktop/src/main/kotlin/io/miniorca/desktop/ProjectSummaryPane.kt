@@ -1,31 +1,25 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -49,11 +43,11 @@ internal data class ProjectSummaryMetric(
 internal data class ProjectSummaryDetail(
     val title: String,
     val values: List<String>,
-    val tint: Color = ResultAccent,
 )
 
 internal data class ProjectSummaryPresentation(
     val hasProject: Boolean,
+    val projectName: String,
     val projectType: String,
     val buildMetadata: String,
     val languages: String,
@@ -103,6 +97,11 @@ internal fun projectSummaryPresentation(
       }
   val coverage = selection?.let(::analysisSelectionCoverage) ?: overview?.analysisCoverage
   val hasCoverage = selection != null || coverage != null && coverage != AnalysisCoverage()
+  val currentRun =
+      run?.takeIf {
+        it.identity.projectId == project?.projectId &&
+            it.identity.projectRevision == project.projectRevision
+      }
   val findings = overview?.findingCounts
   val outdated =
       if (hasCoverage) (coverage?.stale ?: 0) > 0
@@ -112,19 +111,21 @@ internal fun projectSummaryPresentation(
               (run != null && AnalysisResultPageState(AnalysisResultType.Bugs, project, run).stale)
   return ProjectSummaryPresentation(
       hasProject = hasProject,
+      projectName = project?.name?.takeIf { it.isNotBlank() } ?: "Project",
       projectType = metrics?.type?.ifBlank { "Unknown project type" } ?: "Unavailable",
       buildMetadata = metrics?.buildFile?.ifBlank { "No build metadata" } ?: "Unavailable",
       languages = metrics?.languages?.keys?.sorted()?.joinToString(" · ").orEmpty(),
       analysisStatus = normalizedStatus,
       summaryStatus =
           when {
-            run?.isActive() == true -> "running"
-            run?.status == "failed" -> "failed"
+            currentRun?.isActive() == true -> "running"
+            currentRun?.status in setOf("paused", "interrupted", "canceled", "failed", "partial") ->
+                requireNotNull(currentRun).status
             hasCoverage -> analysisCoverageStatus(requireNotNull(coverage))
             normalizedStatus == "failed" -> "failed"
             outdated -> "stale"
-            run?.status in setOf("completed", "completed_empty") -> "fresh"
-            else -> normalizedStatus
+            normalizedStatus == "running" -> "running"
+            else -> "unknown"
           },
       analysisMessage =
           listOfNotNull(
@@ -132,9 +133,17 @@ internal fun projectSummaryPresentation(
                       "Selected files: ${analysisStatusLabel(analysisCoverageStatus(requireNotNull(coverage)))}"
                   else null,
                   summaryAnalysisMessage(normalizedStatus, analysis?.failure.orEmpty()),
-                  if (run?.status == "failed" && normalizedStatus != "failed")
-                      "Analysis run failed · ${run.reason.ifBlank { "No failure details available" }}"
+                  if (currentRun?.status == "failed" && normalizedStatus != "failed")
+                      "Analysis run failed · ${currentRun.reason.ifBlank { "No failure details available" }}"
                   else null,
+                  currentRun
+                      ?.takeIf {
+                        it.status in setOf("paused", "interrupted", "canceled", "partial") &&
+                            it.reason.isNotBlank()
+                      }
+                      ?.let {
+                        "Analysis run ${analysisStatusLabel(it.status).lowercase()} · ${it.reason}"
+                      },
                   if (outdated && normalizedStatus != "stale")
                       "Some analysis results are outdated. Run analysis to update them."
                   else null)
@@ -155,14 +164,29 @@ internal fun projectSummaryPresentation(
           ),
       coverageMetrics =
           listOf(
-                  ProjectSummaryMetric("Ready", coverage?.fresh, SummaryMetricTone.Ready),
-                  ProjectSummaryMetric("Stale", coverage?.stale, SummaryMetricTone.Stale),
-                  ProjectSummaryMetric("Missing", coverage?.missing, SummaryMetricTone.Missing),
+                  ProjectSummaryMetric("Up to date", coverage?.fresh, SummaryMetricTone.Ready),
+                  ProjectSummaryMetric("Outdated", coverage?.stale, SummaryMetricTone.Stale),
+                  ProjectSummaryMetric(
+                      "Not analyzed", coverage?.missing, SummaryMetricTone.Missing),
                   ProjectSummaryMetric("Running", coverage?.running, SummaryMetricTone.Running),
                   ProjectSummaryMetric("Failed", coverage?.failed, SummaryMetricTone.Failed),
                   ProjectSummaryMetric("Incomplete", coverage?.partial, SummaryMetricTone.Stale),
                   ProjectSummaryMetric(
-                      "Unavailable", coverage?.unavailable, SummaryMetricTone.Failed),
+                      "Unavailable",
+                      coverage?.let {
+                        it.unavailable +
+                            (it.total.toLong() -
+                                    it.fresh -
+                                    it.stale -
+                                    it.missing -
+                                    it.running -
+                                    it.failed -
+                                    it.partial -
+                                    it.unavailable)
+                                .coerceAtLeast(0L)
+                                .toInt()
+                      },
+                      SummaryMetricTone.Failed),
               )
               .filter { it.value != 0 },
       issueMetrics = summaryIssueMetrics(project, run, sections),
@@ -197,7 +221,6 @@ private fun projectSummaryDetails(
   )
 }
 
-/** Indexed facts and advisory interpretation share a dashboard, with distinct section labels. */
 @Composable
 internal fun ProjectSummaryPane(
     overview: ProjectOverview?,
@@ -211,168 +234,161 @@ internal fun ProjectSummaryPane(
   val fontScale = LocalDensity.current.fontScale
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
-    val readableWidth = contentWidth / fontScale
-    val detailColumns = if (readableWidth >= 720.dp) 2 else 1
+    val sideBySide = contentWidth / fontScale >= 900.dp
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = workspacePagePadding(maxWidth, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = workspacePagePadding(maxWidth, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       if (!presentation.hasProject) {
-        item {
-          SystemStateMessage(
-              "No project selected",
-              "Import a project to view indexed facts and any available interpretation.",
-              modifier = Modifier.fillMaxWidth())
-        }
+        item { SystemStateMessage("No project selected", "", modifier = Modifier.fillMaxWidth()) }
       } else {
+        item { SummaryIntroduction(presentation) }
+        item { SummaryCoverage(presentation) { openResults(Workspace.Analysis) } }
         item {
-          SummarySection("Purpose", ResultAccent) {
-            presentation.purpose?.let { ModelResultContent(it, preview = false) }
-                ?: Text("No purpose available.", color = SecondaryText, style = IdeTypography.body)
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SummaryCategories(presentation.issueMetrics, openResults)
+            Text(
+                "Overall findings · " +
+                    presentation.findingMetrics.joinToString(" · ") {
+                      "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
+                    },
+                color = SecondaryText,
+                style = IdeTypography.workspaceMetadata)
           }
         }
-        item { SummaryOverviewMetrics(presentation, openResults) }
-        items(presentation.details) { detail -> SummaryDetail(detail) }
-        presentation.engineeringInsight?.let { insight ->
-          val pieces = engineeringInsightPieces(insight)
-          if (pieces.isNotEmpty()) {
-            item {
-              SummarySection("Engineering insight", ResultAccent) {
-                pieces.chunked(detailColumns).forEach { row ->
-                  Row(
-                      Modifier.fillMaxWidth(),
-                      horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        row.forEach { piece ->
-                          Column(
-                              Modifier.weight(1f),
-                              verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    piece.label,
-                                    color = ResultAccent,
-                                    style = IdeTypography.resultLabel)
-                                ModelResultContent(piece.content, preview = false)
-                              }
-                        }
-                      }
-                }
-              }
-            }
-          }
-        }
+        item { SummaryPrimaryDetails(presentation, sideBySide) }
+        item { SummarySupportingDetails(presentation, sideBySide) }
       }
     }
   }
 }
 
 @Composable
-private fun SummaryOverviewMetrics(
-    presentation: ProjectSummaryPresentation,
-    openResults: (Workspace) -> Unit,
-) {
-  val tint = summaryAnalysisTint(presentation.summaryStatus)
-  AccentPanel(
-      "Analysis summary",
-      tint,
-      Modifier.testTag("analysis-summary"),
-      trailing = {
-        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-        SummaryAnalysisStatus(presentation)
-      }) {
-        SummaryMetricGrid(
-            Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp)) {
-              (presentation.projectMetrics +
-                      presentation.findingMetrics +
-                      presentation.coverageMetrics)
-                  .forEach { SummaryMetric(it) }
-              presentation.issueMetrics.forEach { metric ->
-                SummaryIssue(metric, onClick = { openResults(metric.type.workspace) })
-              }
+private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
+  WorkspaceSection(modifier = Modifier.testTag("summary-introduction")) {
+    Text(
+        presentation.projectName,
+        color = PrimaryText,
+        fontSize = 24.sp,
+        lineHeight = 30.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.semantics { heading() })
+    presentation.purpose?.let {
+      ModelResultContent(it, preview = false, style = IdeTypography.workspaceBody)
+    } ?: Text("Project description unavailable", color = SecondaryText, style = IdeTypography.body)
+    val facts =
+        listOf(presentation.projectType, presentation.buildMetadata) +
+            presentation.projectMetrics.map { metric ->
+              "${metric.value?.let { "%,d".format(java.util.Locale.ROOT, it) } ?: "—"} ${if (metric.label == "Total lines") "lines" else metric.label.lowercase()}"
+            } +
+            presentation.languages.split(" · ").filter {
+              it.isNotBlank() && !it.equals(presentation.projectType, ignoreCase = true)
             }
-      }
+    Text(facts.joinToString(" · "), color = SecondaryText, style = IdeTypography.workspaceMetadata)
+  }
 }
 
-/** One measured cell size keeps all rows aligned, including wrapped labels and larger text. */
 @Composable
-private fun SummaryMetricGrid(modifier: Modifier, content: @Composable () -> Unit) {
+private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (Workspace) -> Unit) {
   val fontScale = LocalDensity.current.fontScale
-  Layout(content = content, modifier = modifier) { measurables, constraints ->
-    val gap = 8.dp.roundToPx()
-    val minimumWidth = (112.dp * fontScale).roundToPx()
-    val maximumColumns =
-        ((constraints.maxWidth + gap) / (minimumWidth + gap)).coerceIn(1, measurables.size)
-    val rows = (measurables.size + maximumColumns - 1) / maximumColumns
-    val columns = (measurables.size + rows - 1) / rows
-    val cellWidth = (constraints.maxWidth - (columns - 1) * gap) / columns
-    val cellHeight =
-        measurables
-            .maxOf { it.minIntrinsicHeight(cellWidth) }
-            .coerceAtLeast((64.dp * fontScale).roundToPx())
-    val cells = measurables.map { it.measure(Constraints.fixed(cellWidth, cellHeight)) }
-    layout(constraints.maxWidth, rows * cellHeight + (rows - 1) * gap) {
-      cells.forEachIndexed { index, cell ->
-        cell.placeRelative(
-            (index % columns) * (cellWidth + gap), (index / columns) * (cellHeight + gap))
+  BoxWithConstraints(Modifier.fillMaxWidth()) {
+    if (maxWidth / fontScale >= 560.dp) {
+      Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        metrics.forEach { metric ->
+          SummaryIssue(
+              metric, { openResults(metric.type.workspace) }, Modifier.weight(1f).fillMaxHeight())
+        }
+      }
+    } else {
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        metrics.forEach { metric -> SummaryIssue(metric, { openResults(metric.type.workspace) }) }
       }
     }
   }
 }
 
 @Composable
-private fun SummarySection(
-    title: String,
-    tint: Color,
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-  Column(
-      modifier
-          .fillMaxWidth()
-          .clip(MiniOrcaShapes.interactiveCard)
-          .background(Panel)
-          .border(1.dp, PaneSeparator, MiniOrcaShapes.interactiveCard)) {
-        Text(
-            title,
-            color = tint,
-            style = IdeTypography.section,
-            modifier =
-                Modifier.fillMaxWidth()
-                    .background(blendOver(tint.copy(alpha = 0.08f), Panel))
-                    .semantics { heading() }
-                    .padding(8.dp))
-        Column(
-            Modifier.fillMaxWidth().padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            content = content)
-      }
+private fun SummaryPrimaryDetails(presentation: ProjectSummaryPresentation, sideBySide: Boolean) {
+  val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
+  val flows = presentation.details.firstOrNull { it.title == "Flows" }
+  if (architecture == null && flows == null) return
+  if (sideBySide && architecture != null && flows != null) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+      SummaryArchitecture(architecture, Modifier.weight(1f))
+      SummaryFlows(flows, Modifier.weight(1f))
+    }
+  } else {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+      architecture?.let { SummaryArchitecture(it) }
+      flows?.let { SummaryFlows(it) }
+    }
+  }
 }
 
 @Composable
-private fun SummaryMetric(metric: ProjectSummaryMetric, modifier: Modifier = Modifier) {
-  val tint = if (metric.value == null) FaintText else summaryMetricTint(metric.tone)
-  Column(
-      modifier
-          .testTag("summary-metric-${metric.label}")
-          .clip(MiniOrcaShapes.control)
-          .background(blendOver(tint.copy(alpha = 0.08f), Panel))) {
-        Box(Modifier.fillMaxWidth().height(4.dp).background(tint))
-        Column(Modifier.padding(6.dp)) {
-          Text(
-              metric.value?.toString() ?: "—",
-              color = tint,
-              fontSize = 18.sp,
-              lineHeight = 22.sp,
-              fontWeight = FontWeight.SemiBold)
-          Text(
-              metric.label,
-              color = tint,
-              style = IdeTypography.resultLabel,
-              modifier = Modifier.padding(top = 4.dp))
-        }
-      }
+private fun SummaryArchitecture(architecture: ProjectSummaryDetail, modifier: Modifier = Modifier) {
+  WorkspaceSection(modifier = modifier.testTag("summary-architecture")) {
+    MermaidDiagram(architecture.values.single(), "Architecture", title = "Architecture")
+  }
 }
 
-private fun summaryMetricTint(tone: SummaryMetricTone): Color =
+@Composable
+private fun SummaryFlows(flows: ProjectSummaryDetail, modifier: Modifier = Modifier) {
+  WorkspaceSection(modifier = modifier.testTag("summary-flows")) {
+    flows.values.forEachIndexed { index, value ->
+      if (index > 0) IdeHorizontalSeparator()
+      MermaidDiagram(
+          value,
+          "Flow ${index + 1}",
+          title = if (flows.values.size == 1) "Flows" else "Flow ${index + 1}")
+    }
+  }
+}
+
+@Composable
+private fun SummarySupportingDetails(
+    presentation: ProjectSummaryPresentation,
+    sideBySide: Boolean
+) {
+  val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
+  val insight =
+      presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
+  if (modules == null && insight == null) return
+  if (sideBySide && modules != null && insight != null) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+      SummaryModulesSection(modules, Modifier.weight(1f))
+      SummaryEngineeringInsight(insight, Modifier.weight(1f))
+    }
+  } else {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+      modules?.let { SummaryModulesSection(it) }
+      insight?.let { SummaryEngineeringInsight(it) }
+    }
+  }
+}
+
+@Composable
+private fun SummaryModulesSection(modules: ProjectSummaryDetail, modifier: Modifier = Modifier) {
+  WorkspaceSection("Packages / modules", modifier.testTag("summary-modules")) {
+    SummaryModules(modules.values)
+  }
+}
+
+@Composable
+private fun SummaryEngineeringInsight(
+    pieces: List<EngineeringInsightPiece>,
+    modifier: Modifier = Modifier,
+) {
+  WorkspaceSection("Engineering insight", modifier.testTag("summary-insight")) {
+    pieces.forEach { piece ->
+      Text(piece.label, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+      ModelResultContent(piece.content, preview = false, style = IdeTypography.workspaceBody)
+    }
+  }
+}
+
+internal fun summaryMetricTint(tone: SummaryMetricTone): Color =
     when (tone) {
       SummaryMetricTone.Fact -> SelectionText
       SummaryMetricTone.Missing -> SecondaryText
@@ -383,23 +399,3 @@ private fun summaryMetricTint(tone: SummaryMetricTone): Color =
       SummaryMetricTone.Stale -> Warning
       SummaryMetricTone.Failed -> Error
     }
-
-@Composable
-private fun SummaryDetail(detail: ProjectSummaryDetail, modifier: Modifier = Modifier) {
-  SummarySection(detail.title, detail.tint, modifier) {
-    when (detail.title) {
-      "Architecture" -> MermaidDiagram(detail.values.single(), "Architecture")
-      "Packages / modules" -> SummaryModules(detail.values)
-      "Flows" ->
-          detail.values.forEachIndexed { index, value ->
-            if (index > 0) IdeHorizontalSeparator()
-            MermaidDiagram(value, "Flow ${index + 1}")
-          }
-      else ->
-          detail.values.forEachIndexed { index, value ->
-            if (index > 0) IdeHorizontalSeparator()
-            ModelResultContent(value, preview = false)
-          }
-    }
-  }
-}

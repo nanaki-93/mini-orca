@@ -6,30 +6,28 @@ import kotlin.test.assertNull
 
 class ProjectSummaryIssuesTest {
   @Test
-  fun issueCountsUseInclusiveTrafficLightBoundaries() {
-    listOf(0 to Success, 4 to Success, 5 to Warning, 9 to Warning, 10 to Error, 25 to Error)
-        .forEach { (count, tint) ->
-          val run =
-              analysisRunFixture().let { run ->
-                run.copy(sections = run.sections.map { it.copy(findingCount = count) })
-              }
-          val metrics = summaryIssueMetrics(resultProjectFixture(), run, emptyMap())
-          metrics.drop(1).forEach {
-            assertEquals(count, it.score)
-            assertEquals(tint, summaryIssueTint(it.score))
+  fun categoryTintsIdentifyResultsWithoutClaimingSafetyFromZeroCounts() {
+    listOf(0, 1, 4, 5, 10, 25).forEach { count ->
+      val run =
+          analysisRunFixture().let {
+            it.copy(sections = it.sections.map { section -> section.copy(findingCount = count) })
           }
-        }
-    assertEquals(FaintText, summaryIssueTint(null))
+      val metrics = summaryIssueMetrics(resultProjectFixture(), run, emptyMap())
+      assertEquals(listOf(count, count, count), metrics.map { it.value })
+      assertEquals(
+          if (count == 0) listOf(FaintText, FaintText, FaintText)
+          else listOf(Error, Information, Warning),
+          metrics.map(::summaryIssueTint))
+    }
+    assertEquals(
+        listOf(FaintText, FaintText, FaintText),
+        summaryIssueMetrics(resultProjectFixture(), null, emptyMap()).map(::summaryIssueTint))
   }
 
   @Test
-  fun bugsShowPriorityCountsAndUseWeightedPointsInsteadOfIssueCount() {
-    listOf(
-            listOf("high", "low") to (4 to Success),
-            listOf("high", "medium") to (5 to Warning),
-            listOf("high", "high", "high") to (9 to Warning),
-            listOf("high", "high", "high", "low") to (10 to Error))
-        .forEach { (severities, expected) ->
+  fun bugPriorityCountsRemainAvailableWithoutAnInventedHealthScore() {
+    listOf(listOf("high", "low"), listOf("high", "medium"), listOf("high", "high", "high", "low"))
+        .forEach { severities ->
           val (run, section) = summaryBugFixture(severities)
           val metric =
               summaryIssueMetrics(resultProjectFixture(), run, bugSections(section)).first()
@@ -37,13 +35,12 @@ class ProjectSummaryIssuesTest {
           assertEquals(severities.count { it == "high" }, metric.priorities?.high)
           assertEquals(severities.count { it == "medium" }, metric.priorities?.medium)
           assertEquals(severities.count { it == "low" }, metric.priorities?.low)
-          assertEquals(expected.first, metric.score)
-          assertEquals(expected.second, summaryIssueTint(metric.score))
+          assertEquals(Error, summaryIssueTint(metric))
         }
   }
 
   @Test
-  fun unknownOrOutdatedPriorityEvidenceCannotProduceAGreenScore() {
+  fun unknownOrOutdatedPriorityEvidenceCannotInventABreakdown() {
     val (run, section) = summaryBugFixture(listOf("high"))
     val results = section.results!!
     listOf(
@@ -65,29 +62,28 @@ class ProjectSummaryIssuesTest {
           val metric =
               summaryIssueMetrics(resultProjectFixture(), run, bugSections(incomplete)).first()
           assertNull(metric.priorities)
-          assertNull(metric.score)
-          assertEquals(FaintText, summaryIssueTint(metric.score))
+          assertEquals(Error, summaryIssueTint(metric))
         }
     val (otherRun, otherSection) = summaryBugFixture(listOf("critical"))
     val other =
         summaryIssueMetrics(resultProjectFixture(), otherRun, bugSections(otherSection)).first()
     assertEquals(1, other.priorities?.other)
-    assertNull(other.score)
     val stale =
         summaryIssueMetrics(
                 resultProjectFixture(), run.copy(status = "stale"), bugSections(section))
             .first()
-    assertNull(stale.score)
+    assertNull(stale.value)
+    assertEquals(FaintText, summaryIssueTint(stale))
     assertEquals("Stale", stale.status)
   }
 
   @Test
-  fun completedEmptyBugsHaveZeroPrioritiesAndZeroScore() {
+  fun completedEmptyBugsHaveZeroPrioritiesAndANeutralCard() {
     val (run, _) = summaryBugFixture(emptyList())
     val metric = summaryIssueMetrics(resultProjectFixture(), run, emptyMap()).first()
     assertEquals(SummaryBugPriorities(0, 0, 0, 0), metric.priorities)
-    assertEquals(0, metric.score)
-    assertEquals(Success, summaryIssueTint(metric.score))
+    assertEquals(0, metric.value)
+    assertEquals(FaintText, summaryIssueTint(metric))
   }
 
   @Test

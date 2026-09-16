@@ -6,7 +6,7 @@ workspaces, preserving Mini-Orca's colors, icon-only left rail and guarded editi
 
 ## Scope and status
 
-**IDEUX-01–13: approved for scheduled implementation, 3/13 accepted.** On
+**IDEUX-01–13: approved for scheduled implementation, 4/13 accepted.** On
 2026-09-16 the user authorized Terra High implementation, two Terra retries, then
 Sol High with the same initial-attempt-plus-two-retries policy. Every retry must
 receive the task and concrete failure context. Commit each task locally after its
@@ -376,7 +376,7 @@ before immediately starting IDEUX-04.
 
 ## Task IDEUX-04 — Recompose Summary around project, categories and flows
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — 2026-09-16; Sol High initial after three failed Terra attempts.
 
 **Target files**
 
@@ -387,6 +387,7 @@ before immediately starting IDEUX-04.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ProjectSummaryPaneTest.kt` — known/missing/stale content and layout behavior.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ProjectSummaryIssuesTest.kt` — current counts and navigation.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — full Summary reference comparison.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt`, `ModelResultContent.kt` and `MermaidDiagram.kt` — reviewed, already-present shared text/section/diagram prerequisites needed to commit the Summary implementation coherently; no additional working-tree behavior change.
 
 **Inputs / dependencies**
 
@@ -415,6 +416,41 @@ before immediately starting IDEUX-04.
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ProjectSummaryPaneTest' --tests 'io.miniorca.desktop.ProjectSummaryIssuesTest' --tests 'io.miniorca.desktop.MermaidRendererTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/summary"
 ```
+
+### IDEUX-04 acceptance evidence — 2026-09-16
+
+Summary now groups project identity, full purpose and metadata, followed by compact
+coverage and three neutral category surfaces with restrained semantic edges.
+Architecture and Flows share balanced columns; modules and full engineering insight
+follow and stack at compact widths or larger text. Current-run counts remain
+separate from overall findings. Status, local diagram controls, keyboard navigation
+and unknown/stale/failed coverage remain available.
+
+Sol High initial resolved the last two Terra failures by aligning category content
+to the top and testing the visible View analysis → status keyboard order. The exact
+focused command passed 76/76 tests (14 Summary, 5 issues, 4 Mermaid, 53 visual).
+`./scripts/desktop-gradle.sh test spotlessCheck detekt` passed all 502 working-tree
+tests, Spotless and Detekt; `git diff --check` passed. The coordinator reviewed
+wide, compact, short-window and 150% production captures under
+`desktop/build/reports/ide-ux/summary/`, including `summary-dashboard-1440-900-1.0.png`,
+`summary-frame-1600-1000-1.0.png`, `summary-dashboard-800-650-1.5.png`,
+`summary-status-keyboard-focus.png` and `category-focus-performance-480-1.5.png`.
+These are component checks; native/package acceptance remains IDEUX-13.
+
+The commit includes reviewed existing Summary/category prerequisites: project and
+coverage projections, category names/counts, neutral zero counts, compact bug
+breakdown, shared workspace text/section styles, styled model prose, diagram titles
+and the corresponding Summary regression fixtures. Unrelated frame/native work is
+preserved for final integration. Only four implementation/test files changed from
+the task's dirty baseline; unrelated baseline hashes remain unchanged.
+
+The proposed commit was independently exported and passed all 475 tests plus
+Spotless/Detekt. Initial export assembly omitted existing fixture dependencies;
+blank-line formatting, the hover helper, superseded renamed tests, baseline Summary
+expectations and the completed-run fixture state were reconciled before this pass.
+These coordinator extraction failures did not modify the passing working-tree
+candidate or consume worker retries. The task commit is verified and recorded in
+the handoff before immediately starting IDEUX-05.
 
 ## Task IDEUX-05 — Share one compact run-progress strip
 

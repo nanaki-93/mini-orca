@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +48,7 @@ internal fun ModelResultContent(
     response: String,
     modifier: Modifier = Modifier,
     preview: Boolean = true,
+    style: TextStyle = IdeTypography.body,
 ) {
   val formatted = remember(response) { formatModelResult(response) }
   var expanded by remember(response) { mutableStateOf(false) }
@@ -57,7 +59,7 @@ internal fun ModelResultContent(
           formatted,
           modifier = Modifier.fillMaxWidth(),
           color = PrimaryText,
-          style = IdeTypography.body,
+          style = style,
           maxLines = if (!preview || expanded) Int.MAX_VALUE else PREVIEW_LINES,
           overflow = TextOverflow.Ellipsis,
           onTextLayout = { if (preview && !expanded) overflowsPreview = it.hasVisualOverflow },

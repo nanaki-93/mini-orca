@@ -6,6 +6,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -62,16 +65,19 @@ private sealed interface DiagramState {
 }
 
 @Composable
-internal fun MermaidDiagram(value: String, label: String) {
+internal fun MermaidDiagram(value: String, label: String, title: String? = null) {
   val input = remember(value) { summaryDiagramInput(value) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    if (input.prose.isNotBlank()) ModelResultContent(input.prose, preview = false)
-    key(input.source) { MermaidDiagramSource(input.source, label) }
+    if (title == null && input.prose.isNotBlank()) ModelResultContent(input.prose, preview = false)
+    key(input.source) {
+      MermaidDiagramSource(input.source, label, title, input.prose.takeIf { title != null })
+    }
   }
 }
 
 @Composable
-private fun MermaidDiagramSource(source: String?, label: String) {
+@OptIn(ExperimentalLayoutApi::class)
+private fun MermaidDiagramSource(source: String?, label: String, title: String?, prose: String?) {
   val state by
       produceState<DiagramState>(
           if (source == null) DiagramState.Unavailable else DiagramState.Loading, source) {
@@ -89,24 +95,43 @@ private fun MermaidDiagramSource(source: String?, label: String) {
   var showDiagram by remember { mutableStateOf(false) }
   var showSource by remember { mutableStateOf(false) }
   var zoom by remember { mutableStateOf(1f) }
-  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-    ChromeButton(
-        onClick = { showDiagram = !showDiagram },
-        enabled = source != null && state !is DiagramState.Failed,
-        accessibleName = "${if (showDiagram) "Hide" else "Show"} $label diagram",
-        modifier =
-            Modifier.semantics {
-              stateDescription =
-                  when (state) {
-                    DiagramState.Unavailable -> "Diagram unavailable"
-                    DiagramState.Loading -> "Rendering diagram"
-                    is DiagramState.Failed -> "Diagram unavailable"
-                    is DiagramState.Ready -> if (showDiagram) "Expanded" else "Collapsed"
-                  }
-            }) {
-          Text(if (showDiagram) "Hide diagram" else "Show diagram")
+  Row(
+      Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.End,
+      verticalAlignment = Alignment.CenterVertically) {
+        title?.let {
+          Text(
+              it,
+              color = ResultAccent,
+              style = IdeTypography.workspaceHeading,
+              modifier = Modifier.weight(1f).semantics { heading() })
         }
-    if (showDiagram) {
+        ChromeButton(
+            onClick = { showDiagram = !showDiagram },
+            enabled = source != null && state !is DiagramState.Failed,
+            accessibleName = "${if (showDiagram) "Hide" else "Show"} $label diagram",
+            modifier =
+                Modifier.semantics {
+                  stateDescription =
+                      when (state) {
+                        DiagramState.Unavailable -> "Diagram unavailable"
+                        DiagramState.Loading -> "Rendering diagram"
+                        is DiagramState.Failed -> "Diagram unavailable"
+                        is DiagramState.Ready -> if (showDiagram) "Expanded" else "Collapsed"
+                      }
+                }) {
+              DesktopLineIcon(
+                  if (showDiagram) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
+                  "",
+                  iconSize = 16.dp)
+              Text(if (showDiagram) "Hide diagram" else "Show diagram")
+            }
+      }
+  prose
+      ?.takeIf { it.isNotBlank() }
+      ?.let { ModelResultContent(it, preview = false, style = IdeTypography.workspaceBody) }
+  if (showDiagram) {
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
       ChromeButton(
           onClick = { zoom = (zoom - 0.25f).coerceAtLeast(0.75f) },
           enabled = zoom > 0.75f,

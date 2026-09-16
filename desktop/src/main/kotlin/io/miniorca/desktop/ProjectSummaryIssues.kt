@@ -1,6 +1,5 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -13,15 +12,11 @@ internal data class SummaryBugPriorities(
     val medium: Int,
     val low: Int,
     val other: Int
-) {
-  val score: Int?
-    get() = if (other == 0) high * 3 + medium * 2 + low else null
-}
+)
 
 internal data class SummaryIssueMetric(
     val label: String,
     val value: Int?,
-    val score: Int?,
     val status: String,
     val statusCode: String?,
     val detailStatus: String?,
@@ -42,7 +37,6 @@ internal fun summaryIssueMetrics(
       SummaryIssueMetric(
           label = type.workspace.name,
           value = page.reportedCount,
-          score = if (type == AnalysisResultType.Bugs) priorities?.score else page.reportedCount,
           status = page.statusLabel,
           statusCode = statusCode,
           detailStatus =
@@ -71,13 +65,14 @@ private fun summaryBugPriorities(page: AnalysisResultPageState): SummaryBugPrior
       counts[FindingPriority.Other] ?: 0)
 }
 
-internal fun summaryIssueTint(score: Int?) =
-    when {
-      score == null -> FaintText
-      score < 5 -> Success
-      score < 10 -> Warning
-      else -> Error
-    }
+internal fun summaryIssueTint(metric: SummaryIssueMetric) =
+    if (metric.value == null || metric.value == 0) FaintText
+    else
+        when (metric.type) {
+          AnalysisResultType.Bugs -> Error
+          AnalysisResultType.Performance -> Information
+          AnalysisResultType.Security -> Warning
+        }
 
 @Composable
 internal fun SummaryIssue(
@@ -85,7 +80,7 @@ internal fun SummaryIssue(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-  val tint = summaryIssueTint(metric.score)
+  val tint = summaryIssueTint(metric)
   AnalysisCategoryBox(
       type = metric.type,
       count = metric.value,
@@ -106,13 +101,14 @@ internal fun SummaryIssue(
 
 @Composable
 internal fun SummaryBugBreakdown(metric: SummaryIssueMetric, modifier: Modifier = Modifier) {
-  val priorities = metric.priorities
-  Column(modifier) {
-    listOf("High" to priorities?.high, "Medium" to priorities?.medium, "Low" to priorities?.low)
-        .forEach { (label, count) ->
-          Text("$label: ${count ?: "—"}", color = PrimaryText, style = IdeTypography.compactBody)
-        }
-    if (priorities != null && priorities.other > 0)
-        Text("Other: ${priorities.other}", color = SecondaryText, style = IdeTypography.compactBody)
-  }
+  val priorities = metric.priorities ?: return
+  if (metric.value == 0) return
+  val counts =
+      listOf("High" to priorities.high, "Medium" to priorities.medium, "Low" to priorities.low) +
+          if (priorities.other > 0) listOf("Other" to priorities.other) else emptyList()
+  Text(
+      counts.joinToString(" · ") { (label, count) -> "$label: $count" },
+      color = SecondaryText,
+      style = IdeTypography.compactBody,
+      modifier = modifier)
 }
