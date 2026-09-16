@@ -22,6 +22,7 @@ import androidx.compose.material.ModalDrawer
 import androidx.compose.material.Text
 import androidx.compose.material.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -563,12 +564,14 @@ internal fun DesktopShell(
                   DockedToolWindow(
                       "Context",
                       content = { modifier ->
-                        RightToolWindowContainer(
-                            layout.activeRightToolWindow,
-                            ::selectRightToolWindow,
-                            panes.rightToolWindows,
-                            panes.rightToolWindowBadges,
-                            modifier.focusRequester(focusRequesters.drawer))
+                        CompositionLocalProvider(LocalContextCreationActionVisible provides true) {
+                          RightToolWindowContainer(
+                              layout.activeRightToolWindow,
+                              ::selectRightToolWindow,
+                              panes.rightToolWindows,
+                              panes.rightToolWindowBadges,
+                              modifier.focusRequester(focusRequesters.drawer))
+                        }
                       },
                       modifier = Modifier.fillMaxHeight().width(360.dp),
                       onClose = ::closeDrawerAndRestoreFocus)
@@ -700,12 +703,14 @@ internal fun DesktopShell(
                 DockedToolWindow(
                     "Tool windows",
                     content = { modifier ->
-                      RightToolWindowContainer(
-                          layout.activeRightToolWindow,
-                          ::selectRightToolWindow,
-                          panes.rightToolWindows,
-                          panes.rightToolWindowBadges,
-                          modifier.focusRequester(focusRequesters.rightToolWindow))
+                      CompositionLocalProvider(LocalContextCreationActionVisible provides false) {
+                        RightToolWindowContainer(
+                            layout.activeRightToolWindow,
+                            ::selectRightToolWindow,
+                            panes.rightToolWindows,
+                            panes.rightToolWindowBadges,
+                            modifier.focusRequester(focusRequesters.rightToolWindow))
+                      }
                     },
                     modifier = Modifier.width(dockedWidths.action.dp).fillMaxHeight(),
                     // The right-window tabs identify their own active content.
@@ -964,6 +969,7 @@ private fun DesktopCanvas(
                                     appState.review.editor?.status == DraftEditorStatus.Validating,
                         ),
                     draft = appState.review.draft,
+                    review = reviewToolWindowState(appState),
                     focusedLine = appState.selection.focusedLine,
                     findings = appState.findings.findings,
                     analysis = AnalysisWorkspacePaneState(appState.project, appState.analysisRun),
@@ -997,6 +1003,7 @@ private fun DesktopCanvas(
                     selectWorkspace = onWorkspaceSelected,
                     selectEditorSurface = editorActions.selectEditorSurface,
                     createDeclaration = editorActions.createDeclaration,
+                    editDraft = editorActions.focusDraft,
                     sourceLineSelected = { selection ->
                       editorActions.sourceLineSelected(selection)
                       contextDrawerForSourceSelection(workspace, widthDp)?.let(onOpenNarrowDrawer)
@@ -1055,7 +1062,8 @@ private fun ContentPane(
       Workspace.Editor ->
           EditorWorkspace(
               chrome = state.editorChrome,
-              draft = state.draft,
+              review = state.review,
+              onEditDraft = navigation.editDraft,
               onSelectSurface = navigation.selectEditorSurface,
               onCreateDeclaration = navigation.createDeclaration,
               canvas = {
@@ -1088,6 +1096,7 @@ private data class ContentPaneState(
     val selectedSymbol: SymbolInfo?,
     val workspace: Workspace,
     val editorChrome: EditorChromeUiState,
+    val review: ReviewToolWindowState,
     val draft: DeclarationDraft?,
     val focusedLine: Int,
     val findings: List<UnifiedFinding>,
@@ -1098,6 +1107,7 @@ private data class ContentPaneState(
 )
 
 private data class ContentPaneNavigationActions(
+    val editDraft: () -> Unit,
     val selectWorkspace: (Workspace) -> Unit,
     val selectEditorSurface: (EditorSurface) -> Unit,
     val sourceLineSelected: (SourceLineSelection) -> Unit,

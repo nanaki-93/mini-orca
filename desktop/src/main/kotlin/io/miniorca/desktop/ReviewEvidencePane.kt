@@ -196,22 +196,40 @@ internal fun reviewProgressionRows(
   val review =
       ReviewEvidenceRow(
           "Review",
-          if (decision.eligible) "Guarded Apply is available for this candidate."
+          if (evidence.validation.status == ReviewEvidenceStatus.Running ||
+              evidence.checks.status == ReviewEvidenceStatus.Running)
+              "Wait for current evidence before reviewing Apply."
+          else if (decision.eligible) "Guarded Apply is available for this candidate."
           else decision.reason,
           when {
+            evidence.validation.status == ReviewEvidenceStatus.Running ||
+                evidence.checks.status == ReviewEvidenceStatus.Running ->
+                ReviewEvidenceStatus.Running
             decision.eligible -> ReviewEvidenceStatus.Passed
             evidence.validation.status == ReviewEvidenceStatus.Stale ||
                 evidence.checks.status == ReviewEvidenceStatus.Stale -> ReviewEvidenceStatus.Stale
             evidence.validation.status == ReviewEvidenceStatus.Failed ||
                 evidence.checks.status == ReviewEvidenceStatus.Failed -> ReviewEvidenceStatus.Failed
-            evidence.validation.status == ReviewEvidenceStatus.Running ||
-                evidence.checks.status == ReviewEvidenceStatus.Running ->
-                ReviewEvidenceStatus.Running
             else -> ReviewEvidenceStatus.Missing
           },
       )
   return listOf(request, draftRow, evidence.validation, evidence.checks, review)
 }
+
+internal fun editorProgressionRows(state: ReviewToolWindowState): List<ReviewEvidenceRow> =
+    reviewProgressionRows(
+        state.session,
+        state.draft,
+        reviewEvidenceUiState(
+            state.project,
+            state.selected,
+            state.editor,
+            state.draft,
+            state.checks,
+            state.checksRunning),
+        applyDecisionUiState(
+            state.project, state.selected, state.editor, state.draft, state.checks, state.applied),
+    )
 
 /** Presentation-only review evidence; daemon-owned draft and check guards remain authoritative. */
 internal fun reviewEvidenceUiState(
@@ -442,11 +460,7 @@ internal fun applyDecisionUiState(
 
 @Composable
 internal fun ReviewDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Modifier) {
-  Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
-    Text("Candidate diff", color = PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-    Spacer(Modifier.height(12.dp))
-    DiffViewer(draft?.validation?.diff, Modifier.fillMaxWidth())
-  }
+  DiffViewer(draft?.validation?.diff, modifier.fillMaxSize().padding(8.dp))
 }
 
 @Composable

@@ -696,7 +696,7 @@ private fun submitComposerMessage(
       if (mode == ChatEditMode.CreateSymbol) creationMessage(kind, name, request) else request)
 }
 
-private fun reviewToolWindowState(state: DesktopState) =
+internal fun reviewToolWindowState(state: DesktopState) =
     ReviewToolWindowState(
         project = state.project,
         selected = state.selectedFile,

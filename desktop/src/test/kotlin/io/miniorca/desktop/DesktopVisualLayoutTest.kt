@@ -966,7 +966,7 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("editor-breadcrumbs-deep-480-1.3")
-          listOf("Source · user_handler.go", "src", "…", "user_handler.go", "ServeUser")
+          listOf("Source", "src", "…", "user_handler.go", "ServeUser")
               .forEach(fixture::assertTextFits)
           assertTrue(fixture.hasDescription("Project-relative path: $longPath"))
           assertTrue(fixture.hasText("Composed diff unavailable"))
@@ -1206,7 +1206,18 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 480, 1.3f) {
           EditorWorkspace(
               chrome,
-              draft,
+              ReviewToolWindowState(
+                  project,
+                  file,
+                  symbol,
+                  null,
+                  editableDraft(draft),
+                  draft,
+                  null,
+                  null,
+                  null,
+                  null,
+                  false),
               { selectedSurfaces += it },
               onCreateDeclaration = {},
               canvas = {
@@ -1215,9 +1226,11 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("editor-candidate-800-1.3")
-          assertTrue(fixture.hasText("Candidate"))
-          assertTrue(fixture.hasText("VALIDATED DRAFT · 4 changed lines · focused checks pending"))
-          fixture.clickText("Open review")
+          assertTrue(fixture.hasText("Candidate diff"))
+          assertTrue(fixture.hasText("Validate"))
+          assertTrue(fixture.hasText("Checks"))
+          assertFalse(fixture.hasText("focused checks pending"))
+          fixture.clickText("Candidate diff")
           kotlin.test.assertEquals(listOf(EditorSurface.Review), selectedSurfaces)
         }
 
@@ -3659,3 +3672,106 @@ private val visualFixtureFindings =
             status = "open",
             freshness = "fresh"),
     )
+
+internal fun editorComparisonReviewFixture(): ReviewToolWindowState {
+  val symbol =
+      SymbolInfo(
+          "GetUser", "function", "func GetUser(id string) (User, error)", 5, 12, "exact", true)
+  val file =
+      ProjectFileInfo(
+          "internal/api/user.go",
+          "fixture-hash",
+          "user.go",
+          language = "Go",
+          sizeBytes = 480,
+          lineCount = 18,
+          modifiedAt = "",
+          binary = false,
+          content =
+              """
+        package api
+
+        import "errors"
+
+        func GetUser(id string) (User, error) {
+            if id == "" {
+                return User{}, errors.New("missing user id")
+            }
+
+            user, err := repository.Find(id)
+            return user, err
+        }
+
+        type User struct {
+            ID   string
+            Name string
+        }
+      """
+                  .trimIndent())
+  val declaration =
+      """
+      func GetUser(id string) (User, error) {
+          if id == "" {
+              return User{}, errors.New("missing user id")
+          }
+
+          return repository.Find(id)
+      }
+  """
+          .trimIndent()
+  val source = file.content.lines()
+  val diff =
+      UnifiedDiff(
+          file.path,
+          file.path,
+          buildList {
+            (5..9).forEach { add(DiffLine("context", it, it, source[it - 1])) }
+            add(DiffLine("removed", 10, 0, source[9]))
+            add(DiffLine("removed", 11, 0, source[10]))
+            add(DiffLine("added", 0, 10, "    return repository.Find(id)"))
+            add(DiffLine("context", 12, 11, "}"))
+          })
+  val draft =
+      DeclarationDraft(
+          "fixture-draft",
+          visualFixtureProject.projectId,
+          visualFixtureProject.projectRevision,
+          file.contentHash,
+          file.path,
+          "replace_symbol",
+          symbol.name,
+          declaration,
+          revision = 1,
+          hash = "fixture-draft-hash",
+          validation = DeclarationValidation(true, "replace_symbol", diff = diff))
+  val session =
+      ChatSession(
+          "fixture-session",
+          draft.projectId,
+          draft.projectRevision,
+          draft.baseFileHash,
+          draft.targetPath,
+          draft.mode,
+          draft.targetSymbol,
+          latestDraftId = draft.id)
+  val checks =
+      DraftCheckReport(
+          file.path,
+          true,
+          checks = listOf(DraftCheck("go test", required = true, state = "passed")),
+          draftId = draft.id,
+          draftRevision = draft.revision,
+          draftHash = draft.hash)
+  return ReviewToolWindowState(
+      visualFixtureProject,
+      file,
+      symbol,
+      session,
+      editableDraft(draft),
+      draft,
+      checks,
+      null,
+      null,
+      null,
+      false)
+}

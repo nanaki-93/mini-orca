@@ -916,9 +916,13 @@ resolution are recorded in errors.log. Other baseline bytes remain unchanged.
 
 ## Task IDEUX-12 — Make Source and Context feel like one IDE workspace
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — Sol High initial; 95 focused, 527 full and 506 isolated tests plus quality checks passed.
 
 **Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — narrow docked/drawer creation-action placement providers and existing editor review wiring only.
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — only context creation-action visibility wiring if needed to share the editor-owned action; preserve unrelated baseline.
 
 - `desktop/src/main/kotlin/io/miniorca/desktop/EditorWorkspace.kt` — compact source identity and unambiguous file/draft actions.
 - `desktop/src/main/kotlin/io/miniorca/desktop/SourceEditorPane.kt` — remove duplicate identity chrome while preserving code/gutter geometry.
@@ -928,6 +932,16 @@ resolution are recorded in errors.log. Other baseline bytes remain unchanged.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ContextToolWindowTest.kt` — explicit explanation/refactor and cached/stale content.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ExplorerPaneTest.kt` — file selection/filter/reveal behavior.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — full Source/Context and Candidate/Review captures.
+
+**Commit prerequisites**
+
+Retain the existing accepted editor progression and Edit draft wiring when isolating
+this task: the narrow `DesktopShell.kt` review/action call-site hunks and
+`ReviewEvidencePane.kt` editor progression helper and removal of duplicate Candidate
+diff identity are prerequisites, not authority
+for a general shell/review redesign. Include the corresponding existing visual
+fixture and adapted editor-call test where required; keep unrelated native/frame
+work for IDEUX-13.
 
 **Inputs / dependencies**
 
@@ -958,6 +972,23 @@ resolution are recorded in errors.log. Other baseline bytes remain unchanged.
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.EditorWorkspaceTest' --tests 'io.miniorca.desktop.ContextToolWindowTest' --tests 'io.miniorca.desktop.ExplorerPaneTest' --tests 'io.miniorca.desktop.DraftReviewWorkflowTest' --tests 'io.miniorca.desktop.ReviewToolWindowTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/source"
 ```
+
+**Acceptance receipt — IDEUX-12**
+
+Source uses one compact identity and retains aligned read-only code/gutter geometry.
+Context promotes Explain until a current explanation exists, then Refactor. Docked
+Editor owns New function; compact Context keeps explicit access without dispatching
+analysis. Explorer retains visible basenames with full path semantics/tooltips.
+Existing Edit draft/review progression wiring and its exact helper dependencies
+are included; the remaining full-frame/Review redesign stays for task13.
+
+Focused 95/95, full 527/527 and isolated commit 506/506 passed with Spotless,
+Detekt and diff checks. Wide, compact, short and 150% Source/Context/Candidate/Review
+renders were reviewed. Native flows, packaging and screen-reader observations are
+not established by these fixtures. Three Terra failures are recorded in errors.log.
+The first isolated export copied task13 Review assertions with a shared test method;
+retaining the existing Review assertions and only the task12 Editor adaptation
+fixed the extraction boundary, and the complete isolated gate then passed.
 
 ## Task IDEUX-13 — Verify the complete IDE experience and document actual acceptance
 
