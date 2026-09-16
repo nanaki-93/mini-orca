@@ -16,8 +16,11 @@ immutable; later cards may inspect them but do not replace or regenerate them.
 
 - Reuse heartbeat `mini-orca-ux-implementation`, every 20 minutes, attached to
   **Plan IDE UI/UX improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`).
-  Run in this existing checkout, one ordered card attempt per wake. Resume an
-  active attempt/check instead of launching a second writer.
+  Run in this existing checkout, one ordered card attempt at a time. Continue
+  immediately to the next card after acceptance and its verified local commit;
+  the user requested this completion-driven continuation on 2026-09-16. The
+  20-minute heartbeat starts or recovers idle/interrupted work, not a delay between
+  cards. Resume an active attempt/check instead of launching a second writer.
 - The heartbeat coordinates; implementation is assigned to one fresh subagent
   with an explicit model and reasoning effort. Use `fork_turns="none"` and provide
   the complete task and handoff in its prompt. This user request authorizes those
@@ -37,7 +40,7 @@ immutable; later cards may inspect them but do not replace or regenerate them.
 Local scheduling needs the computer on and the app running; see the
 [official scheduled-task documentation](https://learn.chatgpt.com/docs/automations?surface=app).
 
-## Per-wake procedure
+## Continuous execution procedure
 
 1. Read root and relevant area instructions, this procedure, the current PLAN,
    the first incomplete IDEUX card and the handoff. Inspect Git status/diffs and
@@ -60,16 +63,23 @@ Local scheduling needs the computer on and the app running; see the
 5. On failure, append a bounded factual entry to [docs/errors.log](../docs/errors.log),
    update the handoff and leave the card incomplete. Set the next attempt/model
    according to the table above; do not reset counts after a wake, compaction,
-   model switch or intermittent partial success. End the wake. The next scheduled
-   wake dispatches a fresh agent with the full task plus the failure packet.
+   model switch or intermittent partial success. Once the previous worker has
+   stopped, immediately dispatch the next permitted fresh agent with the full task
+   plus the failure packet. Pause if the attempt limit or a blocker requires it.
 6. On success, review the diff and evidence against the complete card. Failed or
    unavailable required evidence cannot be called passing. Record exact commands,
    results and image paths; then create and verify the task's local commit as below.
-   Stop after that card. Only then initialize the next card at Terra High.
+   Immediately initialize and dispatch the next incomplete card at Terra High,
+   repeating this procedure in the same active run without a scheduled delay.
 7. Pause the same heartbeat after IDEUX-13 passes and is committed, after Sol's
    final failed retry, or on a true external blocker. Report the current task,
    attempts, last failure or commit and next required action. Keep unaffected
    earlier task acceptance and historical receipts intact.
+
+Keep the coordinator active while workers or checks run, using bounded waits and
+persisting progress. An incoming heartbeat resumes that same work. Continue until
+the queue is complete, retries are exhausted, a genuine external blocker prevents
+progress or the user pauses; do not stop solely because one card finished.
 
 ## Failure packet passed to the next agent
 
@@ -107,11 +117,11 @@ only the required prerequisite files/hunks. Leave unrelated work untouched.
 Do not alter unrelated staged changes. No amend/rewrite, push, release, publication,
 live Mini-Orca provider campaign or destructive cleanup is authorized.
 
-The current user instructions override builder-executor defaults that would forbid
-commits, perform all cards in one turn, or retry within one agent. If that skill is
-used, preserve its target/check discipline while following this explicit scheduling,
-fresh-agent retry and per-task commit policy. State/log/PLAN updates needed by this
-procedure are authorized administrative targets for every IDEUX card.
+The current user instructions override builder-executor defaults that forbid
+commits or permit retries within one agent. If that skill is used, preserve its
+target/check discipline while following this explicit scheduling, fresh-agent
+retry and per-task commit policy. State/log/PLAN updates needed by this procedure
+are authorized administrative targets for every IDEUX card.
 
 ---
 
