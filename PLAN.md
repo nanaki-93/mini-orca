@@ -31,7 +31,7 @@ IDEUX-04 committed and verified as `5011783` after Sol High initial.
 IDEUX-05 committed and verified as `6db69ec` after Sol High retry2.
 IDEUX-06 committed and verified as `f06d5db` after user-authorized Astra light
 (`gpt-6-astra`, `low`) repair: 70 focused, 506 working-tree and 485 isolated-commit
-tests passed with desktop quality gates. IDEUX-07 accepted at Sol High retry2: 77 focused, 512 working-tree and 491 isolated-commit tests passed with quality and component visual checks. IDEUX-07 commit `393a54d` verified; IDEUX-08 accepted at Sol High retry1: 85 focused, 516 full and 495 isolated tests plus quality/visual checks passed. IDEUX-08 commit `7fc0fb1` verified; IDEUX-09 accepted at Sol High initial: 123 focused, 518 full and 497 isolated tests plus quality/visual checks passed. IDEUX-10 is next.
+tests passed with desktop quality gates. IDEUX-07 accepted at Sol High retry2: 77 focused, 512 working-tree and 491 isolated-commit tests passed with quality and component visual checks. IDEUX-07 commit `393a54d` verified; IDEUX-08 accepted at Sol High retry1: 85 focused, 516 full and 495 isolated tests plus quality/visual checks passed. IDEUX-08 commit `7fc0fb1` verified; IDEUX-09 accepted at Sol High initial: 123 focused, 518 full and 497 isolated tests plus quality/visual checks passed. IDEUX-09 commit `157ad60` verified; IDEUX-10 accepted at Terra High retry2: 88 focused, 521 full and 500 isolated tests plus quality/visual checks passed. IDEUX-11 is next.
 Reuse `mini-orca-ux-implementation` at minutes 09, 29 and 49 each hour in the
 computer's local timezone, attached to **Plan IDE UI/UX
 improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`). **Scheduler: Active**,

@@ -25,8 +25,15 @@ internal fun PerformanceWorkspacePane(
     actions: PerformanceWorkspaceActions
 ) {
   var benchmarksExpanded by remember { mutableStateOf(false) }
+  var measurementDetailsExpanded by remember { mutableStateOf(false) }
   val results = performanceResults(state.page)
   val semantic = state.page.semantic
+  val benchmarkStatus =
+      performanceBenchmarkStatusPresentation(
+          state.benchmarkComparison,
+          state.expectedBenchmarkIdentity,
+          state.selectedBenchmark,
+          state.benchmarkRunning)
   AnalysisResultsPane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
@@ -34,31 +41,38 @@ internal fun PerformanceWorkspacePane(
       facetLabel = "Impact",
       openAnalysis = actions.openAnalysis,
       tools = {
-        if (state.expectedBenchmarkIdentity != null ||
-            state.benchmarkCatalog != null ||
-            state.benchmarkComparison != null) {
-          IdeDisclosureHeader(
-              "Benchmark evidence",
-              benchmarksExpanded,
-              { benchmarksExpanded = !benchmarksExpanded },
-              stateLabel = if (state.benchmarkRunning) "Running" else "Explicit local execution")
-          if (benchmarksExpanded)
-              Column(
-                  Modifier.fillMaxWidth()
-                      .heightIn(max = 260.dp)
-                      .verticalScroll(rememberScrollState())) {
-                    PerformanceBenchmarkControls(
-                        state.benchmarkCatalog,
-                        state.selectedBenchmark,
-                        state.expectedBenchmarkIdentity != null,
-                        state.benchmarkRunning,
-                        actions)
-                    state.benchmarkComparison?.let {
-                      PerformanceBenchmarkEvidence(
-                          it, state.expectedBenchmarkIdentity, state.selectedBenchmark)
-                    }
+        IdeDisclosureHeader(
+            "Benchmark evidence",
+            benchmarksExpanded,
+            { benchmarksExpanded = !benchmarksExpanded },
+            stateLabel = benchmarkStatus.stateLabel)
+        if (benchmarksExpanded)
+            Column(
+                Modifier.fillMaxWidth()
+                    .heightIn(max = 260.dp)
+                    .verticalScroll(rememberScrollState())) {
+                  Text(
+                      benchmarkStatus.summary,
+                      color = SecondaryText,
+                      style = IdeTypography.compactBody,
+                      modifier = Modifier.padding(top = 4.dp))
+                  PerformanceBenchmarkControls(
+                      state.benchmarkCatalog,
+                      state.selectedBenchmark,
+                      state.expectedBenchmarkIdentity != null,
+                      state.benchmarkRunning,
+                      actions)
+                  state.benchmarkComparison?.let { comparison ->
+                    IdeDisclosureHeader(
+                        "Measurement details",
+                        measurementDetailsExpanded,
+                        { measurementDetailsExpanded = !measurementDetailsExpanded },
+                        stateLabel = benchmarkStatus.stateLabel)
+                    if (measurementDetailsExpanded)
+                        PerformanceBenchmarkEvidence(
+                            comparison, state.expectedBenchmarkIdentity, state.selectedBenchmark)
                   }
-        }
+                }
       }) { key ->
         val result = results.firstOrNull { it.row().key == key }
         if (result != null) PerformanceFindingDetails(result, state.index, actions)
@@ -81,7 +95,7 @@ internal data class PerformanceResult(
           "${report.path}:${finding.startLine}",
           finding.observedPattern,
           finding.potentialImpact.ifBlank { "Unknown impact" },
-          "",
+          "Model suggestion",
           if (stale) "Stale" else "")
 }
 
@@ -136,6 +150,10 @@ private fun PerformanceFindingDetails(
   var technical by remember(result.row().key) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
     ResultDetailHeader(result.row())
+    Text(
+        "Unmeasured recommendation. Benchmark the affected workload before claiming an improvement.",
+        color = SecondaryText,
+        style = IdeTypography.compactBody)
     ResultEvidenceSection("Observed pattern", finding.observedPattern)
     ResultEvidenceSection("Recommendation", finding.recommendation)
     ResponsiveActionGroup(Modifier.fillMaxWidth()) {
@@ -231,6 +249,38 @@ private fun PerformanceBenchmarkEvidence(
     }
   }
 }
+
+internal data class PerformanceBenchmarkStatusPresentation(
+    val stateLabel: String,
+    val summary: String,
+)
+
+/**
+ * Keeps the benchmark status visible even before an explicit local comparison exists. A benchmark
+ * comparison applies to its candidate identity and never validates a separate model suggestion.
+ */
+internal fun performanceBenchmarkStatusPresentation(
+    comparison: GoBenchmarkComparison?,
+    expectedIdentity: GoBenchmarkComparisonIdentity?,
+    expectedChoice: GoBenchmarkChoice?,
+    running: Boolean,
+): PerformanceBenchmarkStatusPresentation =
+    when {
+      running ->
+          PerformanceBenchmarkStatusPresentation(
+              "Running · explicit local execution",
+              "The selected benchmark is running in isolated copies for the current candidate.")
+      comparison != null ->
+          performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice).let {
+            PerformanceBenchmarkStatusPresentation(
+                it.stateLabel,
+                "Benchmark evidence is candidate-specific and does not measure this model suggestion.")
+          }
+      else ->
+          PerformanceBenchmarkStatusPresentation(
+              "Not measured · explicit local execution",
+              "No benchmark evidence is available for the current candidate. Listing is read-only; running a benchmark requires explicit local execution.")
+    }
 
 /** Listing a catalog is read-only; only the explicitly labeled run action can execute code. */
 @Composable

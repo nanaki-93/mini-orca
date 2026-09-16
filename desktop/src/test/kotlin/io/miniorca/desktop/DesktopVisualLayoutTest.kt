@@ -57,6 +57,56 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun performanceBenchmarkStatusAndMeasurementDetailsRemainReadableAcrossLayouts() {
+    val choice =
+        GoBenchmarkChoice("BenchmarkRun", listOf("go", "test", "-bench", "^BenchmarkRun$"), "scope")
+    val identity =
+        GoBenchmarkComparisonIdentity(
+            "draft", 1, "candidate", "project", "revision", "base", "main.go")
+    val comparison =
+        GoBenchmarkComparison(
+            draftId = "draft",
+            draftRevision = 1,
+            draftHash = "candidate",
+            projectId = "project",
+            projectRevision = "revision",
+            baseFileHash = "base",
+            targetPath = "main.go",
+            benchmark = choice.name,
+            scope = choice.scope,
+            status = "completed",
+            command = choice.command,
+            base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 100.0, 10, 1) }),
+            candidate = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 90.0, 12, 1) }))
+    listOf(Triple(1440, 900, 1f), Triple(800, 400, 1.5f)).forEach { (width, height, scale) ->
+      ComposeVisualFixture(width, height, scale) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    performancePageFixture(),
+                    resultIndexFixture(),
+                    benchmarkComparison = comparison,
+                    expectedBenchmarkIdentity = identity,
+                    selectedBenchmark = choice),
+                PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> })))
+          }
+          .use { fixture ->
+            fixture.render("performance-benchmark-$width-$height-$scale")
+            assertTrue(fixture.hasText("Measured · selected benchmark"))
+            fixture.clickText("Benchmark evidence")
+            fixture.render("performance-benchmark-expanded-$width-$height-$scale")
+            assertTrue(
+                fixture.hasText(
+                    "Benchmark evidence is candidate-specific and does not measure this model suggestion."))
+            fixture.clickText("Measurement details")
+            fixture.render("performance-benchmark-details-$width-$height-$scale")
+            fixture.assertTextFits("Benchmark evidence")
+            assertTrue(fixture.hasText("Measured trade-offs"))
+            assertTrue(fixture.hasText("BenchmarkRun"))
+          }
+    }
+  }
+
+  @Test
   fun gutterHandlesRetainVisibleKeyboardFocusAndCommitResizing() {
     listOf(false, true).forEach { horizontal ->
       var size by mutableStateOf(220f)
@@ -501,7 +551,9 @@ class DesktopVisualLayoutTest {
                   assertFalse(fixture.hasText("AI SUGGESTIONS"))
                   assertFalse(fixture.hasText("AI suspicion"))
                   assertFalse(fixture.hasText("Performance review"))
-                  assertFalse(fixture.hasText("Not measured"))
+                  if (category == "performance")
+                      assertTrue(fixture.hasText("Not measured · explicit local execution"))
+                  else assertFalse(fixture.hasText("Not measured"))
                   assertTrue(fixture.hasDescription("Filter results"))
                   assertTrue(
                       fixture.hasText(if (category == "performance") "Impact" else "Severity"))
@@ -514,6 +566,12 @@ class DesktopVisualLayoutTest {
                       fixture.hasText("Back to results"))
                   assertFalse(fixture.hasText("Clear selection"))
                   assertTrue(fixture.hasText("Prepare fix"))
+                  if (category == "performance") {
+                    assertTrue(fixture.hasText("Model suggestion"))
+                    assertTrue(
+                        fixture.hasText(
+                            "Unmeasured recommendation. Benchmark the affected workload before claiming an improvement."))
+                  }
                   assertFalse(fixture.hasText("Open source"))
                   assertEquals(0, externalActions)
                   if (width < 900) {
@@ -2903,6 +2961,20 @@ internal class ComposeVisualFixture(
       Thread.yield()
     }
     assertEquals(expectedCount, commits.size, "Timed out waiting for pointer resize commit")
+  }
+
+  fun assertTextWrapsAndTailIsReachable(label: String, scrollTag: String) {
+    val node = textNodes(label).single()
+    val layouts = mutableListOf<TextLayoutResult>()
+    requireNotNull(node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action)
+        .invoke(layouts)
+    assertTrue(layouts.any { it.lineCount > 1 }, "$label must wrap instead of being clipped")
+    scrollBy(100_000f, scrollTag)
+    render()
+    val tail = textNodes(label).single().boundsInRoot
+    assertTrue(
+        tail.bottom > 0 && tail.bottom <= height,
+        "$label tail must be reachable by scrolling: $tail in ${width}x$height")
   }
 
   fun assertSummaryColumns() {

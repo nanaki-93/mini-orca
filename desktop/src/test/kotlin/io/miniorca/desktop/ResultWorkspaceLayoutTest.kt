@@ -318,6 +318,59 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
+  fun compactPerformanceDetailKeepsUnmeasuredRecommendationAndFixReachable() {
+    val page = performancePageFixture()
+    val results = requireNotNull(page.results)
+    val longTradeoff =
+        "Retained buffers can increase memory under bursty workloads; measure the representative request mix before accepting the change. "
+            .repeat(5)
+    val populated =
+        page.copy(
+            section =
+                page.section.copy(
+                    results =
+                        results.copy(
+                            performance =
+                                results.performance.map { report ->
+                                  report.copy(
+                                      findings =
+                                          report.findings.map {
+                                            it.copy(
+                                                workloadConditions =
+                                                    "High sustained request volume across multiple payload sizes.",
+                                                tradeoff = longTradeoff)
+                                          })
+                                })))
+    var fixes = 0
+    ComposeVisualFixture(800, 400, 1.5f) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(populated, resultIndexFixture()),
+              PerformanceWorkspaceActions({ _, _ -> fixes++ }, {}, FindingActions({}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("performance-detail-compact-800-400-150")
+          assertTrue(fixture.hasText("Not measured · explicit local execution"))
+          fixture.clickDescription("Inspect Avoid repeated allocation")
+          fixture.render()
+          fixture.revealText("Prepare fix", "result-detail")
+          assertTrue(fixture.hasText("Model suggestion"))
+          assertTrue(
+              fixture.hasText(
+                  "Unmeasured recommendation. Benchmark the affected workload before claiming an improvement."))
+          assertFalse(fixture.hasText("Dismiss"))
+          fixture.revealText("Workload, trade-offs and verification", "result-detail")
+          fixture.clickText("Workload, trade-offs and verification")
+          fixture.render()
+          assertEquals(0, fixes)
+          assertTrue(fixture.hasText("When it matters"))
+          fixture.assertTextWrapsAndTailIsReachable(longTradeoff, "result-detail")
+          fixture.revealText("Prepare fix", "result-detail")
+          fixture.clickText("Prepare fix")
+          assertEquals(1, fixes)
+        }
+  }
+
+  @Test
   fun longRefreshErrorWithoutRowsRemainsReachableInShortLargeTextWindow() {
     val original = performancePageFixture()
     val refreshError =
