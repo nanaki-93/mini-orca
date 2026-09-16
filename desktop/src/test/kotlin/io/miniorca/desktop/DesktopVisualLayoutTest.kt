@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -31,14 +32,21 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.WindowInfo
+import androidx.compose.ui.platform.asAwtTransferable
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.scene.CanvasLayersComposeScene
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
@@ -46,6 +54,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import java.awt.datatransfer.DataFlavor
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -57,289 +66,118 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
-  fun securityProductionRendersKeepEvidenceIdentityAndScopedEmptyStateDistinct() {
-    val populated = securityPageFixture()
-    var prepared = 0
-    var openedAnalysis = 0
-    ComposeVisualFixture(1440, 900) {
-          SecurityWorkspacePane(
-              SecurityWorkspacePaneState(populated, resultIndexFixture()),
-              SecurityWorkspaceActions(
-                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
-        }
-        .use { fixture ->
-          fixture.render("security-populated-wide-1440-900")
-          fixture.clickDescription("Inspect Credential-like assignment")
-          fixture.render("security-source-rule-wide-1440-900")
-          assertTrue(fixture.hasText("Source rule"))
-          assertTrue(
-              fixture.hasText(
-                  "A source rule match identifies a pattern; it does not confirm a vulnerability."))
-          fixture.clickDescription("Inspect Review input boundary")
-          fixture.render("security-model-hypothesis-wide-1440-900")
-          assertTrue(fixture.hasText("Model hypothesis"))
-          assertTrue(
-              fixture.hasText(
-                  "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."))
-          assertEquals(0, prepared)
-          assertEquals(0, openedAnalysis)
-        }
-
-    val reports = requireNotNull(populated.results)
-    val sourceReport = reports.security.single { it.source == "deterministic" }
-    val unavailableEvidence =
-        populated.copy(
-            section =
-                populated.section.copy(
-                    results = reports.copy(security = listOf(sourceReport.copy(source = "ai")))))
-    ComposeVisualFixture(800, 650, 1.5f) {
-          SecurityWorkspacePane(
-              SecurityWorkspacePaneState(unavailableEvidence, resultIndexFixture()),
-              SecurityWorkspaceActions(
-                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
-        }
-        .use { fixture ->
-          fixture.render("security-unavailable-evidence-compact-800-650-150")
-          fixture.clickDescription("Inspect Credential-like assignment")
-          fixture.render("security-unavailable-evidence-detail-compact-800-650-150")
-          assertTrue(fixture.hasText("Evidence type unavailable"))
-          assertTrue(
-              fixture.hasText(
-                  "Evidence type was unavailable. Do not treat this finding as verified."))
-          assertEquals(0, prepared)
-          assertEquals(0, openedAnalysis)
-        }
-
-    val empty = resultPageFixture("security").copy(run = null, section = AnalysisSectionState())
-    ComposeVisualFixture(800, 650, 1.5f) {
-          SecurityWorkspacePane(
-              SecurityWorkspacePaneState(empty, null),
-              SecurityWorkspaceActions(
-                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
-        }
-        .use { fixture ->
-          fixture.render("security-empty-compact-800-650-150")
-          fixture.assertTextFits("Analysis has not started.")
-          assertFalse(fixture.hasText("Prepare fix"))
-          fixture.clickText("View analysis")
-          assertEquals(1, openedAnalysis)
-          assertEquals(0, prepared)
-        }
-  }
-
-  @Test
-  fun performanceBenchmarkStatusAndMeasurementDetailsRemainReadableAcrossLayouts() {
-    val choice =
-        GoBenchmarkChoice("BenchmarkRun", listOf("go", "test", "-bench", "^BenchmarkRun$"), "scope")
-    val identity =
-        GoBenchmarkComparisonIdentity(
-            "draft", 1, "candidate", "project", "revision", "base", "main.go")
-    val comparison =
-        GoBenchmarkComparison(
-            draftId = "draft",
-            draftRevision = 1,
-            draftHash = "candidate",
-            projectId = "project",
-            projectRevision = "revision",
-            baseFileHash = "base",
-            targetPath = "main.go",
-            benchmark = choice.name,
-            scope = choice.scope,
-            status = "completed",
-            command = choice.command,
-            base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 100.0, 10, 1) }),
-            candidate = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 90.0, 12, 1) }))
-    listOf(Triple(1440, 900, 1f), Triple(800, 400, 1.5f)).forEach { (width, height, scale) ->
-      ComposeVisualFixture(width, height, scale) {
-            PerformanceWorkspacePane(
-                PerformanceWorkspacePaneState(
-                    performancePageFixture(),
-                    resultIndexFixture(),
-                    benchmarkComparison = comparison,
-                    expectedBenchmarkIdentity = identity,
-                    selectedBenchmark = choice),
-                PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> })))
+  fun productionReferenceMatrixUsesAttachmentSizeAndRepresentativeDensity() {
+    listOf(Triple("1x", 1_512, 712), Triple("2x", 3_024, 1_424)).forEach {
+        (densityLabel, width, height) ->
+      val density = if (densityLabel == "2x") 2f else 1f
+      val logicalWidth = width / density
+      fun renderReferenceSurface(surface: String, content: @Composable () -> Unit) {
+        ComposeVisualFixture(width, height, densityScale = density, content = content).use { fixture
+          ->
+          fixture.render("final-reference-$surface-$densityLabel")
+          when (surface) {
+            "summary" -> fixture.assertTextFits("Analysis coverage")
+            "analysis" -> {
+              fixture.assertTextFits("8 of 12 files finished")
+              fixture.assertTextFits("Current: internal/api/user.go")
+              fixture.assertTextFits("Pause")
+              fixture.assertTextFits("Cancel")
+            }
+            "source" -> fixture.assertTextFits("Read-only")
+            "review" -> {
+              fixture.assertTextFits("Read-only")
+              assertFalse(fixture.hasEditableText("Read-only composed diff"))
+            }
+            else -> fixture.assertTextFits("View analysis")
           }
-          .use { fixture ->
-            fixture.render("performance-benchmark-$width-$height-$scale")
-            assertTrue(fixture.hasText("Measured · selected benchmark"))
-            fixture.clickText("Benchmark evidence")
-            fixture.render("performance-benchmark-expanded-$width-$height-$scale")
-            assertTrue(
-                fixture.hasText(
-                    "Benchmark evidence is candidate-specific and does not measure this model suggestion."))
-            fixture.clickText("Measurement details")
-            fixture.render("performance-benchmark-details-$width-$height-$scale")
-            fixture.assertTextFits("Benchmark evidence")
-            assertTrue(fixture.hasText("Measured trade-offs"))
-            assertTrue(fixture.hasText("BenchmarkRun"))
-          }
+        }
+      }
+
+      renderReferenceSurface("summary") { RoundedSummaryVisualFixture(logicalWidth) }
+      renderReferenceSurface("analysis") { RoundedAnalysisVisualFixture(logicalWidth) }
+      renderReferenceSurface("bugs") { AcceptanceResultPane("bugs", "partial") }
+      renderReferenceSurface("performance") { AcceptanceResultPane("performance", "partial") }
+      renderReferenceSurface("security") { AcceptanceResultPane("security", "partial") }
+      renderReferenceSurface("source") { EditorVisualFixture(logicalWidth) }
+      renderReferenceSurface("review") { EditorVisualFixture(logicalWidth, comparison = true) }
     }
   }
 
   @Test
-  fun gutterHandlesRetainVisibleKeyboardFocusAndCommitResizing() {
-    listOf(false, true).forEach { horizontal ->
-      var size by mutableStateOf(220f)
-      val commits = mutableListOf<Float>()
-      val label =
-          if (horizontal) "Resize bottom pane. Use Up or Down Arrow."
-          else "Resize adjacent panes. Use Left or Right Arrow."
-      ComposeVisualFixture(160, 160) {
-            Box(Modifier.fillMaxSize().background(ActivityRail)) {
-              if (horizontal) HorizontalResizableDivider({ size += it }, { commits += size })
-              else ResizableDivider({ size += it }, { commits += size })
-            }
-          }
-          .use { fixture ->
-            fixture.render()
-            fixture.assertColorVisible(ControlBorder)
-            assertTrue(fixture.requestDescriptionFocus(label))
-            fixture.render()
-            fixture.assertColorVisible(FocusAccent)
-            assertTrue(fixture.pressKey(if (horizontal) Key.DirectionUp else Key.DirectionRight))
-            fixture.render("frame-${if (horizontal) "horizontal" else "vertical"}-splitter-focus")
-            assertEquals(232f, size)
-            assertEquals(listOf(232f), commits)
-            assertTrue(fixture.pressKey(if (horizontal) Key.DirectionDown else Key.DirectionLeft))
-            fixture.render()
-            assertEquals(220f, size)
-            assertEquals(listOf(232f, 220f), commits)
-            fixture.dragDescription(label, if (horizontal) Offset(0f, 40f) else Offset(40f, 0f))
-            assertTrue(
-                if (horizontal) size < 220f else size > 220f,
-                "Pointer resizing must still update the pane")
-            fixture.awaitResizeCommit(commits, expectedCount = 3)
-            assertEquals(3, commits.size)
-            assertEquals(size, commits.last(), "Pointer release must save the current size")
-            repeat(20) { drag ->
-              val distance = if (drag % 2 == 0) -40f else 40f
-              val previousSize = size
-              fixture.dragDescription(
-                  label, if (horizontal) Offset(0f, distance) else Offset(distance, 0f))
-              assertTrue(size != previousSize, "Each pointer drag must resize the pane")
-              fixture.awaitResizeCommit(commits, expectedCount = 4 + drag)
-              assertEquals(4 + drag, commits.size, "Each release must commit exactly once")
-              assertEquals(size, commits.last(), "Each release must save the current size")
-            }
-          }
-    }
-  }
-
-  @Test
-  fun unknownFileProgressKeepsOneTruthfulTrackAcrossActiveAndPausedRuns() {
-    listOf(
-            Triple("running", "Pause", "Resume"),
-            Triple("paused", "Resume", "Pause"),
-        )
-        .forEach { (status, expectedAction, absentAction) ->
-          val run =
-              analysisRunFixture()
-                  .copy(
-                      status = status,
-                      files = emptyList(),
-                      sections = analysisRunFixture().sections.map { it.copy(status = status) },
-                  )
-          ComposeVisualFixture(800, 650, 1.5f) {
-                AnalysisWorkspacePane(
-                    AnalysisWorkspacePaneState(
-                        resultProjectFixture(), ProjectAnalysisRunState(run = run)),
-                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}),
-                )
-              }
-              .use { fixture ->
-                fixture.render("analysis-progress-unknown-$status-800-1.5")
-                fixture.assertTextFits(analysisStatusLabel(status))
-                fixture.assertTextFits("File progress unavailable")
-                fixture.assertTextFits(expectedAction)
-                fixture.assertTextFits("Cancel")
-                assertFalse(fixture.hasText(absentAction))
-                assertFalse(fixture.hasText("0 of 0 files finished"))
-                assertEquals(1, fixture.tagCount("analysis-run-progress-track"))
-                assertTrue(fixture.hasDescription("Files finished: progress unavailable"))
-              }
-        }
-  }
-
-  @Test
-  fun sharedRunStripWrapsProgressAndUsesCurrentLifecycleControlsInSummary() {
-    val paths = listOf("internal/transport/main.go", "internal/storage/repository.go")
-    val initialRun =
-        analysisRunFixture()
-            .copy(
-                status = "running",
-                identity =
-                    analysisRunFixture()
-                        .identity
-                        .copy(
-                            projectId = visualFixtureProject.projectId,
-                            projectRevision = visualFixtureProject.projectRevision),
-                files =
-                    paths.mapIndexed { index, path ->
-                      AnalysisRunFile(
-                          path,
-                          "hash-$index",
-                          "Go",
-                          listOf(AnalysisStageProgress("semantic", "running", 1, false)))
-                    })
-    listOf(1440 to 1f, 800 to 1.5f).forEach { (width, scale) ->
-      var state by mutableStateOf(ProjectAnalysisRunState(run = initialRun))
-      var pauses = 0
-      var resumes = 0
-      var cancels = 0
-      val actions =
-          AnalysisWorkspaceActions(
-              { _, _ -> error("Summary must not start or retry analysis") },
-              { pauses++ },
-              { resumes++ },
-              { cancels++ },
-              {})
-      ComposeVisualFixture(width, 650, scale) {
-            ProjectSummaryPane(
-                visualFixtureOverview,
-                visualFixtureProject,
+  fun nativeTerminalContentStaysInsideTheRoundedDockWhenResized() {
+    listOf(140f, 220f, 360f).forEach { dockHeight ->
+      ComposeVisualFixture(1000, 600) {
+            TerminalDock(
+                DesktopLayoutState(bottomCollapsed = false, bottomHeight = dockHeight),
+                TerminalWorkspaceState(),
                 {},
-                run = state.run,
-                analysisState = state,
-                analysisActions = actions)
+                {},
+                TerminalTabActions({}, {}, {}),
+                {},
+                {},
+                { modifier ->
+                  Box(modifier.testTag("native-terminal-content").background(EditorCanvas))
+                },
+                modifier = Modifier.testTag("native-terminal-dock"))
           }
           .use { fixture ->
-            fixture.render("summary-run-strip-$width-$scale")
-            fixture.assertTextFits("Running")
-            fixture.assertTextFits("0 of 2 files finished")
-            fixture.assertTextFits("Pause")
-            fixture.assertTextFits("Cancel")
-            assertFalse(fixture.hasText("Start analysis"))
-            assertFalse(fixture.hasText("Analyze stale & failed"))
-            assertTrue(fixture.taggedBounds("analysis-run-progress-track").width > 0f)
-            if (width == 1440) {
-              fixture.assertTextSharesRowBefore("Running", "0 of 2 files finished")
-              fixture.assertTextSharesRowBefore(
-                  "0 of 2 files finished", "Current: ${paths.first()}")
-              fixture.assertTextSharesRowBefore("Current: ${paths.first()}", "Pause")
-            } else {
-              fixture.assertTextAbove("Current: ${paths.first()}", "Pause")
-            }
-            fixture.clickText("Pause")
-            fixture.clickText("Cancel")
-            assertEquals(1, pauses)
-            assertEquals(1, cancels)
-            fixture.clickDescription("Show active files")
-            fixture.render("summary-run-strip-expanded-$width-$scale")
-            fixture.assertTextFits("Current: ${paths.last()}", maxLines = 2)
-
-            state = state.copy(action = "pausing")
-            fixture.render("summary-run-strip-disabled-$width-$scale")
-            assertTrue(fixture.isDisabled("Pause"))
-
-            state = state.copy(run = initialRun.copy(status = "paused"), action = "")
-            fixture.render("summary-run-strip-paused-$width-$scale")
-            fixture.assertTextFits("Paused")
-            fixture.assertTextFits("Resume")
-            fixture.clickText("Resume")
-            assertEquals(1, resumes)
+            fixture.render("terminal-native-inset-$dockHeight")
+            val dock = fixture.taggedBounds("native-terminal-dock")
+            val content = fixture.taggedBounds("native-terminal-content")
+            assertEquals(8f, content.left - dock.left, 1f)
+            assertEquals(8f, dock.right - content.right, 1f)
+            assertEquals(8f, dock.bottom - content.bottom, 1f)
+            assertTrue(content.height > 70f)
           }
     }
+  }
+
+  @Test
+  fun candidateComparisonFillsTheEditorAcrossWindowAndTextSizes() {
+    listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
+        (width, height) ->
+      listOf(1f, 1.25f, 1.5f).forEach { scale ->
+        ComposeVisualFixture(width, height, scale) {
+              EditorVisualFixture(width.toFloat(), comparison = true)
+            }
+            .use { fixture ->
+              fixture.render("comparison-frame-$width-$height-$scale")
+              listOf("Candidate diff", "Read-only", "New function", "Side-by-side", "Unified")
+                  .forEach(fixture::assertTextFits)
+              assertFalse(fixture.hasEditableText("Read-only composed diff"))
+              assertTrue(fixture.hasDescription("Read-only composed diff"))
+              val wide = fixture.hasText("Current")
+              val column =
+                  fixture.taggedBounds(
+                      if (wide) "diff-Current-column" else "diff-Current → Candidate-column")
+              assertTrue(
+                  column.height > 180f,
+                  "Comparison must keep usable canvas height at $width/$height/$scale: $column")
+              if (wide) {
+                val candidate = fixture.taggedBounds("diff-Candidate-column")
+                assertEquals(column.bottom, candidate.bottom, 1f)
+                assertEquals(column.height, candidate.height, 1f)
+              }
+            }
+      }
+    }
+  }
+
+  @Test
+  fun sourceGutterAndBreadcrumbStayAlignedAtLargeText() {
+    ComposeVisualFixture(1000, 760, 1.5f) { EditorVisualFixture(1000f) }
+        .use { fixture ->
+          fixture.render("source-alignment-1000-760-1.5")
+          fixture.assertTextFits("Read-only")
+          (1..12).forEach { line ->
+            val number = fixture.taggedBounds("source-number-$line")
+            val code = fixture.taggedBounds("source-code-$line")
+            assertEquals(number.top, code.top, 1f)
+            assertEquals(30f, code.height, 1f)
+          }
+          assertFalse(fixture.hasEditableText(withinTag = "source-viewport"))
+          assertTrue(fixture.copyTextByDragging("package api").isNotEmpty())
+        }
   }
 
   @Test
@@ -430,6 +268,122 @@ class DesktopVisualLayoutTest {
                   fixture.clickVisibleDescription("View ${type.workspace.name} results")
                 }
                 assertEquals(AnalysisResultType.entries.map { it.workspace }, navigations)
+              }
+        }
+  }
+
+  @Test
+  fun sharedRunStripWrapsProgressAndUsesCurrentLifecycleControlsInSummary() {
+    val paths = listOf("internal/transport/main.go", "internal/storage/repository.go")
+    val initialRun =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                identity =
+                    analysisRunFixture()
+                        .identity
+                        .copy(
+                            projectId = visualFixtureProject.projectId,
+                            projectRevision = visualFixtureProject.projectRevision),
+                files =
+                    paths.mapIndexed { index, path ->
+                      AnalysisRunFile(
+                          path,
+                          "hash-$index",
+                          "Go",
+                          listOf(AnalysisStageProgress("semantic", "running", 1, false)))
+                    })
+    listOf(1440 to 1f, 800 to 1.5f).forEach { (width, scale) ->
+      var state by mutableStateOf(ProjectAnalysisRunState(run = initialRun))
+      var pauses = 0
+      var resumes = 0
+      var cancels = 0
+      val actions =
+          AnalysisWorkspaceActions(
+              { _, _ -> error("Summary must not start or retry analysis") },
+              { pauses++ },
+              { resumes++ },
+              { cancels++ },
+              {})
+      ComposeVisualFixture(width, 650, scale) {
+            ProjectSummaryPane(
+                visualFixtureOverview,
+                visualFixtureProject,
+                {},
+                run = state.run,
+                analysisState = state,
+                analysisActions = actions)
+          }
+          .use { fixture ->
+            fixture.render("summary-run-strip-$width-$scale")
+            fixture.assertTextFits("Running")
+            fixture.assertTextFits("0 of 2 files finished")
+            fixture.assertTextFits("Pause")
+            fixture.assertTextFits("Cancel")
+            assertFalse(fixture.hasText("Start analysis"))
+            assertFalse(fixture.hasText("Analyze stale & failed"))
+            assertTrue(fixture.taggedBounds("analysis-run-progress-track").width > 0f)
+            if (width == 1440) {
+              fixture.assertTextSharesRowBefore("Running", "0 of 2 files finished")
+              fixture.assertTextSharesRowBefore(
+                  "0 of 2 files finished", "Current: ${paths.first()}")
+              fixture.assertTextSharesRowBefore("Current: ${paths.first()}", "Pause")
+            } else {
+              fixture.assertTextAbove("Current: ${paths.first()}", "Pause")
+            }
+            fixture.clickText("Pause")
+            fixture.clickText("Cancel")
+            assertEquals(1, pauses)
+            assertEquals(1, cancels)
+            fixture.clickDescription("Show active files")
+            fixture.render("summary-run-strip-expanded-$width-$scale")
+            fixture.assertTextFits("Current: ${paths.last()}", maxLines = 2)
+
+            state = state.copy(action = "pausing")
+            fixture.render("summary-run-strip-disabled-$width-$scale")
+            assertTrue(fixture.isDisabled("Pause"))
+
+            state = state.copy(run = initialRun.copy(status = "paused"), action = "")
+            fixture.render("summary-run-strip-paused-$width-$scale")
+            fixture.assertTextFits("Paused")
+            fixture.assertTextFits("Resume")
+            fixture.clickText("Resume")
+            assertEquals(1, resumes)
+          }
+    }
+  }
+
+  @Test
+  fun unknownFileProgressKeepsOneTruthfulTrackAcrossActiveAndPausedRuns() {
+    listOf(
+            Triple("running", "Pause", "Resume"),
+            Triple("paused", "Resume", "Pause"),
+        )
+        .forEach { (status, expectedAction, absentAction) ->
+          val run =
+              analysisRunFixture()
+                  .copy(
+                      status = status,
+                      files = emptyList(),
+                      sections = analysisRunFixture().sections.map { it.copy(status = status) },
+                  )
+          ComposeVisualFixture(800, 650, 1.5f) {
+                AnalysisWorkspacePane(
+                    AnalysisWorkspacePaneState(
+                        resultProjectFixture(), ProjectAnalysisRunState(run = run)),
+                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}),
+                )
+              }
+              .use { fixture ->
+                fixture.render("analysis-progress-unknown-$status-800-1.5")
+                fixture.assertTextFits(analysisStatusLabel(status))
+                fixture.assertTextFits("File progress unavailable")
+                fixture.assertTextFits(expectedAction)
+                fixture.assertTextFits("Cancel")
+                assertFalse(fixture.hasText(absentAction))
+                assertFalse(fixture.hasText("0 of 0 files finished"))
+                assertEquals(1, fixture.tagCount("analysis-run-progress-track"))
+                assertTrue(fixture.hasDescription("Files finished: progress unavailable"))
               }
         }
   }
@@ -679,6 +633,77 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun securityProductionRendersKeepEvidenceIdentityAndScopedEmptyStateDistinct() {
+    val populated = securityPageFixture()
+    var prepared = 0
+    var openedAnalysis = 0
+    ComposeVisualFixture(1440, 900) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(populated, resultIndexFixture()),
+              SecurityWorkspaceActions(
+                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("security-populated-wide-1440-900")
+          fixture.clickDescription("Inspect Credential-like assignment")
+          fixture.render("security-source-rule-wide-1440-900")
+          assertTrue(fixture.hasText("Source rule"))
+          assertTrue(
+              fixture.hasText(
+                  "A source rule match identifies a pattern; it does not confirm a vulnerability."))
+          fixture.clickDescription("Inspect Review input boundary")
+          fixture.render("security-model-hypothesis-wide-1440-900")
+          assertTrue(fixture.hasText("Model hypothesis"))
+          assertTrue(
+              fixture.hasText(
+                  "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."))
+          assertEquals(0, prepared)
+          assertEquals(0, openedAnalysis)
+        }
+
+    val reports = requireNotNull(populated.results)
+    val sourceReport = reports.security.single { it.source == "deterministic" }
+    val unavailableEvidence =
+        populated.copy(
+            section =
+                populated.section.copy(
+                    results = reports.copy(security = listOf(sourceReport.copy(source = "ai")))))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(unavailableEvidence, resultIndexFixture()),
+              SecurityWorkspaceActions(
+                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("security-unavailable-evidence-compact-800-650-150")
+          fixture.clickDescription("Inspect Credential-like assignment")
+          fixture.render("security-unavailable-evidence-detail-compact-800-650-150")
+          assertTrue(fixture.hasText("Evidence type unavailable"))
+          assertTrue(
+              fixture.hasText(
+                  "Evidence type was unavailable. Do not treat this finding as verified."))
+          assertEquals(0, prepared)
+          assertEquals(0, openedAnalysis)
+        }
+
+    val empty = resultPageFixture("security").copy(run = null, section = AnalysisSectionState())
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(empty, null),
+              SecurityWorkspaceActions(
+                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("security-empty-compact-800-650-150")
+          fixture.assertTextFits("Analysis has not started.")
+          assertFalse(fixture.hasText("Prepare fix"))
+          fixture.clickText("View analysis")
+          assertEquals(1, openedAnalysis)
+          assertEquals(0, prepared)
+        }
+  }
+
+  @Test
   fun stalePartialEmptyAndHistoricalEvidenceRemainDistinct() {
     val base = performancePageFixture()
     val stale =
@@ -726,6 +751,56 @@ class DesktopVisualLayoutTest {
           fixture.render("results-history-800")
           assertTrue(fixture.hasText("Previous uncategorized risk"))
         }
+  }
+
+  @Test
+  fun performanceBenchmarkStatusAndMeasurementDetailsRemainReadableAcrossLayouts() {
+    val choice =
+        GoBenchmarkChoice("BenchmarkRun", listOf("go", "test", "-bench", "^BenchmarkRun$"), "scope")
+    val identity =
+        GoBenchmarkComparisonIdentity(
+            "draft", 1, "candidate", "project", "revision", "base", "main.go")
+    val comparison =
+        GoBenchmarkComparison(
+            draftId = "draft",
+            draftRevision = 1,
+            draftHash = "candidate",
+            projectId = "project",
+            projectRevision = "revision",
+            baseFileHash = "base",
+            targetPath = "main.go",
+            benchmark = choice.name,
+            scope = choice.scope,
+            status = "completed",
+            command = choice.command,
+            base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 100.0, 10, 1) }),
+            candidate = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 90.0, 12, 1) }))
+    listOf(Triple(1440, 900, 1f), Triple(800, 400, 1.5f)).forEach { (width, height, scale) ->
+      ComposeVisualFixture(width, height, scale) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    performancePageFixture(),
+                    resultIndexFixture(),
+                    benchmarkComparison = comparison,
+                    expectedBenchmarkIdentity = identity,
+                    selectedBenchmark = choice),
+                PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> })))
+          }
+          .use { fixture ->
+            fixture.render("performance-benchmark-$width-$height-$scale")
+            assertTrue(fixture.hasText("Measured · selected benchmark"))
+            fixture.clickText("Benchmark evidence")
+            fixture.render("performance-benchmark-expanded-$width-$height-$scale")
+            assertTrue(
+                fixture.hasText(
+                    "Benchmark evidence is candidate-specific and does not measure this model suggestion."))
+            fixture.clickText("Measurement details")
+            fixture.render("performance-benchmark-details-$width-$height-$scale")
+            fixture.assertTextFits("Benchmark evidence")
+            assertTrue(fixture.hasText("Measured trade-offs"))
+            assertTrue(fixture.hasText("BenchmarkRun"))
+          }
+    }
   }
 
   @Test
@@ -910,6 +985,77 @@ class DesktopVisualLayoutTest {
           fixture.assertTextFits("Explanation canceled")
           assertEquals(1, requests)
         }
+  }
+
+  @Test
+  fun filledWorkspacePanesKeepRoundedCornersGuttersAndFullWidthTerminal() {
+    listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
+        (width, height) ->
+      listOf(1f, 1.25f, 1.5f).forEach { scale ->
+        (if (width >= 1000) listOf(false, true) else listOf(false)).forEach { expanded ->
+          ComposeVisualFixture(width, height, scale) {
+                EditorVisualFixture(width.toFloat(), terminalExpanded = expanded)
+              }
+              .use { fixture ->
+                fixture.render(
+                    "frame-$width-$height-$scale-${if (expanded) "expanded" else "collapsed"}")
+                fixture.assertWorkspaceFrameGeometry(docked = width >= 1000)
+                fixture.assertTextFits("Terminal")
+                fixture.assertTextFits("Analysis · Completed")
+                fixture.assertTextFits("user.go")
+              }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun gutterHandlesRetainVisibleKeyboardFocusAndCommitResizing() {
+    listOf(false, true).forEach { horizontal ->
+      var size by mutableStateOf(220f)
+      val commits = mutableListOf<Float>()
+      val label =
+          if (horizontal) "Resize bottom pane. Use Up or Down Arrow."
+          else "Resize adjacent panes. Use Left or Right Arrow."
+      ComposeVisualFixture(160, 160) {
+            Box(Modifier.fillMaxSize().background(ActivityRail)) {
+              if (horizontal) HorizontalResizableDivider({ size += it }, { commits += size })
+              else ResizableDivider({ size += it }, { commits += size })
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.assertColorVisible(ControlBorder)
+            assertTrue(fixture.requestDescriptionFocus(label))
+            fixture.render()
+            fixture.assertColorVisible(FocusAccent)
+            assertTrue(fixture.pressKey(if (horizontal) Key.DirectionUp else Key.DirectionRight))
+            fixture.render("frame-${if (horizontal) "horizontal" else "vertical"}-splitter-focus")
+            assertEquals(232f, size)
+            assertEquals(listOf(232f), commits)
+            assertTrue(fixture.pressKey(if (horizontal) Key.DirectionDown else Key.DirectionLeft))
+            fixture.render()
+            assertEquals(220f, size)
+            assertEquals(listOf(232f, 220f), commits)
+            fixture.dragDescription(label, if (horizontal) Offset(0f, 40f) else Offset(40f, 0f))
+            assertTrue(
+                if (horizontal) size < 220f else size > 220f,
+                "Pointer resizing must still update the pane")
+            fixture.awaitResizeCommit(commits, expectedCount = 3)
+            assertEquals(3, commits.size)
+            assertEquals(size, commits.last(), "Pointer release must save the current size")
+            repeat(20) { drag ->
+              val distance = if (drag % 2 == 0) -40f else 40f
+              val previousSize = size
+              fixture.dragDescription(
+                  label, if (horizontal) Offset(0f, distance) else Offset(distance, 0f))
+              assertTrue(size != previousSize, "Each pointer drag must resize the pane")
+              fixture.awaitResizeCommit(commits, expectedCount = 4 + drag)
+              assertEquals(4 + drag, commits.size, "Each release must commit exactly once")
+              assertEquals(size, commits.last(), "Each release must save the current size")
+            }
+          }
+    }
   }
 
   @Test
@@ -1281,8 +1427,8 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("review-invalid-draft-800-1.3")
-          assertTrue(fixture.hasText("Progress"))
-          assertTrue(fixture.hasText("Next action"))
+          assertTrue(fixture.hasText("Validation failed"))
+          assertTrue(fixture.hasText("Edit draft"))
           assertTrue(fixture.hasText("missing closing brace"))
           assertFalse(fixture.hasDescription("Expand Validation diagnostics"))
           fixture.clickText("Failed check details")
@@ -1321,10 +1467,10 @@ class DesktopVisualLayoutTest {
           .use { fixture ->
             fixture.render("review-ready-$width-${height}-$scale")
             assertTrue(fixture.hasText("Passed"))
-            assertTrue(fixture.hasText("The request is bound to this candidate."))
-            assertTrue(fixture.hasText("Next action"))
-            assertTrue(fixture.hasText("Apply Serve to internal/api/server.go"))
-            fixture.clickText("Focused check details")
+            assertTrue(fixture.hasText("Source unchanged"))
+            assertTrue(fixture.hasText("Ready to apply"))
+            assertTrue(fixture.hasDescription("Apply Serve to internal/api/server.go"))
+            fixture.clickText("Check details")
             fixture.render("review-ready-details-$width-${height}-$scale")
             assertTrue(fixture.hasText("Candidate hash: draft-hash"))
             assertTrue(fixture.hasText("Check identity hash: draft-hash"))
@@ -1968,6 +2114,61 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun roundedAnalysisGroupsRunControlsAndShowsItsFileTableAtSupportedSizes() {
+    listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
+        (width, height) ->
+      listOf(1f, 1.25f, 1.5f).forEach { scale ->
+        ComposeVisualFixture(width, height, scale) { RoundedAnalysisVisualFixture(width.toFloat()) }
+            .use { fixture ->
+              fixture.render("analysis-frame-$width-$height-$scale")
+              assertTrue(fixture.hasDescription("Analysis tool window, selected"))
+              fixture.assertTextFits("Running")
+              fixture.assertTextFits("8 of 12 files finished")
+              fixture.assertTextFits("Current: internal/api/user.go")
+              fixture.assertTextFits("Pause")
+              fixture.assertTextFits("Cancel")
+              if (width >= 1440 && scale == 1f) {
+                fixture.assertAnalysisTableColumns()
+              }
+              fixture.revealText("Files", "analysis-page")
+              assertTrue(fixture.hasDescription("Collapse Files"))
+              fixture.revealText(
+                  "Selection locked. Finish or cancel the current run to change files.",
+                  "analysis-page")
+              fixture.assertTextFits(
+                  "Selection locked. Finish or cancel the current run to change files.")
+              fixture.render("analysis-files-frame-$width-$height-$scale")
+              fixture.revealText("Refresh files", "analysis-page")
+              fixture.assertTextFits("Refresh files")
+            }
+      }
+    }
+  }
+
+  @Test
+  fun roundedSummaryUsesTheProductionFrameAndSelectedSummaryDestination() {
+    listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
+        (width, height) ->
+      listOf(1f, 1.25f, 1.5f).forEach { scale ->
+        ComposeVisualFixture(width, height, scale) { RoundedSummaryVisualFixture(width.toFloat()) }
+            .use { fixture ->
+              fixture.render("summary-frame-$width-$height-$scale")
+              assertTrue(fixture.hasDescription("Summary tool window, selected"))
+              assertTrue(fixture.hasDescription("Analysis tool window, not selected"))
+              fixture.assertTextFits(visualFixtureProject.name)
+              fixture.assertTextFits("Analysis coverage")
+              assertFalse(fixture.hasEditableText())
+              if (width == 1600 && scale == 1f) {
+                fixture.assertSummaryColumns()
+                fixture.assertTextBefore("Bugs", "Performance")
+                fixture.assertTextBefore("Performance", "Security")
+              }
+            }
+      }
+    }
+  }
+
+  @Test
   fun summaryDashboardShowsGroupedInterpretationWithDiagramDisclosures() {
     val overview =
         visualFixtureOverview.copy(
@@ -2229,6 +2430,29 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryOutdatedBadgeClearsAfterRefreshAndCategoryNamesStayVisible() {
+    var overview by mutableStateOf(visualFixtureOverview)
+    ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Outdated"))
+          overview = overview.copy(analysisCoverage = AnalysisCoverage(total = 23, fresh = 23))
+          fixture.render()
+          assertFalse(fixture.hasText("Outdated"))
+          repeat(8) {
+            if (!fixture.hasText("Bugs")) {
+              fixture.pressKey(Key.Tab)
+              fixture.render()
+            }
+          }
+          fixture.render("summary-bug-icon-keyboard-label")
+          assertTrue(fixture.hasText("Bugs"))
+          assertTrue(fixture.hasDescription("Bugs"))
+          assertTrue(fixture.hasText("Performance"))
+        }
+  }
+
+  @Test
   fun summaryShowsOutdatedBadgeForStaleRunEvenWhenProjectPurposeIsFresh() {
     val project = resultProjectFixture()
     val overview = visualFixtureOverview.copy(analysisCoverage = AnalysisCoverage())
@@ -2344,7 +2568,9 @@ class DesktopVisualLayoutTest {
   @Test
   fun validDiagramDisclosureAcceptsTheFirstClickWhileRenderingStarts() {
     val source = "flowchart TD\n A[Client] --> B[Server]"
-    ComposeVisualFixture(800, 650, 1.5f) { MermaidDiagram(source, "Architecture") }
+    ComposeVisualFixture(800, 650, 1.5f) {
+          MermaidDiagram(source, "Architecture", title = "Architecture")
+        }
         .use { fixture ->
           fixture.render("summary-mermaid-first-frame")
           assertTrue(
@@ -2392,6 +2618,51 @@ class DesktopVisualLayoutTest {
             fixture.awaitDescription("$label diagram\n$value")
             assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
           }
+    }
+  }
+
+  @Test
+  fun summaryIssuesKeepPriorityBreakdownAndNeutralZeroCounts() {
+    val (baseRun, section) = summaryBugFixture(listOf("high", "high", "high", "low"))
+    val run =
+        baseRun.copy(
+            sections =
+                baseRun.sections.map {
+                  when (it.category) {
+                    "performance" -> it.copy(findingCount = 5)
+                    "security" -> it.copy(findingCount = 0)
+                    else -> it
+                  }
+                })
+    listOf(1440 to 900, 1000 to 650, 999 to 650, 800 to 650, 1280 to 600).forEach { (width, height)
+      ->
+      listOf(1f, 1.5f).forEach { scale ->
+        ComposeVisualFixture(width, height, scale) {
+              ProjectSummaryPane(
+                  visualFixtureOverview,
+                  resultProjectFixture(),
+                  {},
+                  run = run,
+                  sections = bugSections(section))
+            }
+            .use { fixture ->
+              fixture.render()
+              fixture.render("summary-issue-colors-$width-$height-$scale")
+              fixture.revealText("High: 3 · Medium: 0 · Low: 1")
+              fixture.assertTextFits("High: 3 · Medium: 0 · Low: 1", maxLines = 3)
+              fixture.assertBugPrioritiesInsideCard("High: 3 · Medium: 0 · Low: 1")
+              assertFalse(fixture.hasText("Score: 10 points"))
+              assertFalse(fixture.hasText("Score unavailable"))
+              assertFalse(fixture.hasText("Bug priorities"))
+              listOf("Bugs" to Error, "Performance" to Information, "Security" to FaintText)
+                  .forEach { (label, tint) ->
+                    fixture.revealText(label)
+                    fixture.assertColorVisible(tint)
+                    assertTrue(fixture.hasDescription("View $label results"))
+                    fixture.assertTextFits(label)
+                  }
+            }
+      }
     }
   }
 
@@ -2581,74 +2852,6 @@ class DesktopVisualLayoutTest {
           kotlin.test.assertEquals(0, mutations)
         }
   }
-
-  @Test
-  fun summaryOutdatedBadgeClearsAfterRefreshAndCategoryNamesStayVisible() {
-    var overview by mutableStateOf(visualFixtureOverview)
-    ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
-        .use { fixture ->
-          fixture.render()
-          assertTrue(fixture.hasText("Outdated"))
-          overview = overview.copy(analysisCoverage = AnalysisCoverage(total = 23, fresh = 23))
-          fixture.render()
-          assertFalse(fixture.hasText("Outdated"))
-          repeat(8) {
-            if (!fixture.hasText("Bugs")) {
-              fixture.pressKey(Key.Tab)
-              fixture.render()
-            }
-          }
-          fixture.render("summary-bug-icon-keyboard-label")
-          assertTrue(fixture.hasText("Bugs"))
-          assertTrue(fixture.hasDescription("Bugs"))
-          assertTrue(fixture.hasText("Performance"))
-        }
-  }
-
-  @Test
-  fun summaryIssuesKeepPriorityBreakdownAndNeutralZeroCounts() {
-    val (baseRun, section) = summaryBugFixture(listOf("high", "high", "high", "low"))
-    val run =
-        baseRun.copy(
-            sections =
-                baseRun.sections.map {
-                  when (it.category) {
-                    "performance" -> it.copy(findingCount = 5)
-                    "security" -> it.copy(findingCount = 0)
-                    else -> it
-                  }
-                })
-    listOf(1440 to 900, 1000 to 650, 999 to 650, 800 to 650, 1280 to 600).forEach { (width, height)
-      ->
-      listOf(1f, 1.5f).forEach { scale ->
-        ComposeVisualFixture(width, height, scale) {
-              ProjectSummaryPane(
-                  visualFixtureOverview,
-                  resultProjectFixture(),
-                  {},
-                  run = run,
-                  sections = bugSections(section))
-            }
-            .use { fixture ->
-              fixture.render()
-              fixture.render("summary-issue-colors-$width-$height-$scale")
-              fixture.revealText("High: 3 · Medium: 0 · Low: 1")
-              fixture.assertTextFits("High: 3 · Medium: 0 · Low: 1", maxLines = 3)
-              fixture.assertBugPrioritiesInsideCard("High: 3 · Medium: 0 · Low: 1")
-              assertFalse(fixture.hasText("Score: 10 points"))
-              assertFalse(fixture.hasText("Score unavailable"))
-              assertFalse(fixture.hasText("Bug priorities"))
-              listOf("Bugs" to Error, "Performance" to Information, "Security" to FaintText)
-                  .forEach { (label, tint) ->
-                    fixture.revealText(label)
-                    fixture.assertColorVisible(tint)
-                    assertTrue(fixture.hasDescription("View $label results"))
-                    fixture.assertTextFits(label)
-                  }
-            }
-      }
-    }
-  }
 }
 
 /** This test-only adapter is tied to the Compose version pinned in build.gradle.kts. */
@@ -2660,6 +2863,17 @@ internal class ComposeVisualFixture(
     densityScale: Float = 1f,
     content: @Composable () -> Unit,
 ) : AutoCloseable {
+  private val clipboard =
+      object : Clipboard {
+        override val nativeClipboard = java.awt.datatransfer.Clipboard("visual-test")
+
+        override suspend fun getClipEntry(): ClipEntry? =
+            nativeClipboard.getContents(null)?.let(::ClipEntry)
+
+        override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+          nativeClipboard.setContents(clipEntry?.asAwtTransferable, null)
+        }
+      }
   private val owners = mutableListOf<SemanticsOwner>()
   private val platform =
       object : PlatformContext by PlatformContext.Empty() {
@@ -2696,7 +2910,9 @@ internal class ComposeVisualFixture(
   private var frameTime = 0L
 
   init {
-    scene.setContent { MiniOrcaTheme { content() } }
+    scene.setContent {
+      CompositionLocalProvider(LocalClipboard provides clipboard) { MiniOrcaTheme { content() } }
+    }
   }
 
   fun render(name: String? = null) {
@@ -2857,15 +3073,6 @@ internal class ComposeVisualFixture(
     render()
   }
 
-  fun assertTooltipBelowAction(label: String, action: String) {
-    val tooltip = textNodes(label).single().boundsInWindow
-    val anchor = visibleActionBounds(action)
-    assertTrue(
-        tooltip.top >= anchor.bottom - 8f,
-        "$label must be anchored to $action: $tooltip vs $anchor")
-    assertTrue(tooltip.right <= width && tooltip.bottom <= height, "$label must stay in the window")
-  }
-
   fun tryClick(label: String): Boolean =
       nodes()
           .filter {
@@ -2924,6 +3131,34 @@ internal class ComposeVisualFixture(
           .firstOrNull()
           ?.invoke() ?: false
 
+  fun dragDescription(label: String, delta: Offset) {
+    val start =
+        nodes()
+            .single {
+              it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+            }
+            .boundsInRoot
+            .center
+    scene.sendPointerEvent(PointerEventType.Press, start, button = PointerButton.Primary)
+    render()
+    scene.sendPointerEvent(PointerEventType.Move, start + delta / 2f)
+    render()
+    scene.sendPointerEvent(PointerEventType.Move, start + delta)
+    render()
+    scene.sendPointerEvent(PointerEventType.Release, start + delta, button = PointerButton.Primary)
+    render()
+  }
+
+  fun awaitResizeCommit(commits: List<Float>, expectedCount: Int) {
+    // Saving is a LaunchedEffect; a fixed number of frames can precede snapshot delivery.
+    val deadline = System.nanoTime() + 2_000_000_000L
+    while (commits.size < expectedCount && System.nanoTime() < deadline) {
+      render()
+      Thread.yield()
+    }
+    assertEquals(expectedCount, commits.size, "Timed out waiting for pointer resize commit")
+  }
+
   fun requestDescriptionFocus(label: String): Boolean =
       nodes()
           .asSequence()
@@ -2947,6 +3182,43 @@ internal class ComposeVisualFixture(
             }
             .firstNotNullOfOrNull { it.config.getOrNull(SemanticsActions.ScrollBy)?.action }
     assertTrue(requireNotNull(scroll).invoke(0f, pixels))
+  }
+
+  fun taggedBounds(tag: String): Rect = taggedNode(tag).boundsInRoot
+
+  fun tagCount(tag: String): Int =
+      nodes().count { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+
+  private fun taggedNode(tag: String): SemanticsNode =
+      nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+
+  fun horizontalScrollBy(tag: String, pixels: Float) {
+    assertTrue(
+        requireNotNull(taggedNode(tag).config.getOrNull(SemanticsActions.ScrollBy)?.action)
+            .invoke(pixels, 0f))
+  }
+
+  fun horizontalScrollValue(tag: String): Float =
+      requireNotNull(
+              taggedNode(tag).config.getOrNull(SemanticsProperties.HorizontalScrollAxisRange))
+          .value()
+
+  fun verticalScrollValue(tag: String): Float =
+      requireNotNull(taggedNode(tag).config.getOrNull(SemanticsProperties.VerticalScrollAxisRange))
+          .value()
+
+  fun copyTextByDragging(label: String): String {
+    val bounds = textNodes(label).first().boundsInRoot
+    val start = Offset(bounds.left + 1f, bounds.top + 10f)
+    val end = Offset(minOf(bounds.right - 2f, bounds.left + 120f), start.y)
+    scene.sendPointerEvent(PointerEventType.Press, start, button = PointerButton.Primary)
+    scene.sendPointerEvent(PointerEventType.Move, (start + end) / 2f)
+    scene.sendPointerEvent(PointerEventType.Move, end)
+    scene.sendPointerEvent(PointerEventType.Release, end, button = PointerButton.Primary)
+    render()
+    pressKey(Key.Copy)
+    render()
+    return clipboard.nativeClipboard.getData(DataFlavor.stringFlavor) as String
   }
 
   fun scrollableContentCount(): Int =
@@ -2977,17 +3249,41 @@ internal class ComposeVisualFixture(
           .firstOrNull()
           ?.invoke() ?: false
 
-  fun verticalScrollValue(tag: String): Float =
-      requireNotNull(taggedNode(tag).config.getOrNull(SemanticsProperties.VerticalScrollAxisRange))
-          .value()
+  fun revealText(label: String, scrollTag: String? = null) {
+    fun visible(): Boolean =
+        textNodes(label).any { node ->
+          val layouts = mutableListOf<TextLayoutResult>()
+          node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+          val bounds = node.boundsInRoot
+          bounds.height > 0 &&
+              bounds.top >= 0 &&
+              bounds.bottom <= height &&
+              layouts.any { it.size.height <= bounds.height + 1f }
+        }
+    if (visible()) return
+    scrollBy(-100_000f, scrollTag)
+    render()
+    repeat(100) {
+      if (visible()) return
+      scrollBy(160f, scrollTag)
+      render()
+    }
+    error("$label must be reachable by scrolling")
+  }
 
-  fun taggedBounds(tag: String): Rect = taggedNode(tag).boundsInRoot
-
-  fun tagCount(tag: String): Int =
-      nodes().count { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
-
-  private fun taggedNode(tag: String): SemanticsNode =
-      nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+  fun assertTextWrapsAndTailIsReachable(label: String, scrollTag: String) {
+    val node = textNodes(label).single()
+    val layouts = mutableListOf<TextLayoutResult>()
+    requireNotNull(node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action)
+        .invoke(layouts)
+    assertTrue(layouts.any { it.lineCount > 1 }, "$label must wrap instead of being clipped")
+    scrollBy(100_000f, scrollTag)
+    render()
+    val tail = textNodes(label).single().boundsInRoot
+    assertTrue(
+        tail.bottom > 0 && tail.bottom <= height,
+        "$label tail must be reachable by scrolling: $tail in ${width}x$height")
+  }
 
   fun revealSummaryStatus(label: String) {
     fun visible(): Boolean =
@@ -3011,57 +3307,6 @@ internal class ComposeVisualFixture(
     error("$label in Analysis coverage must be reachable by scrolling")
   }
 
-  fun assertTextSharesRowBefore(label: String, following: String) {
-    val first = textNodes(label).single().boundsInRoot
-    val second = textNodes(following).single().boundsInRoot
-    assertTrue(first.right < second.left, "$label must be left of $following")
-    assertTrue(
-        maxOf(first.top, second.top) < minOf(first.bottom, second.bottom),
-        "$label and $following must share a row")
-  }
-
-  fun dragDescription(label: String, delta: Offset) {
-    val start =
-        nodes()
-            .single {
-              it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
-            }
-            .boundsInRoot
-            .center
-    scene.sendPointerEvent(PointerEventType.Press, start, button = PointerButton.Primary)
-    render()
-    scene.sendPointerEvent(PointerEventType.Move, start + delta / 2f)
-    render()
-    scene.sendPointerEvent(PointerEventType.Move, start + delta)
-    render()
-    scene.sendPointerEvent(PointerEventType.Release, start + delta, button = PointerButton.Primary)
-    render()
-  }
-
-  fun awaitResizeCommit(commits: List<Float>, expectedCount: Int) {
-    // Saving is a LaunchedEffect; a fixed number of frames can precede snapshot delivery.
-    val deadline = System.nanoTime() + 2_000_000_000L
-    while (commits.size < expectedCount && System.nanoTime() < deadline) {
-      render()
-      Thread.yield()
-    }
-    assertEquals(expectedCount, commits.size, "Timed out waiting for pointer resize commit")
-  }
-
-  fun assertTextWrapsAndTailIsReachable(label: String, scrollTag: String) {
-    val node = textNodes(label).single()
-    val layouts = mutableListOf<TextLayoutResult>()
-    requireNotNull(node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action)
-        .invoke(layouts)
-    assertTrue(layouts.any { it.lineCount > 1 }, "$label must wrap instead of being clipped")
-    scrollBy(100_000f, scrollTag)
-    render()
-    val tail = textNodes(label).single().boundsInRoot
-    assertTrue(
-        tail.bottom > 0 && tail.bottom <= height,
-        "$label tail must be reachable by scrolling: $tail in ${width}x$height")
-  }
-
   fun assertSummaryColumns() {
     fun bounds(tag: String) =
         nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }.boundsInRoot
@@ -3076,28 +3321,6 @@ internal class ComposeVisualFixture(
     assertEquals(modules.top, insight.top, 1f)
     assertEquals(architecture.left, modules.left, 1f)
     assertEquals(flows.left, insight.left, 1f)
-  }
-
-  fun revealText(label: String, scrollTag: String? = null) {
-    fun visible(): Boolean =
-        textNodes(label).any { node ->
-          val layouts = mutableListOf<TextLayoutResult>()
-          node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
-          val bounds = node.boundsInRoot
-          bounds.height > 0 &&
-              bounds.top >= 0 &&
-              bounds.bottom <= height &&
-              layouts.any { it.size.height <= bounds.height + 1f }
-        }
-    if (visible()) return
-    scrollBy(-100_000f, scrollTag)
-    render()
-    repeat(100) {
-      if (visible()) return
-      scrollBy(160f, scrollTag)
-      render()
-    }
-    error("$label must be reachable by scrolling")
   }
 
   fun assertTextFits(label: String, maxLines: Int = 1) {
@@ -3150,12 +3373,32 @@ internal class ComposeVisualFixture(
         "$label must align to the right edge of Analysis coverage")
   }
 
+  fun assertAnalysisTableColumns() {
+    val headers =
+        listOf("File", "Analysis state", "Details").map { label ->
+          textNodes(label).minBy { it.boundsInRoot.top }.boundsInRoot
+        }
+    headers.zipWithNext().forEach { (first, second) ->
+      assertTrue(first.right < second.left)
+      assertEquals(first.center.y, second.center.y, 2f)
+    }
+  }
+
   fun assertTextBefore(label: String, following: String) {
     val first = textNodes(label).single().boundsInRoot
     val second = textNodes(following).single().boundsInRoot
     assertTrue(first.right < second.left, "$label must be left of $following")
     assertTrue(
         kotlin.math.abs(first.center.y - second.center.y) < 2f,
+        "$label and $following must share a row")
+  }
+
+  fun assertTextSharesRowBefore(label: String, following: String) {
+    val first = textNodes(label).single().boundsInRoot
+    val second = textNodes(following).single().boundsInRoot
+    assertTrue(first.right < second.left, "$label must be left of $following")
+    assertTrue(
+        maxOf(first.top, second.top) < minOf(first.bottom, second.bottom),
         "$label and $following must share a row")
   }
 
@@ -3177,6 +3420,64 @@ internal class ComposeVisualFixture(
             contrastRatio(layout.layoutInput.style.color, background) >= 4.5,
             "$label must retain readable text on $background")
       }
+    }
+  }
+
+  fun assertWorkspaceFrameGeometry(docked: Boolean) {
+    fun bounds(label: String): Rect {
+      val bounds =
+          nodes()
+              .single {
+                it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+              }
+              .boundsInRoot
+      assertTrue(
+          bounds.width > 0 &&
+              bounds.height > 0 &&
+              bounds.left >= 0 &&
+              bounds.top >= 0 &&
+              bounds.right <= width &&
+              bounds.bottom <= height,
+          "$label must fit: $bounds")
+      return bounds
+    }
+    val editor = bounds("Editor area")
+    val terminal = bounds("Terminal fixture")
+    val panes =
+        if (docked) listOf(bounds("Files tool window"), editor, bounds("Tool windows tool window"))
+        else listOf(editor)
+    assertEquals(56f, panes.first().left, 1f, "The rail and outer inset must stay visible")
+    assertEquals(width - 8f, panes.last().right, 1f, "The trailing frame must stay visible")
+    panes.forEach { pane ->
+      assertEquals(editor.top, pane.top, 1f)
+      assertEquals(editor.bottom, pane.bottom, 1f, "All panes must end above the terminal")
+    }
+    panes.zipWithNext().forEach { (left, right) ->
+      assertEquals(8f, right.left - left.right, 1f, "A single gutter separates adjacent panes")
+    }
+    if (docked)
+        assertTrue(editor.width >= MIN_EDITOR_WIDTH, "The editor must keep its minimum width")
+    assertEquals(panes.first().left, terminal.left, 1f)
+    assertEquals(panes.last().right, terminal.right, 1f)
+    assertEquals(8f, terminal.top - editor.bottom, 1f)
+    val rendered =
+        surface.makeImageSnapshot().use { snapshot ->
+          requireNotNull(snapshot.encodeToData()).use { data ->
+            javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(data.bytes))
+          }
+        }
+    (panes + terminal).forEach { pane ->
+      listOf(pane.left + 1, pane.right - 2).forEach { x ->
+        listOf(pane.top + 1, pane.bottom - 2).forEach { y ->
+          assertEquals(
+              ActivityRail.toArgb(),
+              rendered.getRGB(x.toInt(), y.toInt()),
+              "Filled children must be clipped to the rounded pane at $x,$y")
+        }
+      }
+      assertFalse(
+          ActivityRail.toArgb() == rendered.getRGB(pane.center.x.toInt(), (pane.top + 2).toInt()),
+          "The top edge must show the actual filled pane")
     }
   }
 
@@ -3248,7 +3549,7 @@ internal val visualFixtureProject =
         aiStatus = "fresh",
         analyzedAt = "")
 
-private val visualFixtureOverview =
+internal val visualFixtureOverview =
     ProjectOverview(
         projectId = "visual-fixture",
         projectRevision = "fixture-revision",
@@ -3402,71 +3703,138 @@ private fun SharedChromeStatesVisualFixture() {
   }
 }
 
-@Composable
-internal fun EditorVisualFixture(width: Float) {
-  val layout = DesktopLayoutState(bottomCollapsed = false)
-  val panes = dockedPaneWidths(width, layout.explorerWidth, layout.actionWidth)
-  val symbol =
-      SymbolInfo(
-          "GetUser", "function", "func GetUser(id string) (User, error)", 5, 12, "exact", true)
-  val file =
-      ProjectFileInfo(
+internal fun roundedAnalysisStateFixture(): ProjectAnalysisRunState {
+  val paths =
+      listOf(
+          "cmd/server/main.go",
+          "internal/api/routes.go",
           "internal/api/user.go",
-          "fixture-hash",
-          "user.go",
-          language = "Go",
-          sizeBytes = 480,
-          lineCount = 18,
-          modifiedAt = "",
-          binary = false,
-          content =
-              """
-        package api
+          "internal/db/store.go",
+          "internal/models/user.go",
+          "internal/service/service.go") + (1..6).map { "internal/services/worker$it.go" }
+  val finished = paths.take(2) + paths.takeLast(6)
+  val run =
+      analysisRunFixture().let { original ->
+        original.copy(
+            status = "running",
+            plan =
+                original.plan.copy(
+                    files = paths.map { AnalysisPlannedFile(it, "base", "Go", 20, emptyList()) }),
+            files =
+                paths.map { path ->
+                  AnalysisRunFile(
+                      path,
+                      "base",
+                      "Go",
+                      listOf(
+                          AnalysisStageProgress(
+                              "semantic",
+                              when (path) {
+                                in finished -> "completed"
+                                "internal/api/user.go" -> "running"
+                                else -> "pending"
+                              },
+                              1,
+                              false)))
+                },
+            sections =
+                original.sections.map {
+                  it.copy(
+                      status = "running",
+                      findingCount = null,
+                      coverage =
+                          AnalysisRunCoverage(total = 12, succeeded = 8, running = 1, pending = 3))
+                })
+      }
+  return ProjectAnalysisRunState(
+      run = run,
+      fileSelection =
+          AnalysisSelectionState(
+              selectionFixture()
+                  .copy(
+                      editable = false,
+                      files =
+                          paths.map {
+                            AnalysisSelectableFile(
+                                it,
+                                "",
+                                selectionStageFixture(
+                                    if (it in finished) "fresh" else "missing",
+                                    if (it in finished) "Current" else "No saved analysis."))
+                          } +
+                              listOf("vendor/example.go", "generated/client.go", ".env").map {
+                                AnalysisSelectableFile(it, "Project configuration")
+                              })))
+}
 
-        import "errors"
+@Composable
+internal fun RoundedAnalysisVisualFixture(width: Float) {
+  val analysis = roundedAnalysisStateFixture()
+  val project = resultProjectFixture().copy(name = "go-shop · fixture")
+  Column(Modifier.fillMaxSize().background(AppBackground)) {
+    MainToolbar(
+        ToolbarState(
+            width,
+            project,
+            false,
+            "",
+            ConnectionState(connected = true),
+            GitStatus(available = true, branch = "main"),
+            false,
+            toolbarAnalysisStatus(
+                DesktopState(
+                    projectState = ProjectWorkspaceState(project = project),
+                    analysisRun = analysis))),
+        ToolbarActions({}, {}, {}, {}, {}, {}))
+    WorkspaceFrame(
+        rail = { ToolWindowBar(LeftToolWindow.Analysis, {}) },
+        panes = {
+          EditorArea(
+              {
+                AnalysisWorkspacePane(
+                    AnalysisWorkspacePaneState(project, analysis),
+                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+              },
+              Modifier.weight(1f))
+        },
+        terminal = {
+          TerminalBar(TerminalWorkspaceState(), true, {}, TerminalTabActions({}, {}, {}))
+        },
+        modifier = Modifier.weight(1f))
+    PersistentStatusBar(
+        DesktopStatusBarPresentation(
+            DesktopStatusProviderPresentation("Visual fixture · no backend", false),
+            "Models: 1 local · 2 cloud",
+            "Visual fixture · no backend"),
+        {})
+  }
+}
 
-        func GetUser(id string) (User, error) {
-            if id == "" {
-                return User{}, errors.New("missing user id")
-            }
-
-            user, err := repository.Find(id)
-            return user, err
-        }
-
-        type User struct {
-            ID   string
-            Name string
-        }
-      """
-                  .trimIndent())
-  val index =
-      ProjectIndex(
-          "visual-fixture",
-          "fixture-revision",
-          files =
-              listOf(
-                      "cmd/server/main.go",
-                      "internal/api/routes.go",
-                      file.path,
-                      "internal/db/store.go",
-                      "internal/models/user.go",
-                      "go.mod",
-                      "README.md")
-                  .map { IndexedFile(it, "fixture-hash", "Go", false, analysisStatus = "fresh") })
-  val analysis =
-      FileAnalysis(
-          file.path,
-          "fresh",
-          purpose = "Resolves user requests and delegates persistence to the repository.",
-          symbolExplanations =
-              mapOf(
-                  "GetUser" to
-                      "Validates the identifier before looking up a user. Returns the repository result and preserves its error."))
-  val inspector =
-      symbolInspectorUiState(
-          file, listOf(symbol), symbol, analysis, false, InspectorProviderState(false, false), null)
-  Column(Modifier.fillMaxSize().background(ToolWindowSurface)) {
+@Composable
+internal fun RoundedSummaryVisualFixture(width: Float) {
+  val overview =
+      visualFixtureOverview.copy(
+          analysis =
+              visualFixtureOverview.analysis.copy(
+                  architecture =
+                      "HTTP handlers validate requests and delegate persistence to repository adapters.\n```mermaid\n${visualFixtureOverview.analysis.architecture}\n```",
+                  engineeringInsight =
+                      EngineeringInsight(
+                          mechanism = "Validate at the request boundary.",
+                          whyItMattersHere = "Keep invalid input out of the repository.")),
+          analysisRun =
+              visualFixtureOverview.analysisRun?.let { run ->
+                run.copy(
+                    sections =
+                        run.sections
+                            .filter { it.category != "security" }
+                            .map {
+                              it.copy(
+                                  status = "completed",
+                                  findingCount = if (it.category == "bugs") 4 else 2)
+                            })
+              })
+  Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
         ToolbarState(
             width,
@@ -3475,203 +3843,30 @@ internal fun EditorVisualFixture(width: Float) {
             "",
             ConnectionState(connected = true),
             GitStatus(available = true, branch = "main"),
-            useNarrowLayout(width)),
+            false,
+            toolbarAnalysisStatus(
+                DesktopState(
+                    projectState = ProjectWorkspaceState(project = visualFixtureProject),
+                    analysisRun = ProjectAnalysisRunState(run = overview.analysisRun)))),
         ToolbarActions({}, {}, {}, {}, {}, {}))
-    Row(Modifier.fillMaxWidth().weight(1f)) {
-      ToolWindowBar(LeftToolWindow.Editor, {})
-      IdeVerticalSeparator()
-      Column(Modifier.weight(1f)) {
-        Row(Modifier.fillMaxWidth().weight(1f)) {
-          if (!useNarrowLayout(width)) {
-            DockedToolWindow(
-                title = "Files",
-                content = { modifier ->
-                  ExplorerPane(
-                      ExplorerPaneState(index, file.path, "", emptySet(), false),
-                      ExplorerPaneActions({}, {}, {}, {}, {}),
-                      modifier)
-                },
-                modifier = Modifier.width(panes.explorer.dp),
-                showHeader = false)
-            ResizableDivider({}, {})
-          }
+    WorkspaceFrame(
+        rail = { ToolWindowBar(LeftToolWindow.Summary, {}) },
+        panes = {
           EditorArea(
-              content = {
-                EditorWorkspace(
-                    EditorChromeUiState(
-                        file.name,
-                        file.path,
-                        editorBreadcrumbSegments(file.path, symbol.name),
-                        "Read-only source fixture",
-                        EditorSurface.Source,
-                        false,
-                        "SOURCE",
-                        null),
-                    null,
-                    {},
-                    {},
-                    canvas = {
-                      SourceEditorPane(
-                          visualFixtureProject, file, listOf(symbol), symbol, 7, emptyList(), {})
-                    })
-              },
-              modifier = Modifier.weight(1f))
-        }
-        if (useNarrowLayout(width)) {
+              { ProjectSummaryPane(overview, visualFixtureProject, {}) }, Modifier.weight(1f))
+        },
+        terminal = {
           TerminalBar(TerminalWorkspaceState(), true, {}, TerminalTabActions({}, {}, {}))
-        } else {
-          TerminalDock(
-              layout,
-              TerminalWorkspaceState(),
-              {},
-              {},
-              TerminalTabActions({}, {}, {}),
-              {},
-              {},
-              { modifier -> Text("Synthetic shell", modifier = modifier.padding(8.dp)) })
-        }
-      }
-      if (!useNarrowLayout(width)) {
-        ResizableDivider({}, {})
-        DockedToolWindow(
-            title = "Tool windows",
-            content = { modifier ->
-              RightToolWindowContainer(
-                  RightToolWindow.Context,
-                  {},
-                  content = { _, contentModifier ->
-                    ContextToolWindow(
-                        ContextToolWindowState(
-                            inspector,
-                            ScopedModel(),
-                            false,
-                            null,
-                            null,
-                            analysis,
-                            visualFixtureProject,
-                            ProjectOverview(
-                                analysis =
-                                    StructuredProjectAnalysis(
-                                        status = "fresh",
-                                        purpose =
-                                            "Go service with a small HTTP API and a repository layer."),
-                                metrics =
-                                    ProjectMetrics(
-                                        type = "Go",
-                                        buildFile = "go.mod",
-                                        languages = mapOf("Go" to 7))),
-                            functionModel =
-                                ScopedModel(
-                                    scope = "function",
-                                    model = "local-function-model",
-                                    providerOrigin = "http://127.0.0.1:8080"),
-                            declarationExplanation =
-                                DeclarationExplanationState(
-                                    status = DeclarationExplanationStatus.Current,
-                                    result =
-                                        DeclarationExplanation(
-                                            version = "v1",
-                                            projectId = "visual-fixture",
-                                            projectRevision = "fixture-revision",
-                                            baseFileHash = file.contentHash,
-                                            anchor =
-                                                DeclarationSourceAnchor(
-                                                    file.path,
-                                                    symbol.name,
-                                                    symbol.signature,
-                                                    symbol.startLine,
-                                                    symbol.endLine),
-                                            summary =
-                                                "Validates the user identifier and delegates the lookup to the repository.",
-                                            behavior = listOf("rejects blank identifiers"),
-                                            inputs = listOf("user identifier"),
-                                            outputs = listOf("user or repository error"),
-                                            contextManifest =
-                                                ContextManifest(
-                                                    scope = "function",
-                                                    model = "local-function-model",
-                                                    providerOrigin = "http://127.0.0.1:8080")),
-                                    message =
-                                        "Current explanation · lines ${symbol.startLine}–${symbol.endLine}")),
-                        ContextToolWindowActions({}, {}, {}, {}, {}),
-                        contentModifier)
-                  },
-                  modifier = modifier)
-            },
-            modifier = Modifier.width(panes.action.dp),
-            showHeader = false)
-      }
-    }
+        },
+        modifier = Modifier.weight(1f))
     PersistentStatusBar(
         DesktopStatusBarPresentation(
-            DesktopStatusProviderPresentation(
-                "Visual fixture · local-function-model · no backend", remoteProvider = false),
+            DesktopStatusProviderPresentation("Visual fixture · no backend", false),
             "Models: 1 local · 2 cloud",
             "Visual fixture · no backend"),
         {})
   }
 }
-
-private fun contextVisualState(): ContextToolWindowState {
-  val file =
-      ProjectFileInfo(
-          "internal/api/user.go",
-          "fixture-hash",
-          "user.go",
-          language = "Go",
-          sizeBytes = 480,
-          lineCount = 18,
-          modifiedAt = "",
-          binary = false)
-  val symbol = SymbolInfo("Run", "function", "func Run() error", 5, 12, "exact", true)
-  val analysis =
-      FileAnalysis(
-          file.path,
-          "fresh",
-          purpose = "Routes incoming requests.",
-          symbolExplanations = mapOf("Run" to "Cached declaration explanation"))
-  return ContextToolWindowState(
-      symbolInspectorUiState(
-          file,
-          listOf(symbol),
-          symbol,
-          analysis,
-          false,
-          InspectorProviderState(false, false),
-          null),
-      ScopedModel(),
-      false,
-      null,
-      null,
-      analysis,
-      visualFixtureProject,
-      visualFixtureOverview,
-      declarationExplanation = DeclarationExplanationState())
-}
-
-private val visualFixtureFindings =
-    listOf(
-        UnifiedFinding(
-            id = "fixture-1",
-            severity = "high",
-            source = "file_analysis",
-            confidence = "suggested",
-            title = "Validate the user identifier",
-            message = "Check malformed identifiers before querying the repository.",
-            location = FindingLocation("internal/api/user.go", 6),
-            status = "open",
-            freshness = "fresh"),
-        UnifiedFinding(
-            id = "fixture-2",
-            severity = "medium",
-            source = "file_analysis",
-            confidence = "suggested",
-            title = "Add context to repository errors",
-            message = "Include the operation name when returning repository failures.",
-            location = FindingLocation("internal/api/user.go", 11),
-            status = "open",
-            freshness = "fresh"),
-    )
 
 internal fun editorComparisonReviewFixture(): ReviewToolWindowState {
   val symbol =
@@ -3775,3 +3970,270 @@ internal fun editorComparisonReviewFixture(): ReviewToolWindowState {
       null,
       false)
 }
+
+@Composable
+internal fun EditorVisualFixture(
+    width: Float,
+    terminalExpanded: Boolean = false,
+    comparison: Boolean = false
+) {
+  val layout = DesktopLayoutState(bottomCollapsed = !terminalExpanded)
+  val panes = dockedPaneWidths(width, layout.explorerWidth, layout.actionWidth)
+  val review = editorComparisonReviewFixture()
+  val file = requireNotNull(review.selected)
+  val symbol = requireNotNull(review.selectedSymbol)
+  val index =
+      ProjectIndex(
+          "visual-fixture",
+          "fixture-revision",
+          files =
+              listOf(
+                      "cmd/server/main.go",
+                      "internal/api/routes.go",
+                      file.path,
+                      "internal/db/store.go",
+                      "internal/models/user.go",
+                      "go.mod",
+                      "README.md")
+                  .map { IndexedFile(it, "fixture-hash", "Go", false, analysisStatus = "fresh") })
+  val analysis =
+      FileAnalysis(
+          file.path,
+          "fresh",
+          purpose = "Resolves user requests and delegates persistence to the repository.",
+          symbolExplanations =
+              mapOf(
+                  "GetUser" to
+                      "Validates the identifier before looking up a user. Returns the repository result and preserves its error."))
+  val inspector =
+      symbolInspectorUiState(
+          file, listOf(symbol), symbol, analysis, false, InspectorProviderState(false, false), null)
+  Column(Modifier.fillMaxSize().background(AppBackground)) {
+    MainToolbar(
+        ToolbarState(
+            width,
+            visualFixtureProject,
+            false,
+            "",
+            ConnectionState(connected = true),
+            GitStatus(available = true, branch = "main"),
+            useNarrowLayout(width),
+            ToolbarAnalysisStatus(
+                "Analysis · Completed", "Whole-project analysis · Completed", false, false)),
+        ToolbarActions({}, {}, {}, {}, {}, {}))
+    WorkspaceFrame(
+        rail = { ToolWindowBar(LeftToolWindow.Editor, {}) },
+        panes = {
+          if (!useNarrowLayout(width)) {
+            DockedToolWindow(
+                title = "Files",
+                content = { modifier ->
+                  ExplorerPane(
+                      ExplorerPaneState(index, file.path, "", emptySet(), false),
+                      ExplorerPaneActions({}, {}, {}, {}, {}),
+                      modifier)
+                },
+                modifier = Modifier.width(panes.explorer.dp),
+                showHeader = false)
+            ResizableDivider({}, {})
+          }
+          EditorArea(
+              content = {
+                EditorWorkspace(
+                    editorChromeUiState(
+                        file,
+                        symbol,
+                        if (comparison) EditorSurface.Review else EditorSurface.Source,
+                        EditorProgressUiState(
+                            if (comparison) EditorProgress.Review else EditorProgress.Inspect, ""),
+                        if (comparison) review.draft else null),
+                    if (comparison) review else null,
+                    {},
+                    {},
+                    onEditDraft = {},
+                    canvas = {
+                      if (comparison) ReviewDiffCanvas(review.draft)
+                      else
+                          SourceEditorPane(
+                              visualFixtureProject,
+                              file,
+                              listOf(symbol),
+                              symbol,
+                              7,
+                              emptyList(),
+                              {})
+                    })
+              },
+              modifier = Modifier.weight(1f))
+          if (!useNarrowLayout(width)) {
+            ResizableDivider({}, {})
+            DockedToolWindow(
+                title = "Tool windows",
+                content = { modifier ->
+                  RightToolWindowContainer(
+                      if (comparison) RightToolWindow.Review else RightToolWindow.Context,
+                      {},
+                      content = { _, contentModifier ->
+                        if (comparison)
+                            ReviewToolWindow(
+                                review,
+                                ReviewToolWindowActions({}, {}, {}),
+                                DraftApplicationActions({}, {}),
+                                contentModifier)
+                        else
+                            ContextToolWindow(
+                                ContextToolWindowState(
+                                    inspector,
+                                    ScopedModel(),
+                                    false,
+                                    null,
+                                    null,
+                                    analysis,
+                                    visualFixtureProject,
+                                    ProjectOverview(
+                                        analysis =
+                                            StructuredProjectAnalysis(
+                                                status = "fresh",
+                                                purpose =
+                                                    "Go service with a small HTTP API and a repository layer."),
+                                        metrics =
+                                            ProjectMetrics(
+                                                type = "Go",
+                                                buildFile = "go.mod",
+                                                languages = mapOf("Go" to 7))),
+                                    functionModel =
+                                        ScopedModel(
+                                            scope = "function",
+                                            model = "local-function-model",
+                                            providerOrigin = "http://127.0.0.1:8080"),
+                                    declarationExplanation =
+                                        DeclarationExplanationState(
+                                            status = DeclarationExplanationStatus.Current,
+                                            result =
+                                                DeclarationExplanation(
+                                                    version = "v1",
+                                                    projectId = "visual-fixture",
+                                                    projectRevision = "fixture-revision",
+                                                    baseFileHash = file.contentHash,
+                                                    anchor =
+                                                        DeclarationSourceAnchor(
+                                                            file.path,
+                                                            symbol.name,
+                                                            symbol.signature,
+                                                            symbol.startLine,
+                                                            symbol.endLine),
+                                                    summary =
+                                                        "Validates the user identifier and delegates the lookup to the repository.",
+                                                    behavior = listOf("rejects blank identifiers"),
+                                                    inputs = listOf("user identifier"),
+                                                    outputs = listOf("user or repository error"),
+                                                    contextManifest =
+                                                        ContextManifest(
+                                                            scope = "function",
+                                                            model = "local-function-model",
+                                                            providerOrigin =
+                                                                "http://127.0.0.1:8080")),
+                                            message =
+                                                "Current explanation · lines ${symbol.startLine}–${symbol.endLine}")),
+                                ContextToolWindowActions({}, {}, {}, {}, {}),
+                                contentModifier)
+                      },
+                      modifier = modifier)
+                },
+                modifier = Modifier.width(panes.action.dp),
+                showHeader = false)
+          }
+        },
+        terminal = {
+          if (useNarrowLayout(width)) {
+            TerminalBar(
+                TerminalWorkspaceState(),
+                true,
+                {},
+                TerminalTabActions({}, {}, {}),
+                modifier = Modifier.semantics { contentDescription = "Terminal fixture" })
+          } else {
+            TerminalDock(
+                layout,
+                TerminalWorkspaceState(),
+                {},
+                {},
+                TerminalTabActions({}, {}, {}),
+                {},
+                {},
+                { modifier -> Text("Synthetic shell", modifier = modifier.padding(8.dp)) },
+                modifier = Modifier.semantics { contentDescription = "Terminal fixture" })
+          }
+        },
+        modifier = Modifier.weight(1f),
+    )
+    PersistentStatusBar(
+        DesktopStatusBarPresentation(
+            DesktopStatusProviderPresentation(
+                "Visual fixture · local-function-model · no backend", remoteProvider = false),
+            "Models: 1 local · 2 cloud",
+            "Visual fixture · no backend"),
+        {})
+  }
+}
+
+private fun contextVisualState(): ContextToolWindowState {
+  val file =
+      ProjectFileInfo(
+          "internal/api/user.go",
+          "fixture-hash",
+          "user.go",
+          language = "Go",
+          sizeBytes = 480,
+          lineCount = 18,
+          modifiedAt = "",
+          binary = false)
+  val symbol = SymbolInfo("Run", "function", "func Run() error", 5, 12, "exact", true)
+  val analysis =
+      FileAnalysis(
+          file.path,
+          "fresh",
+          purpose = "Routes incoming requests.",
+          symbolExplanations = mapOf("Run" to "Cached declaration explanation"))
+  return ContextToolWindowState(
+      symbolInspectorUiState(
+          file,
+          listOf(symbol),
+          symbol,
+          analysis,
+          false,
+          InspectorProviderState(false, false),
+          null),
+      ScopedModel(),
+      false,
+      null,
+      null,
+      analysis,
+      visualFixtureProject,
+      visualFixtureOverview,
+      declarationExplanation = DeclarationExplanationState())
+}
+
+private val visualFixtureFindings =
+    listOf(
+        UnifiedFinding(
+            id = "fixture-1",
+            severity = "high",
+            source = "file_analysis",
+            confidence = "suggested",
+            title = "Validate the user identifier",
+            message = "Check malformed identifiers before querying the repository.",
+            location = FindingLocation("internal/api/user.go", 6),
+            status = "open",
+            freshness = "fresh"),
+        UnifiedFinding(
+            id = "fixture-2",
+            severity = "medium",
+            source = "file_analysis",
+            confidence = "suggested",
+            title = "Add context to repository errors",
+            message = "Include the operation name when returning repository failures.",
+            location = FindingLocation("internal/api/user.go", 11),
+            status = "open",
+            freshness = "fresh"),
+    )

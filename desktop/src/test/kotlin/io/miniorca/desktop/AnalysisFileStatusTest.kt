@@ -90,6 +90,160 @@ class AnalysisFileStatusTest {
   }
 
   @Test
+  fun liveRunRowsKeepSavedFreshnessAndRequireMatchingAdmission() {
+    val selection = selectionFixture()
+    val initial =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "running", 1, false)))))
+    val running = analysisFileStatuses(selection, initial).last()
+    assertEquals(AnalysisFileSyncStatus.Running, running.status)
+    assertEquals(AnalysisFileSyncStatus.Missing, running.savedStatus)
+    assertTrue(running.explanation.contains("Running"))
+    listOf(
+            initial.copy(identity = initial.identity.copy(projectId = "other")),
+            initial.copy(identity = initial.identity.copy(projectRevision = "other")),
+            initial.copy(
+                plan = initial.plan.copy(identity = initial.plan.identity.copy(queueId = "other"))),
+            initial.copy(files = initial.files.map { it.copy(contentHash = "other") }),
+            initial.copy(plan = initial.plan.copy(files = emptyList())),
+            initial.copy(status = "completed"),
+            initial.copy(status = "canceled"),
+            initial.copy(status = "stale"))
+        .forEach { run ->
+          assertEquals(
+              analysisFileStatus(selection.files.last()),
+              analysisFileStatuses(selection, run).last())
+        }
+    assertEquals(
+        AnalysisFileSyncStatus.Excluded,
+        analysisFileStatuses(selection.copy(excludedPaths = listOf("main.go")), initial)
+            .last()
+            .status)
+    val completed =
+        initial.copy(
+            files =
+                initial.files.map {
+                  it.copy(stages = it.stages.map { it.copy(status = "completed") })
+                })
+    assertEquals(
+        AnalysisFileSyncStatus.Finished, analysisFileStatuses(selection, completed).last().status)
+    val fresh =
+        selection.copy(
+            files =
+                selection.files.map { it.copy(stages = selectionStageFixture("fresh", "Current")) })
+    assertEquals(
+        AnalysisFileSyncStatus.Updated, analysisFileStatuses(fresh, completed).last().status)
+    val pending =
+        initial.copy(
+            files =
+                initial.files.map {
+                  it.copy(stages = it.stages.map { it.copy(status = "pending") })
+                })
+    assertEquals(
+        AnalysisFileSyncStatus.Pending, analysisFileStatuses(selection, pending).last().status)
+    assertEquals(
+        AnalysisFileSyncStatus.Paused,
+        analysisFileStatuses(selection, pending.copy(status = "paused")).last().status)
+    assertEquals(
+        AnalysisFileSyncStatus.Interrupted,
+        analysisFileStatuses(selection, pending.copy(status = "interrupted")).last().status)
+    assertEquals(
+        AnalysisFileSyncStatus.Running, analysisFileStatuses(selection, initial).last().status)
+  }
+
+  @Test
+  fun ineligibleRunStagesDoNotTurnCurrentSavedFilesIntoFailures() {
+    val selected =
+        selectionFixture().copy(files = listOf(selectionFixture().files[1].copy(path = "main.go")))
+    val original = analysisRunFixture()
+    val run =
+        original.copy(
+            status = "running",
+            plan =
+                original.plan.copy(
+                    files =
+                        listOf(
+                            AnalysisPlannedFile(
+                                "main.go",
+                                "base",
+                                "Go",
+                                20,
+                                listOf(
+                                    AnalysisStagePlan(
+                                        "semantic", true, false, maxModelRequests = 1),
+                                    AnalysisStagePlan(
+                                        "security_source",
+                                        false,
+                                        false,
+                                        reason = "Not applicable",
+                                        maxModelRequests = 0))))),
+            files =
+                listOf(
+                    AnalysisRunFile(
+                        "main.go",
+                        "base",
+                        "Go",
+                        listOf(
+                            AnalysisStageProgress("semantic", "completed", 1, false),
+                            AnalysisStageProgress(
+                                "security_source",
+                                "unavailable",
+                                0,
+                                false,
+                                reason = "Not applicable")))))
+    assertEquals(
+        AnalysisFileSyncStatus.Updated, analysisFileStatuses(selected, run).single().status)
+  }
+
+  @Test
+  fun runFailuresUnknownStagesAndSavedSourceChangesRemainDistinct() {
+    val selection =
+        selectionFixture()
+            .copy(
+                files =
+                    listOf(
+                        selectionFixture()
+                            .files
+                            .last()
+                            .copy(stages = selectionStageFixture("stale", "Source changed."))))
+    val statuses =
+        mapOf(
+            "failed" to AnalysisFileSyncStatus.Failed,
+            "partial" to AnalysisFileSyncStatus.Partial,
+            "unavailable" to AnalysisFileSyncStatus.Unavailable,
+            "future_status" to AnalysisFileSyncStatus.Unknown)
+    statuses.forEach { (status, expected) ->
+      val run =
+          analysisRunFixture()
+              .copy(
+                  status = "running",
+                  files =
+                      listOf(
+                          AnalysisRunFile(
+                              "main.go",
+                              "base",
+                              "Go",
+                              listOf(
+                                  AnalysisStageProgress(
+                                      "semantic", status, 1, false, reason = "Specific cause"),
+                                  AnalysisStageProgress("performance", "pending", 0, false)))))
+      val row = analysisFileStatuses(selection, run).single()
+      assertEquals(expected, row.status)
+      assertEquals(AnalysisFileSyncStatus.Stale, row.savedStatus)
+      assertTrue(row.explanation.contains("Specific cause"))
+      assertTrue(row.needsAttention)
+    }
+  }
+
+  @Test
   fun categoryColorsFollowAnalysisOutcomeRegardlessOfFindingCount() {
     val navigations = mutableListOf<Workspace>()
     val outcomes =

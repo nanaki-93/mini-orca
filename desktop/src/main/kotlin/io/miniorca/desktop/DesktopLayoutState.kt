@@ -146,7 +146,10 @@ internal fun dockedPaneWidths(
     preferredActionWidth: Float,
 ): DockedPaneWidths {
   val availableForPanes =
-      (availableWidthDp - TOOL_WINDOW_BAR_WIDTH - PANE_SEPARATOR_WIDTH - RESIZE_DIVIDER_WIDTH * 2)
+      (availableWidthDp -
+              TOOL_WINDOW_BAR_WIDTH -
+              WORKSPACE_FRAME_INSET * 2 -
+              RESIZE_DIVIDER_WIDTH * 2)
           .coerceAtLeast(0f)
   val availableForDocks = (availableForPanes - MIN_EDITOR_WIDTH).coerceAtLeast(0f)
   var explorer = DesktopLayoutState.clampExplorerWidth(preferredExplorerWidth)
@@ -163,7 +166,7 @@ internal fun dockedPaneWidths(
 }
 
 internal const val TOOL_WINDOW_BAR_WIDTH = 48f
-internal const val PANE_SEPARATOR_WIDTH = 1f
+internal const val WORKSPACE_FRAME_INSET = 8f
 internal const val RESIZE_DIVIDER_WIDTH = 8f
 internal const val MIN_EDITOR_WIDTH = 400f
 

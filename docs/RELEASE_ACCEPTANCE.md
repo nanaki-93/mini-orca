@@ -1,9 +1,125 @@
 # Release acceptance
 
-**Current engineering state: the six-card 2026-09-15 UI polish queue is accepted
-and its scheduler is Paused.** REL-01 and REL-02 retain their previously accepted
-limited release scope. Insight qualification remains user-deferred. This ledger
-owns evidence and limitations; [PLAN.md](../PLAN.md) owns task status.
+**Current engineering state: IDEUX-01–12 are accepted; IDEUX-13 native/package
+acceptance remains in progress on 2026-09-17.** The earlier rounded-mockup receipt
+below remains historical evidence. It does not establish the current reference-size,
+density, or guarded native Apply/Undo requirements. [PLAN.md](../PLAN.md) owns task
+status; this ledger records only observed results and limitations.
+
+## IDEUX-13 native acceptance status — 2026-09-17
+
+The production reference matrix now renders Summary, Analysis, Bugs, Performance,
+Security, Source and Review at 1512×712 logical pixels with separate 1× and 2×
+density runs. It remains component evidence until the current focused gate and render
+review complete.
+
+A test-only launcher creates a disposable Go project, isolated preferences, a
+loopback-only Mini-Orca daemon and deterministic local responder. It starts the
+packaged production Desktop app against that environment and preserves log, port and
+file-hash evidence outside the temporary root. No user project, live provider or
+manual source mutation is used.
+
+Native guarded Apply/Undo is **pending**. The earlier “Could not reopen the last
+project” computer-use window belonged to a stale fixture and is not evidence about
+the owned application. The owned `native-acceptance.GV2bCc` bundle, daemon and
+fixture PID completed import, restore, index, analysis-selection/run, overview,
+findings and scan requests with 200/204 responses against its disposable project.
+The native tool could not attach to that bundle by its exact path, so this request
+trace does not establish an owned-window interaction or guarded mutation. Each
+new harness bundle now receives a distinct bundle identifier and display name so
+the next inspection can match its inventory entry to the recorded PID and evidence
+directory. The harness records bounded cleanup and closed loopback ports for each
+attempt. Screen-reader speech, signing/notarization and other platforms remain
+untested.
+
+## Rounded mockup acceptance — 2026-09-16
+
+The delivered UI follows the three [approved references](../PLAN.md#approved-visual-target):
+the continuous charcoal-teal frame, independent 18dp pane perimeters, 8dp gutters,
+Summary coverage and columns, Analysis progress/table, full-height candidate diff,
+and compact Review with exact guarded action scope. Native title-bar controls
+remain OS-owned. Mockup captions and invented facts are omitted; the production
+state owners supply counts, eligibility, evidence and lifecycle labels.
+
+### Final checks and reproduction
+
+Run from the repository root with the [documented runtime](../desktop/README.md#runtime-and-build):
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' --tests 'io.miniorca.desktop.DesktopAccessibilityTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' -PvisualOutput="$PWD/desktop/build/reports/mockup-ui/final"
+./scripts/desktop-gradle.sh test spotlessCheck detekt createDistributable
+./scripts/validate.sh
+MINI_ORCA_JBR25_HOME=/path/to/jbr-25 ./desktop/scripts/terminal-packaged-smoke.sh
+git diff --check
+```
+
+| Check | Actual result |
+| --- | --- |
+| Focused rendering/accessibility/keyboard | 72 tests passed, zero failures/errors/skips. The iteration command also ran `spotlessApply`. |
+| Final desktop/package gate | 493 tests passed, zero failures/errors/skips; Spotless passed; Detekt reported zero smells; `createDistributable` succeeded. |
+| Full validation | All nine stages passed, including Go formatting/tests/race/vet/contracts/quality and desktop static/tests. Python ran 55 tests with its existing opt-in pinned-runtime conformance skip. |
+| Packaged terminal | The JNI probe used the actual packaged runtime and jars. Canonical cwd, UTF-8, real TTY, 121×42 resize, Ctrl+C, child cleanup and bounded close passed. |
+| Scope and diff | `git diff --check` passed. Historical PLAN/task/execution tails remain byte-for-byte unchanged. No commit, push, release or live provider campaign ran. |
+
+The host was macOS 27.0 (26A428), arm64. Gradle used Temurin 21.0.11+10;
+compilation, packaging and native UI used JBR 25.0.4.1+1-b583.48. Existing restricted
+native access, deprecated Unsafe/Gradle and absent SLF4J-provider notices did not
+fail validation. The full final gate log is `/tmp/mini-orca-mock06-desktop-final.log`;
+full validation is `/tmp/mini-orca-mock06-validation-final.log`.
+
+### Visual comparison
+
+Production-component renders in `desktop/build/reports/mockup-ui/final/` cover
+1600×1000, 1440×900, 1000/999×760, 800×650 and 1280×600 at 100/125/150% text,
+plus long content and lifecycle/error fixtures. These are offscreen renders using
+synthetic data, not native screenshots. Reference-size images reviewed together:
+
+- [Summary](../desktop/build/reports/mockup-ui/final/summary-frame-1600-1000-1.0.png)
+- [Analysis](../desktop/build/reports/mockup-ui/final/analysis-frame-1600-1000-1.0.png)
+- [Editor / Review](../desktop/build/reports/mockup-ui/final/comparison-frame-1600-1000-1.0.png)
+
+Also inspected `summary-frame-800-650-1.5.png`, `analysis-frame-1000-760-1.5.png`,
+`comparison-frame-999-760-1.5.png` and `terminal-native-inset-220.0.png`.
+The comparison accepts platform typography and real-data differences described in
+the plan: native controls, source line numbers, truthful check counts, persistent
+Terminal access, and omitted concept captions. Layout/contrast tests retain the
+exact responsive thresholds and shared-token measurements. No reference image was
+replaced or tolerance weakened.
+
+### Native observations
+
+`DesktopAcceptanceFixtureKt` now exposes the three full comparison frames and an
+interactive production `DesktopShell`, alongside the existing lifecycle fixtures.
+Its controls are test-only. The shell uses in-memory state and a disposable project;
+provider and source intents are visibly recorded without dispatch. It has no API
+client or provider. Real terminal sessions remain owned by the production workspace.
+
+The fixture was packaged with JBR `jar`/`jpackage --type app-image`, the tested app
+jars and embedded runtime, and `io.miniorca.desktop.DesktopAcceptanceFixtureKt` as
+its main class. `native-package.json` records the final temporary bundle path and
+fixture hash. The product distributable remains
+`desktop/build/compose/binaries/main/app/Mini-Orca.app`.
+
+Direct computer-use observations, saved under the same `final/` directory:
+
+| Observation | Native evidence |
+| --- | --- |
+| Rounded panes, full Summary/Analysis/Review and native zoom resize | `native-summary-frame-wide.png`, `native-analysis-frame-wide.png`, `native-workspace-review-wide.png`; captures were 1340×768 at the host's zoomed window and 800×600 when restored. |
+| Analysis search and active-run lock | Typing `user.go` left exactly two matching paths; all run-owned selection controls stayed disabled. `native-analysis-filtered.png`. |
+| Drawers and focus | Files opened at compact width; Escape dismissed it and Cmd+P reopened the palette. Review tab displayed a distinct focus outline. `native-files-drawer-compact.png`, `native-review-drawer-150.png`. |
+| Enlarged text and action reachability | Native 125% Summary and 150% short Review were inspected. Scrolling exposed the complete Apply scope. Explicit Apply recorded only its fixture intent; choosing another file replaced it with stale-target recovery. `native-summary-125.png`, `native-review-apply-reachable-150.png`, `native-review-stale-150.png`. |
+| Read-only selection | Dragging selected source and composed-diff text without changing the candidate or requesting a provider/source action. `native-source-selection-wide.png`, `native-diff-selection-wide.png`. Earlier compact pointer attempts did not establish selection; the wide captures do. |
+| Terminal integration repair | The real Swing canvas initially covered the rounded bottom corners. An 8dp side/bottom content inset fixes it without changing session ownership. A new bounds test covers resized docks. `native-terminal-before-inset.png` records the rejected state; `native-terminal-rounded-final.png` and `native-terminal-resized-final.png` show the fix. |
+| Terminal continuity and focus | Resizing produced a 14×177 PTY; collapse and compact overlay retained shell PID 37851 and its output. Ctrl+Shift+F12 followed by Cmd+P worked from both dock and overlay. `native-terminal-overlay-retained.png`; the earlier `native-terminal-focus-palette.png` covers the unchanged focus owner. |
+| Cleanup | Both temporary native app sessions closed normally and their observed shell PIDs 30956/37851 exited. Both disposable `main.go` files remained exactly `package main` plus newline. |
+
+The exact reference and 1000/999 dimensions are component evidence; native captures
+use the available host's restored/zoomed windows. Native accessibility names and
+focus were inspected, but screen-reader speech, alternate OS density, Windows,
+Linux, signing and notarization were not qualified. Those are not claimed by this
+local UI implementation. Actual guarded Apply/Undo mutation and failure cases are
+covered by deterministic desktop/daemon tests; native fixture clicks prove action
+routing, not filesystem mutation or live provider behavior.
 
 ## Rounded component styling — 2026-09-16
 

@@ -16,7 +16,9 @@ that labels, blocked reasons and required consent remain clear
 with keyboard focus. Record this review separately from historical observations.
 
 1. Before opening a project, verify Open project and Cmd/Ctrl+O work. Cancel the
-   chooser and confirm the landing state remains. Project shortcuts must have no
+   chooser and confirm the landing state remains. When entering a disposable path,
+   confirm its native field is visible before operating it; record an offscreen
+   computer-use failure as pending native evidence. Project shortcuts must have no
    action until a project opens. Restore must not call a provider or start a shell.
 2. Verify Project, Results and Editing groups have distinct labeled destinations.
    Cmd/Ctrl+1–4 select Summary, Analysis, Bugs and Editor. Cmd/Ctrl+Tab cycles all
@@ -62,12 +64,17 @@ with keyboard focus. Record this review separately from historical observations.
     file and declaration and is unavailable for stale evidence. Edit draft clears
     previous approval evidence. After explicit Apply/Undo, source refreshes and
     Undo is limited to the immediately preceding unchanged Apply.
+    At short heights and 150% text, scroll to the complete Apply scope and recovery
+    action. Expand Check details and Project context without dispatching a request.
+    During a rerun, show Running even when the previous report passed.
 11. Confirm Terminal and its shell tabs share one bottom bar. Selecting Terminal
     or Ctrl+Shift+T immediately opens a real shell in the project. Use + to create
     independent shells, switch tabs, and × to close one without stopping others.
     Collapse/Enter reopen, workspace changes and the 1000/999dp transition preserve
     PID, history and scrollback.
     Resize the dock and verify real PTY dimensions change without losing content.
+    Inspect the real Swing canvas: its side/bottom inset must preserve the rounded
+    terminal perimeter when expanded, resized and reopened.
 12. With terminal focus, verify typing, Unicode paste, selection/copy, shell history,
     Ctrl+C, scrolling and a disposable full-screen program. App shortcuts must not
     steal ordinary shell input. Ctrl+Shift+F12 returns to Editor; Cmd/Ctrl+P then

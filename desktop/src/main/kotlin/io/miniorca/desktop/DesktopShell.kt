@@ -31,7 +31,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -491,7 +490,7 @@ internal fun DesktopShell(
   Box(
       modifier =
           Modifier.fillMaxSize()
-              .background(ToolWindowSurface)
+              .background(AppBackground)
               .focusRequester(focusRequesters.fallback)
               .focusable()
               .onPreviewKeyEvent { event ->
@@ -616,107 +615,99 @@ internal fun DesktopShell(
                 modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
                 paletteFocusRequester = focusRequesters.paletteTrigger,
             )
-            val workspaceChrome =
-                Modifier.weight(1f)
-                    .fillMaxWidth()
-                    .background(ActivityRail)
-                    .padding(top = 4.dp, end = 8.dp, bottom = 4.dp)
-            Row(modifier = workspaceChrome) {
-              ToolWindowBar(
-                  leftToolWindowForWorkspace(workspace),
-                  ::selectToolWindow,
-                  Modifier.focusRequester(focusRequesters.leftToolWindow),
-              )
-              IdeVerticalSeparator()
-              val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
-              Column(
-                  Modifier.weight(1f)
-                      .fillMaxHeight()
-                      .padding(start = 4.dp)
-                      .clip(MiniOrcaShapes.interactiveCard)) {
-                    Row(Modifier.weight(1f).fillMaxWidth()) {
-                      if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
-                        DockedToolWindow(
-                            "Files",
-                            content = { modifier -> panes.explorer(modifier) {} },
-                            modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight(),
-                            // Explorer owns its Files heading and actions in a docked layout.
-                            showHeader = false)
-                        ResizableDivider(
-                            onDelta = {
-                              layoutActions.updateLayout(
-                                  layout.withExplorerWidth(layout.explorerWidth + it))
-                            },
-                            onCommit = { layoutActions.saveLayout(layout) })
-                      }
-                      DesktopCanvas(
-                          state = state,
-                          resultBrowsers = resultBrowsers,
-                          widthDp = widthDp,
-                          editorActions = editorActions,
-                          analysisActions = analysisActions,
-                          findingActions = findingActions,
-                          onWorkspaceSelected = ::selectWorkspace,
-                          onOpenNarrowDrawer = ::openDrawer,
-                          modifier =
-                              Modifier.weight(1f)
-                                  .fillMaxHeight()
-                                  .focusRequester(focusRequesters.editor)
-                                  .focusable(),
-                      )
-                    }
-                    if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
-                      TerminalDock(
-                          layout =
-                              layout.copy(
-                                  bottomHeight = terminalDockHeight(layout.bottomHeight, heightDp)),
-                          state = panes.terminalState,
-                          tabActions = panes.terminalTabActions,
-                          onOpen = ::openTerminal,
-                          onCollapse = ::collapseTerminal,
-                          onHeightDelta = {
-                            layoutActions.updateLayout(
-                                layout.withBottomHeight(layout.bottomHeight + it))
-                          },
-                          onHeightCommit = { layoutActions.saveLayout(layout) },
-                          content = panes.terminalContent,
-                          controlModifier =
-                              Modifier.focusRequester(focusRequesters.bottomToolWindow),
-                      )
-                    } else {
-                      TerminalBar(
-                          state = panes.terminalState,
-                          tabActions = panes.terminalTabActions,
-                          collapsed = true,
-                          onToggle = ::openTerminal,
-                          controlModifier =
-                              Modifier.focusRequester(focusRequesters.bottomToolWindow),
-                      )
-                    }
+            val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
+            WorkspaceFrame(
+                rail = {
+                  ToolWindowBar(
+                      leftToolWindowForWorkspace(workspace),
+                      ::selectToolWindow,
+                      Modifier.focusRequester(focusRequesters.leftToolWindow))
+                },
+                panes = {
+                  if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
+                    DockedToolWindow(
+                        "Files",
+                        content = { modifier -> panes.explorer(modifier) {} },
+                        modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight(),
+                        // Explorer owns its Files heading and actions in a docked layout.
+                        showHeader = false)
+                    ResizableDivider(
+                        onDelta = {
+                          layoutActions.updateLayout(
+                              layout.withExplorerWidth(layout.explorerWidth + it))
+                        },
+                        onCommit = { layoutActions.saveLayout(layout) })
                   }
-              if (!narrow && showsEditorChrome && layout.rightToolWindowVisible) {
-                ResizableDivider(
-                    onDelta = {
-                      layoutActions.updateLayout(layout.withActionWidth(layout.actionWidth - it))
-                    },
-                    onCommit = { layoutActions.saveLayout(layout) })
-                DockedToolWindow(
-                    "Tool windows",
-                    content = { modifier ->
-                      CompositionLocalProvider(LocalContextCreationActionVisible provides false) {
-                        RightToolWindowContainer(
-                            layout.activeRightToolWindow,
-                            ::selectRightToolWindow,
-                            panes.rightToolWindows,
-                            panes.rightToolWindowBadges,
-                            modifier.focusRequester(focusRequesters.rightToolWindow))
-                      }
-                    },
-                    modifier = Modifier.width(dockedWidths.action.dp).fillMaxHeight(),
-                    // The right-window tabs identify their own active content.
-                    showHeader = false)
-              }
-            }
+                  DesktopCanvas(
+                      state = state,
+                      resultBrowsers = resultBrowsers,
+                      widthDp = widthDp,
+                      editorActions = editorActions,
+                      analysisActions = analysisActions,
+                      findingActions = findingActions,
+                      onWorkspaceSelected = ::selectWorkspace,
+                      onOpenNarrowDrawer = ::openDrawer,
+                      modifier =
+                          Modifier.weight(1f)
+                              .fillMaxHeight()
+                              .focusRequester(focusRequesters.editor)
+                              .focusable(),
+                  )
+                  if (!narrow && showsEditorChrome && layout.rightToolWindowVisible) {
+                    ResizableDivider(
+                        onDelta = {
+                          layoutActions.updateLayout(
+                              layout.withActionWidth(layout.actionWidth - it))
+                        },
+                        onCommit = { layoutActions.saveLayout(layout) })
+                    DockedToolWindow(
+                        "Tool windows",
+                        content = { modifier ->
+                          CompositionLocalProvider(
+                              LocalContextCreationActionVisible provides false) {
+                                RightToolWindowContainer(
+                                    layout.activeRightToolWindow,
+                                    ::selectRightToolWindow,
+                                    panes.rightToolWindows,
+                                    panes.rightToolWindowBadges,
+                                    modifier.focusRequester(focusRequesters.rightToolWindow))
+                              }
+                        },
+                        modifier = Modifier.width(dockedWidths.action.dp).fillMaxHeight(),
+                        // The right-window tabs identify their own active content.
+                        showHeader = false)
+                  }
+                },
+                terminal = {
+                  if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
+                    TerminalDock(
+                        layout =
+                            layout.copy(
+                                bottomHeight = terminalDockHeight(layout.bottomHeight, heightDp)),
+                        state = panes.terminalState,
+                        tabActions = panes.terminalTabActions,
+                        onOpen = ::openTerminal,
+                        onCollapse = ::collapseTerminal,
+                        onHeightDelta = {
+                          layoutActions.updateLayout(
+                              layout.withBottomHeight(layout.bottomHeight + it))
+                        },
+                        onHeightCommit = { layoutActions.saveLayout(layout) },
+                        content = panes.terminalContent,
+                        controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
+                    )
+                  } else {
+                    TerminalBar(
+                        state = panes.terminalState,
+                        tabActions = panes.terminalTabActions,
+                        collapsed = true,
+                        onToggle = ::openTerminal,
+                        controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
+                    )
+                  }
+                },
+                modifier = Modifier.weight(1f),
+            )
             if (desktopStatusBarVisible(appState.project)) {
               PersistentStatusBar(
                   presentation = statusPresentation,

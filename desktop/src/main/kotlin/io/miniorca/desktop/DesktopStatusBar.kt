@@ -73,9 +73,8 @@ internal fun PersistentStatusBar(
     modifier: Modifier = Modifier,
 ) {
   Column(modifier.fillMaxWidth().background(ActivityRail)) {
-    IdeHorizontalSeparator()
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 29.dp).padding(horizontal = 10.dp),
+        Modifier.fillMaxWidth().heightIn(min = 32.dp).padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically,
     ) {

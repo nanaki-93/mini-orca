@@ -1,7 +1,7 @@
 # IDE token contrast
 
-The shared charcoal theme separates the teal outer frame, tool windows, the darker source
-canvas, section headers and outlined controls. Blue identifies actions and
+The shared charcoal theme separates the teal outer frame, tool windows, the darker
+source canvas, section headers and outlined controls. Blue identifies actions and
 selection; cyan identifies information and running work; green, amber and coral
 identify success, warnings and failures. Every state retains its text label.
 
@@ -15,6 +15,11 @@ focus indicators target 3:1; decorative pane separators are supplementary bounda
 
 | Pair | Foreground / background | Contrast |
 | --- | --- | ---: |
+| Primary text / outer frame | `#F5F7FA` / `#203238` | 12.43:1 |
+| Secondary text / outer frame | `#CCD4DF` / `#203238` | 8.92:1 |
+| Muted text / outer frame | `#A9B4C3` / `#203238` | 6.35:1 |
+| Resize handle / outer frame | `#8E9EAF` / `#203238` | 4.86:1 |
+| Hovered resize handle / outer frame | `#73ABFF` / `#203238` | 5.71:1 |
 | Primary text / tool window | `#F5F7FA` / `#24282F` | 13.78:1 |
 | Primary text / source and terminal | `#F5F7FA` / `#1B1E23` | 15.57:1 |
 | Secondary text / header and overlay | `#CCD4DF` / `#303640` | 8.13:1 |
@@ -23,6 +28,9 @@ focus indicators target 3:1; decorative pane separators are supplementary bounda
 | Primary action label / default | `#101722` / `#78ACFF` | 7.83:1 |
 | Primary action label / hover and press | `#101722` / `#98C1FF` | 9.77:1 |
 | Primary action label / selected | `#101722` / `#619AFF` | 6.49:1 |
+| Apply label / default | `#101722` / `#74E0AC` | 11.13:1 |
+| Apply label / hover and press | opaque 90% success over editor | 9.30:1 |
+| Apply label / selected | opaque 82% success over editor | 7.91:1 |
 | Control outline / hovered control | `#8E9EAF` / `#414E5F` | 3.09:1 |
 | Selection edge / selection fill | `#73ABFF` / `#263F62` | 4.57:1 |
 | Focus / dark inner keyline | `#D3E4FF` / `#203238` | 10.36:1 |
@@ -31,7 +39,9 @@ focus indicators target 3:1; decorative pane separators are supplementary bounda
 
 Primary actions have opaque default, hover/pressed and selected fills. This avoids
 the former hover label dropping to 3.66:1 when its blue fill became translucent.
-Semantic actions use tint fills resolved over the tool window, so placing them
+The primary Apply action has its own opaque positive tone, keeping its dark label
+and the existing focus keyline readable. Positive badges and secondary actions
+retain their tinted treatment. Other semantic actions use tint fills resolved over the tool window, so placing them
 inside an overlay or selected row does not change their label contrast. Disabled
 controls use a neutral fill and muted border. Focus uses a light outline with a
 dark inner keyline, which remains visible against a bright primary action.
@@ -60,7 +70,21 @@ keyboard suites retain coverage of 1000/999dp docking, 800×650, short 1280×600
 windows, larger text, and empty/stale/failed/populated result states.
 
 Visual evidence is generated with the [component reproduction procedure](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks).
-The current comparison captures are under `desktop/build/reports/ui-contrast/`.
+Earlier palette comparison captures are under `desktop/build/reports/ui-contrast/`.
 They are offscreen production-component renders. Native-window interaction and
-screen-reader behavior were not verified for this palette change: the available
+screen-reader behavior were not verified in that earlier check because the
 computer-use tool could not attach to the running Java app.
+
+## Rounded frame verification — 2026-09-16
+
+The frame changes are checked by `DesktopThemeTest` against the actual chrome,
+control and focus colors, and by `DesktopVisualLayoutTest` using filled production
+panes, rendered corner pixels, gutter bounds and keyboard/pointer splitters.
+The current frame comparisons are under `desktop/build/reports/mockup-ui/mock-01/`.
+They cover 1600×1000, 1440×900, 1000/999×760, 800×650 and 1280×600 at 100/125/150%
+text, with the terminal expanded/collapsed in docked layouts and collapsed in
+narrow layouts. The existing terminal tests cover the separate overlay. These are
+offscreen component renders. Final MOCK-06 native and packaged evidence is recorded
+separately in [rounded mockup acceptance](../docs/RELEASE_ACCEPTANCE.md#rounded-mockup-acceptance--2026-09-16).
+The final 493-test gate includes the existing complete contrast checks; the native
+terminal inset introduces no new color or interaction-state fill.

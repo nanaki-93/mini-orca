@@ -8,8 +8,9 @@ internal enum class AnalysisFileSyncStatus(val label: String, val tint: Color) {
   Stale("Outdated", Warning),
   Partial("Incomplete", Warning),
   Failed("Failed", Error),
-  Running("Analyzing", Information),
-  Pending("Waiting", Information),
+  Running("Running", Information),
+  Pending("Pending", SecondaryText),
+  Finished("Finished", Information),
   Paused("Paused", Warning),
   Interrupted("Interrupted", Warning),
   Canceled("Canceled", Warning),
@@ -22,9 +23,100 @@ internal data class AnalysisFileStatus(
     val file: AnalysisSelectableFile,
     val status: AnalysisFileSyncStatus,
     val explanation: String,
+    val savedStatus: AnalysisFileSyncStatus? = null,
+    val summary: String = explanation,
 ) {
   val needsAttention
     get() = status !in setOf(AnalysisFileSyncStatus.Updated, AnalysisFileSyncStatus.Excluded)
+}
+
+/** Run progress describes admitted work, independently of saved result freshness. */
+internal fun analysisFileStatuses(
+    selection: AnalysisFileSelection,
+    run: AnalysisRun?
+): List<AnalysisFileStatus> {
+  val currentRun =
+      run?.takeIf {
+        it.identity.projectId == selection.projectId &&
+            it.identity.projectRevision == selection.projectRevision &&
+            it.plan.identity == it.identity.queue() &&
+            (it.isActive() || it.status in setOf("paused", "interrupted"))
+      }
+  val planned = currentRun?.plan?.files.orEmpty().associateBy { it.path }
+  val progress =
+      currentRun
+          ?.files
+          .orEmpty()
+          .filter { planned[it.path]?.contentHash == it.contentHash }
+          .associateBy { it.path }
+  val excluded = selection.excludedPaths.toSet()
+  return selection.files.map { file ->
+    val saved = analysisFileStatus(file, file.path in excluded)
+    val runningFile = progress[file.path]
+    if (saved.status == AnalysisFileSyncStatus.Excluded ||
+        runningFile == null ||
+        runningFile.stages.isEmpty())
+        saved
+    else {
+      val stages =
+          runningFile.stages.filter { stage ->
+            planned[file.path]?.stages.orEmpty().none { it.stage == stage.stage && !it.eligible }
+          }
+      val status =
+          when {
+            stages.isEmpty() -> saved.status
+            stages.any {
+              !analysisStageFinished(it.status) &&
+                  it.status !in setOf("running", "pending", "paused", "interrupted", "canceled")
+            } -> AnalysisFileSyncStatus.Unknown
+            stages.any { it.status == "running" } -> AnalysisFileSyncStatus.Running
+            stages.any { it.status == "failed" } -> AnalysisFileSyncStatus.Failed
+            stages.any { it.status == "unavailable" } -> AnalysisFileSyncStatus.Unavailable
+            stages.any { it.status == "partial" } -> AnalysisFileSyncStatus.Partial
+            stages.all { analysisStageFinished(it.status) } ->
+                if (saved.status == AnalysisFileSyncStatus.Updated) AnalysisFileSyncStatus.Updated
+                else AnalysisFileSyncStatus.Finished
+            currentRun?.status == "paused" -> AnalysisFileSyncStatus.Paused
+            currentRun?.status == "interrupted" -> AnalysisFileSyncStatus.Interrupted
+            stages.any { it.status == "canceled" } -> AnalysisFileSyncStatus.Canceled
+            stages.any { it.status == "paused" } -> AnalysisFileSyncStatus.Paused
+            stages.any { it.status == "interrupted" } -> AnalysisFileSyncStatus.Interrupted
+            stages.any { it.status == "pending" } -> AnalysisFileSyncStatus.Pending
+            else -> AnalysisFileSyncStatus.Unknown
+          }
+      val details =
+          stages
+              .filter {
+                !analysisStageFinished(it.status) ||
+                    it.status in setOf("failed", "partial", "unavailable")
+              }
+              .joinToString("\n") { stage ->
+                "${analysisStageLabel(stage.stage)} · ${analysisStatusLabel(stage.status)}${stage.reason.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()}"
+              }
+              .ifBlank { "All run stages finished." }
+      if (stages.isEmpty() || status == AnalysisFileSyncStatus.Updated) saved
+      else
+          saved.copy(
+              status = status,
+              explanation = details,
+              savedStatus = saved.status,
+              summary =
+                  when (status) {
+                    AnalysisFileSyncStatus.Running ->
+                        stages
+                            .filter { it.status == "running" }
+                            .joinToString(" · ") { analysisStageLabel(it.stage) }
+                    AnalysisFileSyncStatus.Pending -> "Queued"
+                    AnalysisFileSyncStatus.Finished -> "All run stages finished."
+                    else ->
+                        stages
+                            .firstOrNull { it.status == status.stageStatus }
+                            ?.let {
+                              "${analysisStageLabel(it.stage)}: ${it.reason.ifBlank { analysisStatusLabel(it.status) }}"
+                            } ?: details.lineSequence().first()
+                  })
+    }
+  }
 }
 
 internal fun analysisFileStatus(
@@ -56,8 +148,27 @@ internal fun analysisFileStatus(
             file.stages.joinToString(" ") { "${analysisStageLabel(it.stage)}: ${it.reason}" }
         else -> explanations.joinToString("\n")
       }
-  return AnalysisFileStatus(file, status, explanation)
+  val summary =
+      when (status) {
+        AnalysisFileSyncStatus.Updated -> "Complete"
+        AnalysisFileSyncStatus.Excluded,
+        AnalysisFileSyncStatus.Unknown -> explanation
+        else ->
+            (outstanding.firstOrNull { it.status == status.stageStatus }
+                    ?: outstanding.firstOrNull())
+                ?.reason
+                ?.takeIf { it.isNotBlank() } ?: explanation
+      }
+  return AnalysisFileStatus(file, status, explanation, summary = summary)
 }
+
+private val AnalysisFileSyncStatus.stageStatus: String
+  get() =
+      when (this) {
+        AnalysisFileSyncStatus.Updated -> "fresh"
+        AnalysisFileSyncStatus.Finished -> "completed"
+        else -> name.lowercase()
+      }
 
 private fun analysisIncompleteFileStatus(
     stages: List<AnalysisFileStageStatus>
@@ -94,7 +205,7 @@ private fun analysisIncompleteFileStatus(
 }
 
 internal enum class AnalysisFileFilter(val label: String) {
-  All("All files"),
+  All("All"),
   Attention("Needs attention"),
   Updated("Up to date"),
   Excluded("Excluded")

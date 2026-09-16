@@ -1,9 +1,11 @@
 package io.miniorca.desktop
 
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DiffViewerTest {
@@ -53,7 +55,98 @@ class DiffViewerTest {
   }
 
   @Test
-  fun diffRowsUseTheSameMinimumLineHeightAsTheReadOnlySourceGutter() {
-    assertEquals(20.dp, readOnlyCodeRowMinimumHeight)
+  fun unequalReplacementBlocksPairInOrderWithoutLosingBlankOrHunkLines() {
+    val lines =
+        listOf(
+            DiffLine("removed", 4, 0, "first old"),
+            DiffLine("removed", 5, 0, "second old"),
+            DiffLine("removed", 6, 0, ""),
+            DiffLine("added", 0, 4, "first new"),
+            DiffLine("added", 0, 5, "second new"),
+            DiffLine("hunk", text = "@@ -20 +19 @@"),
+            DiffLine("added", 0, 19, "inserted"),
+            DiffLine("context", 20, 20, "last"))
+    val rows = sideBySideDiffRows(UnifiedDiff("main.go", "main.go", lines))
+    assertEquals(
+        listOf("first old", "second old", "", "@@ -20 +19 @@", null, "last"),
+        rows.map { it.before?.text })
+    assertEquals(
+        listOf("first new", "second new", null, "@@ -20 +19 @@", "inserted", "last"),
+        rows.map { it.proposed?.text })
+    assertEquals(6, rows[2].before?.lineNumber)
+    assertNull(rows[2].proposed)
+    assertNull(rows[3].before?.lineNumber)
+    assertEquals(19, rows[4].proposed?.lineNumber)
+  }
+
+  @Test
+  fun longAndMultilineChangesKeepPairedRowsWithIndependentHorizontalScrolling() {
+    val longLine = "return " + "veryLongIdentifier".repeat(30)
+    val diff =
+        UnifiedDiff(
+            "main.go",
+            "main.go",
+            listOf(
+                DiffLine("removed", 99, 0, "$longLine\nsecond current line"),
+                DiffLine("removed", 100, 0, "removed without replacement"),
+                DiffLine("added", 0, 99, "return newValue")) +
+                (101..150).map { DiffLine("context", it, it - 1, "// line $it") })
+    ComposeVisualFixture(1000, 500, 1.5f) { DiffViewer(diff) }
+        .use { fixture ->
+          fixture.render("diff-long-multiline-1000-1.5")
+          assertFalse(fixture.hasEditableText())
+          assertTrue(
+              fixture.copyTextByDragging("$longLine\nsecond current line").startsWith("return"))
+          assertEquals(60f, fixture.taggedBounds("diff-Current-row-0").height, 1f)
+          assertEquals(60f, fixture.taggedBounds("diff-Candidate-row-0").height, 1f)
+          assertEquals(
+              fixture.taggedBounds("diff-Current-row-1").top,
+              fixture.taggedBounds("diff-Candidate-row-1").top,
+              1f)
+          assertTrue(fixture.hasDescription("Candidate has no corresponding line"))
+          assertFalse(fixture.hasText("Candidate unchanged"))
+          fixture.horizontalScrollBy("diff-Current-horizontal", 160f)
+          fixture.render()
+          assertTrue(fixture.horizontalScrollValue("diff-Current-horizontal") > 0f)
+          assertEquals(0f, fixture.horizontalScrollValue("diff-Candidate-horizontal"))
+          fixture.scrollBy(200f, "diff-Current-vertical")
+          fixture.render("diff-long-scrolled")
+          assertTrue(fixture.verticalScrollValue("diff-Current-vertical") > 0f)
+          assertEquals(
+              fixture.verticalScrollValue("diff-Current-vertical"),
+              fixture.verticalScrollValue("diff-Candidate-vertical"))
+          assertTrue(fixture.requestFocus("Unified"))
+          fixture.render()
+          fixture.pressKey(Key.Enter)
+          fixture.render("diff-unified-1000-1.5")
+          assertTrue(fixture.hasText("Current → Candidate"))
+          assertTrue(fixture.hasText("return newValue"))
+          assertTrue(fixture.hasText("removed without replacement"))
+          assertFalse(fixture.hasEditableText())
+          fixture.clickText("Side-by-side")
+          fixture.render()
+          assertTrue(fixture.hasText("Current"))
+          assertTrue(fixture.hasText("Candidate"))
+        }
+  }
+
+  @Test
+  fun compactDiffDefaultsToUnifiedAndCanShowBothSidesWithoutWrappingCode() {
+    val diff =
+        UnifiedDiff(
+            "main.go", "main.go", listOf(DiffLine("added", 0, 12000, "func NewFunction() {}")))
+    ComposeVisualFixture(400, 400, 1.5f) { DiffViewer(diff) }
+        .use { fixture ->
+          fixture.render("diff-compact-400-1.5")
+          fixture.assertTextFits("Current → Candidate")
+          fixture.assertTextFits("12000")
+          fixture.assertTextLineCount("func NewFunction() {}", 1)
+          fixture.clickText("Side-by-side")
+          fixture.render("diff-compact-split-400-1.5")
+          fixture.assertTextFits("Current")
+          fixture.assertTextFits("Candidate")
+          assertTrue(fixture.hasDescription("Current has no corresponding line"))
+          assertEquals("func NewFunction() {}", diff.lines.single().text)
+        }
   }
 }

@@ -1,14 +1,24 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,11 +28,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 data class DiffCell(val lineNumber: Int?, val text: String, val change: String)
 
@@ -37,33 +51,39 @@ internal fun diffLineBackground(change: String?): Color =
 
 fun sideBySideDiffRows(diff: UnifiedDiff): List<DiffRow> {
   val rows = mutableListOf<DiffRow>()
-  var pendingRemoval: DiffLine? = null
-  fun add(before: DiffLine?, after: DiffLine?) {
-    rows +=
-        DiffRow(
-            before?.let { DiffCell(it.oldLine.takeIf { n -> n > 0 }, it.text, it.kind) },
-            after?.let { DiffCell(it.newLine.takeIf { n -> n > 0 }, it.text, it.kind) })
+  val removed = mutableListOf<DiffLine>()
+  val added = mutableListOf<DiffLine>()
+  fun flush() {
+    repeat(maxOf(removed.size, added.size)) { index ->
+      rows +=
+          DiffRow(
+              removed.getOrNull(index)?.let {
+                DiffCell(it.oldLine.takeIf { n -> n > 0 }, it.text, it.kind)
+              },
+              added.getOrNull(index)?.let {
+                DiffCell(it.newLine.takeIf { n -> n > 0 }, it.text, it.kind)
+              })
+    }
+    removed.clear()
+    added.clear()
   }
   diff.lines.forEach { line ->
     when (line.kind) {
       "removed" -> {
-        pendingRemoval?.let { add(it, null) }
-        pendingRemoval = line
+        if (added.isNotEmpty()) flush()
+        removed += line
       }
-      "added" -> {
-        add(pendingRemoval, line)
-        pendingRemoval = null
-      }
+      "added" -> added += line
       else -> {
-        pendingRemoval?.let {
-          add(it, null)
-          pendingRemoval = null
-        }
-        add(line, line)
+        flush()
+        rows +=
+            DiffRow(
+                DiffCell(line.oldLine.takeIf { it > 0 }, line.text, line.kind),
+                DiffCell(line.newLine.takeIf { it > 0 }, line.text, line.kind))
       }
     }
   }
-  pendingRemoval?.let { add(it, null) }
+  flush()
   return rows
 }
 
@@ -76,91 +96,170 @@ internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
         modifier = modifier)
     return
   }
-  var sideBySide by remember(diff) { mutableStateOf(true) }
-  SelectionContainer {
-    Column(
-        modifier
-            .clip(MiniOrcaShapes.control)
-            .background(Card)
-            .horizontalScroll(rememberScrollState())
-            .semantics { contentDescription = "Read-only composed diff" }
-            .padding(8.dp)) {
-          Row(Modifier.fillMaxWidth()) {
-            Text(
-                if (sideBySide) "BEFORE / PROPOSED (READ-ONLY)"
-                else "UNIFIED COMPOSED DIFF (READ-ONLY)",
-                color = SecondaryText,
-                fontSize = 10.sp,
-                modifier = Modifier.weight(1f))
-            MiniOrcaButton(
-                onClick = { sideBySide = true },
-                enabled = !sideBySide,
-                tone = ActionTone.Navigation,
-                selected = sideBySide,
-                density = ButtonDensity.Toolbar) {
-                  Text("Side-by-side", fontSize = 10.sp)
+  BoxWithConstraints(
+      modifier.fillMaxSize().semantics { contentDescription = "Read-only composed diff" }) {
+        val readableWidth = maxWidth / LocalDensity.current.fontScale
+        var preferredSideBySide by
+            remember(diff.oldPath, diff.newPath) { mutableStateOf<Boolean?>(null) }
+        val sideBySide = preferredSideBySide ?: (readableWidth >= 620.dp)
+        val rows = remember(diff) { sideBySideDiffRows(diff) }
+        val rowHeight = readOnlyCodeRowHeight()
+        Column(Modifier.fillMaxSize()) {
+          Row(
+              Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+              horizontalArrangement = Arrangement.End) {
+                ChromeTab(
+                    selected = sideBySide,
+                    onClick = { preferredSideBySide = true },
+                    accessibleName = "Side-by-side diff") {
+                      Text("Side-by-side", style = IdeTypography.compactBody)
+                    }
+                ChromeTab(
+                    selected = !sideBySide,
+                    onClick = { preferredSideBySide = false },
+                    accessibleName = "Unified diff") {
+                      Text("Unified", style = IdeTypography.compactBody)
+                    }
+              }
+          val verticalScroll = rememberScrollState()
+          val density = LocalDensity.current
+          val largestLine = diff.lines.maxOfOrNull { maxOf(it.oldLine, it.newLine) } ?: 0
+          val numberSize =
+              rememberTextMeasurer()
+                  .measure(
+                      "9".repeat(maxOf(4, largestLine.toString().length)),
+                      style = readOnlyCodeStyle)
+                  .size
+          val numberWidth = with(density) { numberSize.width.toDp() } + 12.dp
+          SelectionContainer(Modifier.weight(1f)) {
+            if (sideBySide) {
+              Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DiffColumn("Current", verticalScroll, Modifier.weight(1f)) {
+                  rows.forEachIndexed { index, row ->
+                    DiffCodeRow(
+                        row.before, "Current", index, diffRowHeight(row, rowHeight), numberWidth)
+                  }
                 }
-            MiniOrcaButton(
-                onClick = { sideBySide = false },
-                enabled = sideBySide,
-                tone = ActionTone.Navigation,
-                selected = !sideBySide,
-                density = ButtonDensity.Toolbar) {
-                  Text("Unified", fontSize = 10.sp)
+                DiffColumn("Candidate", verticalScroll, Modifier.weight(1f)) {
+                  rows.forEachIndexed { index, row ->
+                    DiffCodeRow(
+                        row.proposed,
+                        "Candidate",
+                        index,
+                        diffRowHeight(row, rowHeight),
+                        numberWidth)
+                  }
                 }
+              }
+            } else {
+              DiffColumn("Current → Candidate", verticalScroll, Modifier.fillMaxSize()) {
+                diff.lines.forEachIndexed { index, line ->
+                  DiffCodeRow(
+                      DiffCell(
+                          (if (line.kind == "added") line.newLine else line.oldLine).takeIf {
+                            it > 0
+                          },
+                          line.text,
+                          line.kind),
+                      "Unified",
+                      index,
+                      rowHeight * (line.text.count { it == '\n' } + 1),
+                      numberWidth)
+                }
+              }
+            }
           }
-          if (sideBySide)
-              sideBySideDiffRows(diff).forEach { row ->
-                Row(Modifier.fillMaxWidth()) {
-                  DiffCellText(row.before, "Before", Modifier.weight(1f))
-                  DiffCellText(row.proposed, "Proposed", Modifier.weight(1f))
-                }
-              }
-          else
-              diff.lines.forEach { line ->
-                Text(
-                    "${line.kind.uppercase()} ${line.oldLine.takeIf { it > 0 } ?: line.newLine} ${line.text}",
-                    color =
-                        if (line.kind == "added") Success
-                        else if (line.kind == "removed") Error else PrimaryText,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    lineHeight = 20.sp,
-                    modifier =
-                        Modifier.heightIn(min = readOnlyCodeRowMinimumHeight)
-                            .background(diffLineBackground(line.kind))
-                            .semantics {
-                              contentDescription =
-                                  "${line.kind} diff line ${line.oldLine.takeIf { it > 0 } ?: line.newLine}"
-                            },
-                )
-              }
         }
-  }
+      }
+}
+
+private fun diffRowHeight(row: DiffRow, lineHeight: Dp): Dp =
+    lineHeight *
+        maxOf(
+            row.before?.text?.count { it == '\n' }?.plus(1) ?: 1,
+            row.proposed?.text?.count { it == '\n' }?.plus(1) ?: 1)
+
+@Composable
+private fun DiffColumn(
+    label: String,
+    verticalScroll: ScrollState,
+    modifier: Modifier,
+    content: @Composable () -> Unit
+) {
+  Column(
+      modifier
+          .fillMaxHeight()
+          .clip(MiniOrcaShapes.interactiveCard)
+          .background(EditorCanvas)
+          .border(1.dp, PaneSeparator, MiniOrcaShapes.interactiveCard)
+          .testTag("diff-$label-column")) {
+        Text(
+            label,
+            Modifier.fillMaxWidth()
+                .background(HeaderSurface)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            color = PrimaryText,
+            style = IdeTypography.workspaceMetadata,
+            fontWeight = FontWeight.SemiBold)
+        Box(
+            Modifier.weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(verticalScroll)
+                .testTag("diff-$label-vertical")) {
+              Column(
+                  Modifier.fillMaxWidth()
+                      .horizontalScroll(rememberScrollState())
+                      .width(IntrinsicSize.Max)
+                      .padding(vertical = 12.dp)
+                      .testTag("diff-$label-horizontal")) {
+                    content()
+                  }
+            }
+      }
 }
 
 @Composable
-private fun DiffCellText(cell: DiffCell?, side: String, modifier: Modifier) {
-  Text(
-      cell?.let { "${it.change.uppercase()} ${it.lineNumber ?: ""} ${it.text}" }
-          ?: "$side unchanged",
-      color =
-          when (cell?.change) {
-            "added" -> Success
-            "removed" -> Error
-            else -> PrimaryText
-          },
-      fontFamily = FontFamily.Monospace,
-      fontSize = 12.sp,
-      lineHeight = 20.sp,
-      modifier =
-          modifier
-              .heightIn(min = readOnlyCodeRowMinimumHeight)
-              .background(diffLineBackground(cell?.change))
-              .semantics {
-                contentDescription =
-                    cell?.let { "$side ${it.change} line ${it.lineNumber ?: "unknown"}" }
-                        ?: "$side unchanged"
-              },
-  )
+private fun DiffCodeRow(cell: DiffCell?, side: String, index: Int, height: Dp, numberWidth: Dp) {
+  val marker =
+      when (cell?.change) {
+        "added" -> "+"
+        "removed" -> "−"
+        else -> ""
+      }
+  val tint =
+      when (cell?.change) {
+        "added" -> Success
+        "removed" -> Error
+        else -> FaintText
+      }
+  Row(
+      Modifier.fillMaxWidth()
+          .height(height)
+          .background(diffLineBackground(cell?.change))
+          .testTag("diff-$side-row-$index")
+          .semantics {
+            contentDescription =
+                cell?.let { "$side ${it.change} line ${it.lineNumber ?: "unknown"}" }
+                    ?: "$side has no corresponding line"
+          }) {
+        Text(
+            cell?.lineNumber?.toString().orEmpty(),
+            Modifier.width(numberWidth).padding(end = 8.dp),
+            color = FaintText,
+            style = readOnlyCodeStyle,
+            softWrap = false,
+            textAlign = TextAlign.End)
+        Text(
+            marker,
+            Modifier.width(20.dp * LocalDensity.current.fontScale),
+            color = tint,
+            style = readOnlyCodeStyle,
+            softWrap = false)
+        Text(
+            remember(cell?.text) { highlightedCode(cell?.text.orEmpty()) },
+            Modifier.padding(end = 12.dp),
+            color = PrimaryText,
+            style = readOnlyCodeStyle,
+            softWrap = false)
+      }
 }

@@ -992,9 +992,12 @@ fixed the extraction boundary, and the complete isolated gate then passed.
 
 ## Task IDEUX-13 — Verify the complete IDE experience and document actual acceptance
 
-**Status:** [ ] Pending.
+**Status:** [ ] In progress — Terra High retry2 dispatched after reference-matrix failure; native Apply/Undo remains unproven.
 
 **Target files**
+
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopNativeAcceptanceHarness.kt` — test-only actual DesktopApp/Presenter + loopback daemon/deterministic provider/disposable project journey; verify guarded checks/Apply/Undo through native UI and exact file bytes.
+- `desktop/scripts/native-acceptance-smoke.sh` — only if needed to reproducibly launch/clean up that isolated native harness; read scripts guide and verify shell syntax. No live provider or user-project mutations.
 
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` — deterministic full-workspace states and native interaction coverage; include the preserved IDEUX-03 mode-switch callback with its prior native fixture prerequisites. Retain the IDEUX-05 rounded Analysis heading assertion with the corresponding full-frame visual fixture graph.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — integrated production reference and boundary matrix.
@@ -1008,6 +1011,31 @@ fixed the extraction boundary, and the complete isolated gate then passed.
 - `PLAN.md` — accepted scope/status only after evidence supports it.
 - `docs/tasks.md` — each card's real completion/check records.
 - `tasks/README.md` — final queue status without importing past grants.
+
+**Integration prerequisites retained from the accepted working baseline**
+
+The final integrated frame relies on the following preserved runtime and regression
+changes. Review and validate them with the final candidate before selectively
+committing them; preserve their behavior and do not infer authority for unrelated
+refactoring. Necessary fixes to failures in these owners remain within this task.
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisFileSelector.kt`
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisFileStatus.kt`
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopLayoutState.kt`
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt`
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopStatusBar.kt`
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt`
+- `desktop/src/main/kotlin/io/miniorca/desktop/DiffViewer.kt`
+- `desktop/src/main/kotlin/io/miniorca/desktop/IdeShell.kt`
+- `desktop/src/main/kotlin/io/miniorca/desktop/ReviewEvidencePane.kt`
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkflowToolWindows.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisFileSelectionTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisFileStatusTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopLayoutStateTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopThemeTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DiffViewerTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/ReviewEvidencePaneTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/ReviewToolWindowTest.kt`
 
 **Inputs / dependencies**
 

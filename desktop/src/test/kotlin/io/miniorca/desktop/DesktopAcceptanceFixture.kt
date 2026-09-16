@@ -62,6 +62,10 @@ internal val acceptanceRunStates =
 
 private val acceptancePages =
     listOf(
+        "Summary frame",
+        "Analysis frame",
+        "Review frame",
+        "Workspace",
         "Progress",
         "Bugs",
         "Performance",
@@ -75,7 +79,7 @@ private const val acceptanceFailure =
 
 @Composable
 private fun NativeAcceptanceScreen(terminal: DesktopTerminalWorkspace, directory: String) {
-  var page by remember { mutableStateOf("Progress") }
+  var page by remember { mutableStateOf("Workspace") }
   var stateIndex by remember { mutableStateOf(0) }
   var scale by remember { mutableStateOf(1f) }
   val state = acceptanceRunStates[stateIndex]
@@ -125,6 +129,10 @@ private fun NativeAcceptanceScreen(terminal: DesktopTerminalWorkspace, directory
       BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
         key(page, state) {
           when (page) {
+            "Summary frame" -> RoundedSummaryVisualFixture(maxWidth.value)
+            "Analysis frame" -> RoundedAnalysisVisualFixture(maxWidth.value)
+            "Review frame" -> EditorVisualFixture(maxWidth.value, comparison = true)
+            "Workspace" -> NativeRoundedWorkspace(terminal, directory)
             "Progress" ->
                 AnalysisWorkspacePane(
                     AnalysisWorkspacePaneState(
@@ -142,6 +150,169 @@ private fun NativeAcceptanceScreen(terminal: DesktopTerminalWorkspace, directory
         }
       }
     }
+  }
+}
+
+/** Exercises the actual shell and its focus/drawer/terminal owners without daemon access. */
+@Composable
+private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory: String) {
+  val initialReview = remember { editorComparisonReviewFixture() }
+  val file = requireNotNull(initialReview.selected)
+  val symbol = requireNotNull(initialReview.selectedSymbol)
+  val index = remember {
+    ProjectIndex(
+        "visual-fixture",
+        "fixture-revision",
+        files =
+            listOf(file.path, "cmd/server/main.go", "go.mod", "README.md").map {
+              IndexedFile(it, "fixture-hash", "Go", false, analysisStatus = "fresh")
+            })
+  }
+  var app by remember {
+    mutableStateOf(
+        DesktopState(
+            projectState =
+                ProjectWorkspaceState(
+                    visualFixtureProject.copy(path = directory), index, visualFixtureOverview),
+            selection =
+                FileSelectionState(
+                    selectedFile = file,
+                    symbols = listOf(symbol),
+                    selectedSymbol = symbol,
+                    gitStatus = GitStatus(available = true, branch = "main")),
+            analysisRun = roundedAnalysisStateFixture(),
+            review =
+                DraftReviewState(initialReview.checks, initialReview.draft, initialReview.editor),
+            connection = ConnectionState(label = "Fixture · no daemon")))
+  }
+  var layout by remember {
+    mutableStateOf(
+        DesktopLayoutState(
+            activeLeftToolWindow = LeftToolWindow.Summary,
+            activeRightToolWindow = RightToolWindow.Review,
+            editorSurface = EditorSurface.Review))
+  }
+  var filter by remember { mutableStateOf("") }
+  var collapsed by remember { mutableStateOf(emptySet<String>()) }
+  var palette by remember { mutableStateOf(DesktopShellPaletteState(PaletteMode.Files, "", false)) }
+  var recordedAction by remember { mutableStateOf("No provider or source action requested") }
+  val terminalState by terminal.state.collectAsState()
+  fun record(action: String) {
+    recordedAction = "Fixture request: $action · no backend dispatch"
+  }
+  fun selectFile(path: String) {
+    app =
+        app.copy(
+            workspace = Workspace.Editor,
+            selection =
+                app.selection.copy(
+                    selectedFile = file.copy(path = path, name = path.substringAfterLast('/'))))
+    palette = palette.copy(visible = false)
+  }
+  Column(Modifier.fillMaxSize()) {
+    Text(recordedAction, style = IdeTypography.resultLabel, modifier = Modifier.padding(4.dp))
+    DesktopShell(
+        state =
+            DesktopShellState(
+                app,
+                layout,
+                DesktopShellEditorState(
+                    editorProgressUiState(app),
+                    EditorContextualActions(false, true, false, false, false),
+                    false,
+                    false),
+                DesktopShellContextState(
+                    false, null, ScopedModel(), false, ScopedModel(), false, false),
+                palette,
+                DesktopShellStatusProviders(ScopedModel(), ScopedModel(), ScopedModel())),
+        layoutActions = DesktopShellLayoutActions({ layout = it }, { layout = it }),
+        projectActions =
+            DesktopShellProjectActions(
+                { record("Open project") }, { record("Re-index") }, { record("Reconnect") }),
+        editorActions =
+            DesktopShellEditorActions(
+                selectWorkspace = { app = app.copy(workspace = it) },
+                selectEditorSurface = { layout = layout.withEditorSurface(it) },
+                focusChat = { record("Assistant") },
+                focusDraft = { record("Edit draft") },
+                cancelAnalysis = { record("Cancel analysis") },
+                sourceLineSelected = {
+                  app = app.copy(selection = app.selection.copy(focusedLine = it.line))
+                },
+                validateDraft = { record("Validate") },
+                runDraftChecks = { record("Checks") },
+                generate = { record("Generate") },
+                cancelGeneration = { record("Cancel generation") },
+                dismissContext = {},
+                createDeclaration = { record("New function") }),
+        analysisActions =
+            DesktopShellAnalysisActions(
+                refreshAnalysisSelection = { record("Refresh selection") },
+                saveAnalysisSelection = { record("Save selection") },
+                startAnalysis = { _, _ -> record("Start analysis") },
+                pauseAnalysis = { record("Pause") },
+                resumeAnalysis = { record("Resume") },
+                cancelAnalysis = { record("Cancel") },
+                startScan = { record("Scan") },
+                cancelScan = { record("Cancel scan") },
+                preparePerformanceFinding = { _, _ -> record("Performance finding") },
+                loadGoBenchmarks = { record("Benchmarks") },
+                selectGoBenchmark = { record("Select benchmark") },
+                compareSelectedGoBenchmark = { record("Compare benchmark") },
+                prepareSecurityFinding = { record("Security finding") }),
+        findingActions =
+            FindingActions({ selectFile(it.location.path) }, { _, _ -> record("Finding") }),
+        paletteActions =
+            DesktopShellPaletteActions(
+                updateQuery = { palette = palette.copy(query = it) },
+                dismiss = { palette = palette.copy(visible = false) },
+                open = { palette = DesktopShellPaletteState(it, "", true) },
+                switchMode = { palette = palette.copy(mode = it) },
+                selectFile = ::selectFile,
+                selectSymbol = { palette = palette.copy(visible = false) },
+                selectAction = {
+                  record(it)
+                  palette = palette.copy(visible = false)
+                }),
+        panes =
+            DesktopShellPanes(
+                explorer = { modifier, onSelected ->
+                  ExplorerPane(
+                      ExplorerPaneState(index, app.selectedFile?.path, filter, collapsed, false),
+                      ExplorerPaneActions(
+                          { filter = it },
+                          { collapsed = if (it in collapsed) collapsed - it else collapsed + it },
+                          { collapsed = explorerDirectories(index.files) },
+                          { collapsed = emptySet() },
+                          {
+                            selectFile(it)
+                            onSelected()
+                          }),
+                      modifier)
+                },
+                rightToolWindows = { selected, modifier ->
+                  if (selected == RightToolWindow.Review) {
+                    ReviewToolWindow(
+                        initialReview.copy(project = app.project, selected = app.selectedFile),
+                        ReviewToolWindowActions(
+                            { record("Checks") }, { record("Revise") }, { record("Edit draft") }),
+                        DraftApplicationActions({ record("Apply") }, { record("Undo") }),
+                        modifier)
+                  } else {
+                    Text(
+                        "${rightToolWindowLabel(selected)} · native shell fixture",
+                        modifier.padding(8.dp))
+                  }
+                },
+                rightToolWindowBadges = emptyMap(),
+                terminalContent = { TerminalToolWindow(terminal, it) },
+                terminalState = terminalState,
+                terminalTabActions =
+                    TerminalTabActions(
+                        terminal::selectShell,
+                        { terminal.createShell(directory) },
+                        { terminal.closeSession(it) })),
+        terminal = terminal)
   }
 }
 

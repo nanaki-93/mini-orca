@@ -75,8 +75,7 @@ class AnalysisFileSelectionTest {
           }
           .use { fixture ->
             fixture.render()
-            assertFalse(fixture.hasText("Select all"))
-            fixture.clickDescription("Expand Files")
+            assertTrue(fixture.hasDescription("Collapse Files"))
             fixture.render("analysis-files-$width-$height-150")
             fixture.assertTextFits("Select all")
             fixture.assertTextFits("Exclude all")
@@ -134,12 +133,18 @@ class AnalysisFileSelectionTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("1 selected · 0 excluded"))
-          fixture.clickDescription("Expand Files")
           fixture.render()
           assertTrue(fixture.hasText("Source changed."))
           assertFalse(
               fixture.hasText("Performance review · Unavailable — Model is not configured."))
-          assertFalse(fixture.hasDescription("Analysis details for main.go"))
+          assertTrue(fixture.hasDescription("Analysis details for main.go"))
+          fixture.clickDescription("Analysis details for main.go")
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Code analysis: Source changed.\nPerformance review: Model is not configured."))
+          fixture.clickDescription("Analysis details for main.go")
+          fixture.render()
           assertEquals(0, saves)
           fixture.clickDescription("Analyze main.go")
           fixture.render("analysis-files-excluded-800-150")
@@ -171,7 +176,6 @@ class AnalysisFileSelectionTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Selection could not be saved. Refresh files and retry."))
-          fixture.clickDescription("Expand Files")
           fixture.render("analysis-files-long-path-error-800-150")
           fixture.assertTextFits(path, maxLines = 5)
           assertTrue(fixture.hasText("Selection could not be saved. Refresh files and retry."))
@@ -200,6 +204,9 @@ class AnalysisFileSelectionTest {
                   { calls++ }))
         }
         .use { fixture ->
+          fixture.render("analysis-files-default-expanded")
+          assertTrue(fixture.hasDescription("Analyze main.go"))
+          fixture.clickDescription("Collapse Files")
           fixture.render("analysis-files-collapsed")
           assertFalse(fixture.hasDescription("Analyze main.go"))
           repeat(2) {
@@ -217,20 +224,80 @@ class AnalysisFileSelectionTest {
                   fileSelection = state.value.fileSelection.copy(error = "Save failed"))
           fixture.render("analysis-files-locked-collapsed")
           assertTrue(fixture.hasText("Save failed"))
-          assertTrue(fixture.hasText("Finish or cancel the current run to change selection."))
+          assertTrue(
+              fixture.hasText(
+                  "Selection locked. Finish or cancel the current run to change files."))
           fixture.clickDescription("Expand Files")
           fixture.render()
-          assertTrue(fixture.isDisabled("Select all"))
-          assertTrue(fixture.isDisabled("Exclude all"))
+          assertFalse(fixture.hasText("Select all"))
+          assertFalse(fixture.hasText("Exclude all"))
+          assertFalse(fixture.tryClick("Analyze main.go"))
           state.value =
               state.value.copy(
                   run = null,
                   fileSelection =
                       AnalysisSelectionState(selectionFixture().copy(projectId = "other")))
           fixture.render()
-          assertTrue(fixture.hasDescription("Expand Files"))
-          assertFalse(fixture.hasDescription("Analyze main.go"))
+          assertTrue(fixture.hasDescription("Collapse Files"))
+          assertTrue(fixture.hasDescription("Analyze main.go"))
           assertEquals(0, calls)
+        }
+  }
+
+  @Test
+  fun runningFiltersAndDisclosureStayLocalWhilePausedSelectionRemainsLocked() {
+    val initial =
+        roundedAnalysisStateFixture()
+            .copy(
+                fileSelection =
+                    roundedAnalysisStateFixture().fileSelection.let {
+                      it.copy(selection = it.selection!!.copy(editable = true))
+                    })
+    val state = mutableStateOf(initial)
+    var actions = 0
+    ComposeVisualFixture(1440, 900) {
+          AnalysisFileSelector(
+              state.value,
+              AnalysisWorkspaceActions(
+                  { _, _ -> actions++ },
+                  { actions++ },
+                  { actions++ },
+                  { actions++ },
+                  { actions++ },
+                  { actions++ },
+                  { actions++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Collapse Files"))
+          fixture.scrollBy(100_000f, "analysis-file-table")
+          fixture.render("analysis-last-file")
+          fixture.assertTextFits(".env")
+          fixture.scrollBy(-100_000f, "analysis-file-table")
+          fixture.render()
+          fixture.clickDescription("Needs attention")
+          fixture.render()
+          assertTrue(fixture.hasText("4 of 15 files match"))
+          fixture.setText("internal/api/user")
+          fixture.render("analysis-running-filtered")
+          fixture.assertTextFits("internal/api/user.go")
+          assertTrue(fixture.hasText("1 of 15 files match"))
+          assertFalse(fixture.tryClick("Analyze internal/api/user.go"))
+          fixture.clickDescription("Collapse Files")
+          fixture.render()
+          fixture.clickDescription("Expand Files")
+          fixture.render()
+          assertTrue(fixture.hasText("1 of 15 files match"))
+          state.value = state.value.copy(run = state.value.run!!.copy(status = "paused"))
+          fixture.render()
+          assertFalse(fixture.hasText("Select all"))
+          assertFalse(fixture.tryClick("Analyze internal/api/user.go"))
+          assertEquals(0, actions)
+          assertEquals(initial.fileSelection, state.value.fileSelection)
+          state.value = state.value.copy(run = null)
+          fixture.render()
+          fixture.clickDescription("Analyze internal/api/user.go")
+          assertEquals(1, actions)
         }
   }
 

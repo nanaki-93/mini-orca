@@ -154,6 +154,7 @@ internal fun ResponsiveFieldPair(
 internal object MiniOrcaShapes {
   val control = RoundedCornerShape(10.dp)
   val interactiveCard = RoundedCornerShape(14.dp)
+  val workspace = RoundedCornerShape(18.dp)
   val overlay = RoundedCornerShape(18.dp)
   val indicator = RoundedCornerShape(4.dp)
   val pill = RoundedCornerShape(50)
@@ -185,6 +186,7 @@ internal enum class ActionTone {
   Primary,
   Navigation,
   Positive,
+  PositivePrimary,
   Attention,
   Destructive,
   Neutral,
@@ -231,6 +233,15 @@ internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
               blendOver(Success.copy(alpha = 0.24f), Panel),
               blendOver(Success.copy(alpha = 0.28f), Panel),
               Success,
+              Panel,
+              FaintText,
+              Success)
+      ActionTone.PositivePrimary ->
+          ActionToneStyle(
+              Success,
+              blendOver(Success.copy(alpha = 0.90f), EditorCanvas),
+              blendOver(Success.copy(alpha = 0.82f), EditorCanvas),
+              OnActionFill,
               Panel,
               FaintText,
               Success)
@@ -437,7 +448,7 @@ internal val PaneSeparator = MiniOrcaPalette.paneSeparator
 internal val ControlBorder = MiniOrcaPalette.controlBorder
 internal val ControlHover = MiniOrcaPalette.controlHover
 
-internal val AppBackground = ToolWindowSurface
+internal val AppBackground = ActivityRail
 internal val Chrome = ActivityRail
 internal val Panel = ToolWindowSurface
 internal val Card = OverlaySurface
