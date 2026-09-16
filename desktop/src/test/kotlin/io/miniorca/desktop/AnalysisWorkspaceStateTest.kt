@@ -343,7 +343,129 @@ class AnalysisWorkspaceStateTest {
                         sections = page.run.sections.map { it.copy(findingCount = null) }))
             .reportedCount)
     assertNull(page.copy(run = null).reportedCount)
-    assertTrue(analysisCoverageLabel(null).contains("not available"))
+    assertEquals(
+        "1/1 stages covered", analysisCoverageLabel(AnalysisRunCoverage(total = 1, succeeded = 1)))
+    assertNull(analysisCoverageLabel(null))
+    assertNull(analysisCoverageLabel(AnalysisRunCoverage()))
+  }
+
+  @Test
+  fun emptyResultsKeepLifecycleAndPendingDetailsDistinct() {
+    fun projected(status: String, reportedCount: Int? = null): AnalysisResultPageState {
+      val original = resultPageFixture("bugs")
+      val progress =
+          requireNotNull(original.progress).copy(status = status, findingCount = reportedCount)
+      val run =
+          requireNotNull(original.run)
+              .copy(
+                  status = status,
+                  sections =
+                      original.run.sections.map { if (it.category == "bugs") progress else it })
+      return original.copy(
+          run = run,
+          section =
+              AnalysisSectionState(
+                  results =
+                      requireNotNull(original.results)
+                          .copy(progress = progress, semantic = emptyList())))
+    }
+
+    assertEquals(
+        AnalysisResultAvailability.NoProject,
+        resultPageFixture("bugs")
+            .copy(project = null, run = null)
+            .emptyPresentation(0)
+            .availability)
+    assertEquals(
+        AnalysisResultAvailability.NotStarted,
+        resultPageFixture("bugs").copy(run = null).emptyPresentation(0).availability)
+    assertEquals(
+        AnalysisResultAvailability.Loading,
+        projected("running")
+            .copy(section = AnalysisSectionState(loading = true))
+            .emptyPresentation(0)
+            .availability)
+    assertEquals(
+        AnalysisResultAvailability.Running, projected("running").emptyPresentation(0).availability)
+    assertEquals("No findings yet.", projected("running").emptyPresentation(0).message)
+    assertEquals(
+        AnalysisResultAvailability.PendingDetails,
+        projected("running", reportedCount = 2).emptyPresentation(0).availability)
+    assertEquals(
+        "No results loaded yet.",
+        projected("running", reportedCount = 2).emptyPresentation(0).message)
+    assertEquals(
+        AnalysisResultAvailability.Paused,
+        projected("paused", reportedCount = 2).emptyPresentation(0).availability)
+    assertEquals(
+        AnalysisResultAvailability.Interrupted,
+        projected("interrupted", reportedCount = 2).emptyPresentation(0).availability)
+    assertEquals(
+        AnalysisResultAvailability.Partial,
+        projected("partial", reportedCount = 2).emptyPresentation(0).availability)
+    assertEquals(
+        AnalysisResultAvailability.Failed,
+        projected("failed", reportedCount = 2).emptyPresentation(0).availability)
+    assertEquals(
+        AnalysisResultAvailability.Canceled,
+        projected("canceled", reportedCount = 2).emptyPresentation(0).availability)
+    assertEquals(
+        AnalysisResultAvailability.Unavailable,
+        projected("unavailable", reportedCount = 2).emptyPresentation(0).availability)
+  }
+
+  @Test
+  fun completedEmptyRequiresMatchingCurrentZeroDetailAndTimeStaysProjectScoped() {
+    fun completedPage(reportedCount: Int?): AnalysisResultPageState {
+      val original = resultPageFixture("bugs")
+      val progress =
+          requireNotNull(original.progress).copy(status = "completed", findingCount = reportedCount)
+      val run =
+          requireNotNull(original.run)
+              .copy(
+                  status = "completed",
+                  elapsedSeconds = 42,
+                  sections =
+                      original.run.sections.map { if (it.category == "bugs") progress else it })
+      return original.copy(
+          run = run,
+          section =
+              AnalysisSectionState(
+                  results =
+                      requireNotNull(original.results)
+                          .copy(progress = progress, semantic = emptyList())))
+    }
+
+    val completed = completedPage(0)
+    assertEquals(
+        AnalysisResultAvailability.CompletedEmpty, completed.emptyPresentation(0).availability)
+    assertEquals("Run time · 42s", completed.runTimeLabel)
+    assertEquals(
+        AnalysisResultAvailability.PendingDetails,
+        completed.copy(section = AnalysisSectionState()).emptyPresentation(0).availability)
+    assertEquals(
+        AnalysisResultAvailability.PendingDetails,
+        completedPage(null).emptyPresentation(0).availability)
+    assertEquals(
+        AnalysisResultAvailability.PendingDetails,
+        completedPage(2).emptyPresentation(0).availability)
+    assertNull(
+        completed
+            .copy(
+                run =
+                    completed.run!!.copy(
+                        identity = completed.run.identity.copy(projectId = "other")))
+            .runTimeLabel)
+
+    val stale = completed.copy(project = completed.project!!.copy(projectRevision = "next"))
+    assertEquals(AnalysisResultAvailability.Stale, stale.emptyPresentation(0).availability)
+    assertEquals("Run time · 42s", stale.runTimeLabel)
+    assertEquals(
+        AnalysisResultAvailability.Error,
+        completed
+            .copy(section = AnalysisSectionState(error = "refresh failed"))
+            .emptyPresentation(0)
+            .availability)
   }
 
   @Test

@@ -489,6 +489,7 @@ class DesktopVisualLayoutTest {
                 .use { fixture ->
                   fixture.render()
                   assertTrue(fixture.hasText("Loading results…"))
+                  assertEquals(1, fixture.textCount("Loading results…"))
                   assertFalse(fixture.hasDescription("Inspect $title"))
                   page = original
                   fixture.render("results-$category-$width-$scale")
@@ -578,7 +579,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("results-empty-800-1.5")
           assertFalse(fixture.hasText("Reported findings"))
-          assertTrue(fixture.hasText("No findings yet."))
+          assertTrue(fixture.hasText("Analysis has not started."))
         }
     ComposeVisualFixture(800, 650) {
           Column {
@@ -2831,6 +2832,10 @@ internal class ComposeVisualFixture(
           .mapNotNull { it.config.getOrNull(SemanticsActions.Dismiss)?.action }
           .firstOrNull()
           ?.invoke() ?: false
+
+  fun verticalScrollValue(tag: String): Float =
+      requireNotNull(taggedNode(tag).config.getOrNull(SemanticsProperties.VerticalScrollAxisRange))
+          .value()
 
   fun taggedBounds(tag: String): Rect = taggedNode(tag).boundsInRoot
 

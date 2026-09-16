@@ -157,6 +157,30 @@ internal fun analysisCategoryWorkspace(category: String): Workspace =
 internal fun analysisCategoryLabel(category: String): String =
     analysisCategoryWorkspace(category).name
 
+internal enum class AnalysisResultAvailability {
+  NoProject,
+  NotStarted,
+  Loading,
+  Running,
+  Paused,
+  Interrupted,
+  CompletedEmpty,
+  PendingDetails,
+  Partial,
+  Failed,
+  Canceled,
+  Unavailable,
+  Stale,
+  Error,
+  FilterNoMatch,
+}
+
+internal data class AnalysisResultEmptyPresentation(
+    val availability: AnalysisResultAvailability,
+    val message: String,
+    val detail: String,
+)
+
 /** Current progress and retained evidence stay distinct across all project files. */
 internal data class AnalysisResultPageState(
     val type: AnalysisResultType,
@@ -173,6 +197,7 @@ internal data class AnalysisResultPageState(
           it.identity == run?.identity &&
               it.identity.projectId == project?.projectId &&
               it.progress.category == category &&
+              it.progress == progress &&
               it.path.isEmpty()
         }
 
@@ -190,6 +215,121 @@ internal data class AnalysisResultPageState(
 
   val reportedCount: Int?
     get() = if (stale) null else progress?.findingCount
+
+  val coverageLabel: String?
+    get() = if (stale) null else analysisCoverageLabel(progress?.coverage)
+
+  val runTimeLabel: String?
+    get() =
+        run?.takeIf { it.identity.projectId == project?.projectId }
+            ?.let { it.elapsedSeconds.takeIf { seconds -> seconds > 0 } ?: it.windowElapsedSeconds }
+            ?.takeIf { it > 0 }
+            ?.let { "Run time · ${it}s" }
+
+  /**
+   * Empty-result precedence is deliberate: stale evidence and refresh errors are never presented as
+   * a clean result, and completed-empty requires both the current category record and its details.
+   */
+  fun emptyPresentation(loadedRows: Int): AnalysisResultEmptyPresentation {
+    check(loadedRows == 0) { "Empty presentation requires no loaded rows." }
+    if (project == null)
+        return AnalysisResultEmptyPresentation(
+            AnalysisResultAvailability.NoProject, "Open a project to view analysis results.", "")
+    if (stale && run != null)
+        return AnalysisResultEmptyPresentation(
+            AnalysisResultAvailability.Stale,
+            "Results are out of date.",
+            "View analysis to refresh evidence for the current project revision.")
+    if (section.error != null)
+        return AnalysisResultEmptyPresentation(
+            AnalysisResultAvailability.Error, "Results could not be refreshed.", section.error)
+    if (section.loading)
+        return AnalysisResultEmptyPresentation(
+            AnalysisResultAvailability.Loading, "Loading results…", "")
+    val currentRun = currentProjectRun(run, project)
+    if (currentRun == null)
+        return AnalysisResultEmptyPresentation(
+            AnalysisResultAvailability.NotStarted,
+            "Analysis has not started.",
+            "View analysis to start a run for this project.")
+    val currentProgress =
+        progress
+            ?: return AnalysisResultEmptyPresentation(
+                AnalysisResultAvailability.PendingDetails,
+                "Result details are not available yet.",
+                "View analysis for the current category status.")
+    val currentReportedCount = reportedCount
+    return when (currentProgress.status) {
+      "queued" ->
+          AnalysisResultEmptyPresentation(
+              AnalysisResultAvailability.Running,
+              "Analysis is queued.",
+              "View analysis for the current category status.")
+      "running",
+      "pausing",
+      "canceling" ->
+          if (currentReportedCount != null && currentReportedCount > 0)
+              AnalysisResultEmptyPresentation(
+                  AnalysisResultAvailability.PendingDetails,
+                  "No results loaded yet.",
+                  "$currentReportedCount findings were reported. View analysis for the current category status.")
+          else
+              AnalysisResultEmptyPresentation(
+                  AnalysisResultAvailability.Running, "No findings yet.", "")
+      "paused" ->
+          AnalysisResultEmptyPresentation(
+              AnalysisResultAvailability.Paused,
+              "Analysis is paused.",
+              "View analysis to resume it.")
+      "interrupted" ->
+          AnalysisResultEmptyPresentation(
+              AnalysisResultAvailability.Interrupted,
+              "Analysis was interrupted.",
+              "View analysis to resume or start another run.")
+      "completed",
+      "completed_empty" ->
+          if (currentReportedCount == 0 &&
+              results?.progress?.status in setOf("completed", "completed_empty") &&
+              results?.progress?.findingCount == 0)
+              AnalysisResultEmptyPresentation(
+                  AnalysisResultAvailability.CompletedEmpty,
+                  "No findings in the analyzed scope.",
+                  "")
+          else
+              AnalysisResultEmptyPresentation(
+                  AnalysisResultAvailability.PendingDetails,
+                  if (currentReportedCount != null && currentReportedCount > 0)
+                      "$currentReportedCount findings were reported."
+                  else "Completed result details are not available yet.",
+                  "View analysis for the current category status.")
+      "partial" ->
+          AnalysisResultEmptyPresentation(
+              AnalysisResultAvailability.Partial,
+              "Analysis completed partially.",
+              "View analysis for incomplete coverage.")
+      "failed" ->
+          AnalysisResultEmptyPresentation(
+              AnalysisResultAvailability.Failed,
+              "Analysis failed for this category.",
+              currentRun.reason.ifBlank { "View analysis to retry or inspect the failure." })
+      "canceled",
+      "cancelled" ->
+          AnalysisResultEmptyPresentation(
+              AnalysisResultAvailability.Canceled,
+              "Analysis was canceled.",
+              "View analysis to start another run when ready.")
+      "unavailable" ->
+          AnalysisResultEmptyPresentation(
+              AnalysisResultAvailability.Unavailable,
+              "Analysis is unavailable for this category.",
+              currentRun.reason.ifBlank { "View analysis for availability details." })
+      else ->
+          AnalysisResultEmptyPresentation(
+              AnalysisResultAvailability.PendingDetails,
+              "Result details are not available yet.",
+              "View analysis for the current category status.")
+    }
+  }
 
   val semantic: List<UnifiedFinding>
     get() =
@@ -214,7 +354,17 @@ internal fun DesktopState.analysisResultPage(category: String) =
         analysisRun.run,
         analysisRun.sections[AnalysisResultKey(category)] ?: AnalysisSectionState())
 
-internal fun analysisCoverageLabel(coverage: AnalysisRunCoverage?): String =
-    coverage?.let {
-      "${it.succeeded} covered · ${it.partial} partial · ${it.pending + it.running} remaining · ${it.failed} failed · ${it.skipped} skipped · ${it.unavailable} unavailable"
-    } ?: "Coverage is not available yet."
+internal fun analysisCoverageLabel(coverage: AnalysisRunCoverage?): String? =
+    coverage
+        ?.takeIf { it.total > 0 }
+        ?.let {
+          buildList {
+                add("${it.succeeded}/${it.total} stages covered")
+                if (it.partial > 0) add("${it.partial} partial")
+                if (it.pending + it.running > 0) add("${it.pending + it.running} remaining")
+                if (it.failed > 0) add("${it.failed} failed")
+                if (it.skipped > 0) add("${it.skipped} skipped")
+                if (it.unavailable > 0) add("${it.unavailable} unavailable")
+              }
+              .joinToString(" · ")
+        }

@@ -25,7 +25,6 @@ internal fun AnalysisResultsPane(
     browser: ResultBrowserState,
     facetLabel: String = "Severity",
     openAnalysis: () -> Unit,
-    emptyMessage: String = "No findings yet.",
     tools: @Composable () -> Unit = {},
     detail: @Composable (String) -> Unit,
 ) {
@@ -34,6 +33,7 @@ internal fun AnalysisResultsPane(
     val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
     val wide = resultListDetailUsesTwoPanes(contentWidth, LocalDensity.current.fontScale)
     val visibleRows = filteredResultRows(rows, browser.filter, browser.query)
+    val hasActiveFilter = browser.filter != ResultBrowserFilter.All || browser.query.isNotBlank()
     LaunchedEffect(browser.identity, visibleRows, wide) {
       browser.selectedKey = resultBrowserSelection(browser.selectedKey, visibleRows, wide)
     }
@@ -47,24 +47,33 @@ internal fun AnalysisResultsPane(
                   .testTag("result-overview"),
               verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ResultSectionHeader(page, rows.size, openAnalysis)
-                ResultBrowserFilters(
-                    rows = rows,
-                    browser = browser,
-                    facetLabel = facetLabel,
-                )
+                if (rows.isNotEmpty() || hasActiveFilter)
+                    ResultBrowserFilters(
+                        rows = rows,
+                        browser = browser,
+                        facetLabel = facetLabel,
+                    )
                 tools()
                 PreviousAnalysisDetails(page.unclassified)
               }
-          ResultListDetail(
-              visibleRows,
-              browser,
-              { browser.selectedKey = it },
-              if (rows.isNotEmpty() && visibleRows.isEmpty())
-                  "No matching results. Clear filters to view loaded results."
-              else emptyMessage,
-              Modifier.weight(1f).fillMaxWidth(),
-              wide,
-              detail)
+          if (visibleRows.isEmpty()) {
+            val empty =
+                if (rows.isNotEmpty())
+                    AnalysisResultEmptyPresentation(
+                        AnalysisResultAvailability.FilterNoMatch,
+                        "No matching results.",
+                        "Clear filters to view loaded results.")
+                else page.emptyPresentation(loadedRows = 0)
+            ResultEmptyState(empty, Modifier.weight(1f).fillMaxWidth())
+          } else
+              ResultListDetail(
+                  visibleRows,
+                  browser,
+                  { browser.selectedKey = it },
+                  "",
+                  Modifier.weight(1f).fillMaxWidth(),
+                  wide,
+                  detail)
         }
   }
 }

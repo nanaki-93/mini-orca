@@ -151,7 +151,6 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
       rows = visible.map(::semanticResultRow),
       browser = state.browser,
       openAnalysis = actions.openAnalysis,
-      emptyMessage = if (state.loading) "Loading findings…" else "No findings yet.",
       tools = {
         val scan = verifiedScanProgress(state.scan)
         IdeDisclosureHeader(

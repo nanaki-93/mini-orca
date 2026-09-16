@@ -144,8 +144,7 @@ internal fun SecurityWorkspacePane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
       browser = state.browser,
-      openAnalysis = actions.openAnalysis,
-      emptyMessage = "No security findings reported in the analyzed scope.") { key ->
+      openAnalysis = actions.openAnalysis) { key ->
         val result = results.firstOrNull { it.row().key == key }
         if (result != null) SecurityFindingDetails(result, state.index, actions)
         else

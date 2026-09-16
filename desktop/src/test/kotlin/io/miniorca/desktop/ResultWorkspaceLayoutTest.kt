@@ -78,12 +78,83 @@ class ResultWorkspaceLayoutTest {
           fixture.clickDescription("Filter results")
           fixture.setFocusedText("no loaded finding")
           fixture.render("results-filters-no-match-800-150")
-          fixture.assertTextFits("No matching results. Clear filters to view loaded results.")
+          fixture.assertTextFits("No matching results.")
+          fixture.assertTextFits("Clear filters to view loaded results.")
           fixture.assertTextFits("Clear filters")
+          assertEquals(1, fixture.textCount("Clear filters"))
           fixture.clickDescription("Clear filters")
           fixture.render("results-filters-cleared-800-150")
-          assertFalse(fixture.hasText("No matching results. Clear filters to view loaded results."))
+          assertFalse(fixture.hasText("No matching results."))
+          assertFalse(fixture.hasText("Clear filters to view loaded results."))
           assertEquals(0, openedAnalysis)
+        }
+  }
+
+  @Test
+  fun emptyStateUsesOneFullWidthSurfaceAndKeepsItsScopeDistinct() {
+    fun page(status: String, findingCount: Int?): AnalysisResultPageState {
+      val original = resultPageFixture("bugs")
+      val progress =
+          requireNotNull(original.progress).copy(status = status, findingCount = findingCount)
+      val run =
+          requireNotNull(original.run)
+              .copy(
+                  status = status,
+                  sections =
+                      original.run.sections.map { if (it.category == "bugs") progress else it })
+      return original.copy(
+          run = run,
+          section =
+              AnalysisSectionState(
+                  results =
+                      requireNotNull(original.results)
+                          .copy(progress = progress, semantic = emptyList())))
+    }
+
+    listOf(
+            Triple("running", null, "No findings yet."),
+            Triple("completed", 0, "No findings in the analyzed scope."),
+            Triple("partial", 0, "Analysis completed partially."),
+            Triple("failed", 0, "Analysis failed for this category."))
+        .forEach { (status, findingCount, message) ->
+          var openedAnalysis = 0
+          ComposeVisualFixture(800, 650, 1.5f) {
+                AnalysisResultsPane(
+                    page = page(status, findingCount),
+                    rows = emptyList(),
+                    browser = newResultBrowserState(page(status, findingCount)),
+                    openAnalysis = { openedAnalysis++ }) {
+                      Text("unused")
+                    }
+              }
+              .use { fixture ->
+                fixture.render("results-empty-$status-800-150")
+                fixture.assertTextFits(message)
+                assertTrue(fixture.taggedBounds("result-empty").width > 700f)
+                assertFalse(fixture.hasDescription("Filter results"))
+                assertFalse(fixture.hasText("All 0"))
+                assertFalse(fixture.hasText("Severity"))
+                fixture.clickText("View analysis")
+                assertEquals(1, openedAnalysis)
+              }
+        }
+
+    val completed = page("completed", 0)
+    val browser = newResultBrowserState(completed).also { it.query = "retained query" }
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisResultsPane(
+              page = completed, rows = emptyList(), browser = browser, openAnalysis = {}) {
+                Text("unused")
+              }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Filter results"))
+          fixture.assertTextFits("Clear filters")
+          fixture.clickDescription("Clear filters")
+          fixture.render()
+          assertFalse(fixture.hasDescription("Filter results"))
+          fixture.assertTextFits("No findings in the analyzed scope.")
         }
   }
 
@@ -159,10 +230,12 @@ class ResultWorkspaceLayoutTest {
           fixture.setFocusedText("no loaded finding")
           fixture.render()
           assertFalse(fixture.hasText("Evidence for finding-20"))
-          assertTrue(fixture.hasText("No matching results. Clear filters to view loaded results."))
+          assertTrue(fixture.hasText("No matching results."))
+          assertTrue(fixture.hasText("Clear filters to view loaded results."))
           fixture.clickDescription("Clear filters")
           fixture.render()
-          assertFalse(fixture.hasText("No matching results. Clear filters to view loaded results."))
+          assertFalse(fixture.hasText("No matching results."))
+          assertFalse(fixture.hasText("Clear filters to view loaded results."))
           fixture.revealText("Finding 1", "result-list")
           assertTrue(fixture.requestDescriptionFocus("Inspect Finding 1"))
           assertTrue(fixture.pressKey(Key.DirectionUp))
@@ -221,12 +294,11 @@ class ResultWorkspaceLayoutTest {
   @Test
   fun longRefreshErrorsLeaveRetainedFindingsAndDisabledFixReachable() {
     val original = performancePageFixture()
+    val refreshError = "The result refresh failed for a long project path. ".repeat(12)
     val stale =
         original.copy(
             run = original.run!!.copy(status = "stale"),
-            section =
-                original.section.copy(
-                    error = "The result refresh failed for a long project path. ".repeat(12)))
+            section = original.section.copy(error = refreshError))
     var fixes = 0
     ComposeVisualFixture(800, 650, 1.5f) {
           PerformanceWorkspacePane(
@@ -236,11 +308,46 @@ class ResultWorkspaceLayoutTest {
         .use { fixture ->
           fixture.render("rounded-results-long-error-800-150")
           assertTrue(fixture.taggedBounds("result-list").height > 250f)
+          assertTrue(fixture.hasText("Results could not be refreshed: $refreshError"))
           fixture.clickDescription("Inspect Avoid repeated allocation")
           fixture.render()
           fixture.revealText("Prepare fix", "result-detail")
           assertTrue(fixture.isDisabled("Prepare fix"))
           assertEquals(0, fixes)
+        }
+  }
+
+  @Test
+  fun longRefreshErrorWithoutRowsRemainsReachableInShortLargeTextWindow() {
+    val original = performancePageFixture()
+    val refreshError =
+        "The result refresh failed for a long project path. ".repeat(24) +
+            "Final diagnostic detail remains available."
+    val page =
+        original.copy(
+            section =
+                original.section.copy(
+                    error = refreshError,
+                    results = requireNotNull(original.results).copy(semantic = emptyList())))
+    var openedAnalysis = 0
+    ComposeVisualFixture(800, 400, 1.5f) {
+          AnalysisResultsPane(
+              page = page,
+              rows = emptyList(),
+              browser = newResultBrowserState(page),
+              facetLabel = "Impact",
+              openAnalysis = { openedAnalysis++ }) {
+                Text("unused")
+              }
+        }
+        .use { fixture ->
+          fixture.render("results-empty-long-error-800-400-150")
+          fixture.scrollBy(100_000f, "result-empty")
+          fixture.render()
+          assertTrue(fixture.verticalScrollValue("result-empty") > 0f)
+          assertTrue(fixture.hasText(refreshError))
+          fixture.clickText("View analysis")
+          assertEquals(1, openedAnalysis)
         }
   }
 
