@@ -1,6 +1,8 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -8,13 +10,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun AnalysisCategoryPanels(
@@ -25,8 +31,9 @@ internal fun AnalysisCategoryPanels(
       AnalysisResultType.entries.map { type ->
         AnalysisResultPageState(type, state.project, state.analysis.run)
       }
+  val fontScale = LocalDensity.current.fontScale
   BoxWithConstraints(Modifier.fillMaxWidth()) {
-    if (maxWidth >= 640.dp)
+    if (maxWidth / fontScale >= 640.dp)
         Row(
             Modifier.height(IntrinsicSize.Max),
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -99,51 +106,56 @@ internal fun AnalysisCategoryBox(
   val name = type.workspace.name
   IdeActionSurface(
       onClick = onClick,
-      colors = analysisCategoryBoxColors(tint),
+      colors = analysisCategoryBoxColors(),
       accessibleName = "View $name results",
-      tooltip = name,
+      tooltip = null,
       shape = MiniOrcaShapes.interactiveCard,
-      minimumHeight = 88.dp,
+      minimumHeight = 120.dp,
       modifier = modifier.fillMaxWidth(),
-      contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
+      contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
   ) {
-    Column(
-        Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalAlignment = Alignment.Start,
-    ) {
-      Row(
-          Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalAlignment = Alignment.CenterVertically,
+    Column(Modifier.fillMaxWidth().align(Alignment.Top)) {
+      Box(Modifier.fillMaxWidth().height(4.dp).background(tint))
+      Column(
+          Modifier.fillMaxWidth().padding(16.dp).align(Alignment.Start),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+          horizontalAlignment = Alignment.Start,
       ) {
-        AnalysisCategoryIcon(type, tint)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+          AnalysisCategoryIcon(type, tint)
+          Text(name, color = tint, style = IdeTypography.workspaceHeading)
+        }
         Text(
             count?.toString() ?: "—",
-            color = tint,
-            style = IdeTypography.resultHeading,
-        )
+            color = PrimaryText,
+            fontSize = 32.sp,
+            lineHeight = 38.sp,
+            fontWeight = FontWeight.SemiBold)
+        (if (status == null) "Not analyzed" else analysisResultStatusLabel(status))?.let {
+          Text(
+              it,
+              color = if (status == "completed_empty") SecondaryText else tint,
+              style = IdeTypography.compactBody)
+        }
+        details()
       }
-      analysisResultStatusLabel(status)?.let {
-        Text(
-            it,
-            color = if (status == "completed_empty") SecondaryText else tint,
-            style = IdeTypography.compactBody)
-      }
-      details()
     }
   }
 }
 
-internal fun analysisCategoryBoxColors(tint: Color) =
+internal fun analysisCategoryBoxColors() =
     IdeActionColors(
-        background = blendOver(tint.copy(alpha = 0.08f), Panel),
-        hoveredBackground = blendOver(tint.copy(alpha = 0.14f), ControlHover),
+        background = Panel,
+        hoveredBackground = ControlHover,
         pressedBackground = SelectionSurface,
         selectedBackground = SelectionSurface,
         disabledBackground = Panel,
         content = PrimaryText,
         selectedContent = PrimaryText,
         disabledContent = FaintText,
-        border = tint.copy(alpha = 0.75f),
+        border = PaneSeparator,
     )

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -160,6 +162,9 @@ internal object MiniOrcaShapes {
 internal object IdeTypography {
   val body = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, lineHeight = 20.sp)
   val compactBody = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 18.sp)
+  val workspaceBody = body.copy(fontSize = 14.sp, lineHeight = 22.sp)
+  val workspaceMetadata = compactBody.copy(fontSize = 13.sp, lineHeight = 20.sp)
+  val workspaceHeading = workspaceBody.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
   val toolbarIdentity =
       compactBody.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, lineHeight = 18.sp)
   val resultHeading = body.copy(fontWeight = FontWeight.SemiBold)
@@ -658,4 +663,29 @@ internal fun contrastRatio(foreground: Color, background: Color): Double {
   val lighter = maxOf(luminance(resolvedForeground), luminance(background))
   val darker = minOf(luminance(resolvedForeground), luminance(background))
   return (lighter + 0.05) / (darker + 0.05)
+}
+
+@Composable
+internal fun WorkspaceSection(
+    title: String? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+  Column(
+      modifier
+          .fillMaxWidth()
+          .clip(MiniOrcaShapes.interactiveCard)
+          .background(Panel)
+          .border(1.dp, PaneSeparator, MiniOrcaShapes.interactiveCard)
+          .padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        title?.let {
+          Text(
+              it,
+              color = ResultAccent,
+              style = IdeTypography.workspaceHeading,
+              modifier = Modifier.semantics { heading() })
+        }
+        content()
+      }
 }

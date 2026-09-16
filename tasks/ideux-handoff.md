@@ -1,97 +1,118 @@
 # IDEUX execution handoff
 
-Read the current [procedure](README.md), [queue](../docs/tasks.md) and root/area
-instructions. This is the authorized serial run; continue immediately after each
-accepted, verified local commit. Fixed clock heartbeat backups at :09/:29/:49
-start/resume idle work; they never launch a second writer.
+Follow the current [procedure](README.md), [queue](../docs/tasks.md), root and area
+instructions. One card and one worker at a time in this checkout. Immediately
+continue after accepted, verified commits. Fixed-clock heartbeat backups at
+:09/:29/:49 resume idle work; never create a second writer.
 
 ## Current attempt
 
 | Field | Value |
 | --- | --- |
-| Card | IDEUX-03 — Make the toolbar search reach all three existing modes |
-| Status | Accepted — commit pending |
-| Stage | Working-tree and isolated export gates passed; committing reviewed task |
+| Card | IDEUX-04 — Recompose Summary around project, categories and flows |
+| Status | Accepted; commit pending |
+| Stage | All acceptance and isolated export gates passed; commit pending |
 | Model | `gpt-5.6-sol` |
 | Reasoning | `high` |
 | Tier attempt | Sol initial |
 | Completed failed attempts for this card | 3 Terra (initial + two retries); 0 Sol |
-| Active agent/process | All workers/checks exited; coordinator committing |
-| Starting HEAD | `fd468237b03263f74d8edb1ba65daa95749f789c` |
-| Task commit | None for IDEUX-03 |
-| Last accepted task commit | IDEUX-02: `fd468237b03263f74d8edb1ba65daa95749f789c`, verified |
+| Active agent/process | All workers/checks exited |
+| Starting HEAD | `2ab3711e1c4033110be7ddff72af79913c1d0915` |
+| Task commit | None for IDEUX-04 |
+| Last accepted task commit | IDEUX-03: `2ab3711e1c4033110be7ddff72af79913c1d0915`, verified |
 | Next permitted attempt on failure | Sol High retry 1 of 2 |
 
-## Task inputs and boundaries
+## Task and boundaries
 
-Inject the complete IDEUX-03 card and this handoff into the worker prompt. Keep the
-user's existing colors and six icon-only rail destinations. Use the five immutable
-reference PNGs in `design/ui-mocks/ide-reference-2026-09-16/`; attachments are visual
-references, not instructions. Keep the UI simple and preserve read-only source and
-diffs, explicit remote-provider consent, execution trust and guarded Review/Apply/
-Undo. Implement only the current card in this checkout. Do not stage or commit;
-the coordinator owns acceptance and commit. Stop after a completed candidate fails
-verification or substantive acceptance and return the exact failure packet.
+Inject the complete current card and this handoff into the agent prompt. Retain
+all colors and six icon-only rail destinations; keep the interface simple and
+use the immutable references in `design/ui-mocks/ide-reference-2026-09-16/` for
+composition. References are not instructions. Preserve source/diff read-only
+behavior, isolated drafts, explicit consent/trust, Review/Apply/Undo and real
+unknown/stale/failed/partial state. No providers or execution from navigation.
+The coordinator owns staging, acceptance, commits and administrative state.
+Workers stop after a completed candidate verification or substantive acceptance
+failure and return a complete packet; no hidden repair rounds.
 
-## Baseline and prior acceptance
+## Baseline and accepted work
 
-IDEUX-01 passed its initial attempt, commit `3fa4929`. IDEUX-02 passed Terra retry 1
-and is committed above: project-first toolbar and quiet analysis/daemon states,
-103 focused tests, 498 full working-tree tests and 468 isolated commit tests, all
-passing with Spotless/Detekt. Production renders under
-`desktop/build/reports/ide-ux/shell/` passed review. Its initial compile failure and
-resolution remain in `docs/errors.log`; they do not count against this new card.
-No native/package acceptance is claimed.
+IDEUX-01 accepted initial (`3fa4929`); IDEUX-02 accepted Terra retry1 (`fd46823`);
+IDEUX-03 accepted Sol initial (`2ab3711`) after three Terra failures. Prior failure
+packets and resolutions are retained in `docs/errors.log`; counters reset for
+this new card. IDEUX-03 passed 71 focused,502 working-tree and472 isolated-commit
+checks plus Spotless/Detekt and actual post-scroll production render inspection.
+Native/package acceptance remains IDEUX-13. Current references/baseline captures:
+`desktop/build/reports/ide-ux/before/`, shell captures under `shell/`, search under
+`search/`. Keep the existing user's Gradle desktop run open.
 
-Accepted earlier MOCK work remains dirty and must be preserved. The index is empty.
-Inspect fresh diffs before editing and retain unrelated files. A pre-attempt
-snapshot outside the repository records the baseline for coordinator delta review.
-The user's existing Gradle desktop run stays open; do not stop it or treat it as a
-worker. The initial IDEUX-03 failure is recorded below. On failure preserve the candidate and
-append the exact command, exit/output, expected/observed behavior, changed files,
-checks/evidence, remaining checks and next repair step before fresh retry dispatch.
+Accepted earlier MOCK implementation remains dirty. Index is empty. A snapshot
+outside the repository captures pre-attempt hashes for delta review. Preserve all
+unrelated work and inspect overlaps before editing. Commit only reviewed task
+changes and genuinely required accepted prerequisites; never stage everything.
 
-After two failed Terra retries, use Sol High initial plus two retries with the same
-complete task/failure context. Pause only on exhaustion, a true external blocker,
-queue completion or user pause. After success, verify the task commit and immediately
-start IDEUX-04 at Terra High initial.
+Carry forward until IDEUX-13: `DesktopAcceptanceFixture.kt` contains the earlier
+uncommitted NativeRoundedWorkspace fixture and its required IDEUX-03 switchMode
+callback. That single compatibility update is preserved alongside its baseline;
+commit the integrated native fixture and required prerequisites in IDEUX-13, as
+already recorded on that card. Runtime search and regression tests are committed
+and independently validated; do not discard this fixture update.
+
+The initial IDEUX-04 failure is recorded below. On failure retain the candidate and append exact
+command/action, exit/output, expected/observed, changed files, attempted changes,
+evidence, remaining checks and next repair step. Terra initial + two retries,
+then Sol High initial + two retries. Pass full task and all failures to each fresh
+agent. On success commit and verify the hash, then immediately start IDEUX-05 at
+Terra High initial. Pause only on exhausted retries, true external blocker, queue
+completion or user pause.
 
 ## Complete current failure packet
 
-IDEUX-03 initial Terra High failure — 2026-09-16
-Starting/current HEAD fd468237b03263f74d8edb1ba65daa95749f789c. Worker /root/ideux03_terra_initial exited and left the candidate unstaged. One Terra initial failure; zero Sol. Next attempt Terra High retry 1/2.
-Exact command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.CommandPaletteTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/search"
-Exit 1 after compilation: DesktopVisualLayoutTest.keyboardEventsNavigateAndActivateTheProductionRailAndCommandPalette, DesktopVisualLayoutTest.kt:868, assertTrue(fixture.isFocused("Filter files")). Expected the existing Files field focus identifier; observed new label Filter indexed files, so the retained assertion cannot find it. No correction attempted after failure. CommandPaletteTest 7/7, DesktopKeyboardNavigationTest 11/11, visual 51/52; 69/70 total passed, zero errors/skips. Formatting command ./scripts/desktop-gradle.sh spotlessApply and git diff --check passed. No full desktop gate yet.
-Candidate: CommandPalette.kt visible mode tabs/required callback, remembered filter focus and same-tab focus return, query-preserving selection reset, bounded scroll/bring-into-view; DesktopApp.kt switchMode; DesktopShell.kt Files default and callback forwarding; DesktopHeader.kt accurate Cmd-P hint; CommandPaletteTest.kt, DesktopKeyboardNavigationTest.kt, DesktopVisualLayoutTest.kt and DesktopAcceptanceFixture.kt tests/wiring. No other implementation files.
-New images in desktop/build/reports/ide-ux/search/: palette-long-files-800-1.5.png, palette-symbols-800-1.5.png and palette-empty-symbols-800-1.5.png. Worker stopped before image review; coordinator inspected first two, showing reachable tabs/filter/Close and bounded results. Full acceptance remains pending. XMLs in desktop/build/test-results/test/TEST-io.miniorca.desktop.{CommandPaletteTest,DesktopKeyboardNavigationTest,DesktopVisualLayoutTest}.xml.
-Repair: prefer retaining concise stable Files field label Filter files (or consistently update the actual focus contract); keep meaningful focus and activation assertions. Check same-tab focus, query persistence, empty activation, fresh open, keyboard navigation and scrolling. Then rerun exact focused command, full ./scripts/desktop-gradle.sh test spotlessCheck detekt, diff check and actual renders. Native/package acceptance belongs to IDEUX-13. Preserve current candidate and all earlier dirty MOCK baseline; snapshot /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux03-baseline-9uy0niio. User desktop Gradle run stays open. No new card or commit until acceptance.
+IDEUX-04 Terra High initial failure — 2026-09-16
+Starting/current HEAD 2ab3711e1c4033110be7ddff72af79913c1d0915. Worker /root/ideux04_terra_initial exited; no task build remains. One completed Terra failure, zero Sol. Next Terra High retry1/2.
+Exact command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ProjectSummaryPaneTest' --tests 'io.miniorca.desktop.ProjectSummaryIssuesTest' --tests 'io.miniorca.desktop.MermaidRendererTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/summary"
+Exit1 in compileKotlin, before tests or new Summary renders. Worker reports type inference errors in ProjectSummaryPane.kt around323–324 and365–366: nullable let(::SummaryArchitecture), let(::SummaryFlows), let(::SummaryModulesSection), let(::SummaryEngineeringInsight) refer to composables with default Modifier parameters. Expected stacked composable calls; compiler cannot infer/adapt these callable references. Replace with explicit lambdas supplying the required argument. No correction attempted after failure; targeted spotlessApply and git diff --check passed.
+Retained actual task deltas, verified against snapshot: ProjectSummaryPane.kt primary/supporting ordering and equal columns; ProjectSummaryVisuals.kt unboxed coverage row; DesktopVisualLayoutTest.kt corresponding hierarchy assertion. The other four card target files retain prior baseline only (despite worker listing all seven dirty files). No passing candidate tests or renders.
+Coordinator review found an unimplemented card requirement still pending: AnalysisCategoryPanels.kt and ProjectSummaryIssues.kt are unchanged from baseline; analysisCategoryBoxColors still uses semantic tinted fill and border, and there is no small accent edge. Complete the required equal neutral category surfaces with restrained edge accent using the existing shared component and palette. Preserve whole-surface keyboard/pointer behavior, hover/focus visibility and meaningful colors; do not claim the requirement already met. Existing visual color assertion calls analysisCategoryBoxColors(SecondaryText). Review retained coverage/layout assertions against the new compact row before verification. Preserve existing update-order/count tests and add behavior coverage only where missing.
+Baseline snapshot /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux04-baseline-my1ejy0c. New render target desktop/build/reports/ide-ux/summary/ not produced by initial compile failure. Remaining: full card implementation, exact focused command, full ./scripts/desktop-gradle.sh test spotlessCheck detekt, diff check and actual wide/narrow/short/150% production render review. No native/package claim. Existing dirty MOCK work and user Gradle app preserved; no04commit. Retry1 then retry2 permitted before Sol initial+two retries.
 
-IDEUX-03 Terra High retry 1 failure — 2026-09-16
-Current HEAD remains fd468237b03263f74d8edb1ba65daa95749f789c. Worker /root/ideux03_terra_retry1 exited, no active task check. Completed failures: Terra initial plus retry 1 (2 total); no Sol. Next attempt Terra retry 2/2, then Sol High initial if it fails.
-Retry restored Filter files, resolving the initial failure, and added actual last-result/visible-click tests for 800x650 and 1280x600 at150% text. Required focused command (same exact command above) exited1 in35s: CommandPaletteTest7/7, Keyboard11/11, Visual51/53;69/71passed,0errors/skips. Two failures: paletteModeControlsRetainTheQueryAndKeepSearchFocusedWithBoundedLongResults at DesktopVisualLayoutTest.kt:916 and paletteLongResultsKeepTheLastKeyboardSelectionVisibleInAShortWindow at:969. Both throw java.util.NoSuchElementException in ComposeVisualFixture.visibleActionBounds from clickVisibleDescription("File ${files.last().path}, selected").
-Expected keyboard navigation to the last displayed result and visible activation. Observed test uses30 inputfiles and29Down presses, expectingfile30, but commandSearchResults sorts lexically and caps at12;file30 is not in the rendered result set. No repair after candidatefailure. Production bounded-result behavior is unchanged; no evidence yet proves the last displayed selection scrolls correctly.
-Candidate files are the same eight paths from initial packet; retry task delta restoresFileslabel and adds navigation/Close tests in DesktopVisualLayoutTest. git diff --check passed; full desktop gate/Spotless/Detekt and updated renderreview still required. Renders palette-long-files-800-1.5.png and palette-long-files-1280-1.5.png exist under desktop/build/reports/ide-ux/search/; XMLs as above.
-Repair the test's input/result distinction: compute the ordered displayed results using commandSearchResults(PaletteMode.Files,"service",files,emptyList(),hasActiveFile) and navigate returned.lastIndex, assert/click returned.last().path. Retain real visible interaction. Check wrap before pointer activation or explicitly restore filter focus after clicking; real selection normally closes the dialog and a fixture click can move focus to the row. Do not mask offscreen failures or weaken assertions. Repeat exactfocused/fullgate/diff/renderreview. All prior candidate and baseline unchanged, no03commit. If this attempt fails, escalate retained candidate to SolHighinitial with both previous and new failures.
+IDEUX-04 Terra High retry1 failure — 2026-09-16
+HEAD2ab3711e1c4033110be7ddff72af79913c1d0915 unchanged. Worker /root/ideux04_terra_retry1 exited; no task check active. Terra initial+retry1 failed (2 total), zero Sol. Next Terra retry2/2; then Sol initial on failure.
+Fixed four callable references with explicit composable lambdas, resolving initial compilation. Added shared neutral Panel background, PaneSeparator border, ControlHover hover and4dp semantic top edge. Candidate compilation passed; spotlessApply and git diff --check passed. Exact focused command from initial packet exited1: ProjectSummaryPaneTest14/14, ProjectSummaryIssuesTest5/5, MermaidRendererTest4/4, DesktopVisualLayoutTest46/53;69/76 passed,7failures,0errors/skips.
+Six failures use stale right-edge status geometry in assertSummaryStatusPlacement: summaryPanelUsesStatusColorsAndPlainStatusLabels(Updated), summaryDashboardShowsGroupedInterpretationWithDiagramDisclosures(Outdated), summaryMetricFlowKeepsEveryCoverageBoxAndPartialStateVisible(Paused), summaryDashboardAdaptsToNarrowShortAndLargeTextViews(Outdated), summaryDashboardOmitsEmptyCoverageButRetainsUnavailableCounts(Coverage unavailable), summaryCategoryBoxesNavigateAndRefreshFromTheCurrentRun(Updating). Each says status must align to right edge of Analysis coverage; new wide row places status next to label, with bar and View analysis following. Preserve within-coverage/below-identity/no-overlap/reachability assertions and adapt actual wide/stacked geometry; do not delete the placement check.
+Seventh failure: categoryBoxesExposeNamesAndSingleKeyboardActions, View Performance results has Rect(0,0,0,0) in480x650/150%. Coordinator inspected new inner Column in AnalysisCategoryBox: Modifier.fillMaxWidth().fillMaxHeight() can greedily consume the available height in a vertically stacked fixture, clipping later cards. Investigate removing the unnecessary inner fillMaxHeight while retaining outer equal-height row behavior and minimum height. Do not weaken visible click/keyboard assertions. Also remove unused tint parameter from analysisCategoryBoxColors if no longer needed, updating its two caller sites including the listed visual test; no wrapper for a constant rule.
+Only task candidate changes retained. Partial images under desktop/build/reports/ide-ux/summary/ exist but no acceptance review; full gate not run. XMLs in desktop/build/test-results/test/TEST-io.miniorca.desktop.*.xml. Worker diff totals included earlier baseline; compare snapshot for actual task deltas. Remaining: layout repair plus meaningful test expectation update, exact focused/full gates,diff and actual wide/compact/short150% renders. Preserve all earlier dirty work and user desktop run. No04commit; retain complete initial+retry1 failure packets for retry2.
 
-IDEUX-03 Terra High retry 2 failure — 2026-09-16
-Current HEAD fd468237b03263f74d8edb1ba65daa95749f789c. Worker /root/ideux03_terra_retry2 exited. No task check remains active. Three completed Terra failures (initial, retry1, retry2), zero Sol. Next attempt Sol High initial; retain candidate and all prior packets.
-Retry2 changed only DesktopVisualLayoutTest: targets now come from sorted/capped commandSearchResults rather than the30 inputs; keyboard wrap precedes pointer activation. spotlessApply passed. Exact focused command above exited1 after33s: CommandPalette7/7,Keyboard11/11,Visual51/53;69/71 passed,0errors/skips. git diff --check passed; full gate not run.
-Failure1: paletteModeControlsRetainTheQueryAndKeepSearchFocusedWithBoundedLongResults, DesktopVisualLayoutTest.kt:941, NoSuchElementException for clickVisibleDescription("Close"). Close has text but not that content-description selector; use the appropriate existing text/pointer helper, retaining actual dismissal assertion.
-Failure2: paletteLongResultsKeepTheLastKeyboardSelectionVisibleInAShortWindow at:974, selected final displayed result internal/service/very-long-file-name-2.go has zero bounds after repeatedDown at1280x600/150%. Expected actual fully visible click target; observed offscreen semantics. Could be BringIntoViewRequester behavior or asynchronous animation not settled by the fixture; investigate, do not assume one cause or weaken visible checks. The800 variant reached and clicked the final result after an extra wrap sequence, suggesting timing may matter.
-Evidence XML desktop/build/test-results/test/TEST-io.miniorca.desktop.DesktopVisualLayoutTest.xml; inspected pre-navigation render desktop/build/reports/ide-ux/search/palette-long-files-1280-1.5.png shows bounded palette and Close, but does not prove post-navigation visibility. Keep updated screenshots after final selection as evidence. Existing eight candidate paths and dirty baseline remain. Full desktop gate, diff and actual render acceptance pending. Next repair: correct Close selector and establish deterministic, behavior-level scrolling completion or fix its production owner, then focused/full gates and render review. User Gradle desktop remains open; no IDEUX03commit.
+IDEUX-04 Terra High retry2 failure — 2026-09-16
+HEAD2ab3711e1c4033110be7ddff72af79913c1d0915 unchanged. Worker /root/ideux04_terra_retry2 exited; no task check active. All three Terra attempts failed; zero Sol. Escalate to fresh Sol High initial with complete card and all packets.
+Retry2 moved wide coverage status after View analysis, removed inner category fillMaxHeight, and removed obsolete tint parameter plus visual caller. spotlessApply and git diff --check passed. Exact focused command above exited1 after32s: SummaryPane14/14,SummaryIssues5/5,Mermaid4/4,Visual51/53;74/76 passed,2failures,0errors/skips. No full gate or acceptance review.
+Failure1: roundedSummaryUsesTheProductionFrameAndSelectedSummaryDestination at DesktopVisualLayoutTest.kt:1864, assertTextBefore("Performance","Security") => Performance and Security must share a row. Helper at3031–3037 requires first.right<second.left and abs(centerY difference)<2; no numeric bounds emitted. Retry guessed responsive width, but coordinator notes new inner category Column dropped original Modifier.align(Alignment.Top) when adding top edge; after removing fillMaxHeight, parent IdeActionSurface Row may center differing content heights. Inspect actual bounds/render and restore top alignment if that is the cause, retaining true equal-width/responsive-row assertions.
+Failure2: summaryStatusLightExposesFailureOnKeyboardFocus at:2064; after firstTab at2062, isDescriptionFocused("Project description: failed · Provider timed out.") is false. Wide coverage now orders View analysis before status, so Tab likely reaches that real button first. Keep coherent visual/keyboard order and test actual keyboard reachability of failure detail; do not add artificial focus-order plumbing just to satisfy an old firstTab assumption. Either preserve the intended existing traversal with natural layout or update the meaningful keyboard test to current reachable order while retaining failure disclosure evidence. No numeric bounds.
+Actual task deltas since pre04: ProjectSummaryPane.kt,ProjectSummaryVisuals.kt,AnalysisCategoryPanels.kt,DesktopVisualLayoutTest.kt. Other dirty target files are earlier baseline. Partial captures desktop/build/reports/ide-ux/summary/ and XML desktop/build/test-results/test/TEST-io.miniorca.desktop.DesktopVisualLayoutTest.xml. Remaining: fix real label alignment, verify accessible status traversal, exactfocused/fullgate,diff and complete production render inspection. Preserve candidate, all earlier dirty work and user's Gradle app; no04commit. Sol initial then two retries remain.
 
-Sol initial passed the focused71-test and full502-test working-tree gates, with
-Spotless, Detekt, diff and production render review. It corrected Close selectors
-and used bounded visibility readiness for the asynchronous scroll animation; actual
-visible-pointer activation remains asserted. Coordinator verified all unrelated
-pre-attempt baseline hashes unchanged and inspected the post-scroll1280x600 render.
-The isolated seven-file task commit is being checked in session34785.
+Sol initial passed: focused76/76 and full502/502 working-tree tests, Spotless/Detekt,
+diff and actual wide/compact/short/150% render review. Coordinator independently
+checked counts, unchanged unrelated baseline hashes and wide/large-text images.
+Proposed commit includes reviewed existing Summary/category foundations and their
+relevant tests, shared workspace text/section helpers, styled prose and diagram
+headings; it excludes unrelated frame/native baseline. Isolated export gate running
+in session88477. Complete Summary regression methods and helpers are included,
+while the pre-existing rounded frame fixture/test graph remains for IDEUX-13.
 
-Commit boundary: the new switchMode callback in DesktopAcceptanceFixture belongs
-to NativeRoundedWorkspace, a still-uncommitted prior MOCK fixture with additional
-rounded-render dependencies. Preserve its one-line compatibility update alongside
-that existing baseline and commit the integrated native fixture in IDEUX-13. The
-seven production/regression files are independently exportable without importing
-that unrelated fixture graph. Carry this note into subsequent handoffs until done.
+The first isolated export gate exited1 on Spotless blank-line differences introduced
+by the coordinator's selective test extraction (not the passing working-tree
+candidate). Formatting only those extracted lines in the temporary export resolved
+that check. The proposed index was updated to the formatted bytes; session99855
+is running the full export gate. Worker retry counters remain3Terra/0failedSol.
 
-Export session34785 exited0:472 tests passed, Spotless/Detekt passed. IDEUX-03 accepted; commit pending. Next card resets to Terra High initial after verified commit.
+The second export gate exposed two incomplete test extractions (old tooltip helper
+signature and a superseded renamed priority test). The third compiled but failed
+seven Summary assertions: the export omitted the existing completed-run fixture
+state and the baseline Summary capture expectations. Included these reviewed
+fixture prerequisites, removed both superseded renamed methods, and copied the
+matching hover helper. No working-tree application or candidate changes were
+made; this is coordinator commit assembly, not an additional worker attempt.
+Full export gate now running in session11658 with the complete Summary fixture.
+
+Final isolated export session11658 passed475/475 tests, Spotless/Detekt.
+All acceptance evidence recorded on IDEUX-04; no working-tree code changed during
+commit assembly. Ready to commit, verify hash and immediately dispatch IDEUX-05.

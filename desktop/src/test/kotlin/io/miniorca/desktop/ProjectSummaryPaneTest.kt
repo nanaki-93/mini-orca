@@ -1,5 +1,7 @@
 package io.miniorca.desktop
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -66,7 +68,7 @@ class ProjectSummaryPaneTest {
     assertEquals(listOf(2, 3), summary.findingMetrics.map { it.value })
     assertEquals("Tool-reported issues", summary.findingMetrics.first().label)
     assertEquals(
-        listOf("Ready", "Stale", "Failed"),
+        listOf("Up to date", "Outdated", "Failed"),
         summary.coverageMetrics.map { it.label },
     )
     assertEquals(listOf(1, 1, 1), summary.coverageMetrics.map { it.value })
@@ -176,7 +178,8 @@ class ProjectSummaryPaneTest {
     val project = resultProjectFixture()
     val overview = ProjectOverview(analysis = StructuredProjectAnalysis(status = "fresh"))
     val updated = projectSummaryPresentation(overview, project)
-    assertEquals(Success, summaryAnalysisTint(updated.summaryStatus))
+    assertEquals("unknown", updated.summaryStatus)
+    assertEquals(SecondaryText, summaryAnalysisTint(updated.summaryStatus))
     val outdated =
         projectSummaryPresentation(
             overview.copy(analysisCoverage = AnalysisCoverage(stale = 1)), project)
@@ -238,7 +241,7 @@ class ProjectSummaryPaneTest {
     assertEquals("stale", current.analysisStatus)
     assertEquals("Saved description", current.purpose)
     assertTrue(current.analysisMessage.contains("source may have changed"))
-    assertEquals(listOf("Ready"), current.coverageMetrics.map { it.label })
+    assertEquals(listOf("Up to date"), current.coverageMetrics.map { it.label })
     val included =
         projectSummaryPresentation(
             overview, project, fileSelection = selection.copy(excludedPaths = emptyList()))
@@ -263,6 +266,87 @@ class ProjectSummaryPaneTest {
         projectSummaryPresentation(
             overview, project, fileSelection = selection.copy(projectId = "other"))
     assertEquals("stale", otherProject.summaryStatus)
+  }
+
+  @Test
+  fun coverageSegmentsPreserveUnknownEmptyAndUnaccountedFiles() {
+    val unknown = projectSummaryPresentation(null, resultProjectFixture())
+    assertEquals("unknown", unknown.summaryStatus)
+    assertTrue(summaryCoverageFractions(unknown.coverageMetrics).isEmpty())
+    val empty =
+        projectSummaryPresentation(
+            null,
+            analysisProjectFixture(),
+            fileSelection = selectionFixture().copy(excludedPaths = listOf("helper.go", "main.go")))
+    assertEquals("excluded", empty.summaryStatus)
+    assertTrue(summaryCoverageFractions(empty.coverageMetrics).isEmpty())
+    val partial =
+        projectSummaryPresentation(
+            ProjectOverview(analysisCoverage = AnalysisCoverage(total = 4, fresh = 1, failed = 1)),
+            null)
+    val segments = summaryCoverageFractions(partial.coverageMetrics)
+    assertEquals(listOf("Up to date", "Failed", "Unavailable"), segments.map { it.first.label })
+    assertEquals(listOf(1, 1, 2), segments.map { it.first.value })
+    assertEquals(listOf(.25f, .25f, .5f), segments.map { it.second })
+    val large =
+        summaryCoverageFractions(
+            listOf(
+                ProjectSummaryMetric("Up to date", Int.MAX_VALUE, SummaryMetricTone.Ready),
+                ProjectSummaryMetric("Outdated", Int.MAX_VALUE, SummaryMetricTone.Stale)))
+    assertEquals(listOf(.5f, .5f), large.map { it.second })
+  }
+
+  @Test
+  fun currentRunLifecycleRemainsVisibleAndForeignRunsCannotOverrideCoverage() {
+    val project = resultProjectFixture()
+    val overview = ProjectOverview(analysisCoverage = AnalysisCoverage(total = 1, fresh = 1))
+    listOf("paused", "interrupted", "canceled", "partial", "failed").forEach { status ->
+      assertEquals(
+          status,
+          projectSummaryPresentation(overview, project, analysisRunFixture().copy(status = status))
+              .summaryStatus)
+    }
+    val foreign =
+        analysisRunFixture().let {
+          it.copy(status = "running", identity = it.identity.copy(projectId = "other"))
+        }
+    assertEquals("fresh", projectSummaryPresentation(overview, project, foreign).summaryStatus)
+    assertFalse(
+        projectSummaryPresentation(
+                overview,
+                project,
+                foreign.copy(status = "failed", reason = "Other project's failure"))
+            .analysisMessage
+            .contains("Other project's failure"))
+  }
+
+  @Test
+  fun coverageNavigationIsLocalAndLiveSelectionUpdatesItsSegments() {
+    val navigations = mutableListOf<Workspace>()
+    val project = analysisProjectFixture()
+    val initial = selectionFixture().copy(excludedPaths = listOf("main.go"))
+    var selection by androidx.compose.runtime.mutableStateOf(initial)
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(null, project, navigations::add, fileSelection = selection)
+        }
+        .use { fixture ->
+          fixture.render("summary-selected-coverage")
+          fixture.assertTextFits("1 up to date")
+          fixture.clickText("View analysis")
+          assertEquals(listOf(Workspace.Analysis), navigations)
+          assertEquals(initial, selection)
+          assertTrue(fixture.requestFocus("View analysis"))
+          fixture.pressKey(androidx.compose.ui.input.key.Key.Enter)
+          fixture.render()
+          assertEquals(listOf(Workspace.Analysis, Workspace.Analysis), navigations)
+          selection = selection.copy(excludedPaths = emptyList())
+          fixture.render("summary-selection-updated")
+          fixture.assertTextFits("1 up to date")
+          fixture.assertTextFits("1 not analyzed")
+          assertEquals(
+              "partial",
+              projectSummaryPresentation(null, project, fileSelection = selection).summaryStatus)
+        }
   }
 
   @Test
