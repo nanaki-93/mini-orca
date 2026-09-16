@@ -865,10 +865,11 @@ bytes remain uncommitted and unchanged.
 
 ## Task IDEUX-11 — Clarify Security evidence without implying a clean bill of health
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — Sol High initial; 88 focused, 525 working-tree and 504 isolated tests plus quality checks passed.
 
 **Target files**
 
+- `desktop/src/main/kotlin/io/miniorca/desktop/CommandPalette.kt` — repair keyboard-wrap scroll visibility exposed by the required regression gate; preserve query, selection and actual visible activation.
 - `desktop/src/main/kotlin/io/miniorca/desktop/SecurityWorkspace.kt` — populated detail, visible evidence kind and remediation hierarchy.
 - `desktop/src/test/kotlin/io/miniorca/desktop/SecurityWorkspaceTest.kt` — evidence kinds, source anchors and stale eligibility.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — actual detail/action interactions.
@@ -897,6 +898,21 @@ bytes remain uncommitted and unchanged.
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.SecurityWorkspaceTest' --tests 'io.miniorca.desktop.DesktopSecurityWorkflowTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/security"
 ```
+
+**Acceptance receipt — IDEUX-11**
+
+Security details distinguish Source rule, Model hypothesis and unavailable provenance.
+Warnings and report limitations precede Prepare fix; currentness and declaration guards
+remain authoritative. Disclosure retains preconditions and safe-verification content.
+The required palette regression exposed competing relocation requests; a lazy list with
+explicit selected-item scrolling now preserves wrap, query, focus and visible activation.
+
+Focused 88/88, full 525/525 and isolated commit 504/504 passed; Spotless, Detekt and
+diff checks passed. Reviewed actual wide source-rule/model details, compact unavailable
+provenance, short-window disclosure and scoped empty/stale list states. The retained
+stale screenshot is list-level; disabled Prepare fix/recovery is interaction-test evidence.
+Native/package/screen-reader acceptance remains task13. Three Terra failures and Sol
+resolution are recorded in errors.log. Other baseline bytes remain unchanged.
 
 ## Task IDEUX-12 — Make Source and Context feel like one IDE workspace
 

@@ -8,10 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -176,8 +175,7 @@ internal fun CommandPaletteDialog(
 ) {
   val results = commandSearchResults(mode, query, files, symbols, hasActiveFile)
   val filterFocusRequester = remember { FocusRequester() }
-  val resultScroll = rememberScrollState()
-  val resultRequesters = remember(results) { results.map { BringIntoViewRequester() } }
+  val resultListState = rememberLazyListState()
   var selectedIndex by
       remember(mode, query, results.map(CommandSearchResult::label)) {
         mutableStateOf(if (results.isEmpty()) -1 else 0)
@@ -252,8 +250,8 @@ internal fun CommandPaletteDialog(
             SystemStateMessage(commandSearchEmptyTitle(mode), commandSearchEmptyDetail(mode))
           } else {
             Box(Modifier.fillMaxWidth().heightIn(max = COMMAND_RESULT_HEIGHT)) {
-              Column(Modifier.fillMaxWidth().verticalScroll(resultScroll)) {
-                results.forEachIndexed { index, result ->
+              LazyColumn(Modifier.fillMaxWidth(), state = resultListState) {
+                itemsIndexed(results) { index, result ->
                   CommandSearchEntry(
                       result = result,
                       selected = index == selectedIndex,
@@ -261,7 +259,7 @@ internal fun CommandPaletteDialog(
                         selectedIndex = index
                         activate(result)
                       },
-                      modifier = Modifier.bringIntoViewRequester(resultRequesters[index]))
+                  )
                 }
               }
             }
@@ -273,8 +271,8 @@ internal fun CommandPaletteDialog(
       },
   )
   LaunchedEffect(mode) { filterFocusRequester.requestFocus() }
-  LaunchedEffect(selectedIndex, resultRequesters) {
-    resultRequesters.getOrNull(selectedIndex)?.bringIntoView()
+  LaunchedEffect(selectedIndex, results) {
+    if (selectedIndex in results.indices) resultListState.scrollToItem(selectedIndex)
   }
 }
 

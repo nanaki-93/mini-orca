@@ -57,6 +57,77 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun securityProductionRendersKeepEvidenceIdentityAndScopedEmptyStateDistinct() {
+    val populated = securityPageFixture()
+    var prepared = 0
+    var openedAnalysis = 0
+    ComposeVisualFixture(1440, 900) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(populated, resultIndexFixture()),
+              SecurityWorkspaceActions(
+                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("security-populated-wide-1440-900")
+          fixture.clickDescription("Inspect Credential-like assignment")
+          fixture.render("security-source-rule-wide-1440-900")
+          assertTrue(fixture.hasText("Source rule"))
+          assertTrue(
+              fixture.hasText(
+                  "A source rule match identifies a pattern; it does not confirm a vulnerability."))
+          fixture.clickDescription("Inspect Review input boundary")
+          fixture.render("security-model-hypothesis-wide-1440-900")
+          assertTrue(fixture.hasText("Model hypothesis"))
+          assertTrue(
+              fixture.hasText(
+                  "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."))
+          assertEquals(0, prepared)
+          assertEquals(0, openedAnalysis)
+        }
+
+    val reports = requireNotNull(populated.results)
+    val sourceReport = reports.security.single { it.source == "deterministic" }
+    val unavailableEvidence =
+        populated.copy(
+            section =
+                populated.section.copy(
+                    results = reports.copy(security = listOf(sourceReport.copy(source = "ai")))))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(unavailableEvidence, resultIndexFixture()),
+              SecurityWorkspaceActions(
+                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("security-unavailable-evidence-compact-800-650-150")
+          fixture.clickDescription("Inspect Credential-like assignment")
+          fixture.render("security-unavailable-evidence-detail-compact-800-650-150")
+          assertTrue(fixture.hasText("Evidence type unavailable"))
+          assertTrue(
+              fixture.hasText(
+                  "Evidence type was unavailable. Do not treat this finding as verified."))
+          assertEquals(0, prepared)
+          assertEquals(0, openedAnalysis)
+        }
+
+    val empty = resultPageFixture("security").copy(run = null, section = AnalysisSectionState())
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(empty, null),
+              SecurityWorkspaceActions(
+                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("security-empty-compact-800-650-150")
+          fixture.assertTextFits("Analysis has not started.")
+          assertFalse(fixture.hasText("Prepare fix"))
+          fixture.clickText("View analysis")
+          assertEquals(1, openedAnalysis)
+          assertEquals(0, prepared)
+        }
+  }
+
+  @Test
   fun performanceBenchmarkStatusAndMeasurementDetailsRemainReadableAcrossLayouts() {
     val choice =
         GoBenchmarkChoice("BenchmarkRun", listOf("go", "test", "-bench", "^BenchmarkRun$"), "scope")
@@ -1000,6 +1071,7 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.pressKey(Key.DirectionDown))
           fixture.render()
           assertTrue(fixture.hasDescription("File ${displayedFiles.first().path}, selected"))
+          fixture.awaitVisibleDescription("File ${displayedFiles.first().path}, selected")
           assertTrue(fixture.pressKey(Key.DirectionUp))
           fixture.render()
           assertTrue(fixture.hasDescription("File ${displayedFiles.last().path}, selected"))

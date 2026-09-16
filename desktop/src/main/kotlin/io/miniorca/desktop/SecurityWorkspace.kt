@@ -36,13 +36,48 @@ internal data class SecurityResult(
           "${finding.anchor.path}:${finding.anchor.startLine}",
           finding.observedCondition,
           finding.severity,
-          if (finding.evidenceKind == "model_suspicion") "" else "Rule · ${finding.rule}",
+          "",
           listOfNotNull(
                   "Stale".takeIf { stale },
                   finding.triage.takeIf { it.isNotBlank() && it !in setOf("open", "untriaged") },
                   finding.verificationState.takeIf { it.isNotBlank() && it != "unverified" })
               .joinToString(" · "))
 }
+
+/** The UI only names evidence when the report and finding retain their contract pairing. */
+internal enum class SecurityEvidencePresentation {
+  ModelHypothesis,
+  SourceRule,
+  Unavailable,
+}
+
+internal fun securityEvidencePresentation(result: SecurityResult): SecurityEvidencePresentation =
+    when {
+      result.report.source == "ai" && result.finding.evidenceKind == "model_suspicion" ->
+          SecurityEvidencePresentation.ModelHypothesis
+      result.report.source == "deterministic" && result.finding.evidenceKind == "rule_match" ->
+          SecurityEvidencePresentation.SourceRule
+      else -> SecurityEvidencePresentation.Unavailable
+    }
+
+internal val SecurityEvidencePresentation.label: String
+  get() =
+      when (this) {
+        SecurityEvidencePresentation.ModelHypothesis -> "Model hypothesis"
+        SecurityEvidencePresentation.SourceRule -> "Source rule"
+        SecurityEvidencePresentation.Unavailable -> "Evidence type unavailable"
+      }
+
+internal val SecurityEvidencePresentation.warning: String
+  get() =
+      when (this) {
+        SecurityEvidencePresentation.ModelHypothesis ->
+            "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."
+        SecurityEvidencePresentation.SourceRule ->
+            "A source rule match identifies a pattern; it does not confirm a vulnerability."
+        SecurityEvidencePresentation.Unavailable ->
+            "Evidence type was unavailable. Do not treat this finding as verified."
+      }
 
 internal fun securityResults(page: AnalysisResultPageState): List<SecurityResult> =
     page.results
@@ -161,6 +196,7 @@ private fun SecurityFindingDetails(
     actions: SecurityWorkspaceActions
 ) {
   val finding = result.finding
+  val evidence = securityEvidencePresentation(result)
   val canPrepare =
       !result.stale &&
           securityReportMatchesIndex(result.report, index) &&
@@ -168,8 +204,12 @@ private fun SecurityFindingDetails(
   var technical by remember(result.row().key) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
     ResultDetailHeader(result.row())
+    IdeLabelBadge(evidence.label, Information)
+    Text(evidence.warning, color = Warning, style = IdeTypography.compactBody)
     ResultEvidenceSection("Observed condition", finding.observedCondition)
     ResultEvidenceSection("Remediation", finding.remediation)
+    if (result.report.reason.isNotBlank())
+        Text(result.report.reason, color = Warning, style = IdeTypography.compactBody)
     ResponsiveActionGroup(Modifier.fillMaxWidth()) {
       MiniOrcaButton(
           onClick = { actions.prepareFix(finding) },
@@ -184,14 +224,17 @@ private fun SecurityFindingDetails(
             else "Fix preparation requires a matching indexed Go declaration.",
             color = SecondaryText,
             style = IdeTypography.compactBody)
-    if (result.report.reason.isNotBlank())
-        Text(result.report.reason, color = Warning, style = IdeTypography.compactBody)
     IdeDisclosureHeader("Evidence and safe verification", technical, { technical = !technical })
     if (technical) {
       Text(
-          if (finding.evidenceKind == "model_suspicion")
-              "Model hypothesis; verify the preconditions and source evidence."
-          else "Matched source rule: ${finding.rule}. Verify the preconditions before remediation.",
+          when (evidence) {
+            SecurityEvidencePresentation.ModelHypothesis ->
+                "Model-provided hypothesis; verify the preconditions and source evidence."
+            SecurityEvidencePresentation.SourceRule ->
+                "Matched source rule: ${finding.rule}. Verify the preconditions before remediation."
+            SecurityEvidencePresentation.Unavailable ->
+                "Evidence provenance is unavailable; verify the preconditions before remediation."
+          },
           color = SecondaryText,
           style = IdeTypography.compactBody)
       ResultEvidenceSection(
