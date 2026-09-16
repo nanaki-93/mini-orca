@@ -1,9 +1,15 @@
 # Mini-Orca UI guidelines
 
-Use the [dark reference](../design/ui-mocks/ChatGPT%20Image%20Sep%204,%202026,%2002_37_04%20PM.png)
-and [dark UI direction](../docs/dark-ui/README.md). Build a dense, coherent developer
-tool with source, context and evidence. [PLAN.md](../PLAN.md) owns implementation
-priorities; the screenshot's sample facts and unsupported controls are illustrative.
+Use the immutable [Overview](../design/ui-mocks/ide-reference-2026-09-16/01-overview.png),
+[Performance](../design/ui-mocks/ide-reference-2026-09-16/02-performance.png),
+[Bugs](../design/ui-mocks/ide-reference-2026-09-16/03-bugs.png),
+[Security](../design/ui-mocks/ide-reference-2026-09-16/04-security.png) and
+[Source](../design/ui-mocks/ide-reference-2026-09-16/05-source.png) captures as
+the hierarchy reference. Build a dense, coherent developer tool with source,
+context and evidence. [PLAN.md](../PLAN.md) owns implementation priorities; the
+[dark UI direction](../docs/dark-ui/README.md) records the underlying workspace
+ownership. Sample facts, direct-fix controls, text navigation and unsupported
+controls in the images do not appear in production.
 
 ## Self-explanatory UI and copy
 
@@ -61,7 +67,7 @@ Runtime and dependency setup lives in [README.md](README.md#runtime-and-build).
 
 | Role | Current target |
 | --- | --- |
-| Activity rail / outer chrome | `#14161A` |
+| Activity rail / outer chrome | `#203238` |
 | Tool windows / sidebars / bottom panes | `#24282F` |
 | Editor / input canvas | `#1B1E23` |
 | Section headers / overlay | `#303640` |
@@ -83,18 +89,26 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
 ## Geometry and hierarchy
 
 - Keep structural panes without elevation, with a rounded outer perimeter. Use the
-  shared 10dp corners for controls, inputs, file rows and tooltips; 14dp for panes,
-  sections and category/result surfaces; and 18dp for popups, drawers and dialogs.
+  shared 10dp corners for controls, inputs, file rows and tooltips; 14dp for
+  sections and category/result surfaces; and 18dp for structural workspace panes,
+  popups, drawers and dialogs.
   Use pill-shaped badges and progress tracks, and 4dp corners for small checkbox
   indicators. Clip child fills to the same shape as their containing surface.
   Keep selection strokes inset with rounded ends. Do not wrap ordinary sections
   in repeated decorative cards.
-  One owner per 1dp boundary; keep larger invisible splitter hit targets and keys.
+  Keep an 8dp frame inset beside the rail, along the trailing edge and above/below
+  the workspace. Adjacent panes have one 8dp resize gutter with a centered handle;
+  its hover/focus treatment remains distinct from selection. Avoid full-height
+  divider strokes across the rounded perimeter.
 - Align to a 4dp grid; normal content inset 8dp and internal gaps 4–8dp. Avoid
   nested 16–20dp padding. Headers/actions default to 28–32dp; rows to 24–28dp.
-- Body 12–13sp with explicit 18–20sp line height; secondary chrome 11–12sp;
-  section labels 12sp semibold; breadcrumbs 12sp; source/diff monospaced and readable. Grow at 125/150% text
-  scale rather than clipping or shrinking the font to fit.
+- Summary and Bugs, Performance and Security workspaces use 14sp body / 22sp line
+  height, 16sp section headings and 13sp metadata. Their page inset is 24dp on wide
+  layouts and 16dp on compact layouts; result cards and details use 16dp padding.
+  Compact controls retain 12–13sp body / 18–20sp
+  line height; secondary chrome 11–12sp, section labels 12sp semibold, and
+  breadcrumbs 12sp. Source/diff stay monospaced and readable. Grow at 125/150%
+  text scale rather than clipping or shrinking the font to fit.
 - Use headings only where they add orientation; keep labeled state. Headers own
   their actions, especially Start/Pause/Resume/Cancel. Trailing actions never toggle
   an adjacent disclosure.
@@ -103,6 +117,13 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
   focus is independently visible. Focused buttons add a dark inner keyline so the
   light focus outline remains visible on bright actions. Tool-window and source
   tabs share that policy.
+- Prefer a quiet page hierarchy: project identity and search lead the toolbar;
+  an active run appears once as a compact strip; category summaries use neutral
+  surfaces with small semantic accents; and Architecture sits beside Flows. Result
+  pages use one unboxed heading, local filters beneath it, then a readable
+  list/detail split. Source keeps Explorer, code and Context as resizable peers.
+  These layout rules must not hide the source-safety, consent, trust, stale or
+  evidence state needed for a decision.
 
 ## Shell and task flow
 
@@ -111,7 +132,18 @@ primary workspace, Editor-only Files/inspector
 panes and integrated status bar. At ≥1000dp use resizable docked panes; below it
 use labeled Files/Context drawers and a bounded bottom overlay. Preserve saved
 widths when temporarily clamping and keep essential source/actions reachable in
-short windows. Native window controls remain native.
+short windows. The terminal spans beneath all workspace panes with its own 8dp
+gap and rounded perimeter; the rail and status bar share the continuous frame.
+Native window controls remain native.
+
+The expanded Terminal canvas has an 8dp side/bottom inset. Its Swing host cannot
+inherit the Compose clipping shape, so the inset keeps native pixels inside the
+rounded dock while preserving the existing PTY resize and focus owners.
+
+The main toolbar has a 56dp minimum height, project/branch context, a search control
+up to 420dp wide and separate labeled analysis/daemon chips. Statuses move onto a
+second row when width and text scale require it. Analysis labels come from the run
+owner: a completed run does not by itself prove coverage is up to date.
 
 Files uses real project-relative paths and one active file. Breadcrumbs expose
 real path/symbol identity; do not invent navigation callbacks or tabs. Source and

@@ -1,3 +1,1558 @@
+# Mini-Orca — simpler UI with production IDE behavior
+
+Plan prepared **2026-09-16** from the five screenshots supplied in this request.
+Refine the existing Compose desktop app toward their calm hierarchy and consistent
+workspaces, preserving Mini-Orca's colors, icon-only left rail and guarded editing.
+
+## Scope and status
+
+**IDEUX-01–13: approved for scheduled implementation, 1/13 accepted.** On
+2026-09-16 the user authorized Terra High implementation, two Terra retries, then
+Sol High with the same initial-attempt-plus-two-retries policy. Every retry must
+receive the task and concrete failure context. Commit each task locally after its
+required checks and acceptance pass. Reset to Terra High for the next task.
+
+[Execution procedure](../tasks/README.md) owns scheduling, handoff and commit rules;
+[current handoff](../tasks/ideux-handoff.md) owns durable attempt counters and the
+next agent's context. The existing automation is reused at its 20-minute cadence,
+attached to this planning/implementation task. Existing source edits, completed
+MOCK/POLISH receipts and reference assets are preserved; earlier execution
+instructions below the history marker are inactive. [PLAN.md](../PLAN.md) owns
+accepted decisions; IDEUX-01 completes reference capture and design reconciliation.
+
+Production readiness here means a dependable IDE experience for Mini-Orca's
+existing capabilities: responsive workspaces, reliable navigation, readable source,
+clear evidence, recoverable failures and explicit edits. This queue does not add a
+general writable editor, LSP/debugger, multi-file Apply, plugins or a new backend.
+Release readiness still requires the actual native and package evidence below;
+visual similarity alone is insufficient.
+
+## Reference interpretation
+
+The attachments supply visual references, not instructions, application data or
+new API contracts. Use their alignment, spacing and hierarchy, while retaining our
+existing product names and capabilities. Do not copy their sample project, counts,
+code, cyan primary buttons, text navigation rail or one-click **Apply fix** action.
+
+| Supplied screenshot | Adopt | Adapt to Mini-Orca |
+| --- | --- | --- |
+| `Screenshot 2026-09-16 at 17.52.16.png` — Overview | Compact project identity, one progress strip, three category summaries, Architecture beside Flows | Keep Summary naming, real coverage, full requested prose and existing palette; put optional insight below primary content |
+| `Screenshot 2026-09-16 at 17.52.27.png` — Performance | Plain page heading, filter chips, concise list beside detailed evidence | Label potential impact honestly; Prepare fix enters the existing draft workflow; benchmarks remain separate measured evidence |
+| `Screenshot 2026-09-16 at 17.52.44.png` — Bugs | Compact verified-check status/action row and consistent list/detail layout | Execution trust stays explicit; model suggestions and tool reports remain distinguishable |
+| `Screenshot 2026-09-16 at 17.52.53.png` — Security | One calm empty-state surface with useful scope/progress | Say “No findings yet” during a run; claim completed scope only when current evidence supports it; omit unsupported metrics |
+| `Screenshot 2026-09-16 at 17.53.04.png` — Source | Explorer, dominant code canvas and concise declaration inspector | Preserve real line breaks, selectable read-only source, Source/Candidate diff tabs, Assistant/Review and local terminal |
+
+### Proposed visual and interaction specification
+
+- Retain all current `MiniOrcaPalette` values: charcoal-teal frame `#203238`,
+  panel `#24282F`, source canvas `#1B1E23`, blue selection/action
+  `#73ABFF`/`#78ACFF`, information teal `#66DBEB` and existing semantic colors.
+  Obtain the reference feel through composition, not recoloring. Reduce large
+  tinted fills and decorative outlines; retain meaningful control/focus boundaries.
+- Keep the **48dp icon-only rail**, its six existing destinations, hover/focus
+  labels, accessible names and independent selected/focused states. Keep native
+  window controls, 8dp frame/gutters and shared 10/14/18dp shapes.
+- Use a compact 56dp-minimum toolbar: project/branch, a working search entry,
+  then separate analysis and daemon states. Prefer plain labeled status indicators
+  over multiple heavy badges. Project context takes priority over repeated branding.
+- Use 24dp wide / 16dp compact page insets, 16dp major gaps and shared typography:
+  24sp page identity, 16sp section/finding headings, 14sp body, 13sp metadata.
+  Source retains readable monospace. These are base sizes, not clipping limits;
+  content grows at 125/150% text scale.
+- Summary: active-run strip when relevant; project/purpose/metadata; three equal
+  neutral category surfaces with small semantic accents; Architecture and Flows
+  side by side. Modules and engineering insight stay available below these primary
+  sections. Coverage remains visible without another large dashboard card.
+- Results: one unboxed heading with count/state and View analysis; filters below;
+  a roughly 42/58 list/detail split when both remain readable. Each row shows a
+  severity/impact label, title and location. Put the full explanation in detail.
+  Selection uses our blue treatment; severity never doubles as selection color.
+- Source: Explorer / code / Context remain resizable. Explain and Refactor stay
+  explicit; New function has one clear file-scoped entry. Review retains the exact
+  target, readiness, evidence, draft action and guarded Apply/Undo. Terminal keeps
+  its existing collapsed/docked/overlay behavior.
+- Use short action labels and one clear primary action per relevant panel. Keep
+  errors, execution trust, consent, evidence origin and stale state visible where
+  needed to decide. Optional metadata/logs live in existing disclosures. Do not
+  collapse user-requested explanations merely to make a screenshot look sparse.
+
+### Repository findings that drive the work
+
+- `DesktopTheme.kt`, `IdeShell.kt` and the current uncommitted MOCK changes already
+  supply the palette, icon rail, rounded frame, pane resizing and large-text work.
+  Extend them; rebuilding the shell would duplicate accepted work.
+- `MainToolbar` advertises files/symbols/commands, but `DesktopShell` opens
+  `PaletteMode.Actions`; `CommandPaletteDialog` has no mode switch. Symbols are
+  currently scoped to the active file. IDEUX-03 closes this observable mismatch.
+- `ProjectSummaryPane` currently gives coverage a full card and places engineering
+  insight before Flows. `AnalysisRunPanel` repeats a circular and linear progress
+  treatment. IDEUX-04/05 simplify hierarchy while retaining their state owners.
+- `AnalysisResultsPane` already shares list/detail composition, but selection is
+  local to its composition and there are no severity/impact filters.
+  `ResultSectionHeader` adds another boxed icon header. IDEUX-06/07 refine these
+  maintained components rather than introducing three independent page systems.
+- Empty result copy is caller-supplied and generic; an empty list can coexist with
+  running, failed, stale or loading state. Counts arrive separately from details.
+  `AnalysisResultPageState`, section coverage and run identity must drive IDEUX-08.
+- Bugs hides its only scan action inside a disclosure. Several detail views hide
+  model-versus-tool origin inside technical evidence. IDEUX-09–11 expose only the
+  decision-critical distinctions and retain the existing eligibility owners.
+- `SourceEditorPane`, `ContextToolWindow`, `ReviewToolWindow`, presenter navigation
+  and terminal ownership already implement the deliberate edit workflow. IDEUX-12
+  polishes that path; it does not replace it with the reference's direct Apply.
+
+## Implementation and acceptance rules
+
+- Run one ordered card attempt at a time using the current execution procedure.
+  Terra High gets the initial attempt and retries 1/2 and 2/2; after exhaustion,
+  Sol High gets its initial attempt and retries 1/2 and 2/2. Pause after the final
+  Sol failure. Interruption resumes the same attempt; it does not reset counters.
+  A failure must be recorded before dispatching another agent. The execution
+  handoff, failure log, PLAN status and this ledger may be updated for every card.
+- Review and commit each accepted task before starting the next. This current
+  user grant supersedes older no-commit and model restrictions. It does not permit
+  pushes, publication, live provider campaigns or unrelated changes.
+- Every card starts from the current working tree and applicable area guide.
+  Preserve overlapping edits and historical receipts. No toolchain/dependency
+  upgrade, new service, fabricated production data or API extension is planned.
+- Components emit intents; `DesktopWorkflowPresenter` and existing analysis,
+  benchmark, security and draft owners retain domain rules and side effects.
+  Opening a page, selecting/filtering a result, changing a search mode or restoring
+  local UI state must not invoke a provider, execute project code or write source.
+  Ordinary daemon reads for source/navigation remain permitted.
+- Scope identity includes project/revision/run where relevant. Retained evidence
+  stays inspectable with its actual stale/error state. Unknown is not zero;
+  processed is not successful; connected daemon is not healthy provider.
+- Each implementation card includes focused behavioral checks and visual inspection
+  of affected production components. Then run
+  `./scripts/desktop-gradle.sh test spotlessCheck detekt` for Kotlin changes and
+  `git diff --check`. Commands below are planned verification, not recorded passes.
+- Extend existing deterministic fixtures and tests. Exercise controls, state changes,
+  cancellation/stale results and meaningful boundaries; do not test only constants
+  or bless new screenshots. Generated captures stay under ignored build reports.
+- IDEUX-13 is the final acceptance gate. Until it passes, call the work implemented
+  or partially validated as appropriate, not production-ready or visually accepted.
+
+## Task IDEUX-01 — Preserve the references and reconcile the design specification
+
+**Status:** [x] Accepted — 2026-09-16; Terra High initial attempt; 0 retries.
+
+**Target files**
+
+- `design/ui-mocks/ide-reference-2026-09-16/01-overview.png` — new, unmodified copy of attachment 17.52.16.
+- `design/ui-mocks/ide-reference-2026-09-16/02-performance.png` — new, unmodified copy of attachment 17.52.27.
+- `design/ui-mocks/ide-reference-2026-09-16/03-bugs.png` — new, unmodified copy of attachment 17.52.44.
+- `design/ui-mocks/ide-reference-2026-09-16/04-security.png` — new, unmodified copy of attachment 17.52.53.
+- `design/ui-mocks/ide-reference-2026-09-16/05-source.png` — new, unmodified copy of attachment 17.53.04.
+- `PLAN.md` — record this scope and the retained versus changed design decisions.
+- `desktop/UI_DESIGN_GUIDELINES.md` — update reference links and the hierarchy rules above.
+- `tasks/README.md` — retain the current authorized scheduler/retry/commit procedure and distinguish it from historical grants.
+- `docs/tasks.md` — record reference availability and later implementation status.
+
+**Inputs / dependencies**
+
+- This user request, its five original attachments and the current uncommitted
+  implementation. No dependency on an old scheduler or completed queue.
+
+**Implementation rules**
+
+- Inspect all five original images and preserve them as immutable references.
+  Keep older mockups and acceptance receipts intact. If originals are unavailable,
+  record that asset dependency; do not substitute generated approximations.
+- Reconcile the previous rounded design with the specification above. Keep all
+  colors, icon navigation and source-safety boundaries explicit in the owning docs.
+- Capture existing production Summary, Analysis, results and Source/Review before
+  visual changes, using maintained fixtures. Label these as baseline evidence,
+  not acceptance of this queue. Inspect reference and baseline side by side.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --rerun-tasks --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/before"
+git diff --check
+```
+
+Verify local links and the five asset copies against their originals.
+
+### IDEUX-01 acceptance evidence — 2026-09-16
+
+All five supplied originals were available, inspected and copied byte-for-byte to
+the target paths. SHA-256 values: `01-overview` `eaf2148e366600936b5afe4f7d9bc4aa739914b9a64dd847d03a55ba05f95a47`;
+`02-performance` `d9142f6ba7f715aeec7d44f345609e90f31b49b7eb290c69237f8ecbe9317751`;
+`03-bugs` `5ab47b01160482f97649cdeeebd06feee2547a7db8de8e02f13a02341ca8f33c`;
+`04-security` `a53a373c1e7e57c07a1267d76fd13d6dfa40fb7c62e42d8b5204956b05fa54fc`;
+and `05-source` `9d3974878e5e9c725f2fe501a1cde36b74533d31dc8fa33d9fb83ecb626a0b1a`.
+
+`DesktopVisualLayoutTest` rendered the current dirty working-tree baseline before
+any IDEUX production change to `desktop/build/reports/ide-ux/before/`. Inspected
+Summary, Analysis, Performance detail, Source and Review renders confirm the
+existing rounded frame, lifecycle fixtures and guarded edit workflow that
+later cards must reconcile with the quieter reference hierarchy. This is baseline
+evidence only, not clean-HEAD reproduction, new-UI implementation or acceptance.
+The retained implementation already has heavier boxed summary/results treatment,
+a prominent analysis progress panel and a full Review readiness region; later cards
+will simplify visual hierarchy without replacing the real state owners or guarded
+source mutation path.
+
+The card's exact `desktop-gradle.sh` command above exited 0: 51 tests, 0 failures,
+0 errors and 0 skipped, recorded in
+`desktop/build/test-results/test/TEST-io.miniorca.desktop.DesktopVisualLayoutTest.xml`
+(timestamp `2026-09-16T10:40:51.881Z`). `git diff --check` passed. The coordinator
+verified the five originals against their copies, current local documentation
+links, unchanged historical text and unchanged application files against the
+pre-attempt snapshot. No native or new-implementation acceptance is claimed.
+
+Inspected baseline images under `desktop/build/reports/ide-ux/before/`:
+
+- `summary-dashboard-1440-900-1.0.png` and `summary-frame-1600-1000-1.0.png`.
+- `analysis-progress-1440-1.0.png` and `analysis-frame-1600-1000-1.0.png`.
+- `results-performance-detail-1440-1.0.png`.
+- `editor-1440.png`.
+- `review-ready-1440-900-1.0.png`.
+
+The task commit includes the new plan/scheduler documentation and preserved
+historical documentation already present in the working tree as context for this
+reconciliation. The earlier application implementation and older untracked mockups
+remain untouched and outside this documentation/reference commit. The verified
+commit hash and next attempt are recorded in `tasks/ideux-handoff.md` after commit.
+
+## Task IDEUX-02 — Quiet the shell and establish shared page hierarchy
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt` — shared page typography and restrained structural surface treatment.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopHeader.kt` — project-first toolbar alignment and lighter labeled statuses.
+- `desktop/src/main/kotlin/io/miniorca/desktop/IdeShell.kt` — rail/chrome alignment while preserving resize and terminal geometry.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — integrate the changed toolbar without changing workflow ownership.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — production shell and shared page renders.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopContrastTest.kt` — actual backgrounds, controls and focus contrast.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopShellTest.kt` — toolbar/status and shell behavior regressions.
+- `desktop/UI_DESIGN_GUIDELINES.md` — final shared measurements.
+- `desktop/UI_CONTRAST.md` — measured contrast for changed treatments.
+
+**Inputs / dependencies**
+
+- IDEUX-01; existing Jewel controls, palette, shapes, layout preferences and rail.
+
+**Implementation rules**
+
+- Keep every palette value. Reduce decorative card/header outlines through shared
+  structural variants, without reducing focus or control visibility. Do not change
+  every `WorkspaceSection` globally when only page-heading surfaces need to flatten.
+- Align project/branch and search consecutively; keep status on the right at wide
+  widths and wrap deliberately at narrow widths. Remove redundant toolbar wordmark
+  text if it competes with project identity; retain the existing product mark.
+- Preserve six icon-only rail destinations with hover/focus labels. Keep status
+  labels meaningful when idle, running, stale, disconnected or reconnecting.
+- Retain the 1000dp shell dock/drawer boundary, saved widths and terminal inset.
+  Controls must remain reachable at 800×650 and 1280×600 with 150% text.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopContrastTest' --tests 'io.miniorca.desktop.DesktopLayoutStateTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/shell"
+```
+
+## Task IDEUX-03 — Make the toolbar search reach all three existing modes
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/CommandPalette.kt` — visible Files / Symbols / Commands mode controls and bounded results.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — palette mode/query ownership and explicit switching.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — toolbar launch, mode intents and focus return.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopHeader.kt` — accurate shortcut hint on the search entry.
+- `desktop/src/test/kotlin/io/miniorca/desktop/CommandPaletteTest.kt` — mode switching, query, empty and activation behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — retained shortcuts and focus ownership.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — real palette interactions and long-result layout.
+
+**Inputs / dependencies**
+
+- IDEUX-02; `PaletteMode`, typed search results and existing file/action dispatch.
+
+**Implementation rules**
+
+- Toolbar opens Files by default; the palette exposes all three modes without
+  requiring knowledge of shortcuts. Existing file/symbol/action shortcuts still
+  open their corresponding mode directly. Display only a shortcut that is wired.
+- Keep Files project-index scoped and Symbols explicitly labeled as active-file
+  symbols. Do not imply project-wide symbol search or add a backend index here.
+- Switching modes retains the typed query, resets the highlighted result safely
+  and leaves focus in the search field. Opening a fresh palette starts a new query.
+- Up/Down, Enter and Escape work consistently; keep highlighted results visible
+  in a bounded scrollable area at large text sizes. Empty results never activate.
+- Inspection and switching are local. Commands retain their existing preparation,
+  scope, consent and trust paths; Enter must not silently bypass admission.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.CommandPaletteTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/search"
+```
+
+## Task IDEUX-04 — Recompose Summary around project, categories and flows
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryPane.kt` — primary content order and responsive columns.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryVisuals.kt` — compact retained coverage presentation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryIssues.kt` — neutral category surfaces with restrained semantic accents.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisCategoryPanels.kt` — maintain one shared category component for Summary and Analysis.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ProjectSummaryPaneTest.kt` — known/missing/stale content and layout behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ProjectSummaryIssuesTest.kt` — current counts and navigation.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — full Summary reference comparison.
+
+**Inputs / dependencies**
+
+- IDEUX-02; current summary projections, category count reconciliation and local
+  `MermaidDiagram` disclosure behavior.
+
+**Implementation rules**
+
+- Keep project name, purpose and metadata together. Replace the oversized coverage
+  card with a compact coverage row below identity, retaining unknown/stale/failed
+  distinctions and View analysis. Do not present coverage as run completion.
+- Show three equal neutral category surfaces with a small accent edge, readable
+  count/state and whole-surface navigation. Keep existing category color meanings.
+- Put Architecture and Flows in balanced columns; move modules and engineering
+  insight after these, retaining their full content and existing diagram controls.
+  Stack naturally when content width or text scale requires it.
+- Remove repeated totals only when they add no distinct fact. Preserve the
+  difference between overall tool findings and current-run model counts. Missing
+  descriptions do not become invented summaries; no project retains Open project
+  through the shell's existing entry point.
+- Verify selected-file coverage and category counts while updates arrive in
+  different orders. Clicking categories or expanding diagrams remains local.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ProjectSummaryPaneTest' --tests 'io.miniorca.desktop.ProjectSummaryIssuesTest' --tests 'io.miniorca.desktop.MermaidRendererTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/summary"
+```
+
+## Task IDEUX-05 — Share one compact run-progress strip
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisRunStrip.kt` — new shared presentation of existing progress and control intents.
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — replace redundant progress chrome in Analysis.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryPane.kt` — active/paused run strip above project identity.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — supply existing analysis state/actions to Summary.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisWorkspaceState.kt` — reuse or refine progress projection without a second lifecycle rule set.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisWorkspaceStateTest.kt` — lifecycle, count and identity behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — progress strip interactions at wide/compact sizes.
+
+**Inputs / dependencies**
+
+- IDEUX-04; `ProjectRunPresentation`, `AnalysisWorkspaceActions` and current
+  admission/pause/resume/cancel owners.
+
+**Implementation rules**
+
+- Show status/current path, finished/total files, one progress track and valid run
+  controls in one row when space allows. Wrap rather than clip. Indeterminate
+  progress is appropriate when the denominator is unavailable; omit invented ETA.
+- Summary shows the strip for active, paused or interrupted current runs; Analysis
+  remains the owner of scope selection, start/retry, detailed failures and history.
+  Failed/stale state remains visible in Summary coverage after a run stops.
+- Reuse existing command eligibility and pending-action disabling. Resume retains
+  admission rules. No ambiguous × control: cancellation must be a labeled action.
+- Finished files may include failed/partial stages; never label them successful.
+  Show multiple active paths compactly with the full list available on demand.
+  Old project/run responses must not replace current progress.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.DesktopAnalysisWorkflowTest' --tests 'io.miniorca.desktop.DesktopAnalysisAdmissionTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/progress"
+```
+
+## Task IDEUX-06 — Simplify the shared finding list and detail layout
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/FindingsPresentation.kt` — flat page heading, concise rows and consistent detail hierarchy.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisResultsPane.kt` — page spacing and bounded header/list/detail regions.
+- `desktop/src/test/kotlin/io/miniorca/desktop/FindingsPresentationTest.kt` — preserved evidence text and selected-row meaning.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — responsive panes, long errors and scroll behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — all three production result pages.
+
+**Inputs / dependencies**
+
+- IDEUX-02; existing result adapters and one-scroll-owner list/detail components.
+
+**Implementation rules**
+
+- Replace the boxed category icon/header with page title, count/state and trailing
+  View analysis. Keep errors visible without consuming most of a short window.
+- Rows show severity/impact, title and location, plus material stale/lifecycle
+  state. Remove repeated two-line explanation previews; full prose stays in detail.
+  Use a slim severity accent with a separate blue selected outline/fill.
+- Retain roughly 42/58 panes at sufficient width. Base the list/detail fallback
+  on usable content width and text scale, independent of the shell's 1000dp rule.
+  Compact mode has an explicit Back to results with focus/scroll restoration.
+- Keep one vertical scroll owner per pane; a new selection starts detail at the
+  top. No dead action footer or fixed minimum height that hides actions at 150%.
+  Preserve selectable model prose and literal fallback behavior.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.FindingsPresentationTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.ModelResultContentTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/results"
+```
+
+## Task IDEUX-07 — Add local filters and stable result navigation
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/ResultBrowserState.kt` — new small, typed UI state for filters and selection.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisResultsPane.kt` — filter chips, query field and result selection integration.
+- `desktop/src/main/kotlin/io/miniorca/desktop/FindingsPresentation.kt` — row focus, selection and no-match presentation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — retain browser state across workspace navigation, scoped to project/category/run.
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — pass browser state to Bugs.
+- `desktop/src/main/kotlin/io/miniorca/desktop/PerformanceWorkspace.kt` — pass browser state with impact labels.
+- `desktop/src/main/kotlin/io/miniorca/desktop/SecurityWorkspace.kt` — pass browser state with severity labels.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ResultBrowserStateTest.kt` — new filtering, identity and selection transitions.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — real filter/back/keyboard interactions.
+
+**Inputs / dependencies**
+
+- IDEUX-06; current stable result keys and producer-specific severity/impact values.
+
+**Implementation rules**
+
+- Provide All and applicable severity/impact chips with local counts plus a compact
+  title/path filter. Keep Critical and unknown/other values representable; do not
+  silently normalize unknowns to Low. Performance calls its dimension Impact.
+- Counts refer to loaded rows before the text filter. Keep them distinct from
+  daemon-reported totals when detail loading lags; never manufacture missing rows.
+- Filter/query/selected key and list position survive leaving and returning to the
+  same workspace during the same project/run. Clear them on project/revision/run
+  replacement; no disk persistence or cross-project carryover is needed.
+- Keep selection by key when rows reorder. On wide first entry, select the first
+  visible result locally; compact mode starts on the list. If a filter or update
+  removes selection, select the first remaining row on wide views and return to
+  the list on compact views. Empty matches show Clear filters, not “no issues.”
+- Arrow keys move row focus and keep it visible; Enter/Space inspect. Filtering,
+  automatic detail selection and returning to a page never prepare or apply a fix.
+  Exercise several hundred deterministic rows using the existing lazy list.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ResultBrowserStateTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/filters"
+```
+
+## Task IDEUX-08 — Make empty results and coverage truthful
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisWorkspaceState.kt` — explicit result availability/empty-state projection from existing data.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisResultsPane.kt` — one full-width state surface when no rows exist.
+- `desktop/src/main/kotlin/io/miniorca/desktop/FindingsPresentation.kt` — status, scope and available recovery presentation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — remove Bugs' generic empty-message override.
+- `desktop/src/main/kotlin/io/miniorca/desktop/PerformanceWorkspace.kt` — consume shared state presentation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/SecurityWorkspace.kt` — remove unconditional clean-scope empty wording.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisWorkspaceStateTest.kt` — complete/partial/stale/loading/error combinations.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — retained rows and empty-state layout.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — Security reference and lifecycle renders.
+
+**Inputs / dependencies**
+
+- IDEUX-07; `AnalysisResultPageState`, `AnalysisSectionProgress`,
+  `AnalysisRunCoverage`, matching section identity and current loaded row set.
+
+**Implementation rules**
+
+- Distinguish no project, not started, loading, running with no findings yet,
+  paused/interrupted, completed empty, partial, failed, canceled, unavailable,
+  stale and filter-no-match. Define the precedence explicitly; a refresh error
+  with retained rows keeps the rows and visible error, not a blank success panel.
+- Completed-empty wording requires a current completed category, known zero count
+  and matching loaded details. Pending details or a positive reported count with
+  zero loaded rows cannot become a clean result. Unknown counts display —.
+- Show covered/total using the existing category coverage unit and labels. Do not
+  call stages “files scanned” or invent the reference's “2/5 checks.” Display elapsed
+  time only when available, labeled as run time rather than category scan time.
+- One short state and useful next action are sufficient. View analysis returns to
+  existing scope/retry controls; navigation never starts analysis or Security review.
+  Running zero is “No findings yet”; completed zero is scoped evidence, not a
+  blanket “project is secure” claim.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.SecurityWorkspaceTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/states"
+```
+
+## Task IDEUX-09 — Make Bugs evidence and verified checks immediately usable
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — verified-check status/action row and Bugs detail hierarchy.
+- `desktop/src/main/kotlin/io/miniorca/desktop/FindingsPresentation.kt` — concise visible evidence origin and action priority.
+- `desktop/src/main/kotlin/io/miniorca/desktop/BugsWorkspaceState.kt` — reuse existing classification/lifecycle presentation.
+- `desktop/src/test/kotlin/io/miniorca/desktop/BugsWorkspaceStateTest.kt` — classification and scan states.
+- `desktop/src/test/kotlin/io/miniorca/desktop/FindingsPresentationTest.kt` — evidence identity and guarded action behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — visible action/trust and retained diagnostics.
+
+**Inputs / dependencies**
+
+- IDEUX-08; `classifyFinding`, `findingCanPrepareFix`, scan execution trust and
+  existing finding lifecycle actions.
+
+**Implementation rules**
+
+- Keep Verified checks, actual state and its run/cancel action on one compact row.
+  Command/output details remain expandable. Running/pausing/canceling disables
+  conflicting actions according to existing owners.
+- Retain explicit execution trust at the action boundary. Do not replace the
+  current trust-and-run behavior with an unqualified one-click Run checks merely
+  to copy the screenshot. Compact copy must still identify project-code execution.
+- Detail shows whether the selected result is a model suggestion or tool report
+  before Prepare fix. Technical provenance remains optional. Do not put every
+  source/profile identifier back into each list row.
+- Prepare fix stays primary and enters the current declaration task; Dismiss and
+  other supported triage stay secondary with real lifecycle/error handling.
+  No Apply fix action, fabricated code snippet or new dismissal persistence.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.BugsWorkspaceStateTest' --tests 'io.miniorca.desktop.FindingsPresentationTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopWorkflowPresenterTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/bugs"
+```
+
+## Task IDEUX-10 — Clarify Performance recommendations and measured evidence
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/PerformanceWorkspace.kt` — concise recommendation detail and benchmark status placement.
+- `desktop/src/test/kotlin/io/miniorca/desktop/PerformanceWorkspaceTest.kt` — recommendation/currentness and measurement states.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — compact detail and action reachability.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — reference comparison and benchmark details.
+
+**Inputs / dependencies**
+
+- IDEUX-08 and IDEUX-09; `PerformanceResult`, `performanceCanPrepare` and
+  `performanceBenchmarkPresentation` remain the respective domain owners.
+
+**Implementation rules**
+
+- Lead with potential impact, target, observed pattern and recommendation, with a
+  concise visible “Model suggestion” identity. Preserve workload/trade-off content
+  in the existing disclosure and a visible indication when measurement is absent.
+- Make Prepare fix prominent without suggesting any measured speedup. Code blocks
+  appear only when actual returned content contains code; never synthesize a fix
+  from prose for display. No unsupported Dismiss action for specialized reports.
+- Keep benchmark status discoverable above results and measured details in their
+  own disclosure. Preserve sample identity, failed/inconclusive/stale outcomes,
+  missing metrics and explicit local execution; never turn absent evidence into 0%.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.PerformanceWorkspaceTest' --tests 'io.miniorca.desktop.DesktopBenchmarkWorkflowTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/performance"
+```
+
+## Task IDEUX-11 — Clarify Security evidence without implying a clean bill of health
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/SecurityWorkspace.kt` — populated detail, visible evidence kind and remediation hierarchy.
+- `desktop/src/test/kotlin/io/miniorca/desktop/SecurityWorkspaceTest.kt` — evidence kinds, source anchors and stale eligibility.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — actual detail/action interactions.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — populated and empty Security production renders.
+
+**Inputs / dependencies**
+
+- IDEUX-08 and IDEUX-09; existing report/hash/source-anchor matching,
+  `securityFindingCanPrepareFix` and scope-specific Security review intent.
+
+**Implementation rules**
+
+- Use the shared detail hierarchy: severity, target, visible “Model hypothesis”
+  or “Source rule” identity, observed condition, remediation and Prepare fix.
+  Essential report warnings remain visible; preconditions and safe-verification
+  detail remain available without overwhelming the first view.
+- Keep currentness and exact declaration eligibility enforced by existing owners.
+  Stale anchors may not prepare a fix. No source-rule match is relabeled as a
+  confirmed vulnerability, and an unverified model suspicion remains unverified.
+- Use IDEUX-08's scoped zero-result surface. Opening Security, switching filters
+  or returning from Editor must not start scanning, execute a payload or request
+  remote review. Only expose lifecycle actions already supported for that result.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.SecurityWorkspaceTest' --tests 'io.miniorca.desktop.DesktopSecurityWorkflowTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/security"
+```
+
+## Task IDEUX-12 — Make Source and Context feel like one IDE workspace
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/EditorWorkspace.kt` — compact source identity and unambiguous file/draft actions.
+- `desktop/src/main/kotlin/io/miniorca/desktop/SourceEditorPane.kt` — remove duplicate identity chrome while preserving code/gutter geometry.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ContextToolWindow.kt` — concise declaration inspector and one primary action.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ExplorerPane.kt` — aligned file rows, readable paths and selected-file treatment.
+- `desktop/src/test/kotlin/io/miniorca/desktop/EditorWorkspaceTest.kt` — source selection, read-only behavior and action scope.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ContextToolWindowTest.kt` — explicit explanation/refactor and cached/stale content.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ExplorerPaneTest.kt` — file selection/filter/reveal behavior.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — full Source/Context and Candidate/Review captures.
+
+**Inputs / dependencies**
+
+- IDEUX-02 and IDEUX-03; existing Explorer, source viewport, inspector, draft,
+  Review/Apply/Undo and shell pane persistence. No editor-engine replacement.
+
+**Implementation rules**
+
+- Keep the central code canvas dominant, with aligned gutters, real line breaks,
+  selection, horizontal scroll for long lines and explicit read-only identity.
+  Do not reproduce the reference's compressed/wrapped source lines.
+- Show file/path/symbol identity once in each context that needs it, removing the
+  redundant focused-line sentence when breadcrumbs/inspector already convey it.
+  Preserve current-line versus declaration-range highlight and accessible meaning.
+- Context starts with declaration name/range and actual cached explanation. Explain
+  is prominent when explanation is missing; Refactor becomes primary when a current
+  explanation is available. Preserve explicit refresh/cancel, remote consent and
+  unsupported-target reasons. Selection alone never requests an explanation.
+- Keep New function in one file-scoped action position when the same file is shown
+  in Editor and Context; retain access in compact drawers. Do not add dummy tabs,
+  writable source, auto-generated explanations or duplicate edit controls.
+- Preserve Source/Candidate diff, Edit draft, Assistant and Review transitions,
+  explicit discard, evidence invalidation and guarded Apply/Undo. Verify terminal
+  return retains the existing source-freshness check and draft identity.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.EditorWorkspaceTest' --tests 'io.miniorca.desktop.ContextToolWindowTest' --tests 'io.miniorca.desktop.ExplorerPaneTest' --tests 'io.miniorca.desktop.DraftReviewWorkflowTest' --tests 'io.miniorca.desktop.ReviewToolWindowTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/source"
+```
+
+## Task IDEUX-13 — Verify the complete IDE experience and document actual acceptance
+
+**Status:** [ ] Pending.
+
+**Target files**
+
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` — deterministic full-workspace states and native interaction coverage.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — integrated production reference and boundary matrix.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAccessibilityTest.kt` — changed controls' names, state and keyboard semantics.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — end-to-end focus and shortcut regressions.
+- `desktop/KEYBOARD_SMOKE_CHECKLIST.md` — affected operator journeys.
+- `desktop/UI_DESIGN_GUIDELINES.md` — final implemented visual specification.
+- `desktop/UI_CONTRAST.md` — final actual foreground/background measurements.
+- `desktop/README.md` — concise description of changed navigation and controls.
+- `docs/RELEASE_ACCEPTANCE.md` — commands/results, actual renders, native/package evidence and remaining limitations.
+- `PLAN.md` — accepted scope/status only after evidence supports it.
+- `docs/tasks.md` — each card's real completion/check records.
+- `tasks/README.md` — final queue status without importing past grants.
+
+**Inputs / dependencies**
+
+- IDEUX-01–12 complete; the immutable new references, production baseline,
+  [component reproduction](RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks),
+  [native keyboard checklist](../desktop/KEYBOARD_SMOKE_CHECKLIST.md) and existing
+  [terminal procedure](../desktop/TERMINAL.md).
+
+**Implementation rules**
+
+- Render full Summary, Analysis, Bugs, Performance, Security and Source/Review
+  with production components and labeled deterministic data. Compare at approximately
+  1512×712 logical pixels (the original attachments are 3024×1424 pixels; do not
+  assume their exact device scale), plus 1440×900, 1000/999×760, 800×650 and 1280×600.
+  Cover 100/125/150% text and representative 1×/2× density. Match hierarchy and
+  proportions while deliberately retaining our colors, rail and guarded workflow.
+- Check every affected empty/loading/running/paused/interrupted/partial/stale/
+  failed/canceled/unavailable state, reported-count/detail lag, long paths/errors
+  and dense result sets. Inspect with optional help collapsed; required actions
+  and consequences must remain understandable without explanatory paragraphs.
+- Native journeys: open/restore project; search each mode; Summary → category →
+  detail → prepare → source/draft → Review; explicit checks → Apply → Undo in a
+  disposable project with deterministic provider data; resume/cancel analysis;
+  filter and navigate back; resize dock/drawer; use Terminal and return to source.
+  Validate draft discard, stale evidence and reconnect failures along these paths.
+- Verify tab/arrow/Enter/Escape behavior, visible focus, icon names, selection/copy,
+  popup placement and focus restoration in the native window. Keep terminal chords
+  owned by the terminal. Offscreen tests do not establish OS or screen-reader behavior.
+- Run the full desktop gate, repository validation, package build and documented
+  packaged-terminal smoke. Inspect before/after production captures against each
+  attachment; do not substitute concept mockups or rewrite reference images.
+- Fix any caused failure in its owning earlier card before closing acceptance.
+  Record untested platforms, screen-reader speech, signing/notarization or blocked
+  native flows precisely. Historical passes cannot validate changed inputs.
+  Local per-task commits are authorized; publication and live model campaigns are not.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --rerun-tasks --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' --tests 'io.miniorca.desktop.DesktopAccessibilityTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/final"
+./scripts/desktop-gradle.sh test spotlessCheck detekt createDistributable
+./scripts/validate.sh
+./desktop/scripts/terminal-packaged-smoke.sh
+git diff --check
+```
+
+Use the documented Java 21 launcher/JBR 25 setup. Report native operator results
+separately from these commands, and leave required acceptance pending if blocked.
+
+## Planning validation
+
+The original planning turn changed only `docs/tasks.md`. Its checks on 2026-09-16 passed:
+13 ordered cards have the required fields; existing target files, local links and
+script paths exist; eight new target paths are explicitly identified; the previous
+task file is preserved byte-for-byte below; all other pre-existing changed and
+untracked files retain their original hashes; and `git diff --check` is clean.
+Implementation commands above have not been run for this new queue; previous
+acceptance results below belong only to their original inputs and scopes.
+
+---
+
+## Historical queues and receipts — inactive
+
+Everything below is retained verbatim from the pre-existing task file, including
+uncommitted completion records. Its statements about active queues, schedules,
+models, permission, commits and next actions describe prior work and do not apply
+to IDEUX-01–13 or authorize execution of this new plan.
+
+# Mini-Orca approved rounded mockup implementation — 2026-09-16
+
+Implement the approved Summary, Analysis and Editor/Review mockups in the production
+desktop UI. **MOCK-01–06** are the sole active queue; their product decisions and
+reference images are in [PLAN.md](../PLAN.md#approved-visual-target).
+
+## Current execution scope
+
+- Execute serially in this checkout, one card per scheduled wake. Resume an
+  interrupted card and its running verification before taking another card.
+- Follow current root/area instructions and the accepted mockups. The latest user
+  request supersedes older copy/geometry choices where those choices conflict.
+  Preserve all unrelated work and earlier accepted changes.
+- The user authorized implementation and scheduling, not commits, pushes, releases,
+  live provider campaigns or additional agents. Use this task's current settings;
+  do not inherit the historical SOL/Astra switching or repair-count policy.
+- Each card includes its necessary production/tests/docs. Before extending a target
+  list, record the concrete dependency. Fix failures caused by the change; do not
+  lower thresholds or replace assertions with checks that merely bless new output.
+- UI examples are illustrative. Render real state from current owners; preserve
+  unknown versus zero, partial/stale/failed/canceled, model suggestion versus
+  verified evidence, provider consent, execution trust, and guarded Apply/Undo.
+- Every desktop card requires its focused verification, visual inspection of its
+  affected production components, `./scripts/desktop-gradle.sh test spotlessCheck detekt`
+  and `git diff --check`. Use README toolchain setup. Reuse passing evidence only
+  while its inputs are unchanged.
+- Record status, active stage, actual commands/results, render paths, remaining
+  differences and blockers on the card. Do not mark completed from compilation,
+  generated concept images or tests alone; inspect production renders against the
+  approved reference. Distinguish offscreen evidence from native observations.
+- [tasks/README.md](../tasks/README.md) owns the wake/stop procedure. Historical
+  sections below the history marker are not an execution queue.
+
+## Task MOCK-01 — Rounded frame, pane geometry and toolbar
+
+**Status:** [x] Accepted — 2026-09-16. Frame, geometry and toolbar complete.
+
+**Preparation baseline:** `./scripts/desktop-gradle.sh test spotlessCheck detekt`
+passed on 2026-09-16 before implementation. No MOCK card is accepted by that result.
+At the start of the first scheduled wake, existing changes were limited to the
+approved planning files and mockup assets; no other source writer was active.
+
+**Implementation stage:** accepted; stop this wake. MOCK-02 is next. The scheduler
+remains Active at the existing 20-minute cadence, verified in the app and saved
+configuration after implementation.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt` — shared frame color,
+  structural shape, typography/spacing and restrained surface treatments.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — continuous frame,
+  outer insets and workspace/terminal placement.
+- `desktop/src/main/kotlin/io/miniorca/desktop/IdeShell.kt` — clipped pane perimeters,
+  rail and gutters that retain accessible splitters.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopLayoutState.kt` — correct
+  available-width accounting for frame/gutters without altering saved preferences.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopHeader.kt` — mockup toolbar
+  hierarchy and visible labeled analysis/daemon states at sufficient widths.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopStatusBar.kt` — continuous
+  frame and retained right-aligned model details control.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopThemeTest.kt` — contrast and
+  shared presentation behavior on actual updated backgrounds.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopLayoutStateTest.kt` — pane
+  bounds, narrow transitions and temporary clamping.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopShellTest.kt` — shell/status
+  and splitter regressions.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — frame
+  renders with filled headers and selected rows, including narrow/short views.
+- `desktop/UI_DESIGN_GUIDELINES.md` — new reference, geometry/color/copy decisions.
+- `desktop/AGENTS.md` — reconcile structural shape guidance with the accepted frame.
+- `desktop/UI_CONTRAST.md` — actual changed semantic contrast measurements.
+
+**Inputs / dependencies**
+
+- None. Use all three rounded PNGs and the user's frame reference linked in PLAN.md.
+  Existing `DockedToolWindow`, `EditorArea`, `TerminalDock` and shared shape tokens
+  already own pane clipping; extend them rather than adding a second design system.
+
+**Implementation rules**
+
+- Produce visibly inset rounded structural panes with roughly 18dp corners and
+  8dp gutters. Keep structural surfaces flat and use quiet charcoal-teal outer
+  chrome. Do not simulate the look with screenshots, decorative outlines or fake
+  traffic-light buttons.
+- Preserve current native window controls and terminal startup/cleanup behavior.
+  Native outer corners remain OS-owned; the visible in-app corners must match
+  within the window. Any necessary native-window change requires recording the
+  target and native verification before taking it.
+- Use shared type/spacing roles to match mockup density. Keep all six rail
+  destinations, actual project/branch/search controls, distinct analysis and daemon
+  states, and model counts. Long project paths and status messages must fit or
+  disclose fully without obscuring necessary actions.
+- Account for each gutter only once. Preserve minimum usable editor space,
+  ≥1000dp docks, <1000dp labeled drawers, pointer/keyboard resizing and preference
+  restoration. Existing preferences must not be reset to achieve a screenshot.
+- Clip all child backgrounds to the structural shape; retain independent keyboard
+  focus and meaningful contrast. Check populated panes, not empty corner samples.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.DesktopThemeTest' --tests 'io.miniorca.desktop.DesktopLayoutStateTest' --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/mockup-ui/mock-01"
+./scripts/desktop-gradle.sh test spotlessCheck detekt
+git diff --check
+```
+
+**Acceptance**
+
+Frame, toolbar and three Editor panes visibly match the rounded reference; actual
+render comparisons cover wide, 1000/999dp, 800×650, 1280×600 and large text, with
+no overlap, clipped controls, lost corners or reset stored sizes.
+
+**Acceptance evidence — 2026-09-16**
+
+- Implemented a shared charcoal-teal frame (`#203238`), clipped 18dp workspace
+  corners and 8dp insets/gutters. Files, editor and right tools now end together;
+  the separately rounded terminal spans their combined width. The 56dp toolbar
+  keeps labeled analysis/daemon chips and the status bar shares the outer frame.
+- Pane budgeting includes both frame insets and each gutter once. Default docks
+  leave a 400dp editor at 1000dp; saved preferences and the 1000/999 breakpoint
+  remain unchanged. Splitter handles show keyboard focus and retain pointer/arrow
+  resizing with deferred commits. Removed the obsolete terminal separator option.
+- Focused command above passed **92 tests, 0 failures/errors/skips**. The final
+  `./scripts/desktop-gradle.sh test spotlessCheck detekt` passed **469 tests,
+  0 failures/errors/skips**, Spotless and Detekt (0 smells). Reused unchanged
+  Spotless/Detekt results on the final test run. `git diff --check` passed.
+- The visual suite checks 30 frame combinations: four docked viewports at
+  100/125/150% text with expanded/collapsed terminal, plus two narrow viewports
+  at those scales with the terminal collapsed. Existing tests cover the separate
+  terminal overlay. Pixel checks use filled production headers and selected rows;
+  semantic bounds check corners, gutters, pane alignment and terminal width.
+- Inspected actual component renders against `03-review-rounded.png` and the
+  user's frame reference: `frame-1600-1000-1.0-collapsed.png`, `editor-1440.png`,
+  `frame-1000-760-1.0-collapsed.png`, `frame-1000-760-1.5-collapsed.png`,
+  `frame-999-760-1.25-collapsed.png`, `frame-800-650-1.5-collapsed.png`, and
+  `frame-1280-600-1.5-expanded.png`, all under
+  `desktop/build/reports/mockup-ui/mock-01/`. The frame matches the accepted
+  silhouette, spacing and flat surface treatment. These are production components
+  with fixture data, not native window screenshots.
+- During iteration, `spotlessApply compileTestKotlin` first found a malformed
+  fixture statement; it passed after correction. A new splitter test initially
+  expected 16dp; corrected it to the existing 12dp contract and added actual
+  pointer drag/release coverage. No production resize behavior or quality threshold
+  was weakened.
+- Remaining scope: Summary, Analysis, comparison/progression and Review are
+  MOCK-02–05; native acceptance is MOCK-06. MOCK-04 records the large-text
+  breadcrumb/gutter issues seen in the source content. This card accepts the frame
+  and toolbar only. Native controls, source mutation, provider consent and terminal
+  lifecycle code were not changed. No commits or pushes were made.
+
+## Task MOCK-02 — Summary composition and meaningful coverage
+
+**Status:** [x] Accepted — 2026-09-16. Summary composition and coverage complete.
+
+**Active stage:** accepted; stop this wake. MOCK-03 is next. Prior MOCK-01 changes
+are preserved. The scheduler remains Active at its existing 20-minute cadence,
+verified in the app and saved configuration; no verification is still running.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt` — render comparison
+  showed the old compact type was denser than the approved Summary; add shared
+  workspace body/heading/metadata roles while preserving existing control/code roles.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ModelResultContent.kt` — necessary
+  caller support for those Summary prose roles, preserving the formatter, selection
+  and disclosure behavior through an optional text-style argument.
+- `desktop/UI_DESIGN_GUIDELINES.md` — document the resulting workspace type roles.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryPane.kt` — project
+  introduction, coverage and responsive two-column information layout.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryVisuals.kt` — coverage
+  presentation and flat module/diagram sections.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryIssues.kt` — readable
+  named result cards and supported evidence breakdowns.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisCategoryPanels.kt` — shared
+  persistent category labels with whole-card navigation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/MermaidDiagram.kt` — necessary adjacent
+  dependency: place the existing diagram disclosure beside its Summary section
+  heading without duplicating rendering, expansion, source or zoom state.
+- `desktop/src/main/kotlin/io/miniorca/desktop/EngineeringInsightPanel.kt` — retain
+  complete insight content within the Summary composition if shared changes are needed.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ProjectSummaryPaneTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/ProjectSummaryIssuesTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisFileStatusTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt`
+- `desktop/README.md` — resulting Summary behavior and navigation.
+
+**Inputs / dependencies**
+
+- MOCK-01. Reference `design/ui-mocks/ux-concepts-2026-09-16/01-summary-rounded.png`.
+  Existing `projectSummaryPresentation`, `analysisSelectionCoverage`,
+  `summaryIssueMetrics` and `AnalysisResultPageState` remain state owners.
+
+**Implementation rules**
+
+- Match the project introduction and quiet metadata, dedicated labeled segmented
+  coverage, three named category cards and wider-left/narrower-right content.
+  Move facts out of the current long metric-card strip; keep all useful data.
+- Calculate segments from current selected-file coverage, including failure/running
+  states when present. Never divide by zero, hide nonzero exceptional states,
+  coerce unavailable counts to zero or label unanalysed files as up to date.
+  "View analysis" only navigates; it must not start a run.
+- Category names are visible, with exactly-once pointer/keyboard activation and
+  current selection/focus semantics. Use neutral treatment for unknown/unanalysed
+  outcomes; do not imply Security safety from zero findings.
+- Show verified/model/measured breakdowns only where current matching data supports
+  them. Retain existing global totals where per-category attribution is unavailable;
+  never infer the mockup's sample breakdown from an unrelated total.
+- Preserve full purpose/architecture/insight text and offline diagrams. No repeated
+  instructional placeholders. Keep modules flat with exact paths and responsibilities.
+  Stack columns at narrow widths and enlarged text; use coherent page scrolling.
+- Correct the generated Summary image's erroneous Analysis rail highlight in the
+  implementation: Summary must select Summary. Omit all concept/example captions.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ProjectSummaryPaneTest' --tests 'io.miniorca.desktop.ProjectSummaryIssuesTest' --tests 'io.miniorca.desktop.AnalysisFileStatusTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/mockup-ui/mock-02"
+./scripts/desktop-gradle.sh test spotlessCheck detekt
+git diff --check
+```
+
+**Acceptance**
+
+The full Summary composition matches the reference and remains correct for empty,
+populated, outdated, running, failed and unavailable data, live selection changes,
+long prose and first-click diagram expansion.
+
+**Acceptance evidence — 2026-09-16**
+
+- Replaced the metric-card strip with project name, full purpose, quiet indexed
+  metadata, a labeled selected-file coverage bar and three permanently named
+  result cards. Added shared workspace body/heading/metadata type roles. Category
+  titles align at the top regardless of missing status or evidence detail.
+- Architecture and flat module rows occupy the wider left column; full engineering
+  insight and Flows occupy the right. Narrow/enlarged-text layouts stack and retain
+  one page scroll. Show/Hide diagram shares the heading row; existing local
+  rendering, first-click expansion, source selection and zoom owners are retained.
+- Coverage follows current matching selection, keeps nonzero exceptional and
+  unaccounted states, and uses overflow-safe segment totals. Unknown coverage is
+  separate from zero selected files; a fresh description or completed run alone
+  cannot imply current file coverage. Current run lifecycle/reasons remain visible;
+  foreign run failures cannot override current coverage or inject failure details.
+- View analysis and category activation only navigate. Pointer, Enter/Space and
+  focus tests retain exactly-once actions; live selection tests verify the legend
+  updates. Unknown/zero result counts are neutral. Removed the old weighted
+  traffic-light score; matching priority evidence remains available. Global
+  tool-reported/AI totals stay below the cards because category attribution is
+  unavailable in those totals.
+- Final focused command above passed **70 tests, 0 failures/errors/skips**;
+  `spotlessApply` was also run while iterating. Final
+  `./scripts/desktop-gradle.sh test spotlessCheck detekt` passed **473 tests,
+  0 failures/errors/skips**, Spotless and Detekt (0 smells). `git diff --check`
+  passed. No quality thresholds were changed.
+- Rendered the full production Summary/frame at 1600×1000, 1440×900, 1000×760,
+  999×760, 800×650 and 1280×600, each at 100/125/150% text. Inspected reference,
+  narrow, short and enlarged-text images against `01-summary-rounded.png`, including
+  `summary-frame-1600-1000-1.0.png`, `summary-frame-1440-900-1.0.png`,
+  `summary-frame-1000-760-1.25.png`, `summary-frame-999-760-1.5.png`,
+  `summary-frame-800-650-1.5.png` and `summary-frame-1280-600-1.5.png`, under
+  `desktop/build/reports/mockup-ui/mock-02/`. Additional component renders/tests
+  cover long prose, all coverage states, current selection with older description,
+  full insight, collapsed/expanded diagrams and keyboard navigation.
+- During iteration, fixed a nullable current-run branch and a fixture state-owner
+  argument found by compilation. Updated assertions for the removed metric strip,
+  permanent category names and page scrolling; corrected a fixture expectation
+  from incomplete to not analyzed. Replaced redundant category-tooltip assertions
+  with visible labels, actual hover fill and keyboard/pointer behavior. Final visual
+  review corrected card-title alignment and module responsibility typography.
+- Remaining differences are intentional data/copy rules already accepted above:
+  no concept caption, duplicate Summary heading/count line or unsupported category
+  attribution; Summary selects its own rail destination, and full insight labels
+  and the real terminal strip remain. Renders use production components with
+  fixture data and establish offscreen Summary evidence. Native window acceptance
+  remains MOCK-06; Analysis, comparison and Review remain MOCK-03–05. No provider,
+  source-mutation or terminal lifecycle code changed; no commits or pushes made.
+
+## Task MOCK-03 — Analysis progress and file-state table
+
+**Status:** [x] Accepted — 2026-09-16. Analysis progress and file table complete.
+
+**Active stage:** accepted; stop this wake. MOCK-04 is next. MOCK-01/02 changes are
+preserved and no verification is still running. The existing scheduler remains
+Active every 20 minutes, verified through the app and saved configuration.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt` and
+  `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryPane.kt` — move the
+  existing Summary section surface to a shared workspace section for Analysis,
+  retaining its shape/type/spacing instead of copying another panel implementation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ProjectSummaryVisuals.kt` — update the
+  Summary coverage caller to the shared surface name; preserve its appearance.
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkspacePanes.kt` — Analysis progress
+  block, page hierarchy and controls.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisCategoryPanels.kt` — named
+  category layout and truthful progress/count states.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisWorkspaceState.kt` — expose
+  existing run facts needed for finished/total labels.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisFileSelector.kt` — expanded
+  table, local query/filter controls, idle selection and running lock.
+- `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisFileStatus.kt` — presentation
+  of admitted run progress against matching file-selection identity.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopContrastTest.kt` — the full
+  gate found its old header-label assertion; verify the new visible run heading
+  against its actual shared panel background while retaining lifecycle contrast.
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisWorkspaceStateTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisFileSelectionTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisFileStatusTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAnalysisWorkflowTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt`
+- `desktop/README.md` — file table, disclosure default and lifecycle behavior.
+
+**Inputs / dependencies**
+
+- MOCK-02. Reference `design/ui-mocks/ux-concepts-2026-09-16/02-analysis-rounded.png`.
+  Preserve `projectRunPresentation`, `AnalysisWorkspaceActions`,
+  `filteredAnalysisFiles`, selection persistence and existing admission workflow.
+
+**Implementation rules**
+
+- Group run state, completed/total, progress, active path(s) and Pause/Cancel or
+  the valid lifecycle actions in one region. Indeterminate/missing totals remain
+  explicit; no invented ETA. Keep Start, selective retry and Resume previews.
+- Preserve named category cards and live stage coverage, unknown count em dashes,
+  failures and actionable diagnostics. Navigation does not admit provider work.
+- Show Files expanded by default for a newly opened project, allowing local
+  collapse. Align File / Analysis state / Details columns at wide widths;
+  reorganize rows at narrow widths and large text without shrinking labels.
+- During a run, display current Running/Pending/finished stage facts only from a
+  matching admitted run. Keep saved freshness distinct from current-run progress.
+  Never mark old results current or classify a file from a different run/project.
+- Keep local search/All/Needs attention/Excluded usable while running. Disable
+  selection changes for active/paused runs and show the lock reason nearby.
+  Idle checkboxes, Select all/Exclude all, Refresh files, automatic save errors and
+  retained selections continue to work. Bulk selection still covers all eligible
+  files, not just filtered rows.
+- Use real filtered/total counts. Do not invent pagination or copy the mockup's
+  seven sample files. Preserve responsive scrolling and all included file paths.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.AnalysisFileSelectionTest' --tests 'io.miniorca.desktop.AnalysisFileStatusTest' --tests 'io.miniorca.desktop.DesktopAnalysisWorkflowTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/mockup-ui/mock-03"
+./scripts/desktop-gradle.sh test spotlessCheck detekt
+git diff --check
+```
+
+**Acceptance**
+
+Reference-like running layout with readable active path, category names and table;
+all idle, paused, canceled, failed, partial and resumed transitions preserve
+truthful coverage and selection/consent semantics.
+
+**Acceptance evidence — 2026-09-16**
+
+- Grouped file progress, current paths and valid lifecycle controls in one rounded
+  panel using the shared workspace surface. Progress counts files whose stages
+  have finished, including unsuccessful terminal outcomes; the label says
+  **finished**, never successful/complete. Missing file totals stay unavailable.
+  Stored elapsed/window facts and previous-run metadata remain; removed the
+  duplicate current-run stage-count line and obsolete stage-progress ratio.
+- Files opens expanded for each project. Wide rows align File / Analysis state /
+  Details; narrow/enlarged-text rows stack. The active file has the selected fill.
+  Search and All / Needs attention / Up to date / Excluded filters are local;
+  the footer counts matches against all files, independent of the visible scroll
+  window. The bounded virtualized table retains every row; tests reach its last
+  file and the page footer. Expanded stage details retain complete reasons.
+- Live rows use only active/paused/interrupted runs with matching selection
+  project/revision, plan queue identity and run/plan file hashes. Unplanned,
+  foreign and mismatched-hash files retain saved status. Completed run stages
+  alone never upgrade saved analysis to Up to date; saved freshness remains
+  separate. Plan-ineligible stages do not become operational failures. Unknown,
+  failed, unavailable, partial, paused and interrupted states retain their meaning.
+- Idle checkboxes and all-file bulk selection retain automatic persistence and
+  error handling. Active/paused/interrupted selection is locked, with its reason
+  visible even when collapsed; bulk controls hide while locked. Search, filters,
+  Details, collapse and Refresh remain available. Start/retry/Resume admission,
+  exactly-once controls, consent, stale response handling and provider workflows
+  remain with existing owners and are covered by the existing workflow tests.
+- `./scripts/desktop-gradle.sh spotlessApply compileTestKotlin` passed during
+  construction. The final focused command above (also prefixed with
+  `spotlessApply`) passed **89 tests, 0 failures/errors/skips**. After updating
+  the added contrast target, the final full gate
+  `./scripts/desktop-gradle.sh spotlessApply test spotlessCheck detekt` passed
+  **479 tests, 0 failures/errors/skips**, Spotless and Detekt (0 smells).
+  `git diff --check` passed; quality thresholds are unchanged.
+- Rendered the production Analysis/frame at 1600×1000, 1440×900, 1000×760,
+  999×760, 800×650 and 1280×600 at 100/125/150% text. Compared the wide running
+  composition with `02-analysis-rounded.png`, then inspected narrow, short and
+  enlarged-text views. Evidence under `desktop/build/reports/mockup-ui/mock-03/`
+  includes `analysis-frame-1600-1000-1.0.png`, `analysis-frame-1440-900-1.0.png`,
+  `analysis-frame-1000-760-1.5.png`, `analysis-files-frame-999-760-1.5.png`,
+  `analysis-files-frame-800-650-1.5.png`, `analysis-frame-1280-600-1.5.png`,
+  `analysis-last-file.png` and `analysis-running-filtered.png`. Existing focused
+  renders/tests also cover idle selection, long paths, load/save errors, failures,
+  lifecycle controls and unknown category counts. Full gate covers Summary after
+  moving its unchanged section surface into the shared theme.
+- Iteration corrected old collapsed-default and header assertions, a missing test
+  render between disclosure clicks, and a duplicate Details text selector. The
+  new full-frame scroll test initially targeted the rail; it now targets the
+  Analysis page explicitly, retaining footer-reachability assertions. The full
+  gate found one old contrast assertion for the removed current-run line; the
+  corrected test checks the new visible heading on its actual panel background.
+  A local edit script stopped on an unmatched substring; inspected its partial
+  edits and completed them before the final passing runs.
+- Intentional reference differences follow the accepted data/copy rules: no
+  concept caption or repeated page heading; real counts/paths, an additional
+  retained Up to date filter, saved-result Details, Refresh and idle selection
+  controls remain functional. The accepted terminal strip is retained. These
+  images use production components with test data; native window acceptance is
+  still MOCK-06. Candidate comparison and Review remain MOCK-04/05. No provider,
+  source-mutation, terminal lifecycle, daemon contract or dependency changes;
+  no commits or pushes were made.
+
+## Task MOCK-04 — Candidate comparison and compact progression
+
+**Status:** [x] Accepted — 2026-09-16. Candidate comparison and progression complete.
+
+**Active stage:** accepted; stop this wake. MOCK-05 is next. Prior MOCK-01–03
+changes are preserved; no verification is still running. The scheduler remains
+Active at the existing 20-minute cadence, checked in the app and saved configuration.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/DiffViewer.kt` — full-height
+  Current/Candidate comparison, gutters, markers and readable code.
+- `desktop/src/main/kotlin/io/miniorca/desktop/EditorWorkspace.kt` — Source/Candidate
+  tabs, breadcrumbs and compact progression without redundant candidate cards.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ReviewEvidencePane.kt` — canvas
+  composition and shared progression presentation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopShell.kt` — pass immutable
+  existing review evidence into the editor surface.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopApp.kt` — reuse the existing
+  review snapshot construction if necessary for the shared presentation.
+- `desktop/src/main/kotlin/io/miniorca/desktop/SourceEditorPane.kt` — reuse existing
+  syntax rendering only where required by the diff.
+- `desktop/README.md` — document the changed Editor tabs, comparison modes and
+  local Edit draft/progression behavior beside the existing read-only contract.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DiffViewerTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/EditorWorkspaceTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/ReviewEvidencePaneTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt`
+
+**Inputs / dependencies**
+
+- MOCK-03. Reference `design/ui-mocks/ux-concepts-2026-09-16/03-review-rounded.png`.
+  Current `UnifiedDiff`, `sideBySideDiffRows`, `editorChromeUiState`,
+  `reviewProgressionRows` and review evidence/eligibility remain authoritative.
+
+**Render finding to resolve:** MOCK-01's 1000dp / 150% source render shows the
+read-only breadcrumb label wrapping mid-word and source gutter rows losing their
+alignment. Check `EditorWorkspace.kt` and `SourceEditorPane.kt` while implementing
+this card; compare against `frame-1000-760-1.5-collapsed.png` in the MOCK-01 render
+directory. These content areas are not accepted by the frame card. Extend the
+existing SourceEditorPane target to include this concrete large-text correction.
+
+**Implementation rules**
+
+- Match the dominant comparison with Current and Candidate column headers, actual
+  line numbers, syntax colors and restrained red/green line backgrounds. Retain
+  explicit non-color change markers and text selection.
+- Preserve every server-supplied line and its hunk/line identity. Multiple removals,
+  additions, empty sides, context and long lines must align correctly; padding
+  cells must not pretend to be unchanged source. Do not fetch model content or
+  reconstruct missing source from assumptions to fill the screenshot.
+- Keep side-by-side as the wide default and retain a working unified view for
+  compact inspection. Use sensible independent horizontal code scrolling and
+  aligned vertical rows, avoiding weighted children inside unbounded width.
+- Source and diff stay read-only. Only the existing isolated draft editor edits.
+  Tabs and progression navigation must not validate, run checks, generate or apply.
+- Derive progression states from the existing evidence functions, including
+  failed/stale/missing states. If the editor needs the review snapshot, pass it
+  through existing state ownership; do not implement duplicate eligibility rules.
+- Keep New function and the valid path to Edit draft. Replace redundant Candidate
+  and repeated Candidate diff headers with the approved tab/breadcrumb hierarchy.
+  Preserve invalidation on edit and project/file/draft replacement.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.DiffViewerTest' --tests 'io.miniorca.desktop.EditorWorkspaceTest' --tests 'io.miniorca.desktop.ReviewEvidencePaneTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/mockup-ui/mock-04"
+./scripts/desktop-gradle.sh test spotlessCheck detekt
+git diff --check
+```
+
+**Acceptance**
+
+The central Editor comparison visibly matches the reference with real validated
+diffs, aligned long/multiline changes and truthful progression. Source/diff
+selection, compact unified access and stale-draft guards remain intact.
+
+**Acceptance evidence — 2026-09-16**
+
+- Replaced the lower Candidate card and repeated canvas heading with Source /
+  Candidate diff tabs, a full-path breadcrumb disclosure, a permanent Read-only
+  label, and compact Request → Draft → Validate → Checks → Review evidence.
+  Status markers and exceptional-state labels use the existing evidence and
+  guarded Apply decision functions through the shared immutable Review snapshot.
+  The former unconditional “focused checks pending” copy is removed.
+- Kept New function and routed Edit draft to the existing Assistant draft focus
+  action. Both remain reachable at large text; they share the responsive action
+  row so the progress strip does not consume an extra row in short windows.
+  Tab/mode/draft navigation remains local, with no generation, validation,
+  check execution or source mutation introduced.
+- Current/Candidate columns fill the available canvas with clipped 14dp corners,
+  shared syntax colors, actual line numbers and explicit +/− markers. Each side
+  scrolls horizontally within bounded width; both share vertical scroll state.
+  Replacement blocks pair removals/additions in order, preserving unequal blocks,
+  empty text, hunk metadata and supplied identities. Missing counterparts remain
+  visibly blank and carry an accessible description. Multiline cell heights stay
+  aligned. Compact views default to Unified; users can switch either way.
+- Fixed breadcrumb width ownership at the outer tooltip so Read-only cannot wrap
+  mid-word. Source gutter width now measures the largest number and scales with
+  text; numbers and source share the same scaled line height. Existing source
+  focus, declaration selection, markers and read-only ownership remain intact.
+- The focused command above, prefixed with `spotlessApply`, passed **77 tests,
+  0 failures/errors/skips**. The final
+  `./scripts/desktop-gradle.sh test spotlessCheck detekt` passed **484 tests,
+  0 failures/errors/skips**, Spotless and Detekt (0 smells). `git diff --check`
+  passed. No thresholds, baselines, dependencies or daemon contracts changed.
+- Interaction tests exercise pointer text selection and keyboard copying using a
+  test-owned clipboard, independent horizontal and synchronized vertical scrolling,
+  keyboard mode switching, local Candidate/Edit draft navigation, unequal and
+  multiline changes, five-digit diff gutters, and stale/failed/running/missing
+  evidence plus edit/file-identity invalidation. The full gate retains existing
+  source-selection, keyboard, workflow and mutation-guard coverage.
+- Rendered production components at 1600×1000, 1440×900, 1000×760, 999×760,
+  800×650 and 1280×600 with 100/125/150% text, alongside the earlier frame and
+  content regression suite. Compared against `03-review-rounded.png`; inspected
+  `comparison-frame-1600-1000-1.0.png`, `comparison-frame-1440-900-1.0.png`,
+  `comparison-frame-1000-760-1.5.png`, `comparison-frame-999-760-1.25.png`,
+  `comparison-frame-800-650-1.5.png`, `comparison-frame-1280-600-1.5.png`,
+  `source-alignment-1000-760-1.5.png`, `diff-long-multiline-1000-1.5.png`, and
+  `editor-progression-stale-800-1.5.png` under
+  `desktop/build/reports/mockup-ui/mock-04/`. These show the dominant comparison,
+  rounded bounds, real change alignment, readable actions and scaled gutters.
+- Iteration corrected a legacy fixture still passing a draft instead of the new
+  snapshot, and an incorrect shape token name. Initial new assertions mistakenly
+  included the Files search field in a read-only check, expected nonexistent text
+  selection semantics, and used the wrong evidence detail; these now inspect the
+  actual subtree, drag/copy interaction and existing evidence copy. A real
+  1280×600/150% canvas-height failure was fixed by moving Edit draft into the
+  action row; the minimum usable-height assertion remains unchanged.
+- Intentional reference differences retain working New function / mode controls,
+  actual line numbers and evidence status rather than sample labels. No branch
+  or provider attribution is invented for either diff side. The right Review
+  panel in these images is still the previous production panel: its compact
+  layout is MOCK-05. These are offscreen production-component renders with fixture
+  data; native window acceptance remains MOCK-06. No commits or pushes were made.
+
+## Task MOCK-05 — Compact Review with a reachable guarded action
+
+**Status:** [x] Accepted — 2026-09-16. Compact Review and guarded action complete.
+
+**Active stage:** accepted; stop this wake. MOCK-06 is next. Earlier accepted
+changes are preserved, and no verification is running. The existing scheduler
+remains Active at 20-minute intervals, verified in the app and saved configuration.
+
+**Target files**
+
+- `desktop/src/main/kotlin/io/miniorca/desktop/ReviewEvidencePane.kt` — target,
+  readiness, compact evidence, disclosures and bottom action layout.
+- `desktop/src/main/kotlin/io/miniorca/desktop/WorkflowToolWindows.kt` — concise
+  target/header identity and retained Context/Assistant/Review tabs.
+- `desktop/src/main/kotlin/io/miniorca/desktop/DesktopTheme.kt` — accessible solid
+  positive primary action treatment using the shared control system.
+- `desktop/src/main/kotlin/io/miniorca/desktop/ChromeControls.kt` — shared action
+  support only if necessary for the approved Apply treatment.
+- `desktop/src/test/kotlin/io/miniorca/desktop/ReviewToolWindowTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/ReviewEvidencePaneTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DraftReviewWorkflowTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopThemeTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt`
+- `desktop/README.md` — resulting Review/receipt behavior.
+- `desktop/UI_CONTRAST.md` — necessary adjacent documentation of the new opaque
+  Apply fill and measured label/focus contrast.
+
+**Inputs / dependencies**
+
+- MOCK-04 and the rounded Review reference. Reuse `reviewEvidenceUiState`,
+  `applyDecisionUiState`, `reviewNextActionUiState` and existing
+  `DraftApplicationActions`; this is a presentation change.
+
+**Implementation rules**
+
+- Match target identity plus Edit draft, readiness state, three compact
+  Validation / Focused checks / Source unchanged rows, required-check summary and
+  collapsed check/project-context details. Preserve actual evidence and diagnostics.
+- Use "Ready to apply" only when the existing decision is eligible. Never claim
+  source unchanged solely because a draft exists. Keep stale, skipped, failed,
+  missing and running evidence distinct and surface the relevant recovery reason.
+- Keep the exact target and one-declaration/one-file consequence next to a clear
+  enabled Apply change action only when eligible. Its accessible name retains
+  exact scope. Keep Edit draft, trust-scoped checks, rerun and failure repair paths
+  usable without duplicate primary actions.
+- Place the action region below scrollable evidence, so it remains reachable in
+  normal-height windows. At short/narrow/150% text, adapt without overlap or
+  cutting off essential consent/error text; allow bounded scrolling if necessary.
+- Use an opaque positive action fill with verified text/focus contrast. Do not
+  change every positive badge into a primary action.
+- After Apply show the actual receipt and guarded Undo from returned state.
+  No pre-Apply Undo, automatic mutation, new approval flow or stale evidence bypass.
+  Context, Assistant, draft discard and terminal behavior remain intact.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ReviewToolWindowTest' --tests 'io.miniorca.desktop.ReviewEvidencePaneTest' --tests 'io.miniorca.desktop.DraftReviewWorkflowTest' --tests 'io.miniorca.desktop.DesktopThemeTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/mockup-ui/mock-05"
+./scripts/desktop-gradle.sh test spotlessCheck detekt
+git diff --check
+```
+
+**Acceptance**
+
+Reference-like ready Review at wide size; no hidden action or lost reason in
+invalid, stale, failed, untrusted, running, applied or undo-unavailable states.
+Behavior tests prove exactly-once guarded mutation only from explicit actions.
+
+**Acceptance evidence — 2026-09-16**
+
+- Review now shows the declaration/path and local Edit draft action, a readiness
+  panel, three compact Validation / Focused checks / Source unchanged rows, and
+  reported required-check counts. Check details and Project context start collapsed.
+  Removed the repeated REVIEW/Next action/Progress headers and five-row progression
+  from this pane; the editor still owns its compact progression strip. Existing
+  sanitized failed-output previews, validation diagnostics, complete check output,
+  identity disclosures and candidate engineering insight remain available.
+- The opaque green Apply change action is below scrolling evidence in normal-height
+  panes, beside the one-declaration/one-file consequence and exact target. Its
+  accessible name retains the symbol/path. Short or enlarged-text panes scroll as
+  a whole; unusually long target scopes have a separately bounded action region.
+  Expanding and scrolling details leaves the normal action region anchored.
+- Apply/Undo still call the existing guarded application actions. A returned
+  receipt alone offers Undo, and returned unavailability disables it. Receipt paths
+  take precedence over later file selection. Tests activate Apply by keyboard and
+  Undo explicitly, asserting exactly one callback each and no mutation from
+  disclosures, scrolling, target navigation or disabled controls.
+- Readiness, evidence and next actions reuse their existing owners. Running
+  validation/checks take presentation precedence over a previous passing report;
+  neither Apply nor a second Rerun is offered while current evidence is running.
+  Missing draft identity is Missing, not Stale. Actual stale/failed/skipped states
+  remain distinct. Required counts exclude optional checks and do not turn missing
+  or stale evidence into zero/passed. Existing eligibility accepts applicable
+  skipped checks; that policy remains unchanged, with Skipped and the actual
+  passed/required count visible rather than an invented all-checks-passed claim.
+- Source-only checks keep their existing path. A generated test's action explicitly
+  says Trust local execution & run checks and shows the exact command/project
+  revision scope before activation. Rerun stays available inside Check details
+  with the same execution disclosure. Failure repair and its existing manual-edit
+  fallback remain functional; provider consent and backend trust/hash guards are
+  unchanged.
+- Added an opaque positive primary tone for Apply without changing positive badges
+  or secondary actions. Label contrast is **11.13:1** default, **9.30:1** hover/press
+  and **7.91:1** selected. The existing dark/light focus keylines remain visible;
+  the full contrast suite covers the new tone on all supported host surfaces.
+  Measurements and resulting behavior are documented in the desktop guides.
+- The focused command above, prefixed with `spotlessApply`, passed **85 tests,
+  0 failures/errors/skips**. The final gate
+  `./scripts/desktop-gradle.sh spotlessApply test spotlessCheck detekt` passed
+  **492 tests, 0 failures/errors/skips**, Spotless and Detekt (0 smells).
+  `git diff --check` passed. No check configuration, thresholds, dependencies,
+  toolchains or API contracts changed.
+- Inspected production-component renders against `03-review-rounded.png`, including
+  full-frame 1600×1000 and 1000×760/150% views, 360×850 ready/detail/focus/receipt
+  views, 300×400/150% ready, stale, failed, running and execution-trust recovery,
+  and a long target at 300×850/150%. Existing full-frame tests also render
+  1440×900, 999×760, 800×650 and 1280×600 at 100/125/150% text. Evidence under
+  `desktop/build/reports/mockup-ui/mock-05/` includes
+  `comparison-frame-1600-1000-1.0.png`, `comparison-frame-1000-760-1.5.png`,
+  `review-compact-ready-360.png`, `review-details-anchored-360.png`,
+  `review-apply-focus-360.png`, `review-ready-short-action.png`,
+  `review-stale-short-recovery.png`, `review-trust-short-action.png`,
+  `review-reported-running-short-recovery.png`,
+  `review-long-target-scope-300-850-1.5.png`, and `review-undone-360.png`.
+- Iteration corrected a fixture missing its required diff argument, an implicit
+  Compose height receiver, and two test tags sharing one layout node. The bounded
+  action viewport and content now have separate nodes; the long-path test proves
+  actual scrolling. Updated obsolete Progress/Next action/check-detail assertions
+  to the new hierarchy while retaining diagnostics, identity and mutation checks.
+  Final review added a report-level Running case to prevent a redundant Rerun.
+  Final passes include these corrections; no failed check was waived.
+- These are offscreen production components with fixture data. The compact Review
+  composition, real-state differences and action reachability are accepted here;
+  integrated native-window, focus and final regression acceptance remain MOCK-06.
+  No model/provider campaign, Mini-Orca Apply/Undo against a real project, commit
+  or push was performed during this card.
+
+## Task MOCK-06 — Integrated visual and regression acceptance
+
+**Status:** [x] Accepted.
+
+**Active stage:** completed; all six cards accepted. Final native/test/package
+verification finished with no running build or native fixture. The existing
+heartbeat is **Paused**, verified in the app and saved configuration. No further
+queue is authorized.
+
+**Concrete integration repair:** native terminal expansion exposed the Swing host
+painting square bottom corners outside the Compose clip. `IdeShell.kt` (already
+a MOCK-01 target) must inset TerminalDock content by 8dp at its side/bottom
+edges. The native overlay already supplies dialog padding. Keep the shell, reader,
+focus callback and PTY resize ownership unchanged; verify the actual Swing host
+after packaging, plus a focused content-bounds test.
+
+**Target files**
+
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — full
+  production-shell comparison fixtures for all three approved views.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` —
+  native fixture coverage using production components and local sample data.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAccessibilityTest.kt`
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt`
+- `desktop/KEYBOARD_SMOKE_CHECKLIST.md` — current affected navigation/action checks.
+- `desktop/UI_DESIGN_GUIDELINES.md` — final measured geometry/reference alignment.
+- `desktop/UI_CONTRAST.md` — final changed colors and actual contrast.
+- `desktop/README.md` — concise current behavior.
+- `docs/RELEASE_ACCEPTANCE.md` — real render/native/test evidence and limitations.
+- `PLAN.md`, `docs/tasks.md`, `tasks/README.md` — accepted status and scheduler closure.
+- Production files already listed in MOCK-01–05 only when needed to repair a
+  concrete integration or visual failure; record the cause before editing.
+
+**Inputs / dependencies**
+
+- MOCK-01, MOCK-02, MOCK-03, MOCK-04 and MOCK-05 accepted.
+  All approved rounded reference images, repository UI guidelines, keyboard
+  checklist and component/native reproduction procedure.
+
+**Implementation rules**
+
+- Render FULL Summary, Analysis and Editor/Review with matching deterministic
+  fixture state at the reference aspect ratio (approximately 1600×1000), plus
+  1440×900, 1000/999dp, 800×650 and 1280×600; include 125/150% text and long content.
+  Existing reference PNGs are immutable visual targets; never overwrite them with
+  production renders to make a comparison pass.
+- Inspect reference and actual render side by side. Compare pane bounds/corners,
+  gutters, typography, header/status arrangement, Summary columns, Analysis table,
+  diff readability and Review action placement. Fix material mismatches; record
+  unavoidable native-font/control differences explicitly. Test success alone
+  does not establish visual fidelity.
+- Verify local-only navigation/disclosures, keyboard focus and selected states,
+  source/diff selection, filter/selection behavior, missing/stale/failed/loading/
+  canceled/partial states, guarded Apply/Undo and terminal expand/collapse/return.
+- Build and launch the app or maintained native fixture with isolated sample data;
+  inspect native corners, resize, toolbar, dock/drawer and focus behavior using
+  available computer-use tools. Use disposable project copies/fake providers for
+  mutation checks. Do not use real user source or live model requests.
+- Run the full local validation and package build. Record native and package
+  evidence separately from offscreen rendering. If required native evidence is
+  unavailable, complete independent checks and report the precise limitation;
+  leave that acceptance pending rather than claiming an exact match.
+- Remove superseded presentation helpers and dead call sites introduced by this
+  work. Keep historical records intact. Pause the scheduler only after complete
+  acceptance, or a documented external blocker requiring user action.
+
+**Verification command**
+
+```sh
+./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' --tests 'io.miniorca.desktop.DesktopAccessibilityTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' -PvisualOutput="$PWD/desktop/build/reports/mockup-ui/final"
+./scripts/desktop-gradle.sh test spotlessCheck detekt createDistributable
+./scripts/validate.sh
+git diff --check
+```
+
+**Acceptance**
+
+All six cards pass their checks and actual visual review. Deliver links to
+production-rendered after images, concise behavior/test results, native limitations
+if any, and the app launch command. Pause the implementation heartbeat and record
+6/6 only when every required acceptance item is satisfied.
+
+**Acceptance record — 2026-09-16**
+
+- Extended the maintained native fixture with full Summary, Analysis and Review
+  frames plus the actual interactive `DesktopShell`. The fixture records provider
+  and source intents without dispatch and uses only a disposable terminal project.
+- Native inspection found the Swing terminal painting square bottom corners over
+  the Compose clip. Repaired only the already-listed `IdeShell.kt` owner with an
+  8dp side/bottom inset. The new content-bounds test covers 140/220/360dp docks;
+  rebuilt native captures confirm the rounded perimeter with a real shell.
+- The initial fixture compilation rejected a `UnifiedFinding` passed as a path;
+  using its existing `location.path` fixed the callback. The first 71 focused /
+  492 desktop tests and full validation passed before the native corner discovery.
+  After that repair, the exact focused command above (with `spotlessApply` during
+  iteration) passed **72 tests**; the final `test spotlessCheck detekt
+  createDistributable` command passed **493 tests**, zero failures/errors/skips,
+  Spotless and zero Detekt smells. `./scripts/validate.sh` then passed all nine
+  stages; its 55 Python tests retain one existing opt-in conformance skip.
+- Additional `MINI_ORCA_JBR25_HOME=/path/to/jbr-25
+  ./desktop/scripts/terminal-packaged-smoke.sh` passed against the actual packaged
+  JVM: real TTY, cwd, UTF-8, 121×42 resize, Ctrl+C, child cleanup and bounded close.
+  Native UI used macOS 27.0 arm64 and JBR 25.0.4.1+1-b583.48, with the Java 21 launcher.
+- Reviewed all three full reference-size production renders against the immutable
+  approved PNGs, plus narrow/large-text/short states. Render paths, exact commands,
+  native screenshots, scope and limitations are in the
+  [final acceptance ledger](RELEASE_ACCEPTANCE.md#rounded-mockup-acceptance--2026-09-16).
+  Offscreen evidence retains the exact reference/1000/999 sizes; native captures
+  use the host's 800×600 and zoomed 1340×768 windows at 100/125/150% Compose text.
+- Native checks establish rounded frame/dock/overlay geometry, local filter and
+  disclosure behavior, source/diff selection, active-run locks, drawer/palette
+  focus recovery, reachable exact Apply scope, stale-target recovery, terminal
+  resize/retention and focus return. Both app sessions and their shell PIDs exited;
+  both disposable source files remain unchanged. Actual guarded source mutation
+  remains deterministic desktop/daemon test evidence, not a native fixture claim.
+- `git diff --check`, local references and historical tail preservation pass.
+  No quality threshold, dependency, source-safety boundary or accepted earlier
+  implementation was removed. Screen-reader speech, other operating systems,
+  signing and notarization remain outside this local acceptance. No commit, push,
+  publication, live model/evaluation campaign or real-project Apply/Undo ran.
+
+---
+
+## Historical completed queues — not active instructions
+
+The prior task file follows unchanged for receipt preservation. Old unchecked
+items, scheduler directions, repair limits, model policies and commit grants do
+not belong to MOCK-01–06.
+
 # Mini-Orca UI polish — 2026-09-15
 
 Implement the user's Summary, Analysis and Bugs / Performance / Security cleanup:

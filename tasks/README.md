@@ -1,3 +1,193 @@
+# Executing the IDEUX UI/UX queue
+
+The user authorized scheduled **IDEUX-01–13** implementation and a local commit
+after each accepted task on **2026-09-16**. [PLAN.md](../PLAN.md) owns the current
+scope, [docs/tasks.md](../docs/tasks.md) owns the ordered cards, and
+[ideux-handoff.md](ideux-handoff.md) owns the next attempt and failure context.
+Only this top procedure applies. Earlier model, retry, scheduling and commit rules
+below the history marker are retained receipts, not current instructions.
+
+IDEUX-01 is a reference and specification card. Its baseline fixture renders are
+evidence from the existing dirty working tree, not acceptance of a new visual
+implementation or a clean-HEAD reproduction. The five copied reference assets are
+immutable; later cards may inspect them but do not replace or regenerate them.
+
+## Schedule and worker models
+
+- Reuse heartbeat `mini-orca-ux-implementation`, every 20 minutes, attached to
+  **Plan IDE UI/UX improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`).
+  Run in this existing checkout, one ordered card attempt per wake. Resume an
+  active attempt/check instead of launching a second writer.
+- The heartbeat coordinates; implementation is assigned to one fresh subagent
+  with an explicit model and reasoning effort. Use `fork_turns="none"` and provide
+  the complete task and handoff in its prompt. This user request authorizes those
+  sequential agents; it does not authorize parallel implementation or new sidebar tasks.
+- First use **Terra High** (`gpt-5.6-terra`, `high`): initial attempt, retry 1/2,
+  retry 2/2. On failure of Terra retry 2/2, escalate the same candidate to **Sol
+  High** (`gpt-5.6-sol`, `high`): initial attempt, retry 1/2, retry 2/2. A failed
+  Sol retry 2/2 pauses the automation and reports the retained failure. Maximum:
+  six completed candidate attempts per card. A new card starts at Terra initial.
+- An interrupted turn or still-running check resumes the same attempt. A missing
+  toolchain, unavailable requested model, exhausted account capacity or external
+  approval blocker is not a failed code attempt: preserve state, report the exact
+  blocker and pause if useful work cannot continue. Never substitute a model.
+- Use the app automation tool for updates/pause, preserving other fields. No raw
+  scheduler edits, detached runners, custom cron or additional automations.
+
+Local scheduling needs the computer on and the app running; see the
+[official scheduled-task documentation](https://learn.chatgpt.com/docs/automations?surface=app).
+
+## Per-wake procedure
+
+1. Read root and relevant area instructions, this procedure, the current PLAN,
+   the first incomplete IDEUX card and the handoff. Inspect Git status/diffs and
+   active agents/processes. Resume existing work. Do not race another writer.
+2. Before dispatch, persist the card, model tier, attempt number, stage and worker
+   identity when available in the handoff. Capture the starting HEAD and changed
+   paths so accepted earlier work can be distinguished from the new task delta.
+3. Dispatch one bounded implementation attempt using the model above. Its prompt
+   must include the full card text (targets, dependencies, rules, verification),
+   the user requirement to preserve colors/icons and keep the UI simple, relevant
+   reference paths, and the complete retry packet below. A pointer to a log alone
+   is insufficient. Use the same working tree; retain the failed candidate for repair.
+   While it works, the coordinator may inspect baseline ownership and prepare
+   acceptance review, but must not edit the worker's targets or spawn another writer.
+4. The agent implements only that card, runs its focused verification plus required
+   area gates and inspects actual production renders. Once a candidate verification
+   or substantive acceptance review fails, stop that attempt and return its exact
+   failure; do not consume hidden extra repair rounds inside the agent. Ordinary
+   planned test-first red cases are not failed candidate verdicts.
+5. On failure, append a bounded factual entry to [docs/errors.log](../docs/errors.log),
+   update the handoff and leave the card incomplete. Set the next attempt/model
+   according to the table above; do not reset counts after a wake, compaction,
+   model switch or intermittent partial success. End the wake. The next scheduled
+   wake dispatches a fresh agent with the full task plus the failure packet.
+6. On success, review the diff and evidence against the complete card. Failed or
+   unavailable required evidence cannot be called passing. Record exact commands,
+   results and image paths; then create and verify the task's local commit as below.
+   Stop after that card. Only then initialize the next card at Terra High.
+7. Pause the same heartbeat after IDEUX-13 passes and is committed, after Sol's
+   final failed retry, or on a true external blocker. Report the current task,
+   attempts, last failure or commit and next required action. Keep unaffected
+   earlier task acceptance and historical receipts intact.
+
+## Failure packet passed to the next agent
+
+Every retry and model escalation receives all of:
+
+- Task ID/title and full current card, including any justified target correction.
+- Current tier/attempt and complete prior attempt sequence; next permitted attempt.
+- Starting/current HEAD, changed files and relevant candidate diff summary.
+- Exact failed command or interaction, exit status, failing tests/assertions,
+  relevant bounded error output, and visual evidence paths when applicable.
+- Expected versus observed behavior, diagnosis with uncertainty, changes already
+  tried and their outcomes, passing checks still valid, remaining checks and the
+  next concrete repair step. Do not dump source or secrets into diagnostics.
+- Active worker/build/session identity and whether it has exited. Never repeat a
+  source mutation or commit just because a previous response was interrupted.
+
+The handoff is mandatory even when the next agent uses the same model. No failure
+exists yet at configuration time; do not invent one to fill the template.
+
+## Acceptance and commits
+
+Implementation agents return a candidate and evidence; the coordinator owns final
+acceptance, staging and the commit. Review the staged diff and commit with a
+descriptive subject containing the card ID, such as `IDEUX-02: simplify IDE chrome`.
+Verify the new HEAD and record its hash before starting another card. If interrupted
+after committing, inspect Git history first. If only the commit fails, keep the
+stage `commit pending` and retry that operation without reimplementing the task.
+
+The checkout begins with accepted but uncommitted MOCK work. Never blindly stage
+everything, discard that work or silently attribute it to a new card. Stage the
+reviewed task delta separately where possible. If an accepted uncommitted
+prerequisite is necessary for a coherent task commit, inspect and validate it,
+explicitly identify it in the first relevant commit's body/receipt, and include
+only the required prerequisite files/hunks. Leave unrelated work untouched.
+Do not alter unrelated staged changes. No amend/rewrite, push, release, publication,
+live Mini-Orca provider campaign or destructive cleanup is authorized.
+
+The current user instructions override builder-executor defaults that would forbid
+commits, perform all cards in one turn, or retry within one agent. If that skill is
+used, preserve its target/check discipline while following this explicit scheduling,
+fresh-agent retry and per-task commit policy. State/log/PLAN updates needed by this
+procedure are authorized administrative targets for every IDEUX card.
+
+---
+
+## Historical execution instructions — inactive
+
+The preceding procedure supersedes every execution/model/commit grant below.
+All original text and acceptance receipts are preserved.
+
+# Executing the approved rounded mockup UI
+
+The user authorized implementation and scheduled continuation on **2026-09-16**.
+[PLAN.md](../PLAN.md) owns the approved design and current status;
+[docs/tasks.md](../docs/tasks.md) owns the six ordered **MOCK-01–06** cards.
+All previous queues and execution grants below the history marker are historical.
+
+## Scheduler
+
+Reuse `mini-orca-ux-implementation` as **Mini-Orca rounded mockup implementation**,
+attached to **Show UI UX improvements** (`01a0a651-1e1a-79e0-b884-9c57dd054e5b`).
+All six cards are accepted. The app and saved configuration confirm **Paused**
+after final acceptance. The retained schedule is every 20 minutes, serially in this
+checkout, one card per wake with the current task's model and reasoning settings.
+This completed scope replaced the finished polish prompt; it does not resume POLISH
+or any other queue. The [final evidence](../docs/RELEASE_ACCEPTANCE.md#rounded-mockup-acceptance--2026-09-16)
+records production renders, native inspection, all required gates and limitations.
+
+Local execution requires the computer on, app running and checkout available:
+[scheduled-task documentation](https://learn.chatgpt.com/docs/automations?surface=app).
+
+## Per-wake procedure
+
+1. Read current root/area instructions, the active PLAN section and first pending
+   MOCK card. Inspect the actual rounded reference image before visual changes.
+   Respect user steering and pauses. Existing active work wins over a new wake;
+   never start overlapping writers, a detached runner, additional tasks or agents.
+2. Inspect Git status and relevant staged/unstaged diffs. Preserve prior accepted
+   and unrelated changes. Record the active card/stage in docs/tasks.md; resume an
+   interrupted build/test or implementation before starting new work.
+3. Implement that card end to end with the existing ownership and controls.
+   Mockup sample facts/captions are not production data. Necessary adjacent targets
+   must be justified on the card before editing; do not broaden scope or upgrade
+   dependencies.
+4. Run focused checks while iterating, then the card's full required gates and
+   inspect production renders against the approved PNG. Fix caused failures;
+   retain meaningful assertions and quality thresholds. Use valid cached evidence
+   only while the tested inputs are unchanged.
+5. Review the final diff, including untracked sources. Record actual commands,
+   results, image paths and remaining visual/native limitations. Mark only the
+   accepted card complete and update PLAN status. End this wake after one card.
+6. If work is interrupted, retain the next step and any process/session identity.
+   Continue repairable code/test failures on the same card. If a true external
+   blocker prevents useful progress, record its exact action/error, notify the
+   user and pause the heartbeat via the app tool.
+7. When MOCK-06 passes and all six cards are accepted, pause
+   `mini-orca-ux-implementation` using `automation_update`, preserve its remaining
+   fields, and report completion with actual production screenshots.
+
+Only meaningful completion, failure or required user action needs a notification;
+unchanged/non-actionable state stays quiet.
+
+## Current authorization
+
+Implement source/tests/docs and run ordinary local builds and deterministic
+validation in this checkout. Preserve real source/diff read-only views and all
+existing provider consent, execution trust, Review/Apply/Undo and terminal ownership.
+Do not commit, push, release, publish, run live Mini-Orca provider/evaluation
+campaigns, or revive old dispatcher/model-switch/repair-limit policies without
+a new user request.
+
+---
+
+## Historical execution procedures — inactive
+
+The earlier guide is preserved below. Its completed scopes, model choices and
+local-commit grants do not apply to MOCK-01–06.
+
 # Executing the Mini-Orca UI polish queue
 
 [PLAN.md](../PLAN.md) owns confirmed product decisions and current status.
