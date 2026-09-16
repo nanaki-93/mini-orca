@@ -815,7 +815,7 @@ Unrelated dirty baseline remains outside the commit.
 
 ## Task IDEUX-10 — Clarify Performance recommendations and measured evidence
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — 2026-09-16; Terra High retry2/2.
 
 **Target files**
 
@@ -846,6 +846,22 @@ Unrelated dirty baseline remains outside the commit.
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.PerformanceWorkspaceTest' --tests 'io.miniorca.desktop.DesktopBenchmarkWorkflowTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/performance"
 ```
+
+**Acceptance receipt — IDEUX-10**
+
+Performance recommendations visibly remain model suggestions and unmeasured.
+Prepare fix retains existing currentness and declaration checks. Benchmark status
+is available above results even without measurements; candidate-specific evidence
+has a separate disclosure and preserves stale, failed and missing outcomes.
+Workload and trade-off disclosure remains available without unsupported dismissal.
+
+Focused 88/88, full 521/521 and isolated commit 500/500 passed with Spotless,
+Detekt and diff checks. Wide/compact/short 150% benchmark, recommendation, stale
+and failed renders were reviewed, including actual long-content disclosure and
+explicit fix navigation. Native/package remains task13. Two Terra failures and
+repairs are recorded in errors.log. Export extraction introduced an extra blank
+line; formatting only the export and rerunning its gate passed. Other baseline
+bytes remain uncommitted and unchanged.
 
 ## Task IDEUX-11 — Clarify Security evidence without implying a clean bill of health
 

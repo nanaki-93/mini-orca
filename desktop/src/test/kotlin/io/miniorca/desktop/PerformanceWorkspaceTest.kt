@@ -14,7 +14,7 @@ class PerformanceWorkspaceTest {
     val result = performanceResults(page).single()
     assertEquals("main.go", result.report.path)
     assertEquals("", result.row().state)
-    assertEquals("", result.row().source)
+    assertEquals("Model suggestion", result.row().source)
     assertTrue(
         performanceResults(page.copy(project = page.project!!.copy(projectId = "other"))).isEmpty())
     assertTrue(
@@ -22,6 +22,66 @@ class PerformanceWorkspaceTest {
     assertEquals(
         "Stale",
         performanceResults(page.copy(run = page.run.copy(status = "stale"))).single().row().state)
+  }
+
+  @Test
+  fun recommendationAndBenchmarkStatusKeepPotentialAndMeasuredEvidenceSeparate() {
+    val comparison = comparison()
+    val selectedChoice =
+        GoBenchmarkChoice(comparison.benchmark, comparison.command, comparison.scope)
+
+    assertEquals(
+        "Not measured · explicit local execution",
+        performanceBenchmarkStatusPresentation(null, null, null, running = false).stateLabel)
+    assertEquals(
+        "Running · explicit local execution",
+        performanceBenchmarkStatusPresentation(null, comparison.identity(), null, running = true)
+            .stateLabel)
+    assertEquals(
+        "Measured · selected benchmark",
+        performanceBenchmarkStatusPresentation(
+                comparison, comparison.identity(), selectedChoice, false)
+            .stateLabel)
+    assertTrue(
+        performanceBenchmarkStatusPresentation(
+                comparison, comparison.identity(), selectedChoice, false)
+            .summary
+            .contains("does not measure this model suggestion"))
+    assertEquals(
+        "Stale · candidate identity changed",
+        performanceBenchmarkStatusPresentation(
+                comparison, comparison.identity().copy(draftHash = "new-candidate"), null, false)
+            .stateLabel)
+    assertEquals(
+        "Not measured · unavailable",
+        performanceBenchmarkStatusPresentation(
+                comparison.copy(status = "unavailable", reason = "No compatible benchmark"),
+                comparison.identity(),
+                null,
+                false)
+            .stateLabel)
+    assertEquals(
+        "Inconclusive · incomplete measurement evidence",
+        performanceBenchmarkStatusPresentation(
+                comparison.copy(
+                    candidate = GoBenchmarkMeasurement(comparison.candidate!!.samples.take(4))),
+                comparison.identity(),
+                null,
+                false)
+            .stateLabel)
+    assertEquals(
+        "Inconclusive · incomplete memory evidence",
+        performanceBenchmarkStatusPresentation(
+                comparison.copy(
+                    candidate =
+                        GoBenchmarkMeasurement(
+                            comparison.candidate!!.samples.mapIndexed { index, sample ->
+                              if (index == 0) sample.withoutMemoryMetrics() else sample
+                            })),
+                comparison.identity(),
+                null,
+                false)
+            .stateLabel)
   }
 
   @Test

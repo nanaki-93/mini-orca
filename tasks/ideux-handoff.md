@@ -1,44 +1,37 @@
 # IDEUX execution handoff
 
-Follow tasks/README.md, docs/tasks.md and root/area instructions.
+Follow tasks/README.md, docs/tasks.md, root/area guides.
 
 | Field | Value |
 | --- | --- |
-| Card | IDEUX-09 — Make Bugs evidence and verified checks immediately usable |
+| Card | IDEUX-10 — Clarify Performance recommendations and measured evidence |
 | Status | Accepted; commit pending |
 | Stage | Coordinator selective commit |
-| Model | gpt-5.6-sol |
+| Model | gpt-5.6-terra |
 | Reasoning | high |
-| Tier attempt | Sol initial |
-| Completed failed attempts | 3 Terra; 0 Sol |
+| Tier attempt | Terra retry2/2 |
+| Completed failed attempts | 2 Terra; 0 Sol |
 | Active worker | None; worker/checks exited |
-| Starting HEAD | 7fc0fb18939a726c441b9b8b8f7a335b29657d80 |
-| Last accepted task | IDEUX-08 commit 7fc0fb18939a726c441b9b8b8f7a335b29657d80, verified |
-| Next on failure | Sol High retry1/2 |
+| Starting HEAD | 157ad60add7b9613ff878cdc89a8c7e75211fc97 |
+| Last accepted task | IDEUX-09 commit 157ad60add7b9613ff878cdc89a8c7e75211fc97, verified |
+| Next on failure | Sol High initial |
 
-01–08accepted/committed. 08focused85/full516/isolated495 tests and quality/render
-checks passed. Failurehistory retained docs/errors.log andcardreceipts. Native/package
-acceptance13. Baseline /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux09-baseline-h4hsph60 has28dirtyfilescopies/hashes. Preserve unrelatedbytes;
-indexempty. Previous07hasEditableText and08verticalScrollValue fixtureprerequisites
-arecommitted;don'tduplicate. Native/fullframe/editor/reviewcarry remainsuntil12/13.
+01–09accepted/committed. 09focused123/full518/isolated497 tests plus quality/render
+checks pass. Native/package13. Failurehistory retained errors.log/cardreceipts.
+Baseline /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux10-baseline-0w71uchb contains28dirtycopies/hashes, preserveunrelatedbytes. Indexempty.
+Native/fullframe/editor/reviewcarry remainsuntil12/13. Previousfixtureprerequisites
+arealreadycommitted;donotduplicate. No app/residentdaemontermination.
 
-Onefreshworkerperattempt,TerraHighinitial+2retries thenSolHighinitial+2retries;
-fullcard+allfailuresinprompt; stopworkerafterfirstcompletedcandidatefailure or
-substantiveacceptancegap, nohiddenrepairrounds. Coordinatorownsadmin/selectivestage/
-isolatedchecks/commit. Immediatelynextcardafterverifiedcommit. HeartbeatACTIVE
-mini-orca-ux-implementation clock09/29/49backup;pauseonlyexhaustion/blocker/user/end.
-No userapps/residentdaemontermination. Currentcolors/iconrail/simpleIDE,readonly
-source/diff,isolateddraft,consent/trust,ReviewApplyUndo retained. Referencesimmutable.
+Onefreshworkerperattempt:TerraHighinitial+2retries thenSolHighinitial+2retries;
+fullcard/allfailuresinprompt;stopfirstcompletedcandidatefailure/substantivegap;
+nohiddenrepairrounds. Coordinatoradmin/selectivestaging/isolatedchecks/commit.
+Immediatelynextcardafterverifiedcommit;heartbeatACTIVEmini-orca-ux-implementation
+clock09/29/49backup. Pauseonlyexhaustion/blocker/user/end. Preservecolors/iconrail,
+simpleIDE,readonlysource/diff,isolateddraft,consent/trust/ReviewApplyUndo.
+Referencesimmutable. Full10card docs/tasks.md;no10failuresyet.
 
-Added DesktopVisualLayoutTest to09targets BEFOREworkeredit: existing verifiedchecks
-disclosure expects hiddenaction andmustadapt tovisibletrust/actionrow, retaining
-keyboard/noexternalactionsproof. Full09card docs/tasks.md. No09failuresyet.
+IDEUX-10 Terra High initial failure — 2026-09-16
+HEAD157ad60add7b9613ff878cdc89a8c7e75211fc97 unchanged;1Terra/0Sol nextTerraretry1/2. Exactfocusedexit1 compileTestKotlin ResultWorkspaceLayoutTest334 customgetterpage.resultssmartcastimpossible; bindlocalrequireNotNull results thenuseperformance. No tests/renders. WorkerunnecessarilyranfulltestspotlessCheckdetekt afterfocusedfailure:samecompileexit1,Spotless/Detektcompletedbeforecompile;no sourceedits. Thisisonefailedcandidate,notanotherretry;nextstoponfocusedfailureanddonotrunfullgate. Diffpass. CandidatedeltaPerformanceWorkspace+75/-25,PerformanceWorkspaceTest+65/-1,ResultWorkspaceLayoutTest+46,Visual+59/-1frombaseline. Persistentbenchmarkstatusabove/results+modelsuggestion/unmeasuredidentity/separateMeasurementdetails. No10commit;preservebaseline.
 
-IDEUX-09 Terra High initial failure — 2026-09-16
-HEAD7fc0fb18939a726c441b9b8b8f7a335b29657d80 unchanged;1Terra/0Sol failures nextTerraretry1/2. Exactcardfocusedfailed;rootreadfreshXML123tests2failures (Bugs7/1,Findings3/0,ResultLayout11/1,Presenter47/0,Visual55/0),noerrors/skips. BugsWorkspaceStateTest.verifiedScanProgressOnlyOffersActionsOwnedByTheCurrentLifecycleState185 expectedsummarycontains never starts one automatically butnewcopy saysnever starts them automatically. ResultWorkspaceLayoutTest.bugsChecksKeepTrustAndCommandsReachableInCompactLongDiagnosticViews423 hasText(diagnostic)fails;fixture repeatedstringendswhitespace,DiagnosticText->sanitizedOutputText trims. Checksanitizedexpectedandretainedreadableoutput/scroll,don'tweakenproof. Workerinitialreportonlyincludedfirstsuitefailure;rootcompletedpacket. No taskprocessremains. ScopedSpotlessApply/diffpass beforefailure;no postverdictrepair/fullgate/renderreview. Candidate7listedtargets: visibleVerifiedchecksstate/trustactionrow,Commandandoutputdisclosure,lifecycleactionprojection,detailoriginlabels+tests. Preserve28dirtybaseline/no09commit. Nextcompleteallassertions/fixtures/scopedformat beforegate.
-
-IDEUX-09 Terra High retry1 failure — 2026-09-16
-HEAD7fc0fb1 unchanged;2Terra/0Sol nextTerraretry2/2. Firstsingularcopyassertion andsanitizeddiagnosticexpectationfixed;scopedSpotlessApply/diffpass. Exactfocusedexit1 33s123tests1failure BugsWorkspaceStateTest.verifiedScanProgressOnlyOffersActionsOwnedByTheCurrentLifecycleState209 still expectsresults remain available whilecandidate sayscommand and output remain available. No fullgate/renderreview/postverdictrepair. ReviewALLsame-testcopyexpectations beforegate,retain lifecycle/actionmeaning. Candidate7targetsretained/no09commit;preservepriorpackets/baseline.
-
-IDEUX-09 Terra High retry2 failure — 2026-09-16
-HEAD7fc0fb1 unchanged;3Terra/0Sol nextSolinitial. Scopedformat/diff/nontargethashpass. Exactfocusedexit1 34s123tests1failure0errors/skips: sameBugsWorkspaceStateTest209 requirescontiguous results remain available; retrychangedsummaryto results, command and output remain available (notcontiguous),assertunchanged. SuitesBugs7/1,Findings3/0,Result11/0,Presenter47/0,Visual55/0. No postverdictrepair/fullgate/renderacceptance;allprocessesexited. Rootcompactcollapsed800x400150%imageverifiedrow/trustlegible. Fixcopy/testcontractdirectlywithassertionmatchingactualintendedmeaning,notanothernear-match;preserveresults/command/outputfacts. No09commit.
+IDEUX-10 Terra High retry1 failure — 2026-09-16
+HEAD157ad60 unchanged;2Terra/0Sol nextTerraretry2/2. Initialsmartcastfixedwithlocalresults. Addedactualcompactworkloaddisclosureinteraction,scopedSpotlesspass. Exactfocusedexit1 88tests2fails: PerformanceWorkspaceTest38expectedMeasured·selectedbenchmark observedStale·selectedbenchmarkchanged;newGoBenchmarkChoice(BenchmarkWork,[],scope)doesnotmatchcomparisonfixture selectedidentity. Fixfixturechoicefromrealcomparisonfields,retainmismatchstaletest. ResultWorkspaceLayoutTest364 Trade-offs must be reachable by scrolling afterclickWorkload/trade-offsdisclosure. Rootreadtest clicksdisclosurewithoutfirstreveal (onlyPreparefixrevealed); offscreenpointerclickmaynotopenit. Ensureactualvisibleclick+expandedstate beforeprovinglongcontent. WholelongTradeoffmayexceedviewport,don'trequirealloflongblockfitsatonce;provewrappeduntruncatedcontent+scrolltailreachability meaningfully. No postverdictrepair/fullgate/renderacceptance;diffpass. Partialperformanceimagesemittedunaccepted. Candidate4targets;Visualfullgitstatincludesbaseline,comparetosnapshot. No10commit.
