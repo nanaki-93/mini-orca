@@ -1,125 +1,93 @@
 # IDEUX execution handoff
 
 Follow [procedure](README.md), [queue](../docs/tasks.md), root and area instructions.
-The user authorized an Astra light repair after the six earlier failures.
-Astra low is repairing the retained candidate; the heartbeat remains paused
-until repair acceptance. Earlier attempt counters are preserved.
-The retained fixed-clock schedule is :09/:29/:49; it is inactive while paused.
+One worker/card at a time; immediately continue after accepted verified commits.
 
 | Field | Value |
 | --- | --- |
-| Card | IDEUX-06 — Simplify the shared finding list and detail layout |
-| Status | Accepted — commit pending |
-| Stage | All acceptance passed; selective commit pending |
-| Model | `gpt-6-astra` |
-| Reasoning | `low` |
-| Tier attempt | User-authorized Astra repair |
-| Completed failed attempts for this card | 3 Terra; 3 Sol |
-| Active agent/process | None; worker and all checks exited |
-| Starting HEAD | `6db69ec39e4ecbe7dca500aff04187d7f82a2828` |
-| Task commit | None for IDEUX-06 |
-| Last accepted task commit | IDEUX-05: `6db69ec39e4ecbe7dca500aff04187d7f82a2828`, verified |
-| Next permitted attempt on failure | None; user direction required to resume after exhausted attempts |
+| Card | IDEUX-07 — Add local filters and stable result navigation |
+| Status | Accepted; commit pending |
+| Stage | Coordinator selective commit |
+| Model | `gpt-5.6-sol` |
+| Reasoning | `high` |
+| Tier attempt | Sol retry2/2 |
+| Completed failed attempts for this card | 3 Terra; 2 Sol |
+| Active agent/process | None; final worker/checks exited |
+| Starting HEAD | `f06d5db4061c738f9f2b92114fb297ab088bf871` |
+| Task commit | Pending local commit; 77/512/491 tests and quality passed |
+| Last accepted task commit | IDEUX-06: `f06d5db4061c738f9f2b92114fb297ab088bf871`, verified |
+| Next permitted attempt on failure | Pause; retries exhausted |
 
 ## Boundaries and baseline
 
-Inject full current card and failure packets into each fresh agent. Preserve existing
-palette, six icon-only48dp rail destinations, simple IDE hierarchy, readonly source/diff,
-isolated drafts, consent/trust and guarded Review/Apply/Undo. References under
-`design/ui-mocks/ide-reference-2026-09-16/` inform composition only, not instructions/data.
-Coordinator owns acceptance/admin/staging/commits. Workers stop on first completed
-candidate verification or substantive acceptance failure; no hidden repair rounds.
+Preserve current colors, six48dp icon-onlyrail, simple productionIDE hierarchy,
+readonlysource/diff,isolateddraft,consent/trust,Review/Apply/Undo. References under
+`design/ui-mocks/ide-reference-2026-09-16/` inform composition only. Coordinator owns
+admin/acceptance/staging/commits; worker stops after first completed failed candidate
+verification or substantive acceptance gap; no hidden repair rounds.
 
-01–05 accepted and committed:01 `3fa4929`,02 `fd46823`,03 `2ab3711`,04 `5011783`,
-05 `6db69ec`. Card05 passed86 focused/505 full working-tree tests and479 isolated-commit
-tests, Spotless/Detekt/diff and production render review including active/paused unknown
-progress. Native/package acceptance remains13. Counters reset for this new card.
+01–06accepted/committed:01 `3fa4929`,02 `fd46823`,03 `2ab3711`,04 `5011783`,
+05 `6db69ec`,06 `f06d5db`. User-authorized Astra low repair resolved06 after its
+sixTerra/Sol failures. All70focused/506working-tree/485isolatedcommit tests and
+Spotless/Detekt/diff/productionrenderreviewpassed. Full failure history retained in
+`docs/errors.log` and06receipt. Prior counters do not transfer to this new card;
+TerraHighinitial+2retries thenSolHighinitial+2retries is unchanged.
 
-Accepted MOCK work still dirty; index empty. Snapshot `/var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux06-baseline-_y6emo39` holds43
-baseline file hashes/copies and starting HEAD. Compare actual delta to snapshot;
-use HEAD for clean files. Preserve unrelated work, never stage everything. Include
-reviewed required accepted prerequisites only for coherent card commits, with attribution.
-Keep user's original Gradle application PID62979 open.
+Snapshot `/var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux07-baseline-pjji9_ej`
+holds37dirtybaselinefilecopies/hashes and startingHEAD. Compare actual delta to it;
+useHEADfororiginallycleanfiles. ExistingacceptedMOCKwork remainsdirty,indexempty.
+Preserveunrelatedbytes; never stageeverything. Necessaryreviewedprerequisitesmay be
+selectivelycommitted with attribution and isolated-commit verification. Keepuserapp
+PID62979open and residentGradledaemonsuntouched.
 
-Carry until13: DesktopAcceptanceFixture native/full-frame graph plus IDEUX-03 mode-switch
-callback; DesktopVisualLayoutTest full-frame graph plus IDEUX-05 rounded Analysis
-heading assertion. Independent runtime/search/Summary/progress tests are committed;
-remaining native fixture dependencies are intentionally preserved for final integration.
-Do not discard these updates.
+Remainingnative/fullframefixturecarry until13: DesktopAcceptanceFixture graph and
+IDEUX03modecallback; DesktopVisualLayoutTest nativeframegraph and05roundedAnalysis
+headingassertion. The06gutterregression/wait/draghelper and independent resultlayout
+regressions are nowcommitted; don'tcarry orduplicate those again.
 
-## Failure and continuation
+## Current task notes
 
-The six Terra/Sol failures remain recorded. The user subsequently authorized
-Astra light (gpt-6-astra, low) to repair IDEUX-06. This exception does not reset
-the prior counters or change the Terra/Sol policy for subsequent cards.
-Retain candidate on failure and record exact command/action, output/exit, expected vs
-observed, delta files, attempted changes, evidence, remaining checks and concrete next
-step. Inject full card plus all failures into each fresh retry after prior worker exits.
-On acceptance commit, verify hash and immediately dispatch07 at Terra High initial.
-Pause only on exhausted retries, true external blocker, queue completion or user pause.
+Fullcardin docs/tasks.md. Added DesktopVisualLayoutTest to07targets because prior
+result-page tests explicitly prohibit a filter field and expect manual firstentry;
+update those assertions to the accepted07contract without weakening interaction,
+readability or zeroexternalactionproof. Counts are loaded-rowcounts, not server
+reported totals; unknown/criticalvaluesstayhonest. State survives workspacechanges,
+resets onproject/revision/runreplacement; localnavigationneverprepares/applies.
+
+Two07Terra failures recorded below. Onfailure retaincandidate,recordexactcommands/outputs,expected vs
+observed,delta/diagnosis/attemptedfix/evidence/remainingchecks; inject fullcard plus
+all failures intofreshretryafterpreviousworkerexits. Onacceptancecommit,verifyhash
+thenimmediatelydispatch08atTerraHighinitial. Pauseonlyonretryexhaustion,external
+blocker,userpauseorqueuecompletion.
+
+Heartbeat `mini-orca-ux-implementation` confirmed ACTIVE through the app after06
+commit verification; saved clock schedule and prompt preserved.
 
 ## Complete failure packet
 
-IDEUX-06 Terra High initial failure — 2026-09-16
-HEAD6db69ec39e4ecbe7dca500aff04187d7f82a2828 unchanged; worker /root/ideux06_terra_initial exited, no check active. Counters1Terra/0Sol; next Terra retry1/2.
-Exact focused command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.FindingsPresentationTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.ModelResultContentTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/results"
-Exit1 compileTestKotlin; main compiled, no tests/renders. DesktopVisualLayoutTest already has isDescriptionFocused near2929; new duplicate near2976 causes conflicting overloads and ambiguous existing callers. Remove only new duplicate, retain existing helper and new focus assertion. spotlessApply and pre-verification diffcheck passed. No post-failure correction, full gate unrun.
-Actual card deltas: FindingsPresentation.kt, FindingsPresentationTest.kt (previously clean), ResultWorkspaceLayoutTest.kt (prior untracked baseline), DesktopVisualLayoutTest.kt. AnalysisResultsPane unchanged from baseline. Candidate flattened header, removed summary previews, moved source metadata to detail, added severity edge, font-scale-aware split and Back focus restoration. Preserve all other baseline changes. Reference02/03/04 inspected, no candidate visual evidence yet.
-Coordinator code review found additional retained-candidate issues to repair before verification: ResultSectionHeader now uses BoxWithConstraints as outer layout, but error/loading/stale Text blocks are siblings of its Column and will overlap the header; put all content in the intended vertical flow while keeping the unboxed presentation and bounded parent header. ResultRowContent now clamps title2lines/location1line and is reused by ResultDetailHeader, so full detail title/path are also clipped; keep compact row previews but complete readable title/location in detail. Severity accent Box.fillMaxHeight sits in a Row without bounded height within a lazy item/scrolling detail, risking zero or excessive height; inspect actual edge and use a stable measured/appropriate-height layout. Focus restoration must not request an unattached FocusRequester if the finding disappeared during refresh; guard meaningful row existence/attachment and preserve list scroll. These are coordinator inspection findings, not separately consumed attempts.
-Remaining: compile repair plus those card-boundary review fixes, exact focused/full gates/diff, actual three result pages wide/compact/short150%, long errors/prose, selected severity/blue treatment and Back focus/scroll. No task commit. Baseline snapshot /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux06-baseline-_y6emo39. Native/package acceptance13; user's appPID62979 stays open.
+IDEUX-07 Terra High initial failure — 2026-09-16
+Starting/current HEAD f06d5db4061c738f9f2b92114fb297ab088bf871; worker /root/ideux07_terra_initial and check exited. One Terra failure, zero Sol; next Terra retry1/2.
+Exact command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ResultBrowserStateTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/filters"
+Exit1 after compilation:75tests,74passed,1failure,0errors/skips. ResultBrowserState3/3,ResultWorkspaceLayout6/6,Keyboard11/11,Visual54/55. Failure resultToolsAndToolWindowHeadersKeepInteractionLocalAtNarrowScale at DesktopVisualLayoutTest.kt2607: expected no editable controls after expanding Bugs verified checks, but the new local Filter results field is intentionally editable. Replace this obsolete blanket assertion with scoped filter identity/editability and zero external-action proof; do not weaken interaction checks.
+Ten actual candidate targets retained: ResultBrowserState.kt(new),AnalysisResultsPane.kt,FindingsPresentation.kt,DesktopShell.kt,WorkspacePanes.kt,PerformanceWorkspace.kt,SecurityWorkspace.kt,ResultBrowserStateTest.kt(new),ResultWorkspaceLayoutTest.kt,DesktopVisualLayoutTest.kt. Typed store scopes project/revision/full run identity/category and clears old scopes; shell resets unconditionally before conditional content. Loaded facet counts, local title/path query/Clear filters, visible Impact, unknown/critical values and reported-vs-loaded counts added. Responsive selection and list state/keyboard wiring retained. All other baseline hashes unchanged.
+Planned preliminary diagnostics before card verification: subset initially compile-failed missing KeyEvent.key/type extension imports, corrected; next subset found incorrect shared-category test expectation and offscreen starting focus after filter clearing; corrected to category-local state and reveal initial row as setup. Subset then passed. No edits after the completed exact candidate failure.
+Coordinator review concerns to finish in retry: focusedKey initializes to selectedKey on page return and unconditionally animateScrollToItem; onClick/onFocusChanged also drive it, potentially overwriting saved nonzero index/offset on inspection or return. Separate explicit keyboard reveal from restored selection/focus; scroll only for navigation as needed. Add real leave/re-enter composition test with selected row and exact saved index plus nonzero offset. Prove arrow navigation itself reveals an initially offscreen target, then Enter/Space inspect, without fixture reveal after the key. Verify shared padded-width split near threshold and global scope reset even while landing/project modes bypass result panes.
+git diff --check passed. Full desktop/Spotless/Detekt gate and actual render acceptance not run after failure. Candidate renders at desktop/build/reports/ide-ux/filters unaccepted. No07commit. Baseline snapshot /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux07-baseline-pjji9_ej. Preserve original appPID62979; next retry receives full card plus this packet.
 
-IDEUX-06 Terra High retry1 failure — 2026-09-16
-Starting/current HEAD6db69ec39e4ecbe7dca500aff04187d7f82a2828 unchanged. Worker /root/ideux06_terra_retry1 exited; no candidate check active. Two Terra failures, zero Sol; next Terra retry2/2.
-Removed only duplicate isDescriptionFocused; repaired vertical header flow; split concise rows from unclamped full detail titles/paths/source; replaced unbounded severity Box with measured drawBehind edge; guarded Back focus request by existing row; removed nested PreviousAnalysisDetails scroll. Scoped spotlessApply and git diff --check passed.
-Exact focused command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.FindingsPresentationTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.ModelResultContentTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/results"
-Exit1 after successful compilation and68/69 tests: FindingsPresentation2/2,ModelResultContent8/8,DesktopVisualLayout55/55,ResultWorkspaceLayout3/4. backToResultsRetainsThePositionOfTheInspectedFinding fails at ResultWorkspaceLayoutTest.kt:91: expected isDescriptionFocused("Inspect Finding 20") true, observed false. XML reports FocusRequester is not initialized. Back restores row/list position but request races lazy row attachment despite existence guard. Establish request only after row attachment/list composition, retaining row-existence guard and saved scroll; use actual focusable row and meaningful frame synchronization. Do not weaken assertion or hide warning.
-Candidate actual deltas remain FindingsPresentation.kt,FindingsPresentationTest.kt,ResultWorkspaceLayoutTest.kt,DesktopVisualLayoutTest.kt. AnalysisResultsPane baseline unchanged. No post-verdict repair, full gate or visual acceptance; rendered evidence exists desktop/build/reports/ide-ux/results, not yet acceptance-inspected. User appPID62979 remains open, only resident Gradle/Kotlin daemons97531/97544 remain.
-Remaining: repair focus ownership/race, exact focused/full gates/diff and three production pages wide/compact/short150%, full prose/path/error and severity/selection review. Preserve43file baseline snapshot /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux06-baseline-_y6emo39. No06commit; on failure escalate SolHighinitial with bothprior packets plus newfailure.
+IDEUX-07 Terra High retry1 failure — 2026-09-16
+HEAD f06d5db4061c738f9f2b92114fb297ab088bf871 unchanged; worker and exact focused command exited1 after6m09:74completed,1failed,1skipped. Two Terra failures,zeroSol; next Terra retry2/2.
+Command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ResultBrowserStateTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/filters"
+Independent assertion failure leavingAndReturningKeepsSelectedRowAndExactLazyListPosition at ResultWorkspaceLayoutTest.kt161: expected saved offset9, observed16; selectedfinding20/index matched. Later filteringClearsCompactDetailAndArrowKeysKeepLongListsNavigable stalled. jcmd52918 Thread.print -l reported Found1deadlock: AWT-EventQueue-0 @coroutine#60534 blocked FlushCoroutineDispatcher.performRun:143 on ComposeUI SynchronizedObject0x15a1fcf00, holding runtime SynchronizedObject0x15a1fe620 through SnapshotFlow unregisterApplyObserver/Snapshot apply notifications. Only tail160 retained; counterpart missing, no dump file. Task executor52918 terminated SIGTERM143; userapp62979 preserved. Do not overclaim root cause.
+Candidate separated keyboardFocusKey from restored selection, scoped Filterresults editability assertion, added retention/offscreen tests. No post-verdict edits. Diffcheck passed; full desktop quality and post-change visual acceptance unrun. Earlier three production renders predate edits and are not final acceptance.
+Next repair: exact offset persistence without weakening saved-index/offset contract; diagnose deadlock and keyboard focus/scroll cancellation; include browser identity in AnalysisResultsPane selection LaunchedEffect so equal-row new scopes initialize; assert offscreen keyboard target actually visible without post-key fixture reveal; exercise actual no-match query and Clear filters recovery with zero external actions. Retain all initial failure context and baseline. No07commit/indexempty.
 
-IDEUX-06 Terra High retry2 failure — 2026-09-16
-HEAD6db69ec39e4ecbe7dca500aff04187d7f82a2828 unchanged; worker /root/ideux06_terra_retry2 exited, no task check active. Three completed Terra failures,zeroSol; next SolHighinitial.
-Changed only FindingsPresentation.kt: focus request launches inside target lazy row after attachment; outer effect only clears disappeared key. Exact focused command above compiled and ran69tests,68pass: ResultWorkspaceLayout4/4 including Backfocus/scroll, no FocusRequesterwarning; FindingsPresentation2/2,ModelResultContent8/8,DesktopVisualLayout54/55. Failure gutterHandlesRetainVisibleKeyboardFocusAndCommitResizing at DesktopVisualLayoutTest.kt875 expectedcommits.size3 observed2 afterpointerdrag. TestXMLonefailure,noerrors. Determine candidate relationship vs preexisting pointer-test instability; do not assume or weaken meaningful resizeassertion. No postverdictrepair/fullgate/renderacceptance; diffcheckpassed, indexempty. Fourcarddeltafilesremain. Requiredresultrendersregenerated; coordinator earlier inspected Performance1440wide,Bugs1280/150%,Security800detail forhierarchy/readability/severityselection, but overallacceptancepending.
-Next: inspect gutter production/fixture pointer synchronization and demonstrate valid resizedcallback behavior. TargetDesktopVisualLayoutTestalreadyauthorized. Preserve workingBackfocusfix, allpriorcandidate/prerequisite baseline. Remainingexactfocused,fulltest spotlessCheckdetekt,diff and actualrenderacceptance. OriginalappPID62979staysopen. NextcandidateSolHighinitial; no06commit.
+IDEUX-07 Terra High retry2 failure — 2026-09-16
+HEADf06d5db unchanged; completed3Terra/0Sol failures, nextSolHighinitial. Exactfocused PASS76tests (Browser3/Workspace7/Keyboard11/Visual55),0fail/errors/skips, daemon Build4b9cb8df BUILD SUCCESSFUL34s at21:54:53. No deadlock. Preliminary diagnostic10tests initially9pass/1offsetfailure; observing isScrollInProgress established old offset9 was interim and16 settled. Same scoped LazyListState now retained instead of duplicated index/offset; bounded observable settle before exactoffset capture, testpasses. Keyboard scrollToItem replaces cancellation-prone animate; no-match/Clear/offscreenvisibleSpace and zeroopenAnalysis assertionspass. Browseridentity added to selection effect, revision/null-page resets covered. Direct composed equal-row scope swap nottested; coordinator accepted code+unit coverage for this narrow effect key correction.
+Full ./scripts/desktop-gradle.sh test spotlessCheck detekt exit1 after23s atspotlessKotlinCheck: unformatted AnalysisResultsPane,FindingsPresentation,ResultBrowserState,ResultWorkspaceLayoutTest,DesktopVisualLayoutTest; testscompleted beforefailure; Detektunrun. No post-verdict edits/diffcheck. Apply scopedformatting BEFOREnextcandidateverification, then rerunexactfocused/fullgate/diff. Do not format unrelated dirty baseline.
+Reviewed production images desktop/build/reports/ide-ux/filters/results-bugs-1440-1.0.png,results-bugs-800-1.0.png,results-performance-1440-1.0.png,rounded-security-1280-600-1.5.png: localfilters,compactlist,Impact,2loaded·1reported legible. Remaining required unknown/critical/no-match/short150% evidence needs review, no completeacceptance yet. Preserve existing app62979/baseline; no07commit. All prior packets remain applicable. Coordinator selectivecommit assembly scratch notaccepted/tested; reset/rebuild aftercandidateaccepted.
 
-IDEUX-06 Sol High initial failure — 2026-09-16
-HEAD6db69ec unchanged;worker /root/ideux06_sol_initial/checkexited. ThreeTerrafailures,oneSol;nextSolretry1/2.
-SolchangedDesktopVisualLayoutTest.dragDescription to renderafterPress/eachMove beforeRelease, permittingproductiondeferredresizecommit without changingdivider. Focused69/69passed;fulltestspotlessCheckdetektpassed(0Detektsmells),diffpassed. These pre-newtestresultsarenotfinalcandidateacceptance.
-Reviewinspected results-performance-detail-1440-1.0,results-bugs-detail-1280-1.5,results-security-detail-800-1.0,results-performance-999-1.0,results-bugs-detail-999-1.0,rounded-results-long-error-800-150,results-stale-error-800-1.25,rounded-security-1280-600-1.5 underdesktop/build/reports/ide-ux/results, goodhierarchy/responsiveness. Added compactDetailKeepsTheCompleteTitlePathAndModelProse to ResultWorkspaceLayoutTest for missing longfullcontentproof.
-FinalEXACTfocusedcommandaboveexit1:70tests69pass1failure0errors. Findings2/2,Model8/8,Visual55/55,Result4/5. Newtestfails atResultWorkspaceLayoutTest.kt159: IllegalStateException No clickable control 'Inspect Reject credential-like assignments when a generated configuration value crosses the trusted input boundary'. Syntheticfindinglacks category/projectId/projectRevision; page.semantic filtersitout. Thisisfixtureidentitysetup,notdemonstratedproductionbug. Populatefindingidentity/categorymatchingrun/project(orcorrectlypassfixturefindings),retainmeaningfulassertions,rerunexactfocused/fullgate/diffandinspectlongcontentrender. Fullcontentimagenotgenerated.
-No postverdictrepair,staging,commit/adminedits;diffcheckpasses. Actualcarddelta4filesremain; Solnarrowdelta2testfiles. AppPID62979alive;residentsonly. CarrydragDescriptionfixwithnative/fullframefixtureuntil13;Resulttestandruntimecommit06. Remainingfinalchecks/renderacceptance/isolatedcommit. NextfailureSolretry2/2.
+IDEUX-07 Sol High initial failure — 2026-09-16
+HEADf06d5db unchanged. ThreeTerra/oneSol failures; nextSolretry1/2. Scopedformat only five violationtargets, unrelatedKotlinhashesunchanged. Exactfocusedexit0 BUILD SUCCESSFUL36s76/76passed. FulltestspotlessCheckdetekt exit1 after23s:511/511tests(52suites)pass,Spotlesspass,Detekt oneLongParameterList DesktopShell.kt921 DesktopCanvas13parameters vs12threshold (63files). No post-verdictcorrection. Suggested boundedfix useexistingDesktopShellState instead separateappState/layout/editor/context andderiveinside, retain shell-ownedResultBrowserStore; no suppression/thresholdchange. Diffcheckpass; no finalrenderacceptance/stage/commit. AppPID62979absent onworkerfinalread-onlycheck, workerdenieskillingit; residentdaemonsuntouched. Do not assume applicationrunning now. Preserve baseline. Requirednext exactfocused/fullgate/remainingactualrenderacceptance; preserveallpriorfailurepackets.
 
-IDEUX-06 Sol High retry1 failure — 2026-09-16
-HEAD6db69ec unchanged;worker /root/ideux06_sol_retry1/checkexited. ThreeTerra+twoSolcompletedfailures;nextSolretry2/2(final).
-Changed only3fixtureidentityassignments in ResultWorkspaceLayoutTest longcontentcase: category=original.category,projectId=original.project.projectId,projectRevision=original.run.identity.projectRevision. Exactfocusedpassed70/70;generated desktop/build/reports/ide-ux/results/rounded-results-full-content-800-150.png100202bytes (notyetinspected).
-Requiredfull ./scripts/desktop-gradle.sh test spotlessCheck detekt exit1:506tests505pass1failure. DesktopVisualLayoutTest.paletteModeControlsRetainTheQueryAndKeepSearchFocusedWithBoundedLongResults:1043 expected lastdisplayedfilerow fullyvisible/clickableafterkeyboardwrap; observed Rect.fromLTRB(0,0,0,0) in800x650 for File internal/service/very-long-file-name-2.go, selected. Sametestpassedfocusedearlierinthisattempt;suggestsorderdependentoffscreenfixturetiming,notyetproven. Inspect boundedreadiness inpriorIDEUX03palettefix;do notweakenvisibility/clickassertion orblindlyrerun. DesktopVisualLayoutTestauthorizedtarget.
-FulltaskgraphstoppedattestsoSpotless/Detektnotrunforfinalcandidate. No postfailurefix/diffcheck/renderinspection;earlierfullpassbelongsprenewtestinputs. Actualcarddelta4filesunchanged;appPID62979alive,indexempty. Remainingfinalfocused/fullquality/diff/renderacceptance+isolatedcommit. Failureofnextcandidatepausesscheduler,retainswork,reportsexactfailure;no07dispatch.
-
-IDEUX-06 Sol High retry2 final failure — 2026-09-16
-HEAD6db69ec39e4ecbe7dca500aff04187d7f82a2828 unchanged; worker /root/ideux06_sol_retry2 and focused check exited. Three Terra and three Sol candidate failures: initial+two retries on each tier exhausted. No next permitted automatic attempt; IDEUX-07 not dispatched.
-Narrow repair: added existing bounded awaitVisibleDescription after keyboard Up wrap and selected-key assertion in paletteModeControlsRetainTheQueryAndKeepSearchFocusedWithBoundedLongResults, before real visible pointer click. Palette mode-controls and paletteLongResults tests both passed.
-Exact focused command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.FindingsPresentationTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.ModelResultContentTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/results"
-Exit1 after compilation:70tests69pass1fail0errors. DesktopVisualLayoutTest55tests1failure: gutterHandlesRetainVisibleKeyboardFocusAndCommitResizing:875 expected3resizecommitcallbacks afterpointerdrag, observed2. Same intermittent/deferred pointer-release failure as Terraretry2 despite retained Solinitial render-after-Press/Move fixture correction. Do not call that fix accepted or silently rerun. Full test spotlessCheck detekt notrun forfinalcandidate; finalSpotless/Detekt/overallacceptance unavailable. git diff --check passed read-only afterfailure.
-Coordinator inspected regenerated rounded-results-full-content-800-150.png: fulltitle/path/prosewrapandactionsreachable. Other earlierrepresentative3pagevisualreview retained; visualevidence doesnotoverridefailedgate orprove native/packageacceptance. Actualcarddelta4files retained (FindingsPresentation.kt,FindingsPresentationTest.kt,ResultWorkspaceLayoutTest.kt,DesktopVisualLayoutTest.kt); priorbaselineuntouched. Actualindexempty,no06commit; originalappPID62979alive. Externalalternateindex/export scratch is uncommitted/unverified and must be rebuilt from currentcandidate if laterauthorized.
-Automation mini-orca-ux-implementation PAUSED throughapp automation_update; resultconfirmedPAUSED. Preservedname,prompt,fixedclock:09/:29/:49 schedule andtargetthread. LastacceptedverifiedcommitIDEUX05 6db69ec;01–05accepted,06incomplete,07–13pending. Resume requires new user direction for exhaustedattemptpolicy, not another scheduled wake. Retain failurecontext and carrynativefixture/dragDescription compatibility workuntil13.
-
-## Astra repair candidate evidence
-
-The user authorized Astra light (`gpt-6-astra`, `low`) after the six preserved
-Terra/Sol failures. The repair diagnosed an offscreen fixture synchronization race:
-divider save is a LaunchedEffect and three renders do not establish callback
-completion. Diagnostic stress of 420 releases across20independentfixtures captured
-one needing another render. A bounded2second observable completion wait retains
-exact callback count/current-size checks;20 alternating repeated drags per
-orientation now verify one save per release. No production behavior was changed
-by the repair, no sleeps or weakened assertions retained.
-
-Exact focused gate70/70; full working-tree test/Spotless/Detekt gate506/506 passed;
-gitdiffcheck and representative production render review passed. Originalapp62979
-alive. The coordinator's nine-file selective commit includes necessary prior
-bounded-result/detail/divider-style prerequisites with attribution; remaining
-native/full-frame work stays untouched. Isolated export gate running in
-`/var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux06-astra-export-hxja4qeg`.
-No task acceptance/commit until that gate and final staged review pass.
-
-Isolated proposed commit gate completed exit0:485tests,zero failures/errors/skips,
-Spotless and Detekt zero smells. Candidate accepted; commit pending.
+IDEUX-07 Sol High retry1 visual failure — 2026-09-16
+HEADf06d5db unchanged;3Terra/2Sol failures, nextFINALSolretry2/2. DesktopCanvas uses existingDesktopShellState andderivesapp/layout/editor/context, preserves scopedbrowserstore. Addedproduction800x650@150%Critical/Unknown/no-match/Clearfixture. Focusedexit0 33s77/77;fulltestspotlessCheckdetekt exit0 21s512/512,Spotlesspass,Detekt63files0smells;diffpass. Actualimage desktop/build/reports/ide-ux/filters/results-filters-critical-unknown-800-150.png: Unknownchip correctlyUnknown1 but Finding2row rawblankseverity yields emptybadge. This violates honestunknownrepresentation. Stopatvisualverdict;nofurtheredits/commit. Fixexistingrowbadgelabel viaexistingfacet/presentationnormalization,assertvisibleUnknownrowbadge,scopedformatbeforeexact/fullgate/diff/renderreview. OthernomatchClear/Impact/countlag/widecompactshort150reviewpassed. Preserveallpriorcandidate/baseline. NextfailureexhaustsSol,pauseautomation andreport,no08dispatch.

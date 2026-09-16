@@ -501,8 +501,9 @@ class DesktopVisualLayoutTest {
                   assertFalse(fixture.hasText("AI suspicion"))
                   assertFalse(fixture.hasText("Performance review"))
                   assertFalse(fixture.hasText("Not measured"))
-                  assertFalse(
-                      fixture.hasEditableText(), "Result pages must show the unfiltered list")
+                  assertTrue(fixture.hasDescription("Filter results"))
+                  assertTrue(
+                      fixture.hasText(if (category == "performance") "Impact" else "Severity"))
                   assertFalse(fixture.hasText("Start analysis"))
                   assertFalse(fixture.hasText("Review"))
                   fixture.clickDescription("Inspect $title")
@@ -2358,7 +2359,8 @@ class DesktopVisualLayoutTest {
           fixture.render("findings-tools-expanded-480-1.3")
           assertTrue(fixture.stateDescription("Verified checks") == "Expanded")
           assertTrue(fixture.hasText("Trust local execution & run scan"))
-          assertFalse(fixture.hasEditableText())
+          assertTrue(fixture.hasDescription("Filter results"))
+          assertTrue(fixture.hasEditableText(withinDescription = "Filter results"))
           assertTrue(fixture.hasScrollableContent())
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
@@ -2615,8 +2617,20 @@ internal class ComposeVisualFixture(
 
   fun textCount(label: String): Int = textNodes(label).size
 
-  fun hasEditableText(): Boolean =
-      nodes().any { it.config.getOrNull(SemanticsActions.SetText) != null }
+  fun hasEditableText(withinDescription: String? = null, withinTag: String? = null): Boolean =
+      nodes().any { node ->
+        node.config.getOrNull(SemanticsActions.SetText) != null &&
+            (withinDescription == null ||
+                generateSequence(node) { it.parent }
+                    .any {
+                      it.config
+                          .getOrNull(SemanticsProperties.ContentDescription)
+                          ?.contains(withinDescription) == true
+                    }) &&
+            (withinTag == null ||
+                generateSequence(node) { it.parent }
+                    .any { it.config.getOrNull(SemanticsProperties.TestTag) == withinTag })
+      }
 
   fun hasDescription(label: String): Boolean =
       nodes().any {

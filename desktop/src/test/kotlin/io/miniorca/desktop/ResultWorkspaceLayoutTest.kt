@@ -4,10 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Text
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,12 +48,53 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
+  fun criticalUnknownAndNoMatchFiltersStayVisibleAtCompactLargeTextScale() {
+    val page = resultPageFixture("bugs")
+    val rows =
+        listOf(
+            row(1).copy(severity = "critical"),
+            row(2).copy(severity = ""),
+            row(3).copy(severity = "high"),
+        )
+    val browser = newResultBrowserState(page)
+    var openedAnalysis = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisResultsPane(
+              page = page,
+              rows = rows,
+              browser = browser,
+              openAnalysis = { openedAnalysis++ },
+          ) { key ->
+            Text("Evidence for $key")
+          }
+        }
+        .use { fixture ->
+          fixture.render("results-filters-critical-unknown-800-150")
+          fixture.assertTextFits("Critical 1")
+          fixture.assertTextFits("Unknown 1")
+          fixture.assertTextFits("High 1")
+          fixture.assertTextFits("Unknown")
+          assertEquals(1, fixture.textCount("Unknown"))
+          fixture.clickDescription("Filter results")
+          fixture.setFocusedText("no loaded finding")
+          fixture.render("results-filters-no-match-800-150")
+          fixture.assertTextFits("No matching results. Clear filters to view loaded results.")
+          fixture.assertTextFits("Clear filters")
+          fixture.clickDescription("Clear filters")
+          fixture.render("results-filters-cleared-800-150")
+          assertFalse(fixture.hasText("No matching results. Clear filters to view loaded results."))
+          assertEquals(0, openedAnalysis)
+        }
+  }
+
+  @Test
   fun selectingAnotherFindingStartsItsEvidenceAtTheTop() {
     val rows = (1..2).map { row(it) }
-    var selected by mutableStateOf<String?>(rows.first().key)
+    val browser =
+        newResultBrowserState(resultPageFixture("bugs")).also { it.selectedKey = rows.first().key }
     ComposeVisualFixture(1000, 600) {
           ResultListDetail(
-              rows, selected, { selected = it }, "No findings", Modifier.fillMaxSize()) {
+              rows, browser, { browser.selectedKey = it }, "No findings", Modifier.fillMaxSize()) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                   Text("Evidence for $it")
                   repeat(30) { line -> Text("Evidence paragraph $line for $it") }
@@ -74,10 +114,10 @@ class ResultWorkspaceLayoutTest {
   @Test
   fun backToResultsRetainsThePositionOfTheInspectedFinding() {
     val rows = (1..30).map { row(it) }
-    var selected by mutableStateOf<String?>(null)
+    val browser = newResultBrowserState(resultPageFixture("bugs"))
     ComposeVisualFixture(800, 650) {
           ResultListDetail(
-              rows, selected, { selected = it }, "No findings", Modifier.fillMaxSize()) {
+              rows, browser, { browser.selectedKey = it }, "No findings", Modifier.fillMaxSize()) {
                 Text("Evidence for $it")
               }
         }
@@ -90,6 +130,91 @@ class ResultWorkspaceLayoutTest {
           fixture.render()
           fixture.assertTextFits("Finding 20")
           assertTrue(fixture.isDescriptionFocused("Inspect Finding 20"))
+        }
+  }
+
+  @Test
+  fun filteringClearsCompactDetailAndArrowKeysKeepLongListsNavigable() {
+    val page = resultPageFixture("bugs")
+    val rows = (1..320).map { row(it) }
+    val browser = newResultBrowserState(page)
+    var openedAnalysis = 0
+    ComposeVisualFixture(800, 650) {
+          AnalysisResultsPane(
+              page = page,
+              rows = rows,
+              browser = browser,
+              openAnalysis = { openedAnalysis++ },
+          ) { key ->
+            Text("Evidence for $key")
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Finding 20", "result-list")
+          fixture.clickDescription("Inspect Finding 20")
+          fixture.render()
+          assertTrue(fixture.hasText("Evidence for finding-20"))
+          fixture.clickDescription("Filter results")
+          fixture.setFocusedText("no loaded finding")
+          fixture.render()
+          assertFalse(fixture.hasText("Evidence for finding-20"))
+          assertTrue(fixture.hasText("No matching results. Clear filters to view loaded results."))
+          fixture.clickDescription("Clear filters")
+          fixture.render()
+          assertFalse(fixture.hasText("No matching results. Clear filters to view loaded results."))
+          fixture.revealText("Finding 1", "result-list")
+          assertTrue(fixture.requestDescriptionFocus("Inspect Finding 1"))
+          assertTrue(fixture.pressKey(Key.DirectionUp))
+          fixture.awaitVisibleDescription("Inspect Finding 320")
+          assertTrue(fixture.isDescriptionFocused("Inspect Finding 320"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertTrue(fixture.hasText("Evidence for finding-320"))
+          assertEquals(0, openedAnalysis)
+        }
+  }
+
+  @Test
+  fun leavingAndReturningKeepsSelectedRowAndExactLazyListPosition() {
+    val page = resultPageFixture("bugs")
+    val rows = (1..320).map { row(it) }
+    val browser =
+        newResultBrowserState(page).also {
+          it.filter = ResultBrowserFilter.Value("high")
+          it.query = "Finding"
+          it.selectedKey = "finding-20"
+        }
+    val showingResults = mutableStateOf(true)
+    ComposeVisualFixture(1000, 650) {
+          if (showingResults.value)
+              ResultListDetail(
+                  rows,
+                  browser,
+                  { browser.selectedKey = it },
+                  "No findings",
+                  Modifier.fillMaxSize()) {
+                    Text("Evidence for $it")
+                  }
+          else Text("Other workspace")
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.scrollBy(563f, "result-list")
+          awaitResultListSettled(fixture, browser)
+          val retainedIndex = browser.listState.firstVisibleItemIndex
+          val retainedOffset = browser.listState.firstVisibleItemScrollOffset
+          assertTrue(retainedIndex > 0)
+          assertTrue(retainedOffset > 0)
+          showingResults.value = false
+          fixture.render()
+          showingResults.value = true
+          fixture.render()
+          assertEquals(ResultBrowserFilter.Value("high"), browser.filter)
+          assertEquals("Finding", browser.query)
+          assertEquals("finding-20", browser.selectedKey)
+          assertEquals(retainedIndex, browser.listState.firstVisibleItemIndex)
+          assertEquals(retainedOffset, browser.listState.firstVisibleItemScrollOffset)
         }
   }
 
@@ -176,4 +301,18 @@ class ResultWorkspaceLayoutTest {
           "high",
           "",
           "")
+
+  private fun awaitResultListSettled(
+      fixture: ComposeVisualFixture,
+      browser: ResultBrowserState,
+  ) {
+    val deadline = System.nanoTime() + 2_000_000_000L
+    fixture.render()
+    while (browser.listState.isScrollInProgress && System.nanoTime() < deadline) {
+      fixture.render()
+      Thread.yield()
+    }
+    assertFalse(browser.listState.isScrollInProgress, "Timed out waiting for result list scroll")
+    fixture.render()
+  }
 }

@@ -6,10 +6,10 @@ workspaces, preserving Mini-Orca's colors, icon-only left rail and guarded editi
 
 ## Scope and status
 
-**IDEUX-01–13: approved for scheduled implementation, 6/13 accepted; repair passed.**
+**IDEUX-01–13: approved for scheduled implementation, 6/13 accepted.**
 IDEUX-06 passed the user-authorized Astra light repair after Terra/Sol attempts
-were exhausted. Its accepted changes are being committed before immediate
-continuation under the original Terra/Sol policy. On
+were exhausted. Commit `f06d5db` is verified; execution continues immediately
+under the original Terra/Sol policy. On
 2026-09-16 the user authorized Terra High implementation, two Terra retries, then
 Sol High with the same initial-attempt-plus-two-retries policy. Every retry must
 receive the task and concrete failure context. Commit each task locally after its
@@ -535,7 +535,7 @@ is verified in the handoff before immediately dispatching IDEUX-06 at Terra High
 
 ## Task IDEUX-06 — Simplify the shared finding list and detail layout
 
-**Status:** [x] Accepted — user-authorized Astra light repair; commit pending.
+**Status:** [x] Accepted — Astra light repair, committed and verified as `f06d5db`.
 
 **Target files**
 
@@ -630,7 +630,7 @@ Commit hash is verified in the next handoff before IDEUX-07 starts at Terra High
 
 ## Task IDEUX-07 — Add local filters and stable result navigation
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — 2026-09-16; Sol High retry2/2.
 
 **Target files**
 
@@ -643,6 +643,8 @@ Commit hash is verified in the next handoff before IDEUX-07 starts at Terra High
 - `desktop/src/main/kotlin/io/miniorca/desktop/SecurityWorkspace.kt` — pass browser state with severity labels.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ResultBrowserStateTest.kt` — new filtering, identity and selection transitions.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — real filter/back/keyboard interactions.
+
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — update prior unfiltered-list/manual-first-selection expectations to the new filter/navigation contract while retaining real interaction and no-external-action assertions.
 
 **Inputs / dependencies**
 
@@ -671,6 +673,28 @@ Commit hash is verified in the next handoff before IDEUX-07 starts at Terra High
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ResultBrowserStateTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/filters"
 ```
+
+**Acceptance receipt — IDEUX-07**
+
+Local facets and title/path filtering now retain selection and settled list position
+within the current project/run/category. Critical and Unknown remain explicit;
+Performance says Impact; counts distinguish loaded from reported rows. Keyboard
+navigation reveals offscreen results and no-match has Clear filters. Shell state
+uses its existing aggregate to stay within the maintained parameter limit.
+
+Final focused verification: 77/77. Full desktop gate: 512/512, Spotless and Detekt
+passed. Isolated proposed commit: 491/491 plus Spotless/Detekt passed. Diff checks
+passed. The coordinator reviewed Critical/Unknown and no-match production renders;
+worker reviewed Impact, count lag, wide/compact and short 150% views. Native/package
+acceptance remains task13; direct composed equal-row scope replacement was reviewed
+through identity/selection code and unit coverage, not a separate composed test.
+
+Three Terra and two Sol failures are retained in docs/errors.log. Final Sol repair
+normalizes blank severity consistently. Commit extraction includes the preexisting
+scoped hasEditableText fixture helper required by the new filter-field assertion;
+all other unrelated dirty baseline remains outside the commit. An initial export
+compile failure identified that missing helper and was corrected in the extraction,
+without changing the worker candidate or consuming a retry. Hash verified in next handoff.
 
 ## Task IDEUX-08 — Make empty results and coverage truthful
 
