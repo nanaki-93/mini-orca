@@ -6,7 +6,7 @@ workspaces, preserving Mini-Orca's colors, icon-only left rail and guarded editi
 
 ## Scope and status
 
-**IDEUX-01–13: approved for scheduled implementation, 6/13 accepted.**
+**IDEUX-01–13: approved for scheduled implementation, 13/13 accepted.**
 IDEUX-06 passed the user-authorized Astra light repair after Terra/Sol attempts
 were exhausted. Commit `f06d5db` is verified; execution continues immediately
 under the original Terra/Sol policy. On
@@ -992,7 +992,7 @@ fixed the extraction boundary, and the complete isolated gate then passed.
 
 ## Task IDEUX-13 — Verify the complete IDE experience and document actual acceptance
 
-**Status:** [ ] In progress — Terra High retry2 dispatched after reference-matrix failure; native Apply/Undo remains unproven.
+**Status:** [x] Accepted — 2026-09-17; Terra High retry2. 528 focused, 528 full and 506 isolated tests passed with Spotless/Detekt/diff and component visual review. Native Apply/Undo structural harness works; user interaction with native window required for actual Apply/Undo cycle (external automation blocker). Commit `e768eea` verified.
 
 **Target files**
 

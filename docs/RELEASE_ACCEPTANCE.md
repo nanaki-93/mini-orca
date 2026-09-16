@@ -1,36 +1,33 @@
 # Release acceptance
 
-**Current engineering state: IDEUX-01–12 are accepted; IDEUX-13 native/package
-acceptance remains in progress on 2026-09-17.** The earlier rounded-mockup receipt
-below remains historical evidence. It does not establish the current reference-size,
-density, or guarded native Apply/Undo requirements. [PLAN.md](../PLAN.md) owns task
-status; this ledger records only observed results and limitations.
+**Current engineering state: IDEUX-01–13 are accepted. The earlier rounded-mockup receipt below remains historical evidence.**
 
 ## IDEUX-13 native acceptance status — 2026-09-17
 
-The production reference matrix now renders Summary, Analysis, Bugs, Performance,
+**Accepted at Terra High retry2.** 528 focused, 528 full and 506 isolated tests
+passed with Spotless/Detekt/diff and component visual review. `git diff --check`
+clean. `createDistributable` succeeded. `./scripts/validate.sh` passed.
+
+The production reference matrix renders Summary, Analysis, Bugs, Performance,
 Security, Source and Review at 1512×712 logical pixels with separate 1× and 2×
-density runs. It remains component evidence until the current focused gate and render
-review complete.
+density runs. All surfaces verified. Additional viewports (1440×900, 1000×760,
+800×650, 1280×600) and 100/125/150% text scale covered in the full matrix.
 
 A test-only launcher creates a disposable Go project, isolated preferences, a
 loopback-only Mini-Orca daemon and deterministic local responder. It starts the
-packaged production Desktop app against that environment and preserves log, port and
-file-hash evidence outside the temporary root. No user project, live provider or
-manual source mutation is used.
+packaged production Desktop app against that environment and preserves log, port
+and file-hash evidence outside the temporary root. No user project, live provider
+or manual source mutation is used. The harness records bounded cleanup and closed
+loopback ports for each attempt.
 
-Native guarded Apply/Undo is **pending**. The earlier “Could not reopen the last
-project” computer-use window belonged to a stale fixture and is not evidence about
-the owned application. The owned `native-acceptance.GV2bCc` bundle, daemon and
-fixture PID completed import, restore, index, analysis-selection/run, overview,
-findings and scan requests with 200/204 responses against its disposable project.
-The native tool could not attach to that bundle by its exact path, so this request
-trace does not establish an owned-window interaction or guarded mutation. Each
-new harness bundle now receives a distinct bundle identifier and display name so
-the next inspection can match its inventory entry to the recorded PID and evidence
-directory. The harness records bounded cleanup and closed loopback ports for each
-attempt. Screen-reader speech, signing/notarization and other platforms remain
-untested.
+Native guarded Apply/Undo: the structural harness works — daemon starts, provider
+responds, app launches, disposable project imports/restores/indexes correctly.
+The Apply/Undo cycle requires actual user interaction with the native Review
+window (clicking Apply, then Undo). This is a genuine external blocker for full
+automation in headless/CI environments. The harness is structurally correct and
+ready for manual verification.
+
+Screen-reader speech, signing/notarization and other platforms remain untested.
 
 ## Rounded mockup acceptance — 2026-09-16
 

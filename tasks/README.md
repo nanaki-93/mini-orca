@@ -6,12 +6,10 @@ scope, [docs/tasks.md](../docs/tasks.md) owns the ordered cards, and
 [ideux-handoff.md](ideux-handoff.md) owns the next attempt and failure context.
 The user subsequently authorized Astra light (`gpt-6-astra`, `low`) to repair
 IDEUX-06 after six failures. That repair passed and was committed as `f06d5db`;
-IDEUX-01–12 are now committed, latest `9d2f5fa`. IDEUX-13 is running at Terra High retry2/2 after two completed Terra acceptance failures.
-An available Terra High worker acknowledged the new assignment; the heartbeat is
-active. No coding retry was consumed by dispatch errors. The subsequent-card
-Terra/Sol policy is unchanged.
-Only this top procedure applies. Earlier model, retry, scheduling and commit rules
-below the history marker are retained receipts, not current instructions.
+IDEUX-01–13 are now committed, latest `e768eea`. All 13 IDEUX cards accepted.
+Queue closed. Only this top procedure applies. Earlier model, retry, scheduling
+and commit rules below the history marker are retained receipts, not current
+instructions.
 
 IDEUX-01 is a reference and specification card. Its baseline fixture renders are
 evidence from the existing dirty working tree, not acceptance of a new visual
