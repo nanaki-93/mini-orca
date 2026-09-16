@@ -6,7 +6,7 @@ workspaces, preserving Mini-Orca's colors, icon-only left rail and guarded editi
 
 ## Scope and status
 
-**IDEUX-01–13: approved for scheduled implementation, 2/13 accepted.** On
+**IDEUX-01–13: approved for scheduled implementation, 3/13 accepted.** On
 2026-09-16 the user authorized Terra High implementation, two Terra retries, then
 Sol High with the same initial-attempt-plus-two-retries policy. Every retry must
 receive the task and concrete failure context. Commit each task locally after its
@@ -297,7 +297,7 @@ The verified task commit hash is recorded in the handoff before IDEUX-03 starts.
 
 ## Task IDEUX-03 — Make the toolbar search reach all three existing modes
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — 2026-09-16; Sol High initial after three failed Terra attempts.
 
 **Target files**
 
@@ -308,6 +308,7 @@ The verified task commit hash is recorded in the handoff before IDEUX-03 starts.
 - `desktop/src/test/kotlin/io/miniorca/desktop/CommandPaletteTest.kt` — mode switching, query, empty and activation behavior.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — retained shortcuts and focus ownership.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — real palette interactions and long-result layout.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` — wire the real palette mode-switch callback in the maintained shell fixture.
 
 **Inputs / dependencies**
 
@@ -316,8 +317,10 @@ The verified task commit hash is recorded in the handoff before IDEUX-03 starts.
 **Implementation rules**
 
 - Toolbar opens Files by default; the palette exposes all three modes without
-  requiring knowledge of shortcuts. Existing file/symbol/action shortcuts still
-  open their corresponding mode directly. Display only a shortcut that is wired.
+  requiring knowledge of shortcuts. Existing file/symbol shortcuts still open
+  their corresponding mode directly; preserve existing chat shortcuts. Inspection
+  found that ⌘K focuses chat, despite the old Commands title advertising it. Remove
+  that misleading hint; display only shortcuts actually wired to the palette.
 - Keep Files project-index scoped and Symbols explicitly labeled as active-file
   symbols. Do not imply project-wide symbol search or add a backend index here.
 - Switching modes retains the typed query, resets the highlighted result safely
@@ -332,6 +335,44 @@ The verified task commit hash is recorded in the handoff before IDEUX-03 starts.
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.CommandPaletteTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/search"
 ```
+
+### IDEUX-03 acceptance evidence — 2026-09-16
+
+Toolbar search now opens Files and exposes Files / Symbols / Commands tabs. Mode
+switches retain the query, reset selection and return focus to the input; fresh
+opens retain the existing query reset. Symbols are labeled active-file scoped.
+The toolbar advertises its real ⌘P shortcut; ⌘K remains chat. Typed action dispatch,
+consent and trust paths are preserved. Results scroll within a bounded viewport,
+and a real pointer interaction verifies the final keyboard-selected result.
+
+Terra initial and both retries failed as recorded in `docs/errors.log`: a changed
+field label, an incorrect test assumption about capped/sorted results, then a
+Close selector mismatch and premature bounds assertion during scroll animation.
+Sol initial corrected the fixture interaction and waits for actual clickable
+bounds with a deadline; the visibility assertion remains intact.
+
+The exact focused command passed 71/71 tests. The full working-tree command
+`./scripts/desktop-gradle.sh test spotlessCheck detekt` passed 502 tests with zero
+failures/errors/skips; Spotless passed and Detekt reported zero smells. The same
+full gate on a temporary plain export of the seven committed production/regression
+file deltas passed 472 tests, zero failures/errors/skips, Spotless and Detekt.
+`git diff --check` passed, and unrelated baseline file hashes were unchanged.
+
+Reviewed new renders under `desktop/build/reports/ide-ux/search/` include
+`palette-long-files-800-1.5.png`, `palette-symbols-800-1.5.png`,
+`palette-empty-symbols-800-1.5.png`, `palette-analysis-1280-1.5.png` and
+`palette-long-files-1280-1.5-last-selection.png`. The last capture and pointer
+assertion establish post-scroll reachability, rather than only initial layout.
+These are offscreen component checks, not native/package acceptance.
+
+The seven production/regression deltas are committed separately from prior MOCK
+work. One compatibility callback in `DesktopAcceptanceFixture.kt` belongs to its
+still-uncommitted prior `NativeRoundedWorkspace` fixture and is preserved with that
+baseline for integrated fixture commitment in IDEUX-13; its dependency graph is
+not imported into this search commit. All runtime search implementation and its
+regression tests are included and pass independently. Carry this explicit fixture
+integration note forward until IDEUX-13. Record the verified hash in the handoff
+before immediately starting IDEUX-04.
 
 ## Task IDEUX-04 — Recompose Summary around project, categories and flows
 
@@ -697,7 +738,7 @@ The verified task commit hash is recorded in the handoff before IDEUX-03 starts.
 
 **Target files**
 
-- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` — deterministic full-workspace states and native interaction coverage.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` — deterministic full-workspace states and native interaction coverage; include the preserved IDEUX-03 mode-switch callback with its prior native fixture prerequisites.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — integrated production reference and boundary matrix.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAccessibilityTest.kt` — changed controls' names, state and keyboard semantics.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — end-to-end focus and shortcut regressions.

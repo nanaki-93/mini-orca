@@ -273,6 +273,10 @@ internal fun MiniOrcaApp(
     showPalette = true
   }
 
+  fun switchPaletteMode(mode: PaletteMode) {
+    paletteMode = mode
+  }
+
   val explorer: @Composable (Modifier, () -> Unit) -> Unit = { modifier, onSelected ->
     ExplorerPane(
         state =
@@ -590,6 +594,7 @@ internal fun MiniOrcaApp(
               updateQuery = { paletteQuery = it },
               dismiss = { showPalette = false },
               open = ::openPalette,
+              switchMode = ::switchPaletteMode,
               selectFile = {
                 showPalette = false
                 clearComposerInput()

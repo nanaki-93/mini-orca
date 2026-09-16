@@ -1,10 +1,17 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,6 +31,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -53,9 +61,23 @@ internal sealed interface CommandSearchActivation {
 
 internal fun commandSearchTitle(mode: PaletteMode): String =
     when (mode) {
-      PaletteMode.Files -> "Go to file · ⌘P"
-      PaletteMode.Symbols -> "Go to symbol · ⌘⇧O"
-      PaletteMode.Actions -> "Focused action · ⌘K"
+      PaletteMode.Files -> "Files · ⌘P"
+      PaletteMode.Symbols -> "Symbols · active file · ⌘⇧O"
+      PaletteMode.Actions -> "Commands"
+    }
+
+internal fun commandSearchFieldLabel(mode: PaletteMode): String =
+    when (mode) {
+      PaletteMode.Files -> "Filter files"
+      PaletteMode.Symbols -> "Filter active-file symbols"
+      PaletteMode.Actions -> "Filter commands"
+    }
+
+internal fun commandSearchModeLabel(mode: PaletteMode): String =
+    when (mode) {
+      PaletteMode.Files -> "Files"
+      PaletteMode.Symbols -> "Symbols"
+      PaletteMode.Actions -> "Commands"
     }
 
 internal fun commandSearchHint(mode: PaletteMode): String = "↑↓ select · Enter activate · Esc close"
@@ -143,6 +165,7 @@ internal fun CommandPaletteDialog(
     mode: PaletteMode,
     query: String,
     onQuery: (String) -> Unit,
+    onMode: (PaletteMode) -> Unit,
     files: List<IndexedFile>,
     symbols: List<SymbolInfo>,
     hasActiveFile: Boolean,
@@ -152,7 +175,9 @@ internal fun CommandPaletteDialog(
     onDismiss: () -> Unit,
 ) {
   val results = commandSearchResults(mode, query, files, symbols, hasActiveFile)
-  val filterFocusRequester = FocusRequester()
+  val filterFocusRequester = remember { FocusRequester() }
+  val resultScroll = rememberScrollState()
+  val resultRequesters = remember(results) { results.map { BringIntoViewRequester() } }
   var selectedIndex by
       remember(mode, query, results.map(CommandSearchResult::label)) {
         mutableStateOf(if (results.isEmpty()) -1 else 0)
@@ -188,10 +213,30 @@ internal fun CommandPaletteDialog(
       title = { Text(commandSearchTitle(mode)) },
       content = {
         Column {
+          Row(Modifier.fillMaxWidth()) {
+            PaletteMode.entries.forEach { candidate ->
+              ChromeTab(
+                  onClick = {
+                    onMode(candidate)
+                    filterFocusRequester.requestFocus()
+                  },
+                  selected = mode == candidate,
+                  modifier = Modifier.weight(1f),
+                  accessibleName = "${commandSearchModeLabel(candidate)} search mode",
+              ) {
+                Text(
+                    commandSearchModeLabel(candidate),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+              }
+            }
+          }
+          Spacer(Modifier.height(8.dp))
           CompactSingleLineField(
               value = query,
               onValueChange = onQuery,
-              label = "Filter ${mode.name.lowercase()}",
+              label = commandSearchFieldLabel(mode),
               showLabel = false,
               modifier =
                   Modifier.fillMaxWidth()
@@ -206,14 +251,19 @@ internal fun CommandPaletteDialog(
           if (results.isEmpty()) {
             SystemStateMessage(commandSearchEmptyTitle(mode), commandSearchEmptyDetail(mode))
           } else {
-            results.forEachIndexed { index, result ->
-              CommandSearchEntry(
-                  result = result,
-                  selected = index == selectedIndex,
-                  onClick = {
-                    selectedIndex = index
-                    activate(result)
-                  })
+            Box(Modifier.fillMaxWidth().heightIn(max = COMMAND_RESULT_HEIGHT)) {
+              Column(Modifier.fillMaxWidth().verticalScroll(resultScroll)) {
+                results.forEachIndexed { index, result ->
+                  CommandSearchEntry(
+                      result = result,
+                      selected = index == selectedIndex,
+                      onClick = {
+                        selectedIndex = index
+                        activate(result)
+                      },
+                      modifier = Modifier.bringIntoViewRequester(resultRequesters[index]))
+                }
+              }
             }
           }
         }
@@ -222,7 +272,10 @@ internal fun CommandPaletteDialog(
         MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
       },
   )
-  LaunchedEffect(Unit) { filterFocusRequester.requestFocus() }
+  LaunchedEffect(mode) { filterFocusRequester.requestFocus() }
+  LaunchedEffect(selectedIndex, resultRequesters) {
+    resultRequesters.getOrNull(selectedIndex)?.bringIntoView()
+  }
 }
 
 internal fun availableCommandActions(hasActiveFile: Boolean = true): List<String> = buildList {
@@ -287,11 +340,12 @@ private fun CommandSearchEntry(
     result: CommandSearchResult,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
   MiniOrcaButton(
       onClick = onClick,
       modifier =
-          Modifier.fillMaxWidth().padding(top = 3.dp).semantics {
+          modifier.fillMaxWidth().padding(top = 3.dp).semantics {
             contentDescription =
                 "${result.accessibleDescription}, ${if (selected) "selected" else "not selected"}"
           },
@@ -308,9 +362,11 @@ private fun CommandSearchEntry(
           "${result.type.label} · ${result.label} · ${result.detail}",
           fontFamily = FontFamily.Monospace,
           fontSize = 11.sp,
-          maxLines = 1)
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis)
     }
   }
 }
 
 private const val MAX_COMMAND_RESULTS = 12
+private val COMMAND_RESULT_HEIGHT = 288.dp
