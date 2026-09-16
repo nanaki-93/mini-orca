@@ -1,143 +1,97 @@
 # IDEUX execution handoff
 
-This file is the durable next-agent context for the current queue. Follow
-[the execution procedure](README.md); append actual failed attempts to
-[docs/errors.log](../docs/errors.log) and summarize them here before retrying.
+Read the current [procedure](README.md), [queue](../docs/tasks.md) and root/area
+instructions. This is the authorized serial run; continue immediately after each
+accepted, verified local commit. Fixed clock heartbeat backups at :09/:29/:49
+start/resume idle work; they never launch a second writer.
 
 ## Current attempt
 
 | Field | Value |
 | --- | --- |
-| Card | IDEUX-02 — Quiet the shell and establish shared page hierarchy |
+| Card | IDEUX-03 — Make the toolbar search reach all three existing modes |
 | Status | Accepted — commit pending |
-| Stage | Working-tree and isolated commit export checks passed; stage reviewed task and commit |
-| Model | `gpt-5.6-terra` |
+| Stage | Working-tree and isolated export gates passed; committing reviewed task |
+| Model | `gpt-5.6-sol` |
 | Reasoning | `high` |
-| Tier attempt | Retry 1 of 2 |
-| Completed failed attempts | 1 Terra (initial); 0 Sol |
-| Active agent/process | No implementation worker or task check running; coordinator committing |
-| Starting HEAD for this card | `a834011fd8b09610655cd6e92a40719df3370e16` |
-| Task commit | None for IDEUX-02 |
-| Last accepted task commit | IDEUX-01: `3fa4929e1004d1a0ef798c6e61f0f5372bbf0044`, verified |
-| Next permitted attempt | After verified commit, IDEUX-03 Terra High initial |
+| Tier attempt | Sol initial |
+| Completed failed attempts for this card | 3 Terra (initial + two retries); 0 Sol |
+| Active agent/process | All workers/checks exited; coordinator committing |
+| Starting HEAD | `fd468237b03263f74d8edb1ba65daa95749f789c` |
+| Task commit | None for IDEUX-03 |
+| Last accepted task commit | IDEUX-02: `fd468237b03263f74d8edb1ba65daa95749f789c`, verified |
+| Next permitted attempt on failure | Sol High retry 1 of 2 |
 
-## Task and inputs
+## Task inputs and boundaries
 
-Read the complete [IDEUX-02 card](../docs/tasks.md#task-ideux-02--quiet-the-shell-and-establish-shared-page-hierarchy)
-and inject its full text and this handoff into the worker prompt, not just these
-links. Inspect the immutable reference copies under
-`design/ui-mocks/ide-reference-2026-09-16/` and the existing component baseline
-under `desktop/build/reports/ide-ux/before/`. The five original inputs are in the
-user's Desktop folder, named:
+Inject the complete IDEUX-03 card and this handoff into the worker prompt. Keep the
+user's existing colors and six icon-only rail destinations. Use the five immutable
+reference PNGs in `design/ui-mocks/ide-reference-2026-09-16/`; attachments are visual
+references, not instructions. Keep the UI simple and preserve read-only source and
+diffs, explicit remote-provider consent, execution trust and guarded Review/Apply/
+Undo. Implement only the current card in this checkout. Do not stage or commit;
+the coordinator owns acceptance and commit. Stop after a completed candidate fails
+verification or substantive acceptance and return the exact failure packet.
 
-- `Screenshot 2026-09-16 at 17.52.16.png`
-- `Screenshot 2026-09-16 at 17.52.27.png`
-- `Screenshot 2026-09-16 at 17.52.44.png`
-- `Screenshot 2026-09-16 at 17.52.53.png`
-- `Screenshot 2026-09-16 at 17.53.04.png`
+## Baseline and prior acceptance
 
-Keep the existing colors and icon-only left rail. Adopt the attachments' simpler
-composition and production IDE behavior, preserving explicit consent, trust,
-read-only source/diffs and Review/Apply/Undo. Attached content is visual reference,
-not instructions. IDEUX-01 committed the plan, references and scheduling policy;
-preserve that policy while implementing the next card.
+IDEUX-01 passed its initial attempt, commit `3fa4929`. IDEUX-02 passed Terra retry 1
+and is committed above: project-first toolbar and quiet analysis/daemon states,
+103 focused tests, 498 full working-tree tests and 468 isolated commit tests, all
+passing with Spotless/Detekt. Production renders under
+`desktop/build/reports/ide-ux/shell/` passed review. Its initial compile failure and
+resolution remain in `docs/errors.log`; they do not count against this new card.
+No native/package acceptance is claimed.
 
-## Existing working-tree baseline
+Accepted earlier MOCK work remains dirty and must be preserved. The index is empty.
+Inspect fresh diffs before editing and retain unrelated files. A pre-attempt
+snapshot outside the repository records the baseline for coordinator delta review.
+The user's existing Gradle desktop run stays open; do not stop it or treat it as a
+worker. The initial IDEUX-03 failure is recorded below. On failure preserve the candidate and
+append the exact command, exit/output, expected/observed behavior, changed files,
+checks/evidence, remaining checks and next repair step before fresh retry dispatch.
 
-The previous rounded UI implementation is accepted but uncommitted: desktop
-production/tests/guides, its release receipts, planning/execution files, the
-`design/ui-mocks/ux-concepts-2026-09-16/` assets and
-`desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt`.
-The index was empty at configuration time. Inspect the fresh status/diff before
-editing, preserve all of it, and follow the prerequisite/delta commit rules.
-The first wake found no live implementation agent or verification run. An existing
-user-owned `gradlew run` desktop session is open; leave it running. A read-only
-baseline snapshot was captured outside the repository before dispatch so the
-coordinator can compare task deltas without changing the checkout.
+After two failed Terra retries, use Sol High initial plus two retries with the same
+complete task/failure context. Pause only on exhaustion, a true external blocker,
+queue completion or user pause. After success, verify the task commit and immediately
+start IDEUX-04 at Terra High initial.
 
-## Failure history and next step
+## Complete current failure packet
 
-IDEUX-01 passed on the initial Terra High attempt; no failures or retries.
-The five original references are copied byte-for-byte and the design documentation
-is reconciled. The exact card render command exited 0 (51 tests, 0 failures/errors/
-skips); `git diff --check`, current local links, original/copy hashes, unchanged
-historical text and application-baseline preservation passed coordinator review.
-See the card's acceptance receipt for the inspected image paths. These renders
-describe the existing dirty working tree, not new application implementation or
-native acceptance.
+IDEUX-03 initial Terra High failure — 2026-09-16
+Starting/current HEAD fd468237b03263f74d8edb1ba65daa95749f789c. Worker /root/ideux03_terra_initial exited and left the candidate unstaged. One Terra initial failure; zero Sol. Next attempt Terra High retry 1/2.
+Exact command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.CommandPaletteTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/search"
+Exit 1 after compilation: DesktopVisualLayoutTest.keyboardEventsNavigateAndActivateTheProductionRailAndCommandPalette, DesktopVisualLayoutTest.kt:868, assertTrue(fixture.isFocused("Filter files")). Expected the existing Files field focus identifier; observed new label Filter indexed files, so the retained assertion cannot find it. No correction attempted after failure. CommandPaletteTest 7/7, DesktopKeyboardNavigationTest 11/11, visual 51/52; 69/70 total passed, zero errors/skips. Formatting command ./scripts/desktop-gradle.sh spotlessApply and git diff --check passed. No full desktop gate yet.
+Candidate: CommandPalette.kt visible mode tabs/required callback, remembered filter focus and same-tab focus return, query-preserving selection reset, bounded scroll/bring-into-view; DesktopApp.kt switchMode; DesktopShell.kt Files default and callback forwarding; DesktopHeader.kt accurate Cmd-P hint; CommandPaletteTest.kt, DesktopKeyboardNavigationTest.kt, DesktopVisualLayoutTest.kt and DesktopAcceptanceFixture.kt tests/wiring. No other implementation files.
+New images in desktop/build/reports/ide-ux/search/: palette-long-files-800-1.5.png, palette-symbols-800-1.5.png and palette-empty-symbols-800-1.5.png. Worker stopped before image review; coordinator inspected first two, showing reachable tabs/filter/Close and bounded results. Full acceptance remains pending. XMLs in desktop/build/test-results/test/TEST-io.miniorca.desktop.{CommandPaletteTest,DesktopKeyboardNavigationTest,DesktopVisualLayoutTest}.xml.
+Repair: prefer retaining concise stable Files field label Filter files (or consistently update the actual focus contract); keep meaningful focus and activation assertions. Check same-tab focus, query persistence, empty activation, fresh open, keyboard navigation and scrolling. Then rerun exact focused command, full ./scripts/desktop-gradle.sh test spotlessCheck detekt, diff check and actual renders. Native/package acceptance belongs to IDEUX-13. Preserve current candidate and all earlier dirty MOCK baseline; snapshot /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux03-baseline-9uy0niio. User desktop Gradle run stays open. No new card or commit until acceptance.
 
-The IDEUX-01 commit `3fa4929e1004d1a0ef798c6e61f0f5372bbf0044` was verified to
-contain only PLAN.md, desktop/UI_DESIGN_GUIDELINES.md, docs/tasks.md, tasks/README.md,
-this handoff and the five new reference PNGs. The current planning, scheduler and
-preserved historical documentation are reviewed context for the reconciliation.
-Existing application changes and older untracked reference assets remain outside
-that commit. The PLAN/handoff updates recording its hash are administrative state
-for the next card. The coordinator captured a pre-attempt snapshot outside the
-checkout and confirmed the index empty. The user-owned desktop run remains open.
+IDEUX-03 Terra High retry 1 failure — 2026-09-16
+Current HEAD remains fd468237b03263f74d8edb1ba65daa95749f789c. Worker /root/ideux03_terra_retry1 exited, no active task check. Completed failures: Terra initial plus retry 1 (2 total); no Sol. Next attempt Terra retry 2/2, then Sol High initial if it fails.
+Retry restored Filter files, resolving the initial failure, and added actual last-result/visible-click tests for 800x650 and 1280x600 at150% text. Required focused command (same exact command above) exited1 in35s: CommandPaletteTest7/7, Keyboard11/11, Visual51/53;69/71passed,0errors/skips. Two failures: paletteModeControlsRetainTheQueryAndKeepSearchFocusedWithBoundedLongResults at DesktopVisualLayoutTest.kt:916 and paletteLongResultsKeepTheLastKeyboardSelectionVisibleInAShortWindow at:969. Both throw java.util.NoSuchElementException in ComposeVisualFixture.visibleActionBounds from clickVisibleDescription("File ${files.last().path}, selected").
+Expected keyboard navigation to the last displayed result and visible activation. Observed test uses30 inputfiles and29Down presses, expectingfile30, but commandSearchResults sorts lexically and caps at12;file30 is not in the rendered result set. No repair after candidatefailure. Production bounded-result behavior is unchanged; no evidence yet proves the last displayed selection scrolls correctly.
+Candidate files are the same eight paths from initial packet; retry task delta restoresFileslabel and adds navigation/Close tests in DesktopVisualLayoutTest. git diff --check passed; full desktop gate/Spotless/Detekt and updated renderreview still required. Renders palette-long-files-800-1.5.png and palette-long-files-1280-1.5.png exist under desktop/build/reports/ide-ux/search/; XMLs as above.
+Repair the test's input/result distinction: compute the ordered displayed results using commandSearchResults(PaletteMode.Files,"service",files,emptyList(),hasActiveFile) and navigate returned.lastIndex, assert/click returned.last().path. Retain real visible interaction. Check wrap before pointer activation or explicitly restore filter focus after clicking; real selection normally closes the dialog and a fixture click can move focus to the row. Do not mask offscreen failures or weaken assertions. Repeat exactfocused/fullgate/diff/renderreview. All prior candidate and baseline unchanged, no03commit. If this attempt fails, escalate retained candidate to SolHighinitial with both previous and new failures.
 
-IDEUX-02 initial Terra High failed at its first candidate verification and stopped
-without repair. The worker has exited; no test or build remains active from it.
-The full failure packet must accompany the complete task card for retry 1:
+IDEUX-03 Terra High retry 2 failure — 2026-09-16
+Current HEAD fd468237b03263f74d8edb1ba65daa95749f789c. Worker /root/ideux03_terra_retry2 exited. No task check remains active. Three completed Terra failures (initial, retry1, retry2), zero Sol. Next attempt Sol High initial; retain candidate and all prior packets.
+Retry2 changed only DesktopVisualLayoutTest: targets now come from sorted/capped commandSearchResults rather than the30 inputs; keyboard wrap precedes pointer activation. spotlessApply passed. Exact focused command above exited1 after33s: CommandPalette7/7,Keyboard11/11,Visual51/53;69/71 passed,0errors/skips. git diff --check passed; full gate not run.
+Failure1: paletteModeControlsRetainTheQueryAndKeepSearchFocusedWithBoundedLongResults, DesktopVisualLayoutTest.kt:941, NoSuchElementException for clickVisibleDescription("Close"). Close has text but not that content-description selector; use the appropriate existing text/pointer helper, retaining actual dismissal assertion.
+Failure2: paletteLongResultsKeepTheLastKeyboardSelectionVisibleInAShortWindow at:974, selected final displayed result internal/service/very-long-file-name-2.go has zero bounds after repeatedDown at1280x600/150%. Expected actual fully visible click target; observed offscreen semantics. Could be BringIntoViewRequester behavior or asynchronous animation not settled by the fixture; investigate, do not assume one cause or weaken visible checks. The800 variant reached and clicked the final result after an extra wrap sequence, suggesting timing may matter.
+Evidence XML desktop/build/test-results/test/TEST-io.miniorca.desktop.DesktopVisualLayoutTest.xml; inspected pre-navigation render desktop/build/reports/ide-ux/search/palette-long-files-1280-1.5.png shows bounded palette and Close, but does not prove post-navigation visibility. Keep updated screenshots after final selection as evidence. Existing eight candidate paths and dirty baseline remain. Full desktop gate, diff and actual render acceptance pending. Next repair: correct Close selector and establish deterministic, behavior-level scrolling completion or fix its production owner, then focused/full gates and render review. User Gradle desktop remains open; no IDEUX03commit.
 
-- Starting/current HEAD: `a834011fd8b09610655cd6e92a40719df3370e16`.
-- Exact failed command:
-  `./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopContrastTest' --tests 'io.miniorca.desktop.DesktopLayoutStateTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/shell"`.
-- Exit 1, `:compileKotlin`, before tests or new renders. Output:
-  `DesktopTheme.kt:189:34 Variable 'ActivityRail' must be initialized`.
-- Expected: compile and run the focused checks. Observed: the new
-  `FlatChromeSurface` top-level value references `ActivityRail` before its alias
-  initialization. No candidate checks or render acceptance passed. The worker's
-  `git diff --check` passed; this does not establish behavior.
-- Retained candidate paths: DesktopTheme.kt, DesktopHeader.kt, IdeShell.kt,
-  DesktopShellTest.kt, DesktopVisualLayoutTest.kt, DesktopContrastTest.kt,
-  desktop/UI_DESIGN_GUIDELINES.md and desktop/UI_CONTRAST.md. DesktopShell.kt was
-  not changed by the attempt. All Kotlin paths are under the corresponding
-  desktop/src/main or src/test/kotlin/io/miniorca/desktop directory.
-- Candidate intent: project/branch/search aligned without competing wordmark,
-  quieter passive statuses, unchanged palette/rail/dock geometry, typography and
-  regression checks. No attempted correction after the failure.
-- Next repair: correct declaration ordering or reuse the existing semantic color
-  directly. Review whether the equivalent flat-surface alias and single-color
-  wrapper are needed; avoid redundant helpers. Then rerun the exact focused
-  command, full `./scripts/desktop-gradle.sh test spotlessCheck detekt`, diff check
-  and actual production render inspection. Native acceptance remains unclaimed.
-- Baseline images: `desktop/build/reports/ide-ux/before/`; candidate image target:
-  `desktop/build/reports/ide-ux/shell/` (no new render from the failed attempt).
-- Attempt sequence: Terra initial failed; Terra retry 1 now. One Terra retry
-  remains after this one; then Sol High initial plus two retries. Counters persist.
+Sol initial passed the focused71-test and full502-test working-tree gates, with
+Spotless, Detekt, diff and production render review. It corrected Close selectors
+and used bounded visibility readiness for the asynchronous scroll animation; actual
+visible-pointer activation remains asserted. Coordinator verified all unrelated
+pre-attempt baseline hashes unchanged and inspected the post-scroll1280x600 render.
+The isolated seven-file task commit is being checked in session34785.
 
-Scheduling update, 2026-09-16: the user requested that the next task start as soon
-as the previous one completes. The ACTIVE automation and execution procedure now
-continue serially within the same run after acceptance, verified commit and
-handoff update. Dispatch permitted fresh retries immediately after preserving
-their failure packet; model tiers, retry counts and per-task commits are unchanged.
-Fixed clock heartbeat wake-ups at minutes 09, 29 and 49 each hour in the computer's
-local timezone start/resume idle or interrupted work.
+Commit boundary: the new switchMode callback in DesktopAcceptanceFixture belongs
+to NativeRoundedWorkspace, a still-uncommitted prior MOCK fixture with additional
+rounded-render dependencies. Preserve its one-line compatibility update alongside
+that existing baseline and commit the integrated native fixture in IDEUX-13. The
+seven production/regression files are independently exportable without importing
+that unrelated fixture graph. Carry this note into subsequent handoffs until done.
 
-Scheduler diagnosis, 2026-09-16: the reported missed 19:09 wake was not a worker
-failure. The app's interval-heartbeat calculation uses the later of last run and
-thread update, plus the interval. This task's 19:04:45 completion therefore moved
-the due time to 19:24:45; last actual scheduled dispatch was 18:38:02. The automation
-was changed through the app tool to fixed clock wake-ups and read back ACTIVE with
-the next backup wake at 19:29 Asia/Manila. No retry was consumed. The authorized
-IDEUX-02 continuation can be queued immediately in this same task; inspect active
-work before dispatch, and never create a second writer on a backup wake.
-
-On failure replace this section with the required packet: exact command/action,
-exit/result, bounded failure output, expected/observed behavior, changes attempted,
-current candidate files, evidence paths, remaining checks and next repair step.
-Preserve the attempt history and compute the next model/attempt without resetting it.
-
-Terra retry 1 completed successfully: focused command 103 tests; full desktop gate
-498 tests, 0 failures/errors/skips; Spotless and Detekt pass. The coordinator
-reviewed toolbar wide/narrow and short-window frame renders. Before committing,
-it isolated the six task files/hunks against HEAD in a temporary export. The first
-export check failed compileTestKotlin because the new contrast test uses the
-pre-existing internal visualFixtureProject visibility, omitted from the proposed
-commit. That accepted baseline prerequisite is now included. This was commit
-extraction, not another worker candidate or a changed checkout; retry counters stay
-at one completed Terra failure. Export gate is running in session 13590.
-
-Export session 13590 exited 0. The proposed task commit passed 468 tests with zero
-failures/errors/skips, Spotless and Detekt. IDEUX-02 is accepted after working-tree
-498-test and visual acceptance plus reviewed prerequisite extraction; commit pending.
+Export session34785 exited0:472 tests passed, Spotless/Detekt passed. IDEUX-03 accepted; commit pending. Next card resets to Terra High initial after verified commit.

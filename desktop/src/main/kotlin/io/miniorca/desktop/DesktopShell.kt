@@ -252,6 +252,7 @@ internal data class DesktopShellPaletteActions(
     val updateQuery: (String) -> Unit,
     val dismiss: () -> Unit,
     val open: (PaletteMode) -> Unit,
+    val switchMode: (PaletteMode) -> Unit,
     val selectFile: (String) -> Unit,
     val selectSymbol: (SymbolInfo) -> Unit,
     val selectAction: (String) -> Unit,
@@ -594,7 +595,7 @@ internal fun DesktopShell(
                         onPalette = {
                           layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
                           paletteOpenedFromToolbar = true
-                          paletteActions.open(PaletteMode.Actions)
+                          paletteActions.open(PaletteMode.Files)
                         },
                         onOpenExplorer = {
                           layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
@@ -733,6 +734,7 @@ internal fun DesktopShell(
               palette.mode,
               palette.query,
               paletteActions.updateQuery,
+              paletteActions.switchMode,
               appState.index?.files.orEmpty(),
               appState.symbols,
               appState.selectedFile != null,

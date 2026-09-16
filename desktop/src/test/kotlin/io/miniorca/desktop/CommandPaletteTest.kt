@@ -16,6 +16,7 @@ class CommandPaletteTest {
                 mode = PaletteMode.Actions,
                 query = "analysis",
                 onQuery = {},
+                onMode = {},
                 files = emptyList(),
                 symbols = emptyList(),
                 hasActiveFile = false,
@@ -125,6 +126,16 @@ class CommandPaletteTest {
     assertEquals(-1, nextCommandSearchSelection(0, 0, 1))
     assertEquals("↑↓ select · Enter activate · Esc close", commandSearchHint(PaletteMode.Files))
     assertEquals("No focused action is available", commandSearchEmptyTitle(PaletteMode.Actions))
+  }
+
+  @Test
+  fun modeControlsKeepTheScopedLabelsAndOnlyShowWiredShortcuts() {
+    assertEquals("Files · ⌘P", commandSearchTitle(PaletteMode.Files))
+    assertEquals("Symbols · active file · ⌘⇧O", commandSearchTitle(PaletteMode.Symbols))
+    assertEquals("Commands", commandSearchTitle(PaletteMode.Actions))
+    assertEquals("Filter files", commandSearchFieldLabel(PaletteMode.Files))
+    assertEquals("Filter active-file symbols", commandSearchFieldLabel(PaletteMode.Symbols))
+    assertEquals("Filter commands", commandSearchFieldLabel(PaletteMode.Actions))
   }
 
   @Test

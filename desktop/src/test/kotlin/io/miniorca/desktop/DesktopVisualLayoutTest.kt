@@ -701,6 +701,7 @@ class DesktopVisualLayoutTest {
                 mode = PaletteMode.Files,
                 query = query,
                 onQuery = { query = it },
+                onMode = {},
                 files =
                     listOf(
                         IndexedFile("internal/alpha.go", "alpha", "Go", false),
@@ -721,6 +722,113 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasDescription("File internal/zeta.go, selected"))
           assertTrue(fixture.pressKey(Key.Enter))
           kotlin.test.assertEquals(listOf("internal/zeta.go"), openedFiles)
+        }
+  }
+
+  @Test
+  fun paletteModeControlsRetainTheQueryAndKeepSearchFocusedWithBoundedLongResults() {
+    var mode by mutableStateOf(PaletteMode.Files)
+    var query by mutableStateOf("service")
+    var dismissed = false
+    val selectedFiles = mutableListOf<String>()
+    val selectedSymbols = mutableListOf<String>()
+    val files =
+        (1..30).map {
+          IndexedFile("internal/service/very-long-file-name-$it.go", "$it", "Go", false)
+        }
+    val displayedFiles =
+        commandSearchResults(PaletteMode.Files, "service", files, emptyList(), hasActiveFile = true)
+    ComposeVisualFixture(800, 650, 1.5f) {
+          CommandPaletteDialog(
+              mode = mode,
+              query = query,
+              onQuery = { query = it },
+              onMode = { mode = it },
+              files = files,
+              symbols =
+                  listOf(
+                      SymbolInfo(
+                          "ServiceHandler",
+                          "function",
+                          startLine = 12,
+                          confidence = "exact",
+                          atomicTarget = true)),
+              hasActiveFile = true,
+              onSelectFile = { selectedFiles += it },
+              onSelectSymbol = { selectedSymbols += it.name },
+              onSelectAction = {},
+              onDismiss = { dismissed = true })
+        }
+        .use { fixture ->
+          fixture.render("palette-long-files-800-1.5")
+          assertTrue(fixture.hasText("Files"))
+          assertTrue(fixture.hasText("Symbols"))
+          assertTrue(fixture.hasText("Commands"))
+          assertTrue(fixture.hasScrollableContent())
+          repeat(displayedFiles.lastIndex) { assertTrue(fixture.pressKey(Key.DirectionDown)) }
+          fixture.render()
+          assertTrue(fixture.pressKey(Key.DirectionDown))
+          fixture.render()
+          assertTrue(fixture.hasDescription("File ${displayedFiles.first().path}, selected"))
+          assertTrue(fixture.pressKey(Key.DirectionUp))
+          fixture.render()
+          assertTrue(fixture.hasDescription("File ${displayedFiles.last().path}, selected"))
+          fixture.clickVisibleDescription("File ${displayedFiles.last().path}, selected")
+          assertEquals(listOf(displayedFiles.last().path), selectedFiles)
+          fixture.clickText("Symbols")
+          fixture.render("palette-symbols-800-1.5")
+          assertEquals(PaletteMode.Symbols, mode)
+          assertEquals("service", query)
+          assertTrue(fixture.isDescriptionFocused("Filter active-file symbols"))
+          fixture.clickText("Symbols")
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("Filter active-file symbols"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(listOf("ServiceHandler"), selectedSymbols)
+          fixture.setFocusedText("missing")
+          fixture.render("palette-empty-symbols-800-1.5")
+          assertTrue(fixture.hasText("No active-file symbol matches"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(listOf("ServiceHandler"), selectedSymbols)
+          fixture.clickText("Close")
+          assertTrue(dismissed)
+        }
+  }
+
+  @Test
+  fun paletteLongResultsKeepTheLastKeyboardSelectionVisibleInAShortWindow() {
+    val files =
+        (1..30).map {
+          IndexedFile("internal/service/very-long-file-name-$it.go", "$it", "Go", false)
+        }
+    val displayedFiles =
+        commandSearchResults(
+            PaletteMode.Files, "service", files, emptyList(), hasActiveFile = false)
+    val selectedFiles = mutableListOf<String>()
+    var dismissed = false
+    ComposeVisualFixture(1280, 600, 1.5f) {
+          CommandPaletteDialog(
+              mode = PaletteMode.Files,
+              query = "service",
+              onQuery = {},
+              onMode = {},
+              files = files,
+              symbols = emptyList(),
+              hasActiveFile = false,
+              onSelectFile = { selectedFiles += it },
+              onSelectSymbol = {},
+              onSelectAction = {},
+              onDismiss = { dismissed = true })
+        }
+        .use { fixture ->
+          fixture.render("palette-long-files-1280-1.5")
+          repeat(displayedFiles.lastIndex) { assertTrue(fixture.pressKey(Key.DirectionDown)) }
+          fixture.awaitVisibleDescription("File ${displayedFiles.last().path}, selected")
+          fixture.render("palette-long-files-1280-1.5-last-selection")
+          fixture.clickVisibleDescription("File ${displayedFiles.last().path}, selected")
+          assertEquals(listOf(displayedFiles.last().path), selectedFiles)
+          fixture.clickText("Close")
+          assertTrue(dismissed)
         }
   }
 
@@ -2296,6 +2404,29 @@ internal class ComposeVisualFixture(
       render()
     }
     assertTrue(matches(), "Timed out waiting for $label${state?.let { " ($it)" }.orEmpty()}")
+  }
+
+  fun awaitVisibleDescription(label: String) {
+    fun visible(): Boolean =
+        nodes().any { node ->
+          node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+              node.config.getOrNull(SemanticsActions.OnClick) != null &&
+              node.boundsInRoot.let { bounds ->
+                bounds.width > 0 &&
+                    bounds.height > 0 &&
+                    bounds.left >= 0 &&
+                    bounds.top >= 0 &&
+                    bounds.right <= width &&
+                    bounds.bottom <= height
+              }
+        }
+    val deadline = System.nanoTime() + 20_000_000_000L
+    render()
+    while (!visible() && System.nanoTime() < deadline) {
+      Thread.sleep(20)
+      render()
+    }
+    assertTrue(visible(), "Timed out waiting for $label to become fully visible")
   }
 
   fun hasText(label: String): Boolean =

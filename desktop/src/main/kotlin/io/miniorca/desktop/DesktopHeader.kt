@@ -85,6 +85,11 @@ internal fun MainToolbar(
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis,
                   modifier = Modifier.weight(1f))
+              Text(
+                  "⌘P",
+                  color = FaintText,
+                  fontSize = 11.sp,
+                  modifier = Modifier.padding(start = 8.dp))
             }
       }
       if (state.showEditorDrawerActions) {

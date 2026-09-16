@@ -18,6 +18,14 @@ import kotlin.test.assertTrue
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun paletteShortcutsKeepFilesAndSymbolsDirectWhileCommandKFocusesChat() {
+    assertEquals(DesktopShortcut.OpenFile, desktopShortcut("P", primaryModifier = true))
+    assertEquals(
+        DesktopShortcut.OpenSymbol, desktopShortcut("O", primaryModifier = true, shift = true))
+    assertEquals(DesktopShortcut.FocusChat, desktopShortcut("K", primaryModifier = true))
+  }
+
+  @Test
   fun resultNavigationAndFixPreparationStaySeparateFromKeyboardInspection() {
     var destination: Workspace? = null
     var preparations = 0
