@@ -200,6 +200,22 @@ internal fun ResultEvidenceSection(title: String, text: String) {
   }
 }
 
+@Composable
+internal fun ResultEmptyState(
+    presentation: AnalysisResultEmptyPresentation,
+    modifier: Modifier = Modifier,
+) {
+  Box(
+      modifier.verticalScroll(rememberScrollState()).testTag("result-empty"),
+      contentAlignment = Alignment.Center) {
+        WorkspaceSection(modifier = Modifier.fillMaxWidth()) {
+          Text(presentation.message, color = PrimaryText, style = IdeTypography.workspaceBody)
+          if (presentation.detail.isNotBlank())
+              Text(presentation.detail, color = SecondaryText, style = IdeTypography.compactBody)
+        }
+      }
+}
+
 /** Each list and detail pane owns one scroll area; narrow windows use an explicit Back action. */
 @Composable
 internal fun ResultListDetail(
@@ -383,35 +399,40 @@ internal fun ResultSectionHeader(
                   horizontalArrangement = Arrangement.spacedBy(8.dp),
                   verticalArrangement = Arrangement.spacedBy(4.dp),
                   itemVerticalAlignment = Alignment.CenterVertically) {
-                    page.reportedCount?.let { count ->
-                      Text(
+                    val countLabel =
+                        page.reportedCount?.let { count ->
                           if (count == loadedCount)
                               "$loadedCount ${if (loadedCount == 1) "finding" else "findings"}"
-                          else "$loadedCount loaded · $count reported",
-                          color = SecondaryText,
-                          style = IdeTypography.workspaceMetadata)
-                    }
-                        ?: Text(
-                            "$loadedCount loaded",
-                            color = SecondaryText,
-                            style = IdeTypography.workspaceMetadata)
+                          else "$loadedCount loaded · $count reported"
+                        }
+                            ?: if (loadedCount > 0) "$loadedCount loaded · — reported"
+                            else "— reported"
+                    Text(countLabel, color = SecondaryText, style = IdeTypography.workspaceMetadata)
                     analysisResultStatusLabel(status)?.let {
                       IdeLabelBadge(it, analysisStatusTint(status))
+                    }
+                    page.coverageLabel?.let {
+                      Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+                    }
+                    page.runTimeLabel?.let {
+                      Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
                     }
                   }
             }
             if (inline) ResultAnalysisAction(openAnalysis)
           }
       if (!inline) ResultAnalysisAction(openAnalysis)
-      page.section.error?.let {
-        Text(
-            "Results could not be refreshed: $it",
-            color = Error,
-            style = IdeTypography.workspaceMetadata)
-      }
-      if (page.section.loading)
+      page.section.error
+          ?.takeIf { loadedCount > 0 }
+          ?.let {
+            Text(
+                "Results could not be refreshed: $it",
+                color = Error,
+                style = IdeTypography.workspaceMetadata)
+          }
+      if (page.section.loading && loadedCount > 0)
           Text("Loading results…", color = SecondaryText, style = IdeTypography.workspaceMetadata)
-      if (page.stale && page.run != null)
+      if (page.stale && page.run != null && loadedCount > 0)
           Text(
               "Retained results are out of date. Start a new analysis for current evidence.",
               color = Warning,

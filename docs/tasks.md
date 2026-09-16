@@ -698,7 +698,7 @@ without changing the worker candidate or consuming a retry. Hash verified in nex
 
 ## Task IDEUX-08 — Make empty results and coverage truthful
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — 2026-09-16; Sol High retry1/2.
 
 **Target files**
 
@@ -739,6 +739,23 @@ without changing the worker candidate or consuming a retry. Hash verified in nex
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.SecurityWorkspaceTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/states"
 ```
+
+**Acceptance receipt — IDEUX-08**
+
+Empty results now distinguish lifecycle, unavailable details and completed scoped
+zero evidence. Matching completed zero details are required before a clean-scope
+message. Unknown counts use —; coverage uses stages and elapsed data says run time.
+Retained errors keep rows; long empty errors scroll; zero-row filters and duplicate
+loading copy are omitted while active-filter recovery remains available.
+
+Focused 85/85, full 516/516 and isolated commit 495/495 tests passed with Spotless,
+Detekt and diff checks. Worker reviewed wide, compact and short 150% lifecycle,
+no-match, coverage and retained-error renders; coordinator reviewed completed-empty
+and long-error surfaces. Native/package acceptance remains task13. Three Terra and
+one Sol failure remain in docs/errors.log. The isolated extraction includes the
+reviewed preexisting verticalScrollValue fixture helper used by the new overflow
+test; its initially missing extraction caused a compile failure, corrected without
+changing the candidate. Other dirty baseline remains outside this commit.
 
 ## Task IDEUX-09 — Make Bugs evidence and verified checks immediately usable
 
