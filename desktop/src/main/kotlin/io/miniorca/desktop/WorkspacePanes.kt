@@ -3,6 +3,8 @@ package io.miniorca.desktop
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -153,11 +156,12 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
       openAnalysis = actions.openAnalysis,
       tools = {
         val scan = verifiedScanProgress(state.scan)
+        VerifiedChecksActionRow(state.scan, scan, actions)
         IdeDisclosureHeader(
-            "Verified checks",
+            "Command and output",
             scanExpanded,
             { scanExpanded = !scanExpanded },
-            stateLabel = state.scan?.status ?: "Not run")
+            stateLabel = "Details")
         if (scanExpanded)
             Column(
                 Modifier.fillMaxWidth()
@@ -165,27 +169,43 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                     .verticalScroll(rememberScrollState())
                     .padding(8.dp)) {
                   Text(scan.summary, style = IdeTypography.compactBody, color = SecondaryText)
-                  Text(
-                      "Explicit local execution: go test ./... runs in a copied workspace; go vet ./... reads source.",
-                      style = IdeTypography.compactBody,
-                      color = SecondaryText)
-                  if (scan.canCancel)
-                      MiniOrcaButton(
-                          onClick = actions.cancelScan,
-                          enabled = state.scan?.status == "running",
-                          tone = ActionTone.Destructive) {
-                            Text("Cancel scan")
-                          }
-                  else
-                      MiniOrcaButton(onClick = actions.startScan, tone = ActionTone.Neutral) {
-                        Text("Trust local execution & run scan")
-                      }
                   state.scan?.let { VerifiedScanDiagnostics(it) }
                 }
       }) { key ->
         visible
             .firstOrNull { semanticResultRow(it).key == key }
             ?.let { FindingDetailsRegion(it, actions.findingActions) }
+      }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun VerifiedChecksActionRow(
+    report: GoScanReport?,
+    progress: VerifiedScanProgress,
+    actions: BugsWorkspaceActions,
+) {
+  FlowRow(
+      Modifier.fillMaxWidth().testTag("verified-checks-row"),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+      itemVerticalAlignment = Alignment.CenterVertically) {
+        Text("Verified checks", color = PrimaryText, style = IdeTypography.resultHeading)
+        IdeLabelBadge(progress.statusLabel, evidenceColor(checkStatus(report?.status.orEmpty())))
+        when (progress.action) {
+          VerifiedScanAction.Start ->
+              MiniOrcaButton(onClick = actions.startScan, tone = ActionTone.Neutral) {
+                Text("Trust project-code execution & run checks")
+              }
+          VerifiedScanAction.Cancel ->
+              MiniOrcaButton(onClick = actions.cancelScan, tone = ActionTone.Destructive) {
+                Text("Cancel checks")
+              }
+          VerifiedScanAction.Waiting ->
+              MiniOrcaButton(onClick = {}, enabled = false, tone = ActionTone.Neutral) {
+                Text("${progress.statusLabel} checks")
+              }
+        }
       }
 }
 
@@ -209,6 +229,7 @@ internal fun FindingDetailsRegion(finding: UnifiedFinding, actions: FindingActio
   var technical by remember(findingDisplayKey(finding)) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
     ResultDetailHeader(semanticResultRow(finding))
+    IdeLabelBadge(findingEvidenceIdentity(finding), findingEvidenceTint(finding))
     ModelResultContent(
         finding.message.ifBlank { "No summary supplied." }, style = IdeTypography.workspaceBody)
     FindingActionButtons(finding, actions)

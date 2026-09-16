@@ -34,7 +34,7 @@ class BugsWorkspaceStateTest {
         }
         .use { fixture ->
           fixture.render()
-          fixture.clickText("Verified checks")
+          fixture.clickText("Command and output")
           fixture.render("bottom-scan-details-800-1.5")
           assertTrue(fixture.hasText("$ go vet ./..."))
           assertTrue(fixture.hasText("vet  diagnostic"))
@@ -172,20 +172,32 @@ class BugsWorkspaceStateTest {
   fun findingPresentationLabelsExposeProvenanceLocationLifecycleAndFreshness() {
     assertEquals(FindingClassification.Verified, classifyFinding(verified))
     assertTrue(findingEvidenceSummary(verified).contains("vet"))
+    assertEquals("Tool report · vet", findingEvidenceIdentity(verified))
+    assertEquals("Model suggestion", findingEvidenceIdentity(suggested))
     assertEquals("", findingMaterialStateLabel(verified))
     assertEquals("Stale", findingMaterialStateLabel(verified.copy(freshness = "stale")))
     assertEquals("main.go:7 · Run", findingLocationLabel(verified))
   }
 
   @Test
-  fun verifiedScanProgressOnlyPollsActiveScansAndRetainsCompletionStatus() {
+  fun verifiedScanProgressOnlyOffersActionsOwnedByTheCurrentLifecycleState() {
     assertFalse(shouldPollVerifiedScan(null))
-    assertTrue(verifiedScanProgress(null).summary.contains("never starts one automatically"))
+    assertTrue(verifiedScanProgress(null).summary.contains("never starts them automatically"))
+    assertEquals("Not run", verifiedScanProgress(null).statusLabel)
+    assertEquals(VerifiedScanAction.Start, verifiedScanProgress(null).action)
     assertTrue(
         verifiedScanProgress(GoScanReport(status = "running"))
             .summary
             .contains("temporary copied workspace; source remains unchanged"))
     assertTrue(shouldPollVerifiedScan(GoScanReport(status = "running")))
+    assertEquals(
+        VerifiedScanAction.Cancel, verifiedScanProgress(GoScanReport(status = "running")).action)
+    assertTrue(shouldPollVerifiedScan(GoScanReport(status = "canceling")))
+    assertEquals(
+        VerifiedScanAction.Waiting, verifiedScanProgress(GoScanReport(status = "canceling")).action)
+    assertTrue(shouldPollVerifiedScan(GoScanReport(status = "pausing")))
+    assertEquals(
+        VerifiedScanAction.Waiting, verifiedScanProgress(GoScanReport(status = "pausing")).action)
     assertFalse(shouldPollVerifiedScan(GoScanReport(status = "completed")))
 
     val progress =
@@ -193,7 +205,7 @@ class BugsWorkspaceStateTest {
             GoScanReport(
                 status = "failed",
                 phases = listOf(GoScanPhase("go vet", "failed", output = "vet output"))))
-    assertFalse(progress.canCancel)
-    assertTrue(progress.summary.contains("results remain available"))
+    assertEquals(VerifiedScanAction.Start, progress.action)
+    assertTrue(progress.summary.contains("results, command and output remain available"))
   }
 }

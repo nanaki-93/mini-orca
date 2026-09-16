@@ -117,6 +117,21 @@ internal fun semanticResultRow(finding: UnifiedFinding) =
         "",
         findingMaterialStateLabel(finding))
 
+internal fun findingEvidenceIdentity(finding: UnifiedFinding): String =
+    when (classifyFinding(finding)) {
+      FindingClassification.Verified ->
+          "Tool report${finding.source.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()}"
+      FindingClassification.Suggested -> "Model suggestion"
+      FindingClassification.Unclassified -> "Evidence origin unavailable"
+    }
+
+internal fun findingEvidenceTint(finding: UnifiedFinding) =
+    when (classifyFinding(finding)) {
+      FindingClassification.Verified -> Information
+      FindingClassification.Suggested -> SelectionText
+      FindingClassification.Unclassified -> SecondaryText
+    }
+
 internal fun findingMaterialStateLabel(finding: UnifiedFinding): String =
     buildList {
           finding.status

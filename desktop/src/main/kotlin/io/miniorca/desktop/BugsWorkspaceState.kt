@@ -21,9 +21,17 @@ data class FindingPriorityGroup(
 data class FindingLifecycleAction(val label: String, val status: String)
 
 data class VerifiedScanProgress(
+    val statusLabel: String,
     val summary: String,
-    val canCancel: Boolean,
+    val action: VerifiedScanAction,
 )
+
+/** The scan owner permits one explicit action for its current lifecycle state. */
+enum class VerifiedScanAction {
+  Start,
+  Cancel,
+  Waiting,
+}
 
 fun classifyFinding(finding: UnifiedFinding): FindingClassification =
     when (finding.confidence.lowercase()) {
@@ -68,20 +76,33 @@ fun findingLifecycleActions(finding: UnifiedFinding): List<FindingLifecycleActio
     }
 
 fun shouldPollVerifiedScan(scan: GoScanReport?): Boolean =
-    scan?.status?.lowercase() in setOf("running", "canceling")
+    scan?.status?.lowercase() in setOf("running", "pausing", "canceling")
+
+fun verifiedScanStatusLabel(scan: GoScanReport?): String =
+    scan?.status?.takeIf { it.isNotBlank() }?.let(::analysisStatusLabel) ?: "Not run"
 
 fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress =
     when {
       scan == null ->
           VerifiedScanProgress(
-              "No verified scan. Importing or reindexing never starts one automatically.", false)
+              verifiedScanStatusLabel(scan),
+              "No verified checks have run. Importing or reindexing never starts them automatically.",
+              VerifiedScanAction.Start)
+      scan.status.equals("running", ignoreCase = true) ->
+          VerifiedScanProgress(
+              verifiedScanStatusLabel(scan),
+              "Verified checks are running in a temporary copied workspace; source remains unchanged.",
+              VerifiedScanAction.Cancel)
       shouldPollVerifiedScan(scan) ->
           VerifiedScanProgress(
-              "Trusted local execution: verified scan ${scan.status.lowercase()} in a temporary copied workspace; source remains unchanged.",
-              true)
+              verifiedScanStatusLabel(scan),
+              "Verified checks are ${scan.status.lowercase()} in a temporary copied workspace; source remains unchanged.",
+              VerifiedScanAction.Waiting)
       else ->
           VerifiedScanProgress(
-              "Verified scan ${scan.status.lowercase()}; results remain available.", false)
+              verifiedScanStatusLabel(scan),
+              "Verified checks ${scan.status.lowercase()}; results, command and output remain available.",
+              VerifiedScanAction.Start)
     }
 
 fun findingCanPrepareFix(finding: UnifiedFinding): Boolean {

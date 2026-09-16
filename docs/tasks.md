@@ -759,7 +759,7 @@ changing the candidate. Other dirty baseline remains outside this commit.
 
 ## Task IDEUX-09 — Make Bugs evidence and verified checks immediately usable
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — 2026-09-16; Sol High initial.
 
 **Target files**
 
@@ -769,6 +769,8 @@ changing the candidate. Other dirty baseline remains outside this commit.
 - `desktop/src/test/kotlin/io/miniorca/desktop/BugsWorkspaceStateTest.kt` — classification and scan states.
 - `desktop/src/test/kotlin/io/miniorca/desktop/FindingsPresentationTest.kt` — evidence identity and guarded action behavior.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — visible action/trust and retained diagnostics.
+
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — adapt existing verified-check disclosure assertions to the visible action row while preserving keyboard and trust checks.
 
 **Inputs / dependencies**
 
@@ -795,6 +797,21 @@ changing the candidate. Other dirty baseline remains outside this commit.
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.BugsWorkspaceStateTest' --tests 'io.miniorca.desktop.FindingsPresentationTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.DesktopWorkflowPresenterTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/bugs"
 ```
+
+**Acceptance receipt — IDEUX-09**
+
+Verified checks show status and explicit project-code trust/run or cancel action
+without opening diagnostics. Transient actions use the existing lifecycle owner;
+command/output remains a local disclosure. Model suggestion or tool report identity
+is visible before the existing guarded Prepare fix and secondary triage actions.
+
+Focused 123/123, full 518/518 and isolated commit 497/497 passed with Spotless,
+Detekt and diff checks. Compact/wide/150% trust, disclosure, long diagnostics and
+detail-origin renders were reviewed; native/package remains task13. Three Terra
+copy/diagnostic assertion failures remain in docs/errors.log. Sol aligned the final
+assertion without production changes. Extraction needed one formatting blank line,
+corrected only in the export before its passing gate; no candidate retry consumed.
+Unrelated dirty baseline remains outside the commit.
 
 ## Task IDEUX-10 — Clarify Performance recommendations and measured evidence
 

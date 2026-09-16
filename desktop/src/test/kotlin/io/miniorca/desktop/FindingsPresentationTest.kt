@@ -2,6 +2,7 @@ package io.miniorca.desktop
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class FindingsPresentationTest {
@@ -57,5 +58,36 @@ class FindingsPresentationTest {
     assertEquals("Handle the returned error.", current.summary)
     assertEquals("Partial · Stale", stale.state)
     assertTrue(current.location.contains("internal/main.go:12"))
+  }
+
+  @Test
+  fun detailIdentifiesEvidenceBeforeGuardedPrepareAndSecondaryTriageActions() {
+    var prepared: UnifiedFinding? = null
+    var triaged: FindingLifecycleAction? = null
+    ComposeVisualFixture(900, 500) {
+          FindingDetailsRegion(
+              highOpen,
+              FindingActions(
+                  prepareFinding = { prepared = it },
+                  triageFinding = { _, action -> triaged = action }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Tool report · vet"))
+          fixture.clickText("Prepare fix")
+          fixture.clickText("Dismiss")
+          assertEquals(highOpen, prepared)
+          assertEquals(FindingLifecycleAction("Dismiss", "dismissed"), triaged)
+        }
+
+    ComposeVisualFixture(900, 500) {
+          FindingDetailsRegion(highOpen.copy(freshness = "stale"), FindingActions({}, { _, _ -> }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Tool report · vet"))
+          assertTrue(fixture.isDisabled("Prepare fix"))
+          assertFalse(fixture.hasText("Apply fix"))
+        }
   }
 }

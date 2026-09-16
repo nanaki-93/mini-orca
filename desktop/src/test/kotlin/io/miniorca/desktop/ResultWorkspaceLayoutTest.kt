@@ -396,6 +396,32 @@ class ResultWorkspaceLayoutTest {
           fixture.assertTextWrapsWithoutClipping(title)
           fixture.assertTextWrapsWithoutClipping(path)
           fixture.assertTextWrapsWithoutClipping(prose)
+          assertTrue(fixture.hasText("Model suggestion"))
+        }
+  }
+
+  @Test
+  fun bugsChecksKeepTrustAndCommandsReachableInCompactLongDiagnosticViews() {
+    val diagnostic = "tool diagnostic from a deeply nested project path ".repeat(20)
+    var starts = 0
+    ComposeVisualFixture(800, 400, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(
+                  emptyList(),
+                  GoScanReport(
+                      status = "failed",
+                      phases = listOf(GoScanPhase("go vet", "failed", output = diagnostic))),
+                  false),
+              BugsWorkspaceActions(FindingActions({}, { _, _ -> }), { starts++ }, {}))
+        }
+        .use { fixture ->
+          fixture.render("bugs-checks-long-diagnostic-800-400-150")
+          fixture.assertTextFits("Verified checks")
+          fixture.assertTextFits("Trust project-code execution & run checks")
+          fixture.clickText("Command and output")
+          fixture.render()
+          assertTrue(fixture.hasText(sanitizedOutputText(diagnostic)))
+          assertEquals(0, starts)
         }
   }
 
