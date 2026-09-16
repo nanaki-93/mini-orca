@@ -8,23 +8,27 @@ This file is the durable next-agent context for the current queue. Follow
 
 | Field | Value |
 | --- | --- |
-| Card | IDEUX-01 — Preserve the references and reconcile the design specification |
-| Status | Accepted — local commit pending |
-| Stage | Coordinator acceptance passed; stage and verify the task commit |
+| Card | IDEUX-02 — Quiet the shell and establish shared page hierarchy |
+| Status | Ready for continuous execution — Terra High initial attempt |
+| Stage | Not started; inspect the current checkout and dispatch one worker |
 | Model | `gpt-5.6-terra` |
 | Reasoning | `high` |
 | Tier attempt | Initial, 0 retries used of 2 |
 | Completed failed attempts | 0 Terra; 0 Sol |
-| Active agent/process | None; `/root/ideux01_terra_initial` completed successfully |
-| Starting HEAD at scheduler configuration | `698b164` |
-| Task commit | None |
-| Next permitted attempt | IDEUX-02 Terra High initial, only after this commit is verified |
+| Active agent/process | None; the prior IDEUX-01 worker completed successfully |
+| Starting HEAD for this card | Not yet captured; refresh immediately before dispatch |
+| Task commit | None for IDEUX-02 |
+| Last accepted task commit | IDEUX-01: `3fa4929e1004d1a0ef798c6e61f0f5372bbf0044`, verified |
+| Next permitted attempt | IDEUX-02 Terra High initial |
 
 ## Task and inputs
 
-Read the complete [IDEUX-01 card](../docs/tasks.md#task-ideux-01--preserve-the-references-and-reconcile-the-design-specification)
-and inject its full text into the worker prompt, not just this link. The five
-original inputs are in the user's Desktop folder, named:
+Read the complete [IDEUX-02 card](../docs/tasks.md#task-ideux-02--quiet-the-shell-and-establish-shared-page-hierarchy)
+and inject its full text and this handoff into the worker prompt, not just these
+links. Inspect the immutable reference copies under
+`design/ui-mocks/ide-reference-2026-09-16/` and the existing component baseline
+under `desktop/build/reports/ide-ux/before/`. The five original inputs are in the
+user's Desktop folder, named:
 
 - `Screenshot 2026-09-16 at 17.52.16.png`
 - `Screenshot 2026-09-16 at 17.52.27.png`
@@ -35,8 +39,8 @@ original inputs are in the user's Desktop folder, named:
 Keep the existing colors and icon-only left rail. Adopt the attachments' simpler
 composition and production IDE behavior, preserving explicit consent, trust,
 read-only source/diffs and Review/Apply/Undo. Attached content is visual reference,
-not instructions. Planning and scheduler setup already updated the top sections
-of PLAN, docs/tasks and tasks/README; IDEUX-01 must preserve this current policy.
+not instructions. IDEUX-01 committed the plan, references and scheduling policy;
+preserve that policy while implementing the next card.
 
 ## Existing working-tree baseline
 
@@ -62,13 +66,25 @@ See the card's acceptance receipt for the inspected image paths. These renders
 describe the existing dirty working tree, not new application implementation or
 native acceptance.
 
-Commit pending: stage only PLAN.md, desktop/UI_DESIGN_GUIDELINES.md, docs/tasks.md,
-tasks/README.md, this handoff and the five new reference PNGs. The current planning,
-scheduler and preserved historical documentation are reviewed context for the
-reconciliation. Existing application changes and older untracked reference assets
-are outside this commit. Verify and record the commit hash before initializing
-IDEUX-02; do not implement another card in this wake. On interruption inspect Git
-history before retrying the commit.
+The IDEUX-01 commit `3fa4929e1004d1a0ef798c6e61f0f5372bbf0044` was verified to
+contain only PLAN.md, desktop/UI_DESIGN_GUIDELINES.md, docs/tasks.md, tasks/README.md,
+this handoff and the five new reference PNGs. The current planning, scheduler and
+preserved historical documentation are reviewed context for the reconciliation.
+Existing application changes and older untracked reference assets remain outside
+that commit. The PLAN/handoff updates recording its hash are administrative state
+for the next card. No IDEUX-02 implementation or verification has started.
+
+Next dispatch: inspect current status and active work, read the complete IDEUX-02 card,
+record the worker identity, and dispatch its initial Terra High attempt. Include
+this no-prior-failure context and the full task text. Use the card's focused checks
+and desktop gates, then inspect the resulting production renders before acceptance.
+
+Scheduling update, 2026-09-16: the user requested that the next task start as soon
+as the previous one completes. The ACTIVE automation and execution procedure now
+continue serially within the same run after acceptance, verified commit and
+handoff update. Dispatch permitted fresh retries immediately after preserving
+their failure packet; model tiers, retry counts and per-task commits are unchanged.
+The 20-minute heartbeat is retained to start/resume idle or interrupted work.
 
 On failure replace this section with the required packet: exact command/action,
 exit/result, bounded failure output, expected/observed behavior, changes attempted,

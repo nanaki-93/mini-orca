@@ -24,11 +24,15 @@ hierarchy to a project-first toolbar, one compact active-run strip, neutral cate
 surfaces, Architecture beside Flows, unboxed result headings with local filters and
 a consistent list/detail layout, and a dominant Explorer/code/Context source view.
 
-**Status:** 1/13 accepted. IDEUX-01 accepted; local commit pending verification.
-Next after that commit: IDEUX-02, Terra High initial attempt.
+**Status:** 1/13 accepted. IDEUX-01 committed and verified as `3fa4929`.
+Next: IDEUX-02, Terra High initial attempt.
 Reuse `mini-orca-ux-implementation` every 20 minutes, attached to **Plan IDE UI/UX
 improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`). **Scheduler: Active**,
 confirmed by the app automation tool on 2026-09-16.
+The user requested immediate sequential continuation on 2026-09-16: each active
+run starts the next card as soon as the preceding card is accepted and its commit
+is verified. The 20-minute heartbeat remains for starting/resuming idle or
+interrupted work; it does not delay transitions between completed cards.
 
 Implementation agents use `gpt-5.6-terra` / `high`: initial attempt plus two
 retries. Then escalate the same card to `gpt-5.6-sol` / `high`: initial attempt
