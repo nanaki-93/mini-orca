@@ -84,6 +84,18 @@ class DesktopThemeTest {
   }
 
   @Test
+  fun positivePrimaryActionUsesOpaqueFillAndReadableTextInEveryState() {
+    val style = actionToneStyle(ActionTone.PositivePrimary)
+    listOf(style.background, style.pressedBackground, style.selectedBackground).forEach { fill ->
+      assertEquals(1f, fill.alpha)
+      assertTrue(contrastRatio(style.content, fill) >= 4.5)
+      assertTrue(contrastRatio(ActivityRail, fill) >= 3.0)
+    }
+    assertTrue(contrastRatio(FocusAccent, ActivityRail) >= 3.0)
+    assertEquals(Success, actionToneStyle(ActionTone.Positive).content)
+  }
+
+  @Test
   fun compactButtonDensitiesStayWithinTheApprovedControlScale() {
     assertEquals(32.dp, buttonDensityStyle(ButtonDensity.Standard).height)
     assertEquals(32.dp, buttonDensityStyle(ButtonDensity.Toolbar).height)
@@ -132,7 +144,12 @@ class DesktopThemeTest {
       assertTrue(contrastRatio(Information, surface) >= 4.5)
       assertTrue(contrastRatio(SecondaryText, surface) >= 4.5)
     }
-    assertTrue(contrastRatio(PrimaryText, AppBackground) >= 4.5)
+    listOf(PrimaryText, SecondaryText, FaintText).forEach { text ->
+      assertTrue(contrastRatio(text, AppBackground) >= 4.5, "Chrome labels on the frame")
+    }
+    listOf(FocusAccent, SelectionAccent, ControlBorder).forEach { indicator ->
+      assertTrue(contrastRatio(indicator, AppBackground) >= 3.0, "Splitter and focus on the frame")
+    }
     assertTrue(contrastRatio(SecondaryText, Panel) >= 4.5)
     assertTrue(contrastRatio(PrimaryText, EditorCanvas) >= 4.5)
     assertTrue(contrastRatio(PrimaryText, OverlaySurface) >= 4.5)

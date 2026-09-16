@@ -1,13 +1,22 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -17,9 +26,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -105,14 +120,6 @@ internal fun reviewNextActionUiState(
         undoAvailable,
     )
   }
-  if (decision.eligible)
-      return ReviewNextActionUiState(
-          ReviewNextActionKind.Apply,
-          decision.actionLabel,
-          scope,
-          "Apply changes only this declaration in this file.",
-          true,
-      )
   if (evidence.validation.status == ReviewEvidenceStatus.Running)
       return ReviewNextActionUiState(
           ReviewNextActionKind.Waiting,
@@ -121,14 +128,6 @@ internal fun reviewNextActionUiState(
           "Wait for validation before focused checks or Apply.",
           false,
       )
-  if (evidence.validation.status != ReviewEvidenceStatus.Passed)
-      return ReviewNextActionUiState(
-          ReviewNextActionKind.EditDraft,
-          "Edit draft",
-          scope,
-          decision.reason,
-          true,
-      )
   if (checksRunning || evidence.checks.status == ReviewEvidenceStatus.Running)
       return ReviewNextActionUiState(
           ReviewNextActionKind.Waiting,
@@ -136,6 +135,22 @@ internal fun reviewNextActionUiState(
           scope,
           "Wait for current focused check evidence before reviewing Apply.",
           false,
+      )
+  if (decision.eligible)
+      return ReviewNextActionUiState(
+          ReviewNextActionKind.Apply,
+          decision.actionLabel,
+          scope,
+          "Apply changes only this declaration in this file.",
+          true,
+      )
+  if (evidence.validation.status != ReviewEvidenceStatus.Passed)
+      return ReviewNextActionUiState(
+          ReviewNextActionKind.EditDraft,
+          "Edit draft",
+          scope,
+          decision.reason,
+          true,
       )
   if (evidence.canRunChecks && evidence.checks.status != ReviewEvidenceStatus.Failed)
       return ReviewNextActionUiState(
@@ -270,7 +285,11 @@ internal fun reviewEvidenceUiState(
                     else -> "The draft no longer matches the open file."
                   },
               status =
-                  if (identityCurrent) ReviewEvidenceStatus.Passed else ReviewEvidenceStatus.Stale,
+                  when {
+                    draft == null || editor == null -> ReviewEvidenceStatus.Missing
+                    identityCurrent -> ReviewEvidenceStatus.Passed
+                    else -> ReviewEvidenceStatus.Stale
+                  },
           ),
       canRunChecks = validationCurrent && identityCurrent && !checksRunning,
       runChecksLabel = if (checksRunning) "Focused checks are running" else "Run focused checks",
@@ -484,129 +503,247 @@ internal fun ReviewToolWindow(
   val nextAction =
       reviewNextActionUiState(
           evidence, decision, state.draft, state.checks, state.session, state.checksRunning)
-  val progression = reviewProgressionRows(state.session, state.draft, evidence, decision)
-  var checksEvidenceExpanded by
-      rememberSaveable(
-          state.checks?.draftId, state.checks?.draftRevision, state.checks?.draftHash) {
-            mutableStateOf(false)
-          }
-
-  Column(modifier.fillMaxSize()) {
-    ToolWindowScopeHeader(
-        "REVIEW",
-        reviewToolWindowScope(state.selected, state.selectedSymbol, state.draft, state.applied),
-        Modifier)
+  BoxWithConstraints(modifier.fillMaxSize().background(ToolWindowSurface)) {
+    val compactHeight = maxHeight / LocalDensity.current.fontScale < 460.dp
+    val maximumActionHeight = maxHeight * 0.5f
+    val scroll = rememberScrollState()
     Column(
-        Modifier.weight(1f)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp)
-            .padding(bottom = 8.dp)) {
-          if (decision.receiptTitle != null && state.applied != null) {
-            ReviewSection(
-                title = "Receipt",
-                icon = DesktopIcon.Check,
-                stateLabel =
-                    if (state.applied.undoAvailable) "Undo available" else "Undo unavailable",
-                stateTint = if (state.applied.undoAvailable) Success else Warning) {
-                  Text(
-                      decision.receiptTitle,
-                      color = PrimaryText,
-                      fontWeight = FontWeight.SemiBold,
-                      fontSize = 17.sp,
-                      modifier = Modifier.padding(top = 4.dp))
-                  Text(
-                      decision.receiptDetail,
-                      color = SecondaryText,
-                      fontFamily = FontFamily.Monospace,
-                      fontSize = 11.sp,
-                      modifier = Modifier.padding(top = 6.dp))
-                  ReviewNextAction(nextAction, evidenceActions, applicationActions)
-                }
-            return@Column
-          }
-          ReviewSection(
-              title = "Next action",
-              icon = DesktopIcon.Run,
-              stateLabel = nextAction.scope,
-              stateTint = if (nextAction.enabled) SelectionText else Warning) {
-                ReviewNextAction(nextAction, evidenceActions, applicationActions)
-                if (evidence.canRunChecks && state.draft?.taskSpec?.goTestCandidate != null)
-                    Text(
-                        "Trusted local execution may run ${draftProjectCodeCommand(state.draft)}. gofmt and go vet are source-only.",
-                        color = SecondaryText,
-                        style = IdeTypography.compactBody,
-                        modifier = Modifier.padding(top = 5.dp))
-                if (nextAction.kind == ReviewNextActionKind.Apply && evidence.canRunChecks)
-                    ChromeButton(
-                        onClick = evidenceActions.runChecks,
-                        accessibleName =
-                            if (state.draft?.taskSpec?.goTestCandidate != null)
-                                "Trust local execution and rerun focused checks"
-                            else "Rerun focused checks") {
-                          Text(
-                              if (state.draft?.taskSpec?.goTestCandidate != null)
-                                  "Trust local execution & rerun checks"
-                              else "Rerun focused checks",
-                              fontSize = 11.sp)
+        if (compactHeight) Modifier.fillMaxSize().verticalScroll(scroll).testTag("review-scroll")
+        else Modifier.fillMaxSize()) {
+          Column(
+              if (compactHeight) Modifier.fillMaxWidth()
+              else Modifier.weight(1f).verticalScroll(scroll).testTag("review-scroll")) {
+                if (state.applied == null)
+                    ReviewTargetHeader(
+                        reviewToolWindowScope(
+                            state.selected, state.selectedSymbol, state.draft, state.applied),
+                        if (state.editor != null &&
+                            state.draft != null &&
+                            nextAction.kind != ReviewNextActionKind.EditDraft)
+                            evidenceActions.editDraft
+                        else null)
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                      if (decision.receiptTitle != null) {
+                        ReviewReadiness(
+                            decision.receiptTitle,
+                            decision.receiptDetail,
+                            ReviewEvidenceStatus.Passed)
+                        Text(
+                            if (state.applied?.undoAvailable == true) "Undo available"
+                            else "Undo unavailable",
+                            color = if (state.applied?.undoAvailable == true) Success else Warning,
+                            style = IdeTypography.workspaceMetadata)
+                      } else {
+                        ReviewReadiness(
+                            if (state.draft == null) "No candidate"
+                            else reviewReadinessTitle(evidence, decision),
+                            when {
+                              evidence.validation.status == ReviewEvidenceStatus.Running ->
+                                  evidence.validation.detail
+                              nextAction.kind == ReviewNextActionKind.Waiting ->
+                                  evidence.checks.detail
+                              decision.eligible ->
+                                  "Validation and check evidence match this candidate."
+                              else -> decision.reason
+                            },
+                            if (decision.eligible &&
+                                nextAction.kind != ReviewNextActionKind.Waiting)
+                                ReviewEvidenceStatus.Passed
+                            else reviewReadinessStatus(evidence))
+                        Column {
+                          listOf(
+                                  evidence.validation,
+                                  evidence.checks,
+                                  evidence.identity.copy(label = "Source unchanged"))
+                              .forEach { row ->
+                                EvidenceRow(row)
+                                IdeHorizontalSeparator()
+                              }
                         }
-                if (nextAction.kind == ReviewNextActionKind.EditDraft &&
-                    repairLimitReached(state.session, state.draft, state.checks))
-                    Text(
-                        "The repair limit is reached. Edit the draft manually.",
-                        color = Warning,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(top = 5.dp))
-              }
-          ReviewSection(
-              title = "Progress",
-              icon = DesktopIcon.Check,
-              stateLabel = "Request → Draft → Validate → Checks → Review",
-              stateTint = SecondaryText,
-              actions = {
-                if (state.editor != null && state.draft != null)
-                    ChromeButton(
-                        onClick = evidenceActions.editDraft, accessibleName = "Edit draft") {
-                          Text("Edit draft", fontSize = 11.sp)
+                        requiredChecksSummary(state.checks, state.draft, state.checksRunning)?.let {
+                          Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
                         }
-              }) {
-                progression.forEachIndexed { index, row ->
-                  if (index > 0) IdeHorizontalSeparator(Modifier.padding(vertical = 6.dp))
-                  EvidenceRow(row)
-                }
-                checkFailurePreview(state.checks)?.let { preview ->
-                  Text(
-                      preview,
-                      color = Error,
-                      style = IdeTypography.body,
-                      modifier = Modifier.padding(top = 5.dp))
-                }
-                DraftValidationDiagnostics(state.editor?.diagnostics.orEmpty())
+                        checkFailurePreview(state.checks)?.let {
+                          Text(it, color = Error, style = IdeTypography.workspaceBody)
+                        }
+                        DraftValidationDiagnostics(state.editor?.diagnostics.orEmpty())
+                        ReviewDetails(state, evidence, nextAction, evidenceActions)
+                        ReadOnlyImpactPane(state.impact, state.gitStatus)
+                        state.draft?.engineeringInsight?.let { insight ->
+                          EngineeringInsightPanel(
+                              insight,
+                              stale = state.draft.state.equals("stale", ignoreCase = true),
+                              scopeLabel = "Current candidate")
+                        }
+                      }
+                    }
+                Spacer(Modifier.height(12.dp))
               }
-          val checksWithDetails =
-              state.checks?.checks.orEmpty().isNotEmpty() ||
-                  !state.draft?.hash.isNullOrBlank() ||
-                  !state.checks?.draftHash.isNullOrBlank()
-          if (checksWithDetails)
-              ReviewEvidenceDetails(
-                  title =
-                      if (evidence.checks.status == ReviewEvidenceStatus.Failed)
-                          "Failed check details"
-                      else "Focused check details",
-                  checks = state.checks?.checks.orEmpty(),
-                  candidateHash = state.draft?.hash,
-                  checkHash = state.checks?.draftHash,
-                  expanded = checksEvidenceExpanded,
-                  onToggle = { checksEvidenceExpanded = !checksEvidenceExpanded })
-          ReadOnlyImpactPane(state.impact, state.gitStatus)
-          state.draft?.engineeringInsight?.let { insight ->
-            EngineeringInsightPanel(
-                insight,
-                stale = state.draft.state.equals("stale", ignoreCase = true),
-                scopeLabel = "Current candidate")
-            IdeHorizontalSeparator()
-          }
+          Box(
+              if (compactHeight) Modifier
+              else
+                  Modifier.heightIn(max = maximumActionHeight)
+                      .verticalScroll(rememberScrollState())
+                      .testTag("review-action-scroll")) {
+                ReviewActionRegion(state, nextAction, evidenceActions, applicationActions)
+              }
         }
   }
+}
+
+internal fun reviewReadinessTitle(
+    evidence: ReviewEvidenceUiState,
+    decision: ApplyDecisionUiState
+): String =
+    when {
+      evidence.validation.status == ReviewEvidenceStatus.Running -> "Validating draft"
+      evidence.checks.status == ReviewEvidenceStatus.Running -> "Checks running"
+      decision.eligible -> "Ready to apply"
+      evidence.validation.status == ReviewEvidenceStatus.Failed -> "Validation failed"
+      evidence.identity.status == ReviewEvidenceStatus.Stale -> "Candidate needs attention"
+      evidence.validation.status != ReviewEvidenceStatus.Passed -> "Validation needed"
+      evidence.checks.status == ReviewEvidenceStatus.Failed -> "Checks failed"
+      evidence.checks.status == ReviewEvidenceStatus.Stale -> "Checks are stale"
+      evidence.checks.status == ReviewEvidenceStatus.Skipped -> "Checks skipped"
+      else -> "Checks needed"
+    }
+
+private fun reviewReadinessStatus(evidence: ReviewEvidenceUiState): ReviewEvidenceStatus =
+    listOf(evidence.validation, evidence.checks, evidence.identity)
+        .firstOrNull { it.status != ReviewEvidenceStatus.Passed }
+        ?.status ?: ReviewEvidenceStatus.Missing
+
+internal fun requiredChecksSummary(
+    checks: DraftCheckReport?,
+    draft: DeclarationDraft?,
+    running: Boolean
+): String? {
+  if (running) return "Checks are running."
+  if (checks == null) return null
+  if (!checksMatchDraft(checks, draft)) return "Results belong to an earlier candidate."
+  if (!checks.applicable) return "Required check evidence is unavailable."
+  val required = checks.checks.filter { it.required }
+  if (required.isEmpty()) return "No required checks reported."
+  val passed = required.count { checkStatus(it.state) == ReviewEvidenceStatus.Passed }
+  return "$passed of ${required.size} required ${if (required.size == 1) "check" else "checks"} passed"
+}
+
+@Composable
+private fun ReviewReadiness(title: String, detail: String, status: ReviewEvidenceStatus) {
+  val tint = evidenceColor(status)
+  Column(
+      Modifier.fillMaxWidth()
+          .clip(MiniOrcaShapes.interactiveCard)
+          .background(labelBadgeBackground(tint))
+          .border(1.dp, tint, MiniOrcaShapes.interactiveCard)
+          .padding(14.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+              ReviewEvidenceMarker(status)
+              Text(title, color = tint, style = IdeTypography.workspaceHeading)
+            }
+        Text(detail, color = PrimaryText, style = IdeTypography.workspaceMetadata)
+      }
+}
+
+@Composable
+private fun ReviewDetails(
+    state: ReviewToolWindowState,
+    evidence: ReviewEvidenceUiState,
+    next: ReviewNextActionUiState,
+    actions: ReviewToolWindowActions
+) {
+  var expanded by
+      rememberSaveable(
+          state.draft?.id, state.draft?.revision, state.draft?.hash, state.checks?.draftHash) {
+            mutableStateOf(false)
+          }
+  if (state.checks?.checks.orEmpty().isNotEmpty() ||
+      !state.draft?.hash.isNullOrBlank() ||
+      !state.checks?.draftHash.isNullOrBlank()) {
+    ReviewEvidenceDetails(
+        title =
+            if (evidence.checks.status == ReviewEvidenceStatus.Failed) "Failed check details"
+            else "Check details",
+        checks = state.checks?.checks.orEmpty(),
+        candidateHash = state.draft?.hash,
+        checkHash = state.checks?.draftHash,
+        expanded = expanded,
+        onToggle = { expanded = !expanded })
+    if (expanded &&
+        evidence.canRunChecks &&
+        next.kind !in setOf(ReviewNextActionKind.RunChecks, ReviewNextActionKind.Waiting)) {
+      if (state.draft?.taskSpec?.goTestCandidate != null) ReviewExecutionScope(state.draft)
+      MiniOrcaButton(
+          onClick = actions.runChecks,
+          modifier = Modifier.fillMaxWidth(),
+          tone = ActionTone.Neutral) {
+            Text(
+                if (state.draft?.taskSpec?.goTestCandidate != null)
+                    "Trust local execution & rerun checks"
+                else "Rerun focused checks",
+                style = IdeTypography.action)
+          }
+    }
+  }
+}
+
+@Composable
+private fun ReviewExecutionScope(draft: DeclarationDraft?) {
+  Text(
+      "Trust local execution for this project revision:",
+      color = PrimaryText,
+      style = IdeTypography.workspaceMetadata)
+  Text(draftProjectCodeCommand(draft), color = PrimaryText, style = IdeTypography.resultCode)
+  Text(
+      "gofmt and go vet are source-only.", color = SecondaryText, style = IdeTypography.compactBody)
+}
+
+@Composable
+private fun ReviewActionRegion(
+    state: ReviewToolWindowState,
+    action: ReviewNextActionUiState,
+    evidenceActions: ReviewToolWindowActions,
+    applicationActions: DraftApplicationActions,
+) {
+  if (state.draft == null && state.applied == null) return
+  Column(
+      Modifier.fillMaxWidth()
+          .background(ToolWindowSurface)
+          .padding(12.dp)
+          .testTag("review-action-region"),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        IdeHorizontalSeparator(Modifier.padding(bottom = 8.dp))
+        if (action.kind == ReviewNextActionKind.Apply) {
+          Text("Apply this change", color = PrimaryText, style = IdeTypography.workspaceHeading)
+          Text(
+              "1 declaration · 1 file",
+              color = SecondaryText,
+              style = IdeTypography.workspaceMetadata)
+        }
+        if (action.kind == ReviewNextActionKind.RunChecks &&
+            state.draft?.taskSpec?.goTestCandidate != null)
+            ReviewExecutionScope(state.draft)
+        if (action.kind == ReviewNextActionKind.EditDraft &&
+            repairLimitReached(state.session, state.draft, state.checks)) {
+          Text(
+              "The repair limit is reached. Edit the draft manually.",
+              color = Warning,
+              style = IdeTypography.workspaceMetadata)
+        }
+        if (action.kind == ReviewNextActionKind.Undo)
+            Text(action.detail, color = PrimaryText, style = IdeTypography.workspaceMetadata)
+        ReviewNextAction(action, state.draft, evidenceActions, applicationActions)
+        if (action.kind == ReviewNextActionKind.Apply)
+            Text(
+                "Updates ${action.scope}.",
+                color = SecondaryText,
+                style = IdeTypography.workspaceMetadata)
+      }
 }
 
 internal fun draftProjectCodeCommand(draft: DeclarationDraft?): String {
@@ -645,15 +782,14 @@ internal data class DraftApplicationActions(
 @Composable
 private fun ReviewNextAction(
     action: ReviewNextActionUiState,
+    draft: DeclarationDraft?,
     evidenceActions: ReviewToolWindowActions,
     applicationActions: DraftApplicationActions,
 ) {
-  Text(
-      action.detail,
-      color = if (action.enabled) PrimaryText else Warning,
-      style = IdeTypography.body,
-      modifier = Modifier.padding(top = 4.dp))
-  if (action.kind == ReviewNextActionKind.Waiting) return
+  if (action.kind == ReviewNextActionKind.Waiting) {
+    Text(action.detail, color = Information, style = IdeTypography.workspaceMetadata)
+    return
+  }
   val onClick =
       when (action.kind) {
         ReviewNextActionKind.EditDraft -> evidenceActions.editDraft
@@ -663,14 +799,30 @@ private fun ReviewNextAction(
         ReviewNextActionKind.Undo -> applicationActions.undo
         ReviewNextActionKind.Waiting -> return
       }
+  val label =
+      when {
+        action.kind == ReviewNextActionKind.Apply -> "Apply change"
+        action.kind == ReviewNextActionKind.RunChecks && draft?.taskSpec?.goTestCandidate != null ->
+            "Trust local execution & run checks"
+        else -> action.label
+      }
   MiniOrcaButton(
       onClick = onClick,
       enabled = action.enabled,
       tone =
-          if (action.kind == ReviewNextActionKind.Apply) ActionTone.Positive
+          if (action.kind == ReviewNextActionKind.Apply) ActionTone.PositivePrimary
           else ActionTone.Primary,
-      modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(action.label)
+      modifier =
+          Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics {
+            contentDescription =
+                if (action.kind == ReviewNextActionKind.Apply) action.label else label
+          }) {
+        if (action.kind == ReviewNextActionKind.Apply) {
+          DesktopLineIcon(
+              DesktopIcon.Branch, "One declaration change", tint = OnActionFill, iconSize = 18.dp)
+          Spacer(Modifier.width(8.dp))
+        }
+        Text(label, style = IdeTypography.workspaceBody.copy(fontWeight = FontWeight.SemiBold))
       }
 }
 
@@ -685,44 +837,15 @@ internal fun checkFailurePreview(checks: DraftCheckReport?, limit: Int = 240): S
 }
 
 @Composable
-private fun ReviewSection(
-    title: String,
-    icon: DesktopIcon,
-    stateLabel: String,
-    stateTint: Color,
-    actions: @Composable RowScope.() -> Unit = {},
-    content: @Composable () -> Unit,
-) {
-  Column(Modifier.fillMaxWidth()) {
-    IdePaneHeader(
-        title = title,
-        icon = icon,
-        stateLabel = stateLabel,
-        stateTint = stateTint,
-        actions = actions)
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) { content() }
-    IdeHorizontalSeparator()
-  }
-}
-
-@Composable
 private fun ReviewDisclosureSection(
     title: String,
     icon: DesktopIcon,
-    stateLabel: String,
-    stateTint: Color,
     expanded: Boolean,
     onToggle: () -> Unit,
     content: @Composable () -> Unit,
 ) {
   Column(Modifier.fillMaxWidth()) {
-    IdePaneHeader(
-        title = title,
-        icon = icon,
-        stateLabel = stateLabel,
-        stateTint = stateTint,
-        expanded = expanded,
-        onToggle = onToggle)
+    IdePaneHeader(title = title, icon = icon, expanded = expanded, onToggle = onToggle)
     if (expanded)
         Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) { content() }
     IdeHorizontalSeparator()
@@ -739,12 +862,11 @@ private fun ReviewEvidenceDetails(
     onToggle: () -> Unit,
 ) {
   val identityHashes = reviewIdentityHashDetails(candidateHash, checkHash)
-  val detailCount = checks.size + identityHashes.size
   IdeDisclosureHeader(
       title = title,
       expanded = expanded,
       onToggle = onToggle,
-      stateLabel = "$detailCount ${if (detailCount == 1) "item" else "items"}")
+      modifier = Modifier.heightIn(min = 40.dp))
   if (expanded)
       SelectionContainer {
         Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -775,20 +897,53 @@ private fun ReviewEvidenceDetails(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun EvidenceRow(row: ReviewEvidenceRow) {
-  Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-    Text(
-        row.label,
-        color = PrimaryText,
-        style = IdeTypography.resultLabel,
-        modifier = Modifier.weight(1f))
-    IdeLabelBadge(row.status.label, evidenceColor(row.status))
+  TooltipArea(tooltip = { IdeControlTooltip(row.detail) }) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 44.dp).semantics(mergeDescendants = true) {
+          contentDescription = "${row.label}: ${row.detail}"
+          stateDescription = row.status.label
+        },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          ReviewEvidenceMarker(row.status)
+          Text(
+              row.label,
+              color = PrimaryText,
+              style = IdeTypography.workspaceBody,
+              modifier = Modifier.weight(1f))
+          IdeLabelBadge(row.status.label, evidenceColor(row.status))
+        }
   }
-  Text(
-      row.detail,
-      color = if (row.status == ReviewEvidenceStatus.Failed) Error else SecondaryText,
-      style = IdeTypography.compactBody,
-      modifier = Modifier.padding(top = 4.dp))
+}
+
+@Composable
+private fun ReviewEvidenceMarker(status: ReviewEvidenceStatus) {
+  val tint = evidenceColor(status)
+  val passed = status == ReviewEvidenceStatus.Passed
+  Box(
+      Modifier.size(22.dp * LocalDensity.current.fontScale)
+          .background(if (passed) tint else ToolWindowSurface, MiniOrcaShapes.pill)
+          .border(1.dp, tint, MiniOrcaShapes.pill),
+      contentAlignment = Alignment.Center) {
+        if (passed)
+            DesktopLineIcon(
+                DesktopIcon.Check,
+                status.label,
+                tint = EditorCanvas,
+                iconSize = 14.dp * LocalDensity.current.fontScale)
+        else
+            Text(
+                when (status) {
+                  ReviewEvidenceStatus.Running -> "…"
+                  ReviewEvidenceStatus.Failed -> "×"
+                  ReviewEvidenceStatus.Skipped -> "–"
+                  else -> "!"
+                },
+                color = tint,
+                style = IdeTypography.compactBody)
+      }
 }
 
 @Composable
@@ -797,8 +952,6 @@ private fun ReadOnlyImpactPane(impact: ImpactPreview?, gitStatus: GitStatus?) {
   ReviewDisclosureSection(
       title = "Project context",
       icon = DesktopIcon.Branch,
-      stateLabel = "Advisory · read-only",
-      stateTint = SecondaryText,
       expanded = expanded,
       onToggle = { expanded = !expanded }) {
         SectionLabel("ADVISORY IMPACT · READ-ONLY")

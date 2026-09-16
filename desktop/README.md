@@ -32,9 +32,9 @@ Java 21 `JAVA_HOME` and no discoverable Java 25 toolchain cannot start the app.
 
 Packaged images include `java.net.http` for the daemon client and `jdk.unsupported`
 for Jewel's native bridge. Package with the JBR launcher, not the Detekt launcher.
-The macOS arm64 startup and attainable UI-04 native/accessibility checks passed;
-unsupported combinations and final package acceptance are recorded in
-[acceptance](../docs/RELEASE_ACCEPTANCE.md).
+The earlier macOS arm64 UI-04 observations are historical. IDEUX-13 native
+open/restore and guarded Apply/Undo acceptance is pending; current limitations and
+package evidence are recorded in [acceptance](../docs/RELEASE_ACCEPTANCE.md).
 
 Pinned dependency provenance from the completed migration:
 [Jewel POM](https://repo1.maven.org/maven2/org/jetbrains/jewel/jewel-int-ui-standalone/0.40.0-262.10315.125/jewel-int-ui-standalone-0.40.0-262.10315.125.pom),
@@ -52,18 +52,31 @@ hover labels. Analysis status appears at the
 top right, immediately before daemon connectivity. Editor owns one declaration change.
 Go, Java and Kotlin projects show a type icon beside the project name in the top bar.
 
-Summary groups facts, findings and coverage above the project interpretation.
-Zero-count coverage tiles are hidden; unavailable counts retain a dash. Tool-reported
-issues are counted separately from AI suggestions. A top-right light shows project
-analysis status: green for current, red for failed, yellow for other states, with
-status and failure details on hover or keyboard focus.
-Architecture and Flows have a **Show diagram** button, disabled when a diagram is
-unavailable. Diagrams start collapsed and render Mermaid flowcharts and sequence diagrams
-locally, with zoom controls and selectable Mermaid source when expanded.
-No browser, network request, provider call
-or project-code execution is needed to display a diagram. Packages / modules use flat
-rows: the parenthesized module name is the title, followed by its project-relative path
-and responsibility. Entry points and next steps are omitted from Summary.
+Summary starts with the project name, purpose and indexed metadata. A segmented
+coverage bar shows the current selected files: up to date, outdated, not analyzed,
+running, failed, incomplete and unavailable. Zero-size segments are omitted;
+unavailable coverage and an empty selection keep separate labels. **View analysis**
+only opens Analysis. The status retains current run lifecycle and exposes saved
+project-description freshness/failure details on hover or keyboard focus.
+
+Three named Bugs, Performance and Security cards open their result pages with one
+click or keyboard activation. Counts stay distinct from unavailable results; zero
+findings use a neutral surface and do not assert that a project is safe. Supported
+bug priority counts remain in the Bugs card. Overall tool-reported issues and AI
+suggestions appear separately below the cards, since those totals cannot be
+reliably assigned to individual categories.
+
+Architecture and flat Packages / modules rows occupy the wider left column;
+Engineering insight and Flows occupy the right. They stack on narrow windows or
+with enlarged text, retaining full prose in the page scroll. Module names, exact
+paths and responsibilities remain selectable/readable. Entry points and next steps
+are omitted from Summary.
+
+Architecture and Flows place **Show diagram** beside the section heading. Diagrams
+start collapsed, with the button disabled when a diagram is unavailable. Mermaid
+flowcharts and sequence diagrams render locally; expanded diagrams provide zoom
+and selectable Mermaid source. No browser, network request, provider call or
+project-code execution is needed to display a diagram.
 
 New Analysis results request Mermaid diagrams. Older prose reports remain readable and
 are marked stale after the prompt update; run Analysis explicitly to replace them.
@@ -81,6 +94,16 @@ Editor has docked Files and Context/Assistant/Review panes at widths ≥1000dp.
 Below that width they become labeled drawers; Terminal uses a bounded overlay.
 Resizing clamps visible widths without overwriting saved preferences. Source and
 composed diffs are selectable/read-only; only the isolated draft is editable.
+The expanded terminal keeps an 8dp side/bottom inset around its native canvas so
+the rounded dock remains visible during shell use and resizing.
+**Source** and **Candidate diff** share file/declaration breadcrumbs. A validated
+candidate opens a full-height Current/Candidate comparison with synchronized
+vertical rows and independent horizontal scrolling; compact views default to
+**Unified**, and either mode can be selected locally. The Request → Draft →
+Validate → Checks → Review strip reflects current evidence, including missing,
+stale, failed and running states. **Edit draft** opens the existing isolated
+editor. Tabs and these navigation controls never generate, validate, run checks
+or apply a change.
 
 Context shows a short description for the selected declaration, with explicit
 explanation and **Refactor** actions. Without a selected declaration, **Actions**
@@ -89,9 +112,23 @@ Labeled warning/error states use amber/red. Selecting a declaration or opening a
 tab never sends a model request.
 
 A current draft must be discarded explicitly before changing its target. Editing
-it invalidates validation/check evidence. Review owns the guarded Apply, receipt
-and Undo. Findings and insights show freshness; daemon connectivity never proves
-that a provider is connected. Non-loopback scopes require their own confirmation.
+it invalidates validation/check evidence. Review shows target identity, readiness,
+three compact Validation / Focused checks / Source unchanged rows, and a summary
+of reported required checks. Check details and read-only project context start
+collapsed; failed output and validation diagnostics remain visible. A check rerun
+shows Running even if the previous report passed.
+
+The bottom action names the exact declaration/file scope. **Apply change** uses
+the existing eligibility checks and a solid green action; a returned receipt alone
+can enable **Undo this change**. Normal-height panes keep the action beneath the
+scrolling evidence. Short windows scroll the whole pane, and unusually long scope
+text can scroll within the bounded action region. **Edit draft** returns to the
+existing editor. Check actions that execute a generated test show the exact
+command and an explicit **Trust local execution & run checks** label; rerun is
+available inside Check details. No disclosure or navigation executes those actions.
+
+Findings and insights show freshness; daemon connectivity never proves that a
+provider is connected. Non-loopback scopes require their own confirmation.
 
 ## Analysis and results
 
@@ -112,9 +149,12 @@ The daemon retains its default 100-file/900-second dispatch bounds; the desktop
 does not expose Run limits controls.
 Pause/Resume/Cancel retain truthful partial coverage and cumulative attempts.
 Resume requires a fresh preview; startup never silently resumes a model request.
-Analysis shows a compact current/last-run line, live category boxes, stage failures
-and a collapsed Files disclosure. Bugs, Performance and Security reuse the same
-three boxes with the current category selected; clicking a box only navigates.
+Analysis groups file progress, active paths and the current run controls in one
+rounded panel. Finished-file counts include failed/partial stages and do not imply
+successful analysis. Unknown file totals stay unavailable; no ETA is inferred.
+Stored elapsed time and previous-run details remain available alongside failures.
+Named Bugs, Performance and Security cards retain live coverage and unknown counts;
+clicking a card only navigates.
 Each page shows all loaded findings for its category. Rounded rows retain severity,
 summary and exact source location. Optional disclosures retain evidence and
 verification details. The single **Prepare fix** action opens the existing
@@ -195,8 +235,11 @@ is documented in the
 
 ### Choose files for project analysis
 
-In **Analysis**, use **Files** to search the project file list
-and select or ignore files. **Select all** and **Exclude all** apply to all eligible
+In **Analysis**, **Files** opens expanded for each project and can be collapsed
+locally. Search and state filters remain usable during a run. The wide table aligns
+File, Analysis state and Details; narrow windows and larger text stack each row.
+The footer counts matching files against the full list. **Select all** and
+**Exclude all** apply to all eligible
 files, regardless of the search filter. Changes save automatically per project
 and survive closing the project or app. Newly indexed files start selected;
 ignored paths remain saved even if temporarily absent.
@@ -206,11 +249,19 @@ folders are omitted from the list. Use **Refresh files** to reload the checklist
 Finish or cancel an active/paused run before changing its files; start a new
 analysis to use the saved selection. Existing results remain available.
 
-The file list shows whether saved analysis is up to date and gives a concise reason
-for outstanding states. Use **Needs attention** to see missing, outdated, failed,
+The file list shows saved analysis state and current progress from an admitted
+active/paused run with matching project revision, plan identity and run/plan file hash.
+Running and Pending describe that run; Finished does not upgrade cached results
+to Up to date. Saved freshness and complete stage reasons remain in **Details**,
+with stale/failed/unavailable saved state visible beside current progress. Stages
+the admitted plan marks ineligible are not operational failures. Finished runs
+return to saved-state presentation. Use **Needs attention** to see missing, outdated, failed,
 or incomplete files. Unchecked files and files excluded by configuration appear
 under **Excluded** and do not count as up to date or needing attention. Re-selecting
-a file restores its saved analysis status. Bugs, Performance and Security boxes use
+a file restores its saved analysis status. During active, paused or interrupted
+runs, checkboxes are disabled, bulk selection controls are hidden, and the lock
+reason stays visible even when Files is collapsed. **Refresh files** remains
+available; load/save errors retain the confirmed selection. Bugs, Performance and Security boxes use
 tinted surfaces like Summary, with text states for completion, partial coverage or
 failure independently of finding counts. Changing the selection does not rewrite a
 previous run.

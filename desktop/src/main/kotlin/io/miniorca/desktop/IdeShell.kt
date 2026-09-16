@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -57,6 +58,32 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.awt.Cursor
+
+/** Shared shell geometry keeps the terminal below every pane and exposes each rounded perimeter. */
+@Composable
+internal fun WorkspaceFrame(
+    rail: @Composable () -> Unit,
+    panes: @Composable RowScope.() -> Unit,
+    terminal: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+  Row(
+      modifier
+          .fillMaxWidth()
+          .background(ActivityRail)
+          .padding(
+              top = WORKSPACE_FRAME_INSET.dp,
+              end = WORKSPACE_FRAME_INSET.dp,
+              bottom = WORKSPACE_FRAME_INSET.dp)) {
+        rail()
+        Spacer(Modifier.width(WORKSPACE_FRAME_INSET.dp))
+        Column(Modifier.weight(1f).fillMaxHeight()) {
+          Row(Modifier.weight(1f).fillMaxWidth(), content = panes)
+          Spacer(Modifier.height(WORKSPACE_FRAME_INSET.dp))
+          terminal()
+        }
+      }
+}
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -155,7 +182,7 @@ internal fun DockedToolWindow(
   Column(
       modifier
           .fillMaxHeight()
-          .clip(MiniOrcaShapes.interactiveCard)
+          .clip(MiniOrcaShapes.workspace)
           .background(ToolWindowSurface)
           .semantics { contentDescription = "$title tool window" },
   ) {
@@ -185,11 +212,9 @@ private fun ToolWindowHeader(title: String, onClose: (() -> Unit)?) {
 @Composable
 internal fun EditorArea(content: @Composable () -> Unit, modifier: Modifier = Modifier) {
   Box(
-      modifier
-          .fillMaxHeight()
-          .clip(MiniOrcaShapes.interactiveCard)
-          .background(EditorCanvas)
-          .semantics { contentDescription = "Editor area" }) {
+      modifier.fillMaxHeight().clip(MiniOrcaShapes.workspace).background(EditorCanvas).semantics {
+        contentDescription = "Editor area"
+      }) {
         content()
       }
 }
@@ -215,7 +240,7 @@ internal fun TerminalDock(
       modifier
           .fillMaxWidth()
           .then(if (layout.bottomCollapsed) Modifier else Modifier.height(layout.bottomHeight.dp))
-          .clip(MiniOrcaShapes.interactiveCard)
+          .clip(MiniOrcaShapes.workspace)
           .background(ToolWindowSurface)) {
         if (!layout.bottomCollapsed) HorizontalResizableDivider(onHeightDelta, onHeightCommit)
         TerminalBar(
@@ -223,9 +248,12 @@ internal fun TerminalDock(
             layout.bottomCollapsed,
             if (layout.bottomCollapsed) onOpen else onCollapse,
             tabActions = tabActions,
-            controlModifier = controlModifier,
-            showSeparator = layout.bottomCollapsed)
-        if (!layout.bottomCollapsed) content(Modifier.fillMaxWidth().weight(1f))
+            controlModifier = controlModifier)
+        if (!layout.bottomCollapsed) {
+          // The native Swing terminal cannot inherit the Compose perimeter clip.
+          content(
+              Modifier.fillMaxWidth().weight(1f).padding(start = 8.dp, end = 8.dp, bottom = 8.dp))
+        }
       }
 }
 
@@ -237,10 +265,8 @@ internal fun TerminalBar(
     tabActions: TerminalTabActions,
     modifier: Modifier = Modifier,
     controlModifier: Modifier = Modifier,
-    showSeparator: Boolean = true,
 ) {
-  Column(modifier.fillMaxWidth().background(ToolWindowSurface)) {
-    if (showSeparator) IdeHorizontalSeparator()
+  Column(modifier.fillMaxWidth().clip(MiniOrcaShapes.workspace).background(ToolWindowSurface)) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 38.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
@@ -274,7 +300,7 @@ internal fun TerminalOverlay(
 ) {
   IdeDialog(
       onDismissRequest = onDismiss,
-      title = { TerminalBar(state, false, onDismiss, tabActions, showSeparator = false) },
+      title = { TerminalBar(state, false, onDismiss, tabActions) },
       content = {
         Box(
             Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp).semantics {

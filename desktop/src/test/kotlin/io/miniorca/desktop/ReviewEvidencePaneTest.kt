@@ -47,8 +47,7 @@ class ReviewEvidencePaneTest {
           }
           .use { fixture ->
             fixture.render()
-            fixture.clickText(
-                if (state == "failed") "Failed check details" else "Focused check details")
+            fixture.clickText(if (state == "failed") "Failed check details" else "Check details")
             fixture.render("bottom-review-$state-360-1.5")
             assertTrue(fixture.hasText("$ go test ./..."))
             assertTrue(fixture.hasText(sanitizedOutputText(output)))
@@ -288,6 +287,82 @@ class ReviewEvidencePaneTest {
                 draftRevision = current.revision,
                 draftHash = "stale"),
             current))
+  }
+
+  @Test
+  fun editorProgressionRetainsMissingFailedRunningAndStaleEvidence() {
+    val ready = editorComparisonReviewFixture()
+    assertTrue(editorProgressionRows(ready).all { it.status == ReviewEvidenceStatus.Passed })
+    val missing = editorProgressionRows(ready.copy(checks = null))
+    assertEquals(ReviewEvidenceStatus.Missing, missing[3].status)
+    assertEquals(ReviewEvidenceStatus.Missing, missing[4].status)
+    val failed =
+        editorProgressionRows(
+            ready.copy(
+                checks =
+                    ready.checks!!.copy(
+                        checks = listOf(DraftCheck("go test", required = true, state = "failed")))))
+    assertEquals(ReviewEvidenceStatus.Failed, failed[3].status)
+    assertEquals(ReviewEvidenceStatus.Failed, failed[4].status)
+    val running = editorProgressionRows(ready.copy(checksRunning = true, checks = null))
+    assertEquals(ReviewEvidenceStatus.Running, running[3].status)
+    assertEquals(ReviewEvidenceStatus.Running, running[4].status)
+    val stale =
+        editorProgressionRows(ready.copy(selected = ready.selected!!.copy(contentHash = "changed")))
+    assertEquals(ReviewEvidenceStatus.Stale, stale[1].status)
+    assertTrue(stale.last().status != ReviewEvidenceStatus.Passed)
+    val edited =
+        editorProgressionRows(
+            ready.copy(editor = editDraft(ready.editor!!, "func GetUser() {}", emptyList())))
+    assertTrue(edited[2].status != ReviewEvidenceStatus.Passed)
+    assertTrue(edited.last().status != ReviewEvidenceStatus.Passed)
+  }
+
+  @Test
+  fun aRerunCannotAdvertiseReadyOrApplyUsingThePreviousPassingReport() {
+    val state = editorComparisonReviewFixture()
+    val evidence =
+        reviewEvidenceUiState(
+            state.project, state.selected, state.editor, state.draft, state.checks, true)
+    val decision =
+        applyDecisionUiState(
+            state.project, state.selected, state.editor, state.draft, state.checks, null)
+    assertTrue(decision.eligible)
+    assertEquals("Checks running", reviewReadinessTitle(evidence, decision))
+    val next =
+        reviewNextActionUiState(evidence, decision, state.draft, state.checks, state.session, true)
+    assertEquals(ReviewNextActionKind.Waiting, next.kind)
+    assertFalse(next.enabled)
+    assertEquals(
+        ReviewEvidenceStatus.Running,
+        editorProgressionRows(state.copy(checksRunning = true)).last().status)
+  }
+
+  @Test
+  fun requiredCheckCountsNeverPromoteMissingStaleSkippedOrOptionalEvidence() {
+    val state = editorComparisonReviewFixture()
+    assertEquals(null, requiredChecksSummary(null, state.draft, false))
+    assertEquals(
+        "1 of 1 required check passed", requiredChecksSummary(state.checks, state.draft, false))
+    assertEquals(
+        "Results belong to an earlier candidate.",
+        requiredChecksSummary(state.checks!!.copy(draftHash = "previous"), state.draft, false))
+    assertEquals(
+        "0 of 1 required check passed",
+        requiredChecksSummary(
+            state.checks.copy(
+                checks =
+                    listOf(
+                        DraftCheck("optional", false, "passed"),
+                        DraftCheck("required", true, "skipped"))),
+            state.draft,
+            false))
+    assertEquals(
+        "No required checks reported.",
+        requiredChecksSummary(state.checks.copy(checks = emptyList()), state.draft, false))
+    assertEquals(
+        ReviewEvidenceStatus.Missing,
+        reviewEvidenceUiState(null, null, null, null, null).identity.status)
   }
 
   private fun draft() =

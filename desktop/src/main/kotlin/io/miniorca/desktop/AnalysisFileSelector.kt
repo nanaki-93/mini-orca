@@ -4,7 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -32,108 +37,199 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 internal fun AnalysisFileSelector(
     analysis: ProjectAnalysisRunState,
     actions: AnalysisWorkspaceActions
 ) {
   val state = analysis.fileSelection
   val selection = state.selection
-  var expanded by remember(selection?.projectId) { mutableStateOf(false) }
+  var expanded by remember(selection?.projectId) { mutableStateOf(true) }
   var query by remember(selection?.projectId) { mutableStateOf("") }
   var filter by remember(selection?.projectId) { mutableStateOf(AnalysisFileFilter.All) }
   val ignored = selection?.excludedPaths.orEmpty().toSet()
   val rows =
-      remember(selection) {
-        selection?.files.orEmpty().map { analysisFileStatus(it, it.path in ignored) }
+      remember(selection, analysis.run) {
+        selection?.let { analysisFileStatuses(it, analysis.run) }.orEmpty()
       }
   val eligible = selection?.files.orEmpty().filter { it.reason.isBlank() }
+  val locked =
+      selection?.editable == false ||
+          analysis.run?.let { it.isActive() || it.status in setOf("paused", "interrupted") } == true
   val editable =
       selection?.editable == true &&
           !state.loading &&
           !state.saving &&
           analysis.action.isBlank() &&
-          analysis.run?.isActive() != true
-  val excludedCount = rows.count { it.status == AnalysisFileSyncStatus.Excluded }
+          !locked
   val selectedCount = eligible.count { it.path !in ignored }
-  Column(Modifier.fillMaxWidth().testTag("analysis-file-panel")) {
-    IdeDisclosureHeader(
-        "Files",
-        expanded,
-        { expanded = !expanded },
-        stateLabel =
-            when {
-              state.saving -> "Saving selection…"
-              state.loading -> "Loading status…"
-              selection == null -> "Not loaded"
-              else -> "$selectedCount selected · $excludedCount excluded"
-            },
-        stateTint = if (state.error == null) Information else Error)
-    state.error?.let { DiagnosticText(it, color = Error) }
-    if (selection?.editable == false || analysis.run?.isActive() == true)
-        Text(
-            "Finish or cancel the current run to change selection.",
-            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            color = Warning,
-            style = IdeTypography.compactBody)
-    if (!expanded) return@Column
-    Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      ResponsiveActionGroup(Modifier.fillMaxWidth()) {
-        MiniOrcaButton(
-            onClick = actions.refreshSelection,
-            enabled = !state.loading && !state.saving,
-            tone = ActionTone.Neutral) {
-              Text("Refresh files")
+  val excludedCount = rows.count { it.status == AnalysisFileSyncStatus.Excluded }
+  val files = filteredAnalysisFiles(rows, query, filter)
+  val fontScale = LocalDensity.current.fontScale
+  WorkspaceSection(modifier = Modifier.testTag("analysis-file-panel")) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+      val inline = maxWidth / fontScale >= 1050.dp
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+              Box(Modifier.weight(1f)) {
+                ChromeButton(
+                    onClick = { expanded = !expanded },
+                    accessibleName = "${if (expanded) "Collapse" else "Expand"} Files",
+                    tooltip = null,
+                    modifier =
+                        Modifier.semantics {
+                          stateDescription = if (expanded) "Expanded" else "Collapsed"
+                        },
+                    contentPadding = PaddingValues(0.dp)) {
+                      DesktopLineIcon(
+                          if (expanded) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
+                          "",
+                          iconSize = 18.dp)
+                      Column(
+                          Modifier.padding(start = 12.dp),
+                          verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "Files",
+                                color = PrimaryText,
+                                style = IdeTypography.workspaceHeading)
+                            Text(
+                                when {
+                                  state.saving -> "Saving selection…"
+                                  state.loading -> "Loading status…"
+                                  selection == null -> "Not loaded"
+                                  else -> "$selectedCount selected · $excludedCount excluded"
+                                },
+                                color = if (state.error == null) SecondaryText else Error,
+                                style = IdeTypography.workspaceMetadata)
+                          }
+                    }
+              }
+              if (inline && expanded)
+                  AnalysisFileFilters(query, { query = it }, filter, { filter = it })
             }
-        MiniOrcaButton(
-            onClick = {
-              actions.saveSelection(ignored.minus(eligible.map { it.path }.toSet()).sorted())
-            },
-            enabled = editable,
-            tone = ActionTone.Neutral) {
-              Text("Select all")
-            }
-        MiniOrcaButton(
-            onClick = { actions.saveSelection((ignored + eligible.map { it.path }).sorted()) },
-            enabled = editable,
-            tone = ActionTone.Neutral) {
-              Text("Exclude all")
-            }
+        if (!inline && expanded) AnalysisFileFilters(query, { query = it }, filter, { filter = it })
       }
-      CompactSingleLineField(query, { query = it }, "Filter files", Modifier.fillMaxWidth())
-      ResponsiveActionGroup(Modifier.fillMaxWidth()) {
-        AnalysisFileFilter.entries.forEach { choice ->
-          ChromeTab(
-              selected = filter == choice,
-              onClick = { filter = choice },
-              accessibleName = choice.label) {
-                Text(choice.label, style = IdeTypography.compactBody)
+    }
+    state.error?.let { DiagnosticText(it, color = Error) }
+    if (locked)
+        Text(
+            "Selection locked. Finish or cancel the current run to change files.",
+            color = SecondaryText,
+            style = IdeTypography.workspaceMetadata)
+    if (expanded) {
+      BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val wide = maxWidth / fontScale >= 720.dp
+        Column {
+          if (wide)
+              Row(
+                  Modifier.fillMaxWidth()
+                      .background(HeaderSurface)
+                      .padding(horizontal = 12.dp, vertical = 8.dp),
+                  horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "File",
+                        Modifier.weight(0.44f),
+                        color = SecondaryText,
+                        style = IdeTypography.workspaceMetadata)
+                    Text(
+                        "Analysis state",
+                        Modifier.weight(0.20f),
+                        color = SecondaryText,
+                        style = IdeTypography.workspaceMetadata)
+                    Text(
+                        "Details",
+                        Modifier.weight(0.36f),
+                        color = SecondaryText,
+                        style = IdeTypography.workspaceMetadata)
+                  }
+          if (files.isEmpty() && !state.loading)
+              Text(
+                  if (selection == null) "File status is not loaded. Refresh files to try again."
+                  else "No matching files.",
+                  Modifier.padding(vertical = 12.dp),
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata)
+          LazyColumn(
+              Modifier.fillMaxWidth().heightIn(max = 320.dp).testTag("analysis-file-table")) {
+                itemsIndexed(files, key = { _, row -> row.file.path }) { _, row ->
+                  AnalysisFileRow(
+                      row,
+                      row.file.reason.isBlank() && row.file.path !in ignored,
+                      editable && row.file.reason.isBlank(),
+                      wide) {
+                        actions.saveSelection(
+                            (if (row.file.path in ignored) ignored - row.file.path
+                                else ignored + row.file.path)
+                                .sorted())
+                      }
+                  IdeHorizontalSeparator()
+                }
               }
         }
       }
-    }
-    val files = filteredAnalysisFiles(rows, query, filter)
-    if (files.isEmpty() && !state.loading)
-        Text(
-            if (selection == null) "File status is not loaded. Refresh files to try again."
-            else "No matching files.",
-            Modifier.padding(8.dp),
-            color = SecondaryText,
-            style = IdeTypography.compactBody)
-    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
-      itemsIndexed(files, key = { _, row -> row.file.path }) { index, row ->
-        AnalysisFileRow(
-            row,
-            row.file.reason.isBlank() && row.file.path !in ignored,
-            editable && row.file.reason.isBlank(),
-            index % 2 == 0) {
-              actions.saveSelection(
-                  (if (row.file.path in ignored) ignored - row.file.path
-                      else ignored + row.file.path)
-                      .sorted())
+      FlowRow(
+          Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+          itemVerticalAlignment = Alignment.CenterVertically) {
+            if (selection != null)
+                Text(
+                    "${files.size} of ${rows.size} files match",
+                    color = SecondaryText,
+                    style = IdeTypography.workspaceMetadata)
+            MiniOrcaButton(
+                onClick = actions.refreshSelection,
+                enabled = !state.loading && !state.saving,
+                tone = ActionTone.Neutral) {
+                  Text("Refresh files")
+                }
+            if (!locked) {
+              MiniOrcaButton(
+                  onClick = {
+                    actions.saveSelection(ignored.minus(eligible.map { it.path }.toSet()).sorted())
+                  },
+                  enabled = editable,
+                  tone = ActionTone.Neutral) {
+                    Text("Select all")
+                  }
+              MiniOrcaButton(
+                  onClick = {
+                    actions.saveSelection((ignored + eligible.map { it.path }).sorted())
+                  },
+                  enabled = editable,
+                  tone = ActionTone.Neutral) {
+                    Text("Exclude all")
+                  }
             }
-      }
+          }
     }
   }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun AnalysisFileFilters(
+    query: String,
+    setQuery: (String) -> Unit,
+    filter: AnalysisFileFilter,
+    setFilter: (AnalysisFileFilter) -> Unit
+) {
+  FlowRow(
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CompactSingleLineField(query, setQuery, "Filter files", Modifier.width(220.dp))
+        AnalysisFileFilter.entries.forEach { choice ->
+          ChromeTab(
+              selected = filter == choice,
+              onClick = { setFilter(choice) },
+              accessibleName = choice.label) {
+                Text(choice.label, style = IdeTypography.workspaceMetadata)
+              }
+        }
+      }
 }
 
 @Composable
@@ -141,48 +237,104 @@ private fun AnalysisFileRow(
     row: AnalysisFileStatus,
     selected: Boolean,
     editable: Boolean,
-    alternate: Boolean,
+    wide: Boolean,
     toggle: () -> Unit
 ) {
   val tint = row.status.tint
   Row(
       Modifier.fillMaxWidth()
           .clip(MiniOrcaShapes.control)
-          .background(if (alternate) EditorCanvas else Panel)
-          .padding(end = 8.dp),
-      horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(
-            Modifier.padding(vertical = 8.dp)
-                .width(3.dp)
-                .heightIn(min = 24.dp)
-                .background(tint, MiniOrcaShapes.pill))
-        AnalysisFileCheckbox(row.file.path, selected, editable, toggle)
-        Column(
-            Modifier.weight(1f).padding(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-              Row(
-                  Modifier.fillMaxWidth(),
-                  verticalAlignment = Alignment.Top,
-                  horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        row.file.path,
-                        Modifier.weight(1f),
-                        style = IdeTypography.resultCode,
-                        color = PrimaryText)
-                    IdeLabelBadge(row.status.label, tint)
-                  }
-              if (row.status != AnalysisFileSyncStatus.Updated) {
-                val reason =
-                    if (row.status == AnalysisFileSyncStatus.Excluded) row.explanation
-                    else
-                        row.file.stages
-                            .firstOrNull { it.status !in setOf("fresh", "skipped") }
-                            ?.reason
-                            ?.takeIf { it.isNotBlank() } ?: row.explanation
-                Text(reason, color = SecondaryText, style = IdeTypography.compactBody)
+          .background(
+              if (row.savedStatus != null && row.status == AnalysisFileSyncStatus.Running)
+                  SelectionSurface
+              else Panel)
+          .padding(horizontal = 12.dp, vertical = 4.dp),
+      horizontalArrangement = Arrangement.spacedBy(16.dp),
+      verticalAlignment = Alignment.Top) {
+        val identity: @Composable (Modifier) -> Unit = { modifier ->
+          Row(
+              modifier,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              verticalAlignment = Alignment.Top) {
+                AnalysisFileCheckbox(row.file.path, selected, editable, toggle)
+                SelectionContainer {
+                  Text(row.file.path, style = IdeTypography.workspaceBody, color = PrimaryText)
+                }
               }
-            }
+        }
+        if (wide) {
+          identity(Modifier.weight(0.44f))
+          Text(
+              row.status.label,
+              Modifier.weight(0.20f),
+              color = tint,
+              style = IdeTypography.workspaceBody)
+          AnalysisFileDetails(row, Modifier.weight(0.36f))
+        } else {
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            identity(Modifier.fillMaxWidth())
+            Text(row.status.label, color = tint, style = IdeTypography.workspaceBody)
+            AnalysisFileDetails(row)
+          }
+        }
       }
+}
+
+@Composable
+private fun AnalysisFileDetails(row: AnalysisFileStatus, modifier: Modifier = Modifier) {
+  var expanded by remember(row.file.path, row.explanation) { mutableStateOf(false) }
+  val summary = row.summary
+  val detail =
+      row.explanation +
+          (row.savedStatus
+              ?.let { "\nSaved analysis: ${it.label}\n" + analysisFileStatus(row.file).explanation }
+              .orEmpty())
+  val hasDetails =
+      detail != summary &&
+          row.status !in setOf(AnalysisFileSyncStatus.Updated, AnalysisFileSyncStatus.Excluded)
+  Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+          SelectionContainer(Modifier.weight(1f)) {
+            Text(
+                sanitizedOutputText(summary),
+                color =
+                    if (row.status == AnalysisFileSyncStatus.Running) Information
+                    else SecondaryText,
+                style = IdeTypography.workspaceBody)
+          }
+          if (hasDetails)
+              ChromeButton(
+                  onClick = { expanded = !expanded },
+                  accessibleName = "Analysis details for ${row.file.path}",
+                  modifier =
+                      Modifier.semantics {
+                        stateDescription = if (expanded) "Expanded" else "Collapsed"
+                      },
+                  contentPadding = PaddingValues(horizontal = 4.dp)) {
+                    Text(
+                        if (expanded) "Hide details" else "Details",
+                        style = IdeTypography.workspaceMetadata)
+                  }
+        }
+    row.savedStatus
+        ?.takeIf {
+          it !in
+              setOf(
+                  AnalysisFileSyncStatus.Missing,
+                  AnalysisFileSyncStatus.Updated,
+                  AnalysisFileSyncStatus.Running,
+                  AnalysisFileSyncStatus.Pending)
+        }
+        ?.let {
+          Text(
+              "Saved analysis: ${it.label.lowercase()}",
+              color = Warning,
+              style = IdeTypography.workspaceMetadata)
+        }
+    if (hasDetails && expanded) DiagnosticText(detail)
+  }
 }
 
 @Composable
@@ -199,9 +351,9 @@ private fun AnalysisFileCheckbox(
       accessibleName = "Analyze $path",
       contentPadding = PaddingValues(4.dp),
       modifier =
-          Modifier.padding(top = 8.dp).semantics {
+          Modifier.semantics {
             toggleableState = ToggleableState(selected)
-            stateDescription = if (selected) "Included in next run" else "Not included in next run"
+            stateDescription = if (selected) "Selected for analysis" else "Excluded from analysis"
           }) {
         Box(
             Modifier.size(18.dp)
