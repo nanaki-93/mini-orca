@@ -330,6 +330,8 @@ internal fun DesktopShell(
   val workspace = appState.workspace
   val shellMode = desktopShellMode(appState)
   val scope = rememberCoroutineScope()
+  val resultBrowsers = remember { ResultBrowserStore() }
+  resultBrowsers.resetFor(appState.project, appState.analysisRun.run)
   val focusManager = LocalFocusManager.current
   val focusRequesters = remember {
     ShellFocusRequesters(
@@ -645,10 +647,8 @@ internal fun DesktopShell(
                             onCommit = { layoutActions.saveLayout(layout) })
                       }
                       DesktopCanvas(
-                          appState = appState,
-                          layout = layout,
-                          editor = editor,
-                          context = context,
+                          state = state,
+                          resultBrowsers = resultBrowsers,
                           widthDp = widthDp,
                           editorActions = editorActions,
                           analysisActions = analysisActions,
@@ -926,10 +926,8 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
 
 @Composable
 private fun DesktopCanvas(
-    appState: DesktopState,
-    layout: DesktopLayoutState,
-    editor: DesktopShellEditorState,
-    context: DesktopShellContextState,
+    state: DesktopShellState,
+    resultBrowsers: ResultBrowserStore,
     widthDp: Float,
     editorActions: DesktopShellEditorActions,
     analysisActions: DesktopShellAnalysisActions,
@@ -938,6 +936,10 @@ private fun DesktopCanvas(
     onOpenNarrowDrawer: (NarrowDrawer) -> Unit,
     modifier: Modifier,
 ) {
+  val appState = state.app
+  val layout = state.layout
+  val editor = state.editor
+  val context = state.context
   val workspace = appState.workspace
   EditorArea(
       content = {
@@ -970,7 +972,8 @@ private fun DesktopCanvas(
                             appState.projectBugFindings(),
                             appState.findings.scan,
                             appState.loading,
-                            appState.analysisResultPage("bugs")),
+                            appState.analysisResultPage("bugs"),
+                            resultBrowsers.stateFor(appState.analysisResultPage("bugs"))),
                     performance =
                         PerformanceWorkspacePaneState(
                             page = appState.analysisResultPage("performance"),
@@ -979,10 +982,15 @@ private fun DesktopCanvas(
                             expectedBenchmarkIdentity = benchmarkEvidenceIdentity(appState.review),
                             benchmarkCatalog = appState.review.benchmark.catalog,
                             selectedBenchmark = appState.review.benchmark.selected,
-                            benchmarkRunning = appState.review.benchmark.running),
+                            benchmarkRunning = appState.review.benchmark.running,
+                            browser =
+                                resultBrowsers.stateFor(
+                                    appState.analysisResultPage("performance"))),
                     security =
                         SecurityWorkspacePaneState(
-                            appState.analysisResultPage("security"), appState.index),
+                            appState.analysisResultPage("security"),
+                            appState.index,
+                            resultBrowsers.stateFor(appState.analysisResultPage("security"))),
                 ),
             navigation =
                 ContentPaneNavigationActions(

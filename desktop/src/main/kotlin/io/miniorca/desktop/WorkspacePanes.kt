@@ -149,6 +149,7 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
   AnalysisResultsPane(
       page = state.page,
       rows = visible.map(::semanticResultRow),
+      browser = state.browser,
       openAnalysis = actions.openAnalysis,
       emptyMessage = if (state.loading) "Loading findings…" else "No findings yet.",
       tools = {
@@ -250,6 +251,7 @@ internal data class BugsWorkspacePaneState(
     val loading: Boolean,
     val page: AnalysisResultPageState =
         AnalysisResultPageState(AnalysisResultType.Bugs, null, null),
+    val browser: ResultBrowserState = newResultBrowserState(page),
 )
 
 /** Finding navigation, task preparation, triage, and scan intents. */

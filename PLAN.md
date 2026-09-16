@@ -29,13 +29,14 @@ IDEUX-02 committed and verified as `fd46823` after Terra High retry 1.
 IDEUX-03 committed and verified as `2ab3711` after Sol High initial.
 IDEUX-04 committed and verified as `5011783` after Sol High initial.
 IDEUX-05 committed and verified as `6db69ec` after Sol High retry2.
-IDEUX-06 accepted after user-authorized Astra light (`gpt-6-astra`, `low`) repair;
-commit pending. All70focused/506working-tree/485isolated-commit tests and desktop
-quality gates passed. IDEUX-07 follows under the original Terra/Sol policy.
+IDEUX-06 committed and verified as `f06d5db` after user-authorized Astra light
+(`gpt-6-astra`, `low`) repair: 70 focused, 506 working-tree and 485 isolated-commit
+tests passed with desktop quality gates. IDEUX-07 accepted at Sol High retry2: 77 focused, 512 working-tree and 491 isolated-commit tests passed with quality and component visual checks. IDEUX-08 is next.
 Reuse `mini-orca-ux-implementation` at minutes 09, 29 and 49 each hour in the
 computer's local timezone, attached to **Plan IDE UI/UX
-improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`). **Scheduler: Paused**,
-confirmed by the app automation tool after the final Sol failure on 2026-09-16.
+improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`). **Scheduler: Active**,
+confirmed by the app automation tool after the accepted Astra repair and verified
+IDEUX-06 commit on 2026-09-16.
 The user requested immediate sequential continuation on 2026-09-16: each active
 run starts the next card as soon as the preceding card is accepted and its commit
 is verified. These fixed clock wake-ups start/resume idle or interrupted work;

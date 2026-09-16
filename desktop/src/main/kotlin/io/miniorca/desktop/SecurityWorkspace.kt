@@ -14,7 +14,8 @@ import androidx.compose.ui.unit.dp
 
 internal data class SecurityWorkspacePaneState(
     val page: AnalysisResultPageState,
-    val index: ProjectIndex?
+    val index: ProjectIndex?,
+    val browser: ResultBrowserState = newResultBrowserState(page),
 )
 
 internal data class SecurityWorkspaceActions(
@@ -142,6 +143,7 @@ internal fun SecurityWorkspacePane(
   AnalysisResultsPane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
+      browser = state.browser,
       openAnalysis = actions.openAnalysis,
       emptyMessage = "No security findings reported in the analyzed scope.") { key ->
         val result = results.firstOrNull { it.row().key == key }

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
@@ -34,6 +33,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -108,7 +113,7 @@ internal fun semanticResultRow(finding: UnifiedFinding) =
         finding.title.ifBlank { "Untitled finding" },
         findingLocationLabel(finding),
         finding.message,
-        finding.severity.ifBlank { "Unknown severity" },
+        resultFacetLabel(finding.severity),
         "",
         findingMaterialStateLabel(finding))
 
@@ -158,9 +163,7 @@ internal fun ResultRowContent(row: ResultRowPresentation) {
           FlowRow(
               horizontalArrangement = Arrangement.spacedBy(6.dp),
               verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                IdeLabelBadge(
-                    row.severity.replaceFirstChar { it.uppercase() },
-                    resultSeverityTint(row.severity))
+                IdeLabelBadge(resultFacetLabel(row.severity), resultSeverityTint(row.severity))
                 if (row.state.isNotBlank()) IdeLabelBadge(row.state, SecondaryText)
               }
           Text(row.location, color = SelectionText, style = IdeTypography.resultCode, maxLines = 1)
@@ -174,8 +177,7 @@ internal fun ResultDetailHeader(row: ResultRowPresentation) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          IdeLabelBadge(
-              row.severity.replaceFirstChar { it.uppercase() }, resultSeverityTint(row.severity))
+          IdeLabelBadge(resultFacetLabel(row.severity), resultSeverityTint(row.severity))
           if (row.state.isNotBlank()) IdeLabelBadge(row.state, SecondaryText)
         }
     Text(row.title, color = PrimaryText, style = IdeTypography.workspaceHeading)
@@ -202,26 +204,37 @@ internal fun ResultEvidenceSection(title: String, text: String) {
 @Composable
 internal fun ResultListDetail(
     rows: List<ResultRowPresentation>,
-    selectedKey: String?,
+    browser: ResultBrowserState,
     onSelection: (String?) -> Unit,
     emptyMessage: String,
     modifier: Modifier = Modifier,
+    wide: Boolean? = null,
     detail: @Composable (String) -> Unit,
 ) {
+  val selectedKey = browser.selectedKey
   val selected = rows.firstOrNull { it.key == selectedKey }
-  val listState = rememberLazyListState()
-  val returnFocusRequester = remember { FocusRequester() }
-  var returnFocusKey by remember { mutableStateOf<String?>(null) }
+  val listState = browser.listState
+  var returnFocusKey by remember(browser) { mutableStateOf<String?>(null) }
+  var keyboardFocusKey by remember(browser) { mutableStateOf<String?>(null) }
   LaunchedEffect(returnFocusKey, selectedKey, rows) {
     val key = returnFocusKey
     if (selectedKey == null && key != null && rows.none { it.key == key }) returnFocusKey = null
   }
+  LaunchedEffect(keyboardFocusKey, rows) {
+    keyboardFocusKey?.let { key ->
+      rows
+          .indexOfFirst { it.key == key }
+          .takeIf { it >= 0 }
+          ?.let { index -> listState.scrollToItem(index) }
+    }
+  }
   BoxWithConstraints(modifier) {
-    val wide = resultListDetailUsesTwoPanes(maxWidth, LocalDensity.current.fontScale)
+    val usesTwoPanes =
+        wide ?: resultListDetailUsesTwoPanes(maxWidth, LocalDensity.current.fontScale)
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      if (wide || selected == null) {
+      if (usesTwoPanes || selected == null) {
         LazyColumn(
-            Modifier.weight(if (wide) 0.42f else 1f).fillMaxHeight().testTag("result-list"),
+            Modifier.weight(if (usesTwoPanes) 0.42f else 1f).fillMaxHeight().testTag("result-list"),
             state = listState,
             contentPadding = PaddingValues(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -232,6 +245,7 @@ internal fun ResultListDetail(
                     }
                   }
               items(rows, key = { it.key }) { row ->
+                val rowFocusRequester = remember(row.key) { FocusRequester() }
                 IdeActionSurface(
                     onClick = { onSelection(row.key) },
                     colors =
@@ -254,26 +268,48 @@ internal fun ResultListDetail(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                     modifier =
                         Modifier.fillMaxWidth()
-                            .then(
-                                if (row.key == returnFocusKey)
-                                    Modifier.focusRequester(returnFocusRequester)
-                                else Modifier)
+                            .focusRequester(rowFocusRequester)
+                            .onPreviewKeyEvent { event: KeyEvent ->
+                              if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                              val target =
+                                  when (event.key) {
+                                    Key.DirectionDown -> nextResultBrowserKey(rows, row.key, 1)
+                                    Key.DirectionUp -> nextResultBrowserKey(rows, row.key, -1)
+                                    else -> null
+                                  }
+                              when {
+                                target != null -> {
+                                  keyboardFocusKey = target
+                                  true
+                                }
+                                event.key == Key.Enter || event.key == Key.Spacebar -> {
+                                  onSelection(row.key)
+                                  true
+                                }
+                                else -> false
+                              }
+                            }
                             .semantics { this.selected = row.key == selectedKey }) {
                       ResultRowContent(row)
                     }
                 if (row.key == returnFocusKey)
                     LaunchedEffect(row.key, returnFocusKey, selectedKey) {
                       if (selectedKey == null && returnFocusKey == row.key) {
-                        returnFocusRequester.requestFocus()
+                        rowFocusRequester.requestFocus()
                         returnFocusKey = null
                       }
+                    }
+                if (row.key == keyboardFocusKey)
+                    LaunchedEffect(row.key, keyboardFocusKey) {
+                      rowFocusRequester.requestFocus()
+                      keyboardFocusKey = null
                     }
               }
             }
       }
-      if (wide || selected != null) {
+      if (usesTwoPanes || selected != null) {
         val detailModifier =
-            Modifier.weight(if (wide) 0.58f else 1f)
+            Modifier.weight(if (usesTwoPanes) 0.58f else 1f)
                 .fillMaxHeight()
                 .clip(MiniOrcaShapes.interactiveCard)
                 .background(Panel)
@@ -298,7 +334,7 @@ internal fun ResultListDetail(
             Column(
                 detailModifier.verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                  if (!wide)
+                  if (!usesTwoPanes)
                       ChromeButton(
                           onClick = {
                             returnFocusKey = selected.key
@@ -326,6 +362,7 @@ internal fun resultListDetailUsesTwoPanes(
 @OptIn(ExperimentalLayoutApi::class)
 internal fun ResultSectionHeader(
     page: AnalysisResultPageState,
+    loadedCount: Int,
     openAnalysis: () -> Unit,
 ) {
   val status = if (page.stale && page.run != null) "stale" else page.progress?.status
@@ -348,10 +385,16 @@ internal fun ResultSectionHeader(
                   itemVerticalAlignment = Alignment.CenterVertically) {
                     page.reportedCount?.let { count ->
                       Text(
-                          "$count ${if (count == 1) "finding" else "findings"}",
+                          if (count == loadedCount)
+                              "$loadedCount ${if (loadedCount == 1) "finding" else "findings"}"
+                          else "$loadedCount loaded · $count reported",
                           color = SecondaryText,
                           style = IdeTypography.workspaceMetadata)
                     }
+                        ?: Text(
+                            "$loadedCount loaded",
+                            color = SecondaryText,
+                            style = IdeTypography.workspaceMetadata)
                     analysisResultStatusLabel(status)?.let {
                       IdeLabelBadge(it, analysisStatusTint(status))
                     }

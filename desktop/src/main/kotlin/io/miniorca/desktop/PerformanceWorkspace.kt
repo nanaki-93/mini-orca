@@ -30,6 +30,8 @@ internal fun PerformanceWorkspacePane(
   AnalysisResultsPane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
+      browser = state.browser,
+      facetLabel = "Impact",
       openAnalysis = actions.openAnalysis,
       tools = {
         if (state.expectedBenchmarkIdentity != null ||
@@ -326,6 +328,7 @@ internal data class PerformanceWorkspacePaneState(
     val benchmarkCatalog: GoBenchmarkCatalog? = null,
     val selectedBenchmark: GoBenchmarkChoice? = null,
     val benchmarkRunning: Boolean = false,
+    val browser: ResultBrowserState = newResultBrowserState(page),
 )
 
 internal data class PerformanceWorkspaceActions(
