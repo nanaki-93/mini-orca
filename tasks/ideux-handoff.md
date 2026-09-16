@@ -8,7 +8,7 @@
 | Reasoning | high |
 | Tier attempt | Terra retry2/2 |
 | Completed failed attempts | 2 Terra; 0 Sol |
-| Last accepted task | IDEUX-13 commit e768eea9a8b7c5d3f1e2a4b6c8d0e2f4a6b8c0d2, verified |
+| Last accepted task | IDEUX-13 commit e768eea verified |
 | Next on failure | Sol High initial (not reached — accepted) |
 
 01–13 accepted/committed. Task13 focused528/full528/isolated506 quality/component pass.
