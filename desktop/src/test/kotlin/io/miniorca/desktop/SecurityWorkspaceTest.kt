@@ -153,8 +153,7 @@ class SecurityWorkspaceTest {
     val page = securityPageFixture()
     val rows = securityResults(page)
     assertEquals(2, rows.size)
-    assertTrue(rows.any { it.row().source == "Rule · credential_literal" })
-    assertTrue(rows.any { it.row().source.isBlank() })
+    assertTrue(rows.all { it.row().source.isBlank() })
     assertTrue(rows.all { it.row().state.isBlank() })
     assertEquals(2, rows.map { it.row().key }.distinct().size)
     val state =
@@ -178,6 +177,42 @@ class SecurityWorkspaceTest {
             state.copy(
                 analysisRun = state.analysisRun.copy(run = page.run!!.copy(status = "stale")))))
     assertEquals("Stale", page.copy(run = page.run.copy(status = "stale")).statusLabel)
+  }
+
+  @Test
+  fun evidenceIdentityRequiresTheValidReportAndFindingSourcePair() {
+    val source = SecurityResult(report("deterministic", listOf(finding)), finding, stale = false)
+    val modelFinding = finding.copy(evidenceKind = "model_suspicion")
+    val model = SecurityResult(report("ai", listOf(modelFinding)), modelFinding, stale = false)
+    val unexpected =
+        SecurityResult(report("deterministic", listOf(modelFinding)), modelFinding, stale = false)
+    val unavailable = SecurityResult(report("ai", listOf(finding)), finding, stale = false)
+
+    assertEquals(SecurityEvidencePresentation.SourceRule, securityEvidencePresentation(source))
+    assertEquals(
+        "A source rule match identifies a pattern; it does not confirm a vulnerability.",
+        securityEvidencePresentation(source).warning)
+    assertEquals(SecurityEvidencePresentation.ModelHypothesis, securityEvidencePresentation(model))
+    assertTrue(
+        securityEvidencePresentation(model).warning.startsWith("Unverified model hypothesis."))
+    assertEquals(SecurityEvidencePresentation.Unavailable, securityEvidencePresentation(unexpected))
+    assertEquals(
+        SecurityEvidencePresentation.Unavailable, securityEvidencePresentation(unavailable))
+    assertTrue(
+        securityEvidencePresentation(unavailable)
+            .warning
+            .contains("Do not treat this finding as verified."))
+    assertTrue(unexpected.row().source.isBlank())
+  }
+
+  @Test
+  fun staleAnchorsRemainMarkedForTheExistingFixEligibilityOwner() {
+    val page = securityPageFixture()
+    val stale =
+        securityResults(page.copy(run = requireNotNull(page.run).copy(status = "stale"))).first()
+
+    assertTrue(securityFindingCanPrepareFix(stale.finding, resultIndexFixture()))
+    assertTrue(stale.stale)
   }
 
   private fun report(

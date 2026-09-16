@@ -371,6 +371,77 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
+  fun securityDetailKeepsEvidenceWarningsVisibleAndLongVerificationOnDemand() {
+    val original = securityPageFixture()
+    val results = requireNotNull(original.results)
+    val source = results.security.single { it.source == "deterministic" }
+    val longWarning =
+        "Some deterministic rules were unavailable for this file; rerun the scoped analysis before relying on complete coverage. "
+            .repeat(5)
+    val longPreconditions =
+        "The value may be a placeholder or test fixture, and external reachability is unknown until the owning request path is reviewed. "
+            .repeat(5)
+    val populated =
+        original.copy(
+            section =
+                original.section.copy(
+                    results =
+                        results.copy(
+                            security =
+                                listOf(
+                                    source.copy(
+                                        reason = longWarning,
+                                        findings =
+                                            source.findings.map {
+                                              it.copy(preconditions = longPreconditions)
+                                            })))))
+    var fixes = 0
+    ComposeVisualFixture(800, 400, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(populated, resultIndexFixture()),
+              SecurityWorkspaceActions({ fixes++ }, {}, FindingActions({}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("security-detail-compact-800-400-150")
+          fixture.clickDescription("Inspect Credential-like assignment")
+          fixture.render()
+          fixture.revealText("Prepare fix", "result-detail")
+          assertTrue(fixture.hasText("Source rule"))
+          assertTrue(
+              fixture.hasText(
+                  "A source rule match identifies a pattern; it does not confirm a vulnerability."))
+          assertTrue(fixture.hasText(longWarning))
+          assertFalse(fixture.hasText("Preconditions / unknowns"))
+          assertFalse(fixture.hasText("Safe verification idea"))
+          fixture.revealText("Evidence and safe verification", "result-detail")
+          fixture.clickText("Evidence and safe verification")
+          fixture.render("security-detail-disclosure-800-400-150")
+          assertTrue(fixture.hasText("Preconditions / unknowns"))
+          assertTrue(fixture.hasText("Safe verification idea"))
+          fixture.assertTextWrapsAndTailIsReachable(longPreconditions, "result-detail")
+          fixture.revealText("Prepare fix", "result-detail")
+          fixture.clickText("Prepare fix")
+          assertEquals(1, fixes)
+        }
+
+    val stale = populated.copy(run = requireNotNull(populated.run).copy(status = "stale"))
+    ComposeVisualFixture(800, 400, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(stale, resultIndexFixture()),
+              SecurityWorkspaceActions({ fixes++ }, {}, FindingActions({}, { _, _ -> })))
+        }
+        .use { fixture ->
+          fixture.render("security-detail-stale-800-400-150")
+          fixture.clickDescription("Inspect Credential-like assignment")
+          fixture.render()
+          fixture.revealText("Prepare fix", "result-detail")
+          assertTrue(fixture.isDisabled("Prepare fix"))
+          assertTrue(fixture.hasText("Analyze again to prepare a fix from current source."))
+          assertEquals(1, fixes)
+        }
+  }
+
+  @Test
   fun longRefreshErrorWithoutRowsRemainsReachableInShortLargeTextWindow() {
     val original = performancePageFixture()
     val refreshError =
