@@ -54,6 +54,7 @@ class FindingsPresentationTest {
 
     assertEquals("", current.source)
     assertEquals("", current.state)
+    assertEquals("Handle the returned error.", current.summary)
     assertEquals("Partial · Stale", stale.state)
     assertTrue(current.location.contains("internal/main.go:12"))
   }

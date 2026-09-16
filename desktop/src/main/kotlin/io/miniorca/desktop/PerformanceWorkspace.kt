@@ -132,12 +132,10 @@ private fun PerformanceFindingDetails(
 ) {
   val finding = result.finding
   var technical by remember(result.row().key) { mutableStateOf(false) }
-  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    ResultRowContent(result.row().copy(summary = ""))
-    Text("Observed pattern", style = IdeTypography.resultLabel, color = PrimaryText)
-    ModelResultContent(finding.observedPattern)
-    Text("Recommendation", style = IdeTypography.resultLabel, color = PrimaryText)
-    ModelResultContent(finding.recommendation)
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    ResultDetailHeader(result.row())
+    ResultEvidenceSection("Observed pattern", finding.observedPattern)
+    ResultEvidenceSection("Recommendation", finding.recommendation)
     ResponsiveActionGroup(Modifier.fillMaxWidth()) {
       MiniOrcaButton(
           onClick = { actions.prepareOptimization(result.report.path, finding) },
@@ -159,12 +157,9 @@ private fun PerformanceFindingDetails(
           "Potential improvement; benchmark the affected workload to verify its impact.",
           color = SecondaryText,
           style = IdeTypography.compactBody)
-      Text("When it matters", style = IdeTypography.resultLabel, color = PrimaryText)
-      ModelResultContent(finding.workloadConditions)
-      Text("Trade-offs", style = IdeTypography.resultLabel, color = PrimaryText)
-      ModelResultContent(finding.tradeoff)
-      Text("Verification plan", style = IdeTypography.resultLabel, color = PrimaryText)
-      ModelResultContent(finding.verificationPlan)
+      ResultEvidenceSection("When it matters", finding.workloadConditions)
+      ResultEvidenceSection("Trade-offs", finding.tradeoff)
+      ResultEvidenceSection("Verification plan", finding.verificationPlan)
       Text(
           "${result.report.profile} · ${result.report.model} · ${result.report.providerOrigin}",
           color = SecondaryText,

@@ -207,18 +207,10 @@ internal fun VerifiedScanDiagnostics(scan: GoScanReport) {
 @Composable
 internal fun FindingDetailsRegion(finding: UnifiedFinding, actions: FindingActions) {
   var technical by remember(findingDisplayKey(finding)) { mutableStateOf(false) }
-  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Text(
-        finding.title.ifBlank { "Untitled finding" },
-        style = IdeTypography.resultHeading,
-        color = PrimaryText)
-    IdeLabelBadge(
-        finding.severity.ifBlank { "Unknown severity" }, resultSeverityTint(finding.severity))
-    Text(findingLocationLabel(finding), style = IdeTypography.resultCode, color = SelectionText)
-    findingMaterialStateLabel(finding).takeIf(String::isNotBlank)?.let {
-      Text(it, style = IdeTypography.compactBody, color = Warning)
-    }
-    ModelResultContent(finding.message.ifBlank { "No summary supplied." })
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    ResultDetailHeader(semanticResultRow(finding))
+    ModelResultContent(
+        finding.message.ifBlank { "No summary supplied." }, style = IdeTypography.workspaceBody)
     FindingActionButtons(finding, actions)
     if (!findingCanPrepareFix(finding))
         Text(
