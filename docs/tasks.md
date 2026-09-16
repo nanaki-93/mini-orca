@@ -14,7 +14,8 @@ required checks and acceptance pass. Reset to Terra High for the next task.
 
 [Execution procedure](../tasks/README.md) owns scheduling, handoff and commit rules;
 [current handoff](../tasks/ideux-handoff.md) owns durable attempt counters and the
-next agent's context. The existing automation is reused at its 20-minute cadence,
+next agent's context. The existing automation is reused at minutes 09, 29 and 49
+each hour in the computer's local timezone,
 attached to this planning/implementation task. At the user's subsequent request,
 active execution now continues immediately after each accepted, verified task
 commit; the heartbeat starts or recovers idle/interrupted work. Existing source

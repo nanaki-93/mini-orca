@@ -14,13 +14,16 @@ immutable; later cards may inspect them but do not replace or regenerate them.
 
 ## Schedule and worker models
 
-- Reuse heartbeat `mini-orca-ux-implementation`, every 20 minutes, attached to
+- Reuse heartbeat `mini-orca-ux-implementation` at minutes 09, 29 and 49 each hour
+  in the computer's local timezone, attached to
   **Plan IDE UI/UX improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`).
   Run in this existing checkout, one ordered card attempt at a time. Continue
   immediately to the next card after acceptance and its verified local commit;
   the user requested this completion-driven continuation on 2026-09-16. The
-  20-minute heartbeat starts or recovers idle/interrupted work, not a delay between
-  cards. Resume an active attempt/check instead of launching a second writer.
+  fixed clock heartbeat starts or recovers idle/interrupted work, not a delay
+  between cards. Use fixed clock times because interval heartbeats count from
+  recent thread activity and can postpone the next run during conversation.
+  Resume an active attempt/check instead of launching a second writer.
 - The heartbeat coordinates; implementation is assigned to one fresh subagent
   with an explicit model and reasoning effort. Use `fork_turns="none"` and provide
   the complete task and handoff in its prompt. This user request authorizes those
