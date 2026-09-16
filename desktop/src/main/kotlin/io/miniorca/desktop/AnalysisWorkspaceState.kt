@@ -39,28 +39,45 @@ internal data class ProjectRunPresentation(
     val headline: String,
     val totalSteps: Int,
     val finishedSteps: Int,
+    val totalFiles: Int,
+    val finishedFiles: Int,
     val currentFiles: List<String>,
     val failures: List<AnalysisStageFailure>,
     val commands: List<AnalysisRunCommand>,
+    val isActive: Boolean,
 ) {
-  val progress: Float
-    get() = if (totalSteps == 0) 0f else finishedSteps.toFloat() / totalSteps
+  val fileProgress: Float?
+    get() = if (totalFiles == 0) null else finishedFiles.toFloat() / totalFiles
 }
+
+internal fun analysisStageFinished(status: String): Boolean =
+    status in setOf("completed", "completed_empty", "partial", "failed", "skipped", "unavailable")
+
+internal fun currentProjectRun(run: AnalysisRun?, project: ProjectAnalysis?): AnalysisRun? =
+    run?.takeIf {
+      project != null &&
+          it.identity.projectId == project.projectId &&
+          it.identity.projectRevision == project.projectRevision
+    }
+
+internal fun AnalysisRun.showsProgressOnSummary(): Boolean =
+    isActive() || status in setOf("paused", "interrupted")
 
 internal fun projectRunPresentation(analysis: ProjectAnalysisRunState): ProjectRunPresentation {
   val run = analysis.run
   val stages = run?.files.orEmpty().flatMap { it.stages }
   val plannedFiles = run?.plan?.files.orEmpty().associateBy { it.path }
-  val finishedSteps =
-      stages.count {
-        it.status in
-            setOf("completed", "completed_empty", "partial", "failed", "skipped", "unavailable")
-      }
+  val finishedSteps = stages.count { analysisStageFinished(it.status) }
   return ProjectRunPresentation(
       status = analysisStatusLabel(run?.status),
       headline = analysisRunHeadline(run, finishedSteps, stages.size),
       totalSteps = stages.size,
       finishedSteps = finishedSteps,
+      totalFiles = run?.files?.size ?: 0,
+      finishedFiles =
+          run?.files.orEmpty().count { file ->
+            file.stages.isNotEmpty() && file.stages.all { analysisStageFinished(it.status) }
+          },
       currentFiles =
           run?.files
               .orEmpty()
@@ -92,17 +109,14 @@ internal fun projectRunPresentation(analysis: ProjectAnalysisRunState): ProjectR
                     AnalysisRunCommand.RetryStaleFailed,
                     AnalysisRunCommand.Cancel)
             else -> listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed)
-          })
+          },
+      isActive = run?.isActive() == true)
 }
 
 internal fun analysisRunHeadline(run: AnalysisRun?, finishedSteps: Int, totalSteps: Int): String {
   if (run == null) return "Last run · None"
   val facts = mutableListOf(if (run.isActive()) "Current run" else "Last run")
   if (run.isActive()) {
-    if (totalSteps > 0) {
-      facts += "$finishedSteps finished"
-      facts += "${(totalSteps - finishedSteps).coerceAtLeast(0)} remaining"
-    }
     if (run.windowFilesCompleted > 0) {
       facts +=
           "${run.windowFilesCompleted} ${if (run.windowFilesCompleted == 1) "file" else "files"} processed"

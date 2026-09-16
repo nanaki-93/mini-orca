@@ -1,12 +1,12 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
@@ -42,81 +43,44 @@ internal fun AnalysisWorkspacePane(
 ) {
   val analysis = state.analysis
   val presentation = projectRunPresentation(analysis)
-  val busy = analysis.action.isNotEmpty() || analysis.fileSelection.saving
-  LazyColumn(
-      Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(8.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-          IdePaneHeader(
-              title = presentation.headline,
-              icon = DesktopIcon.Analysis,
-              stateLabel = if (analysis.run?.isActive() == true) presentation.status else null,
-              stateTint = analysisStatusTint(analysis.run?.status),
-              actions = {
-                presentation.commands.forEach { command ->
-                  MiniOrcaButton(
-                      onClick = {
-                        when (command) {
-                          AnalysisRunCommand.Start,
-                          AnalysisRunCommand.RetryStaleFailed ->
-                              actions.start(
-                                  defaultAnalysisRunLimits,
-                                  command == AnalysisRunCommand.RetryStaleFailed)
-                          AnalysisRunCommand.Pause -> actions.pause()
-                          AnalysisRunCommand.Resume -> actions.resume()
-                          AnalysisRunCommand.Cancel -> actions.cancel()
-                        }
-                      },
-                      enabled = state.project != null && !busy,
-                      tone =
-                          if (command == AnalysisRunCommand.Cancel) ActionTone.Destructive
-                          else if (command == AnalysisRunCommand.RetryStaleFailed)
-                              ActionTone.Neutral
-                          else ActionTone.Primary,
-                      density = ButtonDensity.Toolbar) {
-                        Text(command.label)
-                      }
-                }
-              })
-          analysis.run
-              ?.reason
-              ?.takeIf { it.isNotBlank() }
-              ?.let { DiagnosticText(it, color = Warning) }
-          if (analysis.action.isNotEmpty())
-              Text(
-                  "${analysis.action.replaceFirstChar { it.uppercase() }}…",
-                  style = IdeTypography.compactBody,
-                  color = SelectionText)
-          analysis.error?.let { DiagnosticText(it, color = Error) }
+  BoxWithConstraints(Modifier.fillMaxSize()) {
+    LazyColumn(
+        Modifier.fillMaxSize().testTag("analysis-page"),
+        contentPadding = workspacePagePadding(maxWidth, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+          item { AnalysisRunPanel(state, actions, presentation) }
+          item { AnalysisCategoryPanels(state, actions.openResults) }
+          item { AnalysisFileSelector(analysis, actions) }
+          items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
         }
-        item {
-          analysis.run?.let { run ->
-            if (run.isActive())
-                IdeProgressBar(
-                    presentation.progress,
-                    Modifier.fillMaxWidth().padding(vertical = 8.dp).height(4.dp),
-                    color = SelectionText,
-                    trackColor = StrongSurface)
-            presentation.currentFiles.forEach {
-              Text("Current: $it", style = IdeTypography.resultCode, color = SelectionText)
-            }
-            if (run.plan.compatibilityStage.isNotBlank())
-                Text(
-                    "Saved limited run: ${analysisStageLabel(run.plan.compatibilityStage)}",
-                    color = Warning,
-                    style = IdeTypography.compactBody)
-            if (run.plan.retryStaleFailed)
-                Text(
-                    "Scope: stale & failed files",
-                    color = SecondaryText,
-                    style = IdeTypography.compactBody)
-          }
-        }
-        item { AnalysisCategoryPanels(state, actions.openResults) }
-        item { AnalysisFileSelector(analysis, actions) }
-        items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
-      }
+  }
+}
+
+@Composable
+private fun AnalysisRunPanel(
+    state: AnalysisWorkspacePaneState,
+    actions: AnalysisWorkspaceActions,
+    presentation: ProjectRunPresentation,
+) {
+  val analysis = state.analysis
+  val run = analysis.run
+  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    AnalysisRunStrip(
+        state, actions, AnalysisRunStripScope.Analysis, Modifier.testTag("analysis-run-panel"))
+    if (presentation.headline != "Current run")
+        Text(presentation.headline, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+    run?.reason?.takeIf { it.isNotBlank() }?.let { DiagnosticText(it, color = Warning) }
+    if (run?.plan?.compatibilityStage?.isNotBlank() == true)
+        Text(
+            "Saved limited run: ${analysisStageLabel(run.plan.compatibilityStage)}",
+            color = Warning,
+            style = IdeTypography.workspaceMetadata)
+    if (run?.plan?.retryStaleFailed == true)
+        Text(
+            "Scope: stale & failed files",
+            color = SecondaryText,
+            style = IdeTypography.workspaceMetadata)
+  }
 }
 
 @Composable

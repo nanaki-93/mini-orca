@@ -57,6 +57,122 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun unknownFileProgressKeepsOneTruthfulTrackAcrossActiveAndPausedRuns() {
+    listOf(
+            Triple("running", "Pause", "Resume"),
+            Triple("paused", "Resume", "Pause"),
+        )
+        .forEach { (status, expectedAction, absentAction) ->
+          val run =
+              analysisRunFixture()
+                  .copy(
+                      status = status,
+                      files = emptyList(),
+                      sections = analysisRunFixture().sections.map { it.copy(status = status) },
+                  )
+          ComposeVisualFixture(800, 650, 1.5f) {
+                AnalysisWorkspacePane(
+                    AnalysisWorkspacePaneState(
+                        resultProjectFixture(), ProjectAnalysisRunState(run = run)),
+                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}),
+                )
+              }
+              .use { fixture ->
+                fixture.render("analysis-progress-unknown-$status-800-1.5")
+                fixture.assertTextFits(analysisStatusLabel(status))
+                fixture.assertTextFits("File progress unavailable")
+                fixture.assertTextFits(expectedAction)
+                fixture.assertTextFits("Cancel")
+                assertFalse(fixture.hasText(absentAction))
+                assertFalse(fixture.hasText("0 of 0 files finished"))
+                assertEquals(1, fixture.tagCount("analysis-run-progress-track"))
+                assertTrue(fixture.hasDescription("Files finished: progress unavailable"))
+              }
+        }
+  }
+
+  @Test
+  fun sharedRunStripWrapsProgressAndUsesCurrentLifecycleControlsInSummary() {
+    val paths = listOf("internal/transport/main.go", "internal/storage/repository.go")
+    val initialRun =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                identity =
+                    analysisRunFixture()
+                        .identity
+                        .copy(
+                            projectId = visualFixtureProject.projectId,
+                            projectRevision = visualFixtureProject.projectRevision),
+                files =
+                    paths.mapIndexed { index, path ->
+                      AnalysisRunFile(
+                          path,
+                          "hash-$index",
+                          "Go",
+                          listOf(AnalysisStageProgress("semantic", "running", 1, false)))
+                    })
+    listOf(1440 to 1f, 800 to 1.5f).forEach { (width, scale) ->
+      var state by mutableStateOf(ProjectAnalysisRunState(run = initialRun))
+      var pauses = 0
+      var resumes = 0
+      var cancels = 0
+      val actions =
+          AnalysisWorkspaceActions(
+              { _, _ -> error("Summary must not start or retry analysis") },
+              { pauses++ },
+              { resumes++ },
+              { cancels++ },
+              {})
+      ComposeVisualFixture(width, 650, scale) {
+            ProjectSummaryPane(
+                visualFixtureOverview,
+                visualFixtureProject,
+                {},
+                run = state.run,
+                analysisState = state,
+                analysisActions = actions)
+          }
+          .use { fixture ->
+            fixture.render("summary-run-strip-$width-$scale")
+            fixture.assertTextFits("Running")
+            fixture.assertTextFits("0 of 2 files finished")
+            fixture.assertTextFits("Pause")
+            fixture.assertTextFits("Cancel")
+            assertFalse(fixture.hasText("Start analysis"))
+            assertFalse(fixture.hasText("Analyze stale & failed"))
+            assertTrue(fixture.taggedBounds("analysis-run-progress-track").width > 0f)
+            if (width == 1440) {
+              fixture.assertTextSharesRowBefore("Running", "0 of 2 files finished")
+              fixture.assertTextSharesRowBefore(
+                  "0 of 2 files finished", "Current: ${paths.first()}")
+              fixture.assertTextSharesRowBefore("Current: ${paths.first()}", "Pause")
+            } else {
+              fixture.assertTextAbove("Current: ${paths.first()}", "Pause")
+            }
+            fixture.clickText("Pause")
+            fixture.clickText("Cancel")
+            assertEquals(1, pauses)
+            assertEquals(1, cancels)
+            fixture.clickDescription("Show active files")
+            fixture.render("summary-run-strip-expanded-$width-$scale")
+            fixture.assertTextFits("Current: ${paths.last()}", maxLines = 2)
+
+            state = state.copy(action = "pausing")
+            fixture.render("summary-run-strip-disabled-$width-$scale")
+            assertTrue(fixture.isDisabled("Pause"))
+
+            state = state.copy(run = initialRun.copy(status = "paused"), action = "")
+            fixture.render("summary-run-strip-paused-$width-$scale")
+            fixture.assertTextFits("Paused")
+            fixture.assertTextFits("Resume")
+            fixture.clickText("Resume")
+            assertEquals(1, resumes)
+          }
+    }
+  }
+
+  @Test
   fun finalLifecycleMatrixUsesProductionPanesAtLargeText() {
     acceptanceRunStates.forEach { status ->
       ComposeVisualFixture(800, 650, 1.5f) {
@@ -68,8 +184,12 @@ class DesktopVisualLayoutTest {
           .use { fixture ->
             fixture.render("final-progress-$status-800-150")
             val run = acceptanceRun(status)
-            fixture.assertTextFits(
-                projectRunPresentation(ProjectAnalysisRunState(run = run)).headline)
+            val presentation = projectRunPresentation(ProjectAnalysisRunState(run = run))
+            if (presentation.headline != "Current run")
+                fixture.assertTextFits(presentation.headline)
+            else
+                fixture.assertTextFits(
+                    "${presentation.finishedFiles} of ${presentation.totalFiles} files finished")
             assertFalse(fixture.hasText("Run details"))
             assertFalse(fixture.hasText("Run limits"))
           }
@@ -1965,7 +2085,7 @@ class DesktopVisualLayoutTest {
             }
             fixture.revealText("Partial")
             fixture.assertTextFits("Partial")
-            fixture.revealText("Paused")
+            fixture.revealSummaryStatus("Paused")
             fixture.assertTextFits("Paused")
             fixture.assertSummaryStatusPlacement("Paused")
           }
@@ -2645,6 +2765,45 @@ internal class ComposeVisualFixture(
           .mapNotNull { it.config.getOrNull(SemanticsActions.Dismiss)?.action }
           .firstOrNull()
           ?.invoke() ?: false
+
+  fun taggedBounds(tag: String): Rect = taggedNode(tag).boundsInRoot
+
+  fun tagCount(tag: String): Int =
+      nodes().count { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+
+  private fun taggedNode(tag: String): SemanticsNode =
+      nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+
+  fun revealSummaryStatus(label: String) {
+    fun visible(): Boolean =
+        textNodes(label).any { node ->
+          val belongsToCoverage =
+              generateSequence(node) { it.parent }
+                  .any {
+                    it.config.getOrNull(SemanticsProperties.TestTag) == "summary-analysis-status"
+                  }
+          val bounds = node.boundsInRoot
+          belongsToCoverage && bounds.height > 0 && bounds.top >= 0 && bounds.bottom <= height
+        }
+    if (visible()) return
+    scrollBy(-100_000f)
+    render()
+    repeat(100) {
+      if (visible()) return
+      scrollBy(160f)
+      render()
+    }
+    error("$label in Analysis coverage must be reachable by scrolling")
+  }
+
+  fun assertTextSharesRowBefore(label: String, following: String) {
+    val first = textNodes(label).single().boundsInRoot
+    val second = textNodes(following).single().boundsInRoot
+    assertTrue(first.right < second.left, "$label must be left of $following")
+    assertTrue(
+        maxOf(first.top, second.top) < minOf(first.bottom, second.bottom),
+        "$label and $following must share a row")
+  }
 
   fun assertSummaryColumns() {
     fun bounds(tag: String) =

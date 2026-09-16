@@ -59,7 +59,7 @@ class AnalysisWorkspaceStateTest {
                                 AnalysisStageProgress("semantic", "completed", 1, false),
                                 AnalysisStageProgress("performance", "pending", 0, false)))))
     assertEquals(
-        "Current run · 1 finished · 1 remaining · 3 files processed · 42s elapsed",
+        "Current run · 3 files processed · 42s elapsed",
         projectRunPresentation(ProjectAnalysisRunState(run = run)).headline)
     assertEquals(
         "Last run · Paused · 1 of 2 stages · 2026-09-15T15:30:00Z",
@@ -159,6 +159,25 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
+  fun summaryProgressUsesOnlyTheCurrentRunAndItsExistingLifecycleStates() {
+    val project = resultProjectFixture()
+    val run = analysisRunFixture()
+
+    listOf("queued", "running", "pausing", "canceling", "paused", "interrupted").forEach { status ->
+      assertTrue(run.copy(status = status).showsProgressOnSummary())
+    }
+    listOf("stale", "failed", "partial", "canceled", "completed", "completed_empty").forEach {
+        status ->
+      assertFalse(run.copy(status = status).showsProgressOnSummary())
+    }
+    assertEquals(run, currentProjectRun(run, project))
+    assertNull(
+        currentProjectRun(run.copy(identity = run.identity.copy(projectId = "other")), project))
+    assertNull(
+        currentProjectRun(run.copy(identity = run.identity.copy(projectRevision = "old")), project))
+  }
+
+  @Test
   fun overallProgressCountsUniqueStagesAndRetainsFailuresAndCurrentPaths() {
     val run =
         analysisRunFixture()
@@ -183,11 +202,43 @@ class AnalysisWorkspaceStateTest {
     val result = projectRunPresentation(ProjectAnalysisRunState(run = run))
     assertEquals(4, result.totalSteps)
     assertEquals(2, result.finishedSteps)
-    assertEquals(0.5f, result.progress)
+    assertEquals(0f, result.fileProgress)
     assertEquals(listOf("main.go"), result.currentFiles)
     assertEquals(
         AnalysisStageFailure("main.go", "security_source", 2, "source scanner unavailable"),
         result.failures.single())
+  }
+
+  @Test
+  fun fileProgressCountsOnlyFilesWhoseStagesFinishedWithoutCallingThemSuccessful() {
+    val files =
+        listOf(
+                listOf("completed", "completed_empty"),
+                listOf("completed", "failed"),
+                listOf("partial", "skipped"),
+                listOf("completed", "running"),
+                listOf("pending"),
+                emptyList())
+            .mapIndexed { index, states ->
+              AnalysisRunFile(
+                  "file$index.go",
+                  "base",
+                  "Go",
+                  states.mapIndexed { stage, status ->
+                    AnalysisStageProgress("stage$stage", status, 1, false)
+                  })
+            }
+    val result =
+        projectRunPresentation(
+            ProjectAnalysisRunState(run = analysisRunFixture().copy(files = files)))
+    assertEquals(6, result.totalFiles)
+    assertEquals(3, result.finishedFiles)
+    assertEquals(.5f, result.fileProgress)
+    assertNull(projectRunPresentation(ProjectAnalysisRunState()).fileProgress)
+    assertNull(
+        projectRunPresentation(
+                ProjectAnalysisRunState(run = analysisRunFixture().copy(files = emptyList())))
+            .fileProgress)
   }
 
   @Test
@@ -235,7 +286,7 @@ class AnalysisWorkspaceStateTest {
     assertTrue(result.failures.isEmpty())
     assertEquals(files.size, result.totalSteps)
     assertEquals(files.size, result.finishedSteps)
-    assertEquals(1f, result.progress)
+    assertEquals(1f, result.fileProgress)
   }
 
   @Test

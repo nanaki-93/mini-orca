@@ -6,7 +6,7 @@ workspaces, preserving Mini-Orca's colors, icon-only left rail and guarded editi
 
 ## Scope and status
 
-**IDEUX-01–13: approved for scheduled implementation, 4/13 accepted.** On
+**IDEUX-01–13: approved for scheduled implementation, 5/13 accepted.** On
 2026-09-16 the user authorized Terra High implementation, two Terra retries, then
 Sol High with the same initial-attempt-plus-two-retries policy. Every retry must
 receive the task and concrete failure context. Commit each task locally after its
@@ -454,7 +454,7 @@ the handoff before immediately starting IDEUX-05.
 
 ## Task IDEUX-05 — Share one compact run-progress strip
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — 2026-09-16; Sol High retry2 after three Terra failures and two Sol failures/gaps.
 
 **Target files**
 
@@ -465,6 +465,8 @@ the handoff before immediately starting IDEUX-05.
 - `desktop/src/main/kotlin/io/miniorca/desktop/AnalysisWorkspaceState.kt` — reuse or refine progress projection without a second lifecycle rule set.
 - `desktop/src/test/kotlin/io/miniorca/desktop/AnalysisWorkspaceStateTest.kt` — lifecycle, count and identity behavior.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — progress strip interactions at wide/compact sizes.
+
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopContrastTest.kt` — preserve lifecycle status/readability/contrast assertions against the shared strip; narrow target correction identified by the full desktop gate.
 
 **Inputs / dependencies**
 
@@ -490,6 +492,43 @@ the handoff before immediately starting IDEUX-05.
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.DesktopAnalysisWorkflowTest' --tests 'io.miniorca.desktop.DesktopAnalysisAdmissionTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/progress"
 ```
+
+### IDEUX-05 acceptance evidence — 2026-09-16
+
+Summary and Analysis now share one compact run strip with status, real finished-file
+counts, current paths, one progress track and existing guarded run controls. Wide
+layouts align these horizontally; compact/large-text layouts wrap. Extra active
+paths remain available through a local disclosure. Summary includes only current
+active/paused/interrupted runs; retained coverage and Analysis-owned scope/history
+remain separate. Unknown counts stay unavailable; only active unknown progress
+shows a busy indicator. Pending actions disable controls, Resume uses the existing
+admission flow, and cancellation has a visible label.
+
+The final Sol retry2 passed the exact focused command:86/86 tests (state11,
+workflow17, admission3, visual55). The full desktop command passed505/505 tests,
+Spotless and Detekt, with zero failures/errors/skips. `git diff --check` passed.
+Actual production renders reviewed under `desktop/build/reports/ide-ux/progress/`
+include wide/compact Summary strips, expanded active paths, pending-disabled and
+paused controls, Analysis1280/150%, both full frames1280×600/150%, and the dedicated
+`analysis-progress-unknown-running-800-1.5.png` and
+`analysis-progress-unknown-paused-800-1.5.png`. The coordinator independently inspected
+the unknown states: one unavailable track, correct controls, busy indicator only
+while running. These are offscreen components; native/package acceptance remains13.
+
+The task commit includes reviewed existing file-progress projection, Analysis page
+spacing/layout and related state/lifecycle test prerequisites. Unrelated finding
+layout and shell/frame/editor changes are preserved outside this commit. The
+rounded Analysis frame's updated heading assertion remains with its existing native
+fixture graph for IDEUX-13, alongside the recorded IDEUX-03 mode-switch callback.
+Only the eight listed implementation/test targets changed from this card's baseline;
+unrelated baseline hashes remain unchanged.
+
+An independent export of the proposed commit passed479/479 tests, Spotless and
+Detekt. Initial selective assembly omitted the existing active-run lifecycle fixture
+expectation, causing one failure; including that reviewed prerequisite resolved it.
+Temporary extraction formatting normalized two blank lines. Neither operation
+changed the passing working-tree candidate or consumed a worker retry. Commit hash
+is verified in the handoff before immediately dispatching IDEUX-06 at Terra High.
 
 ## Task IDEUX-06 — Simplify the shared finding list and detail layout
 
@@ -774,7 +813,7 @@ the handoff before immediately starting IDEUX-05.
 
 **Target files**
 
-- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` — deterministic full-workspace states and native interaction coverage; include the preserved IDEUX-03 mode-switch callback with its prior native fixture prerequisites.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAcceptanceFixture.kt` — deterministic full-workspace states and native interaction coverage; include the preserved IDEUX-03 mode-switch callback with its prior native fixture prerequisites. Retain the IDEUX-05 rounded Analysis heading assertion with the corresponding full-frame visual fixture graph.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — integrated production reference and boundary matrix.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopAccessibilityTest.kt` — changed controls' names, state and keyboard semantics.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — end-to-end focus and shortcut regressions.

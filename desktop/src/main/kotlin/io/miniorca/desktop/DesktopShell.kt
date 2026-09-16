@@ -1041,7 +1041,9 @@ private fun ContentPane(
               openResults = navigation.selectWorkspace,
               run = state.analysis.analysis.run,
               sections = state.analysis.analysis.sections,
-              fileSelection = state.analysis.analysis.fileSelection.selection)
+              fileSelection = state.analysis.analysis.fileSelection.selection,
+              analysisState = state.analysis.analysis,
+              analysisActions = analysisActions)
       Workspace.Editor ->
           EditorWorkspace(
               chrome = state.editorChrome,

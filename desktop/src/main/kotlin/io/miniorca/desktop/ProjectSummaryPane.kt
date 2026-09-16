@@ -229,6 +229,8 @@ internal fun ProjectSummaryPane(
     run: AnalysisRun? = overview?.analysisRun,
     sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     fileSelection: AnalysisFileSelection? = null,
+    analysisState: ProjectAnalysisRunState? = null,
+    analysisActions: AnalysisWorkspaceActions? = null,
 ) {
   val presentation = projectSummaryPresentation(overview, project, run, sections, fileSelection)
   val fontScale = LocalDensity.current.fontScale
@@ -243,6 +245,16 @@ internal fun ProjectSummaryPane(
       if (!presentation.hasProject) {
         item { SystemStateMessage("No project selected", "", modifier = Modifier.fillMaxWidth()) }
       } else {
+        val currentRun = currentProjectRun(run, project)
+        val stripState = analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)
+        if (currentRun?.showsProgressOnSummary() == true)
+            item {
+              AnalysisRunStrip(
+                  AnalysisWorkspacePaneState(project, stripState.copy(run = currentRun)),
+                  analysisActions,
+                  AnalysisRunStripScope.Summary,
+                  Modifier.testTag("summary-analysis-run-strip"))
+            }
         item { SummaryIntroduction(presentation) }
         item { SummaryCoverage(presentation) { openResults(Workspace.Analysis) } }
         item {

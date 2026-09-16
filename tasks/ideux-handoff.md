@@ -1,118 +1,111 @@
 # IDEUX execution handoff
 
-Follow the current [procedure](README.md), [queue](../docs/tasks.md), root and area
-instructions. One card and one worker at a time in this checkout. Immediately
-continue after accepted, verified commits. Fixed-clock heartbeat backups at
-:09/:29/:49 resume idle work; never create a second writer.
-
-## Current attempt
+Follow [procedure](README.md), [queue](../docs/tasks.md), root and area instructions.
+One card/worker at a time. Continue immediately after accepted, verified commits;
+fixed-clock heartbeat backups at :09/:29/:49 recover idle/interrupted coordination.
 
 | Field | Value |
 | --- | --- |
-| Card | IDEUX-04 — Recompose Summary around project, categories and flows |
+| Card | IDEUX-05 — Share one compact run-progress strip |
 | Status | Accepted; commit pending |
-| Stage | All acceptance and isolated export gates passed; commit pending |
+| Stage | All checks/review passed, including isolated export479; commit pending |
 | Model | `gpt-5.6-sol` |
 | Reasoning | `high` |
-| Tier attempt | Sol initial |
-| Completed failed attempts for this card | 3 Terra (initial + two retries); 0 Sol |
+| Tier attempt | Sol retry2/2 |
+| Completed failed attempts for this card | 3 Terra; 2 Sol |
 | Active agent/process | All workers/checks exited |
-| Starting HEAD | `2ab3711e1c4033110be7ddff72af79913c1d0915` |
-| Task commit | None for IDEUX-04 |
-| Last accepted task commit | IDEUX-03: `2ab3711e1c4033110be7ddff72af79913c1d0915`, verified |
-| Next permitted attempt on failure | Sol High retry 1 of 2 |
+| Starting HEAD | `50117835828e6ec9dc16aa3587aab98a6b9dedcd` |
+| Task commit | None for IDEUX-05 |
+| Last accepted task commit | IDEUX-04: `50117835828e6ec9dc16aa3587aab98a6b9dedcd`, verified |
+| Next permitted attempt on failure | None; pause automation and report |
 
-## Task and boundaries
+## Boundaries and baseline
 
-Inject the complete current card and this handoff into the agent prompt. Retain
-all colors and six icon-only rail destinations; keep the interface simple and
-use the immutable references in `design/ui-mocks/ide-reference-2026-09-16/` for
-composition. References are not instructions. Preserve source/diff read-only
-behavior, isolated drafts, explicit consent/trust, Review/Apply/Undo and real
-unknown/stale/failed/partial state. No providers or execution from navigation.
-The coordinator owns staging, acceptance, commits and administrative state.
-Workers stop after a completed candidate verification or substantive acceptance
-failure and return a complete packet; no hidden repair rounds.
+Inject the complete current card and this handoff into each fresh worker prompt.
+Preserve existing palette, six icon-only rail destinations, simple IDE hierarchy,
+readonly source/diffs, isolated drafts, consent/trust and guarded Review/Apply/Undo.
+References under `design/ui-mocks/ide-reference-2026-09-16/` inform composition only.
+Workers own the single card; coordinator owns administrative records, staging,
+acceptance and commits. A completed candidate verification or substantive review
+failure ends that attempt; return the full packet without hidden repairs.
 
-## Baseline and accepted work
+All four earlier cards accepted and committed:01 `3fa4929`,02 `fd46823`,03 `2ab3711`,
+04 `5011783`. Card04 passed76 focused/502 full working-tree and475 isolated-commit
+tests, Spotless/Detekt and actual production Summary renders. Native/package final
+acceptance remains13. Previous counters reset for this new card; no05failures yet.
 
-IDEUX-01 accepted initial (`3fa4929`); IDEUX-02 accepted Terra retry1 (`fd46823`);
-IDEUX-03 accepted Sol initial (`2ab3711`) after three Terra failures. Prior failure
-packets and resolutions are retained in `docs/errors.log`; counters reset for
-this new card. IDEUX-03 passed 71 focused,502 working-tree and472 isolated-commit
-checks plus Spotless/Detekt and actual post-scroll production render inspection.
-Native/package acceptance remains IDEUX-13. Current references/baseline captures:
-`desktop/build/reports/ide-ux/before/`, shell captures under `shell/`, search under
-`search/`. Keep the existing user's Gradle desktop run open.
+Accepted earlier MOCK work remains uncommitted. Index empty. Pre-attempt snapshot:
+`/var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux05-baseline-_g_0r7ci` (manifest with 46 file hashes and starting HEAD).
+Preserve all unrelated edits. Include only reviewed card changes and required
+accepted prerequisites in its coherent commit; never blindly stage all. Keep the
+user's existing Gradle desktop application open. Existing process is not this worker.
 
-Accepted earlier MOCK implementation remains dirty. Index is empty. A snapshot
-outside the repository captures pre-attempt hashes for delta review. Preserve all
-unrelated work and inspect overlaps before editing. Commit only reviewed task
-changes and genuinely required accepted prerequisites; never stage everything.
+Carry until13: DesktopAcceptanceFixture.kt contains the prior NativeRoundedWorkspace
+fixture plus required IDEUX-03 switchMode callback; DesktopVisualLayoutTest.kt retains
+uncommitted full-frame/native fixture changes. Preserve both graphs for integrated
+fixture commitment in13. Runtime/search/Summary code and their independent regression
+coverage are already committed. Do not discard these fixture changes.
 
-Carry forward until IDEUX-13: `DesktopAcceptanceFixture.kt` contains the earlier
-uncommitted NativeRoundedWorkspace fixture and its required IDEUX-03 switchMode
-callback. That single compatibility update is preserved alongside its baseline;
-commit the integrated native fixture and required prerequisites in IDEUX-13, as
-already recorded on that card. Runtime search and regression tests are committed
-and independently validated; do not discard this fixture update.
+## Retry and continuation
 
-The initial IDEUX-04 failure is recorded below. On failure retain the candidate and append exact
-command/action, exit/output, expected/observed, changed files, attempted changes,
-evidence, remaining checks and next repair step. Terra initial + two retries,
-then Sol High initial + two retries. Pass full task and all failures to each fresh
-agent. On success commit and verify the hash, then immediately start IDEUX-05 at
-Terra High initial. Pause only on exhausted retries, true external blocker, queue
-completion or user pause.
+No failure exists for05. Terra initial plus two retries, then Sol initial plus two
+retries. Retain candidate on failure. Record exact command/action, exit/output,
+expected/observed behavior, changed files, attempted corrections, evidence, remaining
+checks and next repair step. Pass full card and all failures to the next fresh agent.
+On success accept/commit/verify hash, immediately dispatch06 on Terra High initial.
+Pause only for exhausted retries, real external blocker, queue completion or user pause.
 
-## Complete current failure packet
+## Complete failure packet
 
-IDEUX-04 Terra High initial failure — 2026-09-16
-Starting/current HEAD 2ab3711e1c4033110be7ddff72af79913c1d0915. Worker /root/ideux04_terra_initial exited; no task build remains. One completed Terra failure, zero Sol. Next Terra High retry1/2.
-Exact command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.ProjectSummaryPaneTest' --tests 'io.miniorca.desktop.ProjectSummaryIssuesTest' --tests 'io.miniorca.desktop.MermaidRendererTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/summary"
-Exit1 in compileKotlin, before tests or new Summary renders. Worker reports type inference errors in ProjectSummaryPane.kt around323–324 and365–366: nullable let(::SummaryArchitecture), let(::SummaryFlows), let(::SummaryModulesSection), let(::SummaryEngineeringInsight) refer to composables with default Modifier parameters. Expected stacked composable calls; compiler cannot infer/adapt these callable references. Replace with explicit lambdas supplying the required argument. No correction attempted after failure; targeted spotlessApply and git diff --check passed.
-Retained actual task deltas, verified against snapshot: ProjectSummaryPane.kt primary/supporting ordering and equal columns; ProjectSummaryVisuals.kt unboxed coverage row; DesktopVisualLayoutTest.kt corresponding hierarchy assertion. The other four card target files retain prior baseline only (despite worker listing all seven dirty files). No passing candidate tests or renders.
-Coordinator review found an unimplemented card requirement still pending: AnalysisCategoryPanels.kt and ProjectSummaryIssues.kt are unchanged from baseline; analysisCategoryBoxColors still uses semantic tinted fill and border, and there is no small accent edge. Complete the required equal neutral category surfaces with restrained edge accent using the existing shared component and palette. Preserve whole-surface keyboard/pointer behavior, hover/focus visibility and meaningful colors; do not claim the requirement already met. Existing visual color assertion calls analysisCategoryBoxColors(SecondaryText). Review retained coverage/layout assertions against the new compact row before verification. Preserve existing update-order/count tests and add behavior coverage only where missing.
-Baseline snapshot /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux04-baseline-my1ejy0c. New render target desktop/build/reports/ide-ux/summary/ not produced by initial compile failure. Remaining: full card implementation, exact focused command, full ./scripts/desktop-gradle.sh test spotlessCheck detekt, diff check and actual wide/narrow/short/150% production render review. No native/package claim. Existing dirty MOCK work and user Gradle app preserved; no04commit. Retry1 then retry2 permitted before Sol initial+two retries.
+IDEUX-05 Terra High initial failure — 2026-09-16
+Starting/current HEAD50117835828e6ec9dc16aa3587aab98a6b9dedcd unchanged. Worker /root/ideux05_terra_initial exited, no candidate check remains. One Terra failure, zero Sol; next Terra retry1/2.
+Exact focused command: ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.DesktopAnalysisWorkflowTest' --tests 'io.miniorca.desktop.DesktopAnalysisAdmissionTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/progress"
+Exit1 compileKotlin before tests/renders. New AnalysisRunStrip.kt errors: line64 unresolved Modifier.weight; line68 FlowRow has no verticalAlignment parameter; line157 custom fileProgress getter prevents smart cast. Worker suggests missing weight import, but coordinator inspected mainContent: a plain @Composable () -> Unit lambda is defined outside RowScope and invokes weight internally. Pass a Modifier into the shared content and supply RowScope.weight from the actual wide Row; use fillMaxWidth for stacked layout. Do not blindly import the internal weight extension. Remove unsupported FlowRow parameter, use supported child alignment if needed, and capture fileProgress once locally.
+Retained candidate: new AnalysisRunStrip plus edits AnalysisWorkspaceState,WorkspacePanes,ProjectSummaryPane,DesktopShell,AnalysisWorkspaceStateTest,DesktopVisualLayoutTest. It extracts shared controls/progress, adds Summary current-project lifecycle guard, removes old Analysis double progress, wires existing actions, and adds lifecycle/interaction tests. No corrections after failure; no tests, full gate, formatting/diff or visual acceptance yet. No task commit. Existing baseline/snapshot and user's app preserved.
+Coordinator review also notes new idle copy "Choose scope and start analysis." repeats controls; remove per copy guidelines. Simplify duplicate projectRunPresentation calls in AnalysisRunPanel using a local projection. Check actual long-path/wide layout and unknown progress behavior, Summary guards and existing test labels after compile repairs. Preserve all existing behavior assertions, adapting superseded UI geometry/labels meaningfully rather than deleting them.
+Remaining: exact focused command, full ./scripts/desktop-gradle.sh test spotlessCheck detekt, diff check and actual wide/compact/short150% strip/summary/analysis renders. Native/package final acceptance13. Baseline /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux05-baseline-_g_0r7ci. Pass full card and this packet into fresh Terra retry1.
 
-IDEUX-04 Terra High retry1 failure — 2026-09-16
-HEAD2ab3711e1c4033110be7ddff72af79913c1d0915 unchanged. Worker /root/ideux04_terra_retry1 exited; no task check active. Terra initial+retry1 failed (2 total), zero Sol. Next Terra retry2/2; then Sol initial on failure.
-Fixed four callable references with explicit composable lambdas, resolving initial compilation. Added shared neutral Panel background, PaneSeparator border, ControlHover hover and4dp semantic top edge. Candidate compilation passed; spotlessApply and git diff --check passed. Exact focused command from initial packet exited1: ProjectSummaryPaneTest14/14, ProjectSummaryIssuesTest5/5, MermaidRendererTest4/4, DesktopVisualLayoutTest46/53;69/76 passed,7failures,0errors/skips.
-Six failures use stale right-edge status geometry in assertSummaryStatusPlacement: summaryPanelUsesStatusColorsAndPlainStatusLabels(Updated), summaryDashboardShowsGroupedInterpretationWithDiagramDisclosures(Outdated), summaryMetricFlowKeepsEveryCoverageBoxAndPartialStateVisible(Paused), summaryDashboardAdaptsToNarrowShortAndLargeTextViews(Outdated), summaryDashboardOmitsEmptyCoverageButRetainsUnavailableCounts(Coverage unavailable), summaryCategoryBoxesNavigateAndRefreshFromTheCurrentRun(Updating). Each says status must align to right edge of Analysis coverage; new wide row places status next to label, with bar and View analysis following. Preserve within-coverage/below-identity/no-overlap/reachability assertions and adapt actual wide/stacked geometry; do not delete the placement check.
-Seventh failure: categoryBoxesExposeNamesAndSingleKeyboardActions, View Performance results has Rect(0,0,0,0) in480x650/150%. Coordinator inspected new inner Column in AnalysisCategoryBox: Modifier.fillMaxWidth().fillMaxHeight() can greedily consume the available height in a vertically stacked fixture, clipping later cards. Investigate removing the unnecessary inner fillMaxHeight while retaining outer equal-height row behavior and minimum height. Do not weaken visible click/keyboard assertions. Also remove unused tint parameter from analysisCategoryBoxColors if no longer needed, updating its two caller sites including the listed visual test; no wrapper for a constant rule.
-Only task candidate changes retained. Partial images under desktop/build/reports/ide-ux/summary/ exist but no acceptance review; full gate not run. XMLs in desktop/build/test-results/test/TEST-io.miniorca.desktop.*.xml. Worker diff totals included earlier baseline; compare snapshot for actual task deltas. Remaining: layout repair plus meaningful test expectation update, exact focused/full gates,diff and actual wide/compact/short150% renders. Preserve all earlier dirty work and user desktop run. No04commit; retain complete initial+retry1 failure packets for retry2.
+IDEUX-05 Terra High retry1 failure — 2026-09-16
+HEAD50117835828e6ec9dc16aa3587aab98a6b9dedcd unchanged. Worker /root/ideux05_terra_retry1 exited, no build remains. Two Terra failures (initial+retry1), zero Sol. Next Terra retry2/2, then Sol initial if failed.
+Same exact focused command as initial exited1: compileKotlin passed (all initial three main-source errors resolved); compileTestKotlin failed DesktopVisualLayoutTest.kt:258:13, "Syntax error: Expecting an element." Coordinator inspected new sharedRunStripWrapsProgressAndUsesCurrentLifecycleControlsInSummary: initialRun.copy(files = paths.mapIndexed { ... }) is already closed on line257, leaving an extra standalone ) on258. Remove the redundant delimiter, format task files, inspect other retained new tests before rerunning exact focused verification. No tests/renders ran.
+Retry1 changed mainContent to accept Modifier, applied weight only in wide Row, removed unsupported FlowRow parameter, captured fileProgress locally, removed repetitive idle copy, added ProjectRunPresentation.isActive for active-only unknown progress animation, and reused local projection in AnalysisRunPanel. git diff --check passed. No corrections after this failure. Full gate, formatting/Spotless/Detekt and render acceptance unrun. Candidate retained in the same seven task files; baseline preserved. No staging/commit/admin by worker. All prior failure context must accompany fresh retry2.
 
-IDEUX-04 Terra High retry2 failure — 2026-09-16
-HEAD2ab3711e1c4033110be7ddff72af79913c1d0915 unchanged. Worker /root/ideux04_terra_retry2 exited; no task check active. All three Terra attempts failed; zero Sol. Escalate to fresh Sol High initial with complete card and all packets.
-Retry2 moved wide coverage status after View analysis, removed inner category fillMaxHeight, and removed obsolete tint parameter plus visual caller. spotlessApply and git diff --check passed. Exact focused command above exited1 after32s: SummaryPane14/14,SummaryIssues5/5,Mermaid4/4,Visual51/53;74/76 passed,2failures,0errors/skips. No full gate or acceptance review.
-Failure1: roundedSummaryUsesTheProductionFrameAndSelectedSummaryDestination at DesktopVisualLayoutTest.kt:1864, assertTextBefore("Performance","Security") => Performance and Security must share a row. Helper at3031–3037 requires first.right<second.left and abs(centerY difference)<2; no numeric bounds emitted. Retry guessed responsive width, but coordinator notes new inner category Column dropped original Modifier.align(Alignment.Top) when adding top edge; after removing fillMaxHeight, parent IdeActionSurface Row may center differing content heights. Inspect actual bounds/render and restore top alignment if that is the cause, retaining true equal-width/responsive-row assertions.
-Failure2: summaryStatusLightExposesFailureOnKeyboardFocus at:2064; after firstTab at2062, isDescriptionFocused("Project description: failed · Provider timed out.") is false. Wide coverage now orders View analysis before status, so Tab likely reaches that real button first. Keep coherent visual/keyboard order and test actual keyboard reachability of failure detail; do not add artificial focus-order plumbing just to satisfy an old firstTab assumption. Either preserve the intended existing traversal with natural layout or update the meaningful keyboard test to current reachable order while retaining failure disclosure evidence. No numeric bounds.
-Actual task deltas since pre04: ProjectSummaryPane.kt,ProjectSummaryVisuals.kt,AnalysisCategoryPanels.kt,DesktopVisualLayoutTest.kt. Other dirty target files are earlier baseline. Partial captures desktop/build/reports/ide-ux/summary/ and XML desktop/build/test-results/test/TEST-io.miniorca.desktop.DesktopVisualLayoutTest.xml. Remaining: fix real label alignment, verify accessible status traversal, exactfocused/fullgate,diff and complete production render inspection. Preserve candidate, all earlier dirty work and user's Gradle app; no04commit. Sol initial then two retries remain.
+IDEUX-05 Terra High retry2 failure — 2026-09-16
+HEAD50117835828e6ec9dc16aa3587aab98a6b9dedcd unchanged. Worker /root/ideux05_terra_retry2 exited; no build active. All3Terra attempts failed;0Sol. Next Sol High initial.
+Retry2 fixed extra mapIndexed/copy delimiter (first spotlessApply detected syntax; second after correction passed), reworked wide strip to metadata/progress/controls Row with stacked compact layout, and added geometry assertions. Exact focused command from initial packet compiled main/tests, then exited1:85total,82pass,3fail,0errors/skips. State11/11,Workflow17/17,Admission3/3,Visual51/54. git diff --check passed. Full gate unrun; no post-verdict correction.
+Failures: (1) roundedAnalysisGroupsRunControlsAndShowsItsFileTableAtSupportedSizes expects removed "Analyzing selected files" visible at1600, DesktopVisualLayoutTest.kt1905. Replace superseded heading expectation with current status/finished count and real Files selector; retain reachability/table assertions. (2) summaryMetricFlowKeepsEveryCoverageBoxAndPartialStateVisible calls assertSummaryStatusPlacement("Paused") at2291, NoSuchElement from helper4152. New strip/categories duplicate Paused; revealText("Paused") may stop on an already-visible category while coverage is offscreen in LazyColumn. Reveal the coverage status by its ancestor tag, then check actual placement/reachability; retain coverage ownership, below-identity and right-edge checks. (3) sharedRunStripWrapsProgressAndUsesCurrentLifecycleControlsInSummary asserts centerY difference<2 for Running/count via assertTextBefore at289; production render puts them in same wide row but differing badge/text metrics violate tolerance. Fix actual metadata alignment or use meaningful component bounds proving no overlap and shared wide strip row; don't relax the shared generic helper globally.
+Parent inspected summary-run-strip-1440-1.0.png and analysis-frame-1600-1000-1.0.png under desktop/build/reports/ide-ux/progress. Wide strip/real controls look unclipped; first Summary fixture retains artificial category paused state from its fixture. Worker also inspected analysis-progress-1280-1.5.png and found stacked strip/control visible. These are partial evidence, not acceptance.
+Parent caught a later unreached assertion: new test uses clickText("Show active files"), but visible button text is "+1 active files" and accessibleName is "Show active files". Use actual accessible action clickDescription, retaining disclosure/no-provider behavior checks. Review all newly added tests after earlier assertion fails. Candidate remains seven listed task files; baseline preserved; no05commit. Remaining exact focused/full/diff and full actual render review including short/large-text, disabled/lifecycle, unknown denominator and current-project scope. All prior packets must accompany Sol initial, then two retries allowed.
 
-Sol initial passed: focused76/76 and full502/502 working-tree tests, Spotless/Detekt,
-diff and actual wide/compact/short/150% render review. Coordinator independently
-checked counts, unchanged unrelated baseline hashes and wide/large-text images.
-Proposed commit includes reviewed existing Summary/category foundations and their
-relevant tests, shared workspace text/section helpers, styled prose and diagram
-headings; it excludes unrelated frame/native baseline. Isolated export gate running
-in session88477. Complete Summary regression methods and helpers are included,
-while the pre-existing rounded frame fixture/test graph remains for IDEUX-13.
+IDEUX-05 Sol High initial failure — 2026-09-16
+HEAD50117835828e6ec9dc16aa3587aab98a6b9dedcd unchanged. Sol worker stopped after full gate failure; session69004 focused exited0, session18358 full exited1, neither active. Counters3failedTerra/1failedSol; next Sol retry1/2.
+Sol repaired only visual test assertions: actual Running/finished count/Files ownership, tag-scoped revealSummaryStatus preserving coverage-placement assertions, new row-overlap geometry helper without changing generic assertTextBefore tolerance, accessible Show active files clickDescription. spotlessApply and diffcheck passed. Exact card focused suite85/85 (State11,Workflow17,Admission3,Visual54) passed.
+Required ./scripts/desktop-gradle.sh test spotlessCheck detekt exited1:504 tests,503pass,1fail,0errors/skips. DesktopContrastTest.analysisHeadersRenderDistinctLabeledLifecycleStates atline42 expects "Analysis completed" visible800x650/150%; retained baseline test still derives old heading (running:"Analyzing selected files",others:"Analysis $status"). New strip uses analysisStatusLabel(status) in the existing badge. SpotlessCheck/Detekt not reached on this run. No post-failure corrections, no05commit.
+Add DesktopContrastTest.kt to05targets as a narrow caller test correction before next edit. Adapt lifecycle label/contrast assertion to the real strip status, retaining all lifecycle, readability, color and stored-headline coverage. Inspect actual badge background when calculating contrast; don't drop contrast checks or relax thresholds. Its previous dirty baseline is captured in05snapshot. Rerun exact focused command and full gate, then complete visual acceptance. Keep all prior packets. No source repair currently indicated; make only justified changes. Preserve native/full-frame baseline and user's Gradle app.
 
-The first isolated export gate exited1 on Spotless blank-line differences introduced
-by the coordinator's selective test extraction (not the passing working-tree
-candidate). Formatting only those extracted lines in the temporary export resolved
-that check. The proposed index was updated to the formatted bytes; session99855
-is running the full export gate. Worker retry counters remain3Terra/0failedSol.
+Sol initial final packet confirms actual wide/compact/expanded/disabled/paused and
+short150% render inspection. Dedicated unknown-denominator visual evidence remains
+outstanding and is included in the retry1 prompt. No native/package claim.
 
-The second export gate exposed two incomplete test extractions (old tooltip helper
-signature and a superseded renamed priority test). The third compiled but failed
-seven Summary assertions: the export omitted the existing completed-run fixture
-state and the baseline Summary capture expectations. Included these reviewed
-fixture prerequisites, removed both superseded renamed methods, and copied the
-matching hover helper. No working-tree application or candidate changes were
-made; this is coordinator commit assembly, not an additional worker attempt.
-Full export gate now running in session11658 with the complete Summary fixture.
+IDEUX-05 Sol High retry1 acceptance-evidence gap — 2026-09-16
+HEAD50117835828e6ec9dc16aa3587aab98a6b9dedcd unchanged. Worker /root/ideux05_sol_retry1 exited, all candidate checks exited; original appPID62979 remains running. Counters3failedTerra/2failedSol (this acceptance gap included); next FINAL Sol retry2/2.
+Narrow authorized DesktopContrastTest repair asserts presentation.status against real labelBadgeBackground(analysisStatusTint(status)), retains4.5 contrast threshold, colors and stored-run headline. spotlessApply/diffcheck exit0. Exact focused command85/85 passed. Full ./scripts/desktop-gradle.sh test spotlessCheck detekt exit0:504/504 tests, Spotless passed, Detekt62Kotlinfiles0smells. No runtime failure remains.
+Worker inspected wide/compact Summary, paused/pending-disabled800/150%, multiple paths, Analysis1280/150%, full Summary+Analysis1280x600/150%, pausedAnalysis800/150%: one track, reachable controls, wrapping/no clipping. However explicitly requested active unknown-denominator and paused unknown-denominator render evidence was not produced. Existing unit test checks null fileProgress, code gates busy indicator on presentation.isActive; these do not replace the missing production visual proof. Worker stopped without adding fixtures after its final verdict.
+Final retry must FIRST add deterministic active-unknown and paused-unknown production fixtures to authorized DesktopVisualLayoutTest, using run.files empty and appropriate lifecycle. Render both, inspect images, verify truthful unavailable count, running/paused controls and lack of busy semantics in paused state if exposed. Preserve existing semantic checks; don't invent denominator zero or fake completion. Then exact focused and full gates plus diffcheck. Do not leave the same known evidence task until after verification and declare it outstanding again. No broader source repair currently needed. All eight task-delta paths preserved; no stage/commit. Previous full/render evidence remains valid until relevant input changes; native/package remains13.
 
-Final isolated export session11658 passed475/475 tests, Spotless/Detekt.
-All acceptance evidence recorded on IDEUX-04; no working-tree code changed during
-commit assembly. Ready to commit, verify hash and immediately dispatch IDEUX-05.
+Final Sol retry2 passed86 focused/505 full tests, Spotless/Detekt/diff. Parent inspected
+active-unknown and paused-unknown images; busy indicator appears only in active run.
+Unrelated baseline hashes unchanged. Isolated commit export in session62485 includes
+reviewed pre-existing file-progress projection and Analysis layout prerequisites.
+It preserves unrelated full-frame/native fixture work for13, including the updated
+rounded Analysis heading assertion. Temporary selective test extraction formatting
+normalized two blank lines; working-tree candidate untouched.
+
+First export gate62485 failed one old lifecycle fixture expectation (Current run
+heading), with478/479 tests passing. Included the existing reviewed fixture update
+that checks finished-file counts for active runs; no working-tree change or new
+worker failure. Full isolated export verification resumed as session14402.
+
+Final export14402 passed479/479, Spotless/Detekt. Actual index empty before staging.
+Card05 accepted; commit assembly reviewed, ready for local commit/hash verification
+and immediate06dispatch. Carry05rounded Analysis assertion with native fixture to13.
