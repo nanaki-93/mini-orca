@@ -9,17 +9,17 @@ This file is the durable next-agent context for the current queue. Follow
 | Field | Value |
 | --- | --- |
 | Card | IDEUX-02 — Quiet the shell and establish shared page hierarchy |
-| Status | Ready for continuous execution — Terra High initial attempt |
-| Stage | Not started; inspect the current checkout and dispatch one worker |
+| Status | Accepted — commit pending |
+| Stage | Working-tree and isolated commit export checks passed; stage reviewed task and commit |
 | Model | `gpt-5.6-terra` |
 | Reasoning | `high` |
-| Tier attempt | Initial, 0 retries used of 2 |
-| Completed failed attempts | 0 Terra; 0 Sol |
-| Active agent/process | None; the prior IDEUX-01 worker completed successfully |
-| Starting HEAD for this card | Not yet captured; refresh immediately before dispatch |
+| Tier attempt | Retry 1 of 2 |
+| Completed failed attempts | 1 Terra (initial); 0 Sol |
+| Active agent/process | No implementation worker or task check running; coordinator committing |
+| Starting HEAD for this card | `a834011fd8b09610655cd6e92a40719df3370e16` |
 | Task commit | None for IDEUX-02 |
 | Last accepted task commit | IDEUX-01: `3fa4929e1004d1a0ef798c6e61f0f5372bbf0044`, verified |
-| Next permitted attempt | IDEUX-02 Terra High initial |
+| Next permitted attempt | After verified commit, IDEUX-03 Terra High initial |
 
 ## Task and inputs
 
@@ -72,12 +72,39 @@ this handoff and the five new reference PNGs. The current planning, scheduler an
 preserved historical documentation are reviewed context for the reconciliation.
 Existing application changes and older untracked reference assets remain outside
 that commit. The PLAN/handoff updates recording its hash are administrative state
-for the next card. No IDEUX-02 implementation or verification has started.
+for the next card. The coordinator captured a pre-attempt snapshot outside the
+checkout and confirmed the index empty. The user-owned desktop run remains open.
 
-Next dispatch: inspect current status and active work, read the complete IDEUX-02 card,
-record the worker identity, and dispatch its initial Terra High attempt. Include
-this no-prior-failure context and the full task text. Use the card's focused checks
-and desktop gates, then inspect the resulting production renders before acceptance.
+IDEUX-02 initial Terra High failed at its first candidate verification and stopped
+without repair. The worker has exited; no test or build remains active from it.
+The full failure packet must accompany the complete task card for retry 1:
+
+- Starting/current HEAD: `a834011fd8b09610655cd6e92a40719df3370e16`.
+- Exact failed command:
+  `./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopContrastTest' --tests 'io.miniorca.desktop.DesktopLayoutStateTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/shell"`.
+- Exit 1, `:compileKotlin`, before tests or new renders. Output:
+  `DesktopTheme.kt:189:34 Variable 'ActivityRail' must be initialized`.
+- Expected: compile and run the focused checks. Observed: the new
+  `FlatChromeSurface` top-level value references `ActivityRail` before its alias
+  initialization. No candidate checks or render acceptance passed. The worker's
+  `git diff --check` passed; this does not establish behavior.
+- Retained candidate paths: DesktopTheme.kt, DesktopHeader.kt, IdeShell.kt,
+  DesktopShellTest.kt, DesktopVisualLayoutTest.kt, DesktopContrastTest.kt,
+  desktop/UI_DESIGN_GUIDELINES.md and desktop/UI_CONTRAST.md. DesktopShell.kt was
+  not changed by the attempt. All Kotlin paths are under the corresponding
+  desktop/src/main or src/test/kotlin/io/miniorca/desktop directory.
+- Candidate intent: project/branch/search aligned without competing wordmark,
+  quieter passive statuses, unchanged palette/rail/dock geometry, typography and
+  regression checks. No attempted correction after the failure.
+- Next repair: correct declaration ordering or reuse the existing semantic color
+  directly. Review whether the equivalent flat-surface alias and single-color
+  wrapper are needed; avoid redundant helpers. Then rerun the exact focused
+  command, full `./scripts/desktop-gradle.sh test spotlessCheck detekt`, diff check
+  and actual production render inspection. Native acceptance remains unclaimed.
+- Baseline images: `desktop/build/reports/ide-ux/before/`; candidate image target:
+  `desktop/build/reports/ide-ux/shell/` (no new render from the failed attempt).
+- Attempt sequence: Terra initial failed; Terra retry 1 now. One Terra retry
+  remains after this one; then Sol High initial plus two retries. Counters persist.
 
 Scheduling update, 2026-09-16: the user requested that the next task start as soon
 as the previous one completes. The ACTIVE automation and execution procedure now
@@ -100,3 +127,17 @@ On failure replace this section with the required packet: exact command/action,
 exit/result, bounded failure output, expected/observed behavior, changes attempted,
 current candidate files, evidence paths, remaining checks and next repair step.
 Preserve the attempt history and compute the next model/attempt without resetting it.
+
+Terra retry 1 completed successfully: focused command 103 tests; full desktop gate
+498 tests, 0 failures/errors/skips; Spotless and Detekt pass. The coordinator
+reviewed toolbar wide/narrow and short-window frame renders. Before committing,
+it isolated the six task files/hunks against HEAD in a temporary export. The first
+export check failed compileTestKotlin because the new contrast test uses the
+pre-existing internal visualFixtureProject visibility, omitted from the proposed
+commit. That accepted baseline prerequisite is now included. This was commit
+extraction, not another worker candidate or a changed checkout; retry counters stay
+at one completed Terra failure. Export gate is running in session 13590.
+
+Export session 13590 exited 0. The proposed task commit passed 468 tests with zero
+failures/errors/skips, Spotless and Detekt. IDEUX-02 is accepted after working-tree
+498-test and visual acceptance plus reviewed prerequisite extraction; commit pending.

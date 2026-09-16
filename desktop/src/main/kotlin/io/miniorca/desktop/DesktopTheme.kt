@@ -53,7 +53,7 @@ import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 
 /** Every desktop color is derived from this single dark semantic palette. */
 internal object MiniOrcaPalette {
-  val activityRail = Color(0xFF14161A)
+  val activityRail = Color(0xFF203238)
   val toolWindow = Color(0xFF24282F)
   val editorCanvas = Color(0xFF1B1E23)
   val overlay = Color(0xFF303640)
@@ -160,6 +160,8 @@ internal object MiniOrcaShapes {
 internal object IdeTypography {
   val body = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, lineHeight = 20.sp)
   val compactBody = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 18.sp)
+  val toolbarIdentity =
+      compactBody.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, lineHeight = 18.sp)
   val resultHeading = body.copy(fontWeight = FontWeight.SemiBold)
   val resultLabel = compactBody.copy(fontWeight = FontWeight.SemiBold)
   val resultCode = compactBody.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)

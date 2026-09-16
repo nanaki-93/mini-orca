@@ -142,4 +142,33 @@ class DesktopContrastTest {
           fixture.assertTextContrast("Apply", ActionFill)
         }
   }
+
+  @Test
+  fun toolbarStatusesStayReadableOnTheActivityRail() {
+    listOf(Information, Warning, SecondaryText, Success, Error).forEach { color ->
+      assertTrue(
+          contrastRatio(color, ActivityRail) >= 4.5,
+          "$color toolbar status label must remain readable on flat chrome")
+    }
+    ComposeVisualFixture(1_440, 120) {
+          MainToolbar(
+              ToolbarState(
+                  widthDp = 1_440f,
+                  project = visualFixtureProject,
+                  busy = false,
+                  operationStatus = "",
+                  connection = ConnectionState(connected = true),
+                  gitStatus = GitStatus(available = true, branch = "main"),
+                  showEditorDrawerActions = false,
+                  analysisStatus =
+                      ToolbarAnalysisStatus(
+                          "Analysis · Running", "Whole-project analysis · Running", true, false)),
+              ToolbarActions({}, {}, {}, {}, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render("toolbar-flat-statuses")
+          fixture.assertTextContrast("Analysis · Running", ActivityRail)
+          fixture.assertTextContrast("Daemon connected", ActivityRail)
+        }
+  }
 }

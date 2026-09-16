@@ -1,9 +1,7 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,7 +31,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,17 +50,11 @@ internal fun MainToolbar(
           state.widthDp / LocalDensity.current.fontScale < COMPACT_TOOLBAR_WIDTH
   Column(modifier.fillMaxWidth().background(ActivityRail)) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
       MiniOrcaMark()
-      if (presentation.showProductName) {
-        Spacer(Modifier.width(10.dp))
-        Text("Mini-Orca", color = PrimaryText, fontWeight = FontWeight.SemiBold)
-      }
-      Spacer(Modifier.width(20.dp))
-      IdeVerticalSeparator(Modifier.height(22.dp))
-      Spacer(Modifier.width(16.dp))
+      Spacer(Modifier.width(12.dp))
       ProjectActionsMenu(
           projectType = state.project?.type,
           projectLabel = projectBreadcrumbLabel(state.project),
@@ -71,17 +63,17 @@ internal fun MainToolbar(
           onImport = actions.onImport,
           onReanalyze = actions.onReanalyze,
           onReconnect = actions.onReconnect,
-          modifier = Modifier.width(if (presentation.showProductName) 164.dp else 128.dp))
+          modifier = Modifier.width(if (presentation.showBranchContext) 180.dp else 128.dp))
       if (presentation.showBranchContext) {
         Spacer(Modifier.width(8.dp))
         BranchContext(state.gitStatus)
       }
-      Box(Modifier.weight(1f).padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
+      Box(Modifier.weight(1f).padding(start = 16.dp), contentAlignment = Alignment.CenterStart) {
         ChromeButton(
             onClick = actions.onPalette,
             background = ToolWindowSurface,
             modifier =
-                Modifier.widthIn(max = 340.dp)
+                Modifier.widthIn(max = 420.dp)
                     .fillMaxWidth()
                     .then(paletteFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
                     .semantics { contentDescription = "Search files, symbols, commands" }) {
@@ -101,6 +93,7 @@ internal fun MainToolbar(
         TopBarButton("Context", actions.onOpenContext)
         Spacer(Modifier.width(6.dp))
       }
+      Spacer(Modifier.width(16.dp))
       if (!separateStatusRow) ToolbarStatus(state, connectionPresentation, presentation)
     }
     if (separateStatusRow) {
@@ -111,7 +104,6 @@ internal fun MainToolbar(
             ToolbarStatus(state, connectionPresentation, presentation)
           }
     }
-    IdeHorizontalSeparator()
   }
 }
 
@@ -180,17 +172,19 @@ private fun ToolbarStatus(
     val color =
         if (analysis.attention) Warning else if (analysis.running) Information else SecondaryText
     Row(
-        Modifier.semantics { contentDescription = analysis.detail },
+        Modifier.semantics { contentDescription = analysis.detail }.padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically) {
           if (analysis.running) {
             IdeBusyIndicator(Modifier.size(12.dp), color = color, strokeWidth = 2.dp)
-            Spacer(Modifier.width(6.dp))
+          } else {
+            Canvas(Modifier.size(6.dp)) { drawCircle(color) }
           }
+          Spacer(Modifier.width(6.dp))
           Text(analysis.label, color = color, fontSize = 11.sp)
         }
     Spacer(Modifier.width(10.dp))
   }
-  ConnectionChip(connection, compact = !presentation.showProductName)
+  ConnectionChip(connection, compact = !presentation.showFullConnectionLabel)
 }
 
 internal data class ToolbarActions(
@@ -203,14 +197,14 @@ internal data class ToolbarActions(
 )
 
 internal data class ToolbarPresentation(
-    val showProductName: Boolean,
+    val showFullConnectionLabel: Boolean,
     val showSearchLabel: Boolean,
     val showBranchContext: Boolean,
 )
 
 internal fun toolbarPresentation(widthDp: Float): ToolbarPresentation =
     ToolbarPresentation(
-        showProductName = widthDp >= COMPACT_TOOLBAR_WIDTH,
+        showFullConnectionLabel = widthDp >= COMPACT_TOOLBAR_WIDTH,
         showSearchLabel = widthDp >= EXPANDED_TOOLBAR_WIDTH,
         showBranchContext = widthDp >= COMPACT_TOOLBAR_WIDTH,
     )
@@ -237,6 +231,7 @@ private fun ProjectActionsMenu(
         icon = typePresentation.icon,
         iconDescription = typePresentation.description,
         iconTint = typePresentation.tint,
+        labelStyle = IdeTypography.toolbarIdentity,
         modifier = Modifier.fillMaxWidth().focusRequester(triggerFocus))
     IdeDropdownMenu(
         expanded = expanded,
@@ -288,6 +283,7 @@ private fun TopBarButton(
     modifier: Modifier = Modifier,
     iconDescription: String = label,
     iconTint: Color = SecondaryText,
+    labelStyle: TextStyle = IdeTypography.action,
 ) {
   ChromeButton(
       onClick = onClick,
@@ -299,7 +295,7 @@ private fun TopBarButton(
     }
     Text(
         label,
-        fontSize = 12.sp,
+        style = labelStyle,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = if (icon != null) Modifier.weight(1f) else Modifier)
@@ -391,14 +387,11 @@ internal fun connectionPresentation(connection: ConnectionState): ConnectionPres
 private fun ConnectionChip(presentation: ConnectionPresentation, compact: Boolean) {
   Row(
       modifier =
-          Modifier.background(presentation.color.copy(alpha = 0.07f), MiniOrcaShapes.pill)
-              .border(
-                  BorderStroke(1.dp, presentation.color.copy(alpha = 0.20f)), MiniOrcaShapes.pill)
-              .semantics {
+          Modifier.semantics {
                 contentDescription =
                     "${presentation.label}; this is daemon status, not model connectivity"
               }
-              .padding(horizontal = 10.dp, vertical = 6.dp),
+              .padding(vertical = 6.dp),
       verticalAlignment = Alignment.CenterVertically,
   ) {
     Canvas(Modifier.size(6.dp)) { drawCircle(presentation.color) }

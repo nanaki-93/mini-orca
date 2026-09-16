@@ -1439,6 +1439,9 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("Search files, symbols, commands"))
           assertTrue(fixture.hasText("main"))
           assertTrue(fixture.hasText("Daemon connected"))
+          assertFalse(fixture.hasText("Mini-Orca"))
+          fixture.assertTextBefore("go-shop · fixture", "main")
+          fixture.assertTextBefore("main", "Search files, symbols, commands")
           listOf(
                   "Preview",
                   "New file",
@@ -2642,7 +2645,7 @@ internal class ComposeVisualFixture(
   }
 }
 
-private val visualFixtureProject =
+internal val visualFixtureProject =
     ProjectAnalysis(
         "visual-fixture",
         "fixture-revision",

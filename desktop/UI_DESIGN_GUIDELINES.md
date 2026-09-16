@@ -140,10 +140,13 @@ The expanded Terminal canvas has an 8dp side/bottom inset. Its Swing host cannot
 inherit the Compose clipping shape, so the inset keeps native pixels inside the
 rounded dock while preserving the existing PTY resize and focus owners.
 
-The main toolbar has a 56dp minimum height, project/branch context, a search control
-up to 420dp wide and separate labeled analysis/daemon chips. Statuses move onto a
-second row when width and text scale require it. Analysis labels come from the run
-owner: a completed run does not by itself prove coverage is up to date.
+The main toolbar has a 56dp minimum height. Its product mark leads directly into
+project/branch context and then a left-aligned search control up to 420dp wide; do
+not repeat the product wordmark there. The remaining space keeps separate labeled
+analysis and daemon statuses at the trailing edge without turning passive state into
+another outlined control. Statuses move onto a second row when width and text scale
+require it. Analysis labels come from the run owner: a completed run does not by
+itself prove coverage is up to date.
 
 Files uses real project-relative paths and one active file. Breadcrumbs expose
 real path/symbol identity; do not invent navigation callbacks or tabs. Source and
