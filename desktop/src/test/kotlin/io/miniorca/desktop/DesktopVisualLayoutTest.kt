@@ -2354,18 +2354,18 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("findings-tools-collapsed-480-1.3")
-          assertTrue(fixture.stateDescription("Verified checks") == "Collapsed")
-          assertTrue(fixture.requestFocus("Verified checks"))
+          assertTrue(fixture.hasText("Trust project-code execution & run checks"))
+          assertTrue(fixture.stateDescription("Command and output") == "Collapsed")
+          assertTrue(fixture.requestFocus("Command and output"))
           assertTrue(fixture.pressKey(Key.Spacebar))
           fixture.render("findings-tools-expanded-480-1.3")
-          assertTrue(fixture.stateDescription("Verified checks") == "Expanded")
-          assertTrue(fixture.hasText("Trust local execution & run scan"))
+          assertTrue(fixture.stateDescription("Command and output") == "Expanded")
           assertTrue(fixture.hasDescription("Filter results"))
           assertTrue(fixture.hasEditableText(withinDescription = "Filter results"))
           assertTrue(fixture.hasScrollableContent())
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
-          assertTrue(fixture.stateDescription("Verified checks") == "Collapsed")
+          assertTrue(fixture.stateDescription("Command and output") == "Collapsed")
           kotlin.test.assertEquals(0, workflowActions)
         }
 
@@ -2430,6 +2430,7 @@ class DesktopVisualLayoutTest {
           kotlin.test.assertEquals(0, mutations)
           assertFalse(fixture.hasText("Open source"))
           assertTrue(fixture.isDisabled("Prepare fix"))
+          assertTrue(fixture.hasText("Model suggestion"))
           fixture.clickText("Evidence and fix criteria")
           fixture.render()
           assertTrue(

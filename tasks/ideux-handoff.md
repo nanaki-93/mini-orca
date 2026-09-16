@@ -1,50 +1,44 @@
 # IDEUX execution handoff
 
-Follow README.md and docs/tasks.md. One worker/card, immediate verified-commit chaining.
+Follow tasks/README.md, docs/tasks.md and root/area instructions.
 
 | Field | Value |
 | --- | --- |
-| Card | IDEUX-08 — Make empty results and coverage truthful |
+| Card | IDEUX-09 — Make Bugs evidence and verified checks immediately usable |
 | Status | Accepted; commit pending |
 | Stage | Coordinator selective commit |
 | Model | gpt-5.6-sol |
 | Reasoning | high |
-| Tier attempt | Sol retry1/2 |
-| Completed failed attempts | 3 Terra; 1 Sol |
-| Active worker | None; final worker/checks exited |
-| Starting HEAD | 393a54d473d9a0890157513bb6d40920be78b0c9 |
-| Last accepted task | IDEUX-07 commit 393a54d473d9a0890157513bb6d40920be78b0c9, verified |
-| Next on failure | Sol High retry2/2 |
+| Tier attempt | Sol initial |
+| Completed failed attempts | 3 Terra; 0 Sol |
+| Active worker | None; worker/checks exited |
+| Starting HEAD | 7fc0fb18939a726c441b9b8b8f7a335b29657d80 |
+| Last accepted task | IDEUX-08 commit 7fc0fb18939a726c441b9b8b8f7a335b29657d80, verified |
+| Next on failure | Sol High retry1/2 |
 
-01–07 accepted and committed. 07 focused77/working-tree512/isolated491 tests,
-Spotless/Detekt/diff and component visual review passed. Exact failures and receipts
-remain docs/errors.log and docs/tasks.md. Do not reset prior card history.
+01–08accepted/committed. 08focused85/full516/isolated495 tests and quality/render
+checks passed. Failurehistory retained docs/errors.log andcardreceipts. Native/package
+acceptance13. Baseline /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux09-baseline-h4hsph60 has28dirtyfilescopies/hashes. Preserve unrelatedbytes;
+indexempty. Previous07hasEditableText and08verticalScrollValue fixtureprerequisites
+arecommitted;don'tduplicate. Native/fullframe/editor/reviewcarry remainsuntil12/13.
 
-Baseline /var/folders/lz/20cqfx4x2k98r89q68w3q3ch0000gn/T/mini-orca-ideux08-baseline-ezp9y22t holds 28 dirty file copies/hashes; preserve all unrelated bytes.
-Index empty after07commit. Remaining native/fullframe fixture and earlier MOCK UI
-work stays dirty for12/13. 07 selectively included scoped hasEditableText fixture
-prerequisite; do not duplicate it. App62979 was absent at last check; no agent killed
-it; leave user apps/resident daemons untouched.
+Onefreshworkerperattempt,TerraHighinitial+2retries thenSolHighinitial+2retries;
+fullcard+allfailuresinprompt; stopworkerafterfirstcompletedcandidatefailure or
+substantiveacceptancegap, nohiddenrepairrounds. Coordinatorownsadmin/selectivestage/
+isolatedchecks/commit. Immediatelynextcardafterverifiedcommit. HeartbeatACTIVE
+mini-orca-ux-implementation clock09/29/49backup;pauseonlyexhaustion/blocker/user/end.
+No userapps/residentdaemontermination. Currentcolors/iconrail/simpleIDE,readonly
+source/diff,isolateddraft,consent/trust,ReviewApplyUndo retained. Referencesimmutable.
 
-Original policy: TerraHigh initial+2retries thenSolHigh initial+2retries, onefresh
-worker perattempt carrying fullcard/allfailures. Stop worker after first completed
-candidate verification failure or substantive acceptancegap; nohiddenrepairrounds.
-Coordinator owns docs, selectivecommit/isolatedverification. Pauseautomation only
-onexhaustion/externalblocker/userpause/completion. Scheduler mini-orca-ux-implementation
-ACTIVE with existing clock09/29/49backup; don'twaitbetweenacceptedcards.
+Added DesktopVisualLayoutTest to09targets BEFOREworkeredit: existing verifiedchecks
+disclosure expects hiddenaction andmustadapt tovisibletrust/actionrow, retaining
+keyboard/noexternalactionsproof. Full09card docs/tasks.md. No09failuresyet.
 
-Preservecolors/iconrail/simpleIDE,readonlysource/diff,isolateddraft,consent/trust,
-ReviewApplyUndo. References design/ui-mocks/ide-reference-2026-09-16 immutable.
-Full08card docs/tasks.md; no failures yet. Onpass commit+verify thenimmediately09.
+IDEUX-09 Terra High initial failure — 2026-09-16
+HEAD7fc0fb18939a726c441b9b8b8f7a335b29657d80 unchanged;1Terra/0Sol failures nextTerraretry1/2. Exactcardfocusedfailed;rootreadfreshXML123tests2failures (Bugs7/1,Findings3/0,ResultLayout11/1,Presenter47/0,Visual55/0),noerrors/skips. BugsWorkspaceStateTest.verifiedScanProgressOnlyOffersActionsOwnedByTheCurrentLifecycleState185 expectedsummarycontains never starts one automatically butnewcopy saysnever starts them automatically. ResultWorkspaceLayoutTest.bugsChecksKeepTrustAndCommandsReachableInCompactLongDiagnosticViews423 hasText(diagnostic)fails;fixture repeatedstringendswhitespace,DiagnosticText->sanitizedOutputText trims. Checksanitizedexpectedandretainedreadableoutput/scroll,don'tweakenproof. Workerinitialreportonlyincludedfirstsuitefailure;rootcompletedpacket. No taskprocessremains. ScopedSpotlessApply/diffpass beforefailure;no postverdictrepair/fullgate/renderreview. Candidate7listedtargets: visibleVerifiedchecksstate/trustactionrow,Commandandoutputdisclosure,lifecycleactionprojection,detailoriginlabels+tests. Preserve28dirtybaseline/no09commit. Nextcompleteallassertions/fixtures/scopedformat beforegate.
 
-IDEUX-08 Terra High initial failure — 2026-09-16
-HEAD393a54d473d9a0890157513bb6d40920be78b0c9 unchanged. FirstTerrafailure,zeroSol; nextTerraretry1/2. Exact ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.AnalysisWorkspaceStateTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.SecurityWorkspaceTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/states" exit1 compileKotlin beforetests: AnalysisResultsPane61 missingenumFilterNoMatch;AnalysisWorkspaceState293 customgetterreportedCountsmartcastimpossible;FindingsPresentation210 WorkspaceSection positionalModifierboundtitleString (usemodifier=). No post-verdictrepair. Candidatefiveallowedsourcefiles availability/fullwidthempty/headerunknowncount/removesBugsSecurityoverrides;no testsadded/format/fullgate/renders/diffcheck. Addcompleteunitmatrix/productionrenders BEFOREcandidateverification, not knowinglyincompletecandidate. Reviewedcompletedempty now requirescurrentcompletedzerodetailprogress;positivecountnotmaskpausedfailed;review code. Preserve28dirtybaseline;no08commit. App/daemonsuntouched.
+IDEUX-09 Terra High retry1 failure — 2026-09-16
+HEAD7fc0fb1 unchanged;2Terra/0Sol nextTerraretry2/2. Firstsingularcopyassertion andsanitizeddiagnosticexpectationfixed;scopedSpotlessApply/diffpass. Exactfocusedexit1 33s123tests1failure BugsWorkspaceStateTest.verifiedScanProgressOnlyOffersActionsOwnedByTheCurrentLifecycleState209 still expectsresults remain available whilecandidate sayscommand and output remain available. No fullgate/renderreview/postverdictrepair. ReviewALLsame-testcopyexpectations beforegate,retain lifecycle/actionmeaning. Candidate7targetsretained/no09commit;preservepriorpackets/baseline.
 
-IDEUX-08 Terra High retry1 failure — 2026-09-16
-HEAD393a54d unchanged;2Terra/0Sol failures nextTerraretry2/2. Initialthreecompilefixesresolved;plannedcompile diagnostic foundrunningbranchcustomgettersmartcast correctedbeforegate;compileTestKotlinpassed. Scopedformat/diffpass and27nontargetdirtyhashesunchanged. Exactcardfocusedexit1 43s84tests3failures allResultWorkspaceLayoutTest: criticalUnknownAndNoMatchFiltersStayVisibleAtCompactLargeTextScale81 combinedNo matching results. Clear filters to view loaded results. textnotvisible because newstate two nodes;filteringClearsCompactDetailAndArrowKeysKeepLongListsNavigable210samecombinedassert;longRefreshErrorsLeaveRetainedFindingsAndDisabledFixReachable287 exacthasText(Results could not be refreshed:)prefixfails becauseactualincludesfullerror. Preserve actualvisiblemessage/detail/Clearoneaction/recovery andfullerror evidence,adaptassertionswithoutweakening. No postverdictrepair/fullgate/renderreview/postdiff. Rendersstates emitted. Finish review alloldcopynodeasserts BEFOREgate. Candidateunitprecedencematrix/layouttestsadded; completedzero requiresmatchingdetailprogress, runningpositivependingdetails,pausedfailedhonest,unknown—/stagecoverage/runtime. No08commit.
-
-IDEUX-08 Terra High retry2 failure — 2026-09-16
-HEAD393a54d unchanged;3Terra/0Sol failures nextSolHighinitial. Repaired3textassertions;addedemptylongrefresherror800x400150%scrollregression,emptyownsboundedscroll,errornotduplicatedheader. Exactfocusedexit0 34s. FulltestspotlessCheckdetekt exit1 21s:testscompleted,SpotlessfailedFindingsPresentation(ResultEmptyStateindentation)/ResultWorkspaceLayoutTest(sectioncopyformat);Detektunrun. No postverdictrepair/renderreview/diff. Rootviewedcompletedemptyandlongerrorimages;headline/readabilityokay,longerrorcontinuesviatest-provenscroll. LongerrorfixturecallsAnalysisResultsPanePerformancewithdefaultSeverity ratherthanproductionImpact;fixfixturefacetLabel totruthfulproductionsetup beforegate. Rootreview: keepemptylayoutsimple,avoiduselessfilterswhenactualrowszero ifnoactivefilter;preserveClearforfilter-no-match. Completedemptysecondarycopy repeatsheadline;mayomit. Preserveallpriorpackets/baseline. NextSol mustscopedformat AFTERalleditsBEFOREgate. No08commit.
-
-IDEUX-08 Sol High initial failure — 2026-09-16
-HEAD393a54d unchanged;3Terra/1Sol failures nextSolretry1/2. Scopedformatpass,baseline28entries0nontargetchanges. Exactfocusedexit1 33s85tests1failure ResultWorkspaceLayoutTest.longRefreshErrorWithoutRowsRemainsReachableInShortLargeTextWindow345 expectedresult-emptyverticalScrollValue>0after160scroll observed0. Hidingzerorowfilterchrome gaveerrorenoughheight800x400150%,contentfullyfits. Rootconfirmedimage results-empty-long-error-800-400-150.pngalltextvisible. Needforceactualoverflow(longererror/shorterfixture) thenretainreachabletail+scrollassertion; don'tdeleteproof. Nopostverdictrepair/fullgate/completevisualreview. Diffclean. Currentemptyheader/copyreviewimproved; preservepreviouspackets;no08commit.
+IDEUX-09 Terra High retry2 failure — 2026-09-16
+HEAD7fc0fb1 unchanged;3Terra/0Sol nextSolinitial. Scopedformat/diff/nontargethashpass. Exactfocusedexit1 34s123tests1failure0errors/skips: sameBugsWorkspaceStateTest209 requirescontiguous results remain available; retrychangedsummaryto results, command and output remain available (notcontiguous),assertunchanged. SuitesBugs7/1,Findings3/0,Result11/0,Presenter47/0,Visual55/0. No postverdictrepair/fullgate/renderacceptance;allprocessesexited. Rootcompactcollapsed800x400150%imageverifiedrow/trustlegible. Fixcopy/testcontractdirectlywithassertionmatchingactualintendedmeaning,notanothernear-match;preserveresults/command/outputfacts. No09commit.
