@@ -1,3 +1,150 @@
+# Mini-Orca — simpler production IDE UI/UX
+
+The user approved **IDEUX-01–13** on **2026-09-16** and authorized scheduled
+implementation with local commits after each accepted task. The current design
+specification and exact cards are at the top of [docs/tasks.md](docs/tasks.md).
+Keep Mini-Orca's existing colors and 48dp icon-only activity rail; adopt the five
+new screenshots' simpler hierarchy, compact progress, consistent result browsing
+and dominant source workspace. Preserve read-only source/diffs, isolated editable
+drafts, explicit consent/trust and guarded Review/Apply/Undo.
+
+The immutable visual references are [Overview](design/ui-mocks/ide-reference-2026-09-16/01-overview.png),
+[Performance](design/ui-mocks/ide-reference-2026-09-16/02-performance.png),
+[Bugs](design/ui-mocks/ide-reference-2026-09-16/03-bugs.png),
+[Security](design/ui-mocks/ide-reference-2026-09-16/04-security.png) and
+[Source](design/ui-mocks/ide-reference-2026-09-16/05-source.png). They inform
+composition and hierarchy only; their sample project data, direct fix actions and
+text navigation are not Mini-Orca requirements.
+
+Retain the charcoal-teal frame, panel and source colors; blue selection/actions;
+teal information; six icon-only rail destinations; 8dp frame/gutters; 10/14/18dp
+shapes; source/diff read-only behavior; isolated editable drafts; explicit provider
+consent and execution trust; and guarded Review/Apply/Undo. Change the visual
+hierarchy to a project-first toolbar, one compact active-run strip, neutral category
+surfaces, Architecture beside Flows, unboxed result headings with local filters and
+a consistent list/detail layout, and a dominant Explorer/code/Context source view.
+
+**Status:** 1/13 accepted. IDEUX-01 accepted; local commit pending verification.
+Next after that commit: IDEUX-02, Terra High initial attempt.
+Reuse `mini-orca-ux-implementation` every 20 minutes, attached to **Plan IDE UI/UX
+improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`). **Scheduler: Active**,
+confirmed by the app automation tool on 2026-09-16.
+
+Implementation agents use `gpt-5.6-terra` / `high`: initial attempt plus two
+retries. Then escalate the same card to `gpt-5.6-sol` / `high`: initial attempt
+plus two retries, then pause if still failing. Each new agent receives the complete
+card and prior failure context. Each new card resets to Terra High. The
+[execution procedure](tasks/README.md) and [durable handoff](tasks/ideux-handoff.md)
+own the detailed policy and counters. No push or release is authorized.
+
+IDEUX-01 retains the new original references, records this reconciliation and
+captures baseline fixture renders from the existing dirty working tree. That
+baseline is not new-UI acceptance or a clean-HEAD reproduction. The completed
+rounded implementation below remains the baseline, including its uncommitted
+changes and acceptance evidence. It is not an active execution queue.
+
+---
+
+## Historical rounded design and acceptance — inactive execution
+
+# Mini-Orca — implement the approved rounded UI
+
+Approved on **2026-09-16**. Implement the three rounded mockups in the real Kotlin/Compose
+desktop app, matching their layout, typography, colors, spacing, pane silhouettes and
+action placement. The user authorized a plan and scheduled execution when the work
+requires more than one execution. The active scope is **MOCK-01–06** only.
+
+## Approved visual target
+
+- [Summary](design/ui-mocks/ux-concepts-2026-09-16/01-summary-rounded.png)
+- [Analysis](design/ui-mocks/ux-concepts-2026-09-16/02-analysis-rounded.png)
+- [Editor / Review](design/ui-mocks/ux-concepts-2026-09-16/03-review-rounded.png)
+- [User's frame reference](design/ui-mocks/ux-concepts-2026-09-16/rounded-frame-reference.png)
+
+These images supersede the earlier reference for changed surfaces. Match the full
+composition, not merely the corner radius. Native window controls remain native;
+the rounded in-app frame and pane clipping must work within the host window.
+Use real project data and existing workflows. Omit concept captions, sample facts,
+and image-generation artifacts; select the rail destination that matches the page.
+
+### Accepted design decisions
+
+1. A continuous muted charcoal-teal frame surrounds inset dark workspace panes.
+   Use shared structural corners near 18dp, approximately 8dp gutters, and softer
+   perimeter contrast. Files, the editor and Review have separate rounded bounds;
+   Terminal is a separate rounded strip. Headers and selection fills clip to their
+   owner. Preserve resize hit targets, focus contrast and saved pane dimensions.
+2. Summary starts with project name, purpose and quiet metadata, followed by a
+   dedicated coverage bar and labeled Bugs / Performance / Security cards.
+   Architecture and flat module rows occupy the wider left column; engineering
+   insight and Flows occupy the right, stacking at narrow widths. Preserve full
+   model prose and local diagram disclosures.
+3. Analysis puts progress, completed/total counts, current file and run controls
+   together. Category names remain visible. An expanded file table shows paths,
+   state and details with local search/filters. Selection remains operable while
+   idle and locked for admitted active/paused runs; preserve all lifecycle states,
+   retry/admission, exclusions, failures and cached-result semantics.
+4. Editor keeps Source and Candidate diff tabs, real breadcrumbs and read-only
+   identity. Current/Candidate comparison fills the canvas, with readable syntax,
+   line numbers and change markers. The compact request-to-review progression
+   derives from the existing evidence owner.
+5. Review shows target identity, readiness, three compact evidence rows,
+   disclosures, Edit draft and a bottom action region with exact one-file scope.
+   Apply and Undo remain explicit and guarded. Invalid/stale/failed/running states
+   show the actual reason and recovery; no visual state may imply passed checks
+   that have not passed.
+6. At the reference viewport, closely match the approved images. At 1000/999dp,
+   800×650, 1280×600 and 125/150% text, preserve readable content and reachable
+   actions. Keep the existing dock/drawer breakpoint and keyboard behavior.
+
+## Current implementation status
+
+| Card | Outcome | Status |
+| --- | --- | --- |
+| MOCK-01 | Rounded frame, pane geometry and toolbar | Accepted |
+| MOCK-02 | Summary composition and coverage | Accepted |
+| MOCK-03 | Analysis progress and file table | Accepted |
+| MOCK-04 | Candidate comparison and progression | Accepted |
+| MOCK-05 | Compact Review and reachable guarded action | Accepted |
+| MOCK-06 | Integrated visual, native and regression acceptance | Accepted |
+
+**Accepted:** 6/6. MOCK-01 delivers the continuous rounded frame, independent pane
+corners/gutters, full-width terminal and labeled toolbar statuses. MOCK-02 delivers
+the project introduction, selected-file coverage bar, named result cards and
+responsive architecture/insight columns with local diagram disclosures. MOCK-03
+delivers grouped file progress and run controls, plus an expanded searchable file
+table with matching-run state, saved-result details and guarded selection. MOCK-04
+delivers full-height Current/Candidate comparisons, compact evidence progression,
+local Editor actions and large-text breadcrumb/gutter fixes. MOCK-05 delivers the
+compact target/readiness/evidence layout, collapsed details and a reachable guarded
+Apply/Undo region with explicit execution trust. Its 85 focused tests and final
+492-test desktop/Spotless/Detekt gate pass; actual production-component render
+comparisons are recorded in
+[docs/tasks.md](docs/tasks.md#task-mock-05--compact-review-with-a-reachable-guarded-action).
+MOCK-06 completes the integrated production-render and native UI review, fixes
+native terminal canvas clipping, and passes 493 desktop tests, all nine repository
+validation stages, packaging and the packaged PTY smoke. The
+[final acceptance ledger](docs/RELEASE_ACCEPTANCE.md#rounded-mockup-acceptance--2026-09-16)
+links actual production images and distinguishes native, component and package evidence.
+All native fixture sessions are closed. No commit or push was created.
+
+**Scheduler:** **Paused**, verified through the app and saved configuration.
+`mini-orca-ux-implementation` (**Mini-Orca rounded mockup implementation**) retains
+its prompt, timing and task attachment. No further queue is authorized.
+[Execution procedure](tasks/README.md) records the final scheduler state.
+
+**Preparation checks:** `./scripts/desktop-gradle.sh test spotlessCheck detekt`
+passed before implementation. `git diff --check`, task target/reference existence
+and preservation of historical plan/task/execution content passed. These are
+baseline checks, not acceptance of the proposed UI.
+
+---
+
+## Historical plans and completed queues
+
+Everything below is preserved historical context. It does not authorize current
+work, change the active queue, or reactivate old automation/commit policies.
+
 # Mini-Orca — clearer results, unified analysis and a terminal
 
 Planning proposal prepared on **2026-09-11**. Preserve the current dark IDE style,
