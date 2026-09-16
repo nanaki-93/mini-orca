@@ -37,9 +37,13 @@ class DesktopContrastTest {
               }
               .use { fixture ->
                 fixture.render("analysis-state-color-$status")
-                fixture.assertTextFits(presentation.headline)
-                fixture.assertTextContrast(presentation.headline, HeaderSurface)
-                if (status != "completed") fixture.assertTextFits(analysisStatusLabel(status))
+                fixture.assertTextFits(presentation.status)
+                fixture.assertTextContrast(
+                    presentation.status, labelBadgeBackground(analysisStatusTint(status)))
+                if (presentation.headline != "Current run") {
+                  fixture.assertTextFits(presentation.headline)
+                  fixture.assertTextContrast(presentation.headline, Panel)
+                }
                 fixture.assertColorVisible(color)
               }
         }

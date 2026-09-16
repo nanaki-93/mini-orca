@@ -24,11 +24,12 @@ hierarchy to a project-first toolbar, one compact active-run strip, neutral cate
 surfaces, Architecture beside Flows, unboxed result headings with local filters and
 a consistent list/detail layout, and a dominant Explorer/code/Context source view.
 
-**Status:** 4/13 accepted. IDEUX-01 committed and verified as `3fa4929`.
+**Status:** 5/13 accepted. IDEUX-01 committed and verified as `3fa4929`.
 IDEUX-02 committed and verified as `fd46823` after Terra High retry 1.
 IDEUX-03 committed and verified as `2ab3711` after Sol High initial.
-IDEUX-04 accepted after Sol High initial; commit pending verification.
-Next: IDEUX-05, Terra High initial.
+IDEUX-04 committed and verified as `5011783` after Sol High initial.
+IDEUX-05 accepted after final Sol High retry2; commit pending verification.
+Next: IDEUX-06, Terra High initial.
 Reuse `mini-orca-ux-implementation` at minutes 09, 29 and 49 each hour in the
 computer's local timezone, attached to **Plan IDE UI/UX
 improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`). **Scheduler: Active**,
