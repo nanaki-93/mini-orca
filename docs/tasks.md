@@ -6,7 +6,10 @@ workspaces, preserving Mini-Orca's colors, icon-only left rail and guarded editi
 
 ## Scope and status
 
-**IDEUX-01–13: approved for scheduled implementation, 5/13 accepted.** On
+**IDEUX-01–13: approved for scheduled implementation, 6/13 accepted; repair passed.**
+IDEUX-06 passed the user-authorized Astra light repair after Terra/Sol attempts
+were exhausted. Its accepted changes are being committed before immediate
+continuation under the original Terra/Sol policy. On
 2026-09-16 the user authorized Terra High implementation, two Terra retries, then
 Sol High with the same initial-attempt-plus-two-retries policy. Every retry must
 receive the task and concrete failure context. Commit each task locally after its
@@ -532,7 +535,7 @@ is verified in the handoff before immediately dispatching IDEUX-06 at Terra High
 
 ## Task IDEUX-06 — Simplify the shared finding list and detail layout
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — user-authorized Astra light repair; commit pending.
 
 **Target files**
 
@@ -541,6 +544,22 @@ is verified in the handoff before immediately dispatching IDEUX-06 at Terra High
 - `desktop/src/test/kotlin/io/miniorca/desktop/FindingsPresentationTest.kt` — preserved evidence text and selected-row meaning.
 - `desktop/src/test/kotlin/io/miniorca/desktop/ResultWorkspaceLayoutTest.kt` — responsive panes, long errors and scroll behavior.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — all three production result pages.
+
+**Reviewed commit prerequisites**
+
+The existing accepted MOCK baseline already contains the bounded page layout and
+shared detail/evidence hierarchy. Include the necessary baseline portions of
+`AnalysisResultsPane.kt`, `FindingsPresentation.kt`, plus the detail callers in
+`WorkspacePanes.kt`, `PerformanceWorkspace.kt` and `SecurityWorkspace.kt` in this
+card's coherent commit. Without those callers the newly concise list renderer
+would clip detail titles/paths and omit source metadata at clean HEAD. These are
+reviewed existing prerequisites, not new worker edits; unrelated baseline work
+stays outside the commit. For the user-authorized Astra resize-test repair,
+include the repaired gutter regression and its synchronization helpers, with
+only the existing two divider focus/hover presentation prerequisites from
+`desktop/src/main/kotlin/io/miniorca/desktop/IdeShell.kt`. Keep unrelated frame and
+terminal changes outside this commit. Validate the isolated proposed commit
+independently.
 
 **Inputs / dependencies**
 
@@ -565,6 +584,49 @@ is verified in the handoff before immediately dispatching IDEUX-06 at Terra High
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.FindingsPresentationTest' --tests 'io.miniorca.desktop.ResultWorkspaceLayoutTest' --tests 'io.miniorca.desktop.ModelResultContentTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/results"
 ```
+
+**Prior pause — 2026-09-16 (resolved by the Astra repair below)**
+
+All three Terra and all three Sol attempts are exhausted; exact commands and
+failures are in [the handoff](../tasks/ideux-handoff.md) and `docs/errors.log`.
+The result layout, Back focus/scroll and long-content cases passed in the final
+focused run, but its shared pointer-resize callback test failed: **69/70 overall**.
+The final full desktop/Spotless/Detekt gate was not run after that failure. Earlier
+passes do not establish acceptance of the final inputs. `git diff --check` passed.
+The scheduler was confirmed **Paused** at that point; the later Astra repair
+resolved this failure.
+
+The candidate preserves concise rows, separate full detail text and a width/text-
+scale-aware split. Reviewed production images under
+`desktop/build/reports/ide-ux/results/` include wide Performance, compact Security,
+short 150% Bugs, long errors and `rounded-results-full-content-800-150.png`; these
+are component evidence, not native/package acceptance. Keep the bounded palette
+visibility wait with this candidate. Keep the `dragDescription` frame-synchronization
+change was subsequently included with the independently validated resize
+regression in this card. Unrelated baseline files were preserved.
+
+**Astra repair acceptance — 2026-09-16**
+
+The user authorized `gpt-6-astra` with low reasoning after the six recorded
+failures. Diagnostic stress captured a delayed save callback after420releases
+across20fixtures: the offscreen fixture's fixed three renders did not guarantee
+completion of `LaunchedEffect`. A bounded observable callback wait preserves the
+exact count and saved-size assertions. Twenty alternating drags per orientation
+now verify one save per release. No production save behavior, assertions or
+quality thresholds were weakened.
+
+Exact focused command passed **70/70**. The full working-tree desktop gate passed
+**506/506**, Spotless and valid Detekt; the isolated proposed commit passed
+**485/485**, Spotless and Detekt with zero smells. `git diff --check` and baseline
+hash review passed. Actual production render review covered wide Performance,
+compact Security, short150% Bugs/Security, long errors and full title/path/prose;
+native/package acceptance remains IDEUX-13.
+
+The commit includes the new result layout and regression tests plus reviewed,
+previously accepted bounded-page/detail caller and divider focus/hover prerequisites.
+It includes the palette visibility wait and complete repaired gutter test/helper;
+unrelated native/full-frame, source/review/terminal changes remain in the checkout.
+Commit hash is verified in the next handoff before IDEUX-07 starts at Terra High.
 
 ## Task IDEUX-07 — Add local filters and stable result navigation
 

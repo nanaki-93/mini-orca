@@ -165,12 +165,10 @@ private fun SecurityFindingDetails(
           securityReportMatchesIndex(result.report, index) &&
           securityFindingCanPrepareFix(finding, index)
   var technical by remember(result.row().key) { mutableStateOf(false) }
-  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    ResultRowContent(result.row().copy(summary = ""))
-    Text("Observed condition", style = IdeTypography.resultLabel, color = PrimaryText)
-    ModelResultContent(finding.observedCondition)
-    Text("Remediation", style = IdeTypography.resultLabel, color = PrimaryText)
-    ModelResultContent(finding.remediation)
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    ResultDetailHeader(result.row())
+    ResultEvidenceSection("Observed condition", finding.observedCondition)
+    ResultEvidenceSection("Remediation", finding.remediation)
     ResponsiveActionGroup(Modifier.fillMaxWidth()) {
       MiniOrcaButton(
           onClick = { actions.prepareFix(finding) },
@@ -195,10 +193,10 @@ private fun SecurityFindingDetails(
           else "Matched source rule: ${finding.rule}. Verify the preconditions before remediation.",
           color = SecondaryText,
           style = IdeTypography.compactBody)
-      Text("Preconditions / unknowns", style = IdeTypography.resultLabel, color = PrimaryText)
-      ModelResultContent(finding.preconditions.ifBlank { "Not provided" })
-      Text("Safe verification idea", style = IdeTypography.resultLabel, color = PrimaryText)
-      ModelResultContent(finding.verificationIdea.ifBlank { "Not provided" })
+      ResultEvidenceSection(
+          "Preconditions / unknowns", finding.preconditions.ifBlank { "Not provided" })
+      ResultEvidenceSection(
+          "Safe verification idea", finding.verificationIdea.ifBlank { "Not provided" })
       Text(
           "${result.report.source} · ${result.report.ruleSetVersion} · ${result.report.profile} · ${result.report.model}",
           color = SecondaryText,

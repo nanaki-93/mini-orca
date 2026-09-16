@@ -57,6 +57,55 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun gutterHandlesRetainVisibleKeyboardFocusAndCommitResizing() {
+    listOf(false, true).forEach { horizontal ->
+      var size by mutableStateOf(220f)
+      val commits = mutableListOf<Float>()
+      val label =
+          if (horizontal) "Resize bottom pane. Use Up or Down Arrow."
+          else "Resize adjacent panes. Use Left or Right Arrow."
+      ComposeVisualFixture(160, 160) {
+            Box(Modifier.fillMaxSize().background(ActivityRail)) {
+              if (horizontal) HorizontalResizableDivider({ size += it }, { commits += size })
+              else ResizableDivider({ size += it }, { commits += size })
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.assertColorVisible(ControlBorder)
+            assertTrue(fixture.requestDescriptionFocus(label))
+            fixture.render()
+            fixture.assertColorVisible(FocusAccent)
+            assertTrue(fixture.pressKey(if (horizontal) Key.DirectionUp else Key.DirectionRight))
+            fixture.render("frame-${if (horizontal) "horizontal" else "vertical"}-splitter-focus")
+            assertEquals(232f, size)
+            assertEquals(listOf(232f), commits)
+            assertTrue(fixture.pressKey(if (horizontal) Key.DirectionDown else Key.DirectionLeft))
+            fixture.render()
+            assertEquals(220f, size)
+            assertEquals(listOf(232f, 220f), commits)
+            fixture.dragDescription(label, if (horizontal) Offset(0f, 40f) else Offset(40f, 0f))
+            assertTrue(
+                if (horizontal) size < 220f else size > 220f,
+                "Pointer resizing must still update the pane")
+            fixture.awaitResizeCommit(commits, expectedCount = 3)
+            assertEquals(3, commits.size)
+            assertEquals(size, commits.last(), "Pointer release must save the current size")
+            repeat(20) { drag ->
+              val distance = if (drag % 2 == 0) -40f else 40f
+              val previousSize = size
+              fixture.dragDescription(
+                  label, if (horizontal) Offset(0f, distance) else Offset(distance, 0f))
+              assertTrue(size != previousSize, "Each pointer drag must resize the pane")
+              fixture.awaitResizeCommit(commits, expectedCount = 4 + drag)
+              assertEquals(4 + drag, commits.size, "Each release must commit exactly once")
+              assertEquals(size, commits.last(), "Each release must save the current size")
+            }
+          }
+    }
+  }
+
+  @Test
   fun unknownFileProgressKeepsOneTruthfulTrackAcrossActiveAndPausedRuns() {
     listOf(
             Triple("running", "Pause", "Resume"),
@@ -458,7 +507,9 @@ class DesktopVisualLayoutTest {
                   assertFalse(fixture.hasText("Review"))
                   fixture.clickDescription("Inspect $title")
                   fixture.render("results-$category-detail-$width-$scale")
-                  assertEquals(width < 900, fixture.hasText("Back to results"))
+                  assertEquals(
+                      !resultListDetailUsesTwoPanes(width.dp, scale),
+                      fixture.hasText("Back to results"))
                   assertFalse(fixture.hasText("Clear selection"))
                   assertTrue(fixture.hasText("Prepare fix"))
                   assertFalse(fixture.hasText("Open source"))
@@ -892,6 +943,7 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.pressKey(Key.DirectionUp))
           fixture.render()
           assertTrue(fixture.hasDescription("File ${displayedFiles.last().path}, selected"))
+          fixture.awaitVisibleDescription("File ${displayedFiles.last().path}, selected")
           fixture.clickVisibleDescription("File ${displayedFiles.last().path}, selected")
           assertEquals(listOf(displayedFiles.last().path), selectedFiles)
           fixture.clickText("Symbols")
@@ -2803,6 +2855,34 @@ internal class ComposeVisualFixture(
     assertTrue(
         maxOf(first.top, second.top) < minOf(first.bottom, second.bottom),
         "$label and $following must share a row")
+  }
+
+  fun dragDescription(label: String, delta: Offset) {
+    val start =
+        nodes()
+            .single {
+              it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+            }
+            .boundsInRoot
+            .center
+    scene.sendPointerEvent(PointerEventType.Press, start, button = PointerButton.Primary)
+    render()
+    scene.sendPointerEvent(PointerEventType.Move, start + delta / 2f)
+    render()
+    scene.sendPointerEvent(PointerEventType.Move, start + delta)
+    render()
+    scene.sendPointerEvent(PointerEventType.Release, start + delta, button = PointerButton.Primary)
+    render()
+  }
+
+  fun awaitResizeCommit(commits: List<Float>, expectedCount: Int) {
+    // Saving is a LaunchedEffect; a fixed number of frames can precede snapshot delivery.
+    val deadline = System.nanoTime() + 2_000_000_000L
+    while (commits.size < expectedCount && System.nanoTime() < deadline) {
+      render()
+      Thread.yield()
+    }
+    assertEquals(expectedCount, commits.size, "Timed out waiting for pointer resize commit")
   }
 
   fun assertSummaryColumns() {

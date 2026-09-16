@@ -4,6 +4,9 @@ The user authorized scheduled **IDEUX-01–13** implementation and a local commi
 after each accepted task on **2026-09-16**. [PLAN.md](../PLAN.md) owns the current
 scope, [docs/tasks.md](../docs/tasks.md) owns the ordered cards, and
 [ideux-handoff.md](ideux-handoff.md) owns the next attempt and failure context.
+The user subsequently authorized Astra light (`gpt-6-astra`, `low`) to repair
+IDEUX-06 after six failures. The heartbeat remains paused during that repair;
+prior counters and the subsequent-card Terra/Sol policy remain unchanged.
 Only this top procedure applies. Earlier model, retry, scheduling and commit rules
 below the history marker are retained receipts, not current instructions.
 
