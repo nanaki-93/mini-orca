@@ -84,7 +84,17 @@ as the previous one completes. The ACTIVE automation and execution procedure now
 continue serially within the same run after acceptance, verified commit and
 handoff update. Dispatch permitted fresh retries immediately after preserving
 their failure packet; model tiers, retry counts and per-task commits are unchanged.
-The 20-minute heartbeat is retained to start/resume idle or interrupted work.
+Fixed clock heartbeat wake-ups at minutes 09, 29 and 49 each hour in the computer's
+local timezone start/resume idle or interrupted work.
+
+Scheduler diagnosis, 2026-09-16: the reported missed 19:09 wake was not a worker
+failure. The app's interval-heartbeat calculation uses the later of last run and
+thread update, plus the interval. This task's 19:04:45 completion therefore moved
+the due time to 19:24:45; last actual scheduled dispatch was 18:38:02. The automation
+was changed through the app tool to fixed clock wake-ups and read back ACTIVE with
+the next backup wake at 19:29 Asia/Manila. No retry was consumed. The authorized
+IDEUX-02 continuation can be queued immediately in this same task; inspect active
+work before dispatch, and never create a second writer on a backup wake.
 
 On failure replace this section with the required packet: exact command/action,
 exit/result, bounded failure output, expected/observed behavior, changes attempted,
