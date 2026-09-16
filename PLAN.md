@@ -24,8 +24,8 @@ hierarchy to a project-first toolbar, one compact active-run strip, neutral cate
 surfaces, Architecture beside Flows, unboxed result headings with local filters and
 a consistent list/detail layout, and a dominant Explorer/code/Context source view.
 
-**Status:** 1/13 accepted. IDEUX-01 committed and verified as `3fa4929`.
-Next: IDEUX-02, Terra High initial attempt.
+**Status:** 2/13 accepted. IDEUX-01 committed and verified as `3fa4929`.
+IDEUX-02 passed Terra High retry 1; task commit pending. IDEUX-03 is next.
 Reuse `mini-orca-ux-implementation` at minutes 09, 29 and 49 each hour in the
 computer's local timezone, attached to **Plan IDE UI/UX
 improvements** (`01a0a9ab-9f6b-7da1-93e4-94e05548984e`). **Scheduler: Active**,

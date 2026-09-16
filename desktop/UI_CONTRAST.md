@@ -1,6 +1,6 @@
 # IDE token contrast
 
-The shared charcoal theme separates outer chrome, tool windows, the darker source
+The shared charcoal theme separates the teal outer frame, tool windows, the darker source
 canvas, section headers and outlined controls. Blue identifies actions and
 selection; cyan identifies information and running work; green, amber and coral
 identify success, warnings and failures. Every state retains its text label.
@@ -25,7 +25,7 @@ focus indicators target 3:1; decorative pane separators are supplementary bounda
 | Primary action label / selected | `#101722` / `#619AFF` | 6.49:1 |
 | Control outline / hovered control | `#8E9EAF` / `#414E5F` | 3.09:1 |
 | Selection edge / selection fill | `#73ABFF` / `#263F62` | 4.57:1 |
-| Focus / dark inner keyline | `#D3E4FF` / `#14161A` | 14.07:1 |
+| Focus / dark inner keyline | `#D3E4FF` / `#203238` | 10.36:1 |
 | Success text / added diff | `#74E0AC` / `#193E30` | 7.33:1 |
 | Failure text / removed diff | `#FF929E` / `#482730` | 6.13:1 |
 
@@ -37,6 +37,11 @@ controls use a neutral fill and muted border. Focus uses a light outline with a
 dark inner keyline, which remains visible against a bright primary action.
 
 Badges use an opaque 16% tint over the tool window and a stronger matching outline.
+The flat toolbar keeps its passive analysis and daemon statuses unboxed on the outer
+frame: running uses information (8.19:1), attention uses warning (9.24:1), neutral
+analysis uses secondary text (8.92:1), and connection labels use success (8.26:1) or
+failure (6.26:1). Each status keeps its text label, and the daemon status remains
+separate from provider state.
 
 | Badge label / its resolved fill | Contrast |
 | --- | ---: |

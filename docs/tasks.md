@@ -6,7 +6,7 @@ workspaces, preserving Mini-Orca's colors, icon-only left rail and guarded editi
 
 ## Scope and status
 
-**IDEUX-01–13: approved for scheduled implementation, 1/13 accepted.** On
+**IDEUX-01–13: approved for scheduled implementation, 2/13 accepted.** On
 2026-09-16 the user authorized Terra High implementation, two Terra retries, then
 Sol High with the same initial-attempt-plus-two-retries policy. Every retry must
 receive the task and concrete failure context. Commit each task locally after its
@@ -226,7 +226,7 @@ commit hash and next attempt are recorded in `tasks/ideux-handoff.md` after comm
 
 ## Task IDEUX-02 — Quiet the shell and establish shared page hierarchy
 
-**Status:** [ ] Pending.
+**Status:** [x] Accepted — 2026-09-16; Terra High retry 1 of 2; initial compile failure resolved.
 
 **Target files**
 
@@ -237,6 +237,7 @@ commit hash and next attempt are recorded in `tasks/ideux-handoff.md` after comm
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopVisualLayoutTest.kt` — production shell and shared page renders.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopContrastTest.kt` — actual backgrounds, controls and focus contrast.
 - `desktop/src/test/kotlin/io/miniorca/desktop/DesktopShellTest.kt` — toolbar/status and shell behavior regressions.
+- `desktop/src/test/kotlin/io/miniorca/desktop/DesktopKeyboardNavigationTest.kt` — maintain the existing toolbar breakpoint assertions if the presentation fields change; identified during retry review.
 - `desktop/UI_DESIGN_GUIDELINES.md` — final shared measurements.
 - `desktop/UI_CONTRAST.md` — measured contrast for changed treatments.
 
@@ -262,6 +263,37 @@ commit hash and next attempt are recorded in `tasks/ideux-handoff.md` after comm
 ```sh
 ./scripts/desktop-gradle.sh test --tests 'io.miniorca.desktop.DesktopShellTest' --tests 'io.miniorca.desktop.DesktopContrastTest' --tests 'io.miniorca.desktop.DesktopLayoutStateTest' --tests 'io.miniorca.desktop.DesktopKeyboardNavigationTest' --tests 'io.miniorca.desktop.DesktopVisualLayoutTest' -PvisualOutput="$PWD/desktop/build/reports/ide-ux/shell"
 ```
+
+### IDEUX-02 acceptance evidence — 2026-09-16
+
+The project-first toolbar retains the product mark, aligns project/branch/search,
+and presents analysis and daemon states as separate unboxed indicators. All current
+palette values, six rail icons, drawer boundaries and terminal ownership remain.
+The initial Terra compile failure is retained in `docs/errors.log`; fresh Terra
+retry 1 removed the redundant forward alias and passed acceptance.
+
+The exact focused command above passed 103 tests. The working-tree full gate
+`./scripts/desktop-gradle.sh test spotlessCheck detekt` passed 498 tests with zero
+failures/errors/skips, Spotless passed and Detekt reported zero smells.
+`git diff --check` passed. Worker and coordinator inspected these new production
+renders under `desktop/build/reports/ide-ux/shell/`:
+
+- `toolbar-analysis-1440-1.0.png` — project/branch/search order and trailing states.
+- `toolbar-analysis-800-1.5.png` — reachable controls and deliberate status wrapping.
+- `frame-1280-600-1.5-collapsed.png` — six icons, readable panes and terminal geometry.
+
+Application/design changes are limited to the six task file deltas, alongside
+execution receipts. Required, reviewed portions of the
+accepted uncommitted baseline are included: the existing `#203238` rail palette,
+56dp toolbar, 420dp search limit, removed toolbar separator, passive analysis dot
+and shared test-fixture visibility. Unrelated MOCK application changes remain
+uncommitted and unchanged. To verify this extraction, a temporary plain export of
+HEAD plus exactly the proposed code/test hunks passed the same full desktop gate:
+468 tests, zero failures/errors/skips, Spotless and Detekt passed. Its first check
+exposed omitted fixture visibility; including that existing prerequisite resolved
+it without changing the working-tree candidate or consuming a worker retry.
+These are component and build checks; native/package acceptance remains IDEUX-13.
+The verified task commit hash is recorded in the handoff before IDEUX-03 starts.
 
 ## Task IDEUX-03 — Make the toolbar search reach all three existing modes
 
