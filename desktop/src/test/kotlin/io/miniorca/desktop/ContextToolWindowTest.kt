@@ -50,6 +50,25 @@ class ContextToolWindowTest {
   }
 
   @Test
+  fun declarationActionsKeepExplanationPrimaryUntilTheCurrentExplanationCanSupportRefactor() {
+    assertEquals(
+        DeclarationActionPresentation(ActionTone.Primary, ActionTone.Neutral),
+        declarationActionPresentation(DeclarationExplanationState()))
+    assertEquals(
+        DeclarationActionPresentation(ActionTone.Destructive, ActionTone.Neutral),
+        declarationActionPresentation(
+            DeclarationExplanationState(status = DeclarationExplanationStatus.Loading)))
+    assertEquals(
+        DeclarationActionPresentation(ActionTone.Neutral, ActionTone.Primary),
+        declarationActionPresentation(
+            DeclarationExplanationState(status = DeclarationExplanationStatus.Current)))
+    assertEquals(
+        DeclarationActionPresentation(ActionTone.Primary, ActionTone.Neutral),
+        declarationActionPresentation(
+            DeclarationExplanationState(status = DeclarationExplanationStatus.Stale)))
+  }
+
+  @Test
   fun declarationExplanationShowsOnlyItsSummaryAndUpdatesWithTheResponse() {
     val result =
         DeclarationExplanation(

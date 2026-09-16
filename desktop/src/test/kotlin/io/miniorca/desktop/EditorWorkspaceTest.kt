@@ -1,6 +1,13 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Text
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -65,24 +72,50 @@ class EditorWorkspaceTest {
   }
 
   @Test
-  fun contextOffersCreationWithNoSelectedSymbolWithoutRunningAnalysis() {
+  fun fileCreationHasOneVisibleActionInDockedEditorAndContextAndRemainsAvailableInCompactContext() {
     val file = testFile("empty.go").copy(content = "package demo\n")
     val inspector =
         symbolInspectorUiState(
             file, emptyList(), null, null, false, InspectorProviderState(false, false), null)
     var creations = 0
     var analyses = 0
-    ComposeVisualFixture(320, 200, 1.5f) {
-          ContextCreationAction(
-              ContextToolWindowState(inspector, ScopedModel(), false, null, null),
-              ContextToolWindowActions(
-                  {}, { analyses++ }, { analyses++ }, {}, {}, createDeclaration = { creations++ }))
+    val state = ContextToolWindowState(inspector, ScopedModel(), false, null, null)
+    val actions =
+        ContextToolWindowActions(
+            {}, { analyses++ }, { analyses++ }, {}, {}, createDeclaration = { creations++ })
+    ComposeVisualFixture(800, 320, 1.5f) {
+          Row {
+            EditorWorkspace(
+                editorChromeUiState(
+                    file, null, EditorSurface.Source, progress(EditorProgress.Inspect), null),
+                null,
+                {},
+                { creations++ },
+                canvas = { Text(file.content) },
+                modifier = Modifier.weight(1f))
+            CompositionLocalProvider(LocalContextCreationActionVisible provides false) {
+              ContextToolWindow(state, actions, Modifier.weight(1f))
+            }
+          }
         }
         .use { fixture ->
-          fixture.render("context-new-function-320-1.5")
-          assertTrue(fixture.hasText("New function"))
+          fixture.render("editor-context-one-new-function-800-1.5")
+          assertEquals(1, fixture.textCount("New function"))
           fixture.clickText("New function")
           assertEquals(1, creations)
+          assertEquals(0, analyses)
+        }
+
+    ComposeVisualFixture(320, 200, 1.5f) {
+          CompositionLocalProvider(LocalContextCreationActionVisible provides true) {
+            ContextToolWindow(state, actions, Modifier.fillMaxSize())
+          }
+        }
+        .use { fixture ->
+          fixture.render("context-new-function-compact-320-1.5")
+          assertEquals(1, fixture.textCount("New function"))
+          fixture.clickText("New function")
+          assertEquals(2, creations)
           assertEquals(0, analyses)
         }
   }
@@ -219,42 +252,53 @@ class EditorWorkspaceTest {
   }
 
   @Test
-  fun candidateSummaryUsesOnlyTheCurrentDraftAndValidationStage() {
-    val draft =
-        validatedDraft()
-            .copy(
-                validation =
-                    DeclarationValidation(
-                        applicable = true,
-                        scopeMode = "replace_symbol",
-                        diff =
-                            UnifiedDiff(
-                                "internal/runner/run.go",
-                                "internal/runner/run.go",
-                                listOf(DiffLine("added", newLine = 1, text = "func Run() {}"))),
-                    ))
-    val chrome =
-        editorChromeUiState(
-            testFile("internal/runner/run.go"),
-            symbol(),
-            EditorSurface.Source,
-            progress(EditorProgress.Review),
-            draft)
-    val ready = candidateSummaryPresentation(draft, chrome)!!
-
-    assertEquals("internal/runner/run.go", ready.target)
-    assertEquals("VALIDATED DRAFT", ready.stage)
-    assertEquals("1 changed lines", ready.changedLines)
-    assertTrue(ready.reviewAvailable)
-    assertEquals(
-        "Validate to compose a diff.",
-        candidateSummaryPresentation(draft.copy(validation = null), chrome)!!.changedLines)
-    assertEquals(null, candidateSummaryPresentation(null, readyChrome()))
+  fun candidateTabAndEditDraftAreLocalNavigationAndReflectLiveEvidence() {
+    var review by mutableStateOf(editorComparisonReviewFixture())
+    var surface by mutableStateOf(EditorSurface.Source)
+    var edits = 0
+    var creations = 0
+    ComposeVisualFixture(800, 600, 1.5f) {
+          EditorWorkspace(
+              editorChromeUiState(
+                  review.selected,
+                  review.selectedSymbol,
+                  surface,
+                  EditorProgressUiState(EditorProgress.Review, ""),
+                  review.draft),
+              review,
+              { surface = it },
+              { creations++ },
+              canvas = {
+                if (surface == EditorSurface.Review) ReviewDiffCanvas(review.draft)
+                else Text("Source fixture")
+              },
+              onEditDraft = { edits++ })
+        }
+        .use { fixture ->
+          fixture.render("editor-progression-ready-800-1.5")
+          fixture.assertTextFits("Edit draft")
+          fixture.awaitDescription("Focused checks: 1 checks (1 required) are current.", "Passed")
+          fixture.clickText("Candidate diff")
+          fixture.render()
+          assertEquals(EditorSurface.Review, surface)
+          assertEquals(0, edits)
+          assertEquals(0, creations)
+          assertFalse(fixture.hasEditableText())
+          assertTrue(fixture.requestFocus("Edit draft"))
+          fixture.render()
+          fixture.pressKey(Key.Enter)
+          assertEquals(1, edits)
+          review = review.copy(checks = review.checks!!.copy(draftHash = "previous-draft"))
+          fixture.render("editor-progression-stale-800-1.5")
+          fixture.assertTextFits("Checks · Stale")
+          fixture.assertTextFits("Review · Stale")
+          review = review.copy(checks = null, checksRunning = true)
+          fixture.render("editor-progression-running-800-1.5")
+          fixture.assertTextFits("Checks · Running")
+          assertEquals(1, edits)
+          assertEquals(0, creations)
+        }
   }
-
-  private fun readyChrome() =
-      editorChromeUiState(
-          testFile("main.go"), null, EditorSurface.Source, progress(EditorProgress.Inspect), null)
 
   private fun progress(value: EditorProgress) = EditorProgressUiState(value, "")
 

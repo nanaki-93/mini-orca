@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -115,6 +116,9 @@ internal fun rightToolWindowTabDescription(
 ): String =
     "${rightToolWindowLabel(toolWindow)} tool window tab${badge?.let { ", ${it.label}" }.orEmpty()}, ${if (selected) "selected" else "not selected"}${if (focused) ", focused" else ""}"
 
+/** The Editor owns file creation while its docked Context pane inspects that same file. */
+internal val LocalContextCreationActionVisible = compositionLocalOf { true }
+
 @Composable
 internal fun ContextToolWindow(
     state: ContextToolWindowState,
@@ -211,6 +215,7 @@ private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextTo
   val inspector = requireNotNull(state.inspector)
   val symbol = requireNotNull(inspector.selectedSymbol)
   val explanation = state.declarationExplanation
+  val actionPresentation = declarationActionPresentation(explanation)
   if (explanation.status == DeclarationExplanationStatus.Unavailable &&
       symbol.explanation != null) {
     ModelResultContent(symbol.explanation)
@@ -221,12 +226,12 @@ private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextTo
     DeclarationExplanationDetails(explanation)
   }
   Spacer(Modifier.height(8.dp))
-  ExplanationAction(state, actions)
+  ExplanationAction(state, actions, actionPresentation.explanationTone)
   Spacer(Modifier.height(8.dp))
   if (symbol.editEligibility.eligible) {
     MiniOrcaButton(
         onClick = { actions.editSelected(symbol) },
-        tone = ActionTone.Primary,
+        tone = actionPresentation.refactorTone,
         modifier = Modifier.fillMaxWidth()) {
           DesktopLineIcon(
               DesktopIcon.Editor, "Refactor declaration", iconSize = 16.dp, tint = OnActionFill)
@@ -248,8 +253,10 @@ private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextTo
 @Composable
 private fun ContextActions(state: ContextToolWindowState, actions: ContextToolWindowActions) {
   val inspector = requireNotNull(state.inspector)
-  ContextCreationAction(state, actions)
-  Spacer(Modifier.height(12.dp))
+  if (LocalContextCreationActionVisible.current) {
+    ContextCreationAction(state, actions)
+    Spacer(Modifier.height(12.dp))
+  }
   IdePaneHeader(
       title = "File analysis",
       stateLabel = inspector.analysisStatus.label,
@@ -284,7 +291,11 @@ internal fun ContextCreationAction(
 }
 
 @Composable
-private fun ExplanationAction(state: ContextToolWindowState, actions: ContextToolWindowActions) {
+private fun ExplanationAction(
+    state: ContextToolWindowState,
+    actions: ContextToolWindowActions,
+    tone: ActionTone,
+) {
   val symbol = requireNotNull(state.inspector?.selectedSymbol)
   if (!symbol.editEligibility.eligible) {
     return
@@ -301,7 +312,7 @@ private fun ExplanationAction(state: ContextToolWindowState, actions: ContextToo
       onClick = if (loading) actions.cancelExplanation else actions.explainSelected,
       enabled =
           loading || !state.functionModel.remoteProvider || state.functionRemoteProviderConfirmed,
-      tone = if (loading) ActionTone.Destructive else ActionTone.Navigation,
+      tone = tone,
       modifier = Modifier.fillMaxWidth()) {
         Text(explanationActionLabel(state.declarationExplanation), style = IdeTypography.action)
       }
@@ -409,6 +420,23 @@ internal fun explanationActionLabel(state: DeclarationExplanationState): String 
       DeclarationExplanationStatus.Loading -> "Cancel explanation"
       DeclarationExplanationStatus.Current -> "Refresh explanation"
       else -> "Explain declaration"
+    }
+
+/** Keeps one declaration action primary while retaining an explicit explanation lifecycle. */
+internal data class DeclarationActionPresentation(
+    val explanationTone: ActionTone,
+    val refactorTone: ActionTone,
+)
+
+internal fun declarationActionPresentation(
+    explanation: DeclarationExplanationState,
+): DeclarationActionPresentation =
+    when (explanation.status) {
+      DeclarationExplanationStatus.Current ->
+          DeclarationActionPresentation(ActionTone.Neutral, ActionTone.Primary)
+      DeclarationExplanationStatus.Loading ->
+          DeclarationActionPresentation(ActionTone.Destructive, ActionTone.Neutral)
+      else -> DeclarationActionPresentation(ActionTone.Primary, ActionTone.Neutral)
     }
 
 internal fun contextHeaderLabel(inspector: SymbolInspectorUiState): String =

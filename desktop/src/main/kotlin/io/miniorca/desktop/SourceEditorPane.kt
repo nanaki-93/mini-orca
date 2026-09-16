@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -29,10 +29,15 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -57,6 +62,12 @@ internal data class SourceGutterMarker(
 
 internal val readOnlyCodeRowMinimumHeight = 20.dp
 internal val sourceEditorGutterWidth = 62.dp
+internal val readOnlyCodeStyle =
+    TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp)
+
+@Composable
+internal fun readOnlyCodeRowHeight() =
+    with(LocalDensity.current) { 20.sp.toDp() }.coerceAtLeast(readOnlyCodeRowMinimumHeight)
 
 /** Cached source-only work that does not change when focus or gutter markers move. */
 internal data class SourceViewportRow(
@@ -220,16 +231,19 @@ internal fun SourceEditorPane(
   LaunchedEffect(selected?.path, selected?.contentHash, focusLine) {
     if (focusLine != null) focusLineRequester.bringIntoView()
   }
-  SelectionContainer {
+  val density = LocalDensity.current
+  val rowHeight = readOnlyCodeRowHeight()
+  val measuredNumber =
+      rememberTextMeasurer()
+          .measure(
+              "9".repeat(maxOf(4, rows.size.toString().length)),
+              style = readOnlyCodeStyle.copy(fontSize = 12.sp))
+  val numberWidth =
+      (with(density) { measuredNumber.size.width.toDp() } + 4.dp).coerceAtLeast(
+          38.dp * density.fontScale)
+  val gutterWidth = numberWidth + (sourceEditorGutterWidth - 38.dp) * density.fontScale
+  SelectionContainer(Modifier.testTag("source-viewport")) {
     Column(Modifier.fillMaxSize().padding(vertical = 8.dp)) {
-      if (focusedLine > 0) {
-        Text(
-            "${selectedSymbol?.name ?: "line $focusedLine"} · line $focusedLine",
-            color = SecondaryText,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(start = 12.dp, bottom = 4.dp),
-        )
-      }
       Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SourceGutter(
             rows = rows,
@@ -237,7 +251,9 @@ internal fun SourceEditorPane(
             focusedLine = focusedLine,
             markersByLine = markersByLine,
             onSourceLineSelected = onSourceLineSelected,
-            modifier = Modifier.width(sourceEditorGutterWidth),
+            modifier = Modifier.width(gutterWidth),
+            rowHeight = rowHeight,
+            numberWidth = numberWidth,
         )
         Column(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()).width(IntrinsicSize.Max)) {
@@ -246,7 +262,8 @@ internal fun SourceEditorPane(
                 val declarationSymbol = row.selection?.symbol
                 Box(
                     Modifier.fillMaxWidth()
-                        .heightIn(min = readOnlyCodeRowMinimumHeight)
+                        .height(rowHeight)
+                        .testTag("source-code-${row.line}")
                         .background(sourceLineBackground(emphasis))
                         .semantics {
                           contentDescription =
@@ -286,25 +303,33 @@ private fun SourceGutter(
     markersByLine: Map<Int, List<SourceGutterMarker>>,
     onSourceLineSelected: (SourceLineSelection) -> Unit,
     modifier: Modifier = Modifier,
+    rowHeight: androidx.compose.ui.unit.Dp,
+    numberWidth: androidx.compose.ui.unit.Dp,
 ) {
   Column(modifier.background(EditorCanvas)) {
     rows.forEach { row ->
       val emphasis = sourceLineEmphasis(row.line, selectedSymbol, focusedLine)
       Row(
           Modifier.fillMaxWidth()
-              .heightIn(min = readOnlyCodeRowMinimumHeight)
+              .height(rowHeight)
               .background(sourceLineBackground(emphasis))
               .sourceLineSelectionTap(row.selection) {
                 onSourceLineSelected(requireNotNull(row.selection))
               },
       ) {
         Text(
-            row.line.toString().padStart(4),
+            row.line.toString(),
             color = if (row.line == focusedLine) SelectionText else FaintText,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
             lineHeight = 20.sp,
-            modifier = Modifier.width(38.dp),
+            softWrap = false,
+            maxLines = 1,
+            textAlign = TextAlign.End,
+            modifier =
+                Modifier.width(numberWidth)
+                    .padding(end = 4.dp)
+                    .testTag("source-number-${row.line}"),
         )
         markersByLine[row.line].orEmpty().forEach { marker ->
           TooltipArea(tooltip = { IdeControlTooltip(marker.description) }) {
@@ -314,6 +339,8 @@ private fun SourceGutter(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 lineHeight = 20.sp,
+                softWrap = false,
+                maxLines = 1,
                 modifier = Modifier.semantics { contentDescription = marker.description },
             )
           }

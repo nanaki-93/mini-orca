@@ -110,4 +110,36 @@ class ExplorerPaneTest {
     assertEquals(DesktopIcon.Document, explorerFileIcon("Markdown"))
     assertEquals(DesktopIcon.File, explorerFileIcon(""))
   }
+
+  @Test
+  fun fileRowsKeepDuplicateBasenamesVisibleAndExposeTheirProjectRelativePaths() {
+    val duplicates =
+        listOf(
+            IndexedFile("cmd/worker/main.go", "worker", "Go", false),
+            IndexedFile("cmd/server/main.go", "server", "Go", false),
+        )
+    ComposeVisualFixture(360, 300, 1.5f) {
+          ExplorerPane(
+              ExplorerPaneState(
+                  ProjectIndex("project", "revision", files = duplicates),
+                  "cmd/worker/main.go",
+                  "",
+                  emptySet(),
+                  false),
+              ExplorerPaneActions({}, {}, {}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render("explorer-project-relative-duplicates")
+          assertEquals(2, fixture.textCount("main.go"))
+          fixture.assertTextFits("worker")
+          fixture.assertTextFits("server")
+          assertTrue(
+              fixture.hasDescription(
+                  "Go file main.go at cmd/worker/main.go, Not analyzed, selected"))
+          assertTrue(
+              fixture.hasDescription(
+                  "Go file main.go at cmd/server/main.go, Not analyzed, not selected"))
+        }
+  }
 }

@@ -3,16 +3,21 @@ package io.miniorca.desktop
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.Text
@@ -28,8 +33,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,31 +94,6 @@ internal data class EditorBreadcrumbSegment(
     val label: String,
     val kind: EditorBreadcrumbKind,
 )
-
-internal data class CandidateSummaryPresentation(
-    val target: String,
-    val stage: String,
-    val changedLines: String,
-    val reviewAvailable: Boolean,
-)
-
-internal fun candidateSummaryPresentation(
-    draft: DeclarationDraft?,
-    chrome: EditorChromeUiState,
-): CandidateSummaryPresentation? {
-  val currentDraft = draft ?: return null
-  val changed =
-      currentDraft.validation?.diff?.lines.orEmpty().count { it.kind in setOf("added", "removed") }
-  return CandidateSummaryPresentation(
-      target =
-          listOf(currentDraft.targetPath, currentDraft.targetSymbol)
-              .filter(String::isNotBlank)
-              .joinToString(" · "),
-      stage = chrome.stageLabel,
-      changedLines = if (changed > 0) "$changed changed lines" else "Validate to compose a diff.",
-      reviewAvailable = chrome.reviewAvailable,
-  )
-}
 
 internal fun editorChromeUiState(
     file: ProjectFileInfo?,
@@ -182,53 +165,80 @@ internal fun editorBreadcrumbSegments(
 @Composable
 internal fun EditorWorkspace(
     chrome: EditorChromeUiState,
-    draft: DeclarationDraft?,
+    review: ReviewToolWindowState?,
     onSelectSurface: (EditorSurface) -> Unit,
     onCreateDeclaration: () -> Unit,
     canvas: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    onEditDraft: (() -> Unit)? = null,
 ) {
   Column(modifier.fillMaxSize().background(EditorCanvas)) {
-    ActiveFileEditorChrome(chrome, onSelectSurface, onCreateDeclaration)
+    ActiveFileEditorChrome(
+        chrome, onSelectSurface, onCreateDeclaration, onEditDraft.takeIf { review?.draft != null })
+    if (review?.draft != null) EditorReviewProgression(editorProgressionRows(review))
     Box(Modifier.fillMaxWidth().weight(1f)) { canvas() }
-    candidateSummaryPresentation(draft, chrome)?.let { summary ->
-      CandidateSummary(summary, onReview = { onSelectSurface(EditorSurface.Review) })
-    }
   }
 }
 
 @Composable
-private fun CandidateSummary(summary: CandidateSummaryPresentation, onReview: () -> Unit) {
-  MiniOrcaPanel(
-      Modifier.fillMaxWidth().padding(12.dp),
-      contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
+private fun EditorReviewProgression(rows: List<ReviewEvidenceRow>) {
+  FlowRow(
+      Modifier.fillMaxWidth()
+          .padding(horizontal = 12.dp, vertical = 8.dp)
+          .testTag("editor-progression"),
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp),
   ) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      DesktopLineIcon(DesktopIcon.Editor, "Candidate", tint = SelectionText, iconSize = 16.dp)
-      Spacer(Modifier.width(8.dp))
-      Text("Candidate", color = PrimaryText, fontSize = 12.sp, modifier = Modifier.weight(1f))
-      MiniOrcaButton(
-          onClick = onReview,
-          enabled = summary.reviewAvailable,
-          tone = ActionTone.Neutral,
-          density = ButtonDensity.Toolbar) {
-            Text(
-                if (summary.reviewAvailable) "Open review" else "Review unavailable",
-                fontSize = 12.sp)
+    rows.forEachIndexed { index, row ->
+      val label =
+          when (row.label) {
+            "Validation" -> "Validate"
+            "Focused checks" -> "Checks"
+            else -> row.label
+          }
+      val marker =
+          when (row.status) {
+            ReviewEvidenceStatus.Passed -> "✓"
+            ReviewEvidenceStatus.Failed -> "×"
+            ReviewEvidenceStatus.Stale -> "!"
+            ReviewEvidenceStatus.Running -> "…"
+            ReviewEvidenceStatus.Skipped -> "–"
+            ReviewEvidenceStatus.Missing -> "${index + 1}"
+          }
+      val exceptional =
+          row.status !in setOf(ReviewEvidenceStatus.Passed, ReviewEvidenceStatus.Missing)
+      TooltipArea(
+          tooltip = { IdeControlTooltip(row.detail) },
+          modifier = Modifier.align(Alignment.CenterVertically)) {
+            Row(
+                Modifier.semantics(mergeDescendants = true) {
+                  contentDescription = "${row.label}: ${row.detail}"
+                  stateDescription = row.status.label
+                },
+                verticalAlignment = Alignment.CenterVertically) {
+                  val passed = row.status == ReviewEvidenceStatus.Passed
+                  Box(
+                      Modifier.size(22.dp * LocalDensity.current.fontScale)
+                          .background(if (passed) Success else EditorCanvas, MiniOrcaShapes.pill)
+                          .border(1.dp, evidenceColor(row.status), MiniOrcaShapes.pill),
+                      contentAlignment = Alignment.Center) {
+                        Text(
+                            marker,
+                            color = if (passed) EditorCanvas else evidenceColor(row.status),
+                            style = IdeTypography.workspaceMetadata)
+                      }
+                  Spacer(Modifier.width(6.dp))
+                  Text(
+                      if (exceptional) "$label · ${row.status.label}" else label,
+                      color =
+                          if (row.status == ReviewEvidenceStatus.Passed) PrimaryText
+                          else evidenceColor(row.status),
+                      style = IdeTypography.workspaceMetadata,
+                      softWrap = false)
+                }
           }
     }
-    Text(
-        summary.target.ifBlank { "Current declaration draft" },
-        color = PrimaryText,
-        fontSize = 12.sp,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(top = 8.dp))
-    Text(
-        "${summary.stage} · ${summary.changedLines} · focused checks pending",
-        color = if (summary.reviewAvailable) Success else SecondaryText,
-        fontSize = 12.sp,
-        modifier = Modifier.padding(top = 4.dp))
   }
 }
 
@@ -237,6 +247,7 @@ private fun ActiveFileEditorChrome(
     state: EditorChromeUiState,
     onSelectSurface: (EditorSurface) -> Unit,
     onCreateDeclaration: () -> Unit,
+    onEditDraft: (() -> Unit)?,
 ) {
   val surfaces = buildList {
     add(EditorSurface.Source)
@@ -251,7 +262,7 @@ private fun ActiveFileEditorChrome(
       },
   ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-      val stackAction = maxWidth < 480.dp
+      val stackAction = maxWidth / LocalDensity.current.fontScale < 560.dp
       Column {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
           Row(
@@ -280,35 +291,28 @@ private fun ActiveFileEditorChrome(
                   DesktopLineIcon(
                       DesktopIcon.File, "Source file", tint = SelectionText, iconSize = 16.dp)
                   Spacer(Modifier.width(6.dp))
-                  Text(
-                      "Source · ${state.title}",
-                      fontSize = 12.sp,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis)
+                  Text("Source", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (state.reviewAvailable) {
                   ChromeTab(
                       onClick = { onSelectSurface(EditorSurface.Review) },
                       selected = state.activeSurface == EditorSurface.Review,
                       focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
-                        DesktopLineIcon(DesktopIcon.Check, "Review candidate", iconSize = 14.dp)
+                        DesktopLineIcon(DesktopIcon.Check, "Candidate diff", iconSize = 14.dp)
                         Spacer(Modifier.width(6.dp))
-                        Text("Review candidate", fontSize = 12.sp)
+                        Text("Candidate diff", fontSize = 12.sp, softWrap = false)
                       }
                 }
               }
           if (!stackAction)
-              NewFunctionButton(
-                  state.path,
-                  state.creationBlockedReason,
-                  onCreateDeclaration,
-                  Modifier.padding(end = 8.dp))
+              EditorDraftActions(
+                  state, onCreateDeclaration, onEditDraft, Modifier.padding(end = 8.dp))
         }
         if (stackAction)
-            NewFunctionButton(
-                state.path,
-                state.creationBlockedReason,
+            EditorDraftActions(
+                state,
                 onCreateDeclaration,
+                onEditDraft,
                 Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
       }
     }
@@ -331,12 +335,29 @@ private fun ActiveFileEditorChrome(
           modifier = Modifier.weight(1f),
       )
       Spacer(Modifier.width(8.dp))
-      Text(
-          if (state.reviewAvailable) state.stageLabel.replace('_', ' ') else "Read-only",
-          color = if (state.reviewAvailable) Success else FaintText,
-          fontSize = 11.sp)
+      Text("Read-only", color = FaintText, fontSize = 11.sp, softWrap = false, maxLines = 1)
     }
   }
+}
+
+@Composable
+private fun EditorDraftActions(
+    state: EditorChromeUiState,
+    onCreate: () -> Unit,
+    onEdit: (() -> Unit)?,
+    modifier: Modifier
+) {
+  Row(
+      modifier,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically) {
+        NewFunctionButton(state.path, state.creationBlockedReason, onCreate)
+        if (onEdit != null)
+            MiniOrcaButton(
+                onClick = onEdit, tone = ActionTone.Neutral, density = ButtonDensity.Toolbar) {
+                  Text("Edit draft", style = IdeTypography.action)
+                }
+      }
 }
 
 @Composable
@@ -346,9 +367,9 @@ private fun EditorBreadcrumbs(
     fullPath: String,
     modifier: Modifier = Modifier,
 ) {
-  TooltipArea(tooltip = { IdeControlTooltip(fullPath) }) {
+  TooltipArea(tooltip = { IdeControlTooltip(fullPath) }, modifier = modifier) {
     Row(
-        modifier.horizontalScroll(rememberScrollState()).semantics {
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).semantics {
           contentDescription = "Project-relative path: $fullPath"
         },
         verticalAlignment = Alignment.CenterVertically,
