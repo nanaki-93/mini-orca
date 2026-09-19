@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -108,9 +109,10 @@ internal fun AnalysisFileSelector(
                     }
               }
               if (inline && expanded)
-                  AnalysisFileFilters(query, { query = it }, filter, { filter = it })
+                  AnalysisFileFilters(rows, query, { query = it }, filter, { filter = it })
             }
-        if (!inline && expanded) AnalysisFileFilters(query, { query = it }, filter, { filter = it })
+        if (!inline && expanded)
+            AnalysisFileFilters(rows, query, { query = it }, filter, { filter = it })
       }
     }
     state.error?.let { DiagnosticText(it, color = Error) }
@@ -212,21 +214,30 @@ internal fun AnalysisFileSelector(
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun AnalysisFileFilters(
+    rows: List<AnalysisFileStatus>,
     query: String,
     setQuery: (String) -> Unit,
     filter: AnalysisFileFilter,
     setFilter: (AnalysisFileFilter) -> Unit
 ) {
+  val counts = remember(rows, query) { analysisFileFilterCounts(rows, query) }
   FlowRow(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CompactSingleLineField(query, setQuery, "Filter files", Modifier.width(220.dp))
         AnalysisFileFilter.entries.forEach { choice ->
+          val count = counts[choice] ?: 0
+          val selected = filter == choice
           ChromeTab(
-              selected = filter == choice,
+              selected = selected,
               onClick = { setFilter(choice) },
-              accessibleName = choice.label) {
+              accessibleName = "${choice.label}, $count files") {
                 Text(choice.label, style = IdeTypography.workspaceMetadata)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "$count",
+                    color = if (selected) PrimaryText else SecondaryText,
+                    style = IdeTypography.compactBody)
               }
         }
       }

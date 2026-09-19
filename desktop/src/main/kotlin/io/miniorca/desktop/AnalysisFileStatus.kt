@@ -226,6 +226,13 @@ internal fun filteredAnalysisFiles(
           }
     }
 
+/** Counts respect the active search query so a tab's number always matches what it would show. */
+internal fun analysisFileFilterCounts(
+    files: List<AnalysisFileStatus>,
+    query: String,
+): Map<AnalysisFileFilter, Int> =
+    AnalysisFileFilter.entries.associateWith { filteredAnalysisFiles(files, query, it).size }
+
 internal fun analysisSelectionCoverage(selection: AnalysisFileSelection): AnalysisCoverage {
   val excluded = selection.excludedPaths.toSet()
   val statuses = selection.files.map { analysisFileStatus(it, it.path in excluded).status }
