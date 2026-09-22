@@ -277,7 +277,8 @@ internal fun ProjectSummaryPane(
                       "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
                     },
                 color = SecondaryText,
-                style = IdeTypography.workspaceMetadata)
+                style = IdeTypography.workspaceMetadata,
+                modifier = Modifier.testTag("summary-findings-provenance"))
           }
         }
         item {

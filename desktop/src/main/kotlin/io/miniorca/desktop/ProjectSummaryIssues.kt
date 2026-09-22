@@ -81,7 +81,7 @@ internal fun SummaryIssue(
     modifier: Modifier = Modifier,
 ) {
   val tint = summaryIssueTint(metric)
-  AnalysisCategoryBox(
+  SummaryCategoryBox(
       type = metric.type,
       count = metric.value,
       status = metric.statusCode,
@@ -93,9 +93,15 @@ internal fun SummaryIssue(
           },
       details = {
         metric.detailStatus?.let {
-          Text(it, color = SecondaryText, style = IdeTypography.compactBody)
+          Text(
+              it,
+              color = SecondaryText,
+              style = IdeTypography.compactBody,
+              modifier = Modifier.testTag("summary-category-detail-${metric.type.category}"))
         }
-        if (metric.type == AnalysisResultType.Bugs) SummaryBugBreakdown(metric)
+        if (metric.type == AnalysisResultType.Bugs)
+            SummaryBugBreakdown(
+                metric, Modifier.testTag("summary-category-priorities-${metric.type.category}"))
       })
 }
 

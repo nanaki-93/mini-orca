@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,6 +92,9 @@ internal fun analysisResultStatusLabel(status: String?): String? =
       else -> analysisStatusLabel(status)
     }
 
+private fun analysisCategoryStatusLabel(status: String?): String? =
+    if (status == "completed") "Completed" else analysisResultStatusLabel(status)
+
 @Composable
 internal fun AnalysisCategoryBox(
     type: AnalysisResultType,
@@ -137,6 +141,67 @@ internal fun AnalysisCategoryBox(
             color = if (status == "completed_empty") SecondaryText else tint,
             style = IdeTypography.compactBody)
       }
+      details()
+    }
+  }
+}
+
+@Composable
+internal fun SummaryCategoryBox(
+    type: AnalysisResultType,
+    count: Int?,
+    status: String?,
+    tint: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    details: @Composable () -> Unit = {},
+) {
+  val name = type.workspace.name
+  IdeActionSurface(
+      onClick = onClick,
+      colors = analysisCategoryBoxColors(),
+      accessibleName = "View $name results",
+      tooltip = null,
+      shape = MiniOrcaShapes.interactiveCard,
+      minimumHeight = 132.dp,
+      modifier = modifier.fillMaxWidth(),
+      contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+  ) {
+    Column(
+        Modifier.fillMaxWidth().padding(16.dp).align(Alignment.Top),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalAlignment = Alignment.Start,
+    ) {
+      Row(
+          Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+      ) {
+        AnalysisCategoryIcon(
+            type,
+            tint,
+            description = "",
+            modifier =
+                Modifier.testTag("summary-category-icon-${type.category}").clearAndSetSemantics {})
+        Text(
+            name,
+            color = PrimaryText,
+            style = IdeTypography.workspaceHeading,
+            modifier = Modifier.testTag("summary-category-name-${type.category}"))
+      }
+      Text(
+          count?.toString() ?: "—",
+          color = if (count == null || count == 0) tint else PrimaryText,
+          fontSize = 32.sp,
+          lineHeight = 38.sp,
+          fontWeight = FontWeight.SemiBold,
+          modifier = Modifier.testTag("summary-category-count-${type.category}"))
+      Text(
+          if (status == null) "Not analyzed"
+          else analysisCategoryStatusLabel(status) ?: "Status unavailable",
+          color = if (status == "completed_empty") SecondaryText else tint,
+          style = IdeTypography.compactBody,
+          modifier = Modifier.testTag("summary-category-status-${type.category}"))
       details()
     }
   }

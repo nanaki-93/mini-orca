@@ -23,6 +23,26 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun summaryCategoriesExposeOneNamedActionAndDecorativeIcons() {
+    ComposeVisualFixture(1_600, 1_000) {
+          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+        }
+        .use { fixture ->
+          fixture.render()
+          AnalysisResultType.entries.forEach { type ->
+            val action = "View ${type.workspace.name} results"
+            assertEquals(
+                1,
+                fixture.clickableDescriptionCount(action),
+                "${type.workspace.name} must expose exactly one navigation action")
+            assertTrue(
+                fixture.tagIsDecorative("summary-category-icon-${type.category}"),
+                "${type.workspace.name} icon must not add a second announcement")
+          }
+        }
+  }
+
+  @Test
   fun soleTerminalControlAnnouncesItsStateAndActivatesFromTheKeyboard() {
     var opens = 0
     ComposeVisualFixture(800, 100, 1.5f) {
