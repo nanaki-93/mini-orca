@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
@@ -51,11 +52,27 @@ internal fun AnalysisWorkspacePane(
         Modifier.fillMaxSize().testTag("analysis-page"),
         contentPadding = workspacePagePadding(maxWidth, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
+          item { AnalysisPageHeader() }
           item { AnalysisRunPanel(state, actions) }
           item { AnalysisCategoryPanels(state, actions.openResults) }
           item { AnalysisFileSelector(analysis, actions) }
           items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
         }
+  }
+}
+
+@Composable
+private fun AnalysisPageHeader() {
+  Column(
+      Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+      verticalArrangement = Arrangement.spacedBy(2.dp),
+  ) {
+    Text(
+        "Analysis",
+        color = PrimaryText,
+        style = IdeTypography.workspaceHeading,
+        modifier = Modifier.semantics { heading() },
+    )
   }
 }
 
