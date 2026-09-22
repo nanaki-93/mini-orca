@@ -148,20 +148,22 @@ internal fun AnalysisFileSelector(
                   Modifier.fillMaxWidth()
                       .background(HeaderSurface)
                       .padding(horizontal = 12.dp, vertical = 8.dp),
-                  horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(
-                        "File",
-                        Modifier.weight(0.44f),
-                        color = SecondaryText,
-                        style = IdeTypography.workspaceMetadata)
+                  horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.columnGap)) {
+                    Row(Modifier.weight(AnalysisWideTableGrid.fileWeight)) {
+                      Spacer(Modifier.width(AnalysisWideTableGrid.leadingControlsWidth))
+                      Text(
+                          "File",
+                          color = SecondaryText,
+                          style = IdeTypography.workspaceMetadata)
+                    }
                     Text(
                         "Analysis state",
-                        Modifier.weight(0.20f),
+                        Modifier.weight(AnalysisWideTableGrid.stateWeight),
                         color = SecondaryText,
                         style = IdeTypography.workspaceMetadata)
                     Text(
                         "Details",
-                        Modifier.weight(0.36f),
+                        Modifier.weight(AnalysisWideTableGrid.detailsWeight),
                         color = SecondaryText,
                         style = IdeTypography.workspaceMetadata)
                   }
@@ -264,6 +266,17 @@ private fun AnalysisFileFilters(
       }
 }
 
+private object AnalysisWideTableGrid {
+  const val fileWeight = 0.44f
+  const val stateWeight = 0.20f
+  const val detailsWeight = 0.36f
+  val checkboxWidth = 26.dp
+  val documentWidth = 16.dp
+  val identityGap = 8.dp
+  val leadingControlsWidth = checkboxWidth + identityGap + documentWidth + identityGap
+  val columnGap = 16.dp
+}
+
 @Composable
 private fun AnalysisFileRow(
     row: AnalysisFileStatus,
@@ -282,27 +295,28 @@ private fun AnalysisFileRow(
                   SelectionSurface
               else Panel)
           .padding(horizontal = 12.dp, vertical = 4.dp),
-      horizontalArrangement = Arrangement.spacedBy(16.dp),
+      horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.columnGap),
       verticalAlignment = Alignment.Top) {
         val identity: @Composable (Modifier) -> Unit = { modifier ->
           Row(
               modifier,
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.identityGap),
               verticalAlignment = Alignment.Top) {
                 AnalysisFileCheckbox(row.file.path, selected, editable, toggle)
+                DesktopLineIcon(DesktopIcon.Document, "", iconSize = 16.dp, tint = SecondaryText)
                 SelectionContainer {
                   Text(row.file.path, style = IdeTypography.workspaceBody, color = PrimaryText)
                 }
               }
         }
         if (wide) {
-          identity(Modifier.weight(0.44f))
+          identity(Modifier.weight(AnalysisWideTableGrid.fileWeight))
           Text(
               row.status.label,
-              Modifier.weight(0.20f),
+              Modifier.weight(AnalysisWideTableGrid.stateWeight),
               color = tint,
               style = IdeTypography.workspaceBody)
-          AnalysisFileDetails(row, Modifier.weight(0.36f))
+          AnalysisFileDetails(row, Modifier.weight(AnalysisWideTableGrid.detailsWeight))
         } else {
           Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             identity(Modifier.fillMaxWidth())
