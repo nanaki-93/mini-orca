@@ -58,6 +58,223 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun analysisKeyboardControlsNavigateOrUpdateOnlyLocalPresentationState() {
+    val navigations = mutableListOf<Workspace>()
+    var starts = 0
+    var pauses = 0
+    var resumes = 0
+    var cancels = 0
+    var refreshes = 0
+    var saves = 0
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "helper.go",
+                            "helper",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "running", 1, false))),
+                        AnalysisRunFile(
+                            "main.go",
+                            "main",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "running", 1, false))),
+                    ),
+                sections = analysisRunFixture().sections.map { it.copy(status = "running") },
+            )
+    val actions =
+        AnalysisWorkspaceActions(
+            start = { _, _ -> starts++ },
+            pause = { pauses++ },
+            resume = { resumes++ },
+            cancel = { cancels++ },
+            openResults = { navigations += it },
+            refreshSelection = { refreshes++ },
+            saveSelection = { saves++ },
+        )
+    ComposeVisualFixture(1_600, 1_000) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  resultProjectFixture(),
+                  ProjectAnalysisRunState(
+                      run = run, fileSelection = AnalysisSelectionState(selectionFixture()))),
+              actions,
+          )
+        }
+        .use { fixture ->
+          fixture.render()
+          AnalysisResultType.entries.forEach { type ->
+            assertTrue(fixture.requestDescriptionFocus("View ${type.workspace.name} results"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+          }
+          assertEquals(
+              AnalysisResultType.entries.flatMap { listOf(it.workspace, it.workspace) },
+              navigations)
+
+          assertTrue(fixture.requestDescriptionFocus("Show active files"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.hasDescription("Hide active files"))
+
+          assertTrue(fixture.requestDescriptionFocus("Collapse Files"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals("Collapsed", fixture.stateDescription("Files"))
+          assertTrue(fixture.requestDescriptionFocus("Expand Files"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals("Expanded", fixture.stateDescription("Files"))
+
+          assertTrue(fixture.requestDescriptionFocus("Filter files"))
+          fixture.setFocusedText("helper.go")
+          fixture.render()
+          assertTrue(fixture.hasText("helper.go"))
+          assertTrue(fixture.requestDescriptionFocus("Needs attention"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Needs attention"))
+
+          assertEquals(0, starts)
+          assertEquals(0, pauses)
+          assertEquals(0, resumes)
+          assertEquals(0, cancels)
+          assertEquals(0, refreshes)
+          assertEquals(0, saves)
+        }
+  }
+
+  @Test
+  fun analysisKeyboardRunSelectionAndDetailsControlsRemainIndependent() {
+    var pauses = 0
+    var resumes = 0
+    var cancels = 0
+    val runActions =
+        AnalysisWorkspaceActions(
+            start = { _, _ -> },
+            pause = { pauses++ },
+            resume = { resumes++ },
+            cancel = { cancels++ },
+            openResults = {},
+        )
+    ComposeVisualFixture(1_600, 1_000) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  resultProjectFixture(),
+                  ProjectAnalysisRunState(run = analysisRunFixture().copy(status = "running"))),
+              runActions,
+          )
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestFocus("Pause"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertTrue(fixture.requestFocus("Cancel"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(1, pauses)
+          assertEquals(1, cancels)
+        }
+
+    ComposeVisualFixture(1_600, 1_000) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  resultProjectFixture(),
+                  ProjectAnalysisRunState(run = analysisRunFixture().copy(status = "paused"))),
+              runActions,
+          )
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestFocus("Resume"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, resumes)
+        }
+
+    val selectionWithDetails =
+        selectionFixture().copy(
+            files =
+                selectionFixture().files.map { file ->
+                  if (file.path == "main.go")
+                      file.copy(
+                          stages =
+                              listOf(
+                                  AnalysisFileStageStatus(
+                                      "semantic", "missing", "Semantic results are missing."),
+                                  AnalysisFileStageStatus(
+                                      "performance", "fresh", "Performance results are current."),
+                              ))
+                  else file
+                })
+    var saves = 0
+    ComposeVisualFixture(1_440, 900) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(
+                  fileSelection = AnalysisSelectionState(selectionWithDetails)),
+              AnalysisWorkspaceActions(
+                  start = { _, _ -> },
+                  pause = {},
+                  resume = {},
+                  cancel = {},
+                  openResults = {},
+                  saveSelection = { saves++ },
+              ),
+          )
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Analyze main.go"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(1, saves)
+          assertTrue(fixture.requestDescriptionFocus("Analysis details for main.go"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(
+              "Expanded", fixture.descriptionStateDescription("Analysis details for main.go"))
+          assertEquals(1, saves, "Opening details must not update selection")
+        }
+
+    listOf(
+            ProjectAnalysisRunState(
+                run = analysisRunFixture().copy(status = "running"),
+                fileSelection = AnalysisSelectionState(selectionWithDetails)),
+            ProjectAnalysisRunState(
+                run = analysisRunFixture().copy(status = "paused"),
+                fileSelection = AnalysisSelectionState(selectionWithDetails)),
+            ProjectAnalysisRunState(
+                run = analysisRunFixture().copy(status = "interrupted"),
+                fileSelection = AnalysisSelectionState(selectionWithDetails)),
+            ProjectAnalysisRunState(
+                fileSelection = AnalysisSelectionState(selectionWithDetails, saving = true)),
+            ProjectAnalysisRunState(
+                action = "pausing",
+                fileSelection = AnalysisSelectionState(selectionWithDetails)),
+        )
+        .forEach { analysis ->
+          ComposeVisualFixture(1_440, 900) {
+                AnalysisFileSelector(
+                    analysis,
+                    AnalysisWorkspaceActions(
+                        start = { _, _ -> },
+                        pause = {},
+                        resume = {},
+                        cancel = {},
+                        openResults = {},
+                        saveSelection = { saves++ },
+                    ),
+                )
+              }
+              .use { fixture ->
+                fixture.render()
+                assertTrue(fixture.isDescriptionDisabled("Analyze main.go"))
+              }
+        }
+  }
+
+  @Test
   fun terminalInputOwnsInterruptAndOrdinaryAppChordsUntilExplicitFocusReturn() {
     assertFalse(appShortcutAllowed(terminalFocused = true))
     assertTrue(appShortcutAllowed(terminalFocused = false))

@@ -336,7 +336,7 @@ internal fun acceptanceRun(status: String): AnalysisRun? {
         status == "failed" -> "failed"
         status == "unavailable" -> "unavailable"
         status == "running" -> "running"
-        hasEvidence -> "succeeded"
+        hasEvidence -> "completed"
         else -> "queued"
       }
   return analysisRunFixture()
