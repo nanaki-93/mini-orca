@@ -71,6 +71,24 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun analysisFileStatusMarkersAreDecorativeAtWideAndCompactWidths() {
+    listOf(1_440 to 900, 800 to 650).forEach { (width, height) ->
+      ComposeVisualFixture(width, height, 1.5f) {
+            AnalysisFileSelector(
+                ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
+                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+          }
+          .use { fixture ->
+            fixture.render()
+            listOf(".env", "helper.go", "main.go").forEach { path ->
+              assertTrue(
+                  fixture.tagIsDecorative("analysis-file-status-marker-$path"),
+                  "$path status marker must not add accessible meaning")
+            }
+          }
+    }
+  }
+  @Test
   fun keyboardShortcutsCoverFocusedWorkflowWithoutMouse() {
     assertEquals(DesktopShortcut.OpenFile, desktopShortcut("P", primaryModifier = true))
     assertEquals(DesktopShortcut.OpenProject, desktopShortcut("O", primaryModifier = true))
