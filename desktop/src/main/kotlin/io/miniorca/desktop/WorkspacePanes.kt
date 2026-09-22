@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -24,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -33,12 +36,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val workspaceWideGutterMinimum = 900.dp
+private val analysisFileTableMinimumHeight = 160.dp
+private val analysisFileTableMaximumHeight = 400.dp
 
 internal fun workspacePageHorizontalGutter(availableWidth: Dp): Dp =
     if (availableWidth >= workspaceWideGutterMinimum) 24.dp else 16.dp
 
 internal fun workspacePagePadding(availableWidth: Dp, vertical: Dp): PaddingValues =
     PaddingValues(horizontal = workspacePageHorizontalGutter(availableWidth), vertical = vertical)
+
+/** Keeps the nested file list bounded within the viewport remaining after measured content. */
+internal fun analysisFileTableHeight(availableHeight: Dp, occupiedHeight: Dp?): Dp =
+    if (occupiedHeight == null) analysisFileTableMinimumHeight
+    else
+        (availableHeight - occupiedHeight).coerceIn(
+            analysisFileTableMinimumHeight, analysisFileTableMaximumHeight)
 
 @Composable
 internal fun AnalysisWorkspacePane(
@@ -48,14 +60,37 @@ internal fun AnalysisWorkspacePane(
   val analysis = state.analysis
   val presentation = projectRunPresentation(analysis)
   BoxWithConstraints(Modifier.fillMaxSize()) {
+    val density = LocalDensity.current
+    var headerHeight by remember { mutableStateOf<Int?>(null) }
+    var runHeight by remember { mutableStateOf<Int?>(null) }
+    var categoryHeight by remember { mutableStateOf<Int?>(null) }
+    var fileChromeHeight by remember { mutableStateOf<Int?>(null) }
+    val occupiedHeight =
+        listOfNotNull(headerHeight, runHeight, categoryHeight, fileChromeHeight)
+            .takeIf { it.size == 4 }
+            ?.sum()
+            ?.let { measured -> with(density) { measured.toDp() + 32.dp + 48.dp } }
+    val fileTableHeight = analysisFileTableHeight(maxHeight, occupiedHeight)
     LazyColumn(
         Modifier.fillMaxSize().testTag("analysis-page"),
-        contentPadding = workspacePagePadding(maxWidth, vertical = 20.dp),
+        contentPadding = workspacePagePadding(maxWidth, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-          item { AnalysisPageHeader() }
-          item { AnalysisRunPanel(state, actions) }
-          item { AnalysisCategoryPanels(state, actions.openResults) }
-          item { AnalysisFileSelector(analysis, actions) }
+          item { Box(Modifier.onSizeChanged { headerHeight = it.height }) { AnalysisPageHeader() } }
+          item {
+            Box(Modifier.onSizeChanged { runHeight = it.height }) {
+              AnalysisRunPanel(state, actions)
+            }
+          }
+          item {
+            Box(Modifier.onSizeChanged { categoryHeight = it.height }) {
+              AnalysisCategoryPanels(state, actions.openResults)
+            }
+          }
+          item {
+            AnalysisFileSelector(analysis, actions, fileTableHeight) { height ->
+              fileChromeHeight = height
+            }
+          }
           items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
         }
   }

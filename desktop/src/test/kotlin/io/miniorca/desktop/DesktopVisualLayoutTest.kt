@@ -2146,6 +2146,144 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun measuredAnalysisFileAllocationKeepsVariableContentAndBothScrollTargetsReachable() {
+    val selectionError =
+        "Selection refresh could not confirm the project inventory because the daemon returned a " +
+            "temporary eligibility response. Keep the existing confirmed selection and try again."
+    val stageFailure =
+        "The semantic scanner could not read internal/services/worker6.go after the configured " +
+            "retry budget. Restore the file, then retry analysis to collect complete evidence."
+    val base = roundedAnalysisStateFixture()
+    val extraPaths = (7..20).map { "internal/services/additional$it.go" }
+    val run =
+        requireNotNull(base.run)
+            .copy(
+                reason =
+                    "The active run is using a compatibility plan while the project revision changes; " +
+                        "the displayed files remain guarded by their planned content hashes.",
+                files =
+                    requireNotNull(base.run).files.mapIndexed { index, file ->
+                      when (index) {
+                        0,
+                        1,
+                        2 ->
+                            file.copy(
+                                stages =
+                                    file.stages.map { stage -> stage.copy(status = "running") })
+                        else -> file
+                      }.let { updated ->
+                        if (updated.path == "internal/services/worker6.go")
+                            updated.copy(
+                                stages =
+                                    listOf(
+                                        AnalysisStageProgress(
+                                            "semantic", "failed", 2, false, reason = stageFailure)))
+                        else updated
+                      }
+                    })
+            .let {
+              it.copy(
+                  plan =
+                      it.plan.copy(
+                          files =
+                              it.plan.files +
+                                  extraPaths.map { path ->
+                                    AnalysisPlannedFile(path, "base", "Go", 20, emptyList())
+                                  }),
+                  files =
+                      it.files +
+                          extraPaths.map { path ->
+                            AnalysisRunFile(
+                                path,
+                                "base",
+                                "Go",
+                                listOf(AnalysisStageProgress("semantic", "pending", 1, false)))
+                          })
+            }
+    val state =
+        AnalysisWorkspacePaneState(
+            resultProjectFixture(),
+            base.copy(
+                run = run,
+                fileSelection =
+                    base.fileSelection.copy(
+                        selection =
+                            requireNotNull(base.fileSelection.selection)
+                                .copy(
+                                    files =
+                                        requireNotNull(base.fileSelection.selection).files +
+                                            extraPaths.map { path ->
+                                              AnalysisSelectableFile(path, "")
+                                            }),
+                        error = selectionError)))
+    var actions = 0
+    val callbacks =
+        AnalysisWorkspaceActions(
+            { _, _ -> actions++ },
+            { actions++ },
+            { actions++ },
+            { actions++ },
+            { actions++ },
+            { actions++ },
+            { actions++ })
+
+    ComposeVisualFixture(800, 650, 1.5f) { AnalysisWorkspacePane(state, callbacks) }
+        .use { fixture ->
+          fixture.render("analysis-measured-allocation-variable-content")
+          fixture.clickDescription("Show active files")
+          fixture.render("analysis-measured-allocation-active-paths")
+          assertTrue(fixture.hasText("Current: internal/api/routes.go"))
+          fixture.revealText("Filter files", "analysis-page")
+          fixture.revealText(selectionError, "analysis-page")
+          fixture.assertTextWrapsWithoutClipping(selectionError)
+          fixture.revealText(
+              "Selection locked. Finish or cancel the current run to change files.",
+              "analysis-page")
+          fixture.revealText("Refresh files", "analysis-page")
+          fixture.revealText("cmd/server/main.go", "analysis-page")
+          val measuredTableHeight = fixture.taggedBounds("analysis-file-table").height
+          assertTrue(
+              measuredTableHeight > 0f, "The nested file list must receive a measured height")
+          assertTrue(
+              fixture.scrollableContentCount() >= 2,
+              "The outer page and bounded file list must remain independently scrollable")
+          fixture.render()
+          assertEquals(
+              measuredTableHeight,
+              fixture.taggedBounds("analysis-file-table").height,
+              1f,
+              "Measured content must converge without table-height instability")
+          fixture.revealText(stageFailure, "analysis-page")
+          fixture.assertTextWrapsWithoutClipping(stageFailure)
+          assertTrue(
+              fixture.taggedBounds("analysis-stage-failure-internal/services/worker6.go").height >
+                  0f)
+          assertEquals(0, actions, "Measurement and local scrolling must not dispatch actions")
+        }
+
+    val scrollableAnalysis =
+        roundedAnalysisStateFixture()
+            .copy(
+                fileSelection =
+                    roundedAnalysisStateFixture().fileSelection.let {
+                      it.copy(selection = requireNotNull(it.selection).copy(editable = true))
+                    })
+    ComposeVisualFixture(1_440, 900) { AnalysisFileSelector(scrollableAnalysis, callbacks) }
+        .use { fixture ->
+          fixture.render()
+          fixture.scrollBy(100_000f, "analysis-file-table")
+          fixture.render()
+          assertTrue(fixture.hasText(".env"))
+          val lastFile = fixture.taggedBounds("analysis-file-row-.env")
+          val fileTable = fixture.taggedBounds("analysis-file-table")
+          assertTrue(
+              lastFile.top >= fileTable.top && lastFile.bottom <= fileTable.bottom,
+              "The final file row must be reachable inside the bounded file list")
+          assertEquals(0, actions, "Inner-list scrolling must not dispatch actions")
+        }
+  }
+
+  @Test
   fun roundedSummaryUsesTheProductionFrameAndSelectedSummaryDestination() {
     listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
         (width, height) ->
