@@ -7,6 +7,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -60,6 +61,75 @@ internal fun EngineeringInsightPanel(
 }
 
 internal data class EngineeringInsightPiece(val label: String, val content: String)
+
+internal data class SummaryEngineeringInsightPieces(
+    val lead: List<EngineeringInsightPiece>,
+    val additional: List<EngineeringInsightPiece>,
+)
+
+internal fun summaryEngineeringInsightPieces(
+    pieces: List<EngineeringInsightPiece>
+): SummaryEngineeringInsightPieces {
+  val leadLabels = setOf("Mechanism", "Why it matters here")
+  val preferred = pieces.filter { it.label in leadLabels }
+  val available = preferred + pieces.filterNot { it.label in leadLabels }
+  return SummaryEngineeringInsightPieces(available.take(2), available.drop(2))
+}
+
+/** Summary-local insight disclosure that resets with its project and returned content. */
+@Composable
+internal fun SummaryEngineeringInsightPanel(
+    pieces: List<EngineeringInsightPiece>,
+    stale: Boolean,
+    ownerIdentity: Any,
+    modifier: Modifier = Modifier,
+) {
+  if (pieces.isEmpty()) return
+  key(ownerIdentity, pieces) {
+    val presentation = summaryEngineeringInsightPieces(pieces)
+    var expanded by remember { mutableStateOf(false) }
+    val detailsFocus = remember { FocusRequester() }
+    var restoreDetailsFocus by remember { mutableStateOf(false) }
+    fun toggle() {
+      expanded = !expanded
+      if (!expanded) restoreDetailsFocus = true
+    }
+    Column(modifier.fillMaxWidth()) {
+      Text(
+          engineeringInsightStateLabel("", stale),
+          color = if (stale) Warning else SecondaryText,
+          style = IdeTypography.workspaceMetadata)
+      presentation.lead.forEach { piece ->
+        Text(piece.label, color = ResultAccent, style = IdeTypography.resultLabel)
+        ModelResultContent(piece.content, preview = false, style = IdeTypography.workspaceBody)
+      }
+      presentation.additional
+          .takeIf { it.isNotEmpty() }
+          ?.let { additional ->
+            IdeDisclosureHeader(
+                title = "More insight",
+                expanded = expanded,
+                onToggle = ::toggle,
+                modifier = Modifier.focusRequester(detailsFocus))
+            if (expanded) {
+              Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                additional.forEach { piece ->
+                  Text(piece.label, color = ResultAccent, style = IdeTypography.resultLabel)
+                  ModelResultContent(
+                      piece.content, preview = false, style = IdeTypography.workspaceBody)
+                }
+              }
+            }
+          }
+    }
+    LaunchedEffect(restoreDetailsFocus) {
+      if (restoreDetailsFocus) {
+        detailsFocus.requestFocus()
+        restoreDetailsFocus = false
+      }
+    }
+  }
+}
 
 internal fun engineeringInsightPieces(insight: EngineeringInsight): List<EngineeringInsightPiece> =
     listOf(
