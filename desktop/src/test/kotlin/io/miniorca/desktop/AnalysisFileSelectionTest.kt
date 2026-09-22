@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -14,6 +15,14 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class AnalysisFileSelectionTest {
+  @Test
+  fun measuredTableHeightUsesRemainingViewportAndStaysBounded() {
+    assertEquals(160.dp, analysisFileTableHeight(1000.dp, null))
+    assertEquals(400.dp, analysisFileTableHeight(1000.dp, 440.dp))
+    assertEquals(240.dp, analysisFileTableHeight(1000.dp, 760.dp))
+    assertEquals(160.dp, analysisFileTableHeight(600.dp, 560.dp))
+  }
+
   @Test
   fun saveRestoresAcrossClientsAndNeverDispatchesAnalysis() {
     Harness().use { h ->

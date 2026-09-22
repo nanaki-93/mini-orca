@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -42,7 +44,21 @@ import androidx.compose.ui.unit.dp
 internal fun AnalysisFileSelector(
     analysis: ProjectAnalysisRunState,
     actions: AnalysisWorkspaceActions
+) = AnalysisFileSelector(analysis, actions, 320.dp)
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+internal fun AnalysisFileSelector(
+    analysis: ProjectAnalysisRunState,
+    actions: AnalysisWorkspaceActions,
+    tableHeight: androidx.compose.ui.unit.Dp,
+    onChromeHeightChanged: (Int) -> Unit = {},
 ) {
+  var panelHeightPx by remember { mutableStateOf(0) }
+  var tableHeightPx by remember { mutableStateOf(0) }
+  LaunchedEffect(panelHeightPx, tableHeightPx) {
+    if (panelHeightPx > 0) onChromeHeightChanged(panelHeightPx - tableHeightPx)
+  }
   val state = analysis.fileSelection
   val selection = state.selection
   var expanded by remember(selection?.projectId) { mutableStateOf(true) }
@@ -67,7 +83,9 @@ internal fun AnalysisFileSelector(
   val excludedCount = rows.count { it.status == AnalysisFileSyncStatus.Excluded }
   val files = filteredAnalysisFiles(rows, query, filter)
   val fontScale = LocalDensity.current.fontScale
-  WorkspaceSection(modifier = Modifier.testTag("analysis-file-panel")) {
+  val panelModifier =
+      Modifier.testTag("analysis-file-panel").onSizeChanged { panelHeightPx = it.height }
+  WorkspaceSection(modifier = panelModifier) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
       val inline = maxWidth / fontScale >= 1050.dp
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -155,7 +173,10 @@ internal fun AnalysisFileSelector(
                   color = SecondaryText,
                   style = IdeTypography.workspaceMetadata)
           LazyColumn(
-              Modifier.fillMaxWidth().heightIn(max = 320.dp).testTag("analysis-file-table")) {
+              Modifier.fillMaxWidth()
+                  .height(tableHeight)
+                  .testTag("analysis-file-table")
+                  .onSizeChanged { tableHeightPx = it.height }) {
                 itemsIndexed(files, key = { _, row -> row.file.path }) { _, row ->
                   AnalysisFileRow(
                       row,
@@ -173,7 +194,7 @@ internal fun AnalysisFileSelector(
         }
       }
       FlowRow(
-          Modifier.fillMaxWidth(),
+          Modifier.fillMaxWidth().testTag("analysis-file-footer"),
           horizontalArrangement = Arrangement.spacedBy(12.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp),
           itemVerticalAlignment = Alignment.CenterVertically) {
@@ -254,6 +275,7 @@ private fun AnalysisFileRow(
   val tint = row.status.tint
   Row(
       Modifier.fillMaxWidth()
+          .testTag("analysis-file-row-${row.file.path}")
           .clip(MiniOrcaShapes.control)
           .background(
               if (row.savedStatus != null && row.status == AnalysisFileSyncStatus.Running)
