@@ -280,8 +280,7 @@ internal fun ProjectSummaryPane(
                 style = IdeTypography.workspaceMetadata)
           }
         }
-        item { SummaryPrimaryDetails(presentation, sideBySide) }
-        item { SummarySupportingDetails(presentation, sideBySide) }
+        item { SummaryLowerComposition(presentation, sideBySide) }
       }
     }
   }
@@ -341,27 +340,66 @@ private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (W
 }
 
 @Composable
-private fun SummaryPrimaryDetails(presentation: ProjectSummaryPresentation, sideBySide: Boolean) {
+private fun SummaryLowerComposition(presentation: ProjectSummaryPresentation, sideBySide: Boolean) {
   val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
+  val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
   val flows = presentation.details.firstOrNull { it.title == "Flows" }
-  if (architecture == null && flows == null) return
-  if (sideBySide && architecture != null && flows != null) {
+  val insight =
+      presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
+  val hasLeft = architecture != null || modules != null
+  val hasRight = insight != null || flows != null
+  if (!hasLeft && !hasRight) return
+
+  val left: @Composable (Modifier) -> Unit = { modifier ->
+    SummaryArchitectureModules(architecture, modules, modifier)
+  }
+  val right: @Composable (Modifier) -> Unit = { modifier ->
+    SummaryInsightFlows(insight, flows, modifier)
+  }
+  if (sideBySide && hasLeft && hasRight) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-      SummaryArchitecture(architecture, Modifier.weight(1f))
-      SummaryFlows(flows, Modifier.weight(1f))
+      left(Modifier.weight(0.62f))
+      right(Modifier.weight(0.38f))
     }
   } else {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-      architecture?.let { SummaryArchitecture(it) }
-      flows?.let { SummaryFlows(it) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+      if (hasLeft) left(Modifier.fillMaxWidth())
+      if (hasRight) right(Modifier.fillMaxWidth())
     }
   }
 }
 
 @Composable
-private fun SummaryArchitecture(architecture: ProjectSummaryDetail, modifier: Modifier = Modifier) {
-  WorkspaceSection(modifier = modifier.testTag("summary-architecture")) {
-    MermaidDiagram(architecture.values.single(), "Architecture", title = "Architecture")
+private fun SummaryArchitectureModules(
+    architecture: ProjectSummaryDetail?,
+    modules: ProjectSummaryDetail?,
+    modifier: Modifier = Modifier,
+) {
+  WorkspaceSection(modifier = modifier.testTag("summary-lower-left")) {
+    architecture?.let {
+      Column(Modifier.testTag("summary-architecture")) {
+        MermaidDiagram(it.values.single(), "Architecture", title = "Architecture")
+      }
+    }
+    if (architecture != null && modules != null) IdeHorizontalSeparator()
+    modules?.let {
+      Column(Modifier.testTag("summary-modules")) {
+        Text("Packages / modules", color = ResultAccent, style = IdeTypography.workspaceHeading)
+        SummaryModules(it.values)
+      }
+    }
+  }
+}
+
+@Composable
+private fun SummaryInsightFlows(
+    insight: List<EngineeringInsightPiece>?,
+    flows: ProjectSummaryDetail?,
+    modifier: Modifier = Modifier,
+) {
+  Column(modifier.testTag("summary-lower-right"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    insight?.let { SummaryEngineeringInsight(it) }
+    flows?.let { SummaryFlows(it) }
   }
 }
 
@@ -375,35 +413,6 @@ private fun SummaryFlows(flows: ProjectSummaryDetail, modifier: Modifier = Modif
           "Flow ${index + 1}",
           title = if (flows.values.size == 1) "Flows" else "Flow ${index + 1}")
     }
-  }
-}
-
-@Composable
-private fun SummarySupportingDetails(
-    presentation: ProjectSummaryPresentation,
-    sideBySide: Boolean
-) {
-  val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
-  val insight =
-      presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
-  if (modules == null && insight == null) return
-  if (sideBySide && modules != null && insight != null) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-      SummaryModulesSection(modules, Modifier.weight(1f))
-      SummaryEngineeringInsight(insight, Modifier.weight(1f))
-    }
-  } else {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-      modules?.let { SummaryModulesSection(it) }
-      insight?.let { SummaryEngineeringInsight(it) }
-    }
-  }
-}
-
-@Composable
-private fun SummaryModulesSection(modules: ProjectSummaryDetail, modifier: Modifier = Modifier) {
-  WorkspaceSection("Packages / modules", modifier.testTag("summary-modules")) {
-    SummaryModules(modules.values)
   }
 }
 

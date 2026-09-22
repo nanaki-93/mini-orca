@@ -2546,6 +2546,25 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryLowerCompositionUsesTheFullWidthWhenOnlyArchitectureContentExists() {
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                visualFixtureOverview.analysis.copy(
+                    flows = emptyList(), engineeringInsight = null))
+    ComposeVisualFixture(1440, 900) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
+        .use { fixture ->
+          fixture.render("summary-lower-one-sided-1440")
+          val lower = fixture.taggedBounds("summary-lower-left")
+          val introduction = fixture.taggedBounds("summary-introduction")
+          assertEquals(introduction.width, lower.width, 1f)
+          assertEquals(0, fixture.tagCount("summary-lower-right"))
+          assertTrue(fixture.tagCount("summary-architecture") == 1)
+          assertTrue(fixture.tagCount("summary-modules") == 1)
+        }
+  }
+
+  @Test
   fun summaryDashboardShowsCompleteLongProseInThePage() {
     val longPurpose = "This purpose remains readable directly in the dashboard. ".repeat(60)
     val overview =
@@ -3685,17 +3704,24 @@ internal class ComposeVisualFixture(
   fun assertSummaryColumns() {
     fun bounds(tag: String) =
         nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }.boundsInRoot
+    val left = bounds("summary-lower-left")
+    val right = bounds("summary-lower-right")
     val architecture = bounds("summary-architecture")
-    val flows = bounds("summary-flows")
     val modules = bounds("summary-modules")
     val insight = bounds("summary-insight")
-    assertEquals(architecture.width, flows.width, 1f)
-    assertTrue(architecture.right < flows.left)
-    assertEquals(architecture.top, flows.top, 1f)
-    assertTrue(modules.top >= maxOf(architecture.bottom, flows.bottom) + 16f)
-    assertEquals(modules.top, insight.top, 1f)
-    assertEquals(architecture.left, modules.left, 1f)
-    assertEquals(flows.left, insight.left, 1f)
+    val flows = bounds("summary-flows")
+    val lowerWidth = left.width + right.width
+
+    assertEquals(0.62f, left.width / lowerWidth, 0.03f, "Left summary region must be wider")
+    assertTrue(left.right < right.left, "Lower summary regions must not overlap")
+    assertEquals(left.top, right.top, 1f, "Lower summary regions must align at the top")
+    assertTrue(architecture.left >= left.left && architecture.right <= left.right)
+    assertTrue(modules.left >= left.left && modules.right <= left.right)
+    assertTrue(architecture.top < modules.top, "Modules must follow Architecture in the shared surface")
+    assertTrue(architecture.bottom <= modules.top, "Architecture and modules must not overlap")
+    assertTrue(insight.left >= right.left && insight.right <= right.right)
+    assertTrue(flows.left >= right.left && flows.right <= right.right)
+    assertTrue(insight.bottom <= flows.top, "Flows must follow Engineering insight")
   }
 
   fun assertTextFits(label: String, maxLines: Int = 1) {
