@@ -195,25 +195,27 @@ class DesktopKeyboardNavigationTest {
         }
 
     val selectionWithDetails =
-        selectionFixture().copy(
-            files =
-                selectionFixture().files.map { file ->
-                  if (file.path == "main.go")
-                      file.copy(
-                          stages =
-                              listOf(
-                                  AnalysisFileStageStatus(
-                                      "semantic", "missing", "Semantic results are missing."),
-                                  AnalysisFileStageStatus(
-                                      "performance", "fresh", "Performance results are current."),
-                              ))
-                  else file
-                })
+        selectionFixture()
+            .copy(
+                files =
+                    selectionFixture().files.map { file ->
+                      if (file.path == "main.go")
+                          file.copy(
+                              stages =
+                                  listOf(
+                                      AnalysisFileStageStatus(
+                                          "semantic", "missing", "Semantic results are missing."),
+                                      AnalysisFileStageStatus(
+                                          "performance",
+                                          "fresh",
+                                          "Performance results are current."),
+                                  ))
+                      else file
+                    })
     var saves = 0
     ComposeVisualFixture(1_440, 900) {
           AnalysisFileSelector(
-              ProjectAnalysisRunState(
-                  fileSelection = AnalysisSelectionState(selectionWithDetails)),
+              ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionWithDetails)),
               AnalysisWorkspaceActions(
                   start = { _, _ -> },
                   pause = {},
@@ -250,8 +252,7 @@ class DesktopKeyboardNavigationTest {
             ProjectAnalysisRunState(
                 fileSelection = AnalysisSelectionState(selectionWithDetails, saving = true)),
             ProjectAnalysisRunState(
-                action = "pausing",
-                fileSelection = AnalysisSelectionState(selectionWithDetails)),
+                action = "pausing", fileSelection = AnalysisSelectionState(selectionWithDetails)),
         )
         .forEach { analysis ->
           ComposeVisualFixture(1_440, 900) {
