@@ -26,6 +26,17 @@ Review, explicit Apply and guarded Undo.
 - `internal/llm/` owns provider transport; `internal/config/` owns configuration.
 - `internal/insighteval/` owns the evaluation runner, separate from normal app use.
 - `desktop/` owns presentation, client state and user-operated terminal sessions.
+# Workspace Conventions
+
+## Submodule & Nested Directory Protocol
+- Before editing or creating files in a subdirectory or submodule, check if that directory contains an `AGENTS.md` file.
+- Always check if the working directory or submodule contains a local `AGENTS.md`.
+- When operating inside a submodule, local `AGENTS.md` instructions override root instructions for code style and module tests.
+- Maintain atomic commits per submodule: do not mix submodule git commits with root repository commits in a single `git commit`.
+
+## Commit Requirements
+- All execution tasks must end with a clean git commit once verification passes.
+- Never leave unstaged or uncommitted changes after completing a task unless explicitly requested otherwise.
 
 ## Before changing code
 

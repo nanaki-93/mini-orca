@@ -131,6 +131,23 @@ internal fun analysisRunHeadline(run: AnalysisRun?, finishedSteps: Int, totalSte
   return facts.joinToString(" · ")
 }
 
+/** The large heading shown above the Analysis page's run panel, distinct from the compact badge. */
+internal fun analysisRunTitle(run: AnalysisRun?, presentation: ProjectRunPresentation): String =
+    when {
+      run == null -> "Ready to analyze"
+      run.status == "queued" -> "Queued to analyze"
+      run.status == "pausing" -> "Pausing analysis"
+      run.status == "canceling" -> "Canceling analysis"
+      run.isActive() -> "Analyzing selected files"
+      run.status == "paused" -> "Analysis paused"
+      run.status == "interrupted" -> "Analysis interrupted"
+      run.status == "failed" -> "Analysis failed"
+      run.status in setOf("completed", "completed_empty") -> "Analysis complete"
+      run.status == "partial" -> "Analysis partially complete"
+      run.status in setOf("canceled", "cancelled") -> "Analysis canceled"
+      else -> "Analysis ${presentation.status.lowercase()}"
+    }
+
 internal fun analysisStatusLabel(status: String?): String =
     when (status) {
       null,

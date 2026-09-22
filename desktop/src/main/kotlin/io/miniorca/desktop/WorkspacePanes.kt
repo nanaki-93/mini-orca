@@ -51,7 +51,7 @@ internal fun AnalysisWorkspacePane(
         Modifier.fillMaxSize().testTag("analysis-page"),
         contentPadding = workspacePagePadding(maxWidth, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-          item { AnalysisRunPanel(state, actions, presentation) }
+          item { AnalysisRunPanel(state, actions) }
           item { AnalysisCategoryPanels(state, actions.openResults) }
           item { AnalysisFileSelector(analysis, actions) }
           items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
@@ -63,27 +63,9 @@ internal fun AnalysisWorkspacePane(
 private fun AnalysisRunPanel(
     state: AnalysisWorkspacePaneState,
     actions: AnalysisWorkspaceActions,
-    presentation: ProjectRunPresentation,
 ) {
-  val analysis = state.analysis
-  val run = analysis.run
-  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    AnalysisRunStrip(
-        state, actions, AnalysisRunStripScope.Analysis, Modifier.testTag("analysis-run-panel"))
-    if (presentation.headline != "Current run")
-        Text(presentation.headline, color = SecondaryText, style = IdeTypography.workspaceMetadata)
-    run?.reason?.takeIf { it.isNotBlank() }?.let { DiagnosticText(it, color = Warning) }
-    if (run?.plan?.compatibilityStage?.isNotBlank() == true)
-        Text(
-            "Saved limited run: ${analysisStageLabel(run.plan.compatibilityStage)}",
-            color = Warning,
-            style = IdeTypography.workspaceMetadata)
-    if (run?.plan?.retryStaleFailed == true)
-        Text(
-            "Scope: stale & failed files",
-            color = SecondaryText,
-            style = IdeTypography.workspaceMetadata)
-  }
+  AnalysisRunStrip(
+      state, actions, AnalysisRunStripScope.Analysis, Modifier.testTag("analysis-run-panel"))
 }
 
 @Composable
