@@ -1,8 +1,6 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -114,35 +112,32 @@ internal fun AnalysisCategoryBox(
       modifier = modifier.fillMaxWidth(),
       contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
   ) {
-    Column(Modifier.fillMaxWidth().align(Alignment.Top)) {
-      Box(Modifier.fillMaxWidth().height(4.dp).background(tint))
-      Column(
-          Modifier.fillMaxWidth().padding(16.dp).align(Alignment.Start),
-          verticalArrangement = Arrangement.spacedBy(4.dp),
-          horizontalAlignment = Alignment.Start,
+    Column(
+        Modifier.fillMaxWidth().padding(16.dp).align(Alignment.Top),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalAlignment = Alignment.Start,
+    ) {
+      Row(
+          Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically,
       ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-          AnalysisCategoryIcon(type, tint)
-          Text(name, color = tint, style = IdeTypography.workspaceHeading)
-        }
-        Text(
-            count?.toString() ?: "—",
-            color = PrimaryText,
-            fontSize = 32.sp,
-            lineHeight = 38.sp,
-            fontWeight = FontWeight.SemiBold)
-        (if (status == null) "Not analyzed" else analysisResultStatusLabel(status))?.let {
-          Text(
-              it,
-              color = if (status == "completed_empty") SecondaryText else tint,
-              style = IdeTypography.compactBody)
-        }
-        details()
+        AnalysisCategoryIcon(type, tint)
+        Text(name, color = PrimaryText, style = IdeTypography.workspaceHeading)
       }
+      Text(
+          count?.toString() ?: "—",
+          color = PrimaryText,
+          fontSize = 32.sp,
+          lineHeight = 38.sp,
+          fontWeight = FontWeight.SemiBold)
+      (if (status == null) "Not analyzed" else analysisResultStatusLabel(status))?.let {
+        Text(
+            it,
+            color = if (status == "completed_empty") SecondaryText else tint,
+            style = IdeTypography.compactBody)
+      }
+      details()
     }
   }
 }
