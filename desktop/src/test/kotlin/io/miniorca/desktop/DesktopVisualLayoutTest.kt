@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.TextFieldValue
@@ -193,11 +194,18 @@ class DesktopVisualLayoutTest {
             fixture.render("final-progress-$status-800-150")
             val run = acceptanceRun(status)
             val presentation = projectRunPresentation(ProjectAnalysisRunState(run = run))
-            if (presentation.headline != "Current run")
-                fixture.assertTextFits(presentation.headline)
-            else
-                fixture.assertTextFits(
-                    "${presentation.finishedFiles} of ${presentation.totalFiles} files finished")
+            fixture.assertTextFits(analysisRunTitle(run, presentation))
+            assertEquals(
+                1,
+                fixture.taggedTextCount(
+                    "analysis-run-content", analysisRunTitle(run, presentation)))
+            assertEquals(0, fixture.taggedTextCount("analysis-run-content", presentation.status))
+            assertFalse(fixture.hasText(presentation.headline))
+            if (status == "completed") {
+              assertTrue(fixture.hasText("1 of 1 files finished"))
+              assertTrue(fixture.hasText("100%"))
+              assertTrue(fixture.hasText("4 of 4 stages"))
+            }
             assertFalse(fixture.hasText("Run details"))
             assertFalse(fixture.hasText("Run limits"))
           }
@@ -217,6 +225,42 @@ class DesktopVisualLayoutTest {
               assertFalse(fixture.hasText("Start analysis"))
             }
       }
+    }
+  }
+
+  @Test
+  fun analysisRunPanelKeepsActiveAndTerminalMetadataWithoutLifecycleHeadlines() {
+    val active =
+        analysisRunFixture()
+            .copy(status = "running", windowFilesCompleted = 3, windowElapsedSeconds = 42)
+    val terminal =
+        active.copy(
+            status = "paused",
+            updatedAt = "2026-09-15T15:30:00Z",
+            windowFilesCompleted = 0,
+            windowElapsedSeconds = 0)
+    listOf(active, terminal).forEach { run ->
+      val presentation = projectRunPresentation(ProjectAnalysisRunState(run = run))
+      val metadata =
+          if (run.isActive()) "3 files processed · 42s elapsed"
+          else
+              listOfNotNull(
+                      "${presentation.finishedSteps} of ${presentation.totalSteps} stages"
+                          .takeIf { presentation.totalSteps > 0 },
+                      run.updatedAt.takeIf { it.isNotBlank() })
+                  .joinToString(" · ")
+      ComposeVisualFixture(1440, 900) {
+            AnalysisWorkspacePane(
+                AnalysisWorkspacePaneState(
+                    resultProjectFixture(), ProjectAnalysisRunState(run = run)),
+                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+          }
+          .use { fixture ->
+            fixture.render("analysis-run-metadata-${run.status}")
+            fixture.assertTextFits(analysisRunTitle(run, presentation))
+            fixture.assertTextFits(metadata)
+            assertFalse(fixture.hasText(presentation.headline))
+          }
     }
   }
 
@@ -323,6 +367,8 @@ class DesktopVisualLayoutTest {
             assertFalse(fixture.hasText("Start analysis"))
             assertFalse(fixture.hasText("Analyze stale & failed"))
             assertTrue(fixture.taggedBounds("analysis-run-progress-track").width > 0f)
+            assertEquals(0, fixture.tagCount("analysis-run-content"))
+            assertEquals(0, fixture.tagCount("analysis-run-controls"))
             if (width == 1440) {
               fixture.assertTextSharesRowBefore("Running", "0 of 2 files finished")
               fixture.assertTextSharesRowBefore(
@@ -415,6 +461,9 @@ class DesktopVisualLayoutTest {
             fixture.render("category-focus-${type.category}-480-1.5")
             assertTrue(fixture.isDescriptionFocused("View $name results"))
             fixture.assertTextFits(name)
+            val icon = fixture.taggedBounds("analysis-category-icon-${type.category}")
+            val content = fixture.taggedBounds("analysis-category-content-${type.category}")
+            assertTrue(icon.right < content.left, "Category icon must lead its content")
             fixture.assertColorVisible(FocusAccent)
             assertEquals(index * 2, navigations.size, "Focus must only disclose the name")
             assertTrue(fixture.pressKey(Key.Enter))
@@ -484,6 +533,50 @@ class DesktopVisualLayoutTest {
           fixture.render()
           assertEquals(1, pauses)
           assertTrue(fixture.isDisabled("Pause"))
+        }
+  }
+
+  @Test
+  fun analysisPageKeepsItsSingleHeadingAndStageFailuresAfterFiles() {
+    val failure =
+        "The semantic scanner could not read cmd/miniorca/main.go. Retry analysis after restoring the file."
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "failed",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "cmd/miniorca/main.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress(
+                                    "semantic", "failed", 2, false, reason = failure)))))
+    val state =
+        AnalysisWorkspacePaneState(
+            resultProjectFixture(),
+            ProjectAnalysisRunState(
+                run = run, fileSelection = AnalysisSelectionState(selectionFixture())))
+    val actions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {})
+
+    ComposeVisualFixture(1_600, 1_600) { AnalysisWorkspacePane(state, actions) }
+        .use { fixture ->
+          fixture.render("analysis-hierarchy-stage-failure")
+          assertEquals(1, fixture.textCount("Analysis"))
+          fixture.assertTextAbove("Analysis", "Bugs")
+          fixture.assertTextAbove("Bugs", "Files")
+          fixture.assertTextAbove("Files", "Code analysis · cmd/miniorca/main.go")
+          fixture.assertTextFits(failure)
+          assertTrue(
+              fixture.taggedBounds("analysis-stage-failure-cmd/miniorca/main.go").height > 0f)
+        }
+
+    ComposeVisualFixture(800, 650, 1.5f) { AnalysisWorkspacePane(state, actions) }
+        .use { fixture ->
+          fixture.render("analysis-stage-failure-reachable-800-150")
+          fixture.revealText(failure, "analysis-page")
+          fixture.assertTextWrapsWithoutClipping(failure)
         }
   }
 
@@ -2122,13 +2215,60 @@ class DesktopVisualLayoutTest {
             .use { fixture ->
               fixture.render("analysis-frame-$width-$height-$scale")
               assertTrue(fixture.hasDescription("Analysis tool window, selected"))
-              fixture.assertTextFits("Running")
+              fixture.assertTextFits("Analyzing selected files")
+              assertEquals(
+                  1, fixture.taggedTextCount("analysis-run-content", "Analyzing selected files"))
+              assertEquals(0, fixture.taggedTextCount("analysis-run-content", "Running"))
               fixture.assertTextFits("8 of 12 files finished")
               fixture.assertTextFits("Current: internal/api/user.go")
               fixture.assertTextFits("Pause")
               fixture.assertTextFits("Cancel")
+              fixture.assertAnalysisRunGeometry()
               if (width >= 1440 && scale == 1f) {
                 fixture.assertAnalysisTableColumns()
+              }
+              if (width == 1600 && scale == 1f) {
+                fixture.assertAnalysisCategoryGeometry()
+                assertTrue(fixture.hasText("67%"))
+                fixture.assertTextAbove("8 of 12 files finished", "Current: internal/api/user.go")
+                val content = fixture.taggedBounds("analysis-run-content")
+                val progress = fixture.taggedBounds("analysis-run-progress-track")
+                val controls = fixture.taggedBounds("analysis-run-controls")
+                assertTrue(progress.top > content.top)
+                assertTrue(controls.top <= content.top)
+                assertTrue(controls.left > content.right)
+                val table = fixture.taggedBounds("analysis-file-table")
+                val footer = fixture.taggedBounds("analysis-file-footer")
+                val analysisPage = fixture.taggedBounds("analysis-page")
+                listOf("File", "Analysis state", "Details").forEach { header ->
+                  val bounds = fixture.firstVisibleTextBounds(header)
+                  assertTrue(
+                      bounds.top >= analysisPage.top && bounds.bottom <= analysisPage.bottom,
+                      "$header must be visible in the initial Analysis viewport")
+                  assertTrue(
+                      bounds.bottom <= table.top,
+                      "$header must remain immediately above the bounded table")
+                }
+                assertTrue(
+                    footer.top >= analysisPage.top && footer.bottom <= analysisPage.bottom,
+                    "File footer must be visible in the initial Analysis viewport")
+                listOf(
+                        "cmd/server/main.go",
+                        "internal/api/routes.go",
+                        "internal/api/user.go",
+                        "internal/db/store.go",
+                        "internal/models/user.go",
+                        "internal/service/service.go",
+                        "internal/services/worker1.go")
+                    .forEach { path ->
+                      val row = fixture.taggedBounds("analysis-file-row-$path")
+                      assertTrue(
+                          row.top >= table.top && row.bottom <= table.bottom,
+                          "$path must be visible in the initial bounded table viewport")
+                      assertTrue(
+                          row.top >= analysisPage.top && row.bottom <= analysisPage.bottom,
+                          "$path must be visible in the initial Analysis viewport")
+                    }
               }
               fixture.revealText("Files", "analysis-page")
               assertTrue(fixture.hasDescription("Collapse Files"))
@@ -2591,6 +2731,16 @@ class DesktopVisualLayoutTest {
           listOf("27", "28", "29").forEach(fixture::assertTextFits)
           fixture.assertSummaryStatusPlacement("Updated")
           fixture.assertCategoryBoxesFit()
+          AnalysisResultType.entries.forEach { type ->
+            val box = fixture.taggedBounds("summary-metric-${type.workspace.name}")
+            val icon = fixture.taggedBounds("summary-category-icon-${type.category}")
+            val name = fixture.taggedBounds("summary-category-name-${type.category}")
+            val count = fixture.taggedBounds("summary-category-count-${type.category}")
+            assertEquals(120f, box.height, 1f, "Summary category height must remain compact")
+            assertEquals(icon.top, name.top, 1f, "Summary icon and name must remain inline")
+            assertTrue(count.top >= icon.bottom, "Summary count must remain below its icon row")
+          }
+          assertFalse(fixture.hasText("Completed"))
         }
   }
 
@@ -2612,7 +2762,10 @@ class DesktopVisualLayoutTest {
           }
           fixture.render("summary-bug-icon-keyboard-label")
           assertTrue(fixture.hasText("Bugs"))
-          assertTrue(fixture.hasDescription("Bugs"))
+          assertTrue(fixture.hasDescription("View Bugs results"))
+          AnalysisResultType.entries.forEach { type ->
+            assertFalse(fixture.hasDescription(type.workspace.name))
+          }
           assertTrue(fixture.hasText("Performance"))
         }
   }
@@ -3143,6 +3296,18 @@ internal class ComposeVisualFixture(
 
   fun textCount(label: String): Int = textNodes(label).size
 
+  fun firstVisibleTextBounds(label: String): Rect =
+      textNodes(label)
+          .filter { it.boundsInRoot.width > 0f && it.boundsInRoot.height > 0f }
+          .minBy { it.boundsInRoot.top }
+          .boundsInRoot
+
+  fun taggedTextCount(tag: String, label: String): Int =
+      textNodes(label).count { node ->
+        generateSequence(node) { it.parent }
+            .any { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+      }
+
   fun hasEditableText(withinDescription: String? = null, withinTag: String? = null): Boolean =
       nodes().any { node ->
         node.config.getOrNull(SemanticsActions.SetText) != null &&
@@ -3162,6 +3327,44 @@ internal class ComposeVisualFixture(
       nodes().any {
         it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
       }
+
+  fun isDescriptionSelected(label: String): Boolean =
+      nodes()
+          .asSequence()
+          .filter {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          }
+          .flatMap { node -> generateSequence(node) { it.parent } }
+          .any { it.config.getOrNull(SemanticsProperties.Selected) == true }
+
+  fun isDescriptionDisabled(label: String): Boolean =
+      nodes()
+          .asSequence()
+          .filter {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          }
+          .flatMap { node -> generateSequence(node) { it.parent } }
+          .any { it.config.getOrNull(SemanticsProperties.Disabled) != null }
+
+  fun descriptionStateDescription(label: String): String? =
+      nodes()
+          .asSequence()
+          .filter {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          }
+          .flatMap { node -> generateSequence(node) { it.parent } }
+          .mapNotNull { it.config.getOrNull(SemanticsProperties.StateDescription) }
+          .firstOrNull()
+
+  fun descriptionToggleableState(label: String): ToggleableState? =
+      nodes()
+          .asSequence()
+          .filter {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          }
+          .flatMap { node -> generateSequence(node) { it.parent } }
+          .mapNotNull { it.config.getOrNull(SemanticsProperties.ToggleableState) }
+          .firstOrNull()
 
   fun setFocusedText(value: String) {
     val editor =
@@ -3545,6 +3748,44 @@ internal class ComposeVisualFixture(
         "$label must align to the right edge of Analysis coverage")
   }
 
+  fun assertAnalysisRunGeometry() {
+    val content = taggedBounds("analysis-run-content")
+    val progress = taggedBounds("analysis-run-progress-track")
+    val controls = taggedBounds("analysis-run-controls")
+    val title = textNodes("Analyzing selected files").single().boundsInRoot
+    val finished = textNodes("8 of 12 files finished").single().boundsInRoot
+    val current = textNodes("Current: internal/api/user.go").single().boundsInRoot
+    assertTrue(title.bottom <= finished.top, "Run title must precede the finished-file count")
+    assertTrue(finished.bottom <= progress.top, "Progress must follow the title and file count")
+    assertTrue(progress.bottom <= current.top, "Current file must follow progress")
+    if (controls.top < content.bottom) {
+      assertTrue(controls.left >= content.right, "Inline controls must not overlap run content")
+      assertTrue(controls.top <= content.top, "Inline controls must align with the panel top")
+    } else {
+      assertTrue(controls.top >= content.bottom, "Compact controls must wrap below run content")
+    }
+  }
+
+  fun assertAnalysisCategoryGeometry() {
+    val boxes =
+        AnalysisResultType.entries.map { type ->
+          taggedBounds("analysis-category-${type.category}")
+        }
+    boxes.forEach { box ->
+      assertEquals(boxes.first().width, box.width, 1f, "Analysis category widths must match")
+      assertEquals(boxes.first().height, box.height, 1f, "Analysis category heights must match")
+    }
+    boxes.zipWithNext().forEach { (first, second) ->
+      assertTrue(first.right <= second.left, "Wide categories must share one row")
+      assertEquals(first.top, second.top, 1f, "Wide categories must share a top edge")
+    }
+    AnalysisResultType.entries.forEach { type ->
+      val icon = taggedBounds("analysis-category-icon-${type.category}")
+      val content = taggedBounds("analysis-category-content-${type.category}")
+      assertTrue(icon.right < content.left, "${type.category} icon must lead its content")
+    }
+  }
+
   fun assertAnalysisTableColumns() {
     val headers =
         listOf("File", "Analysis state", "Details").map { label ->
@@ -3584,7 +3825,7 @@ internal class ComposeVisualFixture(
     assertTrue(cell.right <= row.right, "$label must remain inside its row")
   }
 
-  private fun taggedTextBounds(tag: String, label: String): Rect {
+  fun taggedTextBounds(tag: String, label: String): Rect {
     val row = taggedBounds(tag)
     return textNodes(label)
         .single { node ->

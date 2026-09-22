@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.Text
@@ -29,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 internal enum class AnalysisRunStripScope {
   Analysis,
@@ -58,75 +58,23 @@ internal fun AnalysisRunStrip(
             }
       }
   var pathsExpanded by remember(run?.identity, presentation.currentFiles) { mutableStateOf(false) }
-  val currentPaths = presentation.currentFiles
-  val inlineThreshold = if (scope == AnalysisRunStripScope.Analysis) 900.dp else 760.dp
 
   MiniOrcaPanel(
-      modifier = modifier.testTag("analysis-run-strip"), contentPadding = PaddingValues(12.dp)) {
-        val isAnalysisPage = scope == AnalysisRunStripScope.Analysis
-        if (isAnalysisPage) {
-          AnalysisRunTitle(run, presentation)
-        }
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-          val inline = maxWidth / LocalDensity.current.fontScale >= inlineThreshold
-          Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (inline) {
-              Row(
-                  Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.spacedBy(12.dp),
-                  verticalAlignment = Alignment.CenterVertically) {
-                    AnalysisRunMetadata(
-                        run,
-                        presentation,
-                        currentPaths,
-                        pathsExpanded,
-                        { pathsExpanded = !pathsExpanded },
-                        Modifier.weight(1f),
-                        showFileCount = !isAnalysisPage)
-                    run?.let {
-                      AnalysisRunProgressTrack(
-                          presentation,
-                          analysisStatusTint(it.status),
-                          Modifier.weight(1f),
-                          showPercent = isAnalysisPage)
-                    }
-                    AnalysisRunControls(state, commands, actions)
-                  }
-            } else {
-              Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                AnalysisRunMetadata(
-                    run,
-                    presentation,
-                    currentPaths,
-                    pathsExpanded,
-                    { pathsExpanded = !pathsExpanded },
-                    Modifier.fillMaxWidth(),
-                    showFileCount = !isAnalysisPage)
-                run?.let {
-                  AnalysisRunProgressTrack(
-                      presentation,
-                      analysisStatusTint(it.status),
-                      Modifier.fillMaxWidth(),
-                      showPercent = isAnalysisPage)
-                }
-                AnalysisRunControls(state, commands, actions)
+      modifier = modifier.testTag("analysis-run-strip"),
+      contentPadding =
+          if (scope == AnalysisRunStripScope.Analysis) PaddingValues(16.dp)
+          else PaddingValues(12.dp)) {
+        when (scope) {
+          AnalysisRunStripScope.Analysis ->
+              AnalysisRunPanel(state, run, presentation, commands, actions, pathsExpanded) {
+                pathsExpanded = !pathsExpanded
               }
-            }
-            if (pathsExpanded)
-                currentPaths.drop(1).forEach { path ->
-                  Text(
-                      "Current: $path",
-                      color = SecondaryText,
-                      style = IdeTypography.workspaceMetadata)
-                }
-          }
+          AnalysisRunStripScope.Summary ->
+              SummaryRunPanel(state, run, presentation, commands, actions, pathsExpanded) {
+                pathsExpanded = !pathsExpanded
+              }
         }
-        if (isAnalysisPage) {
-          if (presentation.headline != "Current run")
-              Text(
-                  presentation.headline,
-                  color = SecondaryText,
-                  style = IdeTypography.workspaceMetadata)
+        if (scope == AnalysisRunStripScope.Analysis) {
           run?.reason?.takeIf { it.isNotBlank() }?.let { DiagnosticText(it, color = Warning) }
           if (run?.plan?.compatibilityStage?.isNotBlank() == true)
               Text(
@@ -152,32 +100,172 @@ internal fun AnalysisRunStrip(
 }
 
 @Composable
-private fun AnalysisRunTitle(run: AnalysisRun?, presentation: ProjectRunPresentation) {
-  Row(
-      Modifier.fillMaxWidth().padding(bottom = 10.dp),
-      horizontalArrangement = Arrangement.spacedBy(10.dp),
-      verticalAlignment = Alignment.CenterVertically) {
-        val tint = analysisStatusTint(run?.status)
-        Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-          if (presentation.isActive) {
-            IdeBusyIndicator(Modifier.size(22.dp), color = tint, strokeWidth = 2.dp)
-          } else {
-            Canvas(Modifier.size(10.dp)) { drawCircle(tint) }
+private fun AnalysisRunPanel(
+    state: AnalysisWorkspacePaneState,
+    run: AnalysisRun?,
+    presentation: ProjectRunPresentation,
+    commands: List<AnalysisRunCommand>,
+    actions: AnalysisWorkspaceActions?,
+    pathsExpanded: Boolean,
+    onTogglePaths: () -> Unit,
+) {
+  BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val inline = maxWidth / LocalDensity.current.fontScale >= 900.dp
+    if (inline) {
+      Row(
+          Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          verticalAlignment = Alignment.Top) {
+            AnalysisLifecycleIndicator(run, presentation)
+            AnalysisRunContent(
+                run,
+                presentation,
+                pathsExpanded,
+                onTogglePaths,
+                Modifier.weight(1f).testTag("analysis-run-content"))
+            AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
           }
-        }
-        Column {
-          Text(analysisRunTitle(run, presentation), style = IdeTypography.workspaceHeading)
-          if (run != null) {
-            Text(
-                if (presentation.totalFiles > 0)
-                    "${presentation.finishedFiles} of ${presentation.totalFiles} files finished"
-                else "File progress unavailable",
-                color = SecondaryText,
-                style = IdeTypography.compactBody)
+    } else {
+      Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top) {
+              AnalysisLifecycleIndicator(run, presentation)
+              AnalysisRunContent(
+                  run,
+                  presentation,
+                  pathsExpanded,
+                  onTogglePaths,
+                  Modifier.weight(1f).testTag("analysis-run-content"))
+            }
+        AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
+      }
+    }
+  }
+}
+
+@Composable
+private fun AnalysisLifecycleIndicator(run: AnalysisRun?, presentation: ProjectRunPresentation) {
+  val tint = analysisStatusTint(run?.status)
+  Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+    if (presentation.isActive) {
+      IdeBusyIndicator(Modifier.size(22.dp), color = tint, strokeWidth = 2.dp)
+    } else {
+      Canvas(Modifier.size(10.dp)) { drawCircle(tint) }
+    }
+  }
+}
+
+@Composable
+private fun AnalysisRunContent(
+    run: AnalysisRun?,
+    presentation: ProjectRunPresentation,
+    pathsExpanded: Boolean,
+    onTogglePaths: () -> Unit,
+    modifier: Modifier,
+) {
+  Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column {
+      Text(analysisRunTitle(run, presentation), style = IdeTypography.workspaceHeading)
+      Text(
+          analysisFileProgressLabel(presentation),
+          color = SecondaryText,
+          style = IdeTypography.compactBody)
+    }
+    if (run != null) {
+      AnalysisRunProgressTrack(
+          presentation, analysisStatusTint(run.status), Modifier.fillMaxWidth(), showPercent = true)
+    }
+    AnalysisCurrentFiles(
+        presentation.currentFiles, pathsExpanded, onTogglePaths, showExpandedPaths = true)
+    analysisRunSupplementalMetadata(run, presentation)?.let { metadata ->
+      Text(metadata, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+    }
+  }
+}
+
+private fun analysisRunSupplementalMetadata(
+    run: AnalysisRun?,
+    presentation: ProjectRunPresentation,
+): String? {
+  if (run == null) return null
+  val facts = mutableListOf<String>()
+  if (run.isActive()) {
+    if (run.windowFilesCompleted > 0) {
+      facts +=
+          "${run.windowFilesCompleted} ${if (run.windowFilesCompleted == 1) "file" else "files"} processed"
+    }
+    if (run.windowElapsedSeconds > 0) facts += "${run.windowElapsedSeconds}s elapsed"
+  } else {
+    if (presentation.totalSteps > 0)
+        facts += "${presentation.finishedSteps} of ${presentation.totalSteps} stages"
+    run.updatedAt.takeIf { it.isNotBlank() }?.let(facts::add)
+  }
+  return facts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun SummaryRunPanel(
+    state: AnalysisWorkspacePaneState,
+    run: AnalysisRun?,
+    presentation: ProjectRunPresentation,
+    commands: List<AnalysisRunCommand>,
+    actions: AnalysisWorkspaceActions?,
+    pathsExpanded: Boolean,
+    onTogglePaths: () -> Unit,
+) {
+  val currentPaths = presentation.currentFiles
+  BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val inline = maxWidth / LocalDensity.current.fontScale >= 760.dp
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      if (inline) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+              AnalysisRunMetadata(
+                  run,
+                  presentation,
+                  currentPaths,
+                  pathsExpanded,
+                  onTogglePaths,
+                  Modifier.weight(1f))
+              run?.let {
+                AnalysisRunProgressTrack(
+                    presentation, analysisStatusTint(it.status), Modifier.weight(1f))
+              }
+              AnalysisRunControls(state, commands, actions)
+            }
+      } else {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          AnalysisRunMetadata(
+              run,
+              presentation,
+              currentPaths,
+              pathsExpanded,
+              onTogglePaths,
+              Modifier.fillMaxWidth())
+          run?.let {
+            AnalysisRunProgressTrack(
+                presentation, analysisStatusTint(it.status), Modifier.fillMaxWidth())
           }
+          AnalysisRunControls(state, commands, actions)
         }
       }
+      if (pathsExpanded)
+          currentPaths.drop(1).forEach { path ->
+            Text("Current: $path", color = SecondaryText, style = IdeTypography.workspaceMetadata)
+          }
+    }
+  }
 }
+
+private fun analysisFileProgressLabel(presentation: ProjectRunPresentation): String =
+    if (presentation.totalFiles > 0)
+        "${presentation.finishedFiles} of ${presentation.totalFiles} files finished"
+    else "File progress unavailable"
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -188,7 +276,6 @@ private fun AnalysisRunMetadata(
     pathsExpanded: Boolean,
     onTogglePaths: () -> Unit,
     modifier: Modifier,
-    showFileCount: Boolean = true,
 ) {
   FlowRow(
       modifier = modifier,
@@ -196,32 +283,43 @@ private fun AnalysisRunMetadata(
       verticalArrangement = Arrangement.spacedBy(6.dp)) {
         IdeLabelBadge(
             if (run == null) "Ready" else presentation.status, analysisStatusTint(run?.status))
-        if (run != null && showFileCount) {
+        if (run != null) {
           Text(
-              if (presentation.totalFiles > 0)
-                  "${presentation.finishedFiles} of ${presentation.totalFiles} files finished"
-              else "File progress unavailable",
+              analysisFileProgressLabel(presentation),
               color = SecondaryText,
               style = IdeTypography.workspaceMetadata)
         }
-        if (currentPaths.isNotEmpty()) {
-          Text(
-              "Current: ${currentPaths.first()}",
-              color = SecondaryText,
-              style = IdeTypography.workspaceMetadata,
-              modifier = Modifier.widthIn(max = 520.dp))
-          if (currentPaths.size > 1)
-              ChromeButton(
-                  onClick = onTogglePaths,
-                  accessibleName =
-                      if (pathsExpanded) "Hide active files" else "Show active files") {
-                    Text(
-                        if (pathsExpanded) "Hide active files"
-                        else "+${currentPaths.size - 1} active files",
-                        style = IdeTypography.workspaceMetadata)
-                  }
-        }
+        AnalysisCurrentFiles(currentPaths, pathsExpanded, onTogglePaths)
       }
+}
+
+@Composable
+private fun AnalysisCurrentFiles(
+    currentPaths: List<String>,
+    pathsExpanded: Boolean,
+    onTogglePaths: () -> Unit,
+    showExpandedPaths: Boolean = false,
+) {
+  if (currentPaths.isNotEmpty()) {
+    Text(
+        "Current: ${currentPaths.first()}",
+        color = SecondaryText,
+        style = IdeTypography.workspaceMetadata,
+        modifier = Modifier.widthIn(max = 520.dp))
+    if (currentPaths.size > 1)
+        ChromeButton(
+            onClick = onTogglePaths,
+            accessibleName = if (pathsExpanded) "Hide active files" else "Show active files") {
+              Text(
+                  if (pathsExpanded) "Hide active files"
+                  else "+${currentPaths.size - 1} active files",
+                  style = IdeTypography.workspaceMetadata)
+            }
+    if (showExpandedPaths && pathsExpanded)
+        currentPaths.drop(1).forEach { path ->
+          Text("Current: $path", color = SecondaryText, style = IdeTypography.workspaceMetadata)
+        }
+  }
 }
 
 @Composable
@@ -257,9 +355,10 @@ private fun AnalysisRunProgressTrack(
         }
         if (showPercent && fileProgress != null) {
           Text(
-              "${(fileProgress * 100).toInt()}%",
+              "${(fileProgress * 100).roundToInt()}%",
               color = SecondaryText,
-              style = IdeTypography.workspaceMetadata)
+              style = IdeTypography.workspaceMetadata,
+              modifier = Modifier.testTag("analysis-run-progress-percent"))
         }
       }
 }
@@ -270,9 +369,11 @@ private fun AnalysisRunControls(
     state: AnalysisWorkspacePaneState,
     commands: List<AnalysisRunCommand>,
     actions: AnalysisWorkspaceActions?,
+    modifier: Modifier = Modifier,
 ) {
   if (actions == null || commands.isEmpty()) return
   FlowRow(
+      modifier = modifier,
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp)) {
         commands.forEach { command ->

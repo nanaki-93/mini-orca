@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.state.ToggleableState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -71,6 +72,49 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun analysisFilesControlsExposeDisclosureFilterAndLockedSelectionStates() {
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "helper.go",
+                            "helper",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "running", 1, false)))),
+                sections = analysisRunFixture().sections.map { it.copy(status = "running") },
+            )
+    ComposeVisualFixture(1_600, 1_000) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  resultProjectFixture(),
+                  ProjectAnalysisRunState(
+                      run = run, fileSelection = AnalysisSelectionState(selectionFixture()))),
+              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}),
+          )
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Collapse Files"))
+          assertEquals("Expanded", fixture.stateDescription("Files"))
+          assertTrue(fixture.hasDescription("Filter files"))
+          assertTrue(fixture.isDescriptionSelected("All"))
+          assertTrue(fixture.hasDescription("Analyze helper.go"))
+          assertTrue(fixture.isDescriptionDisabled("Analyze helper.go"))
+          assertTrue(fixture.hasText("Up to date"))
+          assertEquals(
+              "Selected for analysis", fixture.descriptionStateDescription("Analyze helper.go"))
+          assertEquals(ToggleableState.On, fixture.descriptionToggleableState("Analyze helper.go"))
+          assertTrue(fixture.hasDescription("Files finished: 0 of 1"))
+          assertTrue(
+              fixture.hasText(
+                  "Selection locked. Finish or cancel the current run to change files."))
+        }
+  }
+
+  @Test
   fun analysisFileStatusMarkersAreDecorativeAtWideAndCompactWidths() {
     listOf(1_440 to 900, 800 to 650).forEach { (width, height) ->
       ComposeVisualFixture(width, height, 1.5f) {
@@ -88,6 +132,41 @@ class DesktopAccessibilityTest {
           }
     }
   }
+
+  @Test
+  fun analysisStageFailureRetainsItsRecoveryActionAndReadableDiagnostic() {
+    val reason =
+        "Semantic analysis failed because the local scanner is unavailable. Start analysis to retry."
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "failed",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "cmd/miniorca/main.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress(
+                                    "semantic", "failed", 1, false, reason = reason)))))
+    var starts = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  resultProjectFixture(), ProjectAnalysisRunState(run = run)),
+              AnalysisWorkspaceActions({ _, _ -> starts++ }, {}, {}, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Start analysis"))
+          fixture.clickText("Start analysis")
+          assertEquals(1, starts)
+          fixture.revealText(reason, "analysis-page")
+          fixture.assertTextWrapsWithoutClipping(reason)
+        }
+  }
+
   @Test
   fun keyboardShortcutsCoverFocusedWorkflowWithoutMouse() {
     assertEquals(DesktopShortcut.OpenFile, desktopShortcut("P", primaryModifier = true))
