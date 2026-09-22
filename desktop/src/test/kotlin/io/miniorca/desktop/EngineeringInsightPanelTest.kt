@@ -95,6 +95,78 @@ class EngineeringInsightPanelTest {
   }
 
   @Test
+  fun summaryPiecesKeepLeadContentVisibleAndDeferAdditionalContent() {
+    val pieces = summaryInsightPieces()
+
+    val summary = summaryEngineeringInsightPieces(pieces)
+
+    assertEquals(listOf("Mechanism", "Why it matters here"), summary.lead.map { it.label })
+    assertEquals(
+        listOf("Trade-off or failure mode", "Transferable lesson"),
+        summary.additional.map { it.label },
+    )
+  }
+
+  @Test
+  fun summaryPiecesPromoteAvailableContentForEveryMissingLeadCase() {
+    val pieces = summaryInsightPieces()
+
+    val withoutMechanism = summaryEngineeringInsightPieces(pieces.drop(1))
+    assertEquals(
+        listOf("Why it matters here", "Trade-off or failure mode"),
+        withoutMechanism.lead.map { it.label },
+    )
+    assertEquals(listOf("Transferable lesson"), withoutMechanism.additional.map { it.label })
+
+    val withoutWhyItMatters =
+        summaryEngineeringInsightPieces(pieces.filterNot { it.label == "Why it matters here" })
+    assertEquals(
+        listOf("Mechanism", "Trade-off or failure mode"),
+        withoutWhyItMatters.lead.map { it.label },
+    )
+    assertEquals(listOf("Transferable lesson"), withoutWhyItMatters.additional.map { it.label })
+
+    val withoutPreferredLeads = summaryEngineeringInsightPieces(pieces.drop(2))
+    assertEquals(
+        listOf("Trade-off or failure mode", "Transferable lesson"),
+        withoutPreferredLeads.lead.map { it.label },
+    )
+    assertTrue(withoutPreferredLeads.additional.isEmpty())
+  }
+
+  @Test
+  fun summaryInsightShowsFullLeadAndAdditionalContentWithoutNestedPreviews() {
+    val longContent = "Insight content. ".repeat(20)
+    ComposeVisualFixture(360, 650) {
+          SummaryEngineeringInsightPanel(
+              pieces =
+                  listOf(
+                      EngineeringInsightPiece("Mechanism", longContent),
+                      EngineeringInsightPiece("Why it matters here", longContent),
+                      EngineeringInsightPiece("Trade-off or failure mode", longContent)),
+              stale = false,
+              ownerIdentity = "project/revision")
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(formatModelResult(longContent).text))
+          assertFalse(fixture.hasText("Show full response"))
+          assertTrue(fixture.tryClick("Expand More insight"))
+          fixture.render()
+          assertTrue(fixture.hasText("Trade-off or failure mode"))
+          assertFalse(fixture.hasText("Show full response"))
+        }
+  }
+
+  private fun summaryInsightPieces(): List<EngineeringInsightPiece> =
+      engineeringInsightPieces(
+          EngineeringInsight(
+              mechanism = "Mechanism.",
+              whyItMattersHere = "Local impact.",
+              tradeoffOrFailureMode = "Trade-off.",
+              transferableLesson = "Lesson."))
+
+  @Test
   fun insightPiecesOmitBlankOptionalFields() {
     val pieces =
         engineeringInsightPieces(

@@ -65,11 +65,16 @@ private sealed interface DiagramState {
 }
 
 @Composable
-internal fun MermaidDiagram(value: String, label: String, title: String? = null) {
+internal fun MermaidDiagram(
+    value: String,
+    label: String,
+    title: String? = null,
+    ownerIdentity: Any = Unit,
+) {
   val input = remember(value) { summaryDiagramInput(value) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     if (title == null && input.prose.isNotBlank()) ModelResultContent(input.prose, preview = false)
-    key(input.source) {
+    key(ownerIdentity, input.source) {
       MermaidDiagramSource(input.source, label, title, input.prose.takeIf { title != null })
     }
   }

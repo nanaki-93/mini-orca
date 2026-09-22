@@ -280,7 +280,14 @@ internal fun ProjectSummaryPane(
                 style = IdeTypography.workspaceMetadata)
           }
         }
-        item { SummaryLowerComposition(presentation, sideBySide) }
+        item {
+          SummaryLowerComposition(
+              presentation,
+              sideBySide,
+              listOf(
+                  project?.projectId ?: overview?.projectId,
+                  project?.projectRevision ?: overview?.projectRevision))
+        }
       }
     }
   }
@@ -340,7 +347,11 @@ private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (W
 }
 
 @Composable
-private fun SummaryLowerComposition(presentation: ProjectSummaryPresentation, sideBySide: Boolean) {
+private fun SummaryLowerComposition(
+    presentation: ProjectSummaryPresentation,
+    sideBySide: Boolean,
+    ownerIdentity: List<String?>,
+) {
   val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
   val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
   val flows = presentation.details.firstOrNull { it.title == "Flows" }
@@ -351,10 +362,11 @@ private fun SummaryLowerComposition(presentation: ProjectSummaryPresentation, si
   if (!hasLeft && !hasRight) return
 
   val left: @Composable (Modifier) -> Unit = { modifier ->
-    SummaryArchitectureModules(architecture, modules, modifier)
+    SummaryArchitectureModules(architecture, modules, ownerIdentity, modifier)
   }
   val right: @Composable (Modifier) -> Unit = { modifier ->
-    SummaryInsightFlows(insight, flows, modifier)
+    SummaryInsightFlows(
+        insight, flows, presentation.interpretationStatus == "stale", ownerIdentity, modifier)
   }
   if (sideBySide && hasLeft && hasRight) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -373,12 +385,17 @@ private fun SummaryLowerComposition(presentation: ProjectSummaryPresentation, si
 private fun SummaryArchitectureModules(
     architecture: ProjectSummaryDetail?,
     modules: ProjectSummaryDetail?,
+    ownerIdentity: List<String?>,
     modifier: Modifier = Modifier,
 ) {
   WorkspaceSection(modifier = modifier.testTag("summary-lower-left")) {
     architecture?.let {
       Column(Modifier.testTag("summary-architecture")) {
-        MermaidDiagram(it.values.single(), "Architecture", title = "Architecture")
+        MermaidDiagram(
+            it.values.single(),
+            "Architecture",
+            title = "Architecture",
+            ownerIdentity = ownerIdentity + "architecture")
       }
     }
     if (architecture != null && modules != null) IdeHorizontalSeparator()
@@ -395,23 +412,31 @@ private fun SummaryArchitectureModules(
 private fun SummaryInsightFlows(
     insight: List<EngineeringInsightPiece>?,
     flows: ProjectSummaryDetail?,
+    stale: Boolean,
+    ownerIdentity: List<String?>,
     modifier: Modifier = Modifier,
 ) {
-  Column(modifier.testTag("summary-lower-right"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-    insight?.let { SummaryEngineeringInsight(it) }
-    flows?.let { SummaryFlows(it) }
-  }
+  Column(
+      modifier.testTag("summary-lower-right"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        insight?.let { SummaryEngineeringInsight(it, stale, ownerIdentity) }
+        flows?.let { SummaryFlows(it, ownerIdentity) }
+      }
 }
 
 @Composable
-private fun SummaryFlows(flows: ProjectSummaryDetail, modifier: Modifier = Modifier) {
+private fun SummaryFlows(
+    flows: ProjectSummaryDetail,
+    ownerIdentity: List<String?>,
+    modifier: Modifier = Modifier,
+) {
   WorkspaceSection(modifier = modifier.testTag("summary-flows")) {
     flows.values.forEachIndexed { index, value ->
       if (index > 0) IdeHorizontalSeparator()
       MermaidDiagram(
           value,
           "Flow ${index + 1}",
-          title = if (flows.values.size == 1) "Flows" else "Flow ${index + 1}")
+          title = if (flows.values.size == 1) "Flows" else "Flow ${index + 1}",
+          ownerIdentity = ownerIdentity + "flow-$index")
     }
   }
 }
@@ -419,13 +444,16 @@ private fun SummaryFlows(flows: ProjectSummaryDetail, modifier: Modifier = Modif
 @Composable
 private fun SummaryEngineeringInsight(
     pieces: List<EngineeringInsightPiece>,
+    stale: Boolean,
+    ownerIdentity: List<String?>,
     modifier: Modifier = Modifier,
 ) {
   WorkspaceSection("Engineering insight", modifier.testTag("summary-insight")) {
-    pieces.forEach { piece ->
-      Text(piece.label, color = SecondaryText, style = IdeTypography.workspaceMetadata)
-      ModelResultContent(piece.content, preview = false, style = IdeTypography.workspaceBody)
-    }
+    SummaryEngineeringInsightPanel(
+        pieces = pieces,
+        stale = stale,
+        ownerIdentity = ownerIdentity + pieces,
+    )
   }
 }
 

@@ -170,6 +170,51 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun summaryDisclosuresResetForAnotherProjectWithIdenticalContent() {
+    val source = "flowchart TD\n A[Client] --> B[Service]"
+    val insight =
+        EngineeringInsight(
+            mechanism = "Validate request identity.",
+            whyItMattersHere = "The current revision owns the interpretation.",
+            tradeoffOrFailureMode = "Validation requires consistent rules.")
+    var currentProject by
+        androidx.compose.runtime.mutableStateOf(
+            resultProjectFixture().copy(projectId = "first", projectRevision = "one"))
+    var currentOverview by
+        androidx.compose.runtime.mutableStateOf(
+            ProjectOverview(
+                projectId = "first",
+                projectRevision = "one",
+                analysis =
+                    StructuredProjectAnalysis(
+                        status = "fresh", architecture = source, engineeringInsight = insight)))
+
+    ComposeVisualFixture(1000, 760) { ProjectSummaryPane(currentOverview, currentProject, {}) }
+        .use { fixture ->
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.clickDescription("Show Architecture diagram")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          fixture.clickDescription("Zoom in Architecture")
+          fixture.render()
+          assertTrue(fixture.hasText("125%"))
+          fixture.clickText("Mermaid source")
+          assertTrue(fixture.tryClick("Expand More insight"))
+          fixture.render()
+          assertTrue(fixture.hasText("Trade-off or failure mode"))
+
+          currentProject = currentProject.copy(projectId = "second", projectRevision = "two")
+          currentOverview = currentOverview.copy(projectId = "second", projectRevision = "two")
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          assertFalse(fixture.hasText("Mermaid source"))
+          fixture.clickDescription("Show Architecture diagram")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          assertTrue(fixture.hasText("100%"))
+          assertEquals("Collapsed", fixture.stateDescription("More insight"))
+          assertFalse(fixture.hasText("Trade-off or failure mode"))
+        }
+  }
+
+  @Test
   fun moduleNamesComeBeforeTheirPathsWithoutLosingDescriptions() {
     assertEquals(
         SummaryModule("Workflow orchestration", "internal/app", "Coordinates changes."),
