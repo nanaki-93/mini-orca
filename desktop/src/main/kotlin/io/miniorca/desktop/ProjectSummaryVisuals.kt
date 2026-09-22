@@ -96,36 +96,54 @@ internal fun summaryCoverageFractions(
 @Composable
 internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnalysis: () -> Unit) {
   val fontScale = LocalDensity.current.fontScale
-  BoxWithConstraints(Modifier.fillMaxWidth().testTag("analysis-summary")) {
-    if (maxWidth / fontScale >= 640.dp) {
-      Row(
-          Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(16.dp),
-          verticalAlignment = Alignment.CenterVertically) {
+  WorkspaceSection(modifier = Modifier.testTag("analysis-summary")) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+      val wideLayout = maxWidth / fontScale >= 640.dp
+      Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (wideLayout) {
+          Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Analysis coverage",
+                color = ResultAccent,
+                style = IdeTypography.workspaceHeading,
+                modifier = Modifier.weight(1f).semantics { heading() })
+            SummaryAnalysisStatus(presentation)
+          }
+        } else {
+          Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 "Analysis coverage",
                 color = ResultAccent,
                 style = IdeTypography.workspaceHeading,
                 modifier = Modifier.semantics { heading() })
-            SummaryCoverageBar(presentation, Modifier.weight(1f))
-            MiniOrcaButton(onClick = openAnalysis, tone = ActionTone.Navigation) {
-              Text("View analysis", style = IdeTypography.workspaceMetadata)
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+              SummaryAnalysisStatus(presentation)
             }
-            SummaryAnalysisStatus(presentation)
           }
-    } else {
-      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-          Text(
-              "Analysis coverage",
-              color = ResultAccent,
-              style = IdeTypography.workspaceHeading,
-              modifier = Modifier.weight(1f).semantics { heading() })
-          SummaryAnalysisStatus(presentation)
         }
-        SummaryCoverageBar(presentation)
-        MiniOrcaButton(onClick = openAnalysis, tone = ActionTone.Navigation) {
-          Text("View analysis", style = IdeTypography.workspaceMetadata)
+        if (wideLayout) {
+          Row(
+              Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(16.dp),
+              verticalAlignment = Alignment.CenterVertically) {
+                SummaryCoverageBar(presentation, Modifier.weight(1f))
+                MiniOrcaButton(
+                    onClick = openAnalysis,
+                    modifier = Modifier.testTag("summary-view-analysis"),
+                    tone = ActionTone.Navigation) {
+                      Text("View analysis", style = IdeTypography.workspaceMetadata)
+                    }
+              }
+        } else {
+          Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SummaryCoverageBar(presentation)
+            MiniOrcaButton(
+                onClick = openAnalysis,
+                modifier = Modifier.testTag("summary-view-analysis"),
+                tone = ActionTone.Navigation) {
+                  Text("View analysis", style = IdeTypography.workspaceMetadata)
+                }
+          }
         }
       }
     }
@@ -150,6 +168,7 @@ private fun SummaryCoverageBar(
   Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Row(
         Modifier.fillMaxWidth()
+            .testTag("summary-coverage-track")
             .height(12.dp)
             .clip(MiniOrcaShapes.pill)
             .background(StrongSurface)
@@ -167,6 +186,7 @@ private fun SummaryCoverageBar(
           style = IdeTypography.workspaceMetadata)
     } else {
       FlowRow(
+          Modifier.testTag("summary-coverage-legend"),
           horizontalArrangement = Arrangement.spacedBy(16.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp)) {
             segments.forEach { (metric, _) ->

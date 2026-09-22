@@ -2514,6 +2514,7 @@ class DesktopVisualLayoutTest {
           fixture.assertTextAbove("Summary", visualFixtureProject.name)
           fixture.assertTextAbove(visualFixtureProject.name, "Analysis coverage")
           fixture.assertSummaryStatusPlacement("Outdated")
+          fixture.assertWideSummaryCoverageLayout()
           listOf("Bugs", "Performance", "Security").forEach {
             assertTrue(fixture.hasDescription("View $it results"))
             assertTrue(fixture.hasText(it))
@@ -2998,6 +2999,7 @@ class DesktopVisualLayoutTest {
                     fixture.assertTextFits(label)
                   }
               fixture.assertSummaryStatusPlacement("Outdated")
+              if (width == 800 && scale == 1.5f) fixture.assertCompactSummaryCoverageLayout()
               listOf("Bugs", "Performance", "Security").forEach { label ->
                 fixture.revealText(label)
                 fixture.assertTextFits(label)
@@ -3744,6 +3746,26 @@ internal class ComposeVisualFixture(
     assertTrue(
         panel.boundsInRoot.right - status.boundsInRoot.right <= 28f,
         "$label must align to the right edge of Analysis coverage")
+  }
+
+  fun assertWideSummaryCoverageLayout() {
+    val section = taggedBounds("analysis-summary")
+    val track = taggedBounds("summary-coverage-track")
+    val legend = taggedBounds("summary-coverage-legend")
+    val action = taggedBounds("summary-view-analysis")
+    assertTrue(track.width >= section.width * 0.6f, "Coverage track must be broad")
+    assertTrue(track.top < legend.top, "Coverage legend must follow the track")
+    assertTrue(action.left >= track.right, "View analysis must trail coverage on wide layouts")
+    assertTrue(action.right <= section.right, "View analysis must stay inside coverage")
+  }
+
+  fun assertCompactSummaryCoverageLayout() {
+    val track = taggedBounds("summary-coverage-track")
+    val legend = taggedBounds("summary-coverage-legend")
+    val action = taggedBounds("summary-view-analysis")
+    assertTrue(track.top < legend.top, "Coverage legend must follow the track")
+    assertTrue(
+        legend.bottom <= action.top, "View analysis must wrap below coverage on compact layouts")
   }
 
   fun assertAnalysisRunGeometry() {
