@@ -1921,8 +1921,10 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-1440")
+          assertEquals(1, fixture.textCount("Summary"))
           assertTrue(fixture.hasText("Go · go.mod · 23 indexed files · 1,800 lines · Markdown"))
           assertTrue(fixture.hasText("Analysis coverage"))
+          fixture.assertTextAbove("Summary", visualFixtureProject.name)
           assertFalse(fixture.hasText("Project understanding"))
         }
 
@@ -2509,6 +2511,7 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("Go · go.mod · 23 indexed files · 1,800 lines · Markdown"))
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
+          fixture.assertTextAbove("Summary", visualFixtureProject.name)
           fixture.assertTextAbove(visualFixtureProject.name, "Analysis coverage")
           fixture.assertSummaryStatusPlacement("Outdated")
           listOf("Bugs", "Performance", "Security").forEach {
@@ -2653,7 +2656,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryStatusLightExposesFailureOnKeyboardFocus() {
+  fun summaryIntroductionKeepsInterpretationFailureVisibleWithoutFocus() {
     val overview =
         visualFixtureOverview.copy(
             analysis =
@@ -2662,15 +2665,10 @@ class DesktopVisualLayoutTest {
     val description = "Project description: failed · Provider timed out."
     ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
-          fixture.render()
-          assertFalse(fixture.hasText(description))
-          assertTrue(fixture.pressKey(Key.Tab))
-          assertTrue(fixture.isFocused("View analysis"))
-          assertTrue(fixture.pressKey(Key.Tab))
-          fixture.render("summary-status-keyboard-focus")
-          assertTrue(fixture.isDescriptionFocused(description))
+          fixture.render("summary-interpretation-failure")
           assertTrue(fixture.hasText(description))
-          fixture.assertColorVisible(FocusAccent)
+          fixture.assertTextAbove(description, "Analysis coverage")
+          assertFalse(fixture.hasEditableText())
         }
   }
 

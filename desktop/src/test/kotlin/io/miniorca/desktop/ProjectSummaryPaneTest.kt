@@ -35,6 +35,8 @@ class ProjectSummaryPaneTest {
     assertTrue(summary.findingMetrics.all { it.value == null })
     assertTrue(summary.coverageMetrics.all { it.value == null })
     assertFalse(summary.toString().contains("revision"))
+    assertEquals("missing", summary.interpretationStatus)
+    assertEquals("Project description: unavailable", summary.interpretationMessage)
     assertEquals("Project description: unavailable", summary.analysisMessage)
   }
 
@@ -63,6 +65,8 @@ class ProjectSummaryPaneTest {
 
     assertEquals("stale", summary.analysisStatus)
     assertEquals("Coordinate requests through one handler.", summary.purpose)
+    assertEquals("stale", summary.interpretationStatus)
+    assertTrue(summary.interpretationMessage.contains("source may have changed"))
     assertTrue(summary.analysisMessage.contains("source may have changed"))
     assertEquals(listOf(2, 20), summary.projectMetrics.map { it.value })
     assertEquals(listOf(2, 3), summary.findingMetrics.map { it.value })
@@ -107,7 +111,9 @@ class ProjectSummaryPaneTest {
                 analysis = StructuredProjectAnalysis(status = "failed", failure = "Timed out.")),
             null)
 
+    assertEquals("Project description: running", running.interpretationMessage)
     assertTrue(running.analysisMessage.contains(": running"))
+    assertEquals("Project description: failed · Timed out.", failed.interpretationMessage)
     assertEquals("Project description: failed · Timed out.", failed.analysisMessage)
     assertEquals(null, failed.purpose)
   }
@@ -233,12 +239,14 @@ class ProjectSummaryPaneTest {
         .use { fixture ->
           fixture.render("summary-current-selection-old-description-800-150")
           fixture.assertSummaryStatusPlacement("Updated")
+          assertTrue(fixture.hasText("Project description: stale · source may have changed"))
           assertFalse(fixture.hasText("Outdated"))
         }
     val current = projectSummaryPresentation(overview, project, fileSelection = selection)
     assertEquals("fresh", current.summaryStatus)
     assertFalse(current.outdated)
     assertEquals("stale", current.analysisStatus)
+    assertEquals("stale", current.interpretationStatus)
     assertEquals("Saved description", current.purpose)
     assertTrue(current.analysisMessage.contains("source may have changed"))
     assertEquals(listOf("Up to date"), current.coverageMetrics.map { it.label })

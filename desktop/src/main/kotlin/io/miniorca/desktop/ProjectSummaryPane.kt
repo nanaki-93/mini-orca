@@ -54,6 +54,8 @@ internal data class ProjectSummaryPresentation(
     val analysisStatus: String,
     val summaryStatus: String,
     val analysisMessage: String,
+    val interpretationStatus: String,
+    val interpretationMessage: String,
     val outdated: Boolean,
     val purpose: String?,
     val projectMetrics: List<ProjectSummaryMetric>,
@@ -148,6 +150,8 @@ internal fun projectSummaryPresentation(
                       "Some analysis results are outdated. Run analysis to update them."
                   else null)
               .joinToString("\n"),
+      interpretationStatus = normalizedStatus,
+      interpretationMessage = summaryAnalysisMessage(normalizedStatus, analysis?.failure.orEmpty()),
       outdated = outdated,
       purpose = analysis?.purpose?.takeIf { interpretationAvailable && it.isNotBlank() },
       projectMetrics =
@@ -245,6 +249,13 @@ internal fun ProjectSummaryPane(
       if (!presentation.hasProject) {
         item { SystemStateMessage("No project selected", "", modifier = Modifier.fillMaxWidth()) }
       } else {
+        item {
+          Text(
+              "Summary",
+              color = PrimaryText,
+              style = IdeTypography.workspaceHeading,
+              modifier = Modifier.testTag("summary-page-heading").semantics { heading() })
+        }
         val currentRun = currentProjectRun(run, project)
         val stripState = analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)
         if (currentRun?.showsProgressOnSummary() == true)
@@ -288,7 +299,16 @@ private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
         modifier = Modifier.semantics { heading() })
     presentation.purpose?.let {
       ModelResultContent(it, preview = false, style = IdeTypography.workspaceBody)
-    } ?: Text("Project description unavailable", color = SecondaryText, style = IdeTypography.body)
+    }
+    if (presentation.interpretationStatus != "fresh") {
+      Text(
+          presentation.interpretationMessage,
+          color = if (presentation.interpretationStatus == "failed") Error else SecondaryText,
+          style = IdeTypography.workspaceMetadata,
+          modifier = Modifier.testTag("summary-interpretation-status"))
+    } else if (presentation.purpose == null) {
+      Text("Project description unavailable", color = SecondaryText, style = IdeTypography.body)
+    }
     val facts =
         listOf(presentation.projectType, presentation.buildMetadata) +
             presentation.projectMetrics.map { metric ->
