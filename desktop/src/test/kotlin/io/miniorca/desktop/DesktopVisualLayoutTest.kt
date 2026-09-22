@@ -3514,12 +3514,55 @@ internal class ComposeVisualFixture(
   fun assertAnalysisTableColumns() {
     val headers =
         listOf("File", "Analysis state", "Details").map { label ->
-          textNodes(label).minBy { it.boundsInRoot.top }.boundsInRoot
+          textNodes(label)
+              .filter { it.boundsInRoot.width > 0f && it.boundsInRoot.height > 0f }
+              .minBy { it.boundsInRoot.top }
+              .boundsInRoot
         }
     headers.zipWithNext().forEach { (first, second) ->
-      assertTrue(first.right < second.left)
-      assertEquals(first.center.y, second.center.y, 2f)
+      assertTrue(first.right < second.left, "Headers must remain separate: $first and $second")
+      assertEquals(
+          first.center.y, second.center.y, 2f, "Headers must share a row: $first and $second")
     }
+    val row = "analysis-file-row-cmd/server/main.go"
+    assertAnalysisTableCellInColumn(row, "cmd/server/main.go", headers[0], headers[1], "File")
+    assertAnalysisTableCellInColumn(row, "Up to date", headers[1], headers[2], "Analysis state")
+    assertAnalysisTableCellInColumn(row, "Complete", headers[2], null, "Details")
+  }
+
+  private fun assertAnalysisTableCellInColumn(
+      rowTag: String,
+      label: String,
+      header: Rect,
+      nextHeader: Rect?,
+      column: String,
+  ) {
+    val cell = taggedTextBounds(rowTag, label)
+    val row = taggedBounds(rowTag)
+    assertEquals(
+        header.left,
+        cell.left,
+        1f,
+        "$label must share the $column column leading edge with its header")
+    assertTrue(
+        nextHeader == null || cell.right <= nextHeader.left,
+        "$label must remain within the $column column")
+    assertTrue(cell.right <= row.right, "$label must remain inside its row")
+  }
+
+  private fun taggedTextBounds(tag: String, label: String): Rect {
+    val row = taggedBounds(tag)
+    return textNodes(label)
+        .single { node ->
+          val bounds = node.boundsInRoot
+          bounds.width > 0f &&
+              bounds.height > 0f &&
+              bounds.left >= row.left &&
+              bounds.right <= row.right &&
+              bounds.top >= row.top &&
+              bounds.bottom <= row.bottom
+        }
+        .boundsInRoot
   }
 
   fun assertTextBefore(label: String, following: String) {
