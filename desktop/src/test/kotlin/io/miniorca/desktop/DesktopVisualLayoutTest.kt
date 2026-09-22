@@ -2555,8 +2555,7 @@ class DesktopVisualLayoutTest {
     val overview =
         visualFixtureOverview.copy(
             analysis =
-                visualFixtureOverview.analysis.copy(
-                    flows = emptyList(), engineeringInsight = null))
+                visualFixtureOverview.analysis.copy(flows = emptyList(), engineeringInsight = null))
     ComposeVisualFixture(1440, 900) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render("summary-lower-one-sided-1440")
@@ -2698,6 +2697,67 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryCategoriesStackAndKeepProvenanceBelowAtCompactTextScale() {
+    ComposeVisualFixture(800, 1_100, 1.5f) {
+          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+        }
+        .use { fixture ->
+          fixture.render("summary-categories-compact-800-150")
+          val cards =
+              AnalysisResultType.entries.map { type ->
+                fixture.taggedBounds("summary-metric-${type.workspace.name}")
+              }
+          cards.forEach { card ->
+            assertTrue(card.height >= 132f, "Stacked cards must retain their minimum height")
+            assertEquals(cards.first().left, card.left, 1f, "Stacked cards must share an edge")
+            assertEquals(
+                cards.first().width, card.width, 1f, "Stacked cards must use the available width")
+          }
+          cards.zipWithNext().forEach { (first, next) ->
+            assertTrue(first.bottom <= next.top, "Compact cards must stack without overlap")
+          }
+          val provenance = fixture.taggedBounds("summary-findings-provenance")
+          assertTrue(
+              provenance.top >= cards.last().bottom, "Provenance must follow all category cards")
+        }
+  }
+
+  @Test
+  fun summaryCategoriesGrowAtCompactLargeTextForLifecyclePriorityAndFailureDetails() {
+    val (baseRun, bugs) = summaryBugFixture(listOf("high", "medium", "low"))
+    val run =
+        baseRun.copy(
+            sections =
+                baseRun.sections.map { progress ->
+                  when (progress.category) {
+                    "performance" -> progress.copy(status = "interrupted", findingCount = 18)
+                    "security" -> progress.copy(status = "failed", findingCount = 19)
+                    else -> progress
+                  }
+                })
+    val sections =
+        mapOf(
+            AnalysisResultKey("bugs") to bugs,
+            AnalysisResultKey("security") to AnalysisSectionState(error = "Result read failed"))
+
+    ComposeVisualFixture(800, 1_100, 1.5f) {
+          ProjectSummaryPane(
+              visualFixtureOverview, resultProjectFixture(), {}, run = run, sections = sections)
+        }
+        .use { fixture ->
+          fixture.render("summary-categories-details-compact-800-150")
+          fixture.assertSummaryCategoryContentContained()
+          fixture.assertTextFits("Interrupted")
+          fixture.assertTextFits("High: 1 · Medium: 1 · Low: 1", maxLines = 2)
+          fixture.assertTextFits("Details unavailable")
+          val bugsCard = fixture.taggedBounds("summary-metric-Bugs")
+          assertTrue(
+              bugsCard.height > 132f,
+              "Priority details must grow the Bugs card beyond its minimum height")
+        }
+  }
+
+  @Test
   fun summaryCategoryBoxesNavigateAndRefreshFromTheCurrentRun() {
     val navigations = mutableListOf<Workspace>()
     var run by
@@ -2727,7 +2787,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("summary-live-running-1440")
           fixture.assertSummaryStatusPlacement("Updating")
-          fixture.assertCategoryBoxesFit()
+          fixture.assertSummaryCategoryBoxesFit()
           listOf("17", "18", "19").forEach(fixture::assertTextFits)
           fixture.assertTextFits("Loading details")
           AnalysisResultType.entries.forEach { type ->
@@ -2753,17 +2813,19 @@ class DesktopVisualLayoutTest {
           listOf("17", "18", "19", "Loading details").forEach { assertFalse(fixture.hasText(it)) }
           listOf("27", "28", "29").forEach(fixture::assertTextFits)
           fixture.assertSummaryStatusPlacement("Updated")
-          fixture.assertCategoryBoxesFit()
+          fixture.assertSummaryCategoryBoxesFit()
           AnalysisResultType.entries.forEach { type ->
             val box = fixture.taggedBounds("summary-metric-${type.workspace.name}")
             val icon = fixture.taggedBounds("summary-category-icon-${type.category}")
             val name = fixture.taggedBounds("summary-category-name-${type.category}")
             val count = fixture.taggedBounds("summary-category-count-${type.category}")
-            assertEquals(120f, box.height, 1f, "Summary category height must remain compact")
+            val status = fixture.taggedBounds("summary-category-status-${type.category}")
+            assertTrue(box.height >= 132f, "Summary category cards must retain a minimum height")
             assertEquals(icon.top, name.top, 1f, "Summary icon and name must remain inline")
             assertTrue(count.top >= icon.bottom, "Summary count must remain below its icon row")
+            assertTrue(status.top >= count.bottom, "Summary status must follow the count")
           }
-          assertFalse(fixture.hasText("Completed"))
+          assertEquals(3, fixture.textCount("Completed"))
         }
   }
 
@@ -3451,6 +3513,12 @@ internal class ComposeVisualFixture(
     return bounds
   }
 
+  fun clickableDescriptionCount(label: String): Int =
+      nodes().count {
+        it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+            it.config.getOrNull(SemanticsActions.OnClick) != null
+      }
+
   fun clickVisibleDescription(label: String) {
     val bounds = visibleActionBounds(label)
     // Click empty space near the trailing edge, away from the icon/count text.
@@ -3722,7 +3790,8 @@ internal class ComposeVisualFixture(
     assertEquals(left.top, right.top, 1f, "Lower summary regions must align at the top")
     assertTrue(architecture.left >= left.left && architecture.right <= left.right)
     assertTrue(modules.left >= left.left && modules.right <= left.right)
-    assertTrue(architecture.top < modules.top, "Modules must follow Architecture in the shared surface")
+    assertTrue(
+        architecture.top < modules.top, "Modules must follow Architecture in the shared surface")
     assertTrue(architecture.bottom <= modules.top, "Architecture and modules must not overlap")
     assertTrue(insight.left >= right.left && insight.right <= right.right)
     assertTrue(flows.left >= right.left && flows.right <= right.right)
@@ -3731,6 +3800,51 @@ internal class ComposeVisualFixture(
 
   fun assertTextFits(label: String, maxLines: Int = 1) {
     assertTextLayout(label, lineCounts = 1..maxLines)
+  }
+
+  fun assertSummaryCategoryBoxesFit() {
+    val cards =
+        AnalysisResultType.entries.map { type ->
+          visibleActionBounds("View ${type.workspace.name} results")
+        }
+    cards.forEach { bounds ->
+      assertTrue(bounds.height >= 132f, "Summary category cards must retain a minimum height")
+      assertTrue(
+          bounds.left >= 0 && bounds.top >= 0 && bounds.right <= width && bounds.bottom <= height,
+          "Every summary card must be visible: $bounds")
+    }
+    cards.zipWithNext().forEach { (first, next) ->
+      assertTrue(first.right <= next.left, "Wide summary categories must share one row")
+      assertEquals(first.top, next.top, 1f, "Wide summary categories must align at the top")
+      assertEquals(first.width, next.width, 1f, "Wide summary category widths must match")
+      assertEquals(first.height, next.height, 1f, "Wide summary category heights must match")
+    }
+  }
+
+  fun assertSummaryCategoryContentContained() {
+    AnalysisResultType.entries.forEach { type ->
+      val card = taggedBounds("summary-metric-${type.workspace.name}")
+      val taggedChildren =
+          nodes().filter { node ->
+            val tag = node.config.getOrNull(SemanticsProperties.TestTag) ?: return@filter false
+            tag.startsWith("summary-category-") &&
+                generateSequence(node) { it.parent }
+                    .any {
+                      it.config.getOrNull(SemanticsProperties.TestTag) ==
+                          "summary-metric-${type.workspace.name}"
+                    }
+          }
+      assertTrue(taggedChildren.isNotEmpty(), "${type.workspace.name} must expose tagged content")
+      taggedChildren.forEach { child ->
+        val bounds = child.boundsInRoot
+        assertTrue(
+            bounds.left >= card.left &&
+                bounds.top >= card.top &&
+                bounds.right <= card.right &&
+                bounds.bottom <= card.bottom,
+            "${child.config.getOrNull(SemanticsProperties.TestTag)} must remain inside ${type.workspace.name}: $bounds in $card")
+      }
+    }
   }
 
   fun assertUniformSummaryCards(expectedCount: Int) {

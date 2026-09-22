@@ -212,6 +212,7 @@ internal fun AnalysisCategoryIcon(
     type: AnalysisResultType,
     tint: Color,
     description: String = type.workspace.name,
+    modifier: Modifier = Modifier,
 ) {
   val icon =
       when (type) {
@@ -219,7 +220,7 @@ internal fun AnalysisCategoryIcon(
         AnalysisResultType.Performance -> DesktopIcon.Performance
         AnalysisResultType.Security -> DesktopIcon.Security
       }
-  DesktopLineIcon(icon, description, tint = tint)
+  DesktopLineIcon(icon, description, modifier = modifier, tint = tint)
 }
 
 internal data class SummaryModule(val name: String, val path: String?, val description: String)
