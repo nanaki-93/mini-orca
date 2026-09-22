@@ -2146,6 +2146,33 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun analysisFileStatusMarkersPrecedeLabelsInWideAndCompactRows() {
+    listOf(1_440 to 900, 800 to 650).forEach { (width, height) ->
+      ComposeVisualFixture(width, height, 1.5f) {
+            AnalysisFileSelector(
+                ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
+                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+          }
+          .use { fixture ->
+            fixture.render("analysis-status-markers-$width")
+            listOf(".env" to "Excluded", "helper.go" to "Up to date", "main.go" to "Not analyzed")
+                .forEach { (path, label) ->
+                  val marker = fixture.taggedBounds("analysis-file-status-marker-$path")
+                  val status = fixture.taggedTextBounds("analysis-file-row-$path", label)
+                  val row = fixture.taggedBounds("analysis-file-row-$path")
+                  assertTrue(marker.right < status.left, "$path marker must precede its status")
+                  assertTrue(
+                      marker.top < status.bottom && marker.bottom > status.top,
+                      "$path marker must align with its status")
+                  assertTrue(
+                      marker.left >= row.left && marker.right <= row.right,
+                      "$path marker must remain inside its row")
+                }
+          }
+    }
+  }
+
+  @Test
   fun measuredAnalysisFileAllocationKeepsVariableContentAndBothScrollTargetsReachable() {
     val selectionError =
         "Selection refresh could not confirm the project inventory because the daemon returned a " +
@@ -3326,6 +3353,13 @@ internal class ComposeVisualFixture(
 
   fun tagCount(tag: String): Int =
       nodes().count { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+
+  fun tagIsDecorative(tag: String): Boolean {
+    val config = taggedNode(tag).config
+    return config.getOrNull(SemanticsProperties.ContentDescription) == null &&
+        config.getOrNull(SemanticsProperties.Text) == null &&
+        config.getOrNull(SemanticsActions.OnClick) == null
+  }
 
   private fun taggedNode(tag: String): SemanticsNode =
       nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }

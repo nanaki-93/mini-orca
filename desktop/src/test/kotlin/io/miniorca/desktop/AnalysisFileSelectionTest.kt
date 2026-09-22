@@ -254,7 +254,47 @@ class AnalysisFileSelectionTest {
   }
 
   @Test
-  fun runningFiltersAndDisclosureStayLocalWhilePausedSelectionRemainsLocked() {
+  fun fileInventoryStatesAndUnexplainedLockRemainTruthful() {
+    val selectionState = mutableStateOf(AnalysisSelectionState(loading = true))
+    val actions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {})
+    ComposeVisualFixture(1_440, 900) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(fileSelection = selectionState.value), actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.hasText("No matching files."))
+          assertFalse(fixture.hasText("No files are available for analysis."))
+
+          selectionState.value = AnalysisSelectionState(error = "Unable to load files")
+          fixture.render()
+          assertTrue(fixture.hasText("Unable to load files"))
+          assertTrue(fixture.hasText("File status is not loaded. Refresh files to try again."))
+
+          selectionState.value =
+              AnalysisSelectionState(selection = selectionFixture().copy(files = emptyList()))
+          fixture.render()
+          assertTrue(fixture.hasText("No files are available for analysis."))
+          assertFalse(fixture.hasText("No matching files."))
+
+          selectionState.value = AnalysisSelectionState(selection = selectionFixture())
+          fixture.render()
+          fixture.setText("not-a-project-file")
+          fixture.render()
+          assertTrue(fixture.hasText("No matching files."))
+
+          selectionState.value =
+              AnalysisSelectionState(selection = selectionFixture().copy(editable = false))
+          fixture.render()
+          assertTrue(fixture.hasText("Selection changes unavailable."))
+          assertFalse(
+              fixture.hasText(
+                  "Selection locked. Finish or cancel the current run to change files."))
+        }
+  }
+
+  @Test
+  fun runningFiltersAndDisclosureStayLocalWhilePausedAndInterruptedSelectionRemainLocked() {
     val initial =
         roundedAnalysisStateFixture()
             .copy(
@@ -300,6 +340,14 @@ class AnalysisFileSelectionTest {
           state.value = state.value.copy(run = state.value.run!!.copy(status = "paused"))
           fixture.render()
           assertFalse(fixture.hasText("Select all"))
+          assertFalse(fixture.hasText("Exclude all"))
+          assertFalse(fixture.tryClick("Analyze internal/api/user.go"))
+          assertEquals(0, actions)
+          assertEquals(initial.fileSelection, state.value.fileSelection)
+          state.value = state.value.copy(run = state.value.run!!.copy(status = "interrupted"))
+          fixture.render()
+          assertFalse(fixture.hasText("Select all"))
+          assertFalse(fixture.hasText("Exclude all"))
           assertFalse(fixture.tryClick("Analyze internal/api/user.go"))
           assertEquals(0, actions)
           assertEquals(initial.fileSelection, state.value.fileSelection)

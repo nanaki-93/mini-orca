@@ -33,8 +33,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
@@ -70,9 +73,9 @@ internal fun AnalysisFileSelector(
         selection?.let { analysisFileStatuses(it, analysis.run) }.orEmpty()
       }
   val eligible = selection?.files.orEmpty().filter { it.reason.isBlank() }
-  val locked =
-      selection?.editable == false ||
-          analysis.run?.let { it.isActive() || it.status in setOf("paused", "interrupted") } == true
+  val lockedByRun =
+      analysis.run?.let { it.isActive() || it.status in setOf("paused", "interrupted") } == true
+  val locked = selection?.editable == false || lockedByRun
   val editable =
       selection?.editable == true &&
           !state.loading &&
@@ -135,10 +138,17 @@ internal fun AnalysisFileSelector(
     }
     state.error?.let { DiagnosticText(it, color = Error) }
     if (locked)
-        Text(
-            "Selection locked. Finish or cancel the current run to change files.",
-            color = SecondaryText,
-            style = IdeTypography.workspaceMetadata)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+          DesktopLineIcon(DesktopIcon.Lock, "", iconSize = 15.dp, tint = SecondaryText)
+          Text(
+              if (lockedByRun) "Selection locked. Finish or cancel the current run to change files."
+              else "Selection changes unavailable.",
+              color = SecondaryText,
+              style = IdeTypography.workspaceMetadata)
+        }
     if (expanded) {
       BoxWithConstraints(Modifier.fillMaxWidth()) {
         val wide = maxWidth / fontScale >= 720.dp
@@ -151,14 +161,12 @@ internal fun AnalysisFileSelector(
                   horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.columnGap)) {
                     Row(Modifier.weight(AnalysisWideTableGrid.fileWeight)) {
                       Spacer(Modifier.width(AnalysisWideTableGrid.leadingControlsWidth))
-                      Text(
-                          "File",
-                          color = SecondaryText,
-                          style = IdeTypography.workspaceMetadata)
+                      Text("File", color = SecondaryText, style = IdeTypography.workspaceMetadata)
                     }
                     Text(
                         "Analysis state",
-                        Modifier.weight(AnalysisWideTableGrid.stateWeight),
+                        Modifier.weight(AnalysisWideTableGrid.stateWeight)
+                            .padding(start = AnalysisWideTableGrid.statusMarkerWidth),
                         color = SecondaryText,
                         style = IdeTypography.workspaceMetadata)
                     Text(
@@ -169,8 +177,11 @@ internal fun AnalysisFileSelector(
                   }
           if (files.isEmpty() && !state.loading)
               Text(
-                  if (selection == null) "File status is not loaded. Refresh files to try again."
-                  else "No matching files.",
+                  when {
+                    selection == null -> "File status is not loaded. Refresh files to try again."
+                    rows.isEmpty() -> "No files are available for analysis."
+                    else -> "No matching files."
+                  },
                   Modifier.padding(vertical = 12.dp),
                   color = SecondaryText,
                   style = IdeTypography.workspaceMetadata)
@@ -254,7 +265,8 @@ private fun AnalysisFileFilters(
           ChromeTab(
               selected = selected,
               onClick = { setFilter(choice) },
-              accessibleName = "${choice.label}, $count files") {
+              accessibleName = choice.label,
+              modifier = Modifier.semantics { this.selected = selected }) {
                 Text(choice.label, style = IdeTypography.workspaceMetadata)
                 Spacer(Modifier.width(6.dp))
                 Text(
@@ -274,6 +286,7 @@ private object AnalysisWideTableGrid {
   val documentWidth = 16.dp
   val identityGap = 8.dp
   val leadingControlsWidth = checkboxWidth + identityGap + documentWidth + identityGap
+  val statusMarkerWidth = 14.dp
   val columnGap = 16.dp
 }
 
@@ -285,7 +298,6 @@ private fun AnalysisFileRow(
     wide: Boolean,
     toggle: () -> Unit
 ) {
-  val tint = row.status.tint
   Row(
       Modifier.fillMaxWidth()
           .testTag("analysis-file-row-${row.file.path}")
@@ -311,19 +323,35 @@ private fun AnalysisFileRow(
         }
         if (wide) {
           identity(Modifier.weight(AnalysisWideTableGrid.fileWeight))
-          Text(
-              row.status.label,
-              Modifier.weight(AnalysisWideTableGrid.stateWeight),
-              color = tint,
-              style = IdeTypography.workspaceBody)
+          AnalysisFileStatusLabel(
+              row.file.path, row.status, Modifier.weight(AnalysisWideTableGrid.stateWeight))
           AnalysisFileDetails(row, Modifier.weight(AnalysisWideTableGrid.detailsWeight))
         } else {
           Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             identity(Modifier.fillMaxWidth())
-            Text(row.status.label, color = tint, style = IdeTypography.workspaceBody)
+            AnalysisFileStatusLabel(row.file.path, row.status)
             AnalysisFileDetails(row)
           }
         }
+      }
+}
+
+@Composable
+private fun AnalysisFileStatusLabel(
+    path: String,
+    status: AnalysisFileSyncStatus,
+    modifier: Modifier = Modifier,
+) {
+  Row(
+      modifier,
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
+      verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(8.dp)
+                .clip(MiniOrcaShapes.indicator)
+                .background(status.tint)
+                .clearAndSetSemantics { testTag = "analysis-file-status-marker-$path" })
+        Text(status.label, color = status.tint, style = IdeTypography.workspaceBody)
       }
 }
 
