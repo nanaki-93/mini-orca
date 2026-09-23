@@ -225,7 +225,7 @@ class ReviewToolWindowTest {
         .use { fixture ->
           fixture.render("review-trust-short-initial")
           val label = "Trust local execution & run checks"
-          fixture.revealText(label, "review-scroll")
+          fixture.revealText(label, "review-action-scroll")
           fixture.render("review-trust-short-action")
           fixture.assertTextFits(label, maxLines = 3)
           assertTrue(fixture.hasText("go test ./... -run ^TestGetUser$"))
@@ -287,7 +287,7 @@ class ReviewToolWindowTest {
                 assertTrue(fixture.hasText("Skipped"))
                 assertTrue(fixture.hasText("0 of 1 required check passed"))
               }
-              fixture.revealText("Updates GetUser in internal/api/user.go.", "review-scroll")
+              fixture.revealText("Updates GetUser in internal/api/user.go.", "review-action-scroll")
               fixture.render("review-$name-short-action")
               fixture.assertTextFits("Apply change")
               fixture.assertTextFits("Updates GetUser in internal/api/user.go.", maxLines = 3)
@@ -303,7 +303,7 @@ class ReviewToolWindowTest {
                   if (name == "running" || name == "reported-running")
                       "Wait for current focused check evidence before reviewing Apply."
                   else "Edit draft"
-              fixture.revealText(recovery, "review-scroll")
+              fixture.revealText(recovery, "review-action-scroll")
               fixture.render("review-$name-short-recovery")
               fixture.assertTextFits(recovery, maxLines = 5)
               assertFalse(fixture.hasText("Ready to apply"))

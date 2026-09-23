@@ -504,92 +504,80 @@ internal fun ReviewToolWindow(
       reviewNextActionUiState(
           evidence, decision, state.draft, state.checks, state.session, state.checksRunning)
   BoxWithConstraints(modifier.fillMaxSize().background(ToolWindowSurface)) {
-    val compactHeight = maxHeight / LocalDensity.current.fontScale < 460.dp
     val maximumActionHeight = maxHeight * 0.5f
     val scroll = rememberScrollState()
-    Column(
-        if (compactHeight) Modifier.fillMaxSize().verticalScroll(scroll).testTag("review-scroll")
-        else Modifier.fillMaxSize()) {
-          Column(
-              if (compactHeight) Modifier.fillMaxWidth()
-              else Modifier.weight(1f).verticalScroll(scroll).testTag("review-scroll")) {
-                if (state.applied == null)
-                    ReviewTargetHeader(
-                        reviewToolWindowScope(
-                            state.selected, state.selectedSymbol, state.draft, state.applied),
-                        if (state.editor != null &&
-                            state.draft != null &&
-                            nextAction.kind != ReviewNextActionKind.EditDraft)
-                            evidenceActions.editDraft
-                        else null)
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                      if (decision.receiptTitle != null) {
-                        ReviewReadiness(
-                            decision.receiptTitle,
-                            decision.receiptDetail,
-                            ReviewEvidenceStatus.Passed)
-                        Text(
-                            if (state.applied?.undoAvailable == true) "Undo available"
-                            else "Undo unavailable",
-                            color = if (state.applied?.undoAvailable == true) Success else Warning,
-                            style = IdeTypography.workspaceMetadata)
-                      } else {
-                        ReviewReadiness(
-                            if (state.draft == null) "No candidate"
-                            else reviewReadinessTitle(evidence, decision),
-                            when {
-                              evidence.validation.status == ReviewEvidenceStatus.Running ->
-                                  evidence.validation.detail
-                              nextAction.kind == ReviewNextActionKind.Waiting ->
-                                  evidence.checks.detail
-                              decision.eligible ->
-                                  "Validation and check evidence match this candidate."
-                              else -> decision.reason
-                            },
-                            if (decision.eligible &&
-                                nextAction.kind != ReviewNextActionKind.Waiting)
-                                ReviewEvidenceStatus.Passed
-                            else reviewReadinessStatus(evidence))
-                        Column {
-                          listOf(
-                                  evidence.validation,
-                                  evidence.checks,
-                                  evidence.identity.copy(label = "Source unchanged"))
-                              .forEach { row ->
-                                EvidenceRow(row)
-                                IdeHorizontalSeparator()
-                              }
-                        }
-                        requiredChecksSummary(state.checks, state.draft, state.checksRunning)?.let {
-                          Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
-                        }
-                        checkFailurePreview(state.checks)?.let {
-                          Text(it, color = Error, style = IdeTypography.workspaceBody)
-                        }
-                        DraftValidationDiagnostics(state.editor?.diagnostics.orEmpty())
-                        ReviewDetails(state, evidence, nextAction, evidenceActions)
-                        ReadOnlyImpactPane(state.impact, state.gitStatus)
-                        state.draft?.engineeringInsight?.let { insight ->
-                          EngineeringInsightPanel(
-                              insight,
-                              stale = state.draft.state.equals("stale", ignoreCase = true),
-                              scopeLabel = "Current candidate")
-                        }
+    Column(Modifier.fillMaxSize()) {
+      Column(Modifier.weight(1f).verticalScroll(scroll).testTag("review-scroll")) {
+        if (state.applied == null)
+            ReviewTargetHeader(
+                reviewToolWindowScope(
+                    state.selected, state.selectedSymbol, state.draft, state.applied),
+                if (state.editor != null &&
+                    state.draft != null &&
+                    nextAction.kind != ReviewNextActionKind.EditDraft)
+                    evidenceActions.editDraft
+                else null)
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+              if (decision.receiptTitle != null) {
+                ReviewReadiness(
+                    decision.receiptTitle, decision.receiptDetail, ReviewEvidenceStatus.Passed)
+                Text(
+                    if (state.applied?.undoAvailable == true) "Undo available"
+                    else "Undo unavailable",
+                    color = if (state.applied?.undoAvailable == true) Success else Warning,
+                    style = IdeTypography.workspaceMetadata)
+              } else {
+                ReviewReadiness(
+                    if (state.draft == null) "No candidate"
+                    else reviewReadinessTitle(evidence, decision),
+                    when {
+                      evidence.validation.status == ReviewEvidenceStatus.Running ->
+                          evidence.validation.detail
+                      nextAction.kind == ReviewNextActionKind.Waiting -> evidence.checks.detail
+                      decision.eligible -> "Validation and check evidence match this candidate."
+                      else -> decision.reason
+                    },
+                    if (decision.eligible && nextAction.kind != ReviewNextActionKind.Waiting)
+                        ReviewEvidenceStatus.Passed
+                    else reviewReadinessStatus(evidence))
+                Column {
+                  listOf(
+                          evidence.validation,
+                          evidence.checks,
+                          evidence.identity.copy(label = "Source unchanged"))
+                      .forEach { row ->
+                        EvidenceRow(row)
+                        IdeHorizontalSeparator()
                       }
-                    }
-                Spacer(Modifier.height(12.dp))
+                }
+                requiredChecksSummary(state.checks, state.draft, state.checksRunning)?.let {
+                  Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+                }
+                checkFailurePreview(state.checks)?.let {
+                  Text(it, color = Error, style = IdeTypography.workspaceBody)
+                }
+                DraftValidationDiagnostics(state.editor?.diagnostics.orEmpty())
+                ReviewDetails(state, evidence, nextAction, evidenceActions)
+                ReadOnlyImpactPane(state.impact, state.gitStatus)
+                state.draft?.engineeringInsight?.let { insight ->
+                  EngineeringInsightPanel(
+                      insight,
+                      stale = state.draft.state.equals("stale", ignoreCase = true),
+                      scopeLabel = "Current candidate")
+                }
               }
-          Box(
-              if (compactHeight) Modifier
-              else
-                  Modifier.heightIn(max = maximumActionHeight)
-                      .verticalScroll(rememberScrollState())
-                      .testTag("review-action-scroll")) {
-                ReviewActionRegion(state, nextAction, evidenceActions, applicationActions)
-              }
-        }
+            }
+        Spacer(Modifier.height(12.dp))
+      }
+      Box(
+          Modifier.heightIn(max = maximumActionHeight)
+              .verticalScroll(rememberScrollState())
+              .testTag("review-action-scroll")) {
+            ReviewActionRegion(state, nextAction, evidenceActions, applicationActions)
+          }
+    }
   }
 }
 
