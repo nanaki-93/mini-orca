@@ -1103,6 +1103,22 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun expandedTerminalRemainsDockedAcrossBreakpointAndInShortWindow() {
+    listOf(1000 to 760, 999 to 760, 1280 to 600).forEach { (width, height) ->
+      ComposeVisualFixture(width, height) {
+            EditorVisualFixture(width.toFloat(), terminalExpanded = true)
+          }
+          .use { fixture ->
+            fixture.render("terminal-docked-$width-$height")
+            val dock = fixture.taggedBounds("terminal-fixture-dock")
+            assertEquals(220f, dock.height, 1f)
+            assertTrue(fixture.hasText("Synthetic shell"))
+            assertFalse(fixture.hasDescription("Terminal overlay"))
+          }
+    }
+  }
+
+  @Test
   fun gutterHandlesRetainVisibleKeyboardFocusAndCommitResizing() {
     listOf(false, true).forEach { horizontal ->
       var size by mutableStateOf(220f)
@@ -3238,22 +3254,6 @@ class DesktopVisualLayoutTest {
           kotlin.test.assertEquals(1, closes)
           kotlin.test.assertEquals(1, opens)
         }
-
-    var overlayDismissals = 0
-    ComposeVisualFixture(480, 420, 1.3f) {
-          TerminalOverlay(
-              state = TerminalWorkspaceState(),
-              tabActions = TerminalTabActions({}, {}, {}),
-              onDismiss = { overlayDismissals++ },
-              content = { modifier -> Text("Synthetic shell", modifier = modifier) })
-        }
-        .use { fixture ->
-          fixture.render("terminal-overlay-480-1.3")
-          assertTrue(fixture.hasText("Terminal"))
-          assertTrue(fixture.hasText("Synthetic shell"))
-          fixture.clickText("Hide terminal")
-          kotlin.test.assertEquals(1, overlayDismissals)
-        }
   }
 
   @Test
@@ -4816,25 +4816,19 @@ internal fun EditorVisualFixture(
               showHeader = false)
         },
         terminal = {
-          if (useNarrowLayout(width)) {
-            TerminalBar(
-                TerminalWorkspaceState(),
-                true,
-                {},
-                TerminalTabActions({}, {}, {}),
-                modifier = Modifier.semantics { contentDescription = "Terminal fixture" })
-          } else {
-            TerminalDock(
-                layout,
-                TerminalWorkspaceState(),
-                {},
-                {},
-                TerminalTabActions({}, {}, {}),
-                {},
-                {},
-                { modifier -> Text("Synthetic shell", modifier = modifier.padding(8.dp)) },
-                modifier = Modifier.semantics { contentDescription = "Terminal fixture" })
-          }
+          TerminalDock(
+              layout,
+              TerminalWorkspaceState(),
+              {},
+              {},
+              TerminalTabActions({}, {}, {}),
+              {},
+              {},
+              { modifier -> Text("Synthetic shell", modifier = modifier.padding(8.dp)) },
+              modifier =
+                  Modifier.testTag("terminal-fixture-dock").semantics {
+                    contentDescription = "Terminal fixture"
+                  })
         },
         modifier = Modifier.weight(1f),
     )

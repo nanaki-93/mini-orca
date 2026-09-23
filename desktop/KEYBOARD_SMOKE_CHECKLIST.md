@@ -70,15 +70,16 @@ with keyboard focus. Record this review separately from historical observations.
 11. Confirm Terminal and its shell tabs share one bottom bar. Selecting Terminal
     or Ctrl+Shift+T immediately opens a real shell in the project. Use + to create
     independent shells, switch tabs, and × to close one without stopping others.
-    Collapse/Enter reopen, workspace changes and the 1000/999dp transition preserve
-    PID, history and scrollback.
+    Collapse/Enter reopen, workspace changes and resizing through 1000/999dp preserve
+    the docked presentation, PID, history and scrollback.
     Resize the dock and verify real PTY dimensions change without losing content.
     Inspect the real Swing canvas: its side/bottom inset must preserve the rounded
     terminal perimeter when expanded, resized and reopened.
 12. With terminal focus, verify typing, Unicode paste, selection/copy, shell history,
     Ctrl+C, scrolling and a disposable full-screen program. App shortcuts must not
     steal ordinary shell input. Ctrl+Shift+F12 returns to Editor; Cmd/Ctrl+P then
-    opens the application palette. Hide terminal restores its opener's focus.
+    opens the application palette. Verify focus returns to Editor without changing
+    or dismissing the dock.
 13. Change the selected temporary file from the shell. Return to Editor/Review:
     source refreshes and old draft/check/analysis evidence becomes stale. Reindex
     is explicit for added/removed/renamed files. Project switch requires closing an

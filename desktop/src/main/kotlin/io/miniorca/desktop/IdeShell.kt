@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -219,10 +218,6 @@ internal fun EditorArea(content: @Composable () -> Unit, modifier: Modifier = Mo
       }
 }
 
-/** Keep source and app chrome reachable in short windows without changing the saved height. */
-internal fun terminalDockHeight(preferred: Float, viewportHeight: Float): Float =
-    minOf(preferred, (viewportHeight - 300f).coerceAtLeast(80f))
-
 @Composable
 internal fun TerminalDock(
     layout: DesktopLayoutState,
@@ -289,29 +284,6 @@ internal fun TerminalBar(
           if (!collapsed) TerminalTabs(state, tabActions, Modifier.weight(1f))
         }
   }
-}
-
-@Composable
-internal fun TerminalOverlay(
-    state: TerminalWorkspaceState,
-    tabActions: TerminalTabActions,
-    onDismiss: () -> Unit,
-    content: @Composable (Modifier) -> Unit,
-) {
-  IdeDialog(
-      onDismissRequest = onDismiss,
-      title = { TerminalBar(state, false, onDismiss, tabActions) },
-      content = {
-        Box(
-            Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp).semantics {
-              contentDescription = "Terminal overlay"
-            }) {
-              content(Modifier.fillMaxSize())
-            }
-      },
-      actions = {
-        MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Primary) { Text("Hide terminal") }
-      })
 }
 
 internal fun leftToolWindowIcon(toolWindow: LeftToolWindow): DesktopIcon =
