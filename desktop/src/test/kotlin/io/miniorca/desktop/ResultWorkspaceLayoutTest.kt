@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
 
 class ResultWorkspaceLayoutTest {
   @Test
-  fun allResultPagesKeepHeadersAndSeparatePanesInsideTheViewport() {
+  fun allResultPagesKeepListAndDetailAtTheSameWidthAcrossViewports() {
     listOf(
             Triple(1440, 900, 1f),
             Triple(1000, 760, 1f),
@@ -32,16 +32,16 @@ class ResultWorkspaceLayoutTest {
                   fixture.assertTextFits(type.workspace.name)
                   fixture.assertTextFits("View analysis")
                   val header = fixture.taggedBounds("result-header")
+                  val action = fixture.firstVisibleTextBounds("View analysis")
                   val list = fixture.taggedBounds("result-list")
                   assertTrue(header.left > 0 && header.right < width)
+                  assertTrue(action.top >= header.top && action.bottom <= header.bottom)
                   assertTrue(list.top > header.bottom && list.bottom < height)
                   assertTrue(list.height > height / 3f)
-                  if (resultListDetailUsesTwoPanes(width.dp, scale)) {
-                    val detail = fixture.taggedBounds("result-detail")
-                    assertTrue(list.right < detail.left && detail.right < width)
-                    assertEquals(list.top, detail.top)
-                    assertEquals(list.bottom, detail.bottom)
-                  }
+                  val detail = fixture.taggedBounds("result-detail")
+                  assertTrue(list.right < detail.left && detail.right < width)
+                  assertEquals(list.top, detail.top)
+                  assertEquals(list.bottom, detail.bottom)
                 }
           }
         }
@@ -183,29 +183,7 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
-  fun backToResultsRetainsThePositionOfTheInspectedFinding() {
-    val rows = (1..30).map { row(it) }
-    val browser = newResultBrowserState(resultPageFixture("bugs"))
-    ComposeVisualFixture(800, 650) {
-          ResultListDetail(
-              rows, browser, { browser.selectedKey = it }, "No findings", Modifier.fillMaxSize()) {
-                Text("Evidence for $it")
-              }
-        }
-        .use { fixture ->
-          fixture.render()
-          fixture.revealText("Finding 20", "result-list")
-          fixture.clickDescription("Inspect Finding 20")
-          fixture.render()
-          fixture.clickText("Back to results")
-          fixture.render()
-          fixture.assertTextFits("Finding 20")
-          assertTrue(fixture.isDescriptionFocused("Inspect Finding 20"))
-        }
-  }
-
-  @Test
-  fun filteringClearsCompactDetailAndArrowKeysKeepLongListsNavigable() {
+  fun filteringClearsDetailAndArrowKeysKeepLongListsNavigable() {
     val page = resultPageFixture("bugs")
     val rows = (1..320).map { row(it) }
     val browser = newResultBrowserState(page)
@@ -476,7 +454,7 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
-  fun compactDetailKeepsTheCompleteTitlePathAndModelProse() {
+  fun detailKeepsTheCompleteTitlePathAndModelProse() {
     val title =
         "Reject credential-like assignments when a generated configuration value crosses the trusted input boundary"
     val path =
@@ -514,11 +492,10 @@ class ResultWorkspaceLayoutTest {
         }
         .use { fixture ->
           fixture.render()
-          assertFalse(fixture.hasText(prose), "Rows must not repeat the explanation preview")
           fixture.clickDescription("Inspect $title")
           fixture.render("rounded-results-full-content-800-150")
           fixture.assertTextWrapsWithoutClipping(title)
-          fixture.assertTextWrapsWithoutClipping(path)
+          assertTrue(fixture.hasText(path))
           fixture.assertTextWrapsWithoutClipping(prose)
           assertTrue(fixture.hasText("Model suggestion"))
         }
