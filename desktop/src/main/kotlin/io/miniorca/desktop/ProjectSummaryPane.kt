@@ -72,6 +72,8 @@ internal data class ProjectSummaryPresentation(
     val projectMetrics: List<ProjectSummaryMetric>,
     val findingMetrics: List<ProjectSummaryMetric>,
     val coverageMetrics: List<ProjectSummaryMetric>,
+    val coverageFresh: Int?,
+    val coverageTotal: Int?,
     val issueMetrics: List<SummaryIssueMetric>,
     val details: List<ProjectSummaryDetail>,
     val engineeringInsight: EngineeringInsight?,
@@ -204,6 +206,8 @@ internal fun projectSummaryPresentation(
                       SummaryMetricTone.Failed),
               )
               .filter { it.value != 0 },
+      coverageFresh = if (hasCoverage) coverage?.fresh else null,
+      coverageTotal = if (hasCoverage) coverage?.total else null,
       issueMetrics = summaryIssueMetrics(project, run, sections),
       details = if (interpretationAvailable) projectSummaryDetails(analysis) else emptyList(),
       engineeringInsight = analysis?.engineeringInsight.takeIf { interpretationAvailable },
