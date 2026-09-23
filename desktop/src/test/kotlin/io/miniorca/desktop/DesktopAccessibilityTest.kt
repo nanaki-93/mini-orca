@@ -93,7 +93,8 @@ class DesktopAccessibilityTest {
     ComposeVisualFixture(1_600, 1_000) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render()
-          assertEquals(0, fixture.textCount("Summary"))
+          assertEquals(1, fixture.textCount("Summary"))
+          assertTrue(fixture.semanticHeadingTexts().contains("Summary"))
           val sectionHeadings =
               listOf(
                   "Analysis coverage",

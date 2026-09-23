@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -303,30 +304,46 @@ internal fun ProjectSummaryPane(
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
               if (sideBySide) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                  Column(Modifier.width(272.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    SummaryOutlineRow(
-                        "Coverage", coverageOutlineValue(presentation), selected == "Coverage") {
-                          selected = "Coverage"
-                        }
-                    presentation.issueMetrics.forEach { metric ->
-                      SummaryOutlineRow(metric.label, metric.value?.toString() ?: "—", false) {
-                        openResults(metric.type.workspace)
-                      }
-                    }
-                    sectionsAvailable.drop(1).forEach { label ->
-                      SummaryOutlineRow(
-                          label,
-                          if (label == "Packages / modules")
-                              modules?.values?.size?.toString().orEmpty()
-                          else if (label == "Flows") flows?.values?.size?.toString().orEmpty()
-                          else "›",
-                          selected == label) {
-                            selected = label
-                          }
-                    }
-                  }
                   Column(
-                      Modifier.weight(1f).padding(bottom = 20.dp),
+                      Modifier.width(290.dp)
+                          .testTag("summary-outline-panel")
+                          .background(Panel, RoundedCornerShape(14.dp))
+                          .padding(16.dp),
+                      verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Summary",
+                            color = ResultAccent,
+                            style = IdeTypography.workspaceHeading,
+                            modifier = Modifier.semantics { heading() }.padding(bottom = 4.dp))
+                        SummaryOutlineRow(
+                            "Coverage",
+                            coverageOutlineValue(presentation),
+                            selected == "Coverage") {
+                              selected = "Coverage"
+                            }
+                        presentation.issueMetrics.forEach { metric ->
+                          SummaryOutlineRow(metric.label, metric.value?.toString() ?: "—", false) {
+                            openResults(metric.type.workspace)
+                          }
+                        }
+                        sectionsAvailable.drop(1).forEach { label ->
+                          SummaryOutlineRow(
+                              label,
+                              if (label == "Packages / modules")
+                                  modules?.values?.size?.toString().orEmpty()
+                              else if (label == "Flows") flows?.values?.size?.toString().orEmpty()
+                              else "›",
+                              selected == label) {
+                                selected = label
+                              }
+                        }
+                      }
+                  Column(
+                      Modifier.weight(1f)
+                          .padding(bottom = 20.dp)
+                          .testTag("summary-detail-panel")
+                          .background(Panel, RoundedCornerShape(14.dp))
+                          .padding(16.dp),
                       verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         SummarySelectedDetail(
                             selected,
@@ -342,42 +359,58 @@ internal fun ProjectSummaryPane(
                       }
                 }
               } else {
-                FlowRow(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    maxItemsInEachRow = 2) {
-                      SummaryOutlineRow(
-                          "Coverage",
-                          coverageOutlineValue(presentation),
-                          selected == "Coverage",
-                          Modifier.weight(1f)) {
-                            selected = "Coverage"
+                Column(
+                    Modifier.fillMaxWidth()
+                        .testTag("summary-outline-panel")
+                        .background(Panel, RoundedCornerShape(14.dp))
+                        .padding(16.dp)) {
+                      Text(
+                          "Summary",
+                          color = ResultAccent,
+                          style = IdeTypography.workspaceHeading,
+                          modifier = Modifier.semantics { heading() }.padding(bottom = 4.dp))
+                      FlowRow(
+                          Modifier.fillMaxWidth(),
+                          horizontalArrangement = Arrangement.spacedBy(4.dp),
+                          verticalArrangement = Arrangement.spacedBy(4.dp),
+                          maxItemsInEachRow = 2) {
+                            SummaryOutlineRow(
+                                "Coverage",
+                                coverageOutlineValue(presentation),
+                                selected == "Coverage",
+                                Modifier.weight(1f)) {
+                                  selected = "Coverage"
+                                }
+                            presentation.issueMetrics.forEach { metric ->
+                              SummaryOutlineRow(
+                                  metric.label,
+                                  metric.value?.toString() ?: "—",
+                                  false,
+                                  Modifier.weight(1f)) {
+                                    openResults(metric.type.workspace)
+                                  }
+                            }
+                            sectionsAvailable.drop(1).forEach { label ->
+                              SummaryOutlineRow(
+                                  label,
+                                  if (label == "Packages / modules")
+                                      modules?.values?.size?.toString().orEmpty()
+                                  else if (label == "Flows")
+                                      flows?.values?.size?.toString().orEmpty()
+                                  else "›",
+                                  selected == label,
+                                  Modifier.weight(1f)) {
+                                    selected = label
+                                  }
+                            }
                           }
-                      presentation.issueMetrics.forEach { metric ->
-                        SummaryOutlineRow(
-                            metric.label,
-                            metric.value?.toString() ?: "—",
-                            false,
-                            Modifier.weight(1f)) {
-                              openResults(metric.type.workspace)
-                            }
-                      }
-                      sectionsAvailable.drop(1).forEach { label ->
-                        SummaryOutlineRow(
-                            label,
-                            if (label == "Packages / modules")
-                                modules?.values?.size?.toString().orEmpty()
-                            else if (label == "Flows") flows?.values?.size?.toString().orEmpty()
-                            else "›",
-                            selected == label,
-                            Modifier.weight(1f)) {
-                              selected = label
-                            }
-                      }
                     }
                 Column(
-                    Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                    Modifier.fillMaxWidth()
+                        .padding(bottom = 20.dp)
+                        .testTag("summary-detail-panel")
+                        .background(Panel, RoundedCornerShape(14.dp))
+                        .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                       SummarySelectedDetail(
                           selected,
