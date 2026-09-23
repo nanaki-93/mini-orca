@@ -2582,7 +2582,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryLowerCompositionStacksInLogicalOrderAtCompactLargeText() {
+  fun summaryLowerCompositionKeepsFullSizeColumnsAtCompactLargeText() {
     val overview =
         visualFixtureOverview.copy(
             analysis =
@@ -2605,7 +2605,7 @@ class DesktopVisualLayoutTest {
           val right = fixture.taggedBounds("summary-lower-right")
           val insight = fixture.taggedBounds("summary-insight")
           val flows = fixture.taggedBounds("summary-flows")
-          assertEquals(left.width, right.width, 1f, "Compact lower groups must use available width")
+          assertTrue(left.right <= right.left, "Full-size Summary columns must remain side by side")
           assertTrue(insight.bottom <= flows.top, "Flows must follow Engineering insight")
           assertEquals(
               1, fixture.scrollableContentCount(), "Summary must keep one page scroll owner")
@@ -2741,7 +2741,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryCategoriesStackAndKeepProvenanceBelowAtCompactTextScale() {
+  fun summaryCategoriesKeepFullSizeRowAtCompactTextScale() {
     ComposeVisualFixture(800, 1_100, 1.5f) {
           ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
         }
@@ -2752,17 +2752,17 @@ class DesktopVisualLayoutTest {
                 fixture.taggedBounds("summary-metric-${type.workspace.name}")
               }
           cards.forEach { card ->
-            assertTrue(card.height >= 132f, "Stacked cards must retain their minimum height")
-            assertEquals(cards.first().left, card.left, 1f, "Stacked cards must share an edge")
-            assertEquals(
-                cards.first().width, card.width, 1f, "Stacked cards must use the available width")
+            assertTrue(card.height >= 132f, "Category cards must retain their minimum height")
+            assertTrue(card.width < 300f, "Category cards must retain equal full-size columns")
           }
           cards.zipWithNext().forEach { (first, next) ->
-            assertTrue(first.bottom <= next.top, "Compact cards must stack without overlap")
+            assertTrue(first.right <= next.left, "Category cards must remain in one row")
           }
           val provenance = fixture.taggedBounds("summary-findings-provenance")
           assertTrue(
-              provenance.top >= cards.last().bottom, "Provenance must follow all category cards")
+              provenance.top >= cards.maxOf { it.bottom },
+              "Provenance must follow all category cards",
+          )
         }
   }
 

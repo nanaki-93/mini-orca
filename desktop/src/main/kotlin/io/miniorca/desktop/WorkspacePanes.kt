@@ -35,15 +35,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val workspaceWideGutterMinimum = 900.dp
 private val analysisFileTableMinimumHeight = 160.dp
 private val analysisFileTableMaximumHeight = 400.dp
 
-internal fun workspacePageHorizontalGutter(availableWidth: Dp): Dp =
-    if (availableWidth >= workspaceWideGutterMinimum) 24.dp else 16.dp
+private val workspacePageHorizontalGutter = 24.dp
 
-internal fun workspacePagePadding(availableWidth: Dp, vertical: Dp): PaddingValues =
-    PaddingValues(horizontal = workspacePageHorizontalGutter(availableWidth), vertical = vertical)
+internal fun workspacePagePadding(vertical: Dp): PaddingValues =
+    PaddingValues(horizontal = workspacePageHorizontalGutter, vertical = vertical)
 
 /** Keeps the nested file list bounded within the viewport remaining after measured content. */
 internal fun analysisFileTableHeight(availableHeight: Dp, occupiedHeight: Dp?): Dp =
@@ -73,7 +71,7 @@ internal fun AnalysisWorkspacePane(
     val fileTableHeight = analysisFileTableHeight(maxHeight, occupiedHeight)
     LazyColumn(
         Modifier.fillMaxSize().testTag("analysis-page"),
-        contentPadding = workspacePagePadding(maxWidth, vertical = 16.dp),
+        contentPadding = workspacePagePadding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
           item { Box(Modifier.onSizeChanged { headerHeight = it.height }) { AnalysisPageHeader() } }
           item {
