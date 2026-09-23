@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -588,28 +589,47 @@ private fun ProjectSummaryHeaderMetadata(
 @Composable
 private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
   WorkspaceSection(modifier = Modifier.testTag("summary-introduction")) {
-    presentation.purpose?.let {
-      ModelResultContent(it, preview = true, style = IdeTypography.workspaceBody)
-    }
-    if (presentation.interpretationStatus != "fresh") {
-      Text(
-          presentation.interpretationMessage,
-          color = if (presentation.interpretationStatus == "failed") Error else SecondaryText,
-          style = IdeTypography.workspaceMetadata,
-          modifier = Modifier.testTag("summary-interpretation-status"))
-    } else if (presentation.purpose == null) {
-      Text("Project description unavailable", color = SecondaryText, style = IdeTypography.body)
-    }
-    val facts =
-        listOf(presentation.projectType, presentation.buildMetadata) +
-            presentation.projectMetrics.map { metric ->
-              "${metric.value?.let { "%,d".format(java.util.Locale.ROOT, it) } ?: "—"} ${if (metric.label == "Total lines") "lines" else metric.label.lowercase()}"
-            } +
-            presentation.languages.split(" · ").filter {
-              it.isNotBlank() && !it.equals(presentation.projectType, ignoreCase = true)
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+          Box(
+              Modifier.size(8.dp)
+                  .background(
+                      summaryAnalysisTint(presentation.summaryStatus), RoundedCornerShape(50))
+                  .testTag("summary-overview-status-dot"))
+          Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            presentation.purpose?.let {
+              ModelResultContent(it, preview = true, style = IdeTypography.workspaceBody)
             }
-    Text(facts.joinToString(" · "), color = SecondaryText, style = IdeTypography.workspaceMetadata)
-    SummaryAnalysisStatus(presentation)
+            if (presentation.interpretationStatus != "fresh") {
+              Text(
+                  presentation.interpretationMessage,
+                  color =
+                      if (presentation.interpretationStatus == "failed") Error else SecondaryText,
+                  style = IdeTypography.workspaceMetadata,
+                  modifier = Modifier.testTag("summary-interpretation-status"))
+            } else if (presentation.purpose == null) {
+              Text(
+                  "Project description unavailable",
+                  color = SecondaryText,
+                  style = IdeTypography.body)
+            }
+            val facts =
+                listOf(presentation.projectType, presentation.buildMetadata) +
+                    presentation.projectMetrics.map { metric ->
+                      "${metric.value?.let { "%,d".format(java.util.Locale.ROOT, it) } ?: "—"} ${if (metric.label == "Total lines") "lines" else metric.label.lowercase()}"
+                    } +
+                    presentation.languages.split(" · ").filter {
+                      it.isNotBlank() && !it.equals(presentation.projectType, ignoreCase = true)
+                    }
+            Text(
+                facts.joinToString(" · "),
+                color = SecondaryText,
+                style = IdeTypography.workspaceMetadata)
+          }
+          SummaryAnalysisStatus(presentation)
+        }
     presentation.analysisMessage
         .lines()
         .filter { it.startsWith("Analysis run") }

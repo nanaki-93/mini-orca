@@ -3044,6 +3044,7 @@ class DesktopVisualLayoutTest {
               .use { fixture ->
                 fixture.render("summary-panel-$status")
                 fixture.assertSummaryStatusPlacement(label)
+                fixture.assertTaggedCenterColor("summary-overview-status-dot", tint)
                 fixture.assertTextContrast(label, Panel)
                 fixture.assertColorVisible(tint)
                 fixture.assertColorVisible(Panel)
@@ -3239,6 +3240,22 @@ class DesktopVisualLayoutTest {
             assertFalse(fixture.hasDescription(type.workspace.name))
           }
           assertTrue(fixture.hasText("Performance"))
+        }
+  }
+
+  @Test
+  fun populatedSummaryOverviewPlacesStatusAfterPurposeAndFactsHorizontallyWhenWide() {
+    ComposeVisualFixture(1440, 900) {
+          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+        }
+        .use { fixture ->
+          fixture.render()
+          val dot = fixture.taggedBounds("summary-overview-status-dot")
+          val overview = fixture.taggedBounds("summary-introduction")
+          val status = fixture.taggedBounds("summary-analysis-status")
+          assertTrue(dot.left < status.left)
+          assertTrue(status.right <= overview.right)
+          assertTrue(status.top < overview.bottom)
         }
   }
 
@@ -4681,6 +4698,18 @@ internal class ComposeVisualFixture(
     assertTrue(
         expected != Panel.toArgb(),
         "Summary card surface must differ from the enclosing detail panel")
+  }
+
+  fun assertTaggedCenterColor(tag: String, color: Color) {
+    val bounds = taggedBounds(tag)
+    val rendered =
+        surface.makeImageSnapshot().use { snapshot ->
+          requireNotNull(snapshot.encodeToData()).use { data ->
+            javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(data.bytes))
+          }
+        }
+    val actual = rendered.getRGB(bounds.center.x.toInt(), bounds.center.y.toInt())
+    assertEquals(color.toArgb(), actual, "$tag center must match $color")
   }
 
   fun assertColorVisible(color: Color) {
