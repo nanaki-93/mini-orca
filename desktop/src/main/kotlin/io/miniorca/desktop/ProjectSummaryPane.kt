@@ -10,18 +10,28 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 internal enum class SummaryMetricTone {
   Fact,
@@ -238,60 +248,176 @@ internal fun ProjectSummaryPane(
 ) {
   val presentation = projectSummaryPresentation(overview, project, run, sections, fileSelection)
   val fontScale = LocalDensity.current.fontScale
+  val identity =
+      (project?.projectId ?: overview?.projectId) to
+          (project?.projectRevision ?: overview?.projectRevision)
+  // The list owns the viewport for one project revision; count and run updates retain its position.
+  val sectionsList = remember(identity) { LazyListState() }
+  val scrollScope = rememberCoroutineScope()
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
     val sideBySide = contentWidth / fontScale >= 900.dp
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = workspacePagePadding(maxWidth, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-      if (!presentation.hasProject) {
-        item { SystemStateMessage("No project selected", "", modifier = Modifier.fillMaxWidth()) }
-      } else {
-        item {
-          Text(
-              "Summary",
-              color = PrimaryText,
-              style = IdeTypography.workspaceHeading,
-              modifier = Modifier.testTag("summary-page-heading").semantics { heading() })
-        }
-        val currentRun = currentProjectRun(run, project)
-        val stripState = analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)
-        if (currentRun?.showsProgressOnSummary() == true)
-            item {
-              AnalysisRunStrip(
-                  AnalysisWorkspacePaneState(project, stripState.copy(run = currentRun)),
-                  analysisActions,
-                  AnalysisRunStripScope.Summary,
-                  Modifier.testTag("summary-analysis-run-strip"))
+    val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
+    val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
+    val flows = presentation.details.firstOrNull { it.title == "Flows" }
+    val insight =
+        presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
+    val ownerIdentity = listOf(identity.first, identity.second)
+    val sectionEntries =
+        if (presentation.hasProject)
+            buildList {
+              add("Project" to "introduction")
+              add("Coverage" to "coverage")
+              add("Findings" to "categories")
+              if (architecture != null) add("Architecture" to "architecture")
+              if (modules != null) add("Packages / modules" to "modules")
+              if (insight != null) add("Engineering insight" to "insight")
+              if (flows != null) add("Flows" to "flows")
             }
-        item { SummaryIntroduction(presentation) }
-        item { SummaryCoverage(presentation) { openResults(Workspace.Analysis) } }
-        item {
-          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SummaryCategories(presentation.issueMetrics, openResults)
-            Text(
-                "Overall findings · " +
-                    presentation.findingMetrics.joinToString(" · ") {
-                      "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
-                    },
-                color = SecondaryText,
-                style = IdeTypography.workspaceMetadata,
-                modifier = Modifier.testTag("summary-findings-provenance"))
+        else emptyList()
+    // Use the same key order to construct the list and resolve navigation, including the run strip.
+    val itemKeys =
+        (if (presentation.hasProject &&
+            currentProjectRun(run, project)?.showsProgressOnSummary() == true)
+            listOf("run")
+        else emptyList()) + sectionEntries.map { it.second }
+    val selectedSection = remember(identity) { mutableStateOf("introduction") }
+    val requestedSection = remember(identity) { mutableStateOf<String?>(null) }
+    LaunchedEffect(sectionsList, itemKeys) {
+      snapshotFlow {
+            val visible = sectionsList.layoutInfo.visibleItemsInfo
+            val requested =
+                requestedSection.value?.takeIf { key ->
+                  visible.any { item -> itemKeys.getOrNull(item.index) == key }
+                }
+            requested to sectionsList.firstVisibleItemIndex
           }
-        }
-        item {
-          SummaryLowerComposition(
-              presentation,
-              sideBySide,
-              listOf(
-                  project?.projectId ?: overview?.projectId,
-                  project?.projectRevision ?: overview?.projectRevision))
-        }
+          .collect { (requested, position) ->
+            if (requested == null) requestedSection.value = null
+            selectedSection.value =
+                requested
+                    ?: when (val key = itemKeys.getOrNull(position)) {
+                      "run" -> "introduction"
+                      null -> sectionEntries.firstOrNull()?.second.orEmpty()
+                      else -> key
+                    }
+          }
+    }
+    val index: @Composable () -> Unit = {
+      Column(
+          Modifier.width(if (sideBySide) 180.dp else maxWidth),
+          verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            sectionEntries.forEach { (label, key) ->
+              SummaryIndexEntry(label, selectedSection.value == key) {
+                scrollScope.launch {
+                  sectionsList.scrollToItem(itemKeys.indexOf(key))
+                  requestedSection.value = key
+                }
+              }
+            }
+          }
+    }
+    Column(Modifier.fillMaxSize()) {
+      if (!sideBySide) index()
+      Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (sideBySide) index()
+        LazyColumn(
+            Modifier.weight(1f).fillMaxHeight(),
+            state = sectionsList,
+            contentPadding =
+                workspacePagePadding(this@BoxWithConstraints.maxWidth, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+              if (!presentation.hasProject) {
+                item(key = "empty") {
+                  SystemStateMessage("No project selected", "", modifier = Modifier.fillMaxWidth())
+                }
+              } else {
+                val currentRun = currentProjectRun(run, project)
+                val stripState =
+                    analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)
+                if ("run" in itemKeys)
+                    item(key = "run") {
+                      AnalysisRunStrip(
+                          AnalysisWorkspacePaneState(project, stripState.copy(run = currentRun)),
+                          analysisActions,
+                          AnalysisRunStripScope.Summary,
+                          Modifier.testTag("summary-analysis-run-strip"))
+                    }
+                item(key = "introduction") { SummaryIntroduction(presentation) }
+                item(key = "coverage") {
+                  SummaryCoverage(presentation) { openResults(Workspace.Analysis) }
+                }
+                item(key = "categories") {
+                  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SummaryCategories(presentation.issueMetrics, openResults)
+                    Text(
+                        "Overall findings · " +
+                            presentation.findingMetrics.joinToString(" · ") {
+                              "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
+                            },
+                        color = SecondaryText,
+                        style = IdeTypography.workspaceMetadata,
+                        modifier = Modifier.testTag("summary-findings-provenance"))
+                  }
+                }
+                architecture?.let { detail ->
+                  item(key = "architecture") {
+                    WorkspaceSection(
+                        modifier = Modifier.fillMaxWidth().testTag("summary-architecture")) {
+                          MermaidDiagram(
+                              detail.values.single(),
+                              "Architecture",
+                              title = "Architecture",
+                              ownerIdentity = ownerIdentity + "architecture")
+                        }
+                  }
+                }
+                modules?.let { detail ->
+                  item(key = "modules") {
+                    WorkspaceSection(
+                        modifier = Modifier.fillMaxWidth().testTag("summary-modules")) {
+                          Text(
+                              "Packages / modules",
+                              color = ResultAccent,
+                              style = IdeTypography.workspaceHeading)
+                          SummaryModules(detail.values)
+                        }
+                  }
+                }
+                insight?.let { pieces ->
+                  item(key = "insight") {
+                    SummaryEngineeringInsight(
+                        pieces,
+                        presentation.interpretationStatus == "stale",
+                        ownerIdentity,
+                        Modifier.fillMaxWidth())
+                  }
+                }
+                flows?.let { detail ->
+                  item(key = "flows") {
+                    SummaryFlows(detail, ownerIdentity, Modifier.fillMaxWidth())
+                  }
+                }
+              }
+            }
       }
     }
   }
+}
+
+@Composable
+private fun SummaryIndexEntry(label: String, selected: Boolean, onClick: () -> Unit) {
+  MiniOrcaButton(
+      onClick = onClick,
+      modifier =
+          Modifier.testTag("summary-index-$label").semantics {
+            contentDescription = "Go to $label summary"
+            this.selected = selected
+          },
+      selected = selected,
+      tone = if (selected) ActionTone.Navigation else ActionTone.Neutral) {
+        Text(label, style = IdeTypography.workspaceMetadata)
+      }
 }
 
 @Composable
@@ -345,83 +471,6 @@ private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (W
       }
     }
   }
-}
-
-@Composable
-private fun SummaryLowerComposition(
-    presentation: ProjectSummaryPresentation,
-    sideBySide: Boolean,
-    ownerIdentity: List<String?>,
-) {
-  val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
-  val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
-  val flows = presentation.details.firstOrNull { it.title == "Flows" }
-  val insight =
-      presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
-  val hasLeft = architecture != null || modules != null
-  val hasRight = insight != null || flows != null
-  if (!hasLeft && !hasRight) return
-
-  val left: @Composable (Modifier) -> Unit = { modifier ->
-    SummaryArchitectureModules(architecture, modules, ownerIdentity, modifier)
-  }
-  val right: @Composable (Modifier) -> Unit = { modifier ->
-    SummaryInsightFlows(
-        insight, flows, presentation.interpretationStatus == "stale", ownerIdentity, modifier)
-  }
-  if (sideBySide && hasLeft && hasRight) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-      left(Modifier.weight(0.62f))
-      right(Modifier.weight(0.38f))
-    }
-  } else {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-      if (hasLeft) left(Modifier.fillMaxWidth())
-      if (hasRight) right(Modifier.fillMaxWidth())
-    }
-  }
-}
-
-@Composable
-private fun SummaryArchitectureModules(
-    architecture: ProjectSummaryDetail?,
-    modules: ProjectSummaryDetail?,
-    ownerIdentity: List<String?>,
-    modifier: Modifier = Modifier,
-) {
-  WorkspaceSection(modifier = modifier.testTag("summary-lower-left")) {
-    architecture?.let {
-      Column(Modifier.testTag("summary-architecture")) {
-        MermaidDiagram(
-            it.values.single(),
-            "Architecture",
-            title = "Architecture",
-            ownerIdentity = ownerIdentity + "architecture")
-      }
-    }
-    if (architecture != null && modules != null) IdeHorizontalSeparator()
-    modules?.let {
-      Column(Modifier.testTag("summary-modules")) {
-        Text("Packages / modules", color = ResultAccent, style = IdeTypography.workspaceHeading)
-        SummaryModules(it.values)
-      }
-    }
-  }
-}
-
-@Composable
-private fun SummaryInsightFlows(
-    insight: List<EngineeringInsightPiece>?,
-    flows: ProjectSummaryDetail?,
-    stale: Boolean,
-    ownerIdentity: List<String?>,
-    modifier: Modifier = Modifier,
-) {
-  Column(
-      modifier.testTag("summary-lower-right"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        insight?.let { SummaryEngineeringInsight(it, stale, ownerIdentity) }
-        flows?.let { SummaryFlows(it, ownerIdentity) }
-      }
 }
 
 @Composable

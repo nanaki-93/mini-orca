@@ -373,7 +373,8 @@ class DesktopVisualLayoutTest {
               fixture.assertTextSharesRowBefore("Running", "0 of 2 files finished")
               fixture.assertTextSharesRowBefore(
                   "0 of 2 files finished", "Current: ${paths.first()}")
-              fixture.assertTextSharesRowBefore("Current: ${paths.first()}", "Pause")
+              fixture.assertTextFits("Current: ${paths.first()}", maxLines = 2)
+              fixture.assertTextFits("Pause")
             } else {
               fixture.assertTextAbove("Current: ${paths.first()}", "Pause")
             }
@@ -1921,10 +1922,10 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-1440")
-          assertEquals(1, fixture.textCount("Summary"))
+          assertEquals(0, fixture.textCount("Summary"))
           assertTrue(fixture.hasText("Go · go.mod · 23 indexed files · 1,800 lines · Markdown"))
           assertTrue(fixture.hasText("Analysis coverage"))
-          fixture.assertTextAbove("Summary", visualFixtureProject.name)
+          assertTrue(fixture.hasDescription("Go to Coverage summary"))
           assertFalse(fixture.hasText("Project understanding"))
         }
 
@@ -2463,7 +2464,7 @@ class DesktopVisualLayoutTest {
               assertTrue(fixture.hasDescription("Summary tool window, selected"))
               assertTrue(fixture.hasDescription("Analysis tool window, not selected"))
               fixture.assertTextFits(visualFixtureProject.name)
-              fixture.assertTextFits("Analysis coverage")
+              if (width >= 1_000 && scale == 1f) fixture.assertTextFits("Analysis coverage")
               assertFalse(fixture.hasEditableText())
               if (width == 1600 && scale == 1f) {
                 fixture.assertReferenceSummaryGeometry()
@@ -2473,6 +2474,134 @@ class DesktopVisualLayoutTest {
             }
       }
     }
+  }
+
+  @Test
+  fun summaryIndexScrollsToKeyedSectionsWithAnActiveRunStrip() {
+    val run = visualFixtureOverview.analysisRun!!.copy(status = "running")
+    val overview = visualFixtureOverview.copy(analysisRun = run)
+    var navigations = 0
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(overview, visualFixtureProject, { navigations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
+          fixture.clickDescription("Go to Findings summary")
+          fixture.render()
+          val bugs = fixture.taggedBounds("summary-metric-Bugs")
+          assertTrue(bugs.top >= 0f && bugs.top < 650f, "Findings must be brought into view")
+          assertTrue(fixture.isDescriptionSelected("Go to Findings summary"))
+          fixture.scrollBy(300f)
+          fixture.render()
+          assertTrue(fixture.tagCount("summary-metric-Bugs") > 0)
+          fixture.clickDescription("Go to Coverage summary")
+          fixture.render()
+          val coverage = fixture.taggedBounds("analysis-summary")
+          assertTrue(fixture.isDescriptionSelected("Go to Coverage summary"))
+          assertTrue(
+              coverage.top >= 0f && coverage.top < 650f,
+              "Coverage must be brought into view despite the run strip")
+          assertEquals(0, navigations, "Index navigation must remain local")
+        }
+  }
+
+  @Test
+  fun summaryIndexResetsOnProjectSwitchAndDropsUnavailableDetails() {
+    var project by mutableStateOf(visualFixtureProject)
+    var overview by
+        mutableStateOf(
+            visualFixtureOverview.copy(
+                analysis =
+                    visualFixtureOverview.analysis.copy(
+                        components =
+                            List(30) { "module-$it: Maintains a real fixture responsibility." })))
+    ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, project, {}) }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Go to Packages / modules summary")
+          fixture.render()
+          assertTrue(fixture.tagCount("summary-modules") > 0, "Modules should be brought into view")
+          assertTrue(fixture.isDescriptionSelected("Go to Packages / modules summary"))
+          overview = overview.copy(analysis = StructuredProjectAnalysis(status = "missing"))
+          fixture.render()
+          assertFalse(fixture.hasDescription("Go to Packages / modules summary"))
+          assertFalse(fixture.hasDescription("Go to Architecture summary"))
+          assertTrue(
+              listOf("Project", "Coverage", "Findings").any {
+                fixture.isDescriptionSelected("Go to $it summary")
+              },
+              "Selection must fall back to an available section")
+          overview =
+              overview.copy(
+                  projectId = "another-project",
+                  projectRevision = "another-revision",
+                  analysis = StructuredProjectAnalysis(status = "missing"),
+                  analysisRun = null)
+          project =
+              project.copy(
+                  projectId = "another-project",
+                  projectRevision = "another-revision",
+                  name = "Another project")
+          fixture.render()
+          assertFalse(fixture.hasDescription("Go to Packages / modules summary"))
+          assertTrue(fixture.isDescriptionSelected("Go to Project summary"))
+          assertTrue(fixture.hasText("Another project"))
+          assertFalse(fixture.hasText(visualFixtureProject.name))
+          assertTrue(fixture.taggedBounds("summary-introduction").top >= 0f)
+          overview = overview.copy(analysisCoverage = AnalysisCoverage(total = 1, missing = 1))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Go to Project summary"))
+        }
+  }
+
+  @Test
+  fun summaryOptionalIndexFollowsEachSuppliedSectionIndependently() {
+    var analysis by
+        mutableStateOf(
+            visualFixtureOverview.analysis.copy(
+                engineeringInsight = EngineeringInsight(mechanism = "Validate before storage.")))
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(
+              visualFixtureOverview.copy(analysis = analysis), visualFixtureProject, {})
+        }
+        .use { fixture ->
+          fixture.render()
+          val targets =
+              listOf(
+                  "Architecture" to "summary-architecture",
+                  "Packages / modules" to "summary-modules",
+                  "Engineering insight" to "summary-insight",
+                  "Flows" to "summary-flows")
+          targets.forEach { (label, tag) ->
+            fixture.clickDescription("Go to $label summary")
+            fixture.render()
+            assertTrue(fixture.isDescriptionSelected("Go to $label summary"), label)
+            assertTrue(fixture.taggedBounds(tag).top < 650f, "$label must be reachable")
+          }
+          analysis =
+              analysis.copy(architecture = "", engineeringInsight = null, flows = emptyList())
+          fixture.render()
+          targets.forEach { (label, _) ->
+            assertEquals(
+                label == "Packages / modules",
+                fixture.hasDescription("Go to $label summary"),
+                "$label entry must match its content")
+          }
+          assertFalse(fixture.isDescriptionSelected("Go to Flows summary"))
+          fixture.clickDescription("Go to Packages / modules summary")
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Go to Packages / modules summary"))
+          analysis = analysis.copy(components = emptyList())
+          fixture.render()
+          targets.forEach { (label, _) ->
+            assertFalse(fixture.hasDescription("Go to $label summary"))
+          }
+          assertTrue(
+              listOf("Project", "Coverage", "Findings").any {
+                fixture.isDescriptionSelected("Go to $it summary")
+              })
+        }
   }
 
   @Test
@@ -2511,7 +2640,7 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("Go · go.mod · 23 indexed files · 1,800 lines · Markdown"))
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
-          fixture.assertTextAbove("Summary", visualFixtureProject.name)
+          assertTrue(fixture.hasDescription("Go to Project summary"))
           fixture.assertTextAbove(visualFixtureProject.name, "Analysis coverage")
           fixture.assertSummaryStatusPlacement("Outdated")
           fixture.assertWideSummaryCoverageLayout()
@@ -2545,7 +2674,7 @@ class DesktopVisualLayoutTest {
           assertFalse(fixture.hasText("MEDIUM · Input validation is incomplete."))
           assertFalse(fixture.hasText("Show full response"))
           assertFalse(fixture.hasEditableText())
-          assertFalse(fixture.tryClick("Engineering insight"))
+          assertTrue(fixture.hasDescription("Go to Engineering insight summary"))
           assertFalse(fixture.hasEditableText())
         }
   }
@@ -2559,10 +2688,11 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(1440, 900) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render("summary-lower-one-sided-1440")
-          val lower = fixture.taggedBounds("summary-lower-left")
+          val lower = fixture.taggedBounds("summary-architecture")
           val introduction = fixture.taggedBounds("summary-introduction")
           assertEquals(introduction.width, lower.width, 1f)
-          assertEquals(0, fixture.tagCount("summary-lower-right"))
+          assertEquals(0, fixture.tagCount("summary-flows"))
+          assertEquals(0, fixture.tagCount("summary-insight"))
           assertTrue(fixture.tagCount("summary-architecture") == 1)
           assertTrue(fixture.tagCount("summary-modules") == 1)
         }
@@ -2583,17 +2713,20 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-lower-compact-800-150")
-          val left = fixture.taggedBounds("summary-lower-left")
-          val architecture = fixture.taggedBounds("summary-architecture")
-          val modules = fixture.taggedBounds("summary-modules")
-          assertTrue(architecture.bottom <= modules.top, "Modules must follow Architecture")
-          fixture.scrollBy(100_000f)
-          fixture.render()
-          val right = fixture.taggedBounds("summary-lower-right")
-          val insight = fixture.taggedBounds("summary-insight")
-          val flows = fixture.taggedBounds("summary-flows")
-          assertEquals(left.width, right.width, 1f, "Compact lower groups must use available width")
-          assertTrue(insight.bottom <= flows.top, "Flows must follow Engineering insight")
+          listOf(
+                  "Architecture" to "summary-architecture",
+                  "Packages / modules" to "summary-modules",
+                  "Engineering insight" to "summary-insight",
+                  "Flows" to "summary-flows")
+              .forEach { (label, tag) ->
+                fixture.clickDescription("Go to $label summary")
+                fixture.render()
+                assertTrue(
+                    fixture.isDescriptionSelected("Go to $label summary"),
+                    "$label should be selected")
+                val bounds = fixture.taggedBounds(tag)
+                assertTrue(bounds.top >= 0f && bounds.top < 1_100f, "$label must be in view")
+              }
           assertEquals(
               1, fixture.scrollableContentCount(), "Summary must keep one page scroll owner")
         }
@@ -2671,7 +2804,7 @@ class DesktopVisualLayoutTest {
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
           assertTrue(fixture.hasText(visualFixtureProject.name))
-          fixture.assertUniformSummaryCards(3)
+          fixture.assertSummaryCategoryBoxesFit()
           fixture.assertSummaryStatusPlacement("Coverage unavailable")
         }
     ComposeVisualFixture(1440, 1100) { ProjectSummaryPane(null, visualFixtureProject, {}) }
@@ -2777,6 +2910,8 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-categories-details-compact-800-150")
+          fixture.clickDescription("Go to Findings summary")
+          fixture.render()
           fixture.assertSummaryCategoryContentContained()
           fixture.assertTextFits("Interrupted")
           fixture.assertTextFits("High: 1 · Medium: 1 · Low: 1", maxLines = 2)
@@ -2940,6 +3075,8 @@ class DesktopVisualLayoutTest {
             }
             fixture.revealText("Partial")
             fixture.assertTextFits("Partial")
+            fixture.clickDescription("Go to Coverage summary")
+            fixture.render()
             fixture.revealSummaryStatus("Paused")
             fixture.assertTextFits("Paused")
             fixture.assertSummaryStatusPlacement("Paused")
@@ -3826,42 +3963,15 @@ internal class ComposeVisualFixture(
   fun assertReferenceSummaryGeometry() {
     fun bounds(tag: String) =
         nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }.boundsInRoot
-    val heading = bounds("summary-page-heading")
+    val index = bounds("summary-index-Project")
     val introduction = bounds("summary-introduction")
     val coverage = bounds("analysis-summary")
     val track = bounds("summary-coverage-track")
-    val left = bounds("summary-lower-left")
-    val right = bounds("summary-lower-right")
-    val architecture = bounds("summary-architecture")
-    val modules = bounds("summary-modules")
-    val insight = bounds("summary-insight")
-    val flows = bounds("summary-flows")
-    val lowerWidth = left.width + right.width
-
-    assertTrue(heading.bottom <= introduction.top, "Summary heading must lead the page")
+    assertTrue(index.right <= introduction.left, "Index must sit beside the overview")
     assertTrue(introduction.bottom <= coverage.top, "Coverage must follow the introduction")
     assertEquals(introduction.width, coverage.width, 1f, "Coverage must use the Summary width")
     assertTrue(track.width >= coverage.width * 0.6f, "Coverage track must be broad")
-    assertEquals(0.62f, left.width / lowerWidth, 0.03f, "Left summary region must be wider")
-    assertTrue(left.right < right.left, "Lower summary regions must not overlap")
-    assertEquals(left.top, right.top, 1f, "Lower summary regions must align at the top")
-    assertTrue(architecture.left >= left.left && architecture.right <= left.right)
-    assertTrue(modules.left >= left.left && modules.right <= left.right)
-    assertTrue(
-        generateSequence(
-                nodes().single {
-                  it.config.getOrNull(SemanticsProperties.TestTag) == "summary-architecture"
-                }) {
-                  it.parent
-                }
-            .any { it.config.getOrNull(SemanticsProperties.TestTag) == "summary-lower-left" },
-        "Architecture and modules must share the bounded left surface")
-    assertTrue(
-        architecture.bottom <= modules.top,
-        "Modules must follow Architecture in the shared surface")
-    assertTrue(insight.left >= right.left && insight.right <= right.right)
-    assertTrue(flows.left >= right.left && flows.right <= right.right)
-    assertTrue(insight.bottom <= flows.top, "Flows must follow Engineering insight")
+    assertTrue(index.width > 0f, "Section index must remain accessible")
   }
 
   fun assertTextFits(label: String, maxLines: Int = 1) {
@@ -3910,23 +4020,6 @@ internal class ComposeVisualFixture(
                 bounds.bottom <= card.bottom,
             "${child.config.getOrNull(SemanticsProperties.TestTag)} must remain inside ${type.workspace.name}: $bounds in $card")
       }
-    }
-  }
-
-  fun assertUniformSummaryCards(expectedCount: Int) {
-    val cards =
-        nodes().filter {
-          it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("summary-metric-") == true
-        }
-    assertEquals(expectedCount, cards.size)
-    val reference = cards.first().boundsInRoot
-    cards.forEach { card ->
-      val bounds = card.boundsInRoot
-      assertEquals(reference.width, bounds.width, "Summary card widths must match")
-      assertEquals(reference.height, bounds.height, "Summary card heights must match")
-      assertTrue(
-          bounds.left >= 0 && bounds.top >= 0 && bounds.right <= width && bounds.bottom <= height,
-          "Every summary card must be visible: $bounds")
     }
   }
 

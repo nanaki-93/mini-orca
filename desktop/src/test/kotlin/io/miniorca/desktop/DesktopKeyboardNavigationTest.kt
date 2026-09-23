@@ -292,6 +292,23 @@ class DesktopKeyboardNavigationTest {
         }
         .use { fixture ->
           fixture.render()
+          listOf(
+                  "Project",
+                  "Coverage",
+                  "Findings",
+                  "Architecture",
+                  "Packages / modules",
+                  "Engineering insight",
+                  "Flows")
+              .forEach { section ->
+                assertTrue(
+                    fixture.pressKey(Key.Tab), "Tab must reach $section in the Summary index")
+                fixture.render()
+                assertTrue(fixture.isFocusedControl("Go to $section summary"))
+              }
+          assertTrue(fixture.pressKey(Key.Enter), "Index must support keyboard activation")
+          fixture.render()
+          assertTrue(destinations.isEmpty(), "Index navigation must stay in Summary")
           repeat(2) {
             assertTrue(fixture.pressKey(Key.Tab), "Tab must advance through the coverage status")
             fixture.render()

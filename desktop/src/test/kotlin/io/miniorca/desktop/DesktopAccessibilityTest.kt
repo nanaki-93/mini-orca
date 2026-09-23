@@ -43,6 +43,41 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun summaryIndexActivatesByKeyboardAndOmitsUnavailableDetails() {
+    var navigations = 0
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(
+              visualFixtureOverview.copy(
+                  analysis = visualFixtureOverview.analysis.copy(status = "missing")),
+              visualFixtureProject,
+              { navigations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Go to Coverage summary"))
+          listOf("Architecture", "Packages / modules", "Engineering insight", "Flows").forEach {
+            assertFalse(fixture.hasDescription("Go to $it summary"))
+          }
+          assertTrue(fixture.requestDescriptionFocus("Go to Findings summary"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(0, navigations)
+          assertTrue(fixture.textCount("Bugs") > 0)
+        }
+  }
+
+  @Test
+  fun summaryWithoutProjectHasNoDanglingIndexTargets() {
+    ComposeVisualFixture(800, 650) { ProjectSummaryPane(null, null, {}) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("No project selected"))
+          assertFalse(fixture.hasDescription("Go to Project summary"))
+          assertFalse(fixture.hasDescription("Go to Coverage summary"))
+        }
+  }
+
+  @Test
   fun summaryExposesNamedLocalDisclosuresAndVisibleNonColorInterpretationState() {
     val overview =
         visualFixtureOverview.copy(
@@ -58,10 +93,9 @@ class DesktopAccessibilityTest {
     ComposeVisualFixture(1_600, 1_000) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render()
-          assertEquals(1, fixture.textCount("Summary"))
+          assertEquals(0, fixture.textCount("Summary"))
           assertEquals(
               listOf(
-                  "Summary",
                   "go-shop · fixture",
                   "Analysis coverage",
                   "Architecture",
