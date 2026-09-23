@@ -2466,7 +2466,7 @@ class DesktopVisualLayoutTest {
               fixture.assertTextFits("Analysis coverage")
               assertFalse(fixture.hasEditableText())
               if (width == 1600 && scale == 1f) {
-                fixture.assertSummaryColumns()
+                fixture.assertReferenceSummaryGeometry()
                 fixture.assertTextBefore("Bugs", "Performance")
                 fixture.assertTextBefore("Performance", "Security")
               }
@@ -2515,11 +2515,11 @@ class DesktopVisualLayoutTest {
           fixture.assertTextAbove(visualFixtureProject.name, "Analysis coverage")
           fixture.assertSummaryStatusPlacement("Outdated")
           fixture.assertWideSummaryCoverageLayout()
+          fixture.assertReferenceSummaryGeometry()
           listOf("Bugs", "Performance", "Security").forEach {
             assertTrue(fixture.hasDescription("View $it results"))
             assertTrue(fixture.hasText(it))
           }
-          fixture.assertSummaryColumns()
           assertFalse(fixture.hasText("Entry points"))
           assertFalse(fixture.hasText("Next steps"))
           assertFalse(fixture.hasText("cmd/server/main.go"))
@@ -2565,6 +2565,37 @@ class DesktopVisualLayoutTest {
           assertEquals(0, fixture.tagCount("summary-lower-right"))
           assertTrue(fixture.tagCount("summary-architecture") == 1)
           assertTrue(fixture.tagCount("summary-modules") == 1)
+        }
+  }
+
+  @Test
+  fun summaryLowerCompositionStacksInLogicalOrderAtCompactLargeText() {
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                visualFixtureOverview.analysis.copy(
+                    engineeringInsight =
+                        EngineeringInsight(
+                            mechanism = "Validate requests before persistence.",
+                            whyItMattersHere = "Invalid input stays outside the repository.")))
+    ComposeVisualFixture(800, 1_100, 1.5f) {
+          ProjectSummaryPane(overview, visualFixtureProject, {})
+        }
+        .use { fixture ->
+          fixture.render("summary-lower-compact-800-150")
+          val left = fixture.taggedBounds("summary-lower-left")
+          val architecture = fixture.taggedBounds("summary-architecture")
+          val modules = fixture.taggedBounds("summary-modules")
+          assertTrue(architecture.bottom <= modules.top, "Modules must follow Architecture")
+          fixture.scrollBy(100_000f)
+          fixture.render()
+          val right = fixture.taggedBounds("summary-lower-right")
+          val insight = fixture.taggedBounds("summary-insight")
+          val flows = fixture.taggedBounds("summary-flows")
+          assertEquals(left.width, right.width, 1f, "Compact lower groups must use available width")
+          assertTrue(insight.bottom <= flows.top, "Flows must follow Engineering insight")
+          assertEquals(
+              1, fixture.scrollableContentCount(), "Summary must keep one page scroll owner")
         }
   }
 
@@ -2617,9 +2648,9 @@ class DesktopVisualLayoutTest {
             assertFalse(fixture.hasText("Failed"))
             assertFalse(fixture.hasText("Running"))
             assertTrue(fixture.hasText("Outdated"))
-            assertTrue(
-                fixture.hasDescription(projectSummaryPresentation(overview, null).analysisMessage))
-            assertFalse(fixture.hasText(projectSummaryPresentation(overview, null).analysisMessage))
+            if (status != "fresh")
+                fixture.assertTextFits(
+                    projectSummaryPresentation(overview, null).interpretationMessage, maxLines = 3)
             fixture.assertColorVisible(Warning)
             if (status == "failed") assertFalse(fixture.hasText(overview.analysis.purpose))
           }
@@ -3414,6 +3445,13 @@ internal class ComposeVisualFixture(
         it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
       }
 
+  fun semanticHeadingTexts(): List<String> =
+      nodes()
+          .filter { it.config.getOrNull(SemanticsProperties.Heading) != null }
+          .flatMap { node ->
+            node.config.getOrNull(SemanticsProperties.Text)?.map { it.text }.orEmpty()
+          }
+
   fun isDescriptionSelected(label: String): Boolean =
       nodes()
           .asSequence()
@@ -3570,11 +3608,22 @@ internal class ComposeVisualFixture(
             .any { it.config.getOrNull(SemanticsProperties.Focused) == true }
       }
 
-  fun isDescriptionFocused(label: String): Boolean =
-      nodes().any { node ->
-        node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
-            node.config.getOrNull(SemanticsProperties.Focused) == true
-      }
+  fun isDescriptionFocused(label: String): Boolean {
+    val described =
+        nodes().filter {
+          it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+        }
+    return described.any { node ->
+      (generateSequence(node) { it.parent } + descendants(node).asSequence())
+          .any { it.config.getOrNull(SemanticsProperties.Focused) == true } ||
+          nodes()
+              .filter { it.config.getOrNull(SemanticsProperties.Focused) == true }
+              .any { it.boundsInRoot.overlaps(node.boundsInRoot) }
+    }
+  }
+
+  fun isFocusedControl(label: String): Boolean =
+      isDescriptionFocused(label) || isFocused(label)
 
   fun stateDescription(label: String): String? =
       textNodes(label)
@@ -3774,9 +3823,13 @@ internal class ComposeVisualFixture(
     error("$label in Analysis coverage must be reachable by scrolling")
   }
 
-  fun assertSummaryColumns() {
+  fun assertReferenceSummaryGeometry() {
     fun bounds(tag: String) =
         nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }.boundsInRoot
+    val heading = bounds("summary-page-heading")
+    val introduction = bounds("summary-introduction")
+    val coverage = bounds("analysis-summary")
+    val track = bounds("summary-coverage-track")
     val left = bounds("summary-lower-left")
     val right = bounds("summary-lower-right")
     val architecture = bounds("summary-architecture")
@@ -3785,14 +3838,27 @@ internal class ComposeVisualFixture(
     val flows = bounds("summary-flows")
     val lowerWidth = left.width + right.width
 
+    assertTrue(heading.bottom <= introduction.top, "Summary heading must lead the page")
+    assertTrue(introduction.bottom <= coverage.top, "Coverage must follow the introduction")
+    assertEquals(introduction.width, coverage.width, 1f, "Coverage must use the Summary width")
+    assertTrue(track.width >= coverage.width * 0.6f, "Coverage track must be broad")
     assertEquals(0.62f, left.width / lowerWidth, 0.03f, "Left summary region must be wider")
     assertTrue(left.right < right.left, "Lower summary regions must not overlap")
     assertEquals(left.top, right.top, 1f, "Lower summary regions must align at the top")
     assertTrue(architecture.left >= left.left && architecture.right <= left.right)
     assertTrue(modules.left >= left.left && modules.right <= left.right)
     assertTrue(
-        architecture.top < modules.top, "Modules must follow Architecture in the shared surface")
-    assertTrue(architecture.bottom <= modules.top, "Architecture and modules must not overlap")
+        generateSequence(
+                nodes().single {
+                  it.config.getOrNull(SemanticsProperties.TestTag) == "summary-architecture"
+                }) {
+                  it.parent
+                }
+            .any { it.config.getOrNull(SemanticsProperties.TestTag) == "summary-lower-left" },
+        "Architecture and modules must share the bounded left surface")
+    assertTrue(
+        architecture.bottom <= modules.top,
+        "Modules must follow Architecture in the shared surface")
     assertTrue(insight.left >= right.left && insight.right <= right.right)
     assertTrue(flows.left >= right.left && flows.right <= right.right)
     assertTrue(insight.bottom <= flows.top, "Flows must follow Engineering insight")

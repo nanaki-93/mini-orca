@@ -43,6 +43,43 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun summaryExposesNamedLocalDisclosuresAndVisibleNonColorInterpretationState() {
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                visualFixtureOverview.analysis.copy(
+                    status = "stale",
+                    failure = "The saved project description is from an older revision.",
+                    engineeringInsight =
+                        EngineeringInsight(
+                            mechanism = "Validate requests before persistence.",
+                            whyItMattersHere = "Invalid input stays outside the repository.",
+                            tradeoffOrFailureMode = "Rules need one owner.")))
+    ComposeVisualFixture(1_600, 1_000) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(1, fixture.textCount("Summary"))
+          assertEquals(
+              listOf(
+                  "Summary",
+                  "go-shop · fixture",
+                  "Analysis coverage",
+                  "Architecture",
+                  "Engineering insight",
+                  "More insight",
+                  "Flows"),
+              fixture.semanticHeadingTexts(),
+              "Summary headings must expose the page and its sections in reading order")
+          assertTrue(fixture.hasText("Project description: stale · source may have changed"))
+          assertTrue(fixture.hasText("Outdated"))
+          assertTrue(fixture.hasText("View analysis"))
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
+          assertEquals("Collapsed", fixture.descriptionStateDescription("Expand More insight"))
+        }
+  }
+
+  @Test
   fun soleTerminalControlAnnouncesItsStateAndActivatesFromTheKeyboard() {
     var opens = 0
     ComposeVisualFixture(800, 100, 1.5f) {
