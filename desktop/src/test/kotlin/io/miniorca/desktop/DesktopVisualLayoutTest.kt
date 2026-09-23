@@ -2605,6 +2605,42 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun compactSummaryIndexWrapsAllOptionalEntriesAndKeepsTargetsReachable() {
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                visualFixtureOverview.analysis.copy(
+                    engineeringInsight =
+                        EngineeringInsight(mechanism = "Validate before storage.")))
+    for ((width, scale) in listOf(800 to 1.5f, 800 to 1f, 999 to 1.25f)) {
+      ComposeVisualFixture(width, 650, scale) {
+            ProjectSummaryPane(overview, visualFixtureProject, {})
+          }
+          .use { fixture ->
+            fixture.render("summary-index-all-$width-$scale")
+            val labels =
+                listOf(
+                    "Project",
+                    "Coverage",
+                    "Findings",
+                    "Architecture",
+                    "Packages / modules",
+                    "Engineering insight",
+                    "Flows")
+            labels.forEach { label ->
+              val bounds = fixture.taggedBounds("summary-index-$label")
+              assertTrue(
+                  bounds.left >= 0f && bounds.right <= width, "$label overflows at $width/$scale")
+              assertTrue(bounds.top >= 0f && bounds.bottom <= 650f, "$label is not visible")
+              fixture.clickDescription("Go to $label summary")
+              fixture.render()
+              assertTrue(fixture.isDescriptionSelected("Go to $label summary"), label)
+            }
+          }
+    }
+  }
+
+  @Test
   fun summaryDashboardShowsGroupedInterpretationWithDiagramDisclosures() {
     val overview =
         visualFixtureOverview.copy(
