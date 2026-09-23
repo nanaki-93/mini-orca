@@ -15,7 +15,6 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -237,13 +236,10 @@ internal fun ProjectSummaryPane(
     analysisActions: AnalysisWorkspaceActions? = null,
 ) {
   val presentation = projectSummaryPresentation(overview, project, run, sections, fileSelection)
-  val fontScale = LocalDensity.current.fontScale
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
-    val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
-    val sideBySide = contentWidth / fontScale >= 900.dp
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = workspacePagePadding(maxWidth, vertical = 20.dp),
+        contentPadding = workspacePagePadding(vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       if (!presentation.hasProject) {
@@ -284,7 +280,6 @@ internal fun ProjectSummaryPane(
         item {
           SummaryLowerComposition(
               presentation,
-              sideBySide,
               listOf(
                   project?.projectId ?: overview?.projectId,
                   project?.projectRevision ?: overview?.projectRevision))
@@ -330,19 +325,10 @@ private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
 
 @Composable
 private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (Workspace) -> Unit) {
-  val fontScale = LocalDensity.current.fontScale
-  BoxWithConstraints(Modifier.fillMaxWidth()) {
-    if (maxWidth / fontScale >= 560.dp) {
-      Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        metrics.forEach { metric ->
-          SummaryIssue(
-              metric, { openResults(metric.type.workspace) }, Modifier.weight(1f).fillMaxHeight())
-        }
-      }
-    } else {
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        metrics.forEach { metric -> SummaryIssue(metric, { openResults(metric.type.workspace) }) }
-      }
+  Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    metrics.forEach { metric ->
+      SummaryIssue(
+          metric, { openResults(metric.type.workspace) }, Modifier.weight(1f).fillMaxHeight())
     }
   }
 }
@@ -350,7 +336,6 @@ private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (W
 @Composable
 private fun SummaryLowerComposition(
     presentation: ProjectSummaryPresentation,
-    sideBySide: Boolean,
     ownerIdentity: List<String?>,
 ) {
   val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
@@ -369,7 +354,7 @@ private fun SummaryLowerComposition(
     SummaryInsightFlows(
         insight, flows, presentation.interpretationStatus == "stale", ownerIdentity, modifier)
   }
-  if (sideBySide && hasLeft && hasRight) {
+  if (hasLeft && hasRight) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
       left(Modifier.weight(0.62f))
       right(Modifier.weight(0.38f))
