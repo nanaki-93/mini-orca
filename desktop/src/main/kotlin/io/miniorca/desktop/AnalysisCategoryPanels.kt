@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -148,16 +149,16 @@ internal fun SummaryCategoryBox(
   val name = type.workspace.name
   IdeActionSurface(
       onClick = onClick,
-      colors = analysisCategoryBoxColors(),
+      colors = summaryCategoryBoxColors(),
       accessibleName = "View $name results",
       tooltip = null,
-      shape = MiniOrcaShapes.interactiveCard,
+      shape = RoundedCornerShape(10.dp),
       minimumHeight = 0.dp,
-      modifier = modifier.fillMaxWidth(),
+      modifier = modifier.fillMaxWidth().testTag("summary-category-surface-${type.category}"),
       contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
   ) {
     Column(
-        Modifier.fillMaxWidth().padding(16.dp).align(Alignment.Top),
+        Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 12.dp).align(Alignment.Top),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.Start,
     ) {
@@ -181,8 +182,8 @@ internal fun SummaryCategoryBox(
       Text(
           count?.toString() ?: "—",
           color = if (count == null || count == 0) tint else PrimaryText,
-          fontSize = 32.sp,
-          lineHeight = 38.sp,
+          fontSize = 20.sp,
+          lineHeight = 25.sp,
           fontWeight = FontWeight.SemiBold,
           modifier = Modifier.testTag("summary-category-count-${type.category}"))
       Text(
@@ -195,6 +196,19 @@ internal fun SummaryCategoryBox(
     }
   }
 }
+
+internal fun summaryCategoryBoxColors() =
+    IdeActionColors(
+        background = HeaderSurface,
+        hoveredBackground = OverlaySurface,
+        pressedBackground = SelectionSurface,
+        selectedBackground = SelectionSurface,
+        disabledBackground = Panel,
+        content = PrimaryText,
+        selectedContent = PrimaryText,
+        disabledContent = SecondaryText,
+        border = Color.Transparent,
+    )
 
 internal fun analysisCategoryBoxColors() =
     IdeActionColors(

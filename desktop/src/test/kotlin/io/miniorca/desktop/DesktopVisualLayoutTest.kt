@@ -3164,8 +3164,14 @@ class DesktopVisualLayoutTest {
             val name = fixture.taggedBounds("summary-category-name-${type.category}")
             val count = fixture.taggedBounds("summary-category-count-${type.category}")
             val status = fixture.taggedBounds("summary-category-status-${type.category}")
+            val detailPanel = fixture.taggedBounds("summary-detail-panel")
             assertTrue(box.height > 0f, "Summary category cards must retain their content")
+            assertTrue(
+                box.left > detailPanel.left && box.right < detailPanel.right,
+                "Summary cards must be inset within the detail panel")
+            fixture.assertSummaryCardSurface(type.category)
             assertEquals(icon.top, name.top, 1f, "Summary icon and name must remain inline")
+            assertTrue(count.height < 34f, "Summary count must use the compact card hierarchy")
             assertTrue(count.top >= icon.bottom, "Summary count must remain below its icon row")
             assertTrue(status.top >= count.bottom, "Summary status must follow the count")
           }
@@ -4552,6 +4558,29 @@ internal class ComposeVisualFixture(
           ActivityRail.toArgb() == rendered.getRGB(pane.center.x.toInt(), (pane.top + 2).toInt()),
           "The top edge must show the actual filled pane")
     }
+  }
+
+  fun assertSummaryCardSurface(category: String) {
+    val rendered =
+        surface.makeImageSnapshot().use { snapshot ->
+          requireNotNull(snapshot.encodeToData()).use { data ->
+            javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(data.bytes))
+          }
+        }
+    val card =
+        taggedBounds("summary-metric-${AnalysisResultType.fromCategory(category).workspace.name}")
+    val panel = taggedBounds("summary-detail-panel")
+    val y = (card.top + card.height / 2).toInt()
+    val candidateXs = listOf(card.left + 16, card.left + 24, card.left + 32, card.left + 40)
+    val expected = summaryCategoryBoxColors().background.toArgb()
+    val renderedColors = candidateXs.map { rendered.getRGB(it.toInt(), y) }
+    assertTrue(card.top > panel.top && y < card.bottom)
+    assertTrue(
+        renderedColors.any { it == expected },
+        "Summary $category card must render with its inset surface (found $renderedColors; expected $expected)")
+    assertTrue(
+        expected != Panel.toArgb(),
+        "Summary card surface must differ from the enclosing detail panel")
   }
 
   fun assertColorVisible(color: Color) {
