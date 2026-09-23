@@ -8,7 +8,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -261,59 +260,48 @@ private fun ActiveFileEditorChrome(
         contentDescription = state.accessibleDescription
       },
   ) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-      val stackAction = maxWidth / LocalDensity.current.fontScale < 560.dp
-      Column {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-          Row(
-              Modifier.weight(1f)
-                  .onFocusChanged { tabGroupHasFocus = it.hasFocus }
-                  .focusable()
-                  .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    val interaction =
-                        tabGroupInteraction(surfaces, focusedSurface, tabGroupKey(event.key))
-                            ?: return@onPreviewKeyEvent false
-                    focusedSurface = interaction.focused
-                    interaction.activate?.let(onSelectSurface)
-                    true
-                  },
-              verticalAlignment = Alignment.CenterVertically) {
-                ChromeTab(
-                    onClick = { onSelectSurface(EditorSurface.Source) },
-                    selected = state.activeSurface == EditorSurface.Source,
-                    focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source,
-                    modifier =
-                        Modifier.weight(1f, fill = false).semantics {
-                          contentDescription = "Source file · ${state.title}"
-                        },
-                ) {
-                  DesktopLineIcon(
-                      DesktopIcon.File, "Source file", tint = SelectionText, iconSize = 16.dp)
-                  Spacer(Modifier.width(6.dp))
-                  Text("Source", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                if (state.reviewAvailable) {
-                  ChromeTab(
-                      onClick = { onSelectSurface(EditorSurface.Review) },
-                      selected = state.activeSurface == EditorSurface.Review,
-                      focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
-                        DesktopLineIcon(DesktopIcon.Check, "Candidate diff", iconSize = 14.dp)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Candidate diff", fontSize = 12.sp, softWrap = false)
-                      }
-                }
+    Column {
+      Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.weight(1f)
+                .onFocusChanged { tabGroupHasFocus = it.hasFocus }
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                  if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                  val interaction =
+                      tabGroupInteraction(surfaces, focusedSurface, tabGroupKey(event.key))
+                          ?: return@onPreviewKeyEvent false
+                  focusedSurface = interaction.focused
+                  interaction.activate?.let(onSelectSurface)
+                  true
+                },
+            verticalAlignment = Alignment.CenterVertically) {
+              ChromeTab(
+                  onClick = { onSelectSurface(EditorSurface.Source) },
+                  selected = state.activeSurface == EditorSurface.Source,
+                  focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source,
+                  modifier =
+                      Modifier.weight(1f, fill = false).semantics {
+                        contentDescription = "Source file · ${state.title}"
+                      },
+              ) {
+                DesktopLineIcon(
+                    DesktopIcon.File, "Source file", tint = SelectionText, iconSize = 16.dp)
+                Spacer(Modifier.width(6.dp))
+                Text("Source", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
               }
-          if (!stackAction)
-              EditorDraftActions(
-                  state, onCreateDeclaration, onEditDraft, Modifier.padding(end = 8.dp))
-        }
-        if (stackAction)
-            EditorDraftActions(
-                state,
-                onCreateDeclaration,
-                onEditDraft,
-                Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+              if (state.reviewAvailable) {
+                ChromeTab(
+                    onClick = { onSelectSurface(EditorSurface.Review) },
+                    selected = state.activeSurface == EditorSurface.Review,
+                    focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
+                      DesktopLineIcon(DesktopIcon.Check, "Candidate diff", iconSize = 14.dp)
+                      Spacer(Modifier.width(6.dp))
+                      Text("Candidate diff", fontSize = 12.sp, softWrap = false)
+                    }
+              }
+            }
+        EditorDraftActions(state, onCreateDeclaration, onEditDraft, Modifier.padding(end = 8.dp))
       }
     }
     state.creationBlockedReason?.let { reason ->

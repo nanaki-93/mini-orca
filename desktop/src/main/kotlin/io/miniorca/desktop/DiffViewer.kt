@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -96,81 +95,70 @@ internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
         modifier = modifier)
     return
   }
-  BoxWithConstraints(
-      modifier.fillMaxSize().semantics { contentDescription = "Read-only composed diff" }) {
-        val readableWidth = maxWidth / LocalDensity.current.fontScale
-        var preferredSideBySide by
-            remember(diff.oldPath, diff.newPath) { mutableStateOf<Boolean?>(null) }
-        val sideBySide = preferredSideBySide ?: (readableWidth >= 620.dp)
-        val rows = remember(diff) { sideBySideDiffRows(diff) }
-        val rowHeight = readOnlyCodeRowHeight()
-        Column(Modifier.fillMaxSize()) {
-          Row(
-              Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-              horizontalArrangement = Arrangement.End) {
-                ChromeTab(
-                    selected = sideBySide,
-                    onClick = { preferredSideBySide = true },
-                    accessibleName = "Side-by-side diff") {
-                      Text("Side-by-side", style = IdeTypography.compactBody)
-                    }
-                ChromeTab(
-                    selected = !sideBySide,
-                    onClick = { preferredSideBySide = false },
-                    accessibleName = "Unified diff") {
-                      Text("Unified", style = IdeTypography.compactBody)
-                    }
-              }
-          val verticalScroll = rememberScrollState()
-          val density = LocalDensity.current
-          val largestLine = diff.lines.maxOfOrNull { maxOf(it.oldLine, it.newLine) } ?: 0
-          val numberSize =
-              rememberTextMeasurer()
-                  .measure(
-                      "9".repeat(maxOf(4, largestLine.toString().length)),
-                      style = readOnlyCodeStyle)
-                  .size
-          val numberWidth = with(density) { numberSize.width.toDp() } + 12.dp
-          SelectionContainer(Modifier.weight(1f)) {
-            if (sideBySide) {
-              Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DiffColumn("Current", verticalScroll, Modifier.weight(1f)) {
-                  rows.forEachIndexed { index, row ->
-                    DiffCodeRow(
-                        row.before, "Current", index, diffRowHeight(row, rowHeight), numberWidth)
-                  }
+  Box(modifier.fillMaxSize().semantics { contentDescription = "Read-only composed diff" }) {
+    var sideBySide by remember(diff.oldPath, diff.newPath) { mutableStateOf(true) }
+    val rows = remember(diff) { sideBySideDiffRows(diff) }
+    val rowHeight = readOnlyCodeRowHeight()
+    Column(Modifier.fillMaxSize()) {
+      Row(
+          Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+          horizontalArrangement = Arrangement.End) {
+            ChromeTab(
+                selected = sideBySide,
+                onClick = { sideBySide = true },
+                accessibleName = "Side-by-side diff") {
+                  Text("Side-by-side", style = IdeTypography.compactBody)
                 }
-                DiffColumn("Candidate", verticalScroll, Modifier.weight(1f)) {
-                  rows.forEachIndexed { index, row ->
-                    DiffCodeRow(
-                        row.proposed,
-                        "Candidate",
-                        index,
-                        diffRowHeight(row, rowHeight),
-                        numberWidth)
-                  }
+            ChromeTab(
+                selected = !sideBySide,
+                onClick = { sideBySide = false },
+                accessibleName = "Unified diff") {
+                  Text("Unified", style = IdeTypography.compactBody)
                 }
+          }
+      val verticalScroll = rememberScrollState()
+      val density = LocalDensity.current
+      val largestLine = diff.lines.maxOfOrNull { maxOf(it.oldLine, it.newLine) } ?: 0
+      val numberSize =
+          rememberTextMeasurer()
+              .measure(
+                  "9".repeat(maxOf(4, largestLine.toString().length)), style = readOnlyCodeStyle)
+              .size
+      val numberWidth = with(density) { numberSize.width.toDp() } + 12.dp
+      SelectionContainer(Modifier.weight(1f)) {
+        if (sideBySide) {
+          Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DiffColumn("Current", verticalScroll, Modifier.weight(1f)) {
+              rows.forEachIndexed { index, row ->
+                DiffCodeRow(
+                    row.before, "Current", index, diffRowHeight(row, rowHeight), numberWidth)
               }
-            } else {
-              DiffColumn("Current → Candidate", verticalScroll, Modifier.fillMaxSize()) {
-                diff.lines.forEachIndexed { index, line ->
-                  DiffCodeRow(
-                      DiffCell(
-                          (if (line.kind == "added") line.newLine else line.oldLine).takeIf {
-                            it > 0
-                          },
-                          line.text,
-                          line.kind),
-                      "Unified",
-                      index,
-                      rowHeight * (line.text.count { it == '\n' } + 1),
-                      numberWidth)
-                }
+            }
+            DiffColumn("Candidate", verticalScroll, Modifier.weight(1f)) {
+              rows.forEachIndexed { index, row ->
+                DiffCodeRow(
+                    row.proposed, "Candidate", index, diffRowHeight(row, rowHeight), numberWidth)
               }
+            }
+          }
+        } else {
+          DiffColumn("Current → Candidate", verticalScroll, Modifier.fillMaxSize()) {
+            diff.lines.forEachIndexed { index, line ->
+              DiffCodeRow(
+                  DiffCell(
+                      (if (line.kind == "added") line.newLine else line.oldLine).takeIf { it > 0 },
+                      line.text,
+                      line.kind),
+                  "Unified",
+                  index,
+                  rowHeight * (line.text.count { it == '\n' } + 1),
+                  numberWidth)
             }
           }
         }
       }
+    }
+  }
 }
 
 private fun diffRowHeight(row: DiffRow, lineHeight: Dp): Dp =

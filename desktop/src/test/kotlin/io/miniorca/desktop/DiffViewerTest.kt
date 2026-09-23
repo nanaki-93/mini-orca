@@ -131,18 +131,30 @@ class DiffViewerTest {
   }
 
   @Test
-  fun compactDiffDefaultsToUnifiedAndCanShowBothSidesWithoutWrappingCode() {
+  fun diffDefaultsToSideBySideAndUnifiedChoiceSurvivesResize() {
     val diff =
         UnifiedDiff(
             "main.go", "main.go", listOf(DiffLine("added", 0, 12000, "func NewFunction() {}")))
-    ComposeVisualFixture(400, 400, 1.5f) { DiffViewer(diff) }
+    ComposeVisualFixture(1000, 500, 1.5f) { DiffViewer(diff) }
         .use { fixture ->
+          fixture.render("diff-default-1000-1.5")
+          assertTrue(fixture.isDescriptionSelected("Side-by-side diff"))
+          fixture.resize(400, 400)
           fixture.render("diff-compact-400-1.5")
-          fixture.assertTextFits("Current → Candidate")
+          assertTrue(fixture.isDescriptionSelected("Side-by-side diff"))
+          fixture.assertTextFits("Current")
+          fixture.assertTextFits("Candidate")
           fixture.assertTextFits("12000")
           fixture.assertTextLineCount("func NewFunction() {}", 1)
+          fixture.clickText("Unified")
+          fixture.render("diff-unified-400-1.5")
+          assertTrue(fixture.hasText("Current → Candidate"))
+          fixture.resize(1000, 500)
+          fixture.render("diff-unified-resized-1000-500")
+          assertTrue(fixture.hasText("Current → Candidate"))
+          assertTrue(fixture.isDescriptionSelected("Unified diff"))
           fixture.clickText("Side-by-side")
-          fixture.render("diff-compact-split-400-1.5")
+          fixture.render("diff-split-resized-1000-500")
           fixture.assertTextFits("Current")
           fixture.assertTextFits("Candidate")
           assertTrue(fixture.hasDescription("Current has no corresponding line"))
