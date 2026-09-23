@@ -7,7 +7,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -28,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -95,48 +93,21 @@ internal fun summaryCoverageFractions(
 
 @Composable
 internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnalysis: () -> Unit) {
-  val fontScale = LocalDensity.current.fontScale
   WorkspaceSection(modifier = Modifier.testTag("analysis-summary")) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-      val wideLayout = maxWidth / fontScale >= 640.dp
-      Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (wideLayout) {
-          Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Analysis coverage",
-                color = ResultAccent,
-                style = IdeTypography.workspaceHeading,
-                modifier = Modifier.weight(1f).semantics { heading() })
-            SummaryAnalysisStatus(presentation)
-          }
-        } else {
-          Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                "Analysis coverage",
-                color = ResultAccent,
-                style = IdeTypography.workspaceHeading,
-                modifier = Modifier.semantics { heading() })
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-              SummaryAnalysisStatus(presentation)
-            }
-          }
-        }
-        if (wideLayout) {
-          Row(
-              Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(16.dp),
-              verticalAlignment = Alignment.CenterVertically) {
-                SummaryCoverageBar(presentation, Modifier.weight(1f))
-                MiniOrcaButton(
-                    onClick = openAnalysis,
-                    modifier = Modifier.testTag("summary-view-analysis"),
-                    tone = ActionTone.Navigation) {
-                      Text("View analysis", style = IdeTypography.workspaceMetadata)
-                    }
-              }
-        } else {
-          Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SummaryCoverageBar(presentation)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Analysis coverage",
+            color = ResultAccent,
+            style = IdeTypography.workspaceHeading,
+            modifier = Modifier.weight(1f).semantics { heading() })
+        SummaryAnalysisStatus(presentation)
+      }
+      Row(
+          Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(16.dp),
+          verticalAlignment = Alignment.CenterVertically) {
+            SummaryCoverageBar(presentation, Modifier.weight(1f))
             MiniOrcaButton(
                 onClick = openAnalysis,
                 modifier = Modifier.testTag("summary-view-analysis"),
@@ -144,8 +115,6 @@ internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnaly
                   Text("View analysis", style = IdeTypography.workspaceMetadata)
                 }
           }
-        }
-      }
     }
   }
 }
@@ -237,12 +206,11 @@ internal fun summaryModule(value: String): SummaryModule {
 
 @Composable
 internal fun SummaryModules(values: List<String>) {
-  val fontScale = LocalDensity.current.fontScale
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     values.forEachIndexed { index, value ->
       if (index > 0) IdeHorizontalSeparator()
       val module = remember(value) { summaryModule(value) }
-      BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+      Box(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
         val identity: @Composable (Modifier) -> Unit = { modifier ->
           Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(module.name, color = PrimaryText, style = IdeTypography.workspaceHeading)
@@ -253,7 +221,7 @@ internal fun SummaryModules(values: List<String>) {
             }
           }
         }
-        if (module.description.isNotBlank() && maxWidth / fontScale >= 500.dp) {
+        if (module.description.isNotBlank()) {
           Row(
               horizontalArrangement = Arrangement.spacedBy(20.dp),
               verticalAlignment = Alignment.CenterVertically) {
@@ -265,12 +233,7 @@ internal fun SummaryModules(values: List<String>) {
                     modifier = Modifier.weight(0.42f))
               }
         } else {
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            identity(Modifier)
-            if (module.description.isNotBlank())
-                ModelResultContent(
-                    module.description, preview = false, style = IdeTypography.workspaceBody)
-          }
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { identity(Modifier) }
         }
       }
     }
