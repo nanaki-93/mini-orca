@@ -52,12 +52,18 @@ hover labels. Analysis status appears at the
 top right, immediately before daemon connectivity. Editor owns one declaration change.
 Go, Java and Kotlin projects show a type icon beside the project name in the top bar.
 
-Summary starts with the project name, purpose and indexed metadata. A segmented
-coverage bar shows the current selected files: up to date, outdated, not analyzed,
-running, failed, incomplete and unavailable. Zero-size segments are omitted;
-unavailable coverage and an empty selection keep separate labels. **View analysis**
-only opens Analysis. The status retains current run lifecycle and exposes saved
-project-description freshness/failure details on hover or keyboard focus.
+Summary opens with the project identity, purpose and indexed metadata, followed
+by a local section index and modular overview. The index moves within Summary; it
+does not change workspaces or start analysis. At smaller window widths or increased
+text sizes, the index sits above the content, which remains reachable by vertical
+scrolling. The native window requests maximized placement on startup, but remains a normal resizable
+window (not fullscreen); the operating system may not honor the initial placement.
+
+A segmented coverage bar shows the current selected files: up to date, outdated,
+not analyzed, running, failed, incomplete and unavailable. Zero-size segments are
+omitted; unavailable coverage and an empty selection keep separate labels. **View
+analysis** only opens Analysis. The status retains current run lifecycle and exposes
+saved project-description freshness/failure details on hover or keyboard focus.
 
 Three named Bugs, Performance and Security cards open their result pages with one
 click or keyboard activation. Counts stay distinct from unavailable results; zero
@@ -66,11 +72,11 @@ bug priority counts remain in the Bugs card. Overall tool-reported issues and AI
 suggestions appear separately below the cards, since those totals cannot be
 reliably assigned to individual categories.
 
-Architecture and flat Packages / modules rows occupy the wider left column;
-Engineering insight and Flows occupy the right. They stack on narrow windows or
-with enlarged text, retaining full prose in the page scroll. Module names, exact
-paths and responsibilities remain selectable/readable. Entry points and next steps
-are omitted from Summary.
+Architecture, Packages / modules, Engineering insight and Flows appear as
+available Summary sections in the indexed overview. They stack as needed in the
+same page scroll at smaller widths or enlarged text. Module names, exact paths and
+responsibilities remain selectable/readable. Entry points and next steps are
+omitted from Summary.
 
 Architecture and Flows place **Show diagram** beside the section heading. Diagrams
 start collapsed, with the button disabled when a diagram is unavailable. Mermaid
@@ -227,8 +233,7 @@ send a request or change source. No file-scoped start controls or duplicate bott
 Problems/Checks/Output panels remain.
 
 UI work follows [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and the
-[current product decisions](../PLAN.md#current-ui-direction--2026-09-15), including
-the [self-explanatory UI and copy rules](UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy)
+[self-explanatory UI and copy rules](UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy)
 for new and changed features. Existing metadata and visual-preference migration
 is documented in the
 [root guide](../README.md#existing-projects-and-preferences); model-scope names are unchanged.
