@@ -274,13 +274,6 @@ class DesktopShellTest {
   }
 
   @Test
-  fun toolbarKeepsTheBranchAndSearchDetailAtTheSupportedWidths() {
-    assertEquals(ToolbarPresentation(true, true, true), toolbarPresentation(1_220f))
-    assertEquals(ToolbarPresentation(true, false, true), toolbarPresentation(1_000f))
-    assertEquals(ToolbarPresentation(false, false, false), toolbarPresentation(999f))
-  }
-
-  @Test
   fun branchContextUsesOnlyActualGitEvidence() {
     assertEquals(
         BranchPresentation("main", "Current Git branch: main"),

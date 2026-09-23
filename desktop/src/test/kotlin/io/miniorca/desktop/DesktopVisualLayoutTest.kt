@@ -2083,13 +2083,12 @@ class DesktopVisualLayoutTest {
                 ToolbarVisualFixture(width.toFloat(), analysisStatus = toolbarAnalysisStatus(state))
               }
               .use { fixture ->
-                val daemon = if (width < 1000) "Connected" else "Daemon connected"
+                val daemon = "Daemon connected"
                 fixture.render("toolbar-analysis-$width-$scale")
                 fixture.assertTextFits("Analysis · Running")
                 fixture.assertTextFits(daemon)
                 fixture.assertTextBefore("Analysis · Running", daemon)
-                fixture.assertTextFits(
-                    if (width < 1220) "Search" else "Search files, symbols, commands")
+                fixture.assertTextFits("Search files, symbols, commands")
                 listOf("paused", "completed").forEach { status ->
                   state =
                       state.copy(
@@ -2201,7 +2200,7 @@ class DesktopVisualLayoutTest {
           fixture.render()
           paletteFocus.requestFocus()
           fixture.render()
-          assertTrue(fixture.isFocused("Search"))
+          assertTrue(fixture.isFocused("Search files, symbols, commands"))
         }
 
     val bottomToolsFocus = FocusRequester()
@@ -4294,7 +4293,6 @@ private fun ToolbarVisualFixture(
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
         ToolbarState(
-            width,
             project,
             false,
             "",
@@ -4455,7 +4453,6 @@ internal fun RoundedAnalysisVisualFixture(width: Float) {
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
         ToolbarState(
-            width,
             project,
             false,
             "",
@@ -4517,7 +4514,6 @@ internal fun RoundedSummaryVisualFixture(width: Float) {
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
         ToolbarState(
-            width,
             visualFixtureProject,
             false,
             "",
@@ -4692,7 +4688,6 @@ internal fun EditorVisualFixture(
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
         ToolbarState(
-            width,
             visualFixtureProject,
             false,
             "",

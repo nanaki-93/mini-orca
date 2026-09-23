@@ -463,7 +463,6 @@ internal fun DesktopShell(
           MainToolbar(
               state =
                   ToolbarState(
-                      widthDp = widthDp,
                       project = appState.project,
                       busy = appState.loading,
                       operationStatus = appState.status,

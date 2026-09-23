@@ -2,13 +2,11 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,7 +26,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -44,10 +41,6 @@ internal fun MainToolbar(
     paletteFocusRequester: FocusRequester? = null,
 ) {
   val connectionPresentation = connectionPresentation(state.connection)
-  val presentation = toolbarPresentation(state.widthDp)
-  val separateStatusRow =
-      state.analysisStatus != null &&
-          state.widthDp / LocalDensity.current.fontScale < COMPACT_TOOLBAR_WIDTH
   Column(modifier.fillMaxWidth().background(ActivityRail)) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -63,11 +56,9 @@ internal fun MainToolbar(
           onImport = actions.onImport,
           onReanalyze = actions.onReanalyze,
           onReconnect = actions.onReconnect,
-          modifier = Modifier.width(if (presentation.showBranchContext) 180.dp else 128.dp))
-      if (presentation.showBranchContext) {
-        Spacer(Modifier.width(8.dp))
-        BranchContext(state.gitStatus)
-      }
+          modifier = Modifier.width(180.dp))
+      Spacer(Modifier.width(8.dp))
+      BranchContext(state.gitStatus)
       Box(Modifier.weight(1f).padding(start = 16.dp), contentAlignment = Alignment.CenterStart) {
         ChromeButton(
             onClick = actions.onPalette,
@@ -80,7 +71,7 @@ internal fun MainToolbar(
               DesktopLineIcon(DesktopIcon.Search, "Search", iconSize = 16.dp)
               Spacer(Modifier.width(8.dp))
               Text(
-                  if (presentation.showSearchLabel) "Search files, symbols, commands" else "Search",
+                  "Search files, symbols, commands",
                   fontSize = 12.sp,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis,
@@ -93,21 +84,12 @@ internal fun MainToolbar(
             }
       }
       Spacer(Modifier.width(16.dp))
-      if (!separateStatusRow) ToolbarStatus(state, connectionPresentation, presentation)
-    }
-    if (separateStatusRow) {
-      Row(
-          Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-          horizontalArrangement = Arrangement.End,
-          verticalAlignment = Alignment.CenterVertically) {
-            ToolbarStatus(state, connectionPresentation, presentation)
-          }
+      ToolbarStatus(state, connectionPresentation)
     }
   }
 }
 
 internal data class ToolbarState(
-    val widthDp: Float,
     val project: ProjectAnalysis?,
     val busy: Boolean,
     val operationStatus: String,
@@ -157,7 +139,6 @@ internal fun toolbarAnalysisStatus(state: DesktopState): ToolbarAnalysisStatus? 
 private fun ToolbarStatus(
     state: ToolbarState,
     connection: ConnectionPresentation,
-    presentation: ToolbarPresentation,
 ) {
   if (state.busy) {
     IdeBusyIndicator(
@@ -182,7 +163,7 @@ private fun ToolbarStatus(
         }
     Spacer(Modifier.width(10.dp))
   }
-  ConnectionChip(connection, compact = !presentation.showFullConnectionLabel)
+  ConnectionChip(connection)
 }
 
 internal data class ToolbarActions(
@@ -191,19 +172,6 @@ internal data class ToolbarActions(
     val onReconnect: () -> Unit,
     val onPalette: () -> Unit,
 )
-
-internal data class ToolbarPresentation(
-    val showFullConnectionLabel: Boolean,
-    val showSearchLabel: Boolean,
-    val showBranchContext: Boolean,
-)
-
-internal fun toolbarPresentation(widthDp: Float): ToolbarPresentation =
-    ToolbarPresentation(
-        showFullConnectionLabel = widthDp >= COMPACT_TOOLBAR_WIDTH,
-        showSearchLabel = widthDp >= EXPANDED_TOOLBAR_WIDTH,
-        showBranchContext = widthDp >= COMPACT_TOOLBAR_WIDTH,
-    )
 
 @Composable
 private fun ProjectActionsMenu(
@@ -380,7 +348,7 @@ internal fun connectionPresentation(connection: ConnectionState): ConnectionPres
     }
 
 @Composable
-private fun ConnectionChip(presentation: ConnectionPresentation, compact: Boolean) {
+private fun ConnectionChip(presentation: ConnectionPresentation) {
   Row(
       modifier =
           Modifier.semantics {
@@ -392,14 +360,6 @@ private fun ConnectionChip(presentation: ConnectionPresentation, compact: Boolea
   ) {
     Canvas(Modifier.size(6.dp)) { drawCircle(presentation.color) }
     Spacer(Modifier.width(7.dp))
-    Text(
-        if (compact) presentation.label.removePrefix("Daemon ").replaceFirstChar { it.uppercase() }
-        else presentation.label,
-        color = presentation.color,
-        fontSize = 11.sp,
-        maxLines = 1)
+    Text(presentation.label, color = presentation.color, fontSize = 11.sp, maxLines = 1)
   }
 }
-
-private const val COMPACT_TOOLBAR_WIDTH = 1_000f
-private const val EXPANDED_TOOLBAR_WIDTH = 1_220f
