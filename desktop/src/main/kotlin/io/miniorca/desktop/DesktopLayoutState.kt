@@ -109,8 +109,6 @@ internal data class DesktopLayoutState(
       )
 
   companion object {
-    // Keep the source canvas useful at the 1000dp docked breakpoint. Users can still widen either
-    // tool window, and those saved preferences return after a temporary narrow-width clamp.
     const val DEFAULT_EXPLORER_WIDTH = 220f
     const val DEFAULT_ACTION_WIDTH = 300f
     const val DEFAULT_BOTTOM_HEIGHT = 220f
@@ -130,45 +128,9 @@ internal data class DesktopLayoutState(
   }
 }
 
-internal data class DockedPaneWidths(
-    val explorer: Float,
-    val action: Float,
-    val editor: Float,
-)
-
-/**
- * Clamps only the rendered widths when a docked window becomes short. Stored preferences remain
- * untouched, so their full values return when the viewport grows again.
- */
-internal fun dockedPaneWidths(
-    availableWidthDp: Float,
-    preferredExplorerWidth: Float,
-    preferredActionWidth: Float,
-): DockedPaneWidths {
-  val availableForPanes =
-      (availableWidthDp -
-              TOOL_WINDOW_BAR_WIDTH -
-              WORKSPACE_FRAME_INSET * 2 -
-              RESIZE_DIVIDER_WIDTH * 2)
-          .coerceAtLeast(0f)
-  val availableForDocks = (availableForPanes - MIN_EDITOR_WIDTH).coerceAtLeast(0f)
-  var explorer = DesktopLayoutState.clampExplorerWidth(preferredExplorerWidth)
-  var action = DesktopLayoutState.clampActionWidth(preferredActionWidth)
-  val overflow = (explorer + action - availableForDocks).coerceAtLeast(0f)
-  val explorerReduction = minOf(overflow, explorer - DesktopLayoutState.MIN_EXPLORER_WIDTH)
-  explorer -= explorerReduction
-  action -= minOf(overflow - explorerReduction, action - DesktopLayoutState.MIN_ACTION_WIDTH)
-  return DockedPaneWidths(
-      explorer = explorer,
-      action = action,
-      editor = (availableForPanes - explorer - action).coerceAtLeast(0f),
-  )
-}
-
 internal const val TOOL_WINDOW_BAR_WIDTH = 48f
 internal const val WORKSPACE_FRAME_INSET = 8f
 internal const val RESIZE_DIVIDER_WIDTH = 8f
-internal const val MIN_EDITOR_WIDTH = 400f
 
 /** Persists visual preferences only; it never stores workflow or authorization state. */
 internal class DesktopLayoutStore(

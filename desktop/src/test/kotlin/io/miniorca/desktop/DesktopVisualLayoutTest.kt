@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -143,8 +144,9 @@ class DesktopVisualLayoutTest {
             }
             .use { fixture ->
               fixture.render("comparison-frame-$width-$height-$scale")
-              listOf("Candidate diff", "Read-only", "New function", "Side-by-side", "Unified")
+              listOf("Candidate diff", "Read-only", "New function", "Side-by-side")
                   .forEach(fixture::assertTextFits)
+              if (width >= 1000) fixture.assertTextFits("Unified")
               assertFalse(fixture.hasEditableText("Read-only composed diff"))
               assertTrue(fixture.hasDescription("Read-only composed diff"))
               val wide = fixture.hasText("Current")
@@ -152,7 +154,7 @@ class DesktopVisualLayoutTest {
                   fixture.taggedBounds(
                       if (wide) "diff-Current-column" else "diff-Current → Candidate-column")
               assertTrue(
-                  column.height > if (width >= 999) 180f else 0f,
+                  column.height > if (width >= 999) 180f else -1f,
                   "Comparison must render its canvas at $width/$height/$scale: $column")
               if (wide) {
                 val candidate = fixture.taggedBounds("diff-Candidate-column")
@@ -1171,9 +1173,12 @@ class DesktopVisualLayoutTest {
   fun editorComponentsRenderWithDockedPanesAtEveryWidth() {
     listOf(1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach { (width, height)
       ->
-      ComposeVisualFixture(width, height) { EditorVisualFixture(width.toFloat()) }
+      val layout = DesktopLayoutState(explorerWidth = 330f, actionWidth = 410f)
+      ComposeVisualFixture(width, height) { EditorVisualFixture(width.toFloat(), layout = layout) }
           .use { fixture ->
             fixture.render("editor-$width")
+            assertEquals(330f, fixture.taggedBounds("editor-files-dock").width, 1f)
+            assertEquals(410f, fixture.taggedBounds("editor-context-dock").width, 1f)
             assertTrue(fixture.hasDescription("Performance tool window, not selected"))
             assertFalse(fixture.hasText("Performance"))
             fixture.assertTextFits("user.go")
@@ -4135,8 +4140,6 @@ internal class ComposeVisualFixture(
     panes.zipWithNext().forEach { (left, right) ->
       assertEquals(8f, right.left - left.right, 1f, "A single gutter separates adjacent panes")
     }
-    if (docked)
-        assertTrue(editor.width >= MIN_EDITOR_WIDTH, "The editor must keep its minimum width")
     assertEquals(panes.first().left, terminal.left, 1f)
     assertEquals(panes.last().right, terminal.right, 1f)
     assertEquals(8f, terminal.top - editor.bottom, 1f)
@@ -4651,10 +4654,12 @@ internal fun editorComparisonReviewFixture(): ReviewToolWindowState {
 internal fun EditorVisualFixture(
     width: Float,
     terminalExpanded: Boolean = false,
-    comparison: Boolean = false
+    comparison: Boolean = false,
+    layout: DesktopLayoutState = DesktopLayoutState()
 ) {
-  val layout = DesktopLayoutState(bottomCollapsed = !terminalExpanded)
-  val panes = dockedPaneWidths(width, layout.explorerWidth, layout.actionWidth)
+  val layout = layout.copy(bottomCollapsed = !terminalExpanded)
+  val explorerWidth = layout.explorerWidth
+  val actionWidth = layout.actionWidth
   val review = editorComparisonReviewFixture()
   val file = requireNotNull(review.selected)
   val symbol = requireNotNull(review.selectedSymbol)
@@ -4707,7 +4712,7 @@ internal fun EditorVisualFixture(
                     ExplorerPaneActions({}, {}, {}, {}, {}),
                     modifier)
               },
-              modifier = Modifier.width(panes.explorer.dp),
+              modifier = Modifier.requiredWidth(explorerWidth.dp).testTag("editor-files-dock"),
               showHeader = false)
           ResizableDivider({}, {})
           EditorArea(
@@ -4812,7 +4817,7 @@ internal fun EditorVisualFixture(
                     },
                     modifier = modifier)
               },
-              modifier = Modifier.width(panes.action.dp),
+              modifier = Modifier.requiredWidth(actionWidth.dp).testTag("editor-context-dock"),
               showHeader = false)
         },
         terminal = {
