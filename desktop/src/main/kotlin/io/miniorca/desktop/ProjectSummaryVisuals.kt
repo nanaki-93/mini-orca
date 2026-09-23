@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -93,22 +94,33 @@ internal fun summaryCoverageFractions(
 
 @Composable
 internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnalysis: () -> Unit) {
-  WorkspaceSection(modifier = Modifier.testTag("analysis-summary")) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      Text(
-          "Analysis coverage",
-          color = ResultAccent,
-          style = IdeTypography.workspaceHeading,
-          modifier = Modifier.semantics { heading() })
-      SummaryCoverageBar(presentation)
-      MiniOrcaButton(
-          onClick = openAnalysis,
-          modifier = Modifier.testTag("summary-view-analysis"),
-          tone = ActionTone.Navigation) {
-            Text("View analysis", style = IdeTypography.workspaceMetadata)
-          }
-    }
-  }
+  Column(
+      Modifier.fillMaxWidth().testTag("analysis-summary"),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                  "Analysis coverage",
+                  color = ResultAccent,
+                  style = IdeTypography.workspaceHeading,
+                  modifier = Modifier.semantics { heading() })
+              MiniOrcaButton(
+                  onClick = openAnalysis,
+                  modifier = Modifier.testTag("summary-view-analysis"),
+                  tone = ActionTone.Navigation) {
+                    Text("View analysis", style = IdeTypography.workspaceMetadata)
+                  }
+            }
+        Column(
+            Modifier.fillMaxWidth()
+                .background(HeaderSurface, RoundedCornerShape(10.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              SummaryCoverageBar(presentation)
+            }
+      }
 }
 
 @Composable
@@ -130,13 +142,13 @@ private fun SummaryCoverageBar(
     Row(
         Modifier.fillMaxWidth()
             .testTag("summary-coverage-track")
-            .height(12.dp)
+            .height(8.dp)
             .clip(MiniOrcaShapes.pill)
             .background(StrongSurface)
             .semantics { contentDescription = "Analysis coverage: $description" },
         horizontalArrangement = Arrangement.spacedBy(2.dp)) {
           segments.forEach { (metric, fraction) ->
-            Box(Modifier.weight(fraction).height(12.dp).background(summaryMetricTint(metric.tone)))
+            Box(Modifier.weight(fraction).height(8.dp).background(summaryMetricTint(metric.tone)))
           }
         }
     if (segments.isEmpty()) {

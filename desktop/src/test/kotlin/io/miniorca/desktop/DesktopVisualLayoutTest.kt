@@ -4211,11 +4211,16 @@ internal class ComposeVisualFixture(
     val separator = taggedBounds("summary-header-separator")
     val coverage = taggedBounds("analysis-summary")
     val track = taggedBounds("summary-coverage-track")
+    val coverageAction = taggedBounds("summary-view-analysis")
     assertTrue(header.bottom <= separator.top, "Project identity precedes its separator")
     assertTrue(separator.bottom <= overview.top, "Overview follows the separate project header")
     assertTrue(overview.bottom <= outline.top, "Overview precedes the outline")
     assertTrue(outline.right <= coverage.left, "Outline sits beside focused detail")
     assertTrue(track.width >= coverage.width * 0.6f, "Coverage track must be broad")
+    assertEquals(8f, track.height, 1f, "Coverage track is a compact 8dp graphic")
+    assertTrue(coverageAction.top >= coverage.top, "View analysis remains within coverage")
+    assertTrue(coverageAction.bottom <= coverage.bottom, "View analysis remains within coverage")
+    assertSummaryDetailContained("summary-coverage-track")
   }
 
   fun assertSummaryDetailContained(tag: String, compact: Boolean = false) {
