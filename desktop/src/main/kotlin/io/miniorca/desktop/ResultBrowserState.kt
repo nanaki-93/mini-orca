@@ -107,10 +107,8 @@ internal fun filteredResultRows(
 internal fun resultBrowserSelection(
     current: String?,
     visibleRows: List<ResultRowPresentation>,
-    wide: Boolean,
 ): String? =
-    current?.takeIf { key -> visibleRows.any { it.key == key } }
-        ?: visibleRows.firstOrNull()?.key?.takeIf { wide }
+    current?.takeIf { key -> visibleRows.any { it.key == key } } ?: visibleRows.firstOrNull()?.key
 
 internal fun nextResultBrowserKey(
     rows: List<ResultRowPresentation>,

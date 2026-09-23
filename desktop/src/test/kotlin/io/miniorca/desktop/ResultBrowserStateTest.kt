@@ -28,14 +28,13 @@ class ResultBrowserStateTest {
   }
 
   @Test
-  fun selectionUsesStableKeysAndOnlyWidePagesAutoSelect() {
+  fun selectionRetainsVisibleKeyAndFallsBackToFirstVisibleRow() {
     val rows = listOf(row("high", "First"), row("critical", "Second"))
 
-    assertEquals("First", resultBrowserSelection(null, rows, wide = true))
-    assertNull(resultBrowserSelection(null, rows, wide = false))
-    assertEquals("Second", resultBrowserSelection("Second", rows.reversed(), wide = true))
-    assertEquals("First", resultBrowserSelection("Second", rows.dropLast(1), wide = true))
-    assertNull(resultBrowserSelection("Second", rows.dropLast(1), wide = false))
+    assertEquals("First", resultBrowserSelection(null, rows))
+    assertEquals("Second", resultBrowserSelection("Second", rows.reversed()))
+    assertEquals("First", resultBrowserSelection("Second", rows.dropLast(1)))
+    assertNull(resultBrowserSelection("Second", emptyList()))
     assertEquals("First", nextResultBrowserKey(rows, "Second", 1))
   }
 

@@ -677,9 +677,7 @@ class DesktopVisualLayoutTest {
                   assertFalse(fixture.hasText("Review"))
                   fixture.clickDescription("Inspect $title")
                   fixture.render("results-$category-detail-$width-$scale")
-                  assertEquals(
-                      !resultListDetailUsesTwoPanes(width.dp, scale),
-                      fixture.hasText("Back to results"))
+                  assertFalse(fixture.hasText("Back to results"))
                   assertFalse(fixture.hasText("Clear selection"))
                   assertTrue(fixture.hasText("Prepare fix"))
                   if (category == "performance") {
@@ -690,12 +688,6 @@ class DesktopVisualLayoutTest {
                   }
                   assertFalse(fixture.hasText("Open source"))
                   assertEquals(0, externalActions)
-                  if (width < 900) {
-                    fixture.clickText("Back to results")
-                    fixture.render()
-                    assertTrue(fixture.hasDescription("Inspect $title"))
-                    fixture.clickDescription("Inspect $title")
-                  }
                   val nextRun =
                       original.run!!.copy(identity = original.run.identity.copy(id = "next-run"))
                   page =

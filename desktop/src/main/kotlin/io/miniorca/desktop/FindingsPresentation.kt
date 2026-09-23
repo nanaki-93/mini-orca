@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -39,7 +38,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -231,7 +229,7 @@ internal fun ResultEmptyState(
       }
 }
 
-/** Each list and detail pane owns one scroll area; narrow windows use an explicit Back action. */
+/** The result list and selected detail remain visible side by side. */
 @Composable
 internal fun ResultListDetail(
     rows: List<ResultRowPresentation>,
@@ -239,18 +237,12 @@ internal fun ResultListDetail(
     onSelection: (String?) -> Unit,
     emptyMessage: String,
     modifier: Modifier = Modifier,
-    wide: Boolean? = null,
     detail: @Composable (String) -> Unit,
 ) {
   val selectedKey = browser.selectedKey
   val selected = rows.firstOrNull { it.key == selectedKey }
   val listState = browser.listState
-  var returnFocusKey by remember(browser) { mutableStateOf<String?>(null) }
   var keyboardFocusKey by remember(browser) { mutableStateOf<String?>(null) }
-  LaunchedEffect(returnFocusKey, selectedKey, rows) {
-    val key = returnFocusKey
-    if (selectedKey == null && key != null && rows.none { it.key == key }) returnFocusKey = null
-  }
   LaunchedEffect(keyboardFocusKey, rows) {
     keyboardFocusKey?.let { key ->
       rows
@@ -259,135 +251,104 @@ internal fun ResultListDetail(
           ?.let { index -> listState.scrollToItem(index) }
     }
   }
-  BoxWithConstraints(modifier) {
-    val usesTwoPanes =
-        wide ?: resultListDetailUsesTwoPanes(maxWidth, LocalDensity.current.fontScale)
-    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      if (usesTwoPanes || selected == null) {
-        LazyColumn(
-            Modifier.weight(if (usesTwoPanes) 0.42f else 1f).fillMaxHeight().testTag("result-list"),
-            state = listState,
-            contentPadding = PaddingValues(bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-              if (rows.isEmpty())
-                  item {
-                    WorkspaceSection {
-                      Text(emptyMessage, color = SecondaryText, style = IdeTypography.workspaceBody)
-                    }
-                  }
-              items(rows, key = { it.key }) { row ->
-                val rowFocusRequester = remember(row.key) { FocusRequester() }
-                IdeActionSurface(
-                    onClick = { onSelection(row.key) },
-                    colors =
-                        IdeActionColors(
-                            background = Panel,
-                            hoveredBackground = ControlHover,
-                            pressedBackground = SelectionSurface,
-                            selectedBackground = SelectionSurface,
-                            disabledBackground = Panel,
-                            content = PrimaryText,
-                            selectedContent = PrimaryText,
-                            disabledContent = FaintText,
-                            border =
-                                if (row.key == selectedKey) SelectionAccent else PaneSeparator),
-                    selected = row.key == selectedKey,
-                    accessibleName = "Inspect ${row.title}",
-                    tooltip = null,
-                    shape = MiniOrcaShapes.interactiveCard,
-                    minimumHeight = 64.dp,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                    modifier =
-                        Modifier.fillMaxWidth()
-                            .focusRequester(rowFocusRequester)
-                            .onPreviewKeyEvent { event: KeyEvent ->
-                              if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                              val target =
-                                  when (event.key) {
-                                    Key.DirectionDown -> nextResultBrowserKey(rows, row.key, 1)
-                                    Key.DirectionUp -> nextResultBrowserKey(rows, row.key, -1)
-                                    else -> null
-                                  }
-                              when {
-                                target != null -> {
-                                  keyboardFocusKey = target
-                                  true
-                                }
-                                event.key == Key.Enter || event.key == Key.Spacebar -> {
-                                  onSelection(row.key)
-                                  true
-                                }
-                                else -> false
-                              }
-                            }
-                            .semantics { this.selected = row.key == selectedKey }) {
-                      ResultRowContent(row)
-                    }
-                if (row.key == returnFocusKey)
-                    LaunchedEffect(row.key, returnFocusKey, selectedKey) {
-                      if (selectedKey == null && returnFocusKey == row.key) {
-                        rowFocusRequester.requestFocus()
-                        returnFocusKey = null
-                      }
-                    }
-                if (row.key == keyboardFocusKey)
-                    LaunchedEffect(row.key, keyboardFocusKey) {
-                      rowFocusRequester.requestFocus()
-                      keyboardFocusKey = null
-                    }
-              }
-            }
-      }
-      if (usesTwoPanes || selected != null) {
-        val detailModifier =
-            Modifier.weight(if (usesTwoPanes) 0.58f else 1f)
-                .fillMaxHeight()
-                .clip(MiniOrcaShapes.interactiveCard)
-                .background(Panel)
-                .border(1.dp, PaneSeparator, MiniOrcaShapes.interactiveCard)
-                .testTag("result-detail")
-        if (selected == null) {
-          Box(detailModifier.padding(24.dp), contentAlignment = Alignment.Center) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                  DesktopLineIcon(
-                      DesktopIcon.Document, "Finding evidence", iconSize = 28.dp, tint = FaintText)
-                  Text(
-                      "Select a result to inspect its evidence.",
-                      color = SecondaryText,
-                      style = IdeTypography.workspaceBody,
-                      textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+  Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        Modifier.weight(0.42f).fillMaxHeight().testTag("result-list"),
+        state = listState,
+        contentPadding = PaddingValues(bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          if (rows.isEmpty())
+              item {
+                WorkspaceSection {
+                  Text(emptyMessage, color = SecondaryText, style = IdeTypography.workspaceBody)
                 }
-          }
-        } else {
-          key(selected.key) {
-            Column(
-                detailModifier.verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                  if (!usesTwoPanes)
-                      ChromeButton(
-                          onClick = {
-                            returnFocusKey = selected.key
-                            onSelection(null)
-                          },
-                          tooltip = null) {
-                            Text("Back to results")
+              }
+          items(rows, key = { it.key }) { row ->
+            val rowFocusRequester = remember(row.key) { FocusRequester() }
+            IdeActionSurface(
+                onClick = { onSelection(row.key) },
+                colors =
+                    IdeActionColors(
+                        background = Panel,
+                        hoveredBackground = ControlHover,
+                        pressedBackground = SelectionSurface,
+                        selectedBackground = SelectionSurface,
+                        disabledBackground = Panel,
+                        content = PrimaryText,
+                        selectedContent = PrimaryText,
+                        disabledContent = FaintText,
+                        border = if (row.key == selectedKey) SelectionAccent else PaneSeparator),
+                selected = row.key == selectedKey,
+                accessibleName = "Inspect ${row.title}",
+                tooltip = null,
+                shape = MiniOrcaShapes.interactiveCard,
+                minimumHeight = 64.dp,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .focusRequester(rowFocusRequester)
+                        .onPreviewKeyEvent { event: KeyEvent ->
+                          if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                          val target =
+                              when (event.key) {
+                                Key.DirectionDown -> nextResultBrowserKey(rows, row.key, 1)
+                                Key.DirectionUp -> nextResultBrowserKey(rows, row.key, -1)
+                                else -> null
+                              }
+                          when {
+                            target != null -> {
+                              keyboardFocusKey = target
+                              true
+                            }
+                            event.key == Key.Enter || event.key == Key.Spacebar -> {
+                              onSelection(row.key)
+                              true
+                            }
+                            else -> false
                           }
-                  detail(selected.key)
+                        }
+                        .semantics { this.selected = row.key == selectedKey }) {
+                  ResultRowContent(row)
+                }
+            if (row.key == keyboardFocusKey)
+                LaunchedEffect(row.key, keyboardFocusKey) {
+                  rowFocusRequester.requestFocus()
+                  keyboardFocusKey = null
                 }
           }
         }
+    val detailModifier =
+        Modifier.weight(0.58f)
+            .fillMaxHeight()
+            .clip(MiniOrcaShapes.interactiveCard)
+            .background(Panel)
+            .border(1.dp, PaneSeparator, MiniOrcaShapes.interactiveCard)
+            .testTag("result-detail")
+    if (selected == null) {
+      Box(detailModifier.padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+              DesktopLineIcon(
+                  DesktopIcon.Document, "Finding evidence", iconSize = 28.dp, tint = FaintText)
+              Text(
+                  "Select a result to inspect its evidence.",
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceBody,
+                  textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+      }
+    } else {
+      key(selected.key) {
+        Column(
+            detailModifier.verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+              detail(selected.key)
+            }
       }
     }
   }
 }
-
-/** Keeps two panes only when both retain a readable text width at the current text scale. */
-internal fun resultListDetailUsesTwoPanes(
-    availableWidth: androidx.compose.ui.unit.Dp,
-    fontScale: Float,
-): Boolean = availableWidth / fontScale >= 900.dp
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -397,63 +358,64 @@ internal fun ResultSectionHeader(
     openAnalysis: () -> Unit,
 ) {
   val status = if (page.stale && page.run != null) "stale" else page.progress?.status
-  BoxWithConstraints(Modifier.fillMaxWidth().testTag("result-header")) {
-    val inline = maxWidth / LocalDensity.current.fontScale >= 440.dp
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      Row(
-          Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-          verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-              Text(
-                  page.type.workspace.name,
-                  color = PrimaryText,
-                  style = IdeTypography.workspaceHeading,
-                  modifier = Modifier.semantics { heading() })
-              FlowRow(
-                  horizontalArrangement = Arrangement.spacedBy(8.dp),
-                  verticalArrangement = Arrangement.spacedBy(4.dp),
-                  itemVerticalAlignment = Alignment.CenterVertically) {
-                    val countLabel =
-                        page.reportedCount?.let { count ->
-                          if (count == loadedCount)
-                              "$loadedCount ${if (loadedCount == 1) "finding" else "findings"}"
-                          else "$loadedCount loaded · $count reported"
-                        }
-                            ?: if (loadedCount > 0) "$loadedCount loaded · — reported"
-                            else "— reported"
-                    Text(countLabel, color = SecondaryText, style = IdeTypography.workspaceMetadata)
-                    analysisResultStatusLabel(status)?.let {
-                      IdeLabelBadge(it, analysisStatusTint(status))
+  Column(
+      Modifier.fillMaxWidth().testTag("result-header"),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+              Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    page.type.workspace.name,
+                    color = PrimaryText,
+                    style = IdeTypography.workspaceHeading,
+                    modifier = Modifier.semantics { heading() })
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically) {
+                      val countLabel =
+                          page.reportedCount?.let { count ->
+                            if (count == loadedCount)
+                                "$loadedCount ${if (loadedCount == 1) "finding" else "findings"}"
+                            else "$loadedCount loaded · $count reported"
+                          }
+                              ?: if (loadedCount > 0) "$loadedCount loaded · — reported"
+                              else "— reported"
+                      Text(
+                          countLabel,
+                          color = SecondaryText,
+                          style = IdeTypography.workspaceMetadata)
+                      analysisResultStatusLabel(status)?.let {
+                        IdeLabelBadge(it, analysisStatusTint(status))
+                      }
+                      page.coverageLabel?.let {
+                        Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+                      }
+                      page.runTimeLabel?.let {
+                        Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+                      }
                     }
-                    page.coverageLabel?.let {
-                      Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
-                    }
-                    page.runTimeLabel?.let {
-                      Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
-                    }
-                  }
+              }
+              ResultAnalysisAction(openAnalysis)
             }
-            if (inline) ResultAnalysisAction(openAnalysis)
-          }
-      if (!inline) ResultAnalysisAction(openAnalysis)
-      page.section.error
-          ?.takeIf { loadedCount > 0 }
-          ?.let {
+        page.section.error
+            ?.takeIf { loadedCount > 0 }
+            ?.let {
+              Text(
+                  "Results could not be refreshed: $it",
+                  color = Error,
+                  style = IdeTypography.workspaceMetadata)
+            }
+        if (page.section.loading && loadedCount > 0)
+            Text("Loading results…", color = SecondaryText, style = IdeTypography.workspaceMetadata)
+        if (page.stale && page.run != null && loadedCount > 0)
             Text(
-                "Results could not be refreshed: $it",
-                color = Error,
+                "Retained results are out of date. Start a new analysis for current evidence.",
+                color = Warning,
                 style = IdeTypography.workspaceMetadata)
-          }
-      if (page.section.loading && loadedCount > 0)
-          Text("Loading results…", color = SecondaryText, style = IdeTypography.workspaceMetadata)
-      if (page.stale && page.run != null && loadedCount > 0)
-          Text(
-              "Retained results are out of date. Start a new analysis for current evidence.",
-              color = Warning,
-              style = IdeTypography.workspaceMetadata)
-    }
-  }
+      }
 }
 
 @Composable

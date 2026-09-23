@@ -14,7 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
@@ -30,15 +29,13 @@ internal fun AnalysisResultsPane(
 ) {
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     val headerLimit = maxHeight * 0.45f
-    val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
-    val wide = resultListDetailUsesTwoPanes(contentWidth, LocalDensity.current.fontScale)
     val visibleRows = filteredResultRows(rows, browser.filter, browser.query)
     val hasActiveFilter = browser.filter != ResultBrowserFilter.All || browser.query.isNotBlank()
-    LaunchedEffect(browser.identity, visibleRows, wide) {
-      browser.selectedKey = resultBrowserSelection(browser.selectedKey, visibleRows, wide)
+    LaunchedEffect(browser.identity, visibleRows) {
+      browser.selectedKey = resultBrowserSelection(browser.selectedKey, visibleRows)
     }
     Column(
-        Modifier.fillMaxSize().padding(workspacePagePadding(maxWidth, vertical = 16.dp)),
+        Modifier.fillMaxSize().padding(workspacePagePadding(vertical = 16.dp)),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
           Column(
               Modifier.fillMaxWidth()
@@ -72,8 +69,7 @@ internal fun AnalysisResultsPane(
                   { browser.selectedKey = it },
                   "",
                   Modifier.weight(1f).fillMaxWidth(),
-                  wide,
-                  detail)
+                  detail = detail)
         }
   }
 }
