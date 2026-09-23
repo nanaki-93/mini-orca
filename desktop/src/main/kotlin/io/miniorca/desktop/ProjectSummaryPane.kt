@@ -4,10 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -233,6 +236,7 @@ private fun projectSummaryDetails(
   )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ProjectSummaryPane(
     overview: ProjectOverview?,
@@ -255,6 +259,7 @@ internal fun ProjectSummaryPane(
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
     val sideBySide = contentWidth / fontScale >= 900.dp
+    val compactIndex = contentWidth / fontScale < 1100.dp
     val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
     val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
     val flows = presentation.details.firstOrNull { it.title == "Flows" }
@@ -301,24 +306,33 @@ internal fun ProjectSummaryPane(
                     }
           }
     }
-    val index: @Composable () -> Unit = {
-      Column(
-          Modifier.width(if (sideBySide) 180.dp else maxWidth),
-          verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            sectionEntries.forEach { (label, key) ->
-              SummaryIndexEntry(label, selectedSection.value == key) {
-                scrollScope.launch {
-                  requestedSection.value = key
-                  sectionsList.scrollToItem(itemKeys.indexOf(key))
-                }
-              }
-            }
+    val indexEntries: @Composable () -> Unit = {
+      sectionEntries.forEach { (label, key) ->
+        SummaryIndexEntry(label, selectedSection.value == key) {
+          scrollScope.launch {
+            requestedSection.value = key
+            sectionsList.scrollToItem(itemKeys.indexOf(key))
           }
+        }
+      }
     }
     Column(Modifier.fillMaxSize()) {
-      if (!sideBySide) index()
+      if (!sideBySide) {
+        FlowRow(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+              indexEntries()
+            }
+      }
       Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (sideBySide) index()
+        if (sideBySide) {
+          Column(
+              Modifier.width(if (compactIndex) 148.dp else 180.dp),
+              verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                indexEntries()
+              }
+        }
         LazyColumn(
             Modifier.weight(1f).fillMaxHeight(),
             state = sectionsList,
