@@ -152,7 +152,7 @@ internal fun SummaryCategoryBox(
       accessibleName = "View $name results",
       tooltip = null,
       shape = MiniOrcaShapes.interactiveCard,
-      minimumHeight = 132.dp,
+      minimumHeight = 0.dp,
       modifier = modifier.fillMaxWidth(),
       contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
   ) {

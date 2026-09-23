@@ -1925,7 +1925,7 @@ class DesktopVisualLayoutTest {
           assertEquals(0, fixture.textCount("Summary"))
           assertTrue(fixture.hasText("Go · go.mod · 23 indexed files · 1,800 lines · Markdown"))
           assertTrue(fixture.hasText("Analysis coverage"))
-          assertTrue(fixture.hasDescription("Go to Coverage summary"))
+          assertTrue(fixture.hasDescription("Select Coverage summary"))
           assertFalse(fixture.hasText("Project understanding"))
         }
 
@@ -2468,8 +2468,7 @@ class DesktopVisualLayoutTest {
               assertFalse(fixture.hasEditableText())
               if (width == 1600 && scale == 1f) {
                 fixture.assertReferenceSummaryGeometry()
-                fixture.assertTextAbove("Bugs", "Performance")
-                fixture.assertTextAbove("Performance", "Security")
+                fixture.assertSummaryCategoryGrid(columns = 2)
               }
             }
       }
@@ -2477,7 +2476,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryIndexScrollsToKeyedSectionsWithAnActiveRunStrip() {
+  fun summarySelectionKeepsRunStripAndDoesNotNavigate() {
     val run = visualFixtureOverview.analysisRun!!.copy(status = "running")
     val overview = visualFixtureOverview.copy(analysisRun = run)
     var navigations = 0
@@ -2487,22 +2486,42 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render()
           assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
-          fixture.clickDescription("Go to Findings summary")
+          fixture.clickDescription("Select Architecture summary")
           fixture.render()
-          val bugs = fixture.taggedBounds("summary-metric-Bugs")
-          assertTrue(bugs.top >= 0f && bugs.top < 650f, "Findings must be brought into view")
-          assertTrue(fixture.isDescriptionSelected("Go to Findings summary"))
-          fixture.scrollBy(300f)
-          fixture.render()
-          assertTrue(fixture.tagCount("summary-metric-Bugs") > 0)
-          fixture.clickDescription("Go to Coverage summary")
+          assertTrue(fixture.isDescriptionSelected("Select Architecture summary"))
+          assertEquals(0, fixture.tagCount("analysis-summary"))
+          assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
+          fixture.clickDescription("Select Coverage summary")
           fixture.render()
           val coverage = fixture.taggedBounds("analysis-summary")
-          assertTrue(fixture.isDescriptionSelected("Go to Coverage summary"))
-          assertTrue(
-              coverage.top >= 0f && coverage.top < 650f,
-              "Coverage must be brought into view despite the run strip")
+          assertTrue(fixture.isDescriptionSelected("Select Coverage summary"))
+          assertTrue(coverage.width > 0f, "Coverage must replace the selected detail")
           assertEquals(0, navigations, "Index navigation must remain local")
+        }
+  }
+
+  @Test
+  fun summaryPreviewSelectsArchitectureAndKeepsOverviewStatusThroughUpdates() {
+    var overview by mutableStateOf(visualFixtureOverview)
+    val destinations = mutableListOf<Workspace>()
+    ComposeVisualFixture(1440, 900) {
+          ProjectSummaryPane(overview, visualFixtureProject, destinations::add)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Select Coverage summary")
+          fixture.clickDescription("Select Architecture summary from preview")
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Select Architecture summary"))
+          assertEquals(0, fixture.tagCount("analysis-summary"))
+          fixture.assertSummaryStatusPlacement("Outdated")
+          overview = overview.copy(analysisCoverage = AnalysisCoverage(total = 23, fresh = 23))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Select Architecture summary"))
+          fixture.assertSummaryStatusPlacement("Updated")
+          fixture.clickDescription("Open Security results")
+          assertEquals(listOf(Workspace.Security), destinations)
+          assertTrue(fixture.isDescriptionSelected("Select Architecture summary"))
         }
   }
 
@@ -2519,18 +2538,16 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, project, {}) }
         .use { fixture ->
           fixture.render()
-          fixture.clickDescription("Go to Packages / modules summary")
+          fixture.clickDescription("Select Packages / modules summary")
           fixture.render()
           assertTrue(fixture.tagCount("summary-modules") > 0, "Modules should be brought into view")
-          assertTrue(fixture.isDescriptionSelected("Go to Packages / modules summary"))
+          assertTrue(fixture.isDescriptionSelected("Select Packages / modules summary"))
           overview = overview.copy(analysis = StructuredProjectAnalysis(status = "missing"))
           fixture.render()
-          assertFalse(fixture.hasDescription("Go to Packages / modules summary"))
-          assertFalse(fixture.hasDescription("Go to Architecture summary"))
+          assertFalse(fixture.hasDescription("Select Packages / modules summary"))
+          assertFalse(fixture.hasDescription("Select Architecture summary"))
           assertTrue(
-              listOf("Project", "Coverage", "Findings").any {
-                fixture.isDescriptionSelected("Go to $it summary")
-              },
+              fixture.isDescriptionSelected("Select Coverage summary"),
               "Selection must fall back to an available section")
           overview =
               overview.copy(
@@ -2544,14 +2561,14 @@ class DesktopVisualLayoutTest {
                   projectRevision = "another-revision",
                   name = "Another project")
           fixture.render()
-          assertFalse(fixture.hasDescription("Go to Packages / modules summary"))
-          assertTrue(fixture.isDescriptionSelected("Go to Project summary"))
+          assertFalse(fixture.hasDescription("Select Packages / modules summary"))
+          assertTrue(fixture.isDescriptionSelected("Select Coverage summary"))
           assertTrue(fixture.hasText("Another project"))
           assertFalse(fixture.hasText(visualFixtureProject.name))
           assertTrue(fixture.taggedBounds("summary-introduction").top >= 0f)
           overview = overview.copy(analysisCoverage = AnalysisCoverage(total = 1, missing = 1))
           fixture.render()
-          assertTrue(fixture.isDescriptionSelected("Go to Project summary"))
+          assertTrue(fixture.isDescriptionSelected("Select Coverage summary"))
         }
   }
 
@@ -2574,9 +2591,9 @@ class DesktopVisualLayoutTest {
                   "Engineering insight" to "summary-insight",
                   "Flows" to "summary-flows")
           targets.forEach { (label, tag) ->
-            fixture.clickDescription("Go to $label summary")
+            fixture.clickDescription("Select $label summary")
             fixture.render()
-            assertTrue(fixture.isDescriptionSelected("Go to $label summary"), label)
+            assertTrue(fixture.isDescriptionSelected("Select $label summary"), label)
             assertTrue(fixture.taggedBounds(tag).top < 650f, "$label must be reachable")
           }
           analysis =
@@ -2585,22 +2602,19 @@ class DesktopVisualLayoutTest {
           targets.forEach { (label, _) ->
             assertEquals(
                 label == "Packages / modules",
-                fixture.hasDescription("Go to $label summary"),
+                fixture.hasDescription("Select $label summary"),
                 "$label entry must match its content")
           }
-          assertFalse(fixture.isDescriptionSelected("Go to Flows summary"))
-          fixture.clickDescription("Go to Packages / modules summary")
+          assertFalse(fixture.isDescriptionSelected("Select Flows summary"))
+          fixture.clickDescription("Select Packages / modules summary")
           fixture.render()
-          assertTrue(fixture.isDescriptionSelected("Go to Packages / modules summary"))
+          assertTrue(fixture.isDescriptionSelected("Select Packages / modules summary"))
           analysis = analysis.copy(components = emptyList())
           fixture.render()
           targets.forEach { (label, _) ->
-            assertFalse(fixture.hasDescription("Go to $label summary"))
+            assertFalse(fixture.hasDescription("Select $label summary"))
           }
-          assertTrue(
-              listOf("Project", "Coverage", "Findings").any {
-                fixture.isDescriptionSelected("Go to $it summary")
-              })
+          assertTrue(fixture.isDescriptionSelected("Select Coverage summary"))
         }
   }
 
@@ -2620,9 +2634,10 @@ class DesktopVisualLayoutTest {
             fixture.render("summary-index-all-$width-$scale")
             val labels =
                 listOf(
-                    "Project",
                     "Coverage",
-                    "Findings",
+                    "Bugs",
+                    "Performance",
+                    "Security",
                     "Architecture",
                     "Packages / modules",
                     "Engineering insight",
@@ -2632,9 +2647,13 @@ class DesktopVisualLayoutTest {
               assertTrue(
                   bounds.left >= 0f && bounds.right <= width, "$label overflows at $width/$scale")
               assertTrue(bounds.top >= 0f && bounds.bottom <= 650f, "$label is not visible")
-              fixture.clickDescription("Go to $label summary")
-              fixture.render()
-              assertTrue(fixture.isDescriptionSelected("Go to $label summary"), label)
+              if (label in listOf("Bugs", "Performance", "Security")) {
+                assertTrue(fixture.hasDescription("Open $label results"))
+              } else {
+                fixture.clickDescription("Select $label summary")
+                fixture.render()
+                assertTrue(fixture.isDescriptionSelected("Select $label summary"), label)
+              }
             }
           }
     }
@@ -2654,15 +2673,19 @@ class DesktopVisualLayoutTest {
                             transferableLesson = "Validate at the request boundary.")))
     ComposeVisualFixture(1440, 1600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Select Architecture summary")
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
           fixture.render("summary-dashboard-collapsed-1440")
           fixture.clickDescription("Show Architecture diagram")
-          fixture.clickDescription("Show Flow 1 diagram")
           fixture.awaitDescription(
               "Architecture diagram\n" + visualFixtureOverview.analysis.architecture)
+          fixture.clickDescription("Select Flows summary")
+          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
+          fixture.clickDescription("Show Flow 1 diagram")
           fixture.awaitDescription(
               "Flow 1 diagram\n" + visualFixtureOverview.analysis.flows.first())
+          fixture.clickDescription("Select Coverage summary")
           fixture.render("summary-dashboard-1440")
           listOf(
                   "Analysis coverage",
@@ -2670,13 +2693,12 @@ class DesktopVisualLayoutTest {
                   "Architecture",
                   "Packages / modules",
                   "Flows",
-                  "Engineering insight",
-                  "Validate before storage.")
+                  "Engineering insight")
               .forEach { assertTrue(fixture.hasText(it), it) }
           assertTrue(fixture.hasText("Go · go.mod · 23 indexed files · 1,800 lines · Markdown"))
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
-          assertTrue(fixture.hasDescription("Go to Project summary"))
+          assertTrue(fixture.isDescriptionSelected("Select Coverage summary"))
           fixture.assertTextAbove(visualFixtureProject.name, "Analysis coverage")
           fixture.assertSummaryStatusPlacement("Outdated")
           fixture.assertSummaryCoverageActionReachable()
@@ -2692,6 +2714,8 @@ class DesktopVisualLayoutTest {
           assertTrue(
               fixture.hasDescription(
                   projectSummaryPresentation(overview, visualFixtureProject).analysisMessage))
+          fixture.clickDescription("Select Engineering insight summary")
+          fixture.render()
           fixture.assertTextAbove("Mechanism", "Why it matters here")
           assertFalse(fixture.hasText("Trade-off or failure mode"))
           assertFalse(fixture.hasText("Transferable lesson"))
@@ -2710,7 +2734,7 @@ class DesktopVisualLayoutTest {
           assertFalse(fixture.hasText("MEDIUM · Input validation is incomplete."))
           assertFalse(fixture.hasText("Show full response"))
           assertFalse(fixture.hasEditableText())
-          assertTrue(fixture.hasDescription("Go to Engineering insight summary"))
+          assertTrue(fixture.hasDescription("Select Engineering insight summary"))
           assertFalse(fixture.hasEditableText())
         }
   }
@@ -2724,13 +2748,15 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(1440, 900) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render("summary-lower-one-sided-1440")
-          val lower = fixture.taggedBounds("summary-architecture")
-          val introduction = fixture.taggedBounds("summary-introduction")
-          assertEquals(introduction.width, lower.width, 1f)
+          fixture.clickDescription("Select Architecture summary")
+          fixture.render()
+          assertTrue(fixture.taggedBounds("summary-architecture").width > 0f)
           assertEquals(0, fixture.tagCount("summary-flows"))
           assertEquals(0, fixture.tagCount("summary-insight"))
-          assertTrue(fixture.tagCount("summary-architecture") == 1)
-          assertTrue(fixture.tagCount("summary-modules") == 1)
+          fixture.clickDescription("Select Packages / modules summary")
+          fixture.render()
+          assertEquals(1, fixture.tagCount("summary-modules"))
+          assertEquals(0, fixture.tagCount("summary-architecture"))
         }
   }
 
@@ -2755,10 +2781,10 @@ class DesktopVisualLayoutTest {
                   "Engineering insight" to "summary-insight",
                   "Flows" to "summary-flows")
               .forEach { (label, tag) ->
-                fixture.clickDescription("Go to $label summary")
+                fixture.clickDescription("Select $label summary")
                 fixture.render()
                 assertTrue(
-                    fixture.isDescriptionSelected("Go to $label summary"),
+                    fixture.isDescriptionSelected("Select $label summary"),
                     "$label should be selected")
                 val bounds = fixture.taggedBounds(tag)
                 assertTrue(bounds.top >= 0f && bounds.top < 1_100f, "$label must be in view")
@@ -2818,7 +2844,7 @@ class DesktopVisualLayoutTest {
           fixture.scrollBy(500f)
           fixture.render("summary-dashboard-long-purpose-800-150")
           fixture.assertTextWrapsWithoutClipping(longPurpose)
-          assertFalse(fixture.hasText("Show full response"))
+          assertTrue(fixture.hasText("Show full response"))
           assertEquals(1, fixture.scrollableContentCount())
           repeat(12) {
             fixture.scrollBy(500f)
@@ -2850,7 +2876,7 @@ class DesktopVisualLayoutTest {
           fixture.render("summary-long-identity-failure-800-150")
           fixture.assertTextWrapsWithoutClipping("Project description: failed · $failure")
           fixture.assertTextWrapsWithoutClipping(longName)
-          assertFalse(fixture.hasDescription("Go to Packages / modules summary"))
+          assertFalse(fixture.hasDescription("Select Packages / modules summary"))
           assertTrue(fixture.hasScrollableContent())
           assertEquals(1, fixture.scrollableContentCount())
         }
@@ -2861,11 +2887,11 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-long-module-path-800-150")
-          fixture.clickDescription("Go to Packages / modules summary")
+          fixture.clickDescription("Select Packages / modules summary")
           fixture.render()
           fixture.assertTextWrapsWithoutClipping(longPath)
           assertEquals(1, fixture.scrollableContentCount())
-          fixture.clickDescription("Go to Flows summary")
+          fixture.clickDescription("Select Flows summary")
           fixture.render()
           assertTrue(fixture.hasText("Flows"))
         }
@@ -2914,10 +2940,11 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render()
           assertFalse(fixture.hasText("0 up to date"))
+          fixture.revealText("Overall findings · 2 tool-reported issues · 4 AI suggestions")
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
           assertTrue(fixture.hasText(visualFixtureProject.name))
-          fixture.assertSummaryCategoriesStacked()
+          fixture.assertSummaryCategoryGrid(columns = 2)
           fixture.assertSummaryStatusPlacement("Coverage unavailable")
         }
     ComposeVisualFixture(1440, 1100) { ProjectSummaryPane(null, visualFixtureProject, {}) }
@@ -2985,17 +3012,23 @@ class DesktopVisualLayoutTest {
                 fixture.taggedBounds("summary-metric-${type.workspace.name}")
               }
           cards.forEach { card ->
-            assertTrue(card.height >= 132f, "Stacked cards must retain their minimum height")
-            assertEquals(cards.first().left, card.left, 1f, "Stacked cards must share an edge")
+            assertTrue(card.height > 0f, "Compact cards must retain their content")
             assertEquals(
-                cards.first().width, card.width, 1f, "Stacked cards must use the available width")
+                cards.first().left, card.left, 1f, "Single-column cards must share an edge")
+            assertEquals(
+                cards.first().width,
+                card.width,
+                1f,
+                "Single-column cards must use the available width")
           }
           cards.zipWithNext().forEach { (first, next) ->
             assertTrue(first.bottom <= next.top, "Compact cards must stack without overlap")
           }
+          fixture.revealText("Overall findings · 2 tool-reported issues · 4 AI suggestions")
           val provenance = fixture.taggedBounds("summary-findings-provenance")
           assertTrue(
-              provenance.top >= cards.last().bottom, "Provenance must follow all category cards")
+              provenance.top >= fixture.taggedBounds("summary-architecture-preview").bottom,
+              "Provenance must follow the category grid")
         }
   }
 
@@ -3023,8 +3056,9 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-categories-details-compact-800-150")
-          fixture.clickDescription("Go to Findings summary")
+          fixture.clickDescription("Select Coverage summary")
           fixture.render()
+          fixture.revealText("Details unavailable")
           fixture.assertSummaryCategoryContentContained()
           fixture.assertTextFits("Interrupted")
           fixture.assertTextFits("High: 1 · Medium: 1 · Low: 1", maxLines = 2)
@@ -3066,7 +3100,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("summary-live-running-1440")
           fixture.assertSummaryStatusPlacement("Updating")
-          fixture.assertSummaryCategoriesStacked()
+          fixture.assertSummaryCategoryGrid(columns = 2)
           listOf("17", "18", "19").forEach(fixture::assertTextFits)
           fixture.assertTextFits("Loading details")
           AnalysisResultType.entries.forEach { type ->
@@ -3092,14 +3126,14 @@ class DesktopVisualLayoutTest {
           listOf("17", "18", "19", "Loading details").forEach { assertFalse(fixture.hasText(it)) }
           listOf("27", "28", "29").forEach(fixture::assertTextFits)
           fixture.assertSummaryStatusPlacement("Updated")
-          fixture.assertSummaryCategoriesStacked()
+          fixture.assertSummaryCategoryGrid(columns = 2)
           AnalysisResultType.entries.forEach { type ->
             val box = fixture.taggedBounds("summary-metric-${type.workspace.name}")
             val icon = fixture.taggedBounds("summary-category-icon-${type.category}")
             val name = fixture.taggedBounds("summary-category-name-${type.category}")
             val count = fixture.taggedBounds("summary-category-count-${type.category}")
             val status = fixture.taggedBounds("summary-category-status-${type.category}")
-            assertTrue(box.height >= 132f, "Summary category cards must retain a minimum height")
+            assertTrue(box.height > 0f, "Summary category cards must retain their content")
             assertEquals(icon.top, name.top, 1f, "Summary icon and name must remain inline")
             assertTrue(count.top >= icon.bottom, "Summary count must remain below its icon row")
             assertTrue(status.top >= count.bottom, "Summary status must follow the count")
@@ -3188,7 +3222,7 @@ class DesktopVisualLayoutTest {
             }
             fixture.revealText("Partial")
             fixture.assertTextFits("Partial")
-            fixture.clickDescription("Go to Coverage summary")
+            fixture.clickDescription("Select Coverage summary")
             fixture.render()
             fixture.revealSummaryStatus("Paused")
             fixture.assertTextFits("Paused")
@@ -3623,7 +3657,11 @@ internal class ComposeVisualFixture(
   fun awaitDescription(label: String, state: String? = null) {
     fun matches(): Boolean =
         nodes().any { node ->
-          node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+          node.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+            description == label ||
+                ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                    description.startsWith("$label,"))
+          } == true &&
               (state == null ||
                   generateSequence(node) { it.parent }
                       .any { it.config.getOrNull(SemanticsProperties.StateDescription) == state })
@@ -3640,7 +3678,11 @@ internal class ComposeVisualFixture(
   fun awaitVisibleDescription(label: String) {
     fun visible(): Boolean =
         nodes().any { node ->
-          node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+          node.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+            description == label ||
+                ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                    description.startsWith("$label,"))
+          } == true &&
               node.config.getOrNull(SemanticsActions.OnClick) != null &&
               node.boundsInRoot.let { bounds ->
                 bounds.width > 0 &&
@@ -3695,7 +3737,11 @@ internal class ComposeVisualFixture(
 
   fun hasDescription(label: String): Boolean =
       nodes().any {
-        it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+        it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+          description == label ||
+              ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                  description.startsWith("$label,"))
+        } == true
       }
 
   fun semanticHeadingTexts(): List<String> =
@@ -3709,7 +3755,11 @@ internal class ComposeVisualFixture(
       nodes()
           .asSequence()
           .filter {
-            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+              description == label ||
+                  ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                      description.startsWith("$label,"))
+            } == true
           }
           .flatMap { node -> generateSequence(node) { it.parent } }
           .any { it.config.getOrNull(SemanticsProperties.Selected) == true }
@@ -3718,7 +3768,11 @@ internal class ComposeVisualFixture(
       nodes()
           .asSequence()
           .filter {
-            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+              description == label ||
+                  ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                      description.startsWith("$label,"))
+            } == true
           }
           .flatMap { node -> generateSequence(node) { it.parent } }
           .any { it.config.getOrNull(SemanticsProperties.Disabled) != null }
@@ -3727,7 +3781,11 @@ internal class ComposeVisualFixture(
       nodes()
           .asSequence()
           .filter {
-            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+              description == label ||
+                  ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                      description.startsWith("$label,"))
+            } == true
           }
           .flatMap { node -> generateSequence(node) { it.parent } }
           .mapNotNull { it.config.getOrNull(SemanticsProperties.StateDescription) }
@@ -3737,7 +3795,11 @@ internal class ComposeVisualFixture(
       nodes()
           .asSequence()
           .filter {
-            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+              description == label ||
+                  ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                      description.startsWith("$label,"))
+            } == true
           }
           .flatMap { node -> generateSequence(node) { it.parent } }
           .mapNotNull { it.config.getOrNull(SemanticsProperties.ToggleableState) }
@@ -3768,7 +3830,11 @@ internal class ComposeVisualFixture(
   fun clickDescription(label: String) {
     clickNode(
         nodes().firstOrNull {
-          it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+            description == label ||
+                ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                    description.startsWith("$label,"))
+          } == true
         },
         label)
   }
@@ -3789,8 +3855,11 @@ internal class ComposeVisualFixture(
   private fun visibleActionBounds(label: String): Rect {
     val node =
         nodes().single {
-          it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
-              it.config.getOrNull(SemanticsActions.OnClick) != null
+          it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+            description == label ||
+                ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                    description.startsWith("$label,"))
+          } == true && it.config.getOrNull(SemanticsActions.OnClick) != null
         }
     val bounds = node.boundsInRoot
     assertTrue(
@@ -3806,8 +3875,11 @@ internal class ComposeVisualFixture(
 
   fun clickableDescriptionCount(label: String): Int =
       nodes().count {
-        it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
-            it.config.getOrNull(SemanticsActions.OnClick) != null
+        it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+          description == label ||
+              ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                  description.startsWith("$label,"))
+        } == true && it.config.getOrNull(SemanticsActions.OnClick) != null
       }
 
   fun clickVisibleDescription(label: String) {
@@ -3827,7 +3899,11 @@ internal class ComposeVisualFixture(
   fun tryClick(label: String): Boolean =
       nodes()
           .filter {
-            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true ||
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+              description == label ||
+                  ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                      description.startsWith("$label,"))
+            } == true ||
                 it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == label } ==
                     true
           }
@@ -3864,7 +3940,11 @@ internal class ComposeVisualFixture(
   fun isDescriptionFocused(label: String): Boolean {
     val described =
         nodes().filter {
-          it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+            description == label ||
+                ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                    description.startsWith("$label,"))
+          } == true
         }
     return described.any { node ->
       (generateSequence(node) { it.parent } + descendants(node).asSequence()).any {
@@ -3897,7 +3977,11 @@ internal class ComposeVisualFixture(
     val start =
         nodes()
             .single {
-              it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+              it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+                description == label ||
+                    ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                        description.startsWith("$label,"))
+              } == true
             }
             .boundsInRoot
             .center
@@ -3925,7 +4009,11 @@ internal class ComposeVisualFixture(
       nodes()
           .asSequence()
           .filter {
-            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+              description == label ||
+                  ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                      description.startsWith("$label,"))
+            } == true
           }
           .flatMap { node -> generateSequence(node) { it.parent } }
           .mapNotNull { it.config.getOrNull(SemanticsActions.RequestFocus)?.action }
@@ -4073,38 +4161,38 @@ internal class ComposeVisualFixture(
       scrollBy(160f)
       render()
     }
-    error("$label in Analysis coverage must be reachable by scrolling")
+    error("$label in Summary overview must be reachable by scrolling")
   }
 
   fun assertReferenceSummaryGeometry() {
-    fun bounds(tag: String) =
-        nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }.boundsInRoot
-    val index = bounds("summary-index-Project")
-    val introduction = bounds("summary-introduction")
-    val coverage = bounds("analysis-summary")
-    val track = bounds("summary-coverage-track")
-    assertTrue(index.right <= introduction.left, "Index must sit beside the overview")
-    assertTrue(introduction.bottom <= coverage.top, "Coverage must follow the introduction")
-    assertEquals(introduction.width, coverage.width, 1f, "Coverage must use the Summary width")
+    val outline = taggedBounds("summary-index-Coverage")
+    val overview = taggedBounds("summary-introduction")
+    val coverage = taggedBounds("analysis-summary")
+    val track = taggedBounds("summary-coverage-track")
+    assertTrue(overview.bottom <= outline.top, "Overview precedes the outline")
+    assertTrue(outline.right <= coverage.left, "Outline sits beside focused detail")
     assertTrue(track.width >= coverage.width * 0.6f, "Coverage track must be broad")
-    assertTrue(index.width > 0f, "Section index must remain accessible")
   }
 
   fun assertTextFits(label: String, maxLines: Int = 1) {
     assertTextLayout(label, lineCounts = 1..maxLines)
   }
 
-  fun assertSummaryCategoriesStacked() {
+  fun assertSummaryCategoryGrid(columns: Int) {
     val cards =
-        AnalysisResultType.entries.map { type ->
-          taggedBounds("summary-metric-${type.workspace.name}")
-        }
-    cards.zipWithNext().forEach { (first, next) ->
-      assertEquals(first.left, next.left, 1f, "Stacked categories must share an edge")
-      assertTrue(first.bottom <= next.top, "Categories must stack without overlap")
+        AnalysisResultType.entries.map { taggedBounds("summary-metric-${it.workspace.name}") } +
+            taggedBounds("summary-architecture-preview")
+    cards.forEachIndexed { index, card ->
+      assertTrue(card.width > 0f && card.height > 0f)
+      val next = cards.getOrNull(index + 1) ?: return@forEachIndexed
+      if (index % columns == columns - 1) {
+        assertTrue(card.bottom <= next.top, "Next row must follow the previous row")
+      } else {
+        assertTrue(card.right <= next.left, "Cards in a row must not overlap")
+      }
     }
-    AnalysisResultType.entries.forEach { type ->
-      assertTrue(hasDescription("View ${type.workspace.name} results"))
+    AnalysisResultType.entries.forEach {
+      assertTrue(hasDescription("View ${it.workspace.name} results"))
     }
   }
 
@@ -4143,30 +4231,20 @@ internal class ComposeVisualFixture(
 
   fun assertSummaryStatusPlacement(label: String) {
     val status =
-        textNodes(label).single { node ->
+        textNodes(label).first { node ->
           generateSequence(node) { it.parent }
               .any { it.config.getOrNull(SemanticsProperties.TestTag) == "summary-analysis-status" }
         }
+    val overview = taggedBounds("summary-introduction")
+    val outline = taggedBounds("summary-index-Coverage")
     assertTrue(
-        generateSequence(status) { it.parent }
-            .any { it.config.getOrNull(SemanticsProperties.TestTag) == "analysis-summary" },
-        "The status must belong to Analysis coverage")
-    val introduction =
-        nodes().single {
-          it.config.getOrNull(SemanticsProperties.TestTag) == "summary-introduction"
-        }
-    assertTrue(introduction.boundsInRoot.bottom <= status.boundsInRoot.top)
-    val panel =
-        nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == "analysis-summary" }
-    assertTrue(
-        status.boundsInRoot.left >= panel.boundsInRoot.left &&
-            status.boundsInRoot.right <= panel.boundsInRoot.right &&
-            status.boundsInRoot.bottom <= height,
-        "$label must remain contained and reachable in Analysis coverage")
+        status.boundsInRoot.left >= overview.left && status.boundsInRoot.right <= overview.right)
+    assertTrue(status.boundsInRoot.bottom <= overview.bottom)
+    assertTrue(overview.bottom <= outline.top, "$label must remain above the detail split")
   }
 
   fun assertSummaryCoverageActionReachable() {
-    clickDescription("Go to Coverage summary")
+    clickDescription("Select Coverage summary")
     render()
     repeat(30) {
       val action =
@@ -4188,7 +4266,7 @@ internal class ComposeVisualFixture(
   }
 
   fun revealSummaryCategory(label: String) {
-    clickDescription("Go to Findings summary")
+    clickDescription("Select Coverage summary")
     render()
     repeat(60) {
       val icon =
@@ -4357,7 +4435,11 @@ internal class ComposeVisualFixture(
       val bounds =
           nodes()
               .single {
-                it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+                it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+                  description == label ||
+                      ((label.startsWith("Select ") || label.startsWith("Open ")) &&
+                          description.startsWith("$label,"))
+                } == true
               }
               .boundsInRoot
       assertTrue(

@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -7,32 +8,29 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 
 internal enum class SummaryMetricTone {
   Fact,
@@ -257,164 +255,138 @@ internal fun ProjectSummaryPane(
   val identity =
       (project?.projectId ?: overview?.projectId) to
           (project?.projectRevision ?: overview?.projectRevision)
-  // The list owns the viewport for one project revision; count and run updates retain its position.
-  val sectionsList = remember(identity) { LazyListState() }
-  val scrollScope = rememberCoroutineScope()
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
-    val sideBySide = contentWidth / fontScale >= 900.dp
-    val compactIndex = contentWidth / fontScale < 1100.dp
+    val sideBySide = contentWidth / fontScale >= 760.dp
     val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
     val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
     val flows = presentation.details.firstOrNull { it.title == "Flows" }
     val insight =
         presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
     val ownerIdentity = listOf(identity.first, identity.second)
-    val sectionEntries =
-        if (presentation.hasProject)
-            buildList {
-              add("Project" to "introduction")
-              add("Coverage" to "coverage")
-              add("Findings" to "categories")
-              if (architecture != null) add("Architecture" to "architecture")
-              if (modules != null) add("Packages / modules" to "modules")
-              if (insight != null) add("Engineering insight" to "insight")
-              if (flows != null) add("Flows" to "flows")
-            }
-        else emptyList()
-    // Use the same key order to construct the list and resolve navigation, including the run strip.
-    val itemKeys =
-        (if (presentation.hasProject &&
-            currentProjectRun(run, project)?.showsProgressOnSummary() == true)
-            listOf("run")
-        else emptyList()) + sectionEntries.map { it.second }
-    val selectedSection = remember(identity) { mutableStateOf("introduction") }
-    val requestedSection = remember(identity) { mutableStateOf<String?>(null) }
-    LaunchedEffect(identity, sectionsList, itemKeys) {
-      snapshotFlow {
-            val visible = sectionsList.layoutInfo.visibleItemsInfo
-            val requested =
-                requestedSection.value?.takeIf { key ->
-                  visible.any { item -> itemKeys.getOrNull(item.index) == key }
-                }
-            requested to sectionsList.firstVisibleItemIndex
-          }
-          .collect { (requested, position) ->
-            if (requested == null) requestedSection.value = null
-            selectedSection.value =
-                requested
-                    ?: when (val key = itemKeys.getOrNull(position)) {
-                      "run" -> "introduction"
-                      null -> sectionEntries.firstOrNull()?.second.orEmpty()
-                      else -> key
+    val sectionsAvailable = buildList {
+      add("Coverage")
+      if (architecture != null) add("Architecture")
+      if (modules != null) add("Packages / modules")
+      if (flows != null) add("Flows")
+      if (insight != null) add("Engineering insight")
+    }
+    var selected by remember(identity) { mutableStateOf("Coverage") }
+    if (selected !in sectionsAvailable) selected = "Coverage"
+    val pageScroll = remember(identity) { ScrollState(0) }
+    LaunchedEffect(pageScroll, selected) { pageScroll.scrollTo(0) }
+    if (!presentation.hasProject) {
+      SystemStateMessage(
+          "No project selected", "", modifier = Modifier.fillMaxWidth().padding(24.dp))
+    } else {
+      Column(Modifier.fillMaxSize().verticalScroll(pageScroll).testTag("summary-page-scroll")) {
+        val currentRun = currentProjectRun(run, project)
+        SummaryIntroduction(presentation)
+        if (currentRun?.showsProgressOnSummary() == true) {
+          AnalysisRunStrip(
+              AnalysisWorkspacePaneState(
+                  project,
+                  (analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)).copy(
+                      run = currentRun)),
+              analysisActions,
+              AnalysisRunStripScope.Summary,
+              Modifier.fillMaxWidth()
+                  .padding(horizontal = 24.dp)
+                  .testTag("summary-analysis-run-strip"))
+        }
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+              if (sideBySide) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                  Column(Modifier.width(272.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SummaryOutlineRow(
+                        "Coverage", coverageOutlineValue(presentation), selected == "Coverage") {
+                          selected = "Coverage"
+                        }
+                    presentation.issueMetrics.forEach { metric ->
+                      SummaryOutlineRow(metric.label, metric.value?.toString() ?: "—", false) {
+                        openResults(metric.type.workspace)
+                      }
                     }
-          }
-    }
-    val indexEntries: @Composable () -> Unit = {
-      sectionEntries.forEach { (label, key) ->
-        SummaryIndexEntry(label, selectedSection.value == key) {
-          scrollScope.launch {
-            requestedSection.value = key
-            sectionsList.scrollToItem(itemKeys.indexOf(key))
-          }
-        }
-      }
-    }
-    Column(Modifier.fillMaxSize()) {
-      if (!sideBySide) {
-        FlowRow(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-              indexEntries()
-            }
-      }
-      Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (sideBySide) {
-          Column(
-              Modifier.width(if (compactIndex) 148.dp else 180.dp),
-              verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                indexEntries()
-              }
-        }
-        LazyColumn(
-            Modifier.weight(1f).fillMaxHeight(),
-            state = sectionsList,
-            contentPadding =
-                workspacePagePadding(this@BoxWithConstraints.maxWidth, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)) {
-              if (!presentation.hasProject) {
-                item(key = "empty") {
-                  SystemStateMessage("No project selected", "", modifier = Modifier.fillMaxWidth())
+                    sectionsAvailable.drop(1).forEach { label ->
+                      SummaryOutlineRow(
+                          label,
+                          if (label == "Packages / modules")
+                              modules?.values?.size?.toString().orEmpty()
+                          else if (label == "Flows") flows?.values?.size?.toString().orEmpty()
+                          else "›",
+                          selected == label) {
+                            selected = label
+                          }
+                    }
+                  }
+                  Column(
+                      Modifier.weight(1f).padding(bottom = 20.dp),
+                      verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SummarySelectedDetail(
+                            selected,
+                            presentation,
+                            architecture,
+                            modules,
+                            flows,
+                            insight,
+                            ownerIdentity,
+                            openResults) {
+                              selected = "Architecture"
+                            }
+                      }
                 }
               } else {
-                val currentRun = currentProjectRun(run, project)
-                val stripState =
-                    analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)
-                if ("run" in itemKeys)
-                    item(key = "run") {
-                      AnalysisRunStrip(
-                          AnalysisWorkspacePaneState(project, stripState.copy(run = currentRun)),
-                          analysisActions,
-                          AnalysisRunStripScope.Summary,
-                          Modifier.testTag("summary-analysis-run-strip"))
+                FlowRow(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    maxItemsInEachRow = 2) {
+                      SummaryOutlineRow(
+                          "Coverage",
+                          coverageOutlineValue(presentation),
+                          selected == "Coverage",
+                          Modifier.weight(1f)) {
+                            selected = "Coverage"
+                          }
+                      presentation.issueMetrics.forEach { metric ->
+                        SummaryOutlineRow(
+                            metric.label,
+                            metric.value?.toString() ?: "—",
+                            false,
+                            Modifier.weight(1f)) {
+                              openResults(metric.type.workspace)
+                            }
+                      }
+                      sectionsAvailable.drop(1).forEach { label ->
+                        SummaryOutlineRow(
+                            label,
+                            if (label == "Packages / modules")
+                                modules?.values?.size?.toString().orEmpty()
+                            else if (label == "Flows") flows?.values?.size?.toString().orEmpty()
+                            else "›",
+                            selected == label,
+                            Modifier.weight(1f)) {
+                              selected = label
+                            }
+                      }
                     }
-                item(key = "introduction") { SummaryIntroduction(presentation) }
-                item(key = "coverage") {
-                  SummaryCoverage(presentation) { openResults(Workspace.Analysis) }
-                }
-                item(key = "categories") {
-                  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SummaryCategories(presentation.issueMetrics, openResults)
-                    Text(
-                        "Overall findings · " +
-                            presentation.findingMetrics.joinToString(" · ") {
-                              "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
-                            },
-                        color = SecondaryText,
-                        style = IdeTypography.workspaceMetadata,
-                        modifier = Modifier.testTag("summary-findings-provenance"))
-                  }
-                }
-                architecture?.let { detail ->
-                  item(key = "architecture") {
-                    WorkspaceSection(
-                        modifier = Modifier.fillMaxWidth().testTag("summary-architecture")) {
-                          MermaidDiagram(
-                              detail.values.single(),
-                              "Architecture",
-                              title = "Architecture",
-                              ownerIdentity = ownerIdentity + "architecture")
-                        }
-                  }
-                }
-                modules?.let { detail ->
-                  item(key = "modules") {
-                    WorkspaceSection(
-                        modifier = Modifier.fillMaxWidth().testTag("summary-modules")) {
-                          Text(
-                              "Packages / modules",
-                              color = ResultAccent,
-                              style = IdeTypography.workspaceHeading,
-                              modifier = Modifier.semantics { heading() })
-                          SummaryModules(detail.values)
-                        }
-                  }
-                }
-                insight?.let { pieces ->
-                  item(key = "insight") {
-                    SummaryEngineeringInsight(
-                        pieces,
-                        presentation.interpretationStatus == "stale",
-                        ownerIdentity,
-                        Modifier.fillMaxWidth())
-                  }
-                }
-                flows?.let { detail ->
-                  item(key = "flows") {
-                    SummaryFlows(detail, ownerIdentity, Modifier.fillMaxWidth())
-                  }
-                }
+                Column(
+                    Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                      SummarySelectedDetail(
+                          selected,
+                          presentation,
+                          architecture,
+                          modules,
+                          flows,
+                          insight,
+                          ownerIdentity,
+                          openResults) {
+                            selected = "Architecture"
+                          }
+                    }
               }
             }
       }
@@ -423,18 +395,98 @@ internal fun ProjectSummaryPane(
 }
 
 @Composable
-private fun SummaryIndexEntry(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun SummaryOutlineRow(
+    label: String,
+    value: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
   MiniOrcaButton(
       onClick = onClick,
       modifier =
-          Modifier.testTag("summary-index-$label").semantics {
-            contentDescription = "Go to $label summary"
+          modifier.fillMaxWidth().testTag("summary-index-$label").semantics {
             this.selected = selected
           },
+      accessibleName =
+          if (label in listOf("Bugs", "Performance", "Security")) "Open $label results, $value"
+          else "Select $label summary, $value",
       selected = selected,
       tone = if (selected) ActionTone.Navigation else ActionTone.Neutral) {
-        Text(label, style = IdeTypography.workspaceMetadata)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Text(label, style = IdeTypography.workspaceMetadata)
+          if (value.isNotBlank())
+              Text(value, style = IdeTypography.workspaceMetadata, color = SecondaryText)
+        }
       }
+}
+
+private fun coverageOutlineValue(presentation: ProjectSummaryPresentation) =
+    if (presentation.coverageFresh == null || presentation.coverageTotal == null) "—"
+    else "${presentation.coverageFresh} / ${presentation.coverageTotal}"
+
+@Composable
+private fun SummarySelectedDetail(
+    selected: String,
+    presentation: ProjectSummaryPresentation,
+    architecture: ProjectSummaryDetail?,
+    modules: ProjectSummaryDetail?,
+    flows: ProjectSummaryDetail?,
+    insight: List<EngineeringInsightPiece>?,
+    ownerIdentity: List<String?>,
+    openResults: (Workspace) -> Unit,
+    selectArchitecture: () -> Unit,
+) {
+  when (selected) {
+    "Coverage" -> {
+      SummaryCoverage(presentation) { openResults(Workspace.Analysis) }
+      Text("Finding categories", color = ResultAccent, style = IdeTypography.workspaceHeading)
+      SummaryCategories(
+          presentation.issueMetrics,
+          openResults,
+          architecture != null,
+          architecture?.values?.firstOrNull().orEmpty(),
+          selectArchitecture)
+      Text(
+          "Overall findings · " +
+              presentation.findingMetrics.joinToString(" · ") {
+                "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
+              },
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata,
+          modifier = Modifier.testTag("summary-findings-provenance"))
+    }
+    "Architecture" ->
+        architecture?.let {
+          WorkspaceSection(modifier = Modifier.fillMaxWidth().testTag("summary-architecture")) {
+            MermaidDiagram(
+                it.values.single(),
+                "Architecture",
+                title = "Architecture",
+                ownerIdentity = ownerIdentity + "architecture")
+          }
+        }
+    "Packages / modules" ->
+        modules?.let {
+          WorkspaceSection(modifier = Modifier.fillMaxWidth().testTag("summary-modules")) {
+            Text(
+                "Packages / modules",
+                color = ResultAccent,
+                style = IdeTypography.workspaceHeading,
+                modifier = Modifier.semantics { heading() })
+            SummaryModules(it.values)
+          }
+        }
+    "Flows" -> flows?.let { SummaryFlows(it, ownerIdentity, Modifier.fillMaxWidth()) }
+    "Engineering insight" ->
+        insight?.let {
+          SummaryEngineeringInsight(
+              it,
+              presentation.interpretationStatus == "stale",
+              ownerIdentity,
+              Modifier.fillMaxWidth())
+        }
+  }
 }
 
 @Composable
@@ -448,7 +500,7 @@ private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.semantics { heading() })
     presentation.purpose?.let {
-      ModelResultContent(it, preview = false, style = IdeTypography.workspaceBody)
+      ModelResultContent(it, preview = true, style = IdeTypography.workspaceBody)
     }
     if (presentation.interpretationStatus != "fresh") {
       Text(
@@ -468,13 +520,55 @@ private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
               it.isNotBlank() && !it.equals(presentation.projectType, ignoreCase = true)
             }
     Text(facts.joinToString(" · "), color = SecondaryText, style = IdeTypography.workspaceMetadata)
+    SummaryAnalysisStatus(presentation)
+    presentation.analysisMessage
+        .lines()
+        .filter { it.startsWith("Analysis run") }
+        .forEach { message ->
+          Text(
+              message,
+              color = if (message.contains("failed")) Error else SecondaryText,
+              style = IdeTypography.workspaceMetadata)
+        }
   }
 }
 
 @Composable
-private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (Workspace) -> Unit) {
-  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    metrics.forEach { metric -> SummaryIssue(metric, { openResults(metric.type.workspace) }) }
+private fun SummaryCategories(
+    metrics: List<SummaryIssueMetric>,
+    openResults: (Workspace) -> Unit,
+    architectureAvailable: Boolean,
+    architecturePreview: String,
+    selectArchitecture: () -> Unit
+) {
+  BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val columns = if (maxWidth / LocalDensity.current.fontScale >= 600.dp) 2 else 1
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = columns) {
+          metrics.forEach { metric ->
+            SummaryIssue(metric, { openResults(metric.type.workspace) }, Modifier.weight(1f))
+          }
+          MiniOrcaButton(
+              onClick = selectArchitecture,
+              modifier = Modifier.weight(1f).fillMaxWidth().testTag("summary-architecture-preview"),
+              enabled = architectureAvailable,
+              accessibleName = "Select Architecture summary from preview",
+              tone = ActionTone.Neutral) {
+                Column {
+                  Text("Architecture", color = PrimaryText, style = IdeTypography.workspaceHeading)
+                  Text(
+                      if (architectureAvailable) architecturePreview
+                      else "Architecture unavailable",
+                      color = SecondaryText,
+                      style = IdeTypography.compactBody,
+                      maxLines = 3,
+                      overflow = TextOverflow.Ellipsis)
+                }
+              }
+        }
   }
 }
 
