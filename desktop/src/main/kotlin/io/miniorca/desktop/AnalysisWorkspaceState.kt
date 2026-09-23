@@ -292,9 +292,7 @@ internal data class AnalysisResultPageState(
                   "$currentReportedCount findings were reported. View analysis for the current category status.")
           else
               AnalysisResultEmptyPresentation(
-                  AnalysisResultAvailability.Running,
-                  "No findings yet.",
-                  coverageLabel.orEmpty())
+                  AnalysisResultAvailability.Running, "No findings yet.", coverageLabel.orEmpty())
       "paused" ->
           AnalysisResultEmptyPresentation(
               AnalysisResultAvailability.Paused,

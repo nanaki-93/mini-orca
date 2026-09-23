@@ -40,10 +40,10 @@ class DesktopContrastTest {
                 fixture.assertTextFits(presentation.status)
                 fixture.assertTextContrast(
                     presentation.status, labelBadgeBackground(analysisStatusTint(status)))
-                if (presentation.headline != "Current run") {
-                  fixture.assertTextFits(presentation.headline)
-                  fixture.assertTextContrast(presentation.headline, Panel)
-                }
+                val title = analysisRunTitle(run, presentation)
+                fixture.assertTextFits(title)
+                fixture.assertTextContrast(title, Panel)
+                assertTrue(!fixture.hasText(presentation.headline))
                 fixture.assertColorVisible(color)
               }
         }

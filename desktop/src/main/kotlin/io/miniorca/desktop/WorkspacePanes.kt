@@ -122,14 +122,19 @@ private fun AnalysisRunPanel(
 
 @Composable
 internal fun AnalysisFailureDetails(failure: AnalysisStageFailure) {
-  Column(Modifier.fillMaxWidth().padding(8.dp)) {
-    Text(
-        "${analysisStageLabel(failure.stage)} · ${failure.path}",
-        style = IdeTypography.resultLabel,
-        color = PrimaryText)
-    Text("Attempts: ${failure.attempts}", style = IdeTypography.compactBody, color = SecondaryText)
-    DiagnosticText(failure.reason, color = Error)
-  }
+  MiniOrcaPanel(
+      modifier = Modifier.fillMaxWidth().testTag("analysis-stage-failure-${failure.path}"),
+      contentPadding = PaddingValues(16.dp)) {
+        Text(
+            "${analysisStageLabel(failure.stage)} · ${failure.path}",
+            style = IdeTypography.resultLabel,
+            color = PrimaryText)
+        Text(
+            "Attempts: ${failure.attempts}",
+            style = IdeTypography.compactBody,
+            color = SecondaryText)
+        DiagnosticText(failure.reason, color = Error)
+      }
 }
 
 internal data class AnalysisWorkspacePaneState(

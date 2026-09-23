@@ -279,14 +279,15 @@ class AnalysisFileStatusTest {
                   fixture.assertColorVisible(tint)
                   val count = if (status == "stale") "—" else findings?.toString() ?: "—"
                   assertEquals(3, fixture.textCount(count), "$status count at $width")
-                  assertFalse(fixture.hasText("Completed"))
-                  if (status != "completed") {
-                    val label =
-                        if (status == "completed_empty") "No results"
-                        else analysisStatusLabel(status)
-                    assertEquals(3, fixture.textCount(label))
-                    fixture.assertTextFits(label)
-                  }
+                  val label =
+                      when (status) {
+                        "completed" -> "Completed"
+                        "completed_empty" -> "No results"
+                        else -> analysisStatusLabel(status)
+                      }
+                  assertEquals(3, fixture.textCount(label))
+                  fixture.assertTextFits(label)
+                  if (status != "stale") assertEquals(3, fixture.textCount("0/1 stages covered"))
                   fixture.clickVisibleDescription("View Security results")
                   assertEquals(Workspace.Security, navigations.last())
                 }

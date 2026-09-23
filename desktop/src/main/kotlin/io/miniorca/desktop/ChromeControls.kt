@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.dismiss
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
@@ -158,7 +159,10 @@ internal fun IdeActionSurface(
               .then(
                   if (focused || focusHighlight) Modifier.border(3.dp, ActivityRail, shape)
                   else Modifier)
-              .semantics { accessibleName?.let { contentDescription = it } }
+              .semantics {
+                accessibleName?.let { contentDescription = it }
+                if (role == Role.Tab) this.selected = selected
+              }
               .then(clickBehavior)
               .padding(contentPadding),
       verticalAlignment = Alignment.CenterVertically,
