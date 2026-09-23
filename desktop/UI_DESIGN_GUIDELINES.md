@@ -91,7 +91,7 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
 - Keep structural panes without elevation, with a rounded outer perimeter. Use the
   shared 10dp corners for controls, inputs, file rows and tooltips; 14dp for
   sections and category/result surfaces; and 18dp for structural workspace panes,
-  popups, drawers and dialogs.
+  popups and dialogs.
   Use pill-shaped badges and progress tracks, and 4dp corners for small checkbox
   indicators. Clip child fills to the same shape as their containing surface.
   Keep selection strokes inset with rounded ends. Do not wrap ordinary sections
@@ -103,9 +103,8 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
 - Align to a 4dp grid; normal content inset 8dp and internal gaps 4–8dp. Avoid
   nested 16–20dp padding. Headers/actions default to 28–32dp; rows to 24–28dp.
 - Summary and Bugs, Performance and Security workspaces use 14sp body / 22sp line
-  height, 16sp section headings and 13sp metadata. Their page inset is 24dp on wide
-  layouts and 16dp on compact layouts; result cards and details use 16dp padding.
-  Compact controls retain 12–13sp body / 18–20sp
+  height, 16sp section headings and 13sp metadata. Their page inset is 24dp;
+  result cards and details use 16dp padding. Controls retain 12–13sp body / 18–20sp
   line height; secondary chrome 11–12sp, section labels 12sp semibold, and
   breadcrumbs 12sp. Source/diff stay monospaced and readable. Grow at 125/150%
   text scale rather than clipping or shrinking the font to fit.
@@ -129,11 +128,13 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
 
 Keep the 48dp icon-only activity rail with hover labels and accessible names,
 primary workspace, Editor-only Files/inspector
-panes and integrated status bar. At ≥1000dp use resizable docked panes; below it
-use labeled Files/Context drawers and a bounded bottom overlay. Preserve saved
-widths when temporarily clamping and keep essential source/actions reachable in
-short windows. The terminal spans beneath all workspace panes with its own 8dp
-gap and rounded perimeter; the rail and status bar share the continuous frame.
+panes and integrated status bar. Keep this docked-pane composition at every
+window size. The native window starts maximized but remains resizable; smaller
+windows may clip or fit awkwardly. Do not substitute drawers, overlays or other
+viewport-specific layouts, and do not constrain the window with a minimum size.
+Preserve saved pane widths across window resizing. The terminal spans beneath all
+workspace panes with its own 8dp gap and rounded perimeter; the rail and status
+bar share the continuous frame.
 Native window controls remain native.
 
 The expanded Terminal canvas has an 8dp side/bottom inset. Its Swing host cannot
@@ -144,9 +145,9 @@ The main toolbar has a 56dp minimum height. Its product mark leads directly into
 project/branch context and then a left-aligned search control up to 420dp wide; do
 not repeat the product wordmark there. The remaining space keeps separate labeled
 analysis and daemon statuses at the trailing edge without turning passive state into
-another outlined control. Statuses move onto a second row when width and text scale
-require it. Analysis labels come from the run owner: a completed run does not by
-itself prove coverage is up to date.
+another outlined control. Keep the full-size status placement; text may clip at
+reduced window sizes. Analysis labels come from the run owner: a completed run does
+not by itself prove coverage is up to date.
 
 Files uses real project-relative paths and one active file. Breadcrumbs expose
 real path/symbol identity; do not invent navigation callbacks or tabs. Source and
@@ -202,9 +203,10 @@ Review each changed flow with optional help and details collapsed:
   point of action, including with keyboard focus and without relying on color?
 
 Compare rendered production components to the references for every substantive
-visual change. Check wide views, 1000/999dp, 800×650, 1280×600, large text, long
-paths/errors and affected empty/stale/populated states. Check alignment, clipping,
-action reachability, separators, keyboard focus and names/states.
+visual change. Check full-size views and, when relevant, reduced window sizes for
+clipping, as well as large text, long paths/errors and affected empty/stale/populated
+states. Check alignment, separators, keyboard focus and names/states; do not
+expect reduced windows to switch layouts or keep every action in view.
 
 Use [component reproduction](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks) for fixture reproduction and the retained
 [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) for native checks. Offscreen
