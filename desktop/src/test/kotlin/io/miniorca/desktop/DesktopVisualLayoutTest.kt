@@ -2962,22 +2962,33 @@ class DesktopVisualLayoutTest {
 
   @Test
   fun summaryModulesShowNamesPathsAndDescriptionsInFlatRows() {
-    ComposeVisualFixture(800, 650, 1.5f) {
+    // Below the former 500dp / font-scale threshold, descriptions still stay beside identity.
+    ComposeVisualFixture(720, 650, 1.5f) {
           SummaryModules(
               listOf(
                   "internal/project (Project indexing): Builds the project context.",
                   "internal/app (Workflow orchestration): Coordinates guarded changes."))
         }
         .use { fixture ->
-          fixture.render("summary-modules-800-150")
-          listOf(
-                  "Project indexing",
-                  "internal/project",
-                  "Builds the project context.",
-                  "Workflow orchestration",
-                  "internal/app")
+          fixture.render("summary-modules-fixed-arrangement-720-150")
+          listOf("Project indexing", "internal/project", "Workflow orchestration", "internal/app")
               .forEach(fixture::assertTextFits)
-          fixture.assertTextAbove("Project indexing", "internal/project")
+          listOf(
+                  Triple("Project indexing", "internal/project", "Builds the project context."),
+                  Triple("Workflow orchestration", "internal/app", "Coordinates guarded changes."))
+              .forEach { (name, path, description) ->
+                assertTrue(fixture.hasText(description), "$description must remain in the row")
+                fixture.assertTextAbove(name, path)
+                val identity = fixture.firstVisibleTextBounds(name)
+                val modulePath = fixture.firstVisibleTextBounds(path)
+                val detail = fixture.firstVisibleTextBounds(description)
+                assertTrue(
+                    detail.left >= maxOf(identity.right, modulePath.right),
+                    "$description must trail the module identity")
+                assertTrue(
+                    detail.top < modulePath.bottom && detail.bottom > identity.top,
+                    "$description must share the module row")
+              }
           assertFalse(fixture.hasEditableText())
         }
   }
@@ -3129,7 +3140,7 @@ class DesktopVisualLayoutTest {
                     fixture.assertTextFits(label)
                   }
               fixture.assertSummaryStatusPlacement("Outdated")
-              if (width == 800 && scale == 1.5f) fixture.assertCompactSummaryCoverageLayout()
+              if (width < 1440) fixture.assertFixedSummaryCoverageLayout()
               listOf("Bugs", "Performance", "Security").forEach { label ->
                 fixture.revealText(label)
                 fixture.assertTextFits(label)
@@ -3865,6 +3876,26 @@ internal class ComposeVisualFixture(
     assertTextLayout(label, lineCounts = 1..maxLines)
   }
 
+  fun assertFixedSummaryCoverageLayout() {
+    val coverage = taggedBounds("analysis-summary")
+    val heading = firstVisibleTextBounds("Analysis coverage")
+    val status = taggedBounds("summary-analysis-status")
+    assertTrue(status.left >= heading.right, "Coverage status must trail the heading")
+    assertTrue(
+        status.top < heading.bottom && status.bottom > heading.top,
+        "Coverage status must share the heading row")
+    val track = taggedBounds("summary-coverage-track")
+    val legend = taggedBounds("summary-coverage-legend")
+    val action = taggedBounds("summary-view-analysis")
+    assertTrue(track.left >= coverage.left && track.right <= coverage.right)
+    assertTrue(legend.left >= coverage.left && legend.right <= coverage.right)
+    assertTrue(action.left >= coverage.left && action.right <= coverage.right)
+    assertTrue(track.top < legend.top, "Coverage legend must follow the track")
+    assertTrue(legend.top >= track.top, "Coverage legend must follow the track")
+    assertTrue(action.left >= track.right, "View analysis must trail coverage at reduced widths")
+    assertTrue(action.top < legend.bottom, "View analysis must stay beside coverage")
+  }
+
   fun assertSummaryCategoryBoxesFit() {
     val cards =
         AnalysisResultType.entries.map { type ->
@@ -3965,15 +3996,6 @@ internal class ComposeVisualFixture(
     assertTrue(track.top < legend.top, "Coverage legend must follow the track")
     assertTrue(action.left >= track.right, "View analysis must trail coverage on wide layouts")
     assertTrue(action.right <= section.right, "View analysis must stay inside coverage")
-  }
-
-  fun assertCompactSummaryCoverageLayout() {
-    val track = taggedBounds("summary-coverage-track")
-    val legend = taggedBounds("summary-coverage-legend")
-    val action = taggedBounds("summary-view-analysis")
-    assertTrue(track.top < legend.top, "Coverage legend must follow the track")
-    assertTrue(
-        legend.bottom <= action.top, "View analysis must wrap below coverage on compact layouts")
   }
 
   fun assertAnalysisRunGeometry() {
