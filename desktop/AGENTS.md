@@ -27,25 +27,20 @@ components and visual reference. [README.md](README.md) owns desktop setup and u
 
 ## UI implementation
 
-- Apply the [self-explanatory UI and copy rules](UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy)
-  before adding text. Let existing tabs, headers and controls identify the task;
-  omit default subtitles and repeated explanations. If a control needs teaching
-  copy, improve its label, placement or interaction first.
-- Extend Jewel and `DesktopTheme.kt`, `ChromeControls.kt`, `DesktopIcons.kt`.
-  Use shared semantic colors, type and spacing. Do not add a parallel theme,
-  copied per-pane styles, stock Material/Swing appearance or decorative card stacks.
-  Use the shared 10dp control, 14dp section/card and 18dp workspace/overlay shapes,
-  with pill badges and progress tracks. Keep structural panes flat, clipped and
-  inset within the frame; follow the approved mockup geometry in the UI guidelines.
-- Preserve workspace/tool-window ownership in the UI guidelines. Keep the next
-  valid action reachable, errors visible and technical details available on demand.
-  Do not add decorative metrics, dummy callbacks or unsupported controls.
+- Follow the [UI guidelines](UI_DESIGN_GUIDELINES.md) for clarity, accessibility
+  and safety. Layout, navigation, copy, palette, typography and shapes can change;
+  the existing mocks and token values are references, not mandatory targets.
+- Coordinate visual primitives with the existing Jewel client and shared theme
+  where appropriate. Keep the interface coherent and test changed semantics,
+  contrast and focus treatment rather than preserving earlier geometry.
+- Keep valid actions reachable, errors visible and technical details available.
+  Do not add fabricated metrics, dummy callbacks or unsupported controls.
 - Preserve labeled states for empty/loading/stale/failed/partial/canceled results.
   Keep unknown values distinct from zero and provider status distinct from daemon
   connectivity. Color supplements labels and keyboard focus.
-- Keep docked panes at widths of at least 1000dp and labeled drawers below 1000dp.
-  Temporary size clamping must preserve saved preferences. Support long paths,
-  wrapped labels and increased text scale without hiding actions or shrinking text.
+- Choose responsive layouts appropriate to the new design. Temporary size
+  clamping must preserve saved preferences. Support long paths, wrapped labels
+  and increased text scale without hiding actions.
 - Preserve keyboard access, accessible names/states, selection and focus. Reuse
   `ModelResultContent` for freeform model prose and its bounded literal fallback;
   do not activate model-supplied HTML, links or remote images.
@@ -67,7 +62,7 @@ formatter output for unrelated churn. Do not change lint configuration or snapsh
 merely to hide a regression.
 
 For substantive visual changes, render affected production components and compare
-them to the reference. Follow the UI guidelines' width, short-window, text-scale
+them to the chosen direction. Follow the UI guidelines' responsive, text-scale
 and state checks, including the review with optional help collapsed. Use the
 existing `DesktopVisualLayoutTest` fixtures and
 [reproduction procedure](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks).

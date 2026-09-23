@@ -292,24 +292,12 @@ class DesktopKeyboardNavigationTest {
         }
         .use { fixture ->
           fixture.render()
-          listOf(
-                  "Project",
-                  "Coverage",
-                  "Findings",
-                  "Architecture",
-                  "Packages / modules",
-                  "Engineering insight",
-                  "Flows")
-              .forEach { section ->
-                assertTrue(
-                    fixture.pressKey(Key.Tab), "Tab must reach $section in the Summary index")
-                fixture.render()
-                assertTrue(fixture.isFocusedControl("Go to $section summary"))
-              }
-          assertTrue(fixture.pressKey(Key.Enter), "Index must support keyboard activation")
+          assertTrue(fixture.requestDescriptionFocus("Select Flows summary"))
+          assertTrue(fixture.pressKey(Key.Enter), "Outline must support keyboard activation")
           fixture.render()
-          assertTrue(destinations.isEmpty(), "Index navigation must stay in Summary")
-          fixture.clickDescription("Go to Coverage summary")
+          assertTrue(fixture.isDescriptionSelected("Select Flows summary"))
+          assertTrue(destinations.isEmpty(), "Local selection must not navigate")
+          fixture.clickDescription("Select Coverage summary")
           fixture.revealText("View analysis")
           assertTrue(fixture.requestFocus("View analysis"))
           fixture.render()
@@ -328,12 +316,12 @@ class DesktopKeyboardNavigationTest {
           assertEquals(
               listOf(Workspace.Analysis, Workspace.Bugs, Workspace.Performance, Workspace.Security),
               destinations)
-          fixture.clickDescription("Go to Engineering insight summary")
+          fixture.clickDescription("Select Engineering insight summary")
           fixture.render()
           assertTrue(fixture.tryClick("Expand More insight"))
           fixture.render()
           assertEquals("Expanded", fixture.descriptionStateDescription("Collapse More insight"))
-          fixture.clickDescription("Go to Architecture summary")
+          fixture.clickDescription("Select Architecture summary")
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           assertTrue(fixture.tryClick("Show Architecture diagram"))
           fixture.awaitDescription("Hide Architecture diagram", "Expanded")

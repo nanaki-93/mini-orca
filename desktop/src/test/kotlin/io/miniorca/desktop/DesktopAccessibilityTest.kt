@@ -54,15 +54,15 @@ class DesktopAccessibilityTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasDescription("Go to Coverage summary"))
+          assertTrue(fixture.hasDescription("Select Coverage summary"))
           listOf("Architecture", "Packages / modules", "Engineering insight", "Flows").forEach {
-            assertFalse(fixture.hasDescription("Go to $it summary"))
+            assertFalse(fixture.hasDescription("Select $it summary"))
           }
-          assertTrue(fixture.requestDescriptionFocus("Go to Findings summary"))
+          assertTrue(fixture.requestDescriptionFocus("Open Bugs results"))
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
-          assertEquals(0, navigations)
-          assertTrue(fixture.textCount("Bugs") > 0)
+          assertEquals(1, navigations)
+          assertTrue(fixture.isDescriptionSelected("Select Coverage summary"))
         }
   }
 
@@ -72,8 +72,8 @@ class DesktopAccessibilityTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("No project selected"))
-          assertFalse(fixture.hasDescription("Go to Project summary"))
-          assertFalse(fixture.hasDescription("Go to Coverage summary"))
+          assertFalse(fixture.hasDescription("Select Coverage summary"))
+          assertFalse(fixture.hasDescription("Select Coverage summary"))
         }
   }
 
@@ -105,7 +105,7 @@ class DesktopAccessibilityTest {
           assertTrue(fixture.hasText("Project description: stale · source may have changed"))
           sectionHeadings.forEach { heading ->
             fixture.clickDescription(
-                "Go to ${if (heading == "Analysis coverage") "Coverage" else heading} summary")
+                "Select ${if (heading == "Analysis coverage") "Coverage" else heading} summary")
             fixture.render()
             assertTrue(
                 fixture.hasText(heading), "$heading must be composed after section navigation")
@@ -123,7 +123,7 @@ class DesktopAccessibilityTest {
               else -> Unit
             }
           }
-          fixture.clickDescription("Go to Findings summary")
+          fixture.clickDescription("Select Coverage summary")
           fixture.render()
           listOf("Bugs", "Performance", "Security").forEach { category ->
             fixture.revealSummaryCategory(category)

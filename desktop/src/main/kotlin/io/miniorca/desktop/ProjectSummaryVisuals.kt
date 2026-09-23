@@ -100,13 +100,6 @@ internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnaly
           color = ResultAccent,
           style = IdeTypography.workspaceHeading,
           modifier = Modifier.semantics { heading() })
-      FlowRow(
-          Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalArrangement = Arrangement.spacedBy(4.dp),
-          itemVerticalAlignment = Alignment.CenterVertically) {
-            SummaryAnalysisStatus(presentation)
-          }
       SummaryCoverageBar(presentation)
       MiniOrcaButton(
           onClick = openAnalysis,

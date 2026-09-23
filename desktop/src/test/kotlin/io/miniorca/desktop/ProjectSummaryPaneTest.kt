@@ -200,7 +200,7 @@ class ProjectSummaryPaneTest {
     ComposeVisualFixture(1000, 760) { ProjectSummaryPane(currentOverview, currentProject, {}) }
         .use { fixture ->
           fixture.render()
-          fixture.clickDescription("Go to Architecture summary")
+          fixture.clickDescription("Select Architecture summary")
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           fixture.clickDescription("Show Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
@@ -208,7 +208,7 @@ class ProjectSummaryPaneTest {
           fixture.render()
           assertTrue(fixture.hasText("125%"))
           fixture.clickText("Mermaid source")
-          fixture.clickDescription("Go to Engineering insight summary")
+          fixture.clickDescription("Select Engineering insight summary")
           fixture.render()
           assertTrue(fixture.tryClick("Expand More insight"))
           fixture.render()
@@ -217,17 +217,84 @@ class ProjectSummaryPaneTest {
           currentProject = currentProject.copy(projectId = "second", projectRevision = "two")
           currentOverview = currentOverview.copy(projectId = "second", projectRevision = "two")
           fixture.render()
-          fixture.awaitDescription("Go to Architecture summary")
-          fixture.clickDescription("Go to Architecture summary")
+          fixture.awaitDescription("Select Architecture summary")
+          fixture.clickDescription("Select Architecture summary")
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           assertFalse(fixture.hasText("Mermaid source"))
           fixture.clickDescription("Show Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
           assertTrue(fixture.hasText("100%"))
-          fixture.clickDescription("Go to Engineering insight summary")
+          fixture.clickDescription("Select Engineering insight summary")
           fixture.render()
           assertEquals("Collapsed", fixture.stateDescription("More insight"))
           assertFalse(fixture.hasText("Trade-off or failure mode"))
+        }
+  }
+
+  @Test
+  fun summaryPageReturnsToTopOnSectionSelectionAndProjectSwitch() {
+    val longModules = List(60) { "module-$it: Coordinates the project workflow." }
+    var project by
+        androidx.compose.runtime.mutableStateOf(
+            resultProjectFixture().copy(projectId = "first", projectRevision = "one"))
+    var overview by
+        androidx.compose.runtime.mutableStateOf(
+            ProjectOverview(
+                projectId = "first",
+                projectRevision = "one",
+                analysis = StructuredProjectAnalysis(status = "fresh", components = longModules)))
+    ComposeVisualFixture(1000, 600) { ProjectSummaryPane(overview, project, {}) }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Select Packages / modules summary")
+          fixture.render()
+          fixture.scrollBy(100_000f, "summary-page-scroll")
+          fixture.render()
+          assertTrue(fixture.verticalScrollValue("summary-page-scroll") > 0f)
+
+          fixture.clickDescription("Select Coverage summary")
+          fixture.render()
+          assertEquals(0f, fixture.verticalScrollValue("summary-page-scroll"))
+          assertTrue(fixture.taggedBounds("summary-introduction").top >= 0f)
+
+          fixture.clickDescription("Select Packages / modules summary")
+          fixture.render()
+          fixture.scrollBy(100_000f, "summary-page-scroll")
+          fixture.render()
+          assertTrue(fixture.verticalScrollValue("summary-page-scroll") > 0f)
+          project = project.copy(projectId = "second", projectRevision = "two")
+          overview = overview.copy(projectId = "second", projectRevision = "two")
+          fixture.render()
+          assertEquals(0f, fixture.verticalScrollValue("summary-page-scroll"))
+          assertTrue(fixture.taggedBounds("summary-introduction").top >= 0f)
+          assertTrue(fixture.hasDescription("Select Coverage summary, —"))
+        }
+  }
+
+  @Test
+  fun longArchitecturePreviewStaysBoundedAndFullSourceRemainsAvailable() {
+    val source =
+        "flowchart TD\n" +
+            List(30) { " n$it[Node $it] --> n${it + 1}[Node ${it + 1}]" }.joinToString("\n")
+    val overview =
+        ProjectOverview(
+            projectId = "project",
+            projectRevision = "revision",
+            analysis = StructuredProjectAnalysis(status = "fresh", architecture = source))
+    ComposeVisualFixture(1440, 900) { ProjectSummaryPane(overview, resultProjectFixture(), {}) }
+        .use { fixture ->
+          fixture.render()
+          val preview = fixture.taggedBounds("summary-architecture-preview")
+          val bugs = fixture.taggedBounds("summary-metric-Bugs")
+          assertTrue(preview.height < 180f, "Diagram source must not expand the overview card")
+          assertTrue(preview.top >= bugs.bottom, "Architecture preview belongs in the second row")
+          fixture.clickDescription("Select Architecture summary from preview")
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.clickDescription("Show Architecture diagram")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          fixture.clickText("Mermaid source")
+          fixture.render()
+          assertTrue(fixture.hasText(source))
         }
   }
 

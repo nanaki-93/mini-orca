@@ -401,6 +401,7 @@ internal fun MiniOrcaButton(
     density: ButtonDensity = ButtonDensity.Standard,
     selected: Boolean = false,
     focusHighlight: Boolean = false,
+    accessibleName: String? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
   val densityStyle = buttonDensityStyle(density)
@@ -425,6 +426,7 @@ internal fun MiniOrcaButton(
       minimumHeight = densityStyle.height,
       contentPadding = densityStyle.contentPadding,
       shape = MiniOrcaShapes.control,
+      accessibleName = accessibleName,
       content = content,
   )
 }
