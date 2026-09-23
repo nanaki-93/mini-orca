@@ -10,7 +10,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 
 fun main() = miniOrcaApplication()
 
@@ -37,7 +39,13 @@ internal fun miniOrcaApplication(
       if (exitRequested && terminalState.tabs.isEmpty() && !terminalState.cleanupPending)
           exitApplication()
     }
-    Window(onCloseRequest = { exitRequested = true }, title = "Mini-Orca", resizable = true) {
+    val windowState = rememberWindowState(placement = WindowPlacement.Maximized)
+    Window(
+        onCloseRequest = { exitRequested = true },
+        title = "Mini-Orca",
+        resizable = true,
+        state = windowState,
+    ) {
       MiniOrcaTheme {
         content(terminal)
         if (exitRequested && terminalState.cleanupPending) {
