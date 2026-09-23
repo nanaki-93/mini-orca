@@ -194,6 +194,7 @@ internal fun DockedToolWindow(
 private fun ToolWindowHeader(title: String, onClose: (() -> Unit)?) {
   IdePaneHeader(
       title = title,
+      actionsBelow = true,
       actions = {
         onClose?.let { close ->
           ChromeButton(

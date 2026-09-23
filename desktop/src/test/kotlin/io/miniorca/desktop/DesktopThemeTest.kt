@@ -118,16 +118,6 @@ class DesktopThemeTest {
   }
 
   @Test
-  fun actionGroupsSwitchToVerticalBeforeTheyBecomeCrowded() {
-    assertEquals(ActionGroupLayout.Vertical, actionGroupLayout(459f))
-    assertEquals(ActionGroupLayout.Horizontal, actionGroupLayout(460f))
-    assertEquals(
-        ActionGroupLayout.Vertical, actionGroupLayout(419f, minimumHorizontalWidthDp = 420f))
-    assertEquals(
-        ActionGroupLayout.Horizontal, actionGroupLayout(420f, minimumHorizontalWidthDp = 420f))
-  }
-
-  @Test
   fun semanticSyntaxTokensDoNotChangeSourceText() {
     val source = "package demo\n// note\nfunc Run() string { return \"ok\" }\n"
     val highlighted = highlightedCode(source)

@@ -2,6 +2,7 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -210,7 +211,7 @@ private fun SecurityFindingDetails(
     ResultEvidenceSection("Remediation", finding.remediation)
     if (result.report.reason.isNotBlank())
         Text(result.report.reason, color = Warning, style = IdeTypography.compactBody)
-    ResponsiveActionGroup(Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
       MiniOrcaButton(
           onClick = { actions.prepareFix(finding) },
           enabled = canPrepare,

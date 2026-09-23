@@ -14,7 +14,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -93,62 +92,6 @@ internal object MiniOrcaSpacing {
   val standard = 8.dp
   val roomy = 12.dp
   val section = 16.dp
-}
-
-internal enum class ActionGroupLayout {
-  Horizontal,
-  Vertical
-}
-
-internal fun actionGroupLayout(
-    widthDp: Float,
-    minimumHorizontalWidthDp: Float = 460f
-): ActionGroupLayout =
-    if (widthDp >= minimumHorizontalWidthDp) ActionGroupLayout.Horizontal
-    else ActionGroupLayout.Vertical
-
-@Composable
-internal fun ResponsiveActionGroup(
-    modifier: Modifier = Modifier,
-    minimumHorizontalWidth: androidx.compose.ui.unit.Dp = 460.dp,
-    content: @Composable () -> Unit,
-) {
-  BoxWithConstraints(modifier) {
-    if (actionGroupLayout(maxWidth.value, minimumHorizontalWidth.value) ==
-        ActionGroupLayout.Horizontal) {
-      androidx.compose.foundation.layout.Row(
-          horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact),
-          content = { content() })
-    } else {
-      Column(
-          verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact),
-          content = { content() })
-    }
-  }
-}
-
-@Composable
-internal fun ResponsiveFieldPair(
-    modifier: Modifier = Modifier,
-    minimumHorizontalWidth: androidx.compose.ui.unit.Dp = 420.dp,
-    first: @Composable (Modifier) -> Unit,
-    second: @Composable (Modifier) -> Unit,
-) {
-  BoxWithConstraints(modifier) {
-    if (actionGroupLayout(maxWidth.value, minimumHorizontalWidth.value) ==
-        ActionGroupLayout.Horizontal) {
-      androidx.compose.foundation.layout.Row {
-        first(Modifier.weight(1f))
-        Spacer(Modifier.width(MiniOrcaSpacing.compact))
-        second(Modifier.weight(1f))
-      }
-    } else {
-      Column(verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
-        first(Modifier.fillMaxWidth())
-        second(Modifier.fillMaxWidth())
-      }
-    }
-  }
 }
 
 internal object MiniOrcaShapes {

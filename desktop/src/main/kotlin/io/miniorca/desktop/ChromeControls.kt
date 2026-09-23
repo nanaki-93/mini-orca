@@ -12,7 +12,6 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -296,14 +295,6 @@ internal fun ChromeTab(
   )
 }
 
-internal enum class PaneHeaderActionLayout {
-  Inline,
-  Below,
-}
-
-internal fun paneHeaderActionLayout(availableWidthDp: Float): PaneHeaderActionLayout =
-    if (availableWidthDp >= 480f) PaneHeaderActionLayout.Inline else PaneHeaderActionLayout.Below
-
 /** One flat pane-header composition keeps disclosure targets separate from trailing actions. */
 @Composable
 internal fun IdePaneHeader(
@@ -318,44 +309,42 @@ internal fun IdePaneHeader(
     actions: @Composable RowScope.() -> Unit = {},
     overflow: (@Composable () -> Unit)? = null,
     collapse: (@Composable () -> Unit)? = null,
+    actionsBelow: Boolean = false,
 ) {
   require((expanded == null) == (onToggle == null)) {
     "A pane header must provide both disclosure state and toggle callback, or neither."
   }
   val headerModifier =
       modifier.fillMaxWidth().clip(MiniOrcaShapes.control).background(HeaderSurface)
-  BoxWithConstraints(headerModifier) {
-    val actionLayout = paneHeaderActionLayout(maxWidth.value)
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-      Row(
-          Modifier.fillMaxWidth().heightIn(min = 24.dp),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
-        PaneHeaderLead(
-            title = title,
-            icon = icon,
-            stateLabel = stateLabel,
-            stateTint = stateTint,
-            expanded = expanded,
-            onToggle = onToggle,
-            disclosureModifier = disclosureModifier,
-            modifier = Modifier.weight(1f),
-        )
-        if (actionLayout == PaneHeaderActionLayout.Inline) {
-          Row(horizontalArrangement = Arrangement.spacedBy(4.dp), content = actions)
-          overflow?.invoke()
-          collapse?.invoke()
-        }
-      }
-      if (actionLayout == PaneHeaderActionLayout.Below) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            content = actions)
+  Column(headerModifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      PaneHeaderLead(
+          title = title,
+          icon = icon,
+          stateLabel = stateLabel,
+          stateTint = stateTint,
+          expanded = expanded,
+          onToggle = onToggle,
+          disclosureModifier = disclosureModifier,
+          modifier = Modifier.weight(1f),
+      )
+      if (!actionsBelow) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), content = actions)
         overflow?.invoke()
         collapse?.invoke()
       }
+    }
+    if (actionsBelow) {
+      Row(
+          Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(4.dp),
+          content = actions)
+      overflow?.invoke()
+      collapse?.invoke()
     }
   }
 }
