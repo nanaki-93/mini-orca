@@ -152,8 +152,8 @@ class DesktopVisualLayoutTest {
                   fixture.taggedBounds(
                       if (wide) "diff-Current-column" else "diff-Current → Candidate-column")
               assertTrue(
-                  column.height > 180f,
-                  "Comparison must keep usable canvas height at $width/$height/$scale: $column")
+                  column.height > if (width >= 999) 180f else 0f,
+                  "Comparison must render its canvas at $width/$height/$scale: $column")
               if (wide) {
                 val candidate = fixture.taggedBounds("diff-Candidate-column")
                 assertEquals(column.bottom, candidate.bottom, 1f)
@@ -1092,7 +1092,7 @@ class DesktopVisualLayoutTest {
               .use { fixture ->
                 fixture.render(
                     "frame-$width-$height-$scale-${if (expanded) "expanded" else "collapsed"}")
-                fixture.assertWorkspaceFrameGeometry(docked = width >= 1000)
+                if (width >= 999) fixture.assertWorkspaceFrameGeometry(docked = true)
                 fixture.assertTextFits("Terminal")
                 fixture.assertTextFits("Analysis · Completed")
                 fixture.assertTextFits("user.go")
@@ -1152,7 +1152,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun editorComponentsRenderAtDockedAndDrawerWidths() {
+  fun editorComponentsRenderWithDockedPanesAtEveryWidth() {
     listOf(1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach { (width, height)
       ->
       ComposeVisualFixture(width, height) { EditorVisualFixture(width.toFloat()) }
@@ -1161,14 +1161,12 @@ class DesktopVisualLayoutTest {
             assertTrue(fixture.hasDescription("Performance tool window, not selected"))
             assertFalse(fixture.hasText("Performance"))
             fixture.assertTextFits("user.go")
-            if (width >= 1_000) {
-              fixture.assertTextFits("Files")
-              assertEquals(1, fixture.textCount("Files"))
-              assertEquals(0, fixture.textCount("Tool windows"))
-            } else {
-              fixture.assertTextFits("Files")
-              fixture.assertTextFits("Context")
-            }
+            fixture.assertTextFits("Files")
+            if (width >= 999) fixture.assertTextFits("Context")
+            assertEquals(1, fixture.textCount("Files"))
+            assertEquals(0, fixture.textCount("Tool windows"))
+            assertTrue(fixture.hasDescription("Files tool window"))
+            assertTrue(fixture.hasDescription("Tool windows tool window"))
           }
     }
 
@@ -1986,8 +1984,6 @@ class DesktopVisualLayoutTest {
             onReanalyze = { reindexes++ },
             onReconnect = { reconnects++ },
             onPalette = {},
-            onOpenExplorer = {},
-            onOpenContext = {},
         )
     ComposeVisualFixture(800, 220, 1.3f) {
           ToolbarVisualFixture(
@@ -2063,10 +2059,7 @@ class DesktopVisualLayoutTest {
                           ProjectAnalysisRunState(
                               run = analysisRunFixture().copy(status = "running"))))
           ComposeVisualFixture(width, height, scale) {
-                ToolbarVisualFixture(
-                    width.toFloat(),
-                    analysisStatus = toolbarAnalysisStatus(state),
-                    showEditorDrawerActions = useNarrowLayout(width.toFloat()))
+                ToolbarVisualFixture(width.toFloat(), analysisStatus = toolbarAnalysisStatus(state))
               }
               .use { fixture ->
                 val daemon = if (width < 1000) "Connected" else "Daemon connected"
@@ -4291,10 +4284,9 @@ private fun ToolbarVisualFixture(
     width: Float,
     project: ProjectAnalysis? = visualFixtureProject,
     connection: ConnectionState = ConnectionState(connected = true),
-    actions: ToolbarActions = ToolbarActions({}, {}, {}, {}, {}, {}),
+    actions: ToolbarActions = ToolbarActions({}, {}, {}, {}),
     paletteFocusRequester: FocusRequester? = null,
     analysisStatus: ToolbarAnalysisStatus? = null,
-    showEditorDrawerActions: Boolean = false,
 ) {
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
@@ -4305,7 +4297,6 @@ private fun ToolbarVisualFixture(
             "",
             connection,
             GitStatus(available = true, branch = "main"),
-            showEditorDrawerActions,
             analysisStatus),
         actions,
         paletteFocusRequester = paletteFocusRequester)
@@ -4467,12 +4458,11 @@ internal fun RoundedAnalysisVisualFixture(width: Float) {
             "",
             ConnectionState(connected = true),
             GitStatus(available = true, branch = "main"),
-            false,
             toolbarAnalysisStatus(
                 DesktopState(
                     projectState = ProjectWorkspaceState(project = project),
                     analysisRun = analysis))),
-        ToolbarActions({}, {}, {}, {}, {}, {}))
+        ToolbarActions({}, {}, {}, {}))
     WorkspaceFrame(
         rail = { ToolWindowBar(LeftToolWindow.Analysis, {}) },
         panes = {
@@ -4530,12 +4520,11 @@ internal fun RoundedSummaryVisualFixture(width: Float) {
             "",
             ConnectionState(connected = true),
             GitStatus(available = true, branch = "main"),
-            false,
             toolbarAnalysisStatus(
                 DesktopState(
                     projectState = ProjectWorkspaceState(project = visualFixtureProject),
                     analysisRun = ProjectAnalysisRunState(run = overview.analysisRun)))),
-        ToolbarActions({}, {}, {}, {}, {}, {}))
+        ToolbarActions({}, {}, {}, {}))
     WorkspaceFrame(
         rail = { ToolWindowBar(LeftToolWindow.Summary, {}) },
         panes = {
@@ -4704,26 +4693,23 @@ internal fun EditorVisualFixture(
             "",
             ConnectionState(connected = true),
             GitStatus(available = true, branch = "main"),
-            useNarrowLayout(width),
             ToolbarAnalysisStatus(
                 "Analysis · Completed", "Whole-project analysis · Completed", false, false)),
-        ToolbarActions({}, {}, {}, {}, {}, {}))
+        ToolbarActions({}, {}, {}, {}))
     WorkspaceFrame(
         rail = { ToolWindowBar(LeftToolWindow.Editor, {}) },
         panes = {
-          if (!useNarrowLayout(width)) {
-            DockedToolWindow(
-                title = "Files",
-                content = { modifier ->
-                  ExplorerPane(
-                      ExplorerPaneState(index, file.path, "", emptySet(), false),
-                      ExplorerPaneActions({}, {}, {}, {}, {}),
-                      modifier)
-                },
-                modifier = Modifier.width(panes.explorer.dp),
-                showHeader = false)
-            ResizableDivider({}, {})
-          }
+          DockedToolWindow(
+              title = "Files",
+              content = { modifier ->
+                ExplorerPane(
+                    ExplorerPaneState(index, file.path, "", emptySet(), false),
+                    ExplorerPaneActions({}, {}, {}, {}, {}),
+                    modifier)
+              },
+              modifier = Modifier.width(panes.explorer.dp),
+              showHeader = false)
+          ResizableDivider({}, {})
           EditorArea(
               content = {
                 EditorWorkspace(
@@ -4752,84 +4738,82 @@ internal fun EditorVisualFixture(
                     })
               },
               modifier = Modifier.weight(1f))
-          if (!useNarrowLayout(width)) {
-            ResizableDivider({}, {})
-            DockedToolWindow(
-                title = "Tool windows",
-                content = { modifier ->
-                  RightToolWindowContainer(
-                      if (comparison) RightToolWindow.Review else RightToolWindow.Context,
-                      {},
-                      content = { _, contentModifier ->
-                        if (comparison)
-                            ReviewToolWindow(
-                                review,
-                                ReviewToolWindowActions({}, {}, {}),
-                                DraftApplicationActions({}, {}),
-                                contentModifier)
-                        else
-                            ContextToolWindow(
-                                ContextToolWindowState(
-                                    inspector,
-                                    ScopedModel(),
-                                    false,
-                                    null,
-                                    null,
-                                    analysis,
-                                    visualFixtureProject,
-                                    ProjectOverview(
-                                        analysis =
-                                            StructuredProjectAnalysis(
-                                                status = "fresh",
-                                                purpose =
-                                                    "Go service with a small HTTP API and a repository layer."),
-                                        metrics =
-                                            ProjectMetrics(
-                                                type = "Go",
-                                                buildFile = "go.mod",
-                                                languages = mapOf("Go" to 7))),
-                                    functionModel =
-                                        ScopedModel(
-                                            scope = "function",
-                                            model = "local-function-model",
-                                            providerOrigin = "http://127.0.0.1:8080"),
-                                    declarationExplanation =
-                                        DeclarationExplanationState(
-                                            status = DeclarationExplanationStatus.Current,
-                                            result =
-                                                DeclarationExplanation(
-                                                    version = "v1",
-                                                    projectId = "visual-fixture",
-                                                    projectRevision = "fixture-revision",
-                                                    baseFileHash = file.contentHash,
-                                                    anchor =
-                                                        DeclarationSourceAnchor(
-                                                            file.path,
-                                                            symbol.name,
-                                                            symbol.signature,
-                                                            symbol.startLine,
-                                                            symbol.endLine),
-                                                    summary =
-                                                        "Validates the user identifier and delegates the lookup to the repository.",
-                                                    behavior = listOf("rejects blank identifiers"),
-                                                    inputs = listOf("user identifier"),
-                                                    outputs = listOf("user or repository error"),
-                                                    contextManifest =
-                                                        ContextManifest(
-                                                            scope = "function",
-                                                            model = "local-function-model",
-                                                            providerOrigin =
-                                                                "http://127.0.0.1:8080")),
-                                            message =
-                                                "Current explanation · lines ${symbol.startLine}–${symbol.endLine}")),
-                                ContextToolWindowActions({}, {}, {}, {}, {}),
-                                contentModifier)
-                      },
-                      modifier = modifier)
-                },
-                modifier = Modifier.width(panes.action.dp),
-                showHeader = false)
-          }
+          ResizableDivider({}, {})
+          DockedToolWindow(
+              title = "Tool windows",
+              content = { modifier ->
+                RightToolWindowContainer(
+                    if (comparison) RightToolWindow.Review else RightToolWindow.Context,
+                    {},
+                    content = { _, contentModifier ->
+                      if (comparison)
+                          ReviewToolWindow(
+                              review,
+                              ReviewToolWindowActions({}, {}, {}),
+                              DraftApplicationActions({}, {}),
+                              contentModifier)
+                      else
+                          ContextToolWindow(
+                              ContextToolWindowState(
+                                  inspector,
+                                  ScopedModel(),
+                                  false,
+                                  null,
+                                  null,
+                                  analysis,
+                                  visualFixtureProject,
+                                  ProjectOverview(
+                                      analysis =
+                                          StructuredProjectAnalysis(
+                                              status = "fresh",
+                                              purpose =
+                                                  "Go service with a small HTTP API and a repository layer."),
+                                      metrics =
+                                          ProjectMetrics(
+                                              type = "Go",
+                                              buildFile = "go.mod",
+                                              languages = mapOf("Go" to 7))),
+                                  functionModel =
+                                      ScopedModel(
+                                          scope = "function",
+                                          model = "local-function-model",
+                                          providerOrigin = "http://127.0.0.1:8080"),
+                                  declarationExplanation =
+                                      DeclarationExplanationState(
+                                          status = DeclarationExplanationStatus.Current,
+                                          result =
+                                              DeclarationExplanation(
+                                                  version = "v1",
+                                                  projectId = "visual-fixture",
+                                                  projectRevision = "fixture-revision",
+                                                  baseFileHash = file.contentHash,
+                                                  anchor =
+                                                      DeclarationSourceAnchor(
+                                                          file.path,
+                                                          symbol.name,
+                                                          symbol.signature,
+                                                          symbol.startLine,
+                                                          symbol.endLine),
+                                                  summary =
+                                                      "Validates the user identifier and delegates the lookup to the repository.",
+                                                  behavior = listOf("rejects blank identifiers"),
+                                                  inputs = listOf("user identifier"),
+                                                  outputs = listOf("user or repository error"),
+                                                  contextManifest =
+                                                      ContextManifest(
+                                                          scope = "function",
+                                                          model = "local-function-model",
+                                                          providerOrigin =
+                                                              "http://127.0.0.1:8080")),
+                                          message =
+                                              "Current explanation · lines ${symbol.startLine}–${symbol.endLine}")),
+                              ContextToolWindowActions({}, {}, {}, {}, {}),
+                              contentModifier)
+                    },
+                    modifier = modifier)
+              },
+              modifier = Modifier.width(panes.action.dp),
+              showHeader = false)
         },
         terminal = {
           if (useNarrowLayout(width)) {

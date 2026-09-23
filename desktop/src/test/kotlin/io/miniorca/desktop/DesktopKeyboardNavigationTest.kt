@@ -406,26 +406,6 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
-  fun responsiveShellKeepsTheExactBreakpointDocked() {
-    assertEquals(
-        ResponsiveShellPresentation(
-            left = ResponsiveShellRegion.Docked,
-            right = ResponsiveShellRegion.Docked,
-            bottom = ResponsiveShellRegion.Docked,
-        ),
-        responsiveShellPresentation(1_000f),
-    )
-    assertEquals(
-        ResponsiveShellPresentation(
-            left = ResponsiveShellRegion.Drawer,
-            right = ResponsiveShellRegion.Drawer,
-            bottom = ResponsiveShellRegion.Overlay,
-        ),
-        responsiveShellPresentation(999f),
-    )
-  }
-
-  @Test
   fun tabGroupArrowsMoveFocusWithoutActivatingTheDestination() {
     val entries = listOf("Source", "Review", "History")
 
@@ -468,7 +448,6 @@ class DesktopKeyboardNavigationTest {
             paletteVisible = true,
             statusDetailsVisible = true,
             bottomToolsVisible = true,
-            drawerVisible = true,
         ),
     )
     assertEquals(
@@ -478,7 +457,6 @@ class DesktopKeyboardNavigationTest {
             paletteVisible = false,
             statusDetailsVisible = false,
             bottomToolsVisible = true,
-            drawerVisible = true,
         ),
     )
     assertNull(
@@ -487,16 +465,8 @@ class DesktopKeyboardNavigationTest {
             paletteVisible = false,
             statusDetailsVisible = false,
             bottomToolsVisible = false,
-            drawerVisible = false,
         ),
     )
-  }
-
-  @Test
-  fun leavingEditorClosesOnlyAnEditorDrawer() {
-    assertEquals(true, closesEditorDrawerOnWorkspaceChange(Workspace.Editor, Workspace.Bugs))
-    assertEquals(false, closesEditorDrawerOnWorkspaceChange(Workspace.Editor, Workspace.Editor))
-    assertEquals(false, closesEditorDrawerOnWorkspaceChange(Workspace.Analysis, Workspace.Bugs))
   }
 
   @Test
