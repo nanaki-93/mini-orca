@@ -52,25 +52,11 @@ hover labels. Analysis status appears at the
 top right, immediately before daemon connectivity. Editor owns one declaration change.
 Go, Java and Kotlin projects show a type icon beside the project name in the top bar.
 
-Summary opens with the project identity, purpose and indexed metadata, followed
-by a local section index and modular overview. The index moves within Summary; it
-does not change workspaces or start analysis. At smaller window widths or increased
-text sizes, the index sits above the content, which remains reachable by vertical
-scrolling. The native window requests maximized placement on startup, but remains a normal resizable
-window (not fullscreen); the operating system may not honor the initial placement.
+Summary presents the project name and type/build metadata in a distinct header above a rounded overview strip containing purpose, indexed facts and labeled status information. Description freshness is indicated by the status when relevant; for a fresh description with a purpose, its freshness detail is available through status focus or hover. Below it, a headed, contained section outline sits beside a contained detail panel at fitting widths; at narrower effective widths or increased text sizes, the outline moves above the detail. The outline selects local Summary content without changing workspaces or starting analysis. Bugs, Performance and Security entries instead open their existing result workspaces. Startup requests a maximized, resizable native window; the operating system may not honor the initial placement.
 
-A segmented coverage bar shows the current selected files: up to date, outdated,
-not analyzed, running, failed, incomplete and unavailable. Zero-size segments are
-omitted; unavailable coverage and an empty selection keep separate labels. **View
-analysis** only opens Analysis. The status retains current run lifecycle and exposes
-saved project-description freshness/failure details on hover or keyboard focus.
+The detail panel groups a compact segmented coverage graphic and a responsive finding-card layout. Coverage represents the current selected files: up to date, outdated, not analyzed, running, failed, incomplete and unavailable. Zero-size segments are omitted; unavailable coverage and an empty selection keep separate labels. **View analysis** only opens Analysis. The overview status retains current run lifecycle and surfaces saved project-description freshness/failure information when applicable.
 
-Three named Bugs, Performance and Security cards open their result pages with one
-click or keyboard activation. Counts stay distinct from unavailable results; zero
-findings use a neutral surface and do not assert that a project is safe. Supported
-bug priority counts remain in the Bugs card. Overall tool-reported issues and AI
-suggestions appear separately below the cards, since those totals cannot be
-reliably assigned to individual categories.
+Bugs, Performance and Security cards retain their live result states; they use two columns when the available detail width permits and stack when it does not. Counts stay distinct from unavailable results; zero findings do not assert that a project is safe. Supported bug priority counts remain in the Bugs card. Overall tool-reported issues and AI suggestions appear separately below the cards, since those totals cannot be reliably assigned to individual categories.
 
 Architecture, Packages / modules, Engineering insight and Flows appear as
 available Summary sections in the indexed overview. They stack as needed in the
