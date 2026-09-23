@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -30,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -85,56 +83,46 @@ internal fun AnalysisFileSelector(
   val selectedCount = eligible.count { it.path !in ignored }
   val excludedCount = rows.count { it.status == AnalysisFileSyncStatus.Excluded }
   val files = filteredAnalysisFiles(rows, query, filter)
-  val fontScale = LocalDensity.current.fontScale
   val panelModifier =
       Modifier.testTag("analysis-file-panel").onSizeChanged { panelHeightPx = it.height }
   WorkspaceSection(modifier = panelModifier) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-      val inline = maxWidth / fontScale >= 1050.dp
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-              Box(Modifier.weight(1f)) {
-                ChromeButton(
-                    onClick = { expanded = !expanded },
-                    accessibleName = "${if (expanded) "Collapse" else "Expand"} Files",
-                    tooltip = null,
-                    modifier =
-                        Modifier.semantics {
-                          stateDescription = if (expanded) "Expanded" else "Collapsed"
-                        },
-                    contentPadding = PaddingValues(0.dp)) {
-                      DesktopLineIcon(
-                          if (expanded) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
-                          "",
-                          iconSize = 18.dp)
-                      Column(
-                          Modifier.padding(start = 12.dp),
-                          verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                "Files",
-                                color = PrimaryText,
-                                style = IdeTypography.workspaceHeading)
-                            Text(
-                                when {
-                                  state.saving -> "Saving selection…"
-                                  state.loading -> "Loading status…"
-                                  selection == null -> "Not loaded"
-                                  else -> "$selectedCount selected · $excludedCount excluded"
-                                },
-                                color = if (state.error == null) SecondaryText else Error,
-                                style = IdeTypography.workspaceMetadata)
-                          }
-                    }
-              }
-              if (inline && expanded)
-                  AnalysisFileFilters(rows, query, { query = it }, filter, { filter = it })
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      Row(
+          Modifier.fillMaxWidth(),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Box(Modifier.weight(1f)) {
+              ChromeButton(
+                  onClick = { expanded = !expanded },
+                  accessibleName = "${if (expanded) "Collapse" else "Expand"} Files",
+                  tooltip = null,
+                  modifier =
+                      Modifier.semantics {
+                        stateDescription = if (expanded) "Expanded" else "Collapsed"
+                      },
+                  contentPadding = PaddingValues(0.dp)) {
+                    DesktopLineIcon(
+                        if (expanded) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
+                        "",
+                        iconSize = 18.dp)
+                    Column(
+                        Modifier.padding(start = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                          Text("Files", color = PrimaryText, style = IdeTypography.workspaceHeading)
+                          Text(
+                              when {
+                                state.saving -> "Saving selection…"
+                                state.loading -> "Loading status…"
+                                selection == null -> "Not loaded"
+                                else -> "$selectedCount selected · $excludedCount excluded"
+                              },
+                              color = if (state.error == null) SecondaryText else Error,
+                              style = IdeTypography.workspaceMetadata)
+                        }
+                  }
             }
-        if (!inline && expanded)
-            AnalysisFileFilters(rows, query, { query = it }, filter, { filter = it })
-      }
+            if (expanded) AnalysisFileFilters(rows, query, { query = it }, filter, { filter = it })
+          }
     }
     state.error?.let { DiagnosticText(it, color = Error) }
     if (locked)
@@ -150,61 +138,56 @@ internal fun AnalysisFileSelector(
               style = IdeTypography.workspaceMetadata)
         }
     if (expanded) {
-      BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val wide = maxWidth / fontScale >= 720.dp
-        Column {
-          if (wide)
-              Row(
-                  Modifier.fillMaxWidth()
-                      .background(HeaderSurface)
-                      .padding(horizontal = 12.dp, vertical = 8.dp),
-                  horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.columnGap)) {
-                    Row(Modifier.weight(AnalysisWideTableGrid.fileWeight)) {
-                      Spacer(Modifier.width(AnalysisWideTableGrid.leadingControlsWidth))
-                      Text("File", color = SecondaryText, style = IdeTypography.workspaceMetadata)
-                    }
-                    Text(
-                        "Analysis state",
-                        Modifier.weight(AnalysisWideTableGrid.stateWeight)
-                            .padding(start = AnalysisWideTableGrid.statusMarkerWidth),
-                        color = SecondaryText,
-                        style = IdeTypography.workspaceMetadata)
-                    Text(
-                        "Details",
-                        Modifier.weight(AnalysisWideTableGrid.detailsWeight),
-                        color = SecondaryText,
-                        style = IdeTypography.workspaceMetadata)
-                  }
-          if (files.isEmpty() && !state.loading)
+      Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth()
+                .background(HeaderSurface)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.columnGap)) {
+              Row(Modifier.weight(AnalysisWideTableGrid.fileWeight)) {
+                Spacer(Modifier.width(AnalysisWideTableGrid.leadingControlsWidth))
+                Text("File", color = SecondaryText, style = IdeTypography.workspaceMetadata)
+              }
               Text(
-                  when {
-                    selection == null -> "File status is not loaded. Refresh files to try again."
-                    rows.isEmpty() -> "No files are available for analysis."
-                    else -> "No matching files."
-                  },
-                  Modifier.padding(vertical = 12.dp),
+                  "Analysis state",
+                  Modifier.weight(AnalysisWideTableGrid.stateWeight)
+                      .padding(start = AnalysisWideTableGrid.statusMarkerWidth),
                   color = SecondaryText,
                   style = IdeTypography.workspaceMetadata)
-          LazyColumn(
-              Modifier.fillMaxWidth()
-                  .height(tableHeight)
-                  .testTag("analysis-file-table")
-                  .onSizeChanged { tableHeightPx = it.height }) {
-                itemsIndexed(files, key = { _, row -> row.file.path }) { _, row ->
-                  AnalysisFileRow(
-                      row,
-                      row.file.reason.isBlank() && row.file.path !in ignored,
-                      editable && row.file.reason.isBlank(),
-                      wide) {
-                        actions.saveSelection(
-                            (if (row.file.path in ignored) ignored - row.file.path
-                                else ignored + row.file.path)
-                                .sorted())
-                      }
-                  IdeHorizontalSeparator()
-                }
+              Text(
+                  "Details",
+                  Modifier.weight(AnalysisWideTableGrid.detailsWeight),
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata)
+            }
+        if (files.isEmpty() && !state.loading)
+            Text(
+                when {
+                  selection == null -> "File status is not loaded. Refresh files to try again."
+                  rows.isEmpty() -> "No files are available for analysis."
+                  else -> "No matching files."
+                },
+                Modifier.padding(vertical = 12.dp),
+                color = SecondaryText,
+                style = IdeTypography.workspaceMetadata)
+        LazyColumn(
+            Modifier.fillMaxWidth()
+                .height(tableHeight)
+                .testTag("analysis-file-table")
+                .onSizeChanged { tableHeightPx = it.height }) {
+              itemsIndexed(files, key = { _, row -> row.file.path }) { _, row ->
+                AnalysisFileRow(
+                    row,
+                    row.file.reason.isBlank() && row.file.path !in ignored,
+                    editable && row.file.reason.isBlank()) {
+                      actions.saveSelection(
+                          (if (row.file.path in ignored) ignored - row.file.path
+                              else ignored + row.file.path)
+                              .sorted())
+                    }
+                IdeHorizontalSeparator()
               }
-        }
+            }
       }
       FlowRow(
           Modifier.fillMaxWidth().testTag("analysis-file-footer"),
@@ -295,7 +278,6 @@ private fun AnalysisFileRow(
     row: AnalysisFileStatus,
     selected: Boolean,
     editable: Boolean,
-    wide: Boolean,
     toggle: () -> Unit
 ) {
   Row(
@@ -321,18 +303,10 @@ private fun AnalysisFileRow(
                 }
               }
         }
-        if (wide) {
-          identity(Modifier.weight(AnalysisWideTableGrid.fileWeight))
-          AnalysisFileStatusLabel(
-              row.file.path, row.status, Modifier.weight(AnalysisWideTableGrid.stateWeight))
-          AnalysisFileDetails(row, Modifier.weight(AnalysisWideTableGrid.detailsWeight))
-        } else {
-          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            identity(Modifier.fillMaxWidth())
-            AnalysisFileStatusLabel(row.file.path, row.status)
-            AnalysisFileDetails(row)
-          }
-        }
+        identity(Modifier.weight(AnalysisWideTableGrid.fileWeight))
+        AnalysisFileStatusLabel(
+            row.file.path, row.status, Modifier.weight(AnalysisWideTableGrid.stateWeight))
+        AnalysisFileDetails(row, Modifier.weight(AnalysisWideTableGrid.detailsWeight))
       }
 }
 

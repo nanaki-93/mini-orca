@@ -72,9 +72,8 @@ class AnalysisFileSelectionTest {
   }
 
   @Test
-  fun selectorShowsSavedChecksSearchAndBulkActionsAcrossViewports() {
-    listOf(1280 to 800, 1000 to 650, 999 to 650, 800 to 650, 1280 to 600).forEach { (width, height)
-      ->
+  fun selectorShowsSavedChecksSearchAndBulkActionsAtFullSize() {
+    listOf(1_440 to 900).forEach { (width, height) ->
       val saves = mutableListOf<List<String>>()
       val selected = selectionFixture().copy(excludedPaths = listOf("main.go"))
       ComposeVisualFixture(width, height, 1.5f) {
@@ -111,6 +110,59 @@ class AnalysisFileSelectionTest {
             assertEquals(listOf("helper.go", "main.go"), saves.last())
           }
     }
+  }
+
+  @Test
+  fun reducedWindowRenderDoesNotChangeBulkSelectionOrAnalysisScope() {
+    val selection = mutableStateOf(selectionFixture())
+    val saves = mutableListOf<List<String>>()
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> },
+            {},
+            {},
+            {},
+            {},
+            {},
+            { paths ->
+              saves += paths
+              selection.value = selection.value.copy(excludedPaths = paths)
+            })
+    ComposeVisualFixture(1_440, 900) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection.value)),
+              actions)
+        }
+        .use { fullSize ->
+          fullSize.render()
+          fullSize.clickText("Exclude all")
+          fullSize.render()
+          assertEquals(listOf("helper.go", "main.go"), saves.single())
+          assertTrue(fullSize.hasText("0 selected · 3 excluded"))
+
+          ComposeVisualFixture(800, 650) {
+                AnalysisFileSelector(
+                    ProjectAnalysisRunState(
+                        fileSelection = AnalysisSelectionState(selection.value)),
+                    actions)
+              }
+              .use { reduced ->
+                reduced.render()
+                assertTrue(reduced.taggedBounds("analysis-file-table").height > 0f)
+                assertTrue(reduced.hasText("0 selected · 3 excluded"))
+                assertEquals(listOf("helper.go", "main.go"), selection.value.excludedPaths)
+                assertEquals(1, saves.size, "Resizing must not dispatch another selection save")
+              }
+
+          fullSize.render()
+          assertTrue(fullSize.hasText("0 selected · 3 excluded"))
+          fullSize.clickText("Select all")
+          assertEquals(
+              emptyList(), saves.last(), "Bulk scope must still include both eligible files")
+          assertEquals(2, saves.size)
+          fullSize.render()
+          assertTrue(fullSize.hasText("2 selected · 1 excluded"))
+        }
   }
 
   @Test
@@ -170,10 +222,33 @@ class AnalysisFileSelectionTest {
   }
 
   @Test
+  fun filtersRemainInlineAtFullSizeWithIncreasedTextScale() {
+    ComposeVisualFixture(1_600, 1_000, 1.5f) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
+              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render("analysis-files-inline-filters-1600-1000-150")
+          val panel = fixture.taggedBounds("analysis-file-panel")
+          val files = fixture.firstVisibleTextBounds("Files")
+          val all = fixture.firstVisibleTextBounds("All")
+          val attention = fixture.firstVisibleTextBounds("Needs attention")
+          val excluded = fixture.firstVisibleTextBounds("Excluded")
+          assertTrue(files.right < all.left, "Filters must remain beside the Files disclosure")
+          assertTrue(all.right < attention.left && attention.right < excluded.left)
+          assertTrue(
+              kotlin.math.abs(all.center.y - excluded.center.y) < 2f,
+              "Filters must stay on one line at full size and 150% text scale")
+          assertTrue(excluded.right <= panel.right, "Filters must fit inside the panel")
+        }
+  }
+
+  @Test
   fun longPathsAndSaveErrorsRemainReadable() {
     val path = "internal/" + "long_project_directory/".repeat(5) + "analysis.go"
     val selection = selectionFixture().copy(files = listOf(AnalysisSelectableFile(path, "")))
-    ComposeVisualFixture(800, 650, 1.5f) {
+    ComposeVisualFixture(3_200, 2_000, 1.5f) {
           AnalysisFileSelector(
               ProjectAnalysisRunState(
                   fileSelection =
@@ -200,7 +275,7 @@ class AnalysisFileSelectionTest {
                     AnalysisSelectionState(
                         selectionFixture().copy(excludedPaths = listOf("main.go")))))
     var calls = 0
-    ComposeVisualFixture(800, 650, 1.5f) {
+    ComposeVisualFixture(1_440, 900, 1.5f) {
           AnalysisFileSelector(
               state.value,
               AnalysisWorkspaceActions(

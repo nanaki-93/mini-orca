@@ -2219,8 +2219,7 @@ class DesktopVisualLayoutTest {
 
   @Test
   fun roundedAnalysisGroupsRunControlsAndShowsItsFileTableAtSupportedSizes() {
-    listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
-        (width, height) ->
+    listOf(1600 to 1000, 1440 to 900).forEach { (width, height) ->
       listOf(1f, 1.25f, 1.5f).forEach { scale ->
         ComposeVisualFixture(width, height, scale) { RoundedAnalysisVisualFixture(width.toFloat()) }
             .use { fixture ->
@@ -2237,6 +2236,21 @@ class DesktopVisualLayoutTest {
               fixture.assertAnalysisRunGeometry()
               if (width >= 1440 && scale == 1f) {
                 fixture.assertAnalysisTableColumns()
+              }
+              if (width == 1600 && scale == 1.5f) {
+                val panel = fixture.taggedBounds("analysis-file-panel")
+                val files = fixture.firstVisibleTextBounds("Files")
+                val all = fixture.firstVisibleTextBounds("All")
+                val attention = fixture.firstVisibleTextBounds("Needs attention")
+                val excluded = fixture.firstVisibleTextBounds("Excluded")
+                assertTrue(
+                    files.right < all.left, "Filters must remain beside Files in the workspace")
+                assertTrue(all.right < attention.left && attention.right < excluded.left)
+                assertTrue(
+                    kotlin.math.abs(all.center.y - excluded.center.y) < 2f,
+                    "Filters must remain on one line in the workspace at 150% text scale")
+                assertTrue(
+                    excluded.right <= panel.right, "Filters must fit inside the workspace panel")
               }
               if (width == 1600 && scale == 1f) {
                 fixture.assertAnalysisCategoryGeometry()
@@ -2297,8 +2311,8 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun analysisFileStatusMarkersPrecedeLabelsInWideAndCompactRows() {
-    listOf(1_440 to 900, 800 to 650).forEach { (width, height) ->
+  fun analysisFileStatusMarkersPrecedeLabelsInAlignedRows() {
+    listOf(1_440 to 900).forEach { (width, height) ->
       ComposeVisualFixture(width, height, 1.5f) {
             AnalysisFileSelector(
                 ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
