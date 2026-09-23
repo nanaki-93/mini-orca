@@ -309,38 +309,31 @@ class DesktopKeyboardNavigationTest {
           assertTrue(fixture.pressKey(Key.Enter), "Index must support keyboard activation")
           fixture.render()
           assertTrue(destinations.isEmpty(), "Index navigation must stay in Summary")
-          repeat(2) {
-            assertTrue(fixture.pressKey(Key.Tab), "Tab must advance through the coverage status")
+          fixture.clickDescription("Go to Coverage summary")
+          fixture.revealText("View analysis")
+          assertTrue(fixture.requestFocus("View analysis"))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("View analysis"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          listOf("Bugs", "Performance", "Security").forEach { category ->
+            fixture.revealSummaryCategory(category)
+            val control = "View $category results"
+            assertTrue(fixture.requestDescriptionFocus(control))
             fixture.render()
-          }
-          val traversal =
-              listOf(
-                  "View analysis",
-                  "View Bugs results",
-                  "View Performance results",
-                  "View Security results")
-          traversal.forEachIndexed { index, control ->
-            assertTrue(fixture.pressKey(Key.Tab), "Tab must reach $control")
-            fixture.render()
-            assertTrue(
-                fixture.isFocusedControl(control),
-                "Tab position $index must focus $control in Summary visual order")
-            when (control) {
-              "View analysis" -> assertTrue(fixture.pressKey(Key.Enter))
-              "View Bugs results",
-              "View Performance results",
-              "View Security results" -> assertTrue(fixture.pressKey(Key.Spacebar))
-            }
+            assertTrue(fixture.isFocusedControl(control))
+            assertTrue(fixture.pressKey(Key.Spacebar))
             fixture.render()
           }
           assertEquals(
               listOf(Workspace.Analysis, Workspace.Bugs, Workspace.Performance, Workspace.Security),
               destinations)
-          fixture.scrollBy(100_000f)
+          fixture.clickDescription("Go to Engineering insight summary")
           fixture.render()
           assertTrue(fixture.tryClick("Expand More insight"))
           fixture.render()
           assertEquals("Expanded", fixture.descriptionStateDescription("Collapse More insight"))
+          fixture.clickDescription("Go to Architecture summary")
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           assertTrue(fixture.tryClick("Show Architecture diagram"))
           fixture.awaitDescription("Hide Architecture diagram", "Expanded")

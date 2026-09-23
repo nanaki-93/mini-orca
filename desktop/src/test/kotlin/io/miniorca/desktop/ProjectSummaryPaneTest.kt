@@ -191,6 +191,8 @@ class ProjectSummaryPaneTest {
 
     ComposeVisualFixture(1000, 760) { ProjectSummaryPane(currentOverview, currentProject, {}) }
         .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Go to Architecture summary")
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           fixture.clickDescription("Show Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
@@ -206,12 +208,16 @@ class ProjectSummaryPaneTest {
 
           currentProject = currentProject.copy(projectId = "second", projectRevision = "two")
           currentOverview = currentOverview.copy(projectId = "second", projectRevision = "two")
+          fixture.render()
+          fixture.awaitDescription("Go to Architecture summary")
           fixture.clickDescription("Go to Architecture summary")
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           assertFalse(fixture.hasText("Mermaid source"))
           fixture.clickDescription("Show Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
           assertTrue(fixture.hasText("100%"))
+          fixture.clickDescription("Go to Engineering insight summary")
+          fixture.render()
           assertEquals("Collapsed", fixture.stateDescription("More insight"))
           assertFalse(fixture.hasText("Trade-off or failure mode"))
         }
