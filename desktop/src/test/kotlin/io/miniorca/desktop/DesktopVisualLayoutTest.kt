@@ -371,14 +371,10 @@ class DesktopVisualLayoutTest {
             assertTrue(fixture.taggedBounds("analysis-run-progress-track").width > 0f)
             assertEquals(0, fixture.tagCount("analysis-run-content"))
             assertEquals(0, fixture.tagCount("analysis-run-controls"))
-            if (width == 1440) {
-              fixture.assertTextSharesRowBefore("Running", "0 of 2 files finished")
-              fixture.assertTextSharesRowBefore(
-                  "0 of 2 files finished", "Current: ${paths.first()}")
-              fixture.assertTextSharesRowBefore("Current: ${paths.first()}", "Pause")
-            } else {
-              fixture.assertTextAbove("Current: ${paths.first()}", "Pause")
-            }
+            fixture.assertTextFits("Running")
+            fixture.assertTextFits("0 of 2 files finished")
+            fixture.assertTextFits("Current: ${paths.first()}", maxLines = 2)
+            fixture.assertTextFits("Pause")
             fixture.clickText("Pause")
             fixture.clickText("Cancel")
             assertEquals(1, pauses)
@@ -4008,12 +4004,8 @@ internal class ComposeVisualFixture(
     assertTrue(title.bottom <= finished.top, "Run title must precede the finished-file count")
     assertTrue(finished.bottom <= progress.top, "Progress must follow the title and file count")
     assertTrue(progress.bottom <= current.top, "Current file must follow progress")
-    if (controls.top < content.bottom) {
-      assertTrue(controls.left >= content.right, "Inline controls must not overlap run content")
-      assertTrue(controls.top <= content.top, "Inline controls must align with the panel top")
-    } else {
-      assertTrue(controls.top >= content.bottom, "Compact controls must wrap below run content")
-    }
+    assertTrue(controls.left >= content.right, "Run controls must remain beside run content")
+    assertTrue(controls.top <= content.top, "Run controls must align with the panel top")
   }
 
   fun assertAnalysisCategoryGeometry() {

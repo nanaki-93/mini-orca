@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -23,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -109,40 +107,19 @@ private fun AnalysisRunPanel(
     pathsExpanded: Boolean,
     onTogglePaths: () -> Unit,
 ) {
-  BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val inline = maxWidth / LocalDensity.current.fontScale >= 900.dp
-    if (inline) {
-      Row(
-          Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-          verticalAlignment = Alignment.Top) {
-            AnalysisLifecycleIndicator(run, presentation)
-            AnalysisRunContent(
-                run,
-                presentation,
-                pathsExpanded,
-                onTogglePaths,
-                Modifier.weight(1f).testTag("analysis-run-content"))
-            AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
-          }
-    } else {
-      Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.Top) {
-              AnalysisLifecycleIndicator(run, presentation)
-              AnalysisRunContent(
-                  run,
-                  presentation,
-                  pathsExpanded,
-                  onTogglePaths,
-                  Modifier.weight(1f).testTag("analysis-run-content"))
-            }
+  Row(
+      Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      verticalAlignment = Alignment.Top) {
+        AnalysisLifecycleIndicator(run, presentation)
+        AnalysisRunContent(
+            run,
+            presentation,
+            pathsExpanded,
+            onTogglePaths,
+            Modifier.weight(1f).testTag("analysis-run-content"))
         AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
       }
-    }
-  }
 }
 
 @Composable
@@ -217,48 +194,23 @@ private fun SummaryRunPanel(
     onTogglePaths: () -> Unit,
 ) {
   val currentPaths = presentation.currentFiles
-  BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val inline = maxWidth / LocalDensity.current.fontScale >= 760.dp
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      if (inline) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-              AnalysisRunMetadata(
-                  run,
-                  presentation,
-                  currentPaths,
-                  pathsExpanded,
-                  onTogglePaths,
-                  Modifier.weight(1f))
-              run?.let {
-                AnalysisRunProgressTrack(
-                    presentation, analysisStatusTint(it.status), Modifier.weight(1f))
-              }
-              AnalysisRunControls(state, commands, actions)
-            }
-      } else {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically) {
           AnalysisRunMetadata(
-              run,
-              presentation,
-              currentPaths,
-              pathsExpanded,
-              onTogglePaths,
-              Modifier.fillMaxWidth())
+              run, presentation, currentPaths, pathsExpanded, onTogglePaths, Modifier.weight(1f))
           run?.let {
             AnalysisRunProgressTrack(
-                presentation, analysisStatusTint(it.status), Modifier.fillMaxWidth())
+                presentation, analysisStatusTint(it.status), Modifier.weight(1f))
           }
           AnalysisRunControls(state, commands, actions)
         }
-      }
-      if (pathsExpanded)
-          currentPaths.drop(1).forEach { path ->
-            Text("Current: $path", color = SecondaryText, style = IdeTypography.workspaceMetadata)
-          }
-    }
+    if (pathsExpanded)
+        currentPaths.drop(1).forEach { path ->
+          Text("Current: $path", color = SecondaryText, style = IdeTypography.workspaceMetadata)
+        }
   }
 }
 
