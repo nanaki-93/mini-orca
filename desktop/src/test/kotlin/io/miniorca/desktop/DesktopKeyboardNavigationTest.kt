@@ -276,6 +276,62 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun summaryKeyboardControlsKeepDisclosuresLocalAndNavigateOnlyToTheirWorkspace() {
+    val destinations = mutableListOf<Workspace>()
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                visualFixtureOverview.analysis.copy(
+                    engineeringInsight =
+                        EngineeringInsight(
+                            mechanism = "Validate requests before persistence.",
+                            whyItMattersHere = "Invalid input stays outside the repository.",
+                            tradeoffOrFailureMode = "Rules need one owner.")))
+    ComposeVisualFixture(1_600, 1_000) {
+          ProjectSummaryPane(overview, visualFixtureProject, destinations::add)
+        }
+        .use { fixture ->
+          fixture.render()
+          repeat(2) {
+            assertTrue(fixture.pressKey(Key.Tab), "Tab must advance through the coverage status")
+            fixture.render()
+          }
+          val traversal =
+              listOf(
+                  "View analysis",
+                  "View Bugs results",
+                  "View Performance results",
+                  "View Security results")
+          traversal.forEachIndexed { index, control ->
+            assertTrue(fixture.pressKey(Key.Tab), "Tab must reach $control")
+            fixture.render()
+            assertTrue(
+                fixture.isFocusedControl(control),
+                "Tab position $index must focus $control in Summary visual order")
+            when (control) {
+              "View analysis" -> assertTrue(fixture.pressKey(Key.Enter))
+              "View Bugs results",
+              "View Performance results",
+              "View Security results" -> assertTrue(fixture.pressKey(Key.Spacebar))
+            }
+            fixture.render()
+          }
+          assertEquals(
+              listOf(Workspace.Analysis, Workspace.Bugs, Workspace.Performance, Workspace.Security),
+              destinations)
+          fixture.scrollBy(100_000f)
+          fixture.render()
+          assertTrue(fixture.tryClick("Expand More insight"))
+          fixture.render()
+          assertEquals("Expanded", fixture.descriptionStateDescription("Collapse More insight"))
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          assertTrue(fixture.tryClick("Show Architecture diagram"))
+          fixture.awaitDescription("Hide Architecture diagram", "Expanded")
+          assertEquals(4, destinations.size, "Summary disclosures must not navigate or start work")
+        }
+  }
+
+  @Test
   fun terminalInputOwnsInterruptAndOrdinaryAppChordsUntilExplicitFocusReturn() {
     assertFalse(appShortcutAllowed(terminalFocused = true))
     assertTrue(appShortcutAllowed(terminalFocused = false))
