@@ -1922,7 +1922,7 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-1440")
-          assertEquals(0, fixture.textCount("Summary"))
+          assertEquals(1, fixture.textCount("Summary"))
           assertTrue(fixture.hasText("Go · go.mod · 23 indexed files · 1,800 lines · Markdown"))
           assertTrue(fixture.hasText("Analysis coverage"))
           assertTrue(fixture.hasDescription("Select Coverage summary"))
@@ -2490,6 +2490,7 @@ class DesktopVisualLayoutTest {
           fixture.render()
           assertTrue(fixture.isDescriptionSelected("Select Architecture summary"))
           assertEquals(0, fixture.tagCount("analysis-summary"))
+          fixture.assertSummaryDetailContained("summary-architecture")
           assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
           fixture.clickDescription("Select Coverage summary")
           fixture.render()
@@ -2497,6 +2498,20 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.isDescriptionSelected("Select Coverage summary"))
           assertTrue(coverage.width > 0f, "Coverage must replace the selected detail")
           assertEquals(0, navigations, "Index navigation must remain local")
+        }
+  }
+
+  @Test
+  fun narrowSummaryStacksContainedPanels() {
+    ComposeVisualFixture(600, 900) {
+          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.assertSummaryDetailContained("analysis-summary", compact = true)
+          fixture.clickDescription("Select Architecture summary")
+          fixture.render()
+          fixture.assertSummaryDetailContained("summary-architecture", compact = true)
         }
   }
 
@@ -2514,6 +2529,7 @@ class DesktopVisualLayoutTest {
           fixture.render()
           assertTrue(fixture.isDescriptionSelected("Select Architecture summary"))
           assertEquals(0, fixture.tagCount("analysis-summary"))
+          fixture.assertSummaryDetailContained("summary-architecture")
           fixture.assertSummaryStatusPlacement("Outdated")
           overview = overview.copy(analysisCoverage = AnalysisCoverage(total = 23, fresh = 23))
           fixture.render()
@@ -4180,6 +4196,15 @@ internal class ComposeVisualFixture(
   }
 
   fun assertReferenceSummaryGeometry() {
+    val outlinePanel = taggedBounds("summary-outline-panel")
+    val detailPanel = taggedBounds("summary-detail-panel")
+    val outlineRow = taggedBounds("summary-index-Coverage")
+    assertEquals(290f, outlinePanel.width, 2f, "Outline panel is approximately 290dp")
+    assertTrue(outlinePanel.width > outlineRow.width, "Outline panel contains its rows")
+    assertEquals(16f, detailPanel.left - outlinePanel.right, 2f, "Panels have a 16dp gap")
+    assertTrue(outlinePanel.left < outlineRow.left && outlinePanel.right > outlineRow.right)
+    assertTrue(outlinePanel.top < outlineRow.top && outlinePanel.bottom > outlineRow.bottom)
+    assertSummaryDetailContained("analysis-summary")
     val outline = taggedBounds("summary-index-Coverage")
     val overview = taggedBounds("summary-introduction")
     val header = taggedBounds("summary-project-header")
@@ -4191,6 +4216,19 @@ internal class ComposeVisualFixture(
     assertTrue(overview.bottom <= outline.top, "Overview precedes the outline")
     assertTrue(outline.right <= coverage.left, "Outline sits beside focused detail")
     assertTrue(track.width >= coverage.width * 0.6f, "Coverage track must be broad")
+  }
+
+  fun assertSummaryDetailContained(tag: String, compact: Boolean = false) {
+    val outline = taggedBounds("summary-outline-panel")
+    val panel = taggedBounds("summary-detail-panel")
+    val content = taggedBounds(tag)
+    assertTrue(panel.left < content.left && panel.right > content.right, "$tag fits in detail")
+    assertTrue(panel.top < content.top && panel.bottom > content.bottom, "$tag fits in detail")
+    if (compact) {
+      assertTrue(outline.bottom <= panel.top, "Compact outline $outline precedes detail $panel")
+    } else {
+      assertEquals(16f, panel.left - outline.right, 2f, "Panels have a 16dp gap")
+    }
   }
 
   fun assertTextFits(label: String, maxLines: Int = 1) {
