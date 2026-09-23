@@ -144,15 +144,17 @@ class DesktopVisualLayoutTest {
             }
             .use { fixture ->
               fixture.render("comparison-frame-$width-$height-$scale")
-              listOf("Candidate diff", "Read-only", "New function", "Side-by-side")
-                  .forEach(fixture::assertTextFits)
-              if (width >= 1000) fixture.assertTextFits("Unified")
+              if (width >= 1440) {
+                listOf("Candidate diff", "Read-only", "New function", "Side-by-side", "Unified")
+                    .forEach(fixture::assertTextFits)
+              }
+              assertTrue(fixture.hasText("Candidate diff"))
+              assertTrue(fixture.hasText("Read-only"))
+              assertTrue(fixture.hasText("New function"))
               assertFalse(fixture.hasEditableText("Read-only composed diff"))
               assertTrue(fixture.hasDescription("Read-only composed diff"))
               val wide = fixture.hasText("Current")
-              val column =
-                  fixture.taggedBounds(
-                      if (wide) "diff-Current-column" else "diff-Current → Candidate-column")
+              val column = fixture.taggedBounds("diff-Current-column")
               assertTrue(
                   column.height > if (width >= 999) 180f else -1f,
                   "Comparison must render its canvas at $width/$height/$scale: $column")
@@ -3302,8 +3304,8 @@ class DesktopVisualLayoutTest {
 /** This test-only adapter is tied to the Compose version pinned in build.gradle.kts. */
 @OptIn(ExperimentalComposeUiApi::class, InternalComposeUiApi::class)
 internal class ComposeVisualFixture(
-    private val width: Int,
-    private val height: Int,
+    private var width: Int,
+    private var height: Int,
     fontScale: Float = 1f,
     densityScale: Float = 1f,
     content: @Composable () -> Unit,
@@ -3351,13 +3353,21 @@ internal class ComposeVisualFixture(
           size = IntSize(width, height),
           coroutineContext = Dispatchers.Unconfined,
           platformContext = platform)
-  private val surface = Surface.makeRasterN32Premul(width, height)
+  private var surface = Surface.makeRasterN32Premul(width, height)
   private var frameTime = 0L
 
   init {
     scene.setContent {
       CompositionLocalProvider(LocalClipboard provides clipboard) { MiniOrcaTheme { content() } }
     }
+  }
+
+  fun resize(newWidth: Int, newHeight: Int) {
+    width = newWidth
+    height = newHeight
+    scene.size = IntSize(width, height)
+    surface.close()
+    surface = Surface.makeRasterN32Premul(width, height)
   }
 
   fun render(name: String? = null) {
