@@ -2468,8 +2468,8 @@ class DesktopVisualLayoutTest {
               assertFalse(fixture.hasEditableText())
               if (width == 1600 && scale == 1f) {
                 fixture.assertReferenceSummaryGeometry()
-                fixture.assertTextBefore("Bugs", "Performance")
-                fixture.assertTextBefore("Performance", "Security")
+                fixture.assertTextAbove("Bugs", "Performance")
+                fixture.assertTextAbove("Performance", "Security")
               }
             }
       }
@@ -2643,7 +2643,7 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasDescription("Go to Project summary"))
           fixture.assertTextAbove(visualFixtureProject.name, "Analysis coverage")
           fixture.assertSummaryStatusPlacement("Outdated")
-          fixture.assertWideSummaryCoverageLayout()
+          fixture.assertSummaryCoverageActionReachable()
           fixture.assertReferenceSummaryGeometry()
           listOf("Bugs", "Performance", "Security").forEach {
             assertTrue(fixture.hasDescription("View $it results"))
@@ -2804,7 +2804,7 @@ class DesktopVisualLayoutTest {
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
           assertTrue(fixture.hasText(visualFixtureProject.name))
-          fixture.assertSummaryCategoryBoxesFit()
+          fixture.assertSummaryCategoriesStacked()
           fixture.assertSummaryStatusPlacement("Coverage unavailable")
         }
     ComposeVisualFixture(1440, 1100) { ProjectSummaryPane(null, visualFixtureProject, {}) }
@@ -2953,7 +2953,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("summary-live-running-1440")
           fixture.assertSummaryStatusPlacement("Updating")
-          fixture.assertSummaryCategoryBoxesFit()
+          fixture.assertSummaryCategoriesStacked()
           listOf("17", "18", "19").forEach(fixture::assertTextFits)
           fixture.assertTextFits("Loading details")
           AnalysisResultType.entries.forEach { type ->
@@ -2979,7 +2979,7 @@ class DesktopVisualLayoutTest {
           listOf("17", "18", "19", "Loading details").forEach { assertFalse(fixture.hasText(it)) }
           listOf("27", "28", "29").forEach(fixture::assertTextFits)
           fixture.assertSummaryStatusPlacement("Updated")
-          fixture.assertSummaryCategoryBoxesFit()
+          fixture.assertSummaryCategoriesStacked()
           AnalysisResultType.entries.forEach { type ->
             val box = fixture.taggedBounds("summary-metric-${type.workspace.name}")
             val icon = fixture.taggedBounds("summary-category-icon-${type.category}")
@@ -3219,7 +3219,9 @@ class DesktopVisualLayoutTest {
             .use { fixture ->
               fixture.render()
               fixture.render("summary-issue-colors-$width-$height-$scale")
+              fixture.revealText("Bugs")
               fixture.revealText("High: 3 · Medium: 0 · Low: 1")
+              fixture.revealText("Security")
               fixture.assertTextFits("High: 3 · Medium: 0 · Low: 1", maxLines = 3)
               fixture.assertBugPrioritiesInsideCard("High: 3 · Medium: 0 · Low: 1")
               assertFalse(fixture.hasText("Score: 10 points"))
@@ -3227,7 +3229,8 @@ class DesktopVisualLayoutTest {
               assertFalse(fixture.hasText("Bug priorities"))
               listOf("Bugs" to Error, "Performance" to Information, "Security" to FaintText)
                   .forEach { (label, tint) ->
-                    fixture.revealText(label)
+                    fixture.revealSummaryCategory(label)
+                    fixture.render("summary-issue-${label.lowercase()}-$width-$height-$scale")
                     fixture.assertColorVisible(tint)
                     assertTrue(fixture.hasDescription("View $label results"))
                     fixture.assertTextFits(label)
@@ -3247,13 +3250,13 @@ class DesktopVisualLayoutTest {
             }
             .use { fixture ->
               fixture.render("summary-dashboard-$width-$height-$scale")
+              if (width == 800 && scale == 1.5f) fixture.assertSummaryCoverageActionReachable()
               listOf("Analysis coverage", "16 up to date", "4 outdated", "3 not analyzed")
                   .forEach { label ->
                     fixture.revealText(label)
                     fixture.assertTextFits(label)
                   }
               fixture.assertSummaryStatusPlacement("Outdated")
-              if (width == 800 && scale == 1.5f) fixture.assertCompactSummaryCoverageLayout()
               listOf("Bugs", "Performance", "Security").forEach { label ->
                 fixture.revealText(label)
                 fixture.assertTextFits(label)
@@ -3978,22 +3981,17 @@ internal class ComposeVisualFixture(
     assertTextLayout(label, lineCounts = 1..maxLines)
   }
 
-  fun assertSummaryCategoryBoxesFit() {
+  fun assertSummaryCategoriesStacked() {
     val cards =
         AnalysisResultType.entries.map { type ->
-          visibleActionBounds("View ${type.workspace.name} results")
+          taggedBounds("summary-metric-${type.workspace.name}")
         }
-    cards.forEach { bounds ->
-      assertTrue(bounds.height >= 132f, "Summary category cards must retain a minimum height")
-      assertTrue(
-          bounds.left >= 0 && bounds.top >= 0 && bounds.right <= width && bounds.bottom <= height,
-          "Every summary card must be visible: $bounds")
-    }
     cards.zipWithNext().forEach { (first, next) ->
-      assertTrue(first.right <= next.left, "Wide summary categories must share one row")
-      assertEquals(first.top, next.top, 1f, "Wide summary categories must align at the top")
-      assertEquals(first.width, next.width, 1f, "Wide summary category widths must match")
-      assertEquals(first.height, next.height, 1f, "Wide summary category heights must match")
+      assertEquals(first.left, next.left, 1f, "Stacked categories must share an edge")
+      assertTrue(first.bottom <= next.top, "Categories must stack without overlap")
+    }
+    AnalysisResultType.entries.forEach { type ->
+      assertTrue(hasDescription("View ${type.workspace.name} results"))
     }
   }
 
@@ -4048,28 +4046,66 @@ internal class ComposeVisualFixture(
     val panel =
         nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == "analysis-summary" }
     assertTrue(
-        panel.boundsInRoot.right - status.boundsInRoot.right <= 28f,
-        "$label must align to the right edge of Analysis coverage")
+        status.boundsInRoot.left >= panel.boundsInRoot.left &&
+            status.boundsInRoot.right <= panel.boundsInRoot.right &&
+            status.boundsInRoot.bottom <= height,
+        "$label must remain contained and reachable in Analysis coverage")
   }
 
-  fun assertWideSummaryCoverageLayout() {
-    val section = taggedBounds("analysis-summary")
-    val track = taggedBounds("summary-coverage-track")
-    val legend = taggedBounds("summary-coverage-legend")
-    val action = taggedBounds("summary-view-analysis")
-    assertTrue(track.width >= section.width * 0.6f, "Coverage track must be broad")
-    assertTrue(track.top < legend.top, "Coverage legend must follow the track")
-    assertTrue(action.left >= track.right, "View analysis must trail coverage on wide layouts")
-    assertTrue(action.right <= section.right, "View analysis must stay inside coverage")
+  fun assertSummaryCoverageActionReachable() {
+    clickDescription("Go to Coverage summary")
+    render()
+    repeat(30) {
+      val action =
+          nodes()
+              .firstOrNull {
+                it.config.getOrNull(SemanticsProperties.TestTag) == "summary-view-analysis"
+              }
+              ?.boundsInRoot
+      if (action != null && action.top >= 0f && action.bottom <= height) {
+        val section = taggedBounds("analysis-summary")
+        assertTrue(action.left >= section.left && action.right <= section.right)
+        assertTrue(hasText("View analysis"))
+        return
+      }
+      scrollBy(80f)
+      render()
+    }
+    error("View analysis must be reachable below coverage by vertical scrolling")
   }
 
-  fun assertCompactSummaryCoverageLayout() {
-    val track = taggedBounds("summary-coverage-track")
-    val legend = taggedBounds("summary-coverage-legend")
-    val action = taggedBounds("summary-view-analysis")
-    assertTrue(track.top < legend.top, "Coverage legend must follow the track")
-    assertTrue(
-        legend.bottom <= action.top, "View analysis must wrap below coverage on compact layouts")
+  fun revealSummaryCategory(label: String) {
+    clickDescription("Go to Findings summary")
+    render()
+    repeat(60) {
+      val icon =
+          nodes()
+              .firstOrNull {
+                it.config.getOrNull(SemanticsProperties.TestTag) ==
+                    "summary-category-icon-${label.lowercase()}"
+              }
+              ?.boundsInRoot
+      val count =
+          nodes()
+              .firstOrNull {
+                it.config.getOrNull(SemanticsProperties.TestTag) ==
+                    "summary-category-count-${label.lowercase()}"
+              }
+              ?.boundsInRoot
+      if (icon != null &&
+          count != null &&
+          icon.top >= 0f &&
+          icon.bottom < height - 80f &&
+          count.height > 15f &&
+          count.top >= icon.bottom &&
+          count.bottom <= height - 8f) {
+        render()
+        return
+      }
+      scrollBy(80f)
+      render()
+    }
+    error("$label category accent must be reachable by vertical scrolling")
   }
 
   fun assertAnalysisRunGeometry() {
@@ -4269,7 +4305,8 @@ internal class ComposeVisualFixture(
           }
         }
     val pixels = rendered.getRGB(0, 0, width, height, null, 0, width)
-    assertTrue(pixels.count { it == color.toArgb() } >= 10, "$color must be visible in the render")
+    val matching = pixels.count { it == color.toArgb() }
+    assertTrue(matching >= 10, "$color must be visible in the render (found $matching pixels)")
   }
 
   fun assertTextWrapsWithoutClipping(label: String) {

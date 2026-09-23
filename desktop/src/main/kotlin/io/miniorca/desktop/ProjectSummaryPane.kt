@@ -4,12 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -283,7 +281,7 @@ internal fun ProjectSummaryPane(
         else emptyList()) + sectionEntries.map { it.second }
     val selectedSection = remember(identity) { mutableStateOf("introduction") }
     val requestedSection = remember(identity) { mutableStateOf<String?>(null) }
-    LaunchedEffect(sectionsList, itemKeys) {
+    LaunchedEffect(identity, sectionsList, itemKeys) {
       snapshotFlow {
             val visible = sectionsList.layoutInfo.visibleItemsInfo
             val requested =
@@ -310,8 +308,8 @@ internal fun ProjectSummaryPane(
             sectionEntries.forEach { (label, key) ->
               SummaryIndexEntry(label, selectedSection.value == key) {
                 scrollScope.launch {
-                  sectionsList.scrollToItem(itemKeys.indexOf(key))
                   requestedSection.value = key
+                  sectionsList.scrollToItem(itemKeys.indexOf(key))
                 }
               }
             }
@@ -379,7 +377,8 @@ internal fun ProjectSummaryPane(
                           Text(
                               "Packages / modules",
                               color = ResultAccent,
-                              style = IdeTypography.workspaceHeading)
+                              style = IdeTypography.workspaceHeading,
+                              modifier = Modifier.semantics { heading() })
                           SummaryModules(detail.values)
                         }
                   }
@@ -456,20 +455,8 @@ private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
 
 @Composable
 private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (Workspace) -> Unit) {
-  val fontScale = LocalDensity.current.fontScale
-  BoxWithConstraints(Modifier.fillMaxWidth()) {
-    if (maxWidth / fontScale >= 560.dp) {
-      Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        metrics.forEach { metric ->
-          SummaryIssue(
-              metric, { openResults(metric.type.workspace) }, Modifier.weight(1f).fillMaxHeight())
-        }
-      }
-    } else {
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        metrics.forEach { metric -> SummaryIssue(metric, { openResults(metric.type.workspace) }) }
-      }
-    }
+  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    metrics.forEach { metric -> SummaryIssue(metric, { openResults(metric.type.workspace) }) }
   }
 }
 

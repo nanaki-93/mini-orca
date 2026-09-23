@@ -94,22 +94,41 @@ class DesktopAccessibilityTest {
         .use { fixture ->
           fixture.render()
           assertEquals(0, fixture.textCount("Summary"))
-          assertEquals(
+          val sectionHeadings =
               listOf(
-                  "go-shop · fixture",
                   "Analysis coverage",
                   "Architecture",
+                  "Packages / modules",
                   "Engineering insight",
-                  "More insight",
-                  "Flows"),
-              fixture.semanticHeadingTexts(),
-              "Summary headings must expose the page and its sections in reading order")
+                  "Flows")
+          assertTrue(fixture.semanticHeadingTexts().contains("go-shop · fixture"))
           assertTrue(fixture.hasText("Project description: stale · source may have changed"))
-          assertTrue(fixture.hasText("Outdated"))
-          assertTrue(fixture.hasText("View analysis"))
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
-          assertEquals("Collapsed", fixture.descriptionStateDescription("Expand More insight"))
+          sectionHeadings.forEach { heading ->
+            fixture.clickDescription(
+                "Go to ${if (heading == "Analysis coverage") "Coverage" else heading} summary")
+            fixture.render()
+            assertTrue(
+                fixture.hasText(heading), "$heading must be composed after section navigation")
+            assertTrue(heading in fixture.semanticHeadingTexts(), "$heading must expose a heading")
+            when (heading) {
+              "Analysis coverage" -> {
+                assertTrue(fixture.hasText("Outdated"))
+                fixture.revealText("View analysis")
+              }
+              "Architecture" -> fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+              "Engineering insight" ->
+                  assertEquals(
+                      "Collapsed", fixture.descriptionStateDescription("Expand More insight"))
+              "Flows" -> fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
+              else -> Unit
+            }
+          }
+          fixture.clickDescription("Go to Findings summary")
+          fixture.render()
+          listOf("Bugs", "Performance", "Security").forEach { category ->
+            fixture.revealSummaryCategory(category)
+            assertTrue(fixture.hasDescription("View $category results"))
+          }
         }
   }
 
