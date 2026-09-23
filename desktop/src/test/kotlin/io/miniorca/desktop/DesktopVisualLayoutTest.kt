@@ -1666,7 +1666,7 @@ class DesktopVisualLayoutTest {
             messages =
                 listOf(
                     ChatSessionMessage("user", request), ChatSessionMessage("assistant", response)))
-    ComposeVisualFixture(800, 900, 1.3f) {
+    ComposeVisualFixture(300, 900, 1.3f) {
           AssistantToolWindow(
               AssistantToolWindowState(
                   project,
@@ -1709,6 +1709,9 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("Candidate for review"))
           assertTrue(fixture.hasText("missing closing brace"))
           assertEquals(1, fixture.scrollableContentCount())
+          fixture.scrollBy(2000f)
+          fixture.render()
+          fixture.assertTextAboveDescription("Candidate for review", "Invalid")
           fixture.clickText("Show full response")
           fixture.render("assistant-response-expanded-800-1.3")
           assertEquals("Expanded", fixture.stateDescription("Show less"))
@@ -3268,6 +3271,7 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("tool-window-controls-360-1.3")
+          fixture.assertTextAboveDescription("Files", "Close Files drawer")
           fixture.clickDescription("Close Files drawer")
           fixture.clickText("Terminal")
           kotlin.test.assertEquals(1, closes)
@@ -4120,6 +4124,18 @@ internal class ComposeVisualFixture(
     val first = textNodes(label).single().boundsInRoot
     val second = textNodes(following).single().boundsInRoot
     assertTrue(first.bottom < second.top, "$label must be above $following")
+  }
+
+  fun assertTextAboveDescription(label: String, description: String) {
+    val text = textNodes(label).single().boundsInRoot
+    val actions =
+        nodes().filter {
+          it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(description) == true
+        }
+    assertTrue(actions.isNotEmpty(), "$description must be accessible")
+    assertTrue(
+        text.bottom <= actions.minOf { it.boundsInRoot.top },
+        "$label $text must be above $description ${actions.map { it.boundsInRoot }}")
   }
 
   fun assertTextContrast(label: String, background: Color) {

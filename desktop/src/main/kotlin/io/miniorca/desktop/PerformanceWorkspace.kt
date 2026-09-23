@@ -2,6 +2,7 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -156,7 +157,7 @@ private fun PerformanceFindingDetails(
         style = IdeTypography.compactBody)
     ResultEvidenceSection("Observed pattern", finding.observedPattern)
     ResultEvidenceSection("Recommendation", finding.recommendation)
-    ResponsiveActionGroup(Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
       MiniOrcaButton(
           onClick = { actions.prepareOptimization(result.report.path, finding) },
           enabled = performanceCanPrepare(result, index),

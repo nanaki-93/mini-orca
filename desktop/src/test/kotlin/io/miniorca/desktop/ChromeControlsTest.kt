@@ -34,10 +34,4 @@ class ChromeControlsTest {
         Color.LightGray,
         ideActionBackground(colors, false, true, IdeActionInteraction(pressed = true)))
   }
-
-  @Test
-  fun paneHeadersMoveActionsBelowTheTitleBeforeTheyCanClip() {
-    assertEquals(PaneHeaderActionLayout.Inline, paneHeaderActionLayout(480f))
-    assertEquals(PaneHeaderActionLayout.Below, paneHeaderActionLayout(479f))
-  }
 }

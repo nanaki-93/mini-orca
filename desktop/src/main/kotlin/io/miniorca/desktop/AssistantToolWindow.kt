@@ -256,6 +256,7 @@ private fun AssistantDraftEditorSection(
     IdePaneHeader(
         title = "Editable draft",
         icon = DesktopIcon.Document,
+        actionsBelow = true,
         stateLabel = "Candidate for review",
         stateTint = ResultAccent,
         actions = { IdeLabelBadge(editor.status.name, draftEditorStatusColor(editor.status)) })
