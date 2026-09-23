@@ -1,7 +1,6 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -14,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
@@ -30,21 +28,13 @@ internal fun AnalysisCategoryPanels(
       AnalysisResultType.entries.map { type ->
         AnalysisResultPageState(type, state.project, state.analysis.run)
       }
-  val fontScale = LocalDensity.current.fontScale
-  BoxWithConstraints(Modifier.fillMaxWidth()) {
-    if (maxWidth / fontScale >= 640.dp)
-        Row(
-            Modifier.height(IntrinsicSize.Max),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              pages.forEach { page ->
-                AnalysisCategoryPanel(page, openResults, Modifier.weight(1f).fillMaxHeight())
-              }
-            }
-    else
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          pages.forEach { page -> AnalysisCategoryPanel(page, openResults) }
+  Row(
+      Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+      horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        pages.forEach { page ->
+          AnalysisCategoryPanel(page, openResults, Modifier.weight(1f).fillMaxHeight())
         }
-  }
+      }
 }
 
 @Composable
