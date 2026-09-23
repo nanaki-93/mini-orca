@@ -3614,16 +3614,16 @@ internal class ComposeVisualFixture(
           it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
         }
     return described.any { node ->
-      (generateSequence(node) { it.parent } + descendants(node).asSequence())
-          .any { it.config.getOrNull(SemanticsProperties.Focused) == true } ||
+      (generateSequence(node) { it.parent } + descendants(node).asSequence()).any {
+        it.config.getOrNull(SemanticsProperties.Focused) == true
+      } ||
           nodes()
               .filter { it.config.getOrNull(SemanticsProperties.Focused) == true }
               .any { it.boundsInRoot.overlaps(node.boundsInRoot) }
     }
   }
 
-  fun isFocusedControl(label: String): Boolean =
-      isDescriptionFocused(label) || isFocused(label)
+  fun isFocusedControl(label: String): Boolean = isDescriptionFocused(label) || isFocused(label)
 
   fun stateDescription(label: String): String? =
       textNodes(label)
