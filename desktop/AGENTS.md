@@ -43,9 +43,11 @@ components and visual reference. [README.md](README.md) owns desktop setup and u
 - Preserve labeled states for empty/loading/stale/failed/partial/canceled results.
   Keep unknown values distinct from zero and provider status distinct from daemon
   connectivity. Color supplements labels and keyboard focus.
-- Keep docked panes at widths of at least 1000dp and labeled drawers below 1000dp.
-  Temporary size clamping must preserve saved preferences. Support long paths,
-  wrapped labels and increased text scale without hiding actions or shrinking text.
+- Keep the existing full-size docked-pane composition at every window size. The
+  window remains resizable; smaller dimensions may clip or fit awkwardly. Do not
+  add drawer/compact fallbacks, viewport-based pane clamping, or a minimum window
+  size. Preserve saved pane preferences, long paths, wrapped labels and increased
+  text scale; retain accessible actions even when clipping occurs.
 - Preserve keyboard access, accessible names/states, selection and focus. Reuse
   `ModelResultContent` for freeform model prose and its bounded literal fallback;
   do not activate model-supplied HTML, links or remote images.
