@@ -2733,6 +2733,44 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryRendersZeroFileProjectDistinctFromMissingAndUnavailableCounts() {
+    val zeroProject = visualFixtureProject.copy(fileCount = 0, sourceFileCount = 0, totalLines = 0)
+    val zeroOverview =
+        visualFixtureOverview.copy(
+            metrics =
+                ProjectMetrics(type = "Go", fileCount = 0, sourceFileCount = 0, totalLines = 0),
+            analysisCoverage = AnalysisCoverage(),
+            findingCounts = FindingCounts())
+    ComposeVisualFixture(800, 650) { ProjectSummaryPane(zeroOverview, zeroProject, {}) }
+        .use { fixture ->
+          fixture.render("summary-zero-files")
+          fixture.assertTextFits("0")
+          assertTrue(fixture.hasText("go-shop · fixture"))
+          assertFalse(fixture.hasText("No project selected"))
+          assertFalse(fixture.hasText("unavailable"))
+        }
+    ComposeVisualFixture(800, 650) { ProjectSummaryPane(null, null, {}) }
+        .use { fixture ->
+          fixture.render("summary-no-project-zero-comparison")
+          assertTrue(fixture.hasText("No project selected"))
+          assertFalse(fixture.hasText("0 files"))
+        }
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(
+              ProjectOverview(projectId = "visual-fixture", projectRevision = "fixture-revision"),
+              visualFixtureProject,
+              {})
+        }
+        .use { fixture ->
+          fixture.render("summary-unavailable-counts")
+          assertTrue(fixture.hasText("go-shop · fixture"))
+          fixture.revealText("File counts unavailable")
+          assertTrue(fixture.hasText("File counts unavailable"))
+          assertFalse(fixture.hasText("0 selected files"))
+        }
+  }
+
+  @Test
   fun summaryDashboardShowsCompleteLongProseInThePage() {
     val longPurpose = "This purpose remains readable directly in the dashboard. ".repeat(60)
     val overview =
@@ -2755,6 +2793,45 @@ class DesktopVisualLayoutTest {
           assertFalse(fixture.hasText("MEDIUM · Input validation is incomplete."))
           assertFalse(fixture.hasText("Next steps"))
           assertFalse(fixture.hasText("Interpretation details"))
+        }
+  }
+
+  @Test
+  fun summaryLongIdentityPathsAndFailureReasonsWrapAtSmallLargeText() {
+    val longName = "Mini-Orca project name ".repeat(12).trim()
+    val longPath = "/Users/example/projects/very-long-project-path/".repeat(5)
+    val failure = "Provider request failed because the analysis service timed out. ".repeat(8)
+    val project = visualFixtureProject.copy(name = longName)
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                visualFixtureOverview.analysis.copy(
+                    status = "failed",
+                    failure = failure,
+                    components = listOf("Module ($longPath) - Handles project requests.")))
+    ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(overview, project, {}) }
+        .use { fixture ->
+          fixture.render("summary-long-identity-failure-800-150")
+          fixture.assertTextWrapsWithoutClipping("Project description: failed · $failure")
+          fixture.assertTextWrapsWithoutClipping(longName)
+          assertFalse(fixture.hasDescription("Go to Packages / modules summary"))
+          assertTrue(fixture.hasScrollableContent())
+          assertEquals(1, fixture.scrollableContentCount())
+        }
+    // Failed interpretation does not expose model details; exercise supplied paths separately.
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ProjectSummaryPane(
+              overview.copy(analysis = overview.analysis.copy(status = "fresh")), project, {})
+        }
+        .use { fixture ->
+          fixture.render("summary-long-module-path-800-150")
+          fixture.clickDescription("Go to Packages / modules summary")
+          fixture.render()
+          fixture.assertTextWrapsWithoutClipping(longPath)
+          assertEquals(1, fixture.scrollableContentCount())
+          fixture.clickDescription("Go to Flows summary")
+          fixture.render()
+          assertTrue(fixture.hasText("Flows"))
         }
   }
 
