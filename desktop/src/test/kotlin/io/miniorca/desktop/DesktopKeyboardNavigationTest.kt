@@ -276,8 +276,26 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun unavailableArchitecturePreviewIsNotKeyboardActivatable() {
+    listOf(1_600 to 1_000, 800 to 650).forEach { (width, height) ->
+      ComposeVisualFixture(width, height) {
+            ProjectSummaryPane(
+                visualFixtureOverview.copy(
+                    analysis = visualFixtureOverview.analysis.copy(status = "missing")),
+                visualFixtureProject,
+                {})
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasDescription("Select Architecture summary from preview"))
+            assertTrue(fixture.isDescriptionDisabled("Select Architecture summary from preview"))
+            assertFalse(fixture.requestDescriptionFocus("Select Architecture summary from preview"))
+          }
+    }
+  }
+
+  @Test
   fun summaryKeyboardControlsKeepDisclosuresLocalAndNavigateOnlyToTheirWorkspace() {
-    val destinations = mutableListOf<Workspace>()
     val overview =
         visualFixtureOverview.copy(
             analysis =
@@ -287,46 +305,95 @@ class DesktopKeyboardNavigationTest {
                             mechanism = "Validate requests before persistence.",
                             whyItMattersHere = "Invalid input stays outside the repository.",
                             tradeoffOrFailureMode = "Rules need one owner.")))
-    ComposeVisualFixture(1_600, 1_000) {
-          ProjectSummaryPane(overview, visualFixtureProject, destinations::add)
-        }
-        .use { fixture ->
-          fixture.render()
-          assertTrue(fixture.requestDescriptionFocus("Select Flows summary"))
-          assertTrue(fixture.pressKey(Key.Enter), "Outline must support keyboard activation")
-          fixture.render()
-          assertTrue(fixture.isDescriptionSelected("Select Flows summary"))
-          assertTrue(destinations.isEmpty(), "Local selection must not navigate")
-          fixture.clickDescription("Select Coverage summary")
-          fixture.revealText("View analysis")
-          assertTrue(fixture.requestFocus("View analysis"))
-          fixture.render()
-          assertTrue(fixture.isFocusedControl("View analysis"))
-          assertTrue(fixture.pressKey(Key.Enter))
-          fixture.render()
-          listOf("Bugs", "Performance", "Security").forEach { category ->
-            fixture.revealSummaryCategory(category)
-            val control = "View $category results"
-            assertTrue(fixture.requestDescriptionFocus(control))
-            fixture.render()
-            assertTrue(fixture.isFocusedControl(control))
-            assertTrue(fixture.pressKey(Key.Spacebar))
-            fixture.render()
+    listOf(1_600 to 1_000, 800 to 650).forEach { (width, height) ->
+      val destinations = mutableListOf<Workspace>()
+      var analysisCalls = 0
+      val actions =
+          AnalysisWorkspaceActions(
+              start = { _, _ -> analysisCalls++ },
+              pause = { analysisCalls++ },
+              resume = { analysisCalls++ },
+              cancel = { analysisCalls++ },
+              openResults = { analysisCalls++ },
+              refreshSelection = { analysisCalls++ },
+              saveSelection = { analysisCalls++ })
+      ComposeVisualFixture(width, height) {
+            ProjectSummaryPane(
+                overview, visualFixtureProject, destinations::add, analysisActions = actions)
           }
-          assertEquals(
-              listOf(Workspace.Analysis, Workspace.Bugs, Workspace.Performance, Workspace.Security),
-              destinations)
-          fixture.clickDescription("Select Engineering insight summary")
-          fixture.render()
-          assertTrue(fixture.tryClick("Expand More insight"))
-          fixture.render()
-          assertEquals("Expanded", fixture.descriptionStateDescription("Collapse More insight"))
-          fixture.clickDescription("Select Architecture summary")
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-          assertTrue(fixture.tryClick("Show Architecture diagram"))
-          fixture.awaitDescription("Hide Architecture diagram", "Expanded")
-          assertEquals(4, destinations.size, "Summary disclosures must not navigate or start work")
-        }
+          .use { fixture ->
+            fixture.render()
+            assertEquals(emptyList(), destinations)
+            assertEquals(0, analysisCalls)
+            assertTrue(fixture.requestDescriptionFocus("Select Flows summary"))
+            assertTrue(fixture.pressKey(Key.Enter), "Outline must support keyboard activation")
+            fixture.render()
+            assertTrue(fixture.isDescriptionSelected("Select Flows summary"))
+            assertEquals(emptyList(), destinations, "Flows selection must remain local")
+            assertEquals(0, analysisCalls)
+            assertTrue(fixture.requestDescriptionFocus("Select Coverage summary"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(emptyList(), destinations, "Coverage selection must remain local")
+            assertEquals(0, analysisCalls)
+            fixture.revealText("View analysis")
+            assertTrue(fixture.requestFocus("View analysis"))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("View analysis"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(listOf(Workspace.Analysis), destinations)
+            assertEquals(0, analysisCalls)
+            val expectedDestinations =
+                listOf(
+                    Workspace.Analysis, Workspace.Bugs, Workspace.Performance, Workspace.Security)
+            listOf("Bugs", "Performance", "Security").forEachIndexed { index, category ->
+              fixture.revealSummaryCategory(category)
+              val control = "View $category results"
+              assertTrue(fixture.requestDescriptionFocus(control))
+              fixture.render()
+              assertTrue(fixture.isFocusedControl(control))
+              assertTrue(fixture.pressKey(Key.Spacebar))
+              fixture.render()
+              assertEquals(expectedDestinations.take(index + 2), destinations)
+              assertEquals(0, analysisCalls)
+            }
+            assertEquals(expectedDestinations, destinations)
+            assertTrue(fixture.requestDescriptionFocus("Select Engineering insight summary"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(expectedDestinations, destinations, "Insight selection must remain local")
+            assertEquals(0, analysisCalls)
+            val insightDisclosure = "Expand More insight"
+            assertTrue(fixture.requestDescriptionFocus(insightDisclosure))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl(insightDisclosure))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals("Expanded", fixture.descriptionStateDescription("Collapse More insight"))
+            assertEquals(expectedDestinations, destinations, "Disclosures must remain local")
+            assertEquals(0, analysisCalls)
+            assertTrue(fixture.requestDescriptionFocus("Select Architecture summary"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(
+                expectedDestinations, destinations, "Architecture selection must remain local")
+            assertEquals(0, analysisCalls)
+            fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+            assertTrue(fixture.requestDescriptionFocus("Show Architecture diagram"))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Show Architecture diagram"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.awaitDescription("Hide Architecture diagram", "Expanded")
+            assertEquals(expectedDestinations, destinations, "Diagram must remain local")
+            assertEquals(0, analysisCalls)
+            assertTrue(fixture.requestDescriptionFocus("Select Coverage summary"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(expectedDestinations, destinations, "Section selection must not navigate")
+            assertEquals(0, analysisCalls)
+          }
+    }
   }
 
   @Test
