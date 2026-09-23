@@ -43,6 +43,26 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun summaryOutlineHasHeadingAndSelectedStateAtWideAndCompactSizes() {
+    listOf(1_600 to 1_000, 800 to 650).forEach { (width, height) ->
+      ComposeVisualFixture(width, height) {
+            ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.semanticHeadingTexts().contains("Summary"))
+            assertTrue(fixture.isDescriptionSelected("Select Coverage summary"))
+            assertFalse(fixture.isDescriptionSelected("Select Bugs summary"))
+            assertTrue(fixture.hasDescription("Open Bugs results"))
+            assertTrue(fixture.requestDescriptionFocus("Select Flows summary"))
+            assertTrue(fixture.pressKey(Key.Enter), "Outline must support keyboard activation")
+            fixture.render()
+            assertTrue(fixture.isDescriptionSelected("Select Flows summary"))
+          }
+    }
+  }
+
+  @Test
   fun summaryIndexActivatesByKeyboardAndOmitsUnavailableDetails() {
     var navigations = 0
     ComposeVisualFixture(800, 650) {
