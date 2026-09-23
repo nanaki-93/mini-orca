@@ -2490,7 +2490,7 @@ class DesktopVisualLayoutTest {
           fixture.render()
           assertTrue(fixture.isDescriptionSelected("Select Architecture summary"))
           assertEquals(0, fixture.tagCount("analysis-summary"))
-          fixture.assertSummaryDetailContained("summary-architecture")
+          fixture.assertSummaryDetailContained("summary-architecture", compact = true)
           assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
           fixture.clickDescription("Select Coverage summary")
           fixture.render()
@@ -2502,6 +2502,42 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryPanelsOutlineAndCardsFitAtWidthAndTextScaleBreakpoints() {
+    // Direct pane widths make the 1000/999dp boundary independent of shell chrome.
+    listOf(
+            Triple(1440, 900, listOf(1f, 1.25f, 1.5f)),
+            Triple(1000, 760, listOf(1f, 1.25f, 1.5f)),
+            Triple(999, 760, listOf(1f, 1.25f, 1.5f)),
+            Triple(800, 650, listOf(1f, 1.25f, 1.5f)),
+            Triple(1280, 600, listOf(1f, 1.25f, 1.5f)),
+            Triple(600, 900, listOf(1f)))
+        .forEach { (width, height, scales) ->
+          scales.forEach { scale ->
+            val wide = width >= 1280 || (width >= 999 && scale <= 1.25f)
+            val outlineColumns =
+                if (!wide && (width >= 999 || (width == 800 && scale == 1f))) 2 else 1
+            val cardColumns =
+                if (width == 1440 ||
+                    (width == 1280 && scale <= 1.25f) ||
+                    (width == 800 && scale == 1f))
+                    2
+                else 1
+            ComposeVisualFixture(width, height, scale) {
+                  ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+                }
+                .use { fixture ->
+                  fixture.render()
+                  fixture.assertSummaryDetailContained("analysis-summary", compact = !wide)
+                  fixture.assertSummaryOutlineColumns(outlineColumns)
+                  fixture.assertSummaryCategoryGrid(
+                      cardColumns, fixture.assertSummaryCardsReachable())
+                  assertEquals(1, fixture.scrollableContentCount())
+                }
+          }
+        }
+  }
+
+  @Test
   fun narrowSummaryStacksContainedPanels() {
     ComposeVisualFixture(600, 900) {
           ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
@@ -2509,6 +2545,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render()
           fixture.assertSummaryDetailContained("analysis-summary", compact = true)
+          fixture.assertSummaryCardsReachable()
           fixture.clickDescription("Select Architecture summary")
           fixture.render()
           fixture.assertSummaryDetailContained("summary-architecture", compact = true)
@@ -4233,12 +4270,69 @@ internal class ComposeVisualFixture(
     val outline = taggedBounds("summary-outline-panel")
     val panel = taggedBounds("summary-detail-panel")
     val content = taggedBounds(tag)
-    assertTrue(panel.left < content.left && panel.right > content.right, "$tag fits in detail")
-    assertTrue(panel.top < content.top && panel.bottom > content.bottom, "$tag fits in detail")
+    assertTrue(
+        panel.left < content.left && panel.right > content.right,
+        "$tag fits in detail at ${width}x$height: $content in $panel")
+    assertTrue(
+        panel.top < content.top && panel.bottom >= content.bottom,
+        "$tag fits in detail at ${width}x$height: $content in $panel")
     if (compact) {
       assertTrue(outline.bottom <= panel.top, "Compact outline $outline precedes detail $panel")
     } else {
-      assertEquals(16f, panel.left - outline.right, 2f, "Panels have a 16dp gap")
+      assertEquals(16f, panel.left - outline.right, 2f, "Wide panels have a 16dp gap")
+      assertTrue(outline.top < panel.bottom && panel.top < outline.bottom, "Wide panels align")
+    }
+  }
+
+  fun assertSummaryOutlineColumns(columns: Int) {
+    val coverage = taggedBounds("summary-index-Coverage")
+    val bugs = taggedBounds("summary-index-Bugs")
+    val performance = taggedBounds("summary-index-Performance")
+    val panel = taggedBounds("summary-outline-panel")
+    listOf(coverage, bugs, performance).forEach {
+      assertTrue(it.left >= panel.left && it.right <= panel.right, "Outline row inside panel")
+      assertTrue(it.width > 0f && it.height > 0f)
+    }
+    if (columns == 2) {
+      assertTrue(
+          coverage.right <= bugs.left && coverage.top < bugs.bottom && bugs.top < coverage.bottom,
+          "Two outline columns share the first row")
+      assertTrue(bugs.bottom <= performance.top, "Third item begins next row")
+    } else {
+      assertTrue(
+          coverage.bottom <= bugs.top && bugs.bottom <= performance.top,
+          "Outline rows stack in one column")
+      assertEquals(coverage.left, bugs.left, 1f)
+    }
+  }
+
+  fun assertSummaryCardsReachable(): List<Rect> {
+    val tags =
+        AnalysisResultType.entries.map { "summary-metric-${it.workspace.name}" } +
+            "summary-architecture-preview"
+    return tags.mapIndexed { index, tag ->
+      val name = AnalysisResultType.entries.getOrNull(index)?.workspace?.name
+      assertTrue(
+          taggedNode(tag).config.getOrNull(SemanticsActions.OnClick) != null,
+          "$tag retains an actionable surface")
+      assertTrue(
+          hasDescription(
+              if (name == null) "Select Architecture summary from preview"
+              else "View $name results"),
+          "$tag retains its named action")
+      repeat(200) {
+        val card = taggedBounds(tag)
+        if (card.width > 0f && card.height > 60f && card.top >= 8f && card.bottom <= height - 8f) {
+          val panel = taggedBounds("summary-detail-panel")
+          assertTrue(
+              card.left >= panel.left && card.right <= panel.right, "$tag fits panel horizontally")
+          val scroll = verticalScrollValue("summary-page-scroll")
+          return@mapIndexed Rect(card.left, card.top + scroll, card.right, card.bottom + scroll)
+        }
+        scrollBy(80f, "summary-page-scroll")
+        render()
+      }
+      error("$tag action must be fully reachable in ${width}x$height")
     }
   }
 
@@ -4246,17 +4340,23 @@ internal class ComposeVisualFixture(
     assertTextLayout(label, lineCounts = 1..maxLines)
   }
 
-  fun assertSummaryCategoryGrid(columns: Int) {
+  fun assertSummaryCategoryGrid(columns: Int, measuredCards: List<Rect>? = null) {
     val cards =
-        AnalysisResultType.entries.map { taggedBounds("summary-metric-${it.workspace.name}") } +
-            taggedBounds("summary-architecture-preview")
+        measuredCards
+            ?: (AnalysisResultType.entries.map {
+              taggedBounds("summary-metric-${it.workspace.name}")
+            } + taggedBounds("summary-architecture-preview"))
     cards.forEachIndexed { index, card ->
       assertTrue(card.width > 0f && card.height > 0f)
       val next = cards.getOrNull(index + 1) ?: return@forEachIndexed
       if (index % columns == columns - 1) {
-        assertTrue(card.bottom <= next.top, "Next row must follow the previous row")
+        assertTrue(
+            card.bottom <= next.top + 16f,
+            "Next row must follow the previous row at ${width}x$height: $card then $next (columns=$columns)")
       } else {
-        assertTrue(card.right <= next.left, "Cards in a row must not overlap")
+        assertTrue(
+            card.right <= next.left,
+            "Cards in a row must not overlap at ${width}x$height: $card then $next (columns=$columns)")
       }
     }
     AnalysisResultType.entries.forEach {

@@ -260,8 +260,8 @@ internal fun ProjectSummaryPane(
       (project?.projectId ?: overview?.projectId) to
           (project?.projectRevision ?: overview?.projectRevision)
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
-    val contentWidth = maxWidth - workspacePageHorizontalGutter(maxWidth) * 2
-    val sideBySide = contentWidth / fontScale >= 760.dp
+    val pageWidth = maxWidth - 48.dp
+    val sideBySide = pageWidth / fontScale >= 760.dp
     val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
     val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
     val flows = presentation.details.firstOrNull { it.title == "Flows" }
@@ -359,6 +359,7 @@ internal fun ProjectSummaryPane(
                       }
                 }
               } else {
+                val twoOutlineColumns = (pageWidth - 32.dp) / fontScale >= 600.dp
                 Column(
                     Modifier.fillMaxWidth()
                         .testTag("summary-outline-panel")
@@ -373,7 +374,7 @@ internal fun ProjectSummaryPane(
                           Modifier.fillMaxWidth(),
                           horizontalArrangement = Arrangement.spacedBy(4.dp),
                           verticalArrangement = Arrangement.spacedBy(4.dp),
-                          maxItemsInEachRow = 2) {
+                          maxItemsInEachRow = if (twoOutlineColumns) 2 else 1) {
                             SummaryOutlineRow(
                                 "Coverage",
                                 coverageOutlineValue(presentation),
@@ -630,7 +631,7 @@ private fun SummaryCategories(
     selectArchitecture: () -> Unit
 ) {
   BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val columns = if (maxWidth / LocalDensity.current.fontScale >= 600.dp) 2 else 1
+    val columns = if ((maxWidth - 32.dp) / LocalDensity.current.fontScale >= 600.dp) 2 else 1
     FlowRow(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
