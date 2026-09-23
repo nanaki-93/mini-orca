@@ -157,7 +157,6 @@ class DesktopContrastTest {
     ComposeVisualFixture(1_440, 120) {
           MainToolbar(
               ToolbarState(
-                  widthDp = 1_440f,
                   project = visualFixtureProject,
                   busy = false,
                   operationStatus = "",

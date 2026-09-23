@@ -483,9 +483,7 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
-  fun compactToolbarAndBreadcrumbPoliciesKeepLongTextBounded() {
-    assertEquals(ToolbarPresentation(false, false, false), toolbarPresentation(999f))
-    assertEquals(ToolbarPresentation(true, false, true), toolbarPresentation(1_000f))
+  fun editorBreadcrumbsKeepLongTextBounded() {
     assertEquals(
         listOf("very", "…", "main.go", "Run"),
         editorBreadcrumbSegments("very/long/project/path/main.go", "Run").map { it.label },
