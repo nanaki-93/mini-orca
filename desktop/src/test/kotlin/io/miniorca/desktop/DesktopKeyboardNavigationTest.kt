@@ -447,16 +447,14 @@ class DesktopKeyboardNavigationTest {
             contextVisible = true,
             paletteVisible = true,
             statusDetailsVisible = true,
-            bottomToolsVisible = true,
         ),
     )
     assertEquals(
-        TransientSurface.BottomTools,
+        TransientSurface.StatusDetails,
         topmostTransientSurface(
             contextVisible = false,
             paletteVisible = false,
-            statusDetailsVisible = false,
-            bottomToolsVisible = true,
+            statusDetailsVisible = true,
         ),
     )
     assertNull(
@@ -464,7 +462,6 @@ class DesktopKeyboardNavigationTest {
             contextVisible = false,
             paletteVisible = false,
             statusDetailsVisible = false,
-            bottomToolsVisible = false,
         ),
     )
   }

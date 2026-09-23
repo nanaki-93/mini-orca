@@ -329,9 +329,6 @@ internal fun DesktopShell(
   var statusDetailsVisible by remember { mutableStateOf(false) }
   var statusDetailsFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var contextFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
-  var terminalUsesOverlay by remember { mutableStateOf(false) }
-  val terminalOverlayVisible = terminalUsesOverlay && !layout.bottomCollapsed
-  var bottomOverlayFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   val showsEditorChrome =
       shellMode == DesktopShellMode.ProjectWorkspace && editorChromeVisible(workspace)
   fun selectWorkspace(nextWorkspace: Workspace) {
@@ -361,10 +358,8 @@ internal fun DesktopShell(
     val updated = layout.withBottomCollapsed(true).withFocus(DesktopFocusRegion.BottomToolWindow)
     layoutActions.updateLayout(updated)
     layoutActions.saveLayout(updated)
-    bottomOverlayFocusRestoreTarget = DesktopFocusRegion.BottomToolWindow
   }
   TerminalFocusReturnEffect(terminal) {
-    if (terminalUsesOverlay) layoutActions.updateLayout(layout.withBottomCollapsed(true))
     editorActions.selectWorkspace(Workspace.Editor)
     scope.launch { restoreTerminalEditorFocus(focusManager, focusRequesters.editor) }
   }
@@ -394,7 +389,6 @@ internal fun DesktopShell(
           contextVisible = context.visible,
           paletteVisible = palette.visible,
           statusDetailsVisible = statusDetailsVisible,
-          bottomToolsVisible = terminalOverlayVisible,
       )) {
         TransientSurface.Context -> {
           dismissContextAndRestoreFocus()
@@ -406,10 +400,6 @@ internal fun DesktopShell(
         }
         TransientSurface.StatusDetails -> {
           dismissStatusDetailsAndRestoreFocus()
-          true
-        }
-        TransientSurface.BottomTools -> {
-          collapseTerminal()
           true
         }
         null -> false
@@ -424,12 +414,6 @@ internal fun DesktopShell(
     if (!context.visible && contextFocusRestoreTarget != null) {
       focusRequesters.forRegion(contextFocusRestoreTarget!!).requestFocus()
       contextFocusRestoreTarget = null
-    }
-  }
-  LaunchedEffect(terminalOverlayVisible, layout.bottomCollapsed, bottomOverlayFocusRestoreTarget) {
-    if (!terminalOverlayVisible && bottomOverlayFocusRestoreTarget != null) {
-      focusRequesters.forRegion(bottomOverlayFocusRestoreTarget!!).requestFocus()
-      bottomOverlayFocusRestoreTarget = null
     }
   }
   Box(
@@ -459,11 +443,6 @@ internal fun DesktopShell(
     } else {
       BoxWithConstraints {
         val widthDp = maxWidth.value
-        val heightDp = maxHeight.value
-        val responsivePresentation = responsiveShellPresentation(widthDp)
-        LaunchedEffect(responsivePresentation.bottom) {
-          terminalUsesOverlay = responsivePresentation.bottom == ResponsiveShellRegion.Overlay
-        }
         val restoredFocusRegion =
             paletteFocusRestorationRegion(
                 previous = paletteFocusRestoreTarget ?: layout.lastFocusedRegion,
@@ -566,32 +545,19 @@ internal fun DesktopShell(
                 }
               },
               terminal = {
-                if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
-                  TerminalDock(
-                      layout =
-                          layout.copy(
-                              bottomHeight = terminalDockHeight(layout.bottomHeight, heightDp)),
-                      state = panes.terminalState,
-                      tabActions = panes.terminalTabActions,
-                      onOpen = ::openTerminal,
-                      onCollapse = ::collapseTerminal,
-                      onHeightDelta = {
-                        layoutActions.updateLayout(
-                            layout.withBottomHeight(layout.bottomHeight + it))
-                      },
-                      onHeightCommit = { layoutActions.saveLayout(layout) },
-                      content = panes.terminalContent,
-                      controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
-                  )
-                } else {
-                  TerminalBar(
-                      state = panes.terminalState,
-                      tabActions = panes.terminalTabActions,
-                      collapsed = true,
-                      onToggle = ::openTerminal,
-                      controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
-                  )
-                }
+                TerminalDock(
+                    layout = layout,
+                    state = panes.terminalState,
+                    tabActions = panes.terminalTabActions,
+                    onOpen = ::openTerminal,
+                    onCollapse = ::collapseTerminal,
+                    onHeightDelta = {
+                      layoutActions.updateLayout(layout.withBottomHeight(layout.bottomHeight + it))
+                    },
+                    onHeightCommit = { layoutActions.saveLayout(layout) },
+                    content = panes.terminalContent,
+                    controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
+                )
               },
               modifier = Modifier.weight(1f),
           )
@@ -600,15 +566,6 @@ internal fun DesktopShell(
                 presentation = statusPresentation,
                 onOpenDetails = ::showStatusDetails,
                 modifier = Modifier.focusRequester(focusRequesters.statusBar).focusable(),
-            )
-          }
-          if (responsivePresentation.bottom == ResponsiveShellRegion.Overlay &&
-              !layout.bottomCollapsed) {
-            TerminalOverlay(
-                state = panes.terminalState,
-                tabActions = panes.terminalTabActions,
-                onDismiss = ::collapseTerminal,
-                content = panes.terminalContent,
             )
           }
         }

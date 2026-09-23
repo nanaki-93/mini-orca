@@ -41,41 +41,21 @@ internal fun <T> tabGroupInteraction(
   return TabGroupInteraction(target, target.takeIf { command == TabGroupKey.Activate })
 }
 
-internal enum class ResponsiveShellRegion {
-  Docked,
-  Overlay,
-}
-
-internal data class ResponsiveShellPresentation(
-    val left: ResponsiveShellRegion = ResponsiveShellRegion.Docked,
-    val right: ResponsiveShellRegion = ResponsiveShellRegion.Docked,
-    val bottom: ResponsiveShellRegion,
-)
-
-internal fun responsiveShellPresentation(widthDp: Float): ResponsiveShellPresentation =
-    ResponsiveShellPresentation(
-        bottom =
-            if (useNarrowLayout(widthDp)) ResponsiveShellRegion.Overlay
-            else ResponsiveShellRegion.Docked)
-
 internal enum class TransientSurface {
   Context,
   Palette,
   StatusDetails,
-  BottomTools,
 }
 
 internal fun topmostTransientSurface(
     contextVisible: Boolean,
     paletteVisible: Boolean,
     statusDetailsVisible: Boolean,
-    bottomToolsVisible: Boolean,
 ): TransientSurface? =
     when {
       contextVisible -> TransientSurface.Context
       paletteVisible -> TransientSurface.Palette
       statusDetailsVisible -> TransientSurface.StatusDetails
-      bottomToolsVisible -> TransientSurface.BottomTools
       else -> null
     }
 

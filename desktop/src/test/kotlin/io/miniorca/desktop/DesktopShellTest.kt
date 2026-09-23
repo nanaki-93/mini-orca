@@ -294,15 +294,6 @@ class DesktopShellTest {
   }
 
   @Test
-  fun terminalHeightProtectsShortWindowContentWithoutChangingThePreferredSize() {
-    val preferred = DesktopLayoutState().withBottomHeight(520f)
-    assertEquals(300f, terminalDockHeight(preferred.bottomHeight, 600f))
-    assertEquals(350f, terminalDockHeight(preferred.bottomHeight, 650f))
-    assertEquals(520f, terminalDockHeight(preferred.bottomHeight, 900f))
-    assertEquals(520f, preferred.bottomHeight)
-  }
-
-  @Test
   fun paletteDismissalRestoresThePriorMeaningfulVisibleRegion() {
     assertEquals(
         DesktopFocusRegion.RightToolWindow,

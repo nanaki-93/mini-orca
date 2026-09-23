@@ -107,9 +107,9 @@ starts a shell if no tabs remain. Exited and failed tabs retain their state unti
 closed; reopening the pane does not automatically restart them. Use **+** to retry
 with a new shell. No replacement can start while cleanup is pending.
 
-Select **Terminal** again to collapse the dock, or **Hide terminal** to dismiss
-the bounded overlay below 1000dp. Collapsing, changing workspaces, or switching
-shell tabs keeps each session's reader and bounded in-memory scrollback. Launch,
+Select **Terminal** again to collapse the dock. Collapsing, changing workspaces,
+or switching shell tabs keeps each session's reader and bounded in-memory
+scrollback. Launch,
 exit and cleanup states remain visible in their tabs, with errors in the selected
 terminal. A restored layout restores pane dimensions with Terminal collapsed.
 Old Problems, Checks and Output selections are discarded; no layout preference
@@ -117,9 +117,9 @@ launches a shell.
 
 The terminal owns shell keys, including Ctrl+C. On macOS, Cmd+C copies the current
 selection and Cmd+V pastes; shell history, ANSI/full-screen programs, cursor motion
-and scrolling are provided by JediTerm. **Ctrl+Shift+F12** returns to the
-application and dismisses a narrow terminal overlay. Resizing the
-pane updates the real PTY dimensions; terminal text follows the source palette and
+and scrolling are provided by JediTerm. **Ctrl+Shift+F12** returns focus to the
+application. Resizing the dock updates the real PTY dimensions; terminal text
+follows the source palette and
 application text scale.
 
 Opening another project while any shell is active requires **Cancel switch** or
