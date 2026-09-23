@@ -98,7 +98,9 @@ TERM-01 execution record in [docs/tasks.md](../docs/tasks.md).
 
 ## Terminal pane
 
-Select **Terminal** at the bottom to open the pane and immediately start a local
+The app starts maximized and remains resizable. Terminal stays docked beneath the
+workspace at every window size; reduced windows may clip the fixed layout. Select
+**Terminal** at the bottom to open the pane and immediately start a local
 interactive shell in the open project. **Ctrl+Shift+T** opens or focuses the pane.
 Shell tabs sit alongside Terminal in the same bar: **+** starts another independent
 shell, selecting a tab focuses that shell, and its **×** closes that shell and its
@@ -108,8 +110,8 @@ closed; reopening the pane does not automatically restart them. Use **+** to ret
 with a new shell. No replacement can start while cleanup is pending.
 
 Select **Terminal** again to collapse the dock. Collapsing, changing workspaces,
-or switching shell tabs keeps each session's reader and bounded in-memory
-scrollback. Launch,
+resizing, or switching shell tabs keeps each session's reader and bounded in-memory
+scrollback; resizing does not replace the dock with an overlay. Launch,
 exit and cleanup states remain visible in their tabs, with errors in the selected
 terminal. A restored layout restores pane dimensions with Terminal collapsed.
 Old Problems, Checks and Output selections are discarded; no layout preference

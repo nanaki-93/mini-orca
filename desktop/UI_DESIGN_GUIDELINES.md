@@ -107,7 +107,7 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
   result cards and details use 16dp padding. Controls retain 12–13sp body / 18–20sp
   line height; secondary chrome 11–12sp, section labels 12sp semibold, and
   breadcrumbs 12sp. Source/diff stay monospaced and readable. Grow at 125/150%
-  text scale rather than clipping or shrinking the font to fit.
+  text scale rather than shrinking the font to fit.
 - Use headings only where they add orientation; keep labeled state. Headers own
   their actions, especially Start/Pause/Resume/Cancel. Trailing actions never toggle
   an adjacent disclosure.
@@ -129,10 +129,10 @@ measurements are in [UI_CONTRAST.md](UI_CONTRAST.md). Color never replaces label
 Keep the 48dp icon-only activity rail with hover labels and accessible names,
 primary workspace, Editor-only Files/inspector
 panes and integrated status bar. Keep this docked-pane composition at every
-window size. The native window starts maximized but remains resizable; smaller
-windows may clip or fit awkwardly. Do not substitute drawers, overlays or other
-viewport-specific layouts, and do not constrain the window with a minimum size.
-Preserve saved pane widths across window resizing. The terminal spans beneath all
+window size. The native window requests maximized placement at startup but remains
+resizable; smaller windows may clip or fit awkwardly. Do not substitute drawers,
+overlays or other viewport-specific layouts, and do not constrain the window with
+a minimum size. Preserve saved pane widths across window resizing. The terminal spans beneath all
 workspace panes with its own 8dp gap and rounded perimeter; the rail and status
 bar share the continuous frame.
 Native window controls remain native.
@@ -205,8 +205,8 @@ Review each changed flow with optional help and details collapsed:
 Compare rendered production components to the references for every substantive
 visual change. Check full-size views and, when relevant, reduced window sizes for
 clipping, as well as large text, long paths/errors and affected empty/stale/populated
-states. Check alignment, separators, keyboard focus and names/states; do not
-expect reduced windows to switch layouts or keep every action in view.
+states. Check alignment, separators, keyboard focus and names/states; reduced
+windows retain the fixed layout and are not expected to fit every action.
 
 Use [component reproduction](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks) for fixture reproduction and the retained
 [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) for native checks. Offscreen
