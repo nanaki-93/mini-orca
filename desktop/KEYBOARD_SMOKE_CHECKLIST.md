@@ -5,9 +5,12 @@ operator procedure, not passing evidence. [Release acceptance](../docs/RELEASE_A
 owns observed results and host limitations; [UI guidelines](UI_DESIGN_GUIDELINES.md)
 owns the visual rules.
 
-Check wide, exactly 1000dp, 999dp, 800×650 and 1280×600 windows. Repeat affected
-surfaces at 125% and 150% text. Record native versus component observations
-separately; native accessibility names do not establish spoken reader behavior.
+Launch maximized, then restore and resize the window through its former breakpoints
+and to smaller heights. Confirm it remains resizable and the fixed full-size layout
+does not switch to alternate presentations; clipping at reduced sizes is accepted.
+Repeat affected surfaces at 125% and 150% text. Record native versus component
+observations separately; native accessibility names do not establish spoken reader
+behavior.
 
 For changed flows, also apply the [UI copy review](UI_DESIGN_GUIDELINES.md#verification):
 with optional details collapsed, identify the task, state and next action from
@@ -37,8 +40,8 @@ with keyboard focus. Record this review separately from historical observations.
 5. In each result page, verify the three category boxes name their destinations,
    mark the current category and navigate with Enter/Space without starting work.
    Select a rounded result row and inspect severity, exact source location and its
-   evidence disclosure. At narrow widths, **Back to results** restores the list;
-   wide details have no Clear selection action. Row selection must not prepare or
+   evidence disclosure. The list and detail remain together at every size; selection
+   remains local and does not prepare or
    apply a fix. Only **Prepare fix** prefills Assistant, and its disabled reason
    remains visible when the source identity is ineligible. Performance hypotheses
    never claim measured speedup; Security rule matches and model hypotheses remain
@@ -46,10 +49,9 @@ with keyboard focus. Record this review separately from historical observations.
 6. Use Cmd/Ctrl+P to choose a file and Cmd/Ctrl+Shift+O to choose a declaration.
    Source and diff must remain selectable/read-only. Relative paths disambiguate
    equal basenames. Source drag selects text without changing the draft target.
-7. Editor retains Files and Context/Assistant/Review docks at 1000dp and above.
-   Below that width, Files and Context drawers are labeled. Open and dismiss each
-   drawer, leave Editor with one open, and verify predictable focus restoration.
-   Cmd/Ctrl+P must work again after dismissal; selected source stays intact.
+7. Editor retains docked Files and Context/Assistant/Review panes while resized;
+   there are no compact drawer fallbacks. Verify palette focus restoration and
+   selected source after resize; Cmd/Ctrl+P remains available.
 8. Open a Go file containing only `package main`. Select New function in the file
    header or Context; Assistant focuses the name field without a model request.
    New Go function and New Go type remain in Commands. Reject keywords, duplicate
@@ -64,14 +66,14 @@ with keyboard focus. Record this review separately from historical observations.
     file and declaration and is unavailable for stale evidence. Edit draft clears
     previous approval evidence. After explicit Apply/Undo, source refreshes and
     Undo is limited to the immediately preceding unchanged Apply.
-    At short heights and 150% text, scroll to the complete Apply scope and recovery
-    action. Expand Check details and Project context without dispatching a request.
+    At reduced heights and 150% text, verify scrolling exposes the complete Apply
+    scope and recovery action. Expand Check details and Project context without dispatching a request.
     During a rerun, show Running even when the previous report passed.
 11. Confirm Terminal and its shell tabs share one bottom bar. Selecting Terminal
     or Ctrl+Shift+T immediately opens a real shell in the project. Use + to create
     independent shells, switch tabs, and × to close one without stopping others.
-    Collapse/Enter reopen, workspace changes and resizing through 1000/999dp preserve
-    the docked presentation, PID, history and scrollback.
+    Collapse/reopen, workspace changes and resizing preserve the docked presentation,
+    PID, history and scrollback; no terminal overlay appears.
     Resize the dock and verify real PTY dimensions change without losing content.
     Inspect the real Swing canvas: its side/bottom inset must preserve the rounded
     terminal perimeter when expanded, resized and reopened.
@@ -88,8 +90,9 @@ with keyboard focus. Record this review separately from historical observations.
     it. Application exit and confirmed project switching clean up all shells.
 14. Inspect idle, starting, running, exited, failed, closed and cleanup-pending
     terminal labels. Failures remain visible and retry/close controls reachable.
-    At short windows and large text, verify long paths/errors, headings, badges,
-    disclosure controls, row actions and status details remain readable. Color
+    At reduced windows and large text, verify ordinary scrolling and access to long
+    paths/errors, headings, badges, disclosure controls, row actions and status details;
+    fixed-layout clipping is acceptable. Color
     must supplement text labels for selection, severity and meaningful lifecycle
     states.
 

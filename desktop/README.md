@@ -67,10 +67,10 @@ suggestions appear separately below the cards, since those totals cannot be
 reliably assigned to individual categories.
 
 Architecture and flat Packages / modules rows occupy the wider left column;
-Engineering insight and Flows occupy the right. They stack on narrow windows or
-with enlarged text, retaining full prose in the page scroll. Module names, exact
-paths and responsibilities remain selectable/readable. Entry points and next steps
-are omitted from Summary.
+Engineering insight and Flows occupy the right. The window remains resizable, but
+its full-size composition is fixed; reduced windows may clip or fit awkwardly.
+Module names, exact paths and responsibilities remain selectable/readable. Entry
+points and next steps are omitted from Summary.
 
 Architecture and Flows place **Show diagram** beside the section heading. Diagrams
 start collapsed, with the button disabled when a diagram is unavailable. Mermaid
@@ -90,16 +90,16 @@ dependencies, run `npm ci --prefix desktop/mermaid --ignore-scripts` and
 `npm run build --prefix desktop/mermaid`. Commit the lockfile and generated resource
 bundle together; do not edit `src/main/resources/mermaid/renderer.js` manually.
 
-Editor has docked Files and Context/Assistant/Review panes at widths ≥1000dp.
-Below that width they become labeled drawers; Terminal uses a bounded overlay.
-Resizing clamps visible widths without overwriting saved preferences. Source and
-composed diffs are selectable/read-only; only the isolated draft is editable.
+The app requests a maximized native window at startup and remains resizable, with
+no minimum size. Editor keeps docked Files and Context/Assistant/Review panes and
+Terminal remains docked beneath the workspace at every size. The existing full-size
+layout is the sole designed layout; reduced windows may clip or fit awkwardly.
+Source and composed diffs are selectable/read-only; only the isolated draft is editable.
 The expanded terminal keeps an 8dp side/bottom inset around its native canvas so
 the rounded dock remains visible during shell use and resizing.
 **Source** and **Candidate diff** share file/declaration breadcrumbs. A validated
 candidate opens a full-height Current/Candidate comparison with synchronized
-vertical rows and independent horizontal scrolling; compact views default to
-**Unified**, and either mode can be selected locally. The Request → Draft →
+vertical rows and independent horizontal scrolling; diffs default to **Side-by-side**, and **Unified** remains an explicit local choice. The Request → Draft →
 Validate → Checks → Review strip reflects current evidence, including missing,
 stale, failed and running states. **Edit draft** opens the existing isolated
 editor. Tabs and these navigation controls never generate, validate, run checks
@@ -121,8 +121,8 @@ shows Running even if the previous report passed.
 The bottom action names the exact declaration/file scope. **Apply change** uses
 the existing eligibility checks and a solid green action; a returned receipt alone
 can enable **Undo this change**. Normal-height panes keep the action beneath the
-scrolling evidence. Short windows scroll the whole pane, and unusually long scope
-text can scroll within the bounded action region. **Edit draft** returns to the
+scrolling evidence at every size; reduced windows may clip the fixed arrangement.
+Unusually long scope text can scroll within the bounded action region. **Edit draft** returns to the
 existing editor. Check actions that execute a generated test show the exact
 command and an explicit **Trust local execution & run checks** label; rerun is
 available inside Check details. No disclosure or navigation executes those actions.
@@ -185,8 +185,8 @@ The compact left rail shows icons with destination names on hover.
 
 Selecting **Terminal** or pressing **Ctrl+Shift+T** opens a shell rooted in the
 project. Shell tabs share the Terminal bar: **+** starts another shell and **×**
-closes its tab and process. Selecting tabs, collapsing the dock, hiding the overlay
-or changing workspaces preserves each shell's process and in-memory scrollback.
+closes its tab and process. Selecting tabs, collapsing the dock, changing
+workspaces or resizing preserves each shell's process and in-memory scrollback.
 Project switching explicitly closes all active shells; application exit cleans
 up every owned session.
 
@@ -236,8 +236,8 @@ is documented in the
 ### Choose files for project analysis
 
 In **Analysis**, **Files** opens expanded for each project and can be collapsed
-locally. Search and state filters remain usable during a run. The wide table aligns
-File, Analysis state and Details; narrow windows and larger text stack each row.
+locally. Search and state filters remain usable during a run. The table aligns File, Analysis state and Details in the full-size layout; reduced
+windows may clip the fixed arrangement. Text can still wrap naturally.
 The footer counts matching files against the full list. **Select all** and
 **Exclude all** apply to all eligible
 files, regardless of the search filter. Changes save automatically per project

@@ -2,6 +2,23 @@
 
 **Current engineering state: IDEUX-01–13 are accepted. The earlier rounded-mockup receipt below remains historical evidence.**
 
+## Current fixed-layout reproduction procedure
+
+The current desktop requests a maximized native window at launch and remains
+resizable. Its existing full-size layout stays docked at reduced sizes; clipping
+is accepted. Terminal remains docked and diffs default to Side-by-side, with
+Unified available as an explicit choice. These are implementation claims, not
+native observations; use the operator checklist below to record actual host results.
+
+For current component checks, use the command and fixtures in
+[Reproduce UI component checks](#reproduce-ui-component-checks). The fixture tests
+include the fixed workspace layout but cannot prove native maximized placement,
+window restoration, OS focus or real PTY resizing. For native reproduction, follow
+[Desktop keyboard smoke checklist](../desktop/KEYBOARD_SMOKE_CHECKLIST.md) and
+[terminal reproduction](../desktop/TERMINAL.md#reproduce-the-proof); record OS,
+runtime, viewport and observed results separately. Do not treat the dated historical
+responsive-layout captures below as evidence for the fixed layout.
+
 ## IDEUX-13 native acceptance status — 2026-09-17
 
 **Accepted at Terra High retry2.** 528 focused, 528 full and 506 isolated tests
@@ -80,7 +97,7 @@ Also inspected `summary-frame-800-650-1.5.png`, `analysis-frame-1000-760-1.5.png
 The comparison accepts platform typography and real-data differences described in
 the plan: native controls, source line numbers, truthful check counts, persistent
 Terminal access, and omitted concept captions. Layout/contrast tests retain the
-exact responsive thresholds and shared-token measurements. No reference image was
+then-current responsive thresholds and shared-token measurements. No reference image was
 replaced or tolerance weakened.
 
 ### Native observations
@@ -1951,9 +1968,9 @@ MINI_ORCA_JBR25_HOME=/path/to/jbr-25 \
 
 The production Compose/Skia fixtures use labeled local data without a daemon or
 provider. Coverage includes Summary, Analysis progress, Bugs, Performance, Security,
-Editor/Review, Assistant, menus/disclosures, responsive drawers, Terminal and keyboard
+Editor/Review, Assistant, menus/disclosures, fixed-layout panes, Terminal and keyboard
 semantics; empty, failed, stale, populated and disabled states remain represented.
-The compact matrix includes 1280×600 at 100%, 125%, 150% text and 1×/2× density.
+The matrix includes 1280×600 at 100%, 125%, 150% text and 1×/2× density.
 The final lifecycle matrix also renders all eleven progress/result states at
 800×650 and 150% text. `DesktopAcceptanceFixtureKt` is a test-only native entry
 point with the same production panes, selectable lifecycle states and explicit
