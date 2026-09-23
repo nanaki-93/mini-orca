@@ -34,6 +34,8 @@ class ProjectSummaryPaneTest {
     assertEquals(listOf(4, 120), summary.projectMetrics.map { it.value })
     assertTrue(summary.findingMetrics.all { it.value == null })
     assertTrue(summary.coverageMetrics.all { it.value == null })
+    assertEquals(null, summary.coverageFresh)
+    assertEquals(null, summary.coverageTotal)
     assertFalse(summary.toString().contains("revision"))
     assertEquals("missing", summary.interpretationStatus)
     assertEquals("Project description: unavailable", summary.interpretationMessage)
@@ -76,6 +78,8 @@ class ProjectSummaryPaneTest {
         summary.coverageMetrics.map { it.label },
     )
     assertEquals(listOf(1, 1, 1), summary.coverageMetrics.map { it.value })
+    assertEquals(1, summary.coverageFresh)
+    assertEquals(0, summary.coverageTotal)
     assertEquals(listOf("Architecture", "Packages / modules"), summary.details.map { it.title })
   }
 
@@ -98,6 +102,10 @@ class ProjectSummaryPaneTest {
     assertEquals(listOf(0, 0), zeroes.projectMetrics.map { it.value })
     assertEquals(listOf(0, 0), zeroes.findingMetrics.map { it.value })
     assertTrue(zeroes.coverageMetrics.isEmpty())
+    assertEquals(null, unavailable.coverageFresh)
+    assertEquals(null, unavailable.coverageTotal)
+    assertEquals(null, zeroes.coverageFresh)
+    assertEquals(null, zeroes.coverageTotal)
   }
 
   @Test
@@ -298,6 +306,8 @@ class ProjectSummaryPaneTest {
         }
     val current = projectSummaryPresentation(overview, project, fileSelection = selection)
     assertEquals("fresh", current.summaryStatus)
+    assertEquals(1, current.coverageFresh)
+    assertEquals(1, current.coverageTotal)
     assertFalse(current.outdated)
     assertEquals("stale", current.analysisStatus)
     assertEquals("stale", current.interpretationStatus)
@@ -328,12 +338,16 @@ class ProjectSummaryPaneTest {
         projectSummaryPresentation(
             overview, project, fileSelection = selection.copy(projectId = "other"))
     assertEquals("stale", otherProject.summaryStatus)
+    assertEquals(1, otherProject.coverageFresh)
+    assertEquals(3, otherProject.coverageTotal)
   }
 
   @Test
   fun coverageSegmentsPreserveUnknownEmptyAndUnaccountedFiles() {
     val unknown = projectSummaryPresentation(null, resultProjectFixture())
     assertEquals("unknown", unknown.summaryStatus)
+    assertEquals(null, unknown.coverageFresh)
+    assertEquals(null, unknown.coverageTotal)
     assertTrue(summaryCoverageFractions(unknown.coverageMetrics).isEmpty())
     val empty =
         projectSummaryPresentation(
@@ -341,6 +355,8 @@ class ProjectSummaryPaneTest {
             analysisProjectFixture(),
             fileSelection = selectionFixture().copy(excludedPaths = listOf("helper.go", "main.go")))
     assertEquals("excluded", empty.summaryStatus)
+    assertEquals(0, empty.coverageFresh)
+    assertEquals(0, empty.coverageTotal)
     assertTrue(summaryCoverageFractions(empty.coverageMetrics).isEmpty())
     val partial =
         projectSummaryPresentation(
@@ -348,6 +364,8 @@ class ProjectSummaryPaneTest {
             null)
     val segments = summaryCoverageFractions(partial.coverageMetrics)
     assertEquals(listOf("Up to date", "Failed", "Unavailable"), segments.map { it.first.label })
+    assertEquals(1, partial.coverageFresh)
+    assertEquals(4, partial.coverageTotal)
     assertEquals(listOf(1, 1, 2), segments.map { it.first.value })
     assertEquals(listOf(.25f, .25f, .5f), segments.map { it.second })
     val large =
