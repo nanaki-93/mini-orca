@@ -41,6 +41,7 @@ internal enum class DesktopIcon(private val path: String) {
   Document("M5 3h9l5 5v13H5Z M14 3v6h5 M8 12h8 M8 16h6"),
   Run("M7 3l14 9-14 9Z"),
   Close("M6 6l12 12 M6 18L18 6"),
+  Lock("M6 10h12v10H6Z M8 10V7a4 4 0 0 1 8 0v3"),
   Check("M4 12l5 5L20 6"),
   ;
 

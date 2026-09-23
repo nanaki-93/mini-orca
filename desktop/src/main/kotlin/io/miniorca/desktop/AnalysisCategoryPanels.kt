@@ -63,24 +63,9 @@ private fun AnalysisCategoryPanel(
       onClick = { openResults(page.type.workspace) },
       modifier = modifier.testTag("analysis-category-${page.type.category}"),
       details = {
-        page.progress
-            ?.coverage
-            ?.takeIf { !page.stale && it.total > 0 }
-            ?.let { coverage ->
-              val facts = buildList {
-                add("${coverage.succeeded} covered")
-                if (coverage.pending + coverage.running > 0)
-                    add("${coverage.pending + coverage.running} remaining")
-                if (coverage.partial > 0) add("${coverage.partial} partial")
-                if (coverage.failed > 0) add("${coverage.failed} failed")
-                if (coverage.skipped > 0) add("${coverage.skipped} skipped")
-                if (coverage.unavailable > 0) add("${coverage.unavailable} unavailable")
-              }
-              Text(
-                  facts.joinToString(" · "),
-                  color = SecondaryText,
-                  style = IdeTypography.compactBody)
-            }
+        page.coverageLabel?.let {
+          Text(it, color = SecondaryText, style = IdeTypography.compactBody)
+        }
       },
   )
 }
@@ -112,36 +97,40 @@ internal fun AnalysisCategoryBox(
       accessibleName = "View $name results",
       tooltip = null,
       shape = MiniOrcaShapes.interactiveCard,
-      minimumHeight = 120.dp,
+      minimumHeight = 148.dp,
       modifier = modifier.fillMaxWidth(),
       contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
   ) {
-    Column(
+    Row(
         Modifier.fillMaxWidth().padding(16.dp).align(Alignment.Top),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        horizontalAlignment = Alignment.Start,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-      Row(
-          Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalAlignment = Alignment.CenterVertically,
+      AnalysisCategoryIcon(
+          type,
+          tint,
+          description = "",
+          modifier =
+              Modifier.padding(top = 2.dp).testTag("analysis-category-icon-${type.category}"))
+      Column(
+          Modifier.weight(1f).testTag("analysis-category-content-${type.category}"),
+          verticalArrangement = Arrangement.spacedBy(6.dp),
+          horizontalAlignment = Alignment.Start,
       ) {
-        AnalysisCategoryIcon(type, tint)
         Text(name, color = PrimaryText, style = IdeTypography.workspaceHeading)
-      }
-      Text(
-          count?.toString() ?: "—",
-          color = PrimaryText,
-          fontSize = 32.sp,
-          lineHeight = 38.sp,
-          fontWeight = FontWeight.SemiBold)
-      (if (status == null) "Not analyzed" else analysisResultStatusLabel(status))?.let {
         Text(
-            it,
+            count?.toString() ?: "—",
+            color = PrimaryText,
+            fontSize = 32.sp,
+            lineHeight = 38.sp,
+            fontWeight = FontWeight.SemiBold)
+        Text(
+            if (status == null) "Not analyzed"
+            else analysisCategoryStatusLabel(status) ?: "Status unavailable",
             color = if (status == "completed_empty") SecondaryText else tint,
             style = IdeTypography.compactBody)
+        details()
       }
-      details()
     }
   }
 }
