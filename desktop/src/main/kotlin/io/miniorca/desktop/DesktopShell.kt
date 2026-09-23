@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -484,7 +485,6 @@ internal fun DesktopShell(
               modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
               paletteFocusRequester = focusRequesters.paletteTrigger,
           )
-          val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
           WorkspaceFrame(
               rail = {
                 ToolWindowBar(
@@ -497,7 +497,7 @@ internal fun DesktopShell(
                   DockedToolWindow(
                       "Files",
                       content = { modifier -> panes.explorer(modifier) {} },
-                      modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight(),
+                      modifier = Modifier.requiredWidth(layout.explorerWidth.dp).fillMaxHeight(),
                       // Explorer owns its Files heading and actions in a docked layout.
                       showHeader = false)
                   ResizableDivider(
@@ -539,7 +539,7 @@ internal fun DesktopShell(
                               modifier.focusRequester(focusRequesters.rightToolWindow))
                         }
                       },
-                      modifier = Modifier.width(dockedWidths.action.dp).fillMaxHeight(),
+                      modifier = Modifier.requiredWidth(layout.actionWidth.dp).fillMaxHeight(),
                       // The right-window tabs identify their own active content.
                       showHeader = false)
                 }

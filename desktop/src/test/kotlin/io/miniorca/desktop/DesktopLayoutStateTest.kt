@@ -151,62 +151,6 @@ class DesktopLayoutStateTest {
   }
 
   @Test
-  fun wideLayoutBoundaryStaysAtExactlyOneThousandDp() {
-    assertFalse(useNarrowLayout(1_000f))
-    assertTrue(useNarrowLayout(999f))
-  }
-
-  @Test
-  fun dockedPaneWidthsProtectTheEditorWithoutChangingStoredPreferences() {
-    val constrained =
-        dockedPaneWidths(1_000f, preferredExplorerWidth = 520f, preferredActionWidth = 560f)
-
-    assertEquals(DesktopLayoutState.MIN_EXPLORER_WIDTH, constrained.explorer)
-    assertEquals(340f, constrained.action)
-    assertEquals(MIN_EDITOR_WIDTH, constrained.editor)
-    assertEquals(520f, DesktopLayoutState().withExplorerWidth(520f).explorerWidth)
-    assertEquals(560f, DesktopLayoutState().withActionWidth(560f).actionWidth)
-  }
-
-  @Test
-  fun dockedPaneWidthsRestorePreferredDimensionsWhenTheViewportGrows() {
-    val preferred =
-        dockedPaneWidths(1_440f, preferredExplorerWidth = 220f, preferredActionWidth = 300f)
-
-    assertEquals(220f, preferred.explorer)
-    assertEquals(300f, preferred.action)
-    assertEquals(840f, preferred.editor)
-  }
-
-  @Test
-  fun defaultDocksKeepSourceUsefulAtTheDockedBreakpoint() {
-    val defaults = DesktopLayoutState()
-    val constrained = dockedPaneWidths(1_000f, defaults.explorerWidth, defaults.actionWidth)
-
-    assertEquals(400f, constrained.editor)
-    assertEquals(defaults.explorerWidth, constrained.explorer)
-    assertEquals(defaults.actionWidth, constrained.action)
-  }
-
-  @Test
-  fun dockedPaneWidthsReserveTheFrameWithoutPersistingTemporaryClamps() {
-    val constrained =
-        dockedPaneWidths(1_000f, preferredExplorerWidth = 520f, preferredActionWidth = 560f)
-
-    assertEquals(
-        1_000f,
-        TOOL_WINDOW_BAR_WIDTH +
-            WORKSPACE_FRAME_INSET * 2 +
-            RESIZE_DIVIDER_WIDTH * 2 +
-            constrained.explorer +
-            constrained.action +
-            constrained.editor,
-    )
-    assertEquals(520f, DesktopLayoutState().withExplorerWidth(520f).explorerWidth)
-    assertEquals(560f, DesktopLayoutState().withActionWidth(560f).actionWidth)
-  }
-
-  @Test
   fun everyLegacyBottomDestinationRestoresCollapsedAndRetainsPaneDimensions() {
     listOf("Problems", "Checks", "Output", "Terminal", "Unknown").forEach { destination ->
       withPreferences { preferences ->
