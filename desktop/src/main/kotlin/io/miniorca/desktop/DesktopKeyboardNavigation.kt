@@ -43,42 +43,26 @@ internal fun <T> tabGroupInteraction(
 
 internal enum class ResponsiveShellRegion {
   Docked,
-  Drawer,
   Overlay,
 }
 
 internal data class ResponsiveShellPresentation(
-    val left: ResponsiveShellRegion,
-    val right: ResponsiveShellRegion,
+    val left: ResponsiveShellRegion = ResponsiveShellRegion.Docked,
+    val right: ResponsiveShellRegion = ResponsiveShellRegion.Docked,
     val bottom: ResponsiveShellRegion,
 )
 
 internal fun responsiveShellPresentation(widthDp: Float): ResponsiveShellPresentation =
-    if (useNarrowLayout(widthDp)) {
-      ResponsiveShellPresentation(
-          left = ResponsiveShellRegion.Drawer,
-          right = ResponsiveShellRegion.Drawer,
-          bottom = ResponsiveShellRegion.Overlay,
-      )
-    } else {
-      ResponsiveShellPresentation(
-          left = ResponsiveShellRegion.Docked,
-          right = ResponsiveShellRegion.Docked,
-          bottom = ResponsiveShellRegion.Docked,
-      )
-    }
-
-internal fun closesEditorDrawerOnWorkspaceChange(
-    current: Workspace,
-    next: Workspace,
-): Boolean = editorChromeVisible(current) && !editorChromeVisible(next)
+    ResponsiveShellPresentation(
+        bottom =
+            if (useNarrowLayout(widthDp)) ResponsiveShellRegion.Overlay
+            else ResponsiveShellRegion.Docked)
 
 internal enum class TransientSurface {
   Context,
   Palette,
   StatusDetails,
   BottomTools,
-  Drawer,
 }
 
 internal fun topmostTransientSurface(
@@ -86,14 +70,12 @@ internal fun topmostTransientSurface(
     paletteVisible: Boolean,
     statusDetailsVisible: Boolean,
     bottomToolsVisible: Boolean,
-    drawerVisible: Boolean,
 ): TransientSurface? =
     when {
       contextVisible -> TransientSurface.Context
       paletteVisible -> TransientSurface.Palette
       statusDetailsVisible -> TransientSurface.StatusDetails
       bottomToolsVisible -> TransientSurface.BottomTools
-      drawerVisible -> TransientSurface.Drawer
       else -> null
     }
 

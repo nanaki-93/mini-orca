@@ -18,14 +18,12 @@ class IdeUiContractBaselineTest {
   }
 
   @Test
-  fun landingIsolationAndNarrowEditorDrawersRemainExplicit() {
+  fun landingIsolationAndNarrowWidthsRemainUsable() {
     assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(DesktopState()))
     assertTrue(shortcutAvailable(DesktopShellMode.ProjectLanding, DesktopShortcut.OpenProject))
     assertFalse(shortcutAvailable(DesktopShellMode.ProjectLanding, DesktopShortcut.OpenFile))
     assertFalse(useNarrowLayout(1_000f))
     assertTrue(useNarrowLayout(999f))
-    assertTrue(editorDrawerActionsVisible(Workspace.Editor, 999f))
-    assertFalse(editorDrawerActionsVisible(Workspace.Bugs, 999f))
   }
 
   @Test

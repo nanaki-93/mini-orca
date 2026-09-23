@@ -92,12 +92,6 @@ internal fun MainToolbar(
                   modifier = Modifier.padding(start = 8.dp))
             }
       }
-      if (state.showEditorDrawerActions) {
-        TopBarButton("Files", actions.onOpenExplorer)
-        Spacer(Modifier.width(6.dp))
-        TopBarButton("Context", actions.onOpenContext)
-        Spacer(Modifier.width(6.dp))
-      }
       Spacer(Modifier.width(16.dp))
       if (!separateStatusRow) ToolbarStatus(state, connectionPresentation, presentation)
     }
@@ -119,7 +113,6 @@ internal data class ToolbarState(
     val operationStatus: String,
     val connection: ConnectionState,
     val gitStatus: GitStatus?,
-    val showEditorDrawerActions: Boolean,
     val analysisStatus: ToolbarAnalysisStatus? = null,
 )
 
@@ -197,8 +190,6 @@ internal data class ToolbarActions(
     val onReanalyze: () -> Unit,
     val onReconnect: () -> Unit,
     val onPalette: () -> Unit,
-    val onOpenExplorer: () -> Unit,
-    val onOpenContext: () -> Unit,
 )
 
 internal data class ToolbarPresentation(

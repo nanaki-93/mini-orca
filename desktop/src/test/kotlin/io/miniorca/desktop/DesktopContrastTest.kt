@@ -163,11 +163,10 @@ class DesktopContrastTest {
                   operationStatus = "",
                   connection = ConnectionState(connected = true),
                   gitStatus = GitStatus(available = true, branch = "main"),
-                  showEditorDrawerActions = false,
                   analysisStatus =
                       ToolbarAnalysisStatus(
                           "Analysis · Running", "Whole-project analysis · Running", true, false)),
-              ToolbarActions({}, {}, {}, {}, {}, {}))
+              ToolbarActions({}, {}, {}, {}))
         }
         .use { fixture ->
           fixture.render("toolbar-flat-statuses")

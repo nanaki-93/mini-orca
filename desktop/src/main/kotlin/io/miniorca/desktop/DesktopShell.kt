@@ -17,10 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.DrawerValue
-import androidx.compose.material.ModalDrawer
 import androidx.compose.material.Text
-import androidx.compose.material.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -58,11 +55,6 @@ data class ExplorerRow(
     val language: String = "",
 )
 
-internal enum class NarrowDrawer {
-  Files,
-  Context
-}
-
 internal enum class DesktopShellMode {
   ProjectLanding,
   ProjectWorkspace
@@ -72,21 +64,9 @@ internal fun desktopShellMode(appState: DesktopState): DesktopShellMode =
     if (appState.project == null) DesktopShellMode.ProjectLanding
     else DesktopShellMode.ProjectWorkspace
 
-internal fun narrowDrawerLabel(drawer: NarrowDrawer): String =
-    when (drawer) {
-      NarrowDrawer.Files -> "Files"
-      NarrowDrawer.Context -> "Context"
-    }
-
 fun useNarrowLayout(widthDp: Float): Boolean = widthDp < 1000f
 
 internal fun editorChromeVisible(workspace: Workspace): Boolean = workspace == Workspace.Editor
-
-internal fun editorDrawerActionsVisible(workspace: Workspace, widthDp: Float): Boolean =
-    useNarrowLayout(widthDp) && editorChromeVisible(workspace)
-
-internal fun contextDrawerForSourceSelection(workspace: Workspace, widthDp: Float): NarrowDrawer? =
-    NarrowDrawer.Context.takeIf { editorDrawerActionsVisible(workspace, widthDp) }
 
 internal fun fileInspectionWorkspace(): Workspace = Workspace.Editor
 
@@ -271,7 +251,6 @@ private data class ShellFocusRequesters(
     val fallback: FocusRequester,
     val toolbar: FocusRequester,
     val leftToolWindow: FocusRequester,
-    val drawer: FocusRequester,
     val editor: FocusRequester,
     val rightToolWindow: FocusRequester,
     val bottomToolWindow: FocusRequester,
@@ -338,7 +317,6 @@ internal fun DesktopShell(
         fallback = FocusRequester(),
         toolbar = FocusRequester(),
         leftToolWindow = FocusRequester(),
-        drawer = FocusRequester(),
         editor = FocusRequester(),
         rightToolWindow = FocusRequester(),
         bottomToolWindow = FocusRequester(),
@@ -346,9 +324,6 @@ internal fun DesktopShell(
         paletteTrigger = FocusRequester(),
     )
   }
-  val drawerState = rememberDrawerState(DrawerValue.Closed)
-  var narrowDrawer by remember { mutableStateOf(NarrowDrawer.Files) }
-  var drawerFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var paletteFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   var paletteOpenedFromToolbar by remember { mutableStateOf(false) }
   var statusDetailsVisible by remember { mutableStateOf(false) }
@@ -359,19 +334,7 @@ internal fun DesktopShell(
   var bottomOverlayFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
   val showsEditorChrome =
       shellMode == DesktopShellMode.ProjectWorkspace && editorChromeVisible(workspace)
-  fun closeDrawerAndRestoreFocus() {
-    if (!drawerState.isOpen) return
-    if (drawerFocusRestoreTarget == null) drawerFocusRestoreTarget = layout.lastFocusedRegion
-    scope.launch { drawerState.close() }
-  }
-  fun openDrawer(drawer: NarrowDrawer) {
-    if (!showsEditorChrome) return
-    if (drawerFocusRestoreTarget == null) drawerFocusRestoreTarget = layout.lastFocusedRegion
-    narrowDrawer = drawer
-    scope.launch { drawerState.open() }
-  }
   fun selectWorkspace(nextWorkspace: Workspace) {
-    if (closesEditorDrawerOnWorkspaceChange(workspace, nextWorkspace)) closeDrawerAndRestoreFocus()
     layoutActions.updateLayout(
         layout
             .openLeft(leftToolWindowForWorkspace(nextWorkspace))
@@ -382,7 +345,6 @@ internal fun DesktopShell(
     layoutActions.updateLayout(
         layout.openLeft(toolWindow).withFocus(DesktopFocusRegion.LeftToolWindow))
     val nextWorkspace = workspaceForLeftToolWindow(toolWindow)
-    if (closesEditorDrawerOnWorkspaceChange(workspace, nextWorkspace)) closeDrawerAndRestoreFocus()
     editorActions.selectWorkspace(nextWorkspace)
   }
   fun selectRightToolWindow(toolWindow: RightToolWindow) {
@@ -404,7 +366,7 @@ internal fun DesktopShell(
   TerminalFocusReturnEffect(terminal) {
     if (terminalUsesOverlay) layoutActions.updateLayout(layout.withBottomCollapsed(true))
     editorActions.selectWorkspace(Workspace.Editor)
-    scope.launch { restoreTerminalEditorFocus(drawerState, focusManager, focusRequesters.editor) }
+    scope.launch { restoreTerminalEditorFocus(focusManager, focusRequesters.editor) }
   }
   LaunchedEffect(Unit) { focusRequesters.fallback.requestFocus() }
   LaunchedEffect(appState.project?.projectId, appState.project?.projectRevision) {
@@ -433,7 +395,6 @@ internal fun DesktopShell(
           paletteVisible = palette.visible,
           statusDetailsVisible = statusDetailsVisible,
           bottomToolsVisible = terminalOverlayVisible,
-          drawerVisible = drawerState.isOpen,
       )) {
         TransientSurface.Context -> {
           dismissContextAndRestoreFocus()
@@ -451,24 +412,8 @@ internal fun DesktopShell(
           collapseTerminal()
           true
         }
-        TransientSurface.Drawer -> {
-          closeDrawerAndRestoreFocus()
-          true
-        }
         null -> false
       }
-  LaunchedEffect(showsEditorChrome) {
-    if (!showsEditorChrome && drawerState.isOpen) closeDrawerAndRestoreFocus()
-  }
-  LaunchedEffect(drawerState.isOpen) {
-    if (drawerState.isOpen) focusRequesters.drawer.requestFocus()
-  }
-  LaunchedEffect(drawerState.isOpen, drawerFocusRestoreTarget) {
-    if (!drawerState.isOpen && drawerFocusRestoreTarget != null) {
-      focusRequesters.forRegion(drawerFocusRestoreTarget!!).requestFocus()
-      drawerFocusRestoreTarget = null
-    }
-  }
   LaunchedEffect(statusDetailsVisible, statusDetailsFocusRestoreTarget) {
     if (!statusDetailsVisible && statusDetailsFocusRestoreTarget != null) {
       focusRequesters.forRegion(statusDetailsFocusRestoreTarget!!).requestFocus()
@@ -516,17 +461,13 @@ internal fun DesktopShell(
         val widthDp = maxWidth.value
         val heightDp = maxHeight.value
         val responsivePresentation = responsiveShellPresentation(widthDp)
-        val narrow = responsivePresentation.left == ResponsiveShellRegion.Drawer
-        val showEditorDrawers = editorDrawerActionsVisible(workspace, widthDp)
-        LaunchedEffect(narrow) { if (!narrow && drawerState.isOpen) closeDrawerAndRestoreFocus() }
         LaunchedEffect(responsivePresentation.bottom) {
           terminalUsesOverlay = responsivePresentation.bottom == ResponsiveShellRegion.Overlay
         }
         val restoredFocusRegion =
             paletteFocusRestorationRegion(
                 previous = paletteFocusRestoreTarget ?: layout.lastFocusedRegion,
-                rightToolWindowVisible =
-                    !narrow && showsEditorChrome && layout.rightToolWindowVisible,
+                rightToolWindowVisible = showsEditorChrome && layout.rightToolWindowVisible,
                 bottomToolWindowVisible = true,
             )
         LaunchedEffect(palette.visible, paletteFocusRestoreTarget, restoredFocusRegion) {
@@ -538,185 +479,131 @@ internal fun DesktopShell(
             paletteOpenedFromToolbar = false
           }
         }
-        ModalDrawer(
-            drawerState = drawerState,
-            // Compose Desktop supplies the responsive drawer gesture and dismissal boundary; its
-            // visual roles stay explicit so it does not depend on the retired Material theme.
-            drawerShape = MiniOrcaShapes.overlay,
-            drawerElevation = 0.dp,
-            drawerBackgroundColor = ToolWindowSurface,
-            drawerContentColor = PrimaryText,
-            scrimColor = EditorCanvas.copy(alpha = 0.68f),
-            drawerContent = {
-              if (showsEditorChrome) {
-                if (narrowDrawer == NarrowDrawer.Files) {
+        Column {
+          MainToolbar(
+              state =
+                  ToolbarState(
+                      widthDp = widthDp,
+                      project = appState.project,
+                      busy = appState.loading,
+                      operationStatus = appState.status,
+                      connection = appState.connection,
+                      gitStatus = appState.gitStatus,
+                      analysisStatus = toolbarAnalysisStatus(appState),
+                  ),
+              actions =
+                  ToolbarActions(
+                      onImport = projectActions.importProject,
+                      onReanalyze = projectActions.reanalyzeProject,
+                      onReconnect = projectActions.reconnect,
+                      onPalette = {
+                        layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
+                        paletteOpenedFromToolbar = true
+                        paletteActions.open(PaletteMode.Files)
+                      },
+                  ),
+              modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
+              paletteFocusRequester = focusRequesters.paletteTrigger,
+          )
+          val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
+          WorkspaceFrame(
+              rail = {
+                ToolWindowBar(
+                    leftToolWindowForWorkspace(workspace),
+                    ::selectToolWindow,
+                    Modifier.focusRequester(focusRequesters.leftToolWindow))
+              },
+              panes = {
+                if (showsEditorChrome && layout.leftToolWindowVisible) {
                   DockedToolWindow(
                       "Files",
-                      content = { modifier ->
-                        panes.explorer(
-                            modifier.focusRequester(focusRequesters.drawer),
-                            ::closeDrawerAndRestoreFocus)
+                      content = { modifier -> panes.explorer(modifier) {} },
+                      modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight(),
+                      // Explorer owns its Files heading and actions in a docked layout.
+                      showHeader = false)
+                  ResizableDivider(
+                      onDelta = {
+                        layoutActions.updateLayout(
+                            layout.withExplorerWidth(layout.explorerWidth + it))
                       },
-                      modifier = Modifier.fillMaxHeight().width(320.dp),
-                      onClose = ::closeDrawerAndRestoreFocus)
-                } else {
+                      onCommit = { layoutActions.saveLayout(layout) })
+                }
+                DesktopCanvas(
+                    state = state,
+                    resultBrowsers = resultBrowsers,
+                    widthDp = widthDp,
+                    editorActions = editorActions,
+                    analysisActions = analysisActions,
+                    findingActions = findingActions,
+                    onWorkspaceSelected = ::selectWorkspace,
+                    modifier =
+                        Modifier.weight(1f)
+                            .fillMaxHeight()
+                            .focusRequester(focusRequesters.editor)
+                            .focusable(),
+                )
+                if (showsEditorChrome && layout.rightToolWindowVisible) {
+                  ResizableDivider(
+                      onDelta = {
+                        layoutActions.updateLayout(layout.withActionWidth(layout.actionWidth - it))
+                      },
+                      onCommit = { layoutActions.saveLayout(layout) })
                   DockedToolWindow(
-                      "Context",
+                      "Tool windows",
                       content = { modifier ->
-                        CompositionLocalProvider(LocalContextCreationActionVisible provides true) {
+                        CompositionLocalProvider(LocalContextCreationActionVisible provides false) {
                           RightToolWindowContainer(
                               layout.activeRightToolWindow,
                               ::selectRightToolWindow,
                               panes.rightToolWindows,
                               panes.rightToolWindowBadges,
-                              modifier.focusRequester(focusRequesters.drawer))
+                              modifier.focusRequester(focusRequesters.rightToolWindow))
                         }
                       },
-                      modifier = Modifier.fillMaxHeight().width(360.dp),
-                      onClose = ::closeDrawerAndRestoreFocus)
+                      modifier = Modifier.width(dockedWidths.action.dp).fillMaxHeight(),
+                      // The right-window tabs identify their own active content.
+                      showHeader = false)
                 }
-              }
-            },
-        ) {
-          Column {
-            MainToolbar(
-                state =
-                    ToolbarState(
-                        widthDp = widthDp,
-                        project = appState.project,
-                        busy = appState.loading,
-                        operationStatus = appState.status,
-                        connection = appState.connection,
-                        gitStatus = appState.gitStatus,
-                        showEditorDrawerActions = showEditorDrawers,
-                        analysisStatus = toolbarAnalysisStatus(appState),
-                    ),
-                actions =
-                    ToolbarActions(
-                        onImport = projectActions.importProject,
-                        onReanalyze = projectActions.reanalyzeProject,
-                        onReconnect = projectActions.reconnect,
-                        onPalette = {
-                          layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
-                          paletteOpenedFromToolbar = true
-                          paletteActions.open(PaletteMode.Files)
-                        },
-                        onOpenExplorer = {
-                          layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
-                          drawerFocusRestoreTarget = DesktopFocusRegion.Toolbar
-                          openDrawer(NarrowDrawer.Files)
-                        },
-                        onOpenContext = {
-                          layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
-                          drawerFocusRestoreTarget = DesktopFocusRegion.Toolbar
-                          openDrawer(NarrowDrawer.Context)
-                        },
-                    ),
-                modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
-                paletteFocusRequester = focusRequesters.paletteTrigger,
-            )
-            val dockedWidths = dockedPaneWidths(widthDp, layout.explorerWidth, layout.actionWidth)
-            WorkspaceFrame(
-                rail = {
-                  ToolWindowBar(
-                      leftToolWindowForWorkspace(workspace),
-                      ::selectToolWindow,
-                      Modifier.focusRequester(focusRequesters.leftToolWindow))
-                },
-                panes = {
-                  if (!narrow && showsEditorChrome && layout.leftToolWindowVisible) {
-                    DockedToolWindow(
-                        "Files",
-                        content = { modifier -> panes.explorer(modifier) {} },
-                        modifier = Modifier.width(dockedWidths.explorer.dp).fillMaxHeight(),
-                        // Explorer owns its Files heading and actions in a docked layout.
-                        showHeader = false)
-                    ResizableDivider(
-                        onDelta = {
-                          layoutActions.updateLayout(
-                              layout.withExplorerWidth(layout.explorerWidth + it))
-                        },
-                        onCommit = { layoutActions.saveLayout(layout) })
-                  }
-                  DesktopCanvas(
-                      state = state,
-                      resultBrowsers = resultBrowsers,
-                      widthDp = widthDp,
-                      editorActions = editorActions,
-                      analysisActions = analysisActions,
-                      findingActions = findingActions,
-                      onWorkspaceSelected = ::selectWorkspace,
-                      onOpenNarrowDrawer = ::openDrawer,
-                      modifier =
-                          Modifier.weight(1f)
-                              .fillMaxHeight()
-                              .focusRequester(focusRequesters.editor)
-                              .focusable(),
+              },
+              terminal = {
+                if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
+                  TerminalDock(
+                      layout =
+                          layout.copy(
+                              bottomHeight = terminalDockHeight(layout.bottomHeight, heightDp)),
+                      state = panes.terminalState,
+                      tabActions = panes.terminalTabActions,
+                      onOpen = ::openTerminal,
+                      onCollapse = ::collapseTerminal,
+                      onHeightDelta = {
+                        layoutActions.updateLayout(
+                            layout.withBottomHeight(layout.bottomHeight + it))
+                      },
+                      onHeightCommit = { layoutActions.saveLayout(layout) },
+                      content = panes.terminalContent,
+                      controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
                   )
-                  if (!narrow && showsEditorChrome && layout.rightToolWindowVisible) {
-                    ResizableDivider(
-                        onDelta = {
-                          layoutActions.updateLayout(
-                              layout.withActionWidth(layout.actionWidth - it))
-                        },
-                        onCommit = { layoutActions.saveLayout(layout) })
-                    DockedToolWindow(
-                        "Tool windows",
-                        content = { modifier ->
-                          CompositionLocalProvider(
-                              LocalContextCreationActionVisible provides false) {
-                                RightToolWindowContainer(
-                                    layout.activeRightToolWindow,
-                                    ::selectRightToolWindow,
-                                    panes.rightToolWindows,
-                                    panes.rightToolWindowBadges,
-                                    modifier.focusRequester(focusRequesters.rightToolWindow))
-                              }
-                        },
-                        modifier = Modifier.width(dockedWidths.action.dp).fillMaxHeight(),
-                        // The right-window tabs identify their own active content.
-                        showHeader = false)
-                  }
-                },
-                terminal = {
-                  if (responsivePresentation.bottom == ResponsiveShellRegion.Docked) {
-                    TerminalDock(
-                        layout =
-                            layout.copy(
-                                bottomHeight = terminalDockHeight(layout.bottomHeight, heightDp)),
-                        state = panes.terminalState,
-                        tabActions = panes.terminalTabActions,
-                        onOpen = ::openTerminal,
-                        onCollapse = ::collapseTerminal,
-                        onHeightDelta = {
-                          layoutActions.updateLayout(
-                              layout.withBottomHeight(layout.bottomHeight + it))
-                        },
-                        onHeightCommit = { layoutActions.saveLayout(layout) },
-                        content = panes.terminalContent,
-                        controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
-                    )
-                  } else {
-                    TerminalBar(
-                        state = panes.terminalState,
-                        tabActions = panes.terminalTabActions,
-                        collapsed = true,
-                        onToggle = ::openTerminal,
-                        controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
-                    )
-                  }
-                },
-                modifier = Modifier.weight(1f),
+                } else {
+                  TerminalBar(
+                      state = panes.terminalState,
+                      tabActions = panes.terminalTabActions,
+                      collapsed = true,
+                      onToggle = ::openTerminal,
+                      controlModifier = Modifier.focusRequester(focusRequesters.bottomToolWindow),
+                  )
+                }
+              },
+              modifier = Modifier.weight(1f),
+          )
+          if (desktopStatusBarVisible(appState.project)) {
+            PersistentStatusBar(
+                presentation = statusPresentation,
+                onOpenDetails = ::showStatusDetails,
+                modifier = Modifier.focusRequester(focusRequesters.statusBar).focusable(),
             )
-            if (desktopStatusBarVisible(appState.project)) {
-              PersistentStatusBar(
-                  presentation = statusPresentation,
-                  onOpenDetails = ::showStatusDetails,
-                  modifier = Modifier.focusRequester(focusRequesters.statusBar).focusable(),
-              )
-            }
           }
-          if (narrow && !layout.bottomCollapsed) {
+          if (responsivePresentation.bottom == ResponsiveShellRegion.Overlay &&
+              !layout.bottomCollapsed) {
             TerminalOverlay(
                 state = panes.terminalState,
                 tabActions = panes.terminalTabActions,
@@ -740,7 +627,6 @@ internal fun DesktopShell(
               },
               { symbol ->
                 paletteActions.selectSymbol(symbol)
-                contextDrawerForSourceSelection(Workspace.Editor, widthDp)?.let(::openDrawer)
                 paletteFocusRestoreTarget = DesktopFocusRegion.Editor
               },
               { action ->
@@ -762,11 +648,9 @@ internal fun DesktopShell(
 }
 
 private suspend fun restoreTerminalEditorFocus(
-    drawer: androidx.compose.material.DrawerState,
     focusManager: FocusManager,
     editor: FocusRequester,
 ) {
-  if (drawer.isOpen) drawer.close()
   kotlinx.coroutines.yield()
   // Swing can own native focus while Compose still considers the editor focused.
   focusManager.clearFocus(force = true)
@@ -929,7 +813,6 @@ private fun DesktopCanvas(
     analysisActions: DesktopShellAnalysisActions,
     findingActions: FindingActions,
     onWorkspaceSelected: (Workspace) -> Unit,
-    onOpenNarrowDrawer: (NarrowDrawer) -> Unit,
     modifier: Modifier,
 ) {
   val appState = state.app
@@ -997,7 +880,6 @@ private fun DesktopCanvas(
                     editDraft = editorActions.focusDraft,
                     sourceLineSelected = { selection ->
                       editorActions.sourceLineSelected(selection)
-                      contextDrawerForSourceSelection(workspace, widthDp)?.let(onOpenNarrowDrawer)
                     },
                 ),
             analysisActions = analysisActions.toWorkspaceActions(onWorkspaceSelected),
