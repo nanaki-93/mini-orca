@@ -2860,12 +2860,18 @@ class DesktopVisualLayoutTest {
 
   @Test
   fun summaryLongIdentityPathsAndFailureReasonsWrapAtSmallLargeText() {
-    val longName = "Mini-Orca project name ".repeat(12).trim()
+    val longName = "Mini-Orca project name ".repeat(4).trim()
+    val longBuildMetadata = "Kotlin/JVM build metadata ".repeat(4).trim()
     val longPath = "/Users/example/projects/very-long-project-path/".repeat(5)
     val failure = "Provider request failed because the analysis service timed out. ".repeat(8)
-    val project = visualFixtureProject.copy(name = longName)
+    val project =
+        visualFixtureProject.copy(
+            name = longName,
+            buildFile = longBuildMetadata,
+        )
     val overview =
         visualFixtureOverview.copy(
+            metrics = visualFixtureOverview.metrics.copy(buildFile = longBuildMetadata),
             analysis =
                 visualFixtureOverview.analysis.copy(
                     status = "failed",
@@ -2874,8 +2880,17 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(overview, project, {}) }
         .use { fixture ->
           fixture.render("summary-long-identity-failure-800-150")
-          fixture.assertTextWrapsWithoutClipping("Project description: failed · $failure")
           fixture.assertTextWrapsWithoutClipping(longName)
+          fixture.assertTextWrapsWithoutClipping("Go · $longBuildMetadata")
+          assertTrue(
+              fixture.taggedBounds("summary-project-header").bottom <=
+                  fixture.taggedBounds("summary-header-separator").top)
+          assertTrue(
+              fixture.taggedBounds("summary-header-separator").bottom <=
+                  fixture.taggedBounds("summary-introduction").top)
+          fixture.scrollBy(400f)
+          fixture.render()
+          fixture.assertTextWrapsWithoutClipping("Project description: failed · $failure")
           assertFalse(fixture.hasDescription("Select Packages / modules summary"))
           assertTrue(fixture.hasScrollableContent())
           assertEquals(1, fixture.scrollableContentCount())
@@ -4167,8 +4182,12 @@ internal class ComposeVisualFixture(
   fun assertReferenceSummaryGeometry() {
     val outline = taggedBounds("summary-index-Coverage")
     val overview = taggedBounds("summary-introduction")
+    val header = taggedBounds("summary-project-header")
+    val separator = taggedBounds("summary-header-separator")
     val coverage = taggedBounds("analysis-summary")
     val track = taggedBounds("summary-coverage-track")
+    assertTrue(header.bottom <= separator.top, "Project identity precedes its separator")
+    assertTrue(separator.bottom <= overview.top, "Overview follows the separate project header")
     assertTrue(overview.bottom <= outline.top, "Overview precedes the outline")
     assertTrue(outline.right <= coverage.left, "Outline sits beside focused detail")
     assertTrue(track.width >= coverage.width * 0.6f, "Coverage track must be broad")
