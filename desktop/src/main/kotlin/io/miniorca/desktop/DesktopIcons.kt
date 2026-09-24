@@ -20,12 +20,12 @@ internal enum class DesktopIcon(private val path: String) {
   Java(
       "M5 10h12v5a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4Z M17 11h2a2 2 0 0 1 0 4h-2 M3 22h16 M10 7c-5-3 5-3 1-6 M14 8c-3-2 4-3 3-5"),
   Kotlin("M4 3h16l-9 9 9 9H4Z M4 12l9-9 M4 12l9 9"),
-  Summary("M5 3h9l5 5v13H5Z M14 3v6h5 M8 12h8 M8 16h5"),
-  Analysis("M3 21V11h4v10 M10 21V7h4v14 M17 21V3h4v18 M2 7l6-4 5 1 7-3"),
-  Performance("M4 18a9 9 0 1 1 16 0 M8 18h8 M12 14l5-6 M5 11H3 M12 5V3 M19 11h2"),
-  Security("M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z M8 12l3 3 5-6"),
+  Summary("M4 4h16v16H4Z M8 8h8 M8 12h5 M8 16h8 M16 11v5"),
+  Analysis("M4 19V13h4v6 M10 19V8h4v11 M16 19V4h4v15 M3 21h18"),
+  Performance("M4 17a8 8 0 1 1 16 0 M8 17h8 M12 13l4-5 M5 10H3 M12 4V2 M19 10h2"),
+  Security("M12 3l8 3v5c0 5-5 8-8 10-3-2-8-5-8-10V6Z M8.5 12l2.3 2.3 4.8-5"),
   Problems(
-      "M8 8h8v9a4 4 0 0 1-8 0Z M9 8V6a3 3 0 0 1 6 0v2 M12 9v11 M4 6l4 4 M20 6l-4 4 M3 13h5 M16 13h5 M4 21l4-4 M16 17l4 4"),
+      "M8 8h8v9a4 4 0 0 1-8 0Z M9 8V6a3 3 0 0 1 6 0v2 M12 10v5 M12 18v.5 M4 6l3 3 M20 6l-3 3 M3 14h4 M17 14h4"),
   Editor("M3 4h18v16H3Z M3 8h18 M8 11l-3 3 3 3 M16 11l3 3-3 3 M13 10l-2 8"),
   Search("M10 3a7 7 0 1 1 0 14a7 7 0 1 1 0-14 M15 15l6 6"),
   Branch(
