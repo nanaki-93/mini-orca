@@ -73,7 +73,6 @@ internal object MiniOrcaPalette {
   val selectionText = Color(0xFFC0CAF5)
   val actionFill = Color(0xFF7AA2F7)
   val actionHover = Color(0xFF9AB8FF)
-  val actionSelected = Color(0xFF6783C3)
   val onActionFill = Color(0xFF161824)
   val focusAccent = Color(0xFFD7DEFF)
   val information = Color(0xFF7DCFFF)
@@ -152,19 +151,23 @@ internal data class ActionToneStyle(
     val disabledBackground: Color,
     val disabledContent: Color,
     val border: Color,
+    val selectedContent: Color = content,
 )
 
 internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
     when (tone) {
+      // Bright inverse-text fills cannot support the cyan selection outline at 3:1;
+      // selected primary actions use the dark selected surface with light text.
       ActionTone.Primary ->
           ActionToneStyle(
               ActionFill,
               MiniOrcaPalette.actionHover,
-              MiniOrcaPalette.actionSelected,
+              SelectionSurface,
               OnActionFill,
               Panel,
               FaintText,
-              ActionFill)
+              ActionFill,
+              SelectionText)
       ActionTone.Navigation ->
           ActionToneStyle(
               labelBadgeBackground(SelectionAccent),
@@ -187,10 +190,11 @@ internal fun actionToneStyle(tone: ActionTone): ActionToneStyle =
           ActionToneStyle(
               Success,
               blendOver(Success.copy(alpha = 0.90f), EditorCanvas),
-              blendOver(Success.copy(alpha = 0.82f), EditorCanvas),
+              SelectionSurface,
               OnActionFill,
               Panel,
               FaintText,
+              Success,
               Success)
       ActionTone.Attention ->
           ActionToneStyle(
@@ -362,7 +366,7 @@ internal fun MiniOrcaButton(
               selectedBackground = style.selectedBackground,
               disabledBackground = style.disabledBackground,
               content = style.content,
-              selectedContent = style.content,
+              selectedContent = style.selectedContent,
               disabledContent = style.disabledContent,
               border = if (enabled) style.border else ControlBorder),
       modifier = modifier,
