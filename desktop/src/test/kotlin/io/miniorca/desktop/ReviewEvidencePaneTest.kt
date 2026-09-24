@@ -65,6 +65,136 @@ class ReviewEvidencePaneTest {
   }
 
   @Test
+  fun evidenceRowsKeepFailureAndRecoveryVisibleWithCheckHelpCollapsed() {
+    val current = draft()
+    val cases =
+        listOf(
+            Triple("failed", "At least one focused check failed.", ReviewEvidenceStatus.Failed),
+            Triple("canceled", "At least one focused check failed.", ReviewEvidenceStatus.Failed),
+            Triple(
+                "unknown",
+                "Focused check state is unavailable for the latest draft.",
+                ReviewEvidenceStatus.Missing),
+            Triple(
+                "partial",
+                "Focused check state is unavailable for the latest draft.",
+                ReviewEvidenceStatus.Missing),
+            Triple(
+                "unavailable",
+                "Focused checks could not produce applicable evidence for this draft.",
+                ReviewEvidenceStatus.Failed))
+    cases.forEach { (checkState, detail, status) ->
+      val checks =
+          DraftCheckReport(
+              "main.go",
+              checkState != "unavailable",
+              checks = listOf(DraftCheck("go test", true, checkState)),
+              draftId = current.id,
+              draftRevision = current.revision,
+              draftHash = current.hash)
+      val evidence =
+          reviewEvidenceUiState(project(), file(), editableDraft(current), current, checks)
+      val decision =
+          applyDecisionUiState(project(), file(), editableDraft(current), current, checks, null)
+      assertEquals(status, evidence.checks.status)
+      assertFalse(decision.eligible)
+      var calls = 0
+      ComposeVisualFixture(600, 900, 1.5f) {
+            ReviewToolWindow(
+                ReviewToolWindowState(
+                    project(),
+                    file(),
+                    null,
+                    null,
+                    editableDraft(current),
+                    current,
+                    checks,
+                    null,
+                    null,
+                    null,
+                    false),
+                ReviewToolWindowActions({ calls++ }, { calls++ }, { calls++ }),
+                DraftApplicationActions({ calls++ }, { calls++ }))
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText(detail), "$checkState detail must not require hover")
+            assertTrue(fixture.hasText(decision.reason), "$checkState blocker must be visible")
+            assertEquals(
+                status.label, fixture.descriptionStateDescription("Focused checks: $detail"))
+            assertFalse(fixture.hasText("Ready to apply"))
+            assertFalse(fixture.hasText("Apply change"))
+            assertFalse(fixture.hasText("$ go test")) // Optional check details remain collapsed.
+            assertTrue(!fixture.tryClick(detail))
+            assertEquals(0, calls)
+          }
+    }
+    val stale =
+        DraftCheckReport(
+            "main.go",
+            true,
+            draftId = current.id,
+            draftRevision = current.revision,
+            draftHash = "previous")
+    val evidence = reviewEvidenceUiState(project(), file(), editableDraft(current), current, stale)
+    assertEquals(ReviewEvidenceStatus.Stale, evidence.checks.status)
+    var calls = 0
+    ComposeVisualFixture(600, 900, 1.5f) {
+          ReviewToolWindow(
+              ReviewToolWindowState(
+                  project(),
+                  file(),
+                  null,
+                  null,
+                  editableDraft(current),
+                  current,
+                  stale,
+                  null,
+                  null,
+                  null,
+                  false),
+              ReviewToolWindowActions({ calls++ }, { calls++ }, { calls++ }),
+              DraftApplicationActions({ calls++ }, { calls++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Check results no longer match the latest draft."))
+          assertTrue(fixture.hasText("Results belong to an earlier candidate."))
+          assertEquals(
+              "Stale",
+              fixture.descriptionStateDescription(
+                  "Focused checks: Check results no longer match the latest draft."))
+          assertFalse(fixture.hasText("Ready to apply"))
+          assertEquals(0, calls)
+        }
+    ComposeVisualFixture(600, 900, 1.5f) {
+          ReviewToolWindow(
+              ReviewToolWindowState(
+                  project(),
+                  file().copy(contentHash = "changed"),
+                  null,
+                  null,
+                  editableDraft(current),
+                  current,
+                  null,
+                  null,
+                  null,
+                  null,
+                  false),
+              ReviewToolWindowActions({ calls++ }, { calls++ }, { calls++ }),
+              DraftApplicationActions({ calls++ }, { calls++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Source identity"))
+          assertTrue(fixture.hasText("The draft no longer matches the open file."))
+          assertFalse(fixture.hasText("Source unchanged"))
+          assertFalse(fixture.hasText("Ready to apply"))
+          assertEquals(0, calls)
+        }
+  }
+
+  @Test
   fun diagnosticSanitizationPreservesLinesAndTabsWhileBoundingRecordedOutput() {
     assertEquals("line one\n\tline two", sanitizedOutputText("line one\n\tline two\u0000"))
     assertEquals("01234\n… output truncated", sanitizedOutputText("0123456789", 5))
