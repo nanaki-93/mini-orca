@@ -1,28 +1,22 @@
-# Documentation and plans
+# Documentation
 
-Read [../AGENTS.md](../AGENTS.md) first. Use these rules for root Markdown and
-`tasks/` documentation too.
+Read [../AGENTS.md](../AGENTS.md) first. Use these rules for root Markdown too.
 
 - Document current behavior, a real contract or an unresolved decision. Verify
   claims against code/tests. Distinguish intended behavior from delivered behavior
   and measured evidence from an assumption.
 - Update the existing owner of a fact: root README for setup, `CONFIG.md` and
   `config.example.yaml` for configuration, `api-contract.md`/`openapi.yaml` for the
-  wire contract, desktop guides for UI/runtime, `PLAN.md` for product decisions and
-  `docs/tasks.md` for its specific ordered queue. Link instead of duplicating prose.
+  wire contract, and desktop guides for UI/runtime. Link instead of duplicating prose.
 - Keep agent instructions short and actionable. Shared rules belong in root
   `AGENTS.md`; area rules belong in the relevant area file and must be linked from
   the root. Update affected instructions when ownership or commands change.
-- UI specifications and acceptance criteria must follow the
-  [UI copy rules](../desktop/UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy).
-  Describe the interaction and necessary labels/states; do not prescribe a title,
-  subtitle or explanatory paragraph for every surface. Keep developer rationale in
-  documentation and distinguish proposed copy from text already in the product.
-- Do not turn an ordinary edit into a new plan, completion report or historical
-  transcript. Update a task ledger only when the request belongs to that ledger.
-  Preserve historical receipts, budgets, verdicts and sealed evaluation material.
-- Task cards and execution guides apply to the work they describe. Do not infer
-  fresh commit, scheduler or model-call authorization from historical instructions.
+- UI specifications and acceptance criteria should describe required behavior,
+  state and accessibility, not treat existing visuals as mandatory. See the
+  [UI guidelines](../desktop/UI_DESIGN_GUIDELINES.md). Distinguish proposed copy
+  from text already in the product.
+- Keep current documentation focused on use, implementation and supported
+  contracts. Do not turn ordinary edits into completion reports or task ledgers.
 - Examples must use real routes/options and placeholder secrets/portable paths.
   Keep API examples consistent with guard fields, error states and Kotlin/Go types.
   `internal/version/version.go` owns the release version; check it before changing

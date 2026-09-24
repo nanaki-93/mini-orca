@@ -2,7 +2,7 @@
 
 Read [../AGENTS.md](../AGENTS.md) first. Before UI changes, read
 [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and inspect the relevant existing
-components and visual reference. [README.md](README.md) owns desktop setup and use.
+components and state owners. [README.md](README.md) owns desktop setup and use.
 
 ## State and workflow ownership
 
@@ -27,27 +27,17 @@ components and visual reference. [README.md](README.md) owns desktop setup and u
 
 ## UI implementation
 
-- Apply the [self-explanatory UI and copy rules](UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy)
-  before adding text. Let existing tabs, headers and controls identify the task;
-  omit default subtitles and repeated explanations. If a control needs teaching
-  copy, improve its label, placement or interaction first.
-- Extend Jewel and `DesktopTheme.kt`, `ChromeControls.kt`, `DesktopIcons.kt`.
-  Use shared semantic colors, type and spacing. Do not add a parallel theme,
-  copied per-pane styles, stock Material/Swing appearance or decorative card stacks.
-  Use the shared 10dp control, 14dp section/card and 18dp workspace/overlay shapes,
-  with pill badges and progress tracks. Keep structural panes flat, clipped and
-  inset within the frame; follow the approved mockup geometry in the UI guidelines.
-- Preserve workspace/tool-window ownership in the UI guidelines. Keep the next
-  valid action reachable, errors visible and technical details available on demand.
-  Do not add decorative metrics, dummy callbacks or unsupported controls.
+- Follow the [UI guidelines](UI_DESIGN_GUIDELINES.md) for interaction,
+  accessibility and verification. Copy, palette, shapes, layout and navigation
+  may be redesigned; previous mocks and theme tokens are not required targets.
+- Coordinate changed components with the current client and state owners. Keep
+  valid actions reachable, errors visible and details available. Do not add
+  fabricated metrics, dummy callbacks or unsupported controls.
 - Preserve labeled states for empty/loading/stale/failed/partial/canceled results.
   Keep unknown values distinct from zero and provider status distinct from daemon
   connectivity. Color supplements labels and keyboard focus.
-- Keep the existing full-size docked-pane composition at every window size. The
-  window remains resizable; smaller dimensions may clip or fit awkwardly. Do not
-  add drawer/compact fallbacks, viewport-based pane clamping, or a minimum window
-  size. Preserve saved pane preferences, long paths, wrapped labels and increased
-  text scale; retain accessible actions even when clipping occurs.
+- Choose responsive behavior for the new design. Preserve saved pane preferences
+  where applicable and keep long paths, larger text and actions accessible.
 - Preserve keyboard access, accessible names/states, selection and focus. Reuse
   `ModelResultContent` for freeform model prose and its bounded literal fallback;
   do not activate model-supplied HTML, links or remote images.
@@ -69,10 +59,9 @@ formatter output for unrelated churn. Do not change lint configuration or snapsh
 merely to hide a regression.
 
 For substantive visual changes, render affected production components and compare
-them to the reference. Follow the UI guidelines' width, short-window, text-scale
+them to the chosen design. Follow the UI guidelines' viewport, text-scale
 and state checks, including the review with optional help collapsed. Use the
-existing `DesktopVisualLayoutTest` fixtures and
-[reproduction procedure](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks).
+existing `DesktopVisualLayoutTest` fixtures.
 Use [KEYBOARD_SMOKE_CHECKLIST.md](KEYBOARD_SMOKE_CHECKLIST.md) for affected native
 behavior. Report offscreen rendering and native-window evidence separately;
 component tests cannot prove OS focus, popup placement or screen-reader behavior.

@@ -1,8 +1,7 @@
 # Local interactive terminal
 
 The terminal runs in the desktop process. It adds no command-execution HTTP API
-and does not use the daemon's copied-workspace check sandbox. TERM-01 supplies
-the session owner and native proof; TERM-02 connects the visible terminal pane.
+and does not use the daemon's copied-workspace check sandbox.
 
 ## Pinned dependencies
 
@@ -47,10 +46,8 @@ binaries contained in the original Pty4J jar. Dependency jars are not modified.
   or daemon requests. The shell retains its own startup/history behavior. Model
   output, report selection and project restore never write to terminal stdin.
 
-The pane, key routing, theme, project-switch confirmation and file-freshness
-integration are implemented in TERM-02. Native focus is checked separately from
-the foundation's PTY tests; see the TERM-02 execution record in
-[docs/tasks.md](../docs/tasks.md#task-term-02--integrate-the-interactive-terminal-pane).
+The pane handles key routing, project-switch confirmation and file-freshness
+checks. Verify native focus separately from the PTY tests.
 
 ## Supported native package
 
@@ -67,7 +64,7 @@ The app enables native access for its classpath and explicitly includes
 `java.desktop`, `java.management`, `java.net.http` and `jdk.unsupported` in the
 runtime image. Signing/notarization and other operating systems remain unverified.
 
-## Reproduce the proof
+## Validate the terminal
 
 Set `MINI_ORCA_JDK21_HOME` and `MINI_ORCA_JBR25_HOME` as described in the desktop
 runtime documentation. Run from the repository root:
@@ -93,13 +90,10 @@ Line Tools and Python 3, does not change generated package files, and does not
 substitute the development JVM for the bundled runtime. An optional first argument
 to the shell script selects another built `Mini-Orca.app`.
 
-Exact run counts, failures/corrections and accepted package evidence belong to the
-TERM-01 execution record in [docs/tasks.md](../docs/tasks.md).
-
 ## Terminal pane
 
-The app starts maximized and remains resizable. Terminal stays docked beneath the
-workspace at every window size; reduced windows may clip the fixed layout. Select
+The current app starts maximized and remains resizable. Terminal is currently
+docked beneath the workspace; its placement may change in a redesign. Select
 **Terminal** at the bottom to open the pane and immediately start a local
 interactive shell in the open project. **Ctrl+Shift+T** opens or focuses the pane.
 Shell tabs sit alongside Terminal in the same bar: **+** starts another independent
@@ -111,7 +105,7 @@ with a new shell. No replacement can start while cleanup is pending.
 
 Select **Terminal** again to collapse the dock. Collapsing, changing workspaces,
 resizing, or switching shell tabs keeps each session's reader and bounded in-memory
-scrollback; resizing does not replace the dock with an overlay. Launch,
+scrollback. Launch,
 exit and cleanup states remain visible in their tabs, with errors in the selected
 terminal. A restored layout restores pane dimensions with Terminal collapsed.
 Old Problems, Checks and Output selections are discarded; no layout preference

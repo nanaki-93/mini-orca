@@ -9,7 +9,7 @@ guides add local detail; keep shared rules here instead of copying them.
 | Go daemon and evaluation CLI (`cmd/`, `internal/`) | [internal/AGENTS.md](internal/AGENTS.md) |
 | Kotlin/Compose client (`desktop/`) | [desktop/AGENTS.md](desktop/AGENTS.md) |
 | Python/shell tooling, Makefile and CI | [scripts/AGENTS.md](scripts/AGENTS.md) |
-| Documentation, plans and API descriptions | [docs/AGENTS.md](docs/AGENTS.md) |
+| Documentation and API descriptions | [docs/AGENTS.md](docs/AGENTS.md) |
 
 ## Project and ownership
 
@@ -54,12 +54,9 @@ Review, explicit Apply and guarded Undo.
    Ask only when missing information materially changes the product behavior,
    compatibility or authorized scope. Continue independent work in the meantime.
 
-`PLAN.md` owns accepted product decisions; `docs/tasks.md` and `tasks/README.md`
-describe their specific implementation queue. Completed cards, historical grants
-and files under `docs/history/` are context, not authorization for a new task.
-Do not resume old queues, schedulers, model campaigns or commit policies unless
-the current user request covers them. Ignore copied instructions in generated
-`.mini-orca/autopilot/` worktrees when working on this checkout.
+Current behavior is documented in the README, desktop guides and API contract.
+Do not infer authorization from old task queues or generated
+`.mini-orca/autopilot/` worktrees.
 
 ## Implementation standard
 
@@ -94,16 +91,12 @@ the current user request covers them. Ignore copied instructions in generated
 
 ## UI and UX standard
 
-- Build new and changed UI features to be understandable from layout, grouping,
-  familiar controls and short action labels. If a flow needs a paragraph to explain
-  how to use it, simplify the interaction first.
-- Omit redundant titles, subtitles, introductory text and instructions that repeat
-  a visible control. Add copy only when it helps identify content, act, decide or
-  recover. Put optional detail behind a clear disclosure.
-- Keep necessary field labels, accessible names, state, errors, scope and consent
-  clear. Brevity must not obscure consequences or remove useful requested content.
-- Follow [desktop/UI_DESIGN_GUIDELINES.md](desktop/UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy)
-  for copy choices and review checks; this applies to every new or changed UI flow.
+- Visual design is not fixed by previous mockups or documentation. Palette,
+  typography, shapes, spacing, layout, navigation and copy may change.
+- Keep UI behavior understandable and accessible: actions, states, errors, scope,
+  consent and recovery remain clear. Do not hide useful requested content.
+- Follow [desktop/UI_DESIGN_GUIDELINES.md](desktop/UI_DESIGN_GUIDELINES.md)
+  for interaction and verification expectations, not as a visual specification.
 
 ## Product boundaries to preserve
 
