@@ -117,7 +117,9 @@ class AnalysisWorkspaceStateTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasText(sanitizedOutputText(failure)))
+          assertTrue(fixture.hasText(failure.replace('\u0000', ' ').take(4_096)))
+          assertTrue(fixture.hasText("… output truncated"))
+          assertFalse(fixture.hasText(sanitizedOutputText(failure)))
           assertFalse(fixture.hasText(failure))
         }
     assertEquals(
