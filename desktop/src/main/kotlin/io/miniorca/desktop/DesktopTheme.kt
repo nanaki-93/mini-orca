@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -262,6 +263,8 @@ internal fun CompactSingleLineField(
     showLabel: Boolean = true,
     placeholder: String? = null,
     textStyle: TextStyle = IdeTypography.compactBody,
+    helperText: String? = null,
+    errorText: String? = null,
 ) {
   val interactions = remember { MutableInteractionSource() }
   val focused by interactions.collectIsFocusedAsState()
@@ -287,9 +290,14 @@ internal fun CompactSingleLineField(
                 .background(EditorCanvas)
                 .border(
                     BorderStroke(
-                        if (focused) 2.dp else 1.dp, if (focused) FocusAccent else ControlBorder),
+                        if (focused) 2.dp else 1.dp,
+                        if (focused) FocusAccent
+                        else if (errorText != null) Error else ControlBorder),
                     MiniOrcaShapes.control)
-                .semantics { contentDescription = label },
+                .semantics {
+                  contentDescription = label
+                  if (errorText != null) error(errorText)
+                },
         decorationBox = { input ->
           Box(
               Modifier.padding(horizontal = 10.dp, vertical = MiniOrcaSpacing.standard),
@@ -298,13 +306,14 @@ internal fun CompactSingleLineField(
                     Text(
                         placeholder ?: if (showLabel) "" else label,
                         color = FaintText,
-                        style = IdeTypography.compactBody,
+                        style = textStyle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
                 input()
               }
         },
     )
+    CompactFieldSupportingText(helperText, errorText)
   }
 }
 
@@ -319,6 +328,8 @@ internal fun CompactMultilineField(
     placeholder: String = "",
     minLines: Int = 3,
     textStyle: TextStyle = IdeTypography.compactBody,
+    helperText: String? = null,
+    errorText: String? = null,
 ) {
   val interactions = remember { MutableInteractionSource() }
   val focused by interactions.collectIsFocusedAsState()
@@ -343,9 +354,14 @@ internal fun CompactMultilineField(
                 .background(EditorCanvas)
                 .border(
                     BorderStroke(
-                        if (focused) 2.dp else 1.dp, if (focused) FocusAccent else ControlBorder),
+                        if (focused) 2.dp else 1.dp,
+                        if (focused) FocusAccent
+                        else if (errorText != null) Error else ControlBorder),
                     MiniOrcaShapes.control)
-                .semantics { contentDescription = label },
+                .semantics {
+                  contentDescription = label
+                  if (errorText != null) error(errorText)
+                },
         decorationBox = { input ->
           Box(Modifier.padding(horizontal = 10.dp, vertical = MiniOrcaSpacing.standard)) {
             if (value.text.isEmpty() && placeholder.isNotBlank())
@@ -354,6 +370,24 @@ internal fun CompactMultilineField(
           }
         },
     )
+    CompactFieldSupportingText(helperText, errorText)
+  }
+}
+
+@Composable
+private fun CompactFieldSupportingText(helperText: String?, errorText: String?) {
+  if (errorText != null) {
+    Text(
+        errorText,
+        color = Error,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.padding(top = 4.dp))
+  } else if (helperText != null) {
+    Text(
+        helperText,
+        color = SecondaryText,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.padding(top = 4.dp))
   }
 }
 
