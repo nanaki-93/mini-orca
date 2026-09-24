@@ -2707,6 +2707,16 @@ class DesktopVisualLayoutTest {
             fixture.render("analysis-status-markers-$width")
             listOf(".env" to "Excluded", "helper.go" to "Up to date", "main.go" to "Pending")
                 .forEach { (path, label) ->
+                  assertTrue(fixture.hasDescription("Analyze $path"))
+                  assertEquals(
+                      if (path == ".env") 0 else 1,
+                      fixture.clickableDescriptionCount("Analyze $path"))
+                  assertEquals(
+                      if (path == ".env") ToggleableState.Off else ToggleableState.On,
+                      fixture.descriptionToggleableState("Analyze $path"))
+                  assertEquals(
+                      if (path == ".env") "Excluded from analysis" else "Selected for analysis",
+                      fixture.descriptionStateDescription("Analyze $path"))
                   val marker = fixture.taggedBounds("analysis-file-status-marker-$path")
                   val status = fixture.taggedTextBounds("analysis-file-row-$path", label)
                   val row = fixture.taggedBounds("analysis-file-row-$path")

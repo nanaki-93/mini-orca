@@ -1,6 +1,8 @@
 package io.miniorca.desktop
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -110,6 +112,97 @@ class AnalysisFileSelectionTest {
             assertEquals(listOf("helper.go", "main.go"), saves.last())
           }
     }
+  }
+
+  @Test
+  fun fileCheckboxPointerAndKeyboardToggleOnlySelectionWhileInspectionStaysLocal() {
+    val selection = mutableStateOf(selectionFixture())
+    val saves = mutableListOf<List<String>>()
+    var privilegedCalls = 0
+    ComposeVisualFixture(1_440, 900) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection.value)),
+              AnalysisWorkspaceActions(
+                  { _, _ -> privilegedCalls++ },
+                  { privilegedCalls++ },
+                  { privilegedCalls++ },
+                  { privilegedCalls++ },
+                  { privilegedCalls++ },
+                  { privilegedCalls++ },
+                  { paths ->
+                    saves += paths
+                    selection.value = selection.value.copy(excludedPaths = paths)
+                  }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(1, fixture.clickableDescriptionCount("Analyze main.go"))
+          assertEquals(ToggleableState.On, fixture.descriptionToggleableState("Analyze main.go"))
+          assertEquals(
+              "Selected for analysis", fixture.descriptionStateDescription("Analyze main.go"))
+          assertEquals(ToggleableState.Off, fixture.descriptionToggleableState("Analyze .env"))
+          assertTrue(fixture.isDescriptionDisabled("Analyze .env"))
+          fixture.setText("main")
+          fixture.render()
+          assertEquals(0, privilegedCalls)
+          assertTrue(fixture.hasDescription("Analyze main.go"))
+          fixture.clickDescription("Analysis details for main.go")
+          fixture.render()
+          assertTrue(saves.isEmpty())
+          fixture.clickVisibleDescription("Analyze main.go")
+          fixture.render()
+          assertEquals(listOf(listOf("main.go")), saves)
+          assertEquals(ToggleableState.Off, fixture.descriptionToggleableState("Analyze main.go"))
+          assertEquals(
+              "Excluded from analysis", fixture.descriptionStateDescription("Analyze main.go"))
+          assertTrue(fixture.requestDescriptionFocus("Analyze main.go"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(listOf(listOf("main.go"), emptyList()), saves)
+          assertEquals(ToggleableState.On, fixture.descriptionToggleableState("Analyze main.go"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(listOf(listOf("main.go"), emptyList(), listOf("main.go")), saves)
+          assertEquals(0, privilegedCalls)
+        }
+  }
+
+  @Test
+  fun lockedFileCheckboxesRetainStateButCannotActivate() {
+    val selection = selectionFixture().copy(excludedPaths = listOf("main.go"))
+    val state =
+        mutableStateOf(ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)))
+    var saves = 0
+    ComposeVisualFixture(1_440, 900) {
+          AnalysisFileSelector(
+              state.value, AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}, {}, { saves++ }))
+        }
+        .use { fixture ->
+          listOf(
+                  state.value.copy(
+                      fileSelection =
+                          state.value.fileSelection.copy(
+                              selection = selection.copy(editable = false))),
+                  state.value.copy(fileSelection = state.value.fileSelection.copy(saving = true)),
+                  state.value.copy(run = analysisRunFixture().copy(status = "running")),
+                  state.value.copy(run = analysisRunFixture().copy(status = "paused")),
+                  state.value.copy(run = analysisRunFixture().copy(status = "interrupted")))
+              .forEach { locked ->
+                state.value = locked
+                fixture.render()
+                assertTrue(fixture.isDescriptionDisabled("Analyze main.go"))
+                assertEquals(
+                    ToggleableState.Off, fixture.descriptionToggleableState("Analyze main.go"))
+                assertEquals(
+                    "Excluded from analysis",
+                    fixture.descriptionStateDescription("Analyze main.go"))
+                assertFalse(fixture.tryClick("Analyze main.go"))
+                assertFalse(fixture.requestDescriptionFocus("Analyze main.go"))
+                fixture.pressKey(Key.Enter)
+                fixture.pressKey(Key.Spacebar)
+                assertEquals(0, saves)
+              }
+        }
   }
 
   @Test
