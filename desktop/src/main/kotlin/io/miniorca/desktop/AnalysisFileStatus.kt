@@ -9,7 +9,7 @@ internal enum class AnalysisFileSyncStatus(val label: String, val tint: Color) {
   Partial("Incomplete", Warning),
   Failed("Failed", Error),
   Running("Running", Information),
-  Pending("Pending", SecondaryText),
+  Pending("Pending", Warning),
   Finished("Finished", Information),
   Paused("Paused", Warning),
   Interrupted("Interrupted", Warning),

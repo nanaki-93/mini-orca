@@ -2353,12 +2353,26 @@ class DesktopVisualLayoutTest {
     listOf(1_440 to 900).forEach { (width, height) ->
       ComposeVisualFixture(width, height, 1.5f) {
             AnalysisFileSelector(
-                ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
+                ProjectAnalysisRunState(
+                    fileSelection =
+                        AnalysisSelectionState(
+                            selectionFixture()
+                                .copy(
+                                    files =
+                                        selectionFixture().files.map { file ->
+                                          if (file.path == "main.go")
+                                              file.copy(
+                                                  stages =
+                                                      listOf(
+                                                          AnalysisFileStageStatus(
+                                                              "semantic", "pending", "Queued")))
+                                          else file
+                                        }))),
                 AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
           }
           .use { fixture ->
             fixture.render("analysis-status-markers-$width")
-            listOf(".env" to "Excluded", "helper.go" to "Up to date", "main.go" to "Not analyzed")
+            listOf(".env" to "Excluded", "helper.go" to "Up to date", "main.go" to "Pending")
                 .forEach { (path, label) ->
                   val marker = fixture.taggedBounds("analysis-file-status-marker-$path")
                   val status = fixture.taggedTextBounds("analysis-file-row-$path", label)
@@ -2370,6 +2384,10 @@ class DesktopVisualLayoutTest {
                   assertTrue(
                       marker.left >= row.left && marker.right <= row.right,
                       "$path marker must remain inside its row")
+                  if (path == "main.go") {
+                    assertTrue(fixture.hasText(label), "Pending must remain an explicit label")
+                    fixture.assertColorVisible(Warning)
+                  }
                 }
           }
     }

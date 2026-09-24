@@ -68,7 +68,12 @@ class AnalysisFileStatusTest {
   }
 
   @Test
-  fun fileStatesKeepTheirDistinctReasons() {
+  fun fileStatesKeepTheirDistinctReasonsAndSemanticTints() {
+    assertEquals(Success, AnalysisFileSyncStatus.Updated.tint)
+    assertEquals(Warning, AnalysisFileSyncStatus.Stale.tint)
+    assertEquals(Warning, AnalysisFileSyncStatus.Pending.tint)
+    assertEquals(Error, AnalysisFileSyncStatus.Failed.tint)
+    assertEquals(Information, AnalysisFileSyncStatus.Running.tint)
     mapOf(
             "missing" to AnalysisFileSyncStatus.Missing,
             "paused" to AnalysisFileSyncStatus.Paused,
