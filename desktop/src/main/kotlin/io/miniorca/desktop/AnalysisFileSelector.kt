@@ -1,7 +1,6 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,14 +29,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
-import androidx.compose.ui.semantics.toggleableState
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -265,7 +261,7 @@ private object AnalysisWideTableGrid {
   const val fileWeight = 0.44f
   const val stateWeight = 0.20f
   const val detailsWeight = 0.36f
-  val checkboxWidth = 26.dp
+  val checkboxWidth = 34.dp
   val documentWidth = 16.dp
   val identityGap = 8.dp
   val leadingControlsWidth = checkboxWidth + identityGap + documentWidth + identityGap
@@ -296,7 +292,13 @@ private fun AnalysisFileRow(
               modifier,
               horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.identityGap),
               verticalAlignment = Alignment.Top) {
-                AnalysisFileCheckbox(row.file.path, selected, editable, toggle)
+                IdeCheckbox(
+                    checked = selected,
+                    onCheckedChange = { toggle() },
+                    accessibleName = "Analyze ${row.file.path}",
+                    enabled = editable,
+                    stateLabel =
+                        if (selected) "Selected for analysis" else "Excluded from analysis")
                 DesktopLineIcon(DesktopIcon.Document, "", iconSize = 16.dp, tint = SecondaryText)
                 SelectionContainer {
                   Text(row.file.path, style = IdeTypography.workspaceMetadata, color = PrimaryText)
@@ -384,36 +386,4 @@ private fun AnalysisFileDetails(row: AnalysisFileStatus, modifier: Modifier = Mo
         }
     if (hasDetails && expanded) DiagnosticText(detail)
   }
-}
-
-@Composable
-private fun AnalysisFileCheckbox(
-    path: String,
-    selected: Boolean,
-    enabled: Boolean,
-    toggle: () -> Unit
-) {
-  ChromeButton(
-      onClick = toggle,
-      enabled = enabled,
-      role = Role.Checkbox,
-      accessibleName = "Analyze $path",
-      contentPadding = PaddingValues(4.dp),
-      modifier =
-          Modifier.semantics {
-            toggleableState = ToggleableState(selected)
-            stateDescription = if (selected) "Selected for analysis" else "Excluded from analysis"
-          }) {
-        Box(
-            Modifier.size(18.dp)
-                .background(
-                    if (selected) SelectionSurface else EditorCanvas, MiniOrcaShapes.indicator)
-                .border(
-                    1.dp, if (selected) SelectionText else ControlBorder, MiniOrcaShapes.indicator),
-            contentAlignment = Alignment.Center) {
-              if (selected)
-                  DesktopLineIcon(
-                      DesktopIcon.Check, "Selected", Modifier.size(14.dp), tint = SelectionText)
-            }
-      }
 }
