@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.test.Test
@@ -74,13 +75,36 @@ class DesktopThemeTest {
   }
 
   @Test
-  fun semanticTypographyRolesUseDenseBodyAndSectionMetrics() {
+  fun semanticTypographyRolesKeepReadingAndTechnicalTextDistinctAtCompactSizes() {
+    listOf(
+            IdeTypography.body,
+            IdeTypography.compactBody,
+            IdeTypography.workspaceBody,
+            IdeTypography.toolbarIdentity,
+            IdeTypography.resultHeading,
+            IdeTypography.section,
+            IdeTypography.action)
+        .forEach { assertEquals(FontFamily.SansSerif, it.fontFamily, "Reading/action role: $it") }
+    listOf(
+            IdeTypography.workspaceMetadata,
+            IdeTypography.workspaceHeading,
+            IdeTypography.resultLabel,
+            IdeTypography.resultCode)
+        .forEach { assertEquals(FontFamily.Monospace, it.fontFamily, "Technical role: $it") }
     assertEquals(13.sp, IdeTypography.body.fontSize)
     assertEquals(20.sp, IdeTypography.body.lineHeight)
     assertEquals(12.sp, IdeTypography.compactBody.fontSize)
     assertEquals(18.sp, IdeTypography.compactBody.lineHeight)
+    assertEquals(14.sp, IdeTypography.workspaceBody.fontSize)
+    assertEquals(22.sp, IdeTypography.workspaceBody.lineHeight)
+    assertEquals(13.sp, IdeTypography.workspaceMetadata.fontSize)
+    assertEquals(20.sp, IdeTypography.workspaceMetadata.lineHeight)
+    assertEquals(16.sp, IdeTypography.workspaceHeading.fontSize)
+    assertEquals(22.sp, IdeTypography.workspaceHeading.lineHeight)
     assertEquals(12.sp, IdeTypography.section.fontSize)
     assertEquals(18.sp, IdeTypography.section.lineHeight)
+    assertEquals(12.sp, IdeTypography.action.fontSize)
+    assertEquals(16.sp, IdeTypography.action.lineHeight)
   }
 
   @Test
@@ -92,8 +116,7 @@ class DesktopThemeTest {
     assertEquals(
         androidx.compose.ui.text.font.FontWeight.SemiBold, IdeTypography.resultLabel.fontWeight)
     assertEquals(IdeTypography.compactBody.fontSize, IdeTypography.resultLabel.fontSize)
-    assertEquals(
-        androidx.compose.ui.text.font.FontFamily.Monospace, IdeTypography.resultCode.fontFamily)
+    assertEquals(FontFamily.Monospace, IdeTypography.resultCode.fontFamily)
     assertEquals(IdeTypography.compactBody.lineHeight, IdeTypography.resultCode.lineHeight)
     listOf(Panel, OverlaySurface, EditorCanvas, SelectionSurface).forEach { surface ->
       listOf(PrimaryText, ResultAccent, SecondaryText).forEach { tint ->

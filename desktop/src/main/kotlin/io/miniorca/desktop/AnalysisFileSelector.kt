@@ -250,7 +250,7 @@ private fun AnalysisFileFilters(
               onClick = { setFilter(choice) },
               accessibleName = choice.label,
               modifier = Modifier.semantics { this.selected = selected }) {
-                Text(choice.label, style = IdeTypography.workspaceMetadata)
+                Text(choice.label, style = IdeTypography.action)
                 Spacer(Modifier.width(6.dp))
                 Text(
                     "$count",

@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
@@ -107,21 +108,30 @@ internal object MiniOrcaShapes {
 }
 
 internal object IdeTypography {
-  val body = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, lineHeight = 20.sp)
-  val compactBody = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 18.sp)
+  val body = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 13.sp, lineHeight = 20.sp)
+  val compactBody =
+      TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 12.sp, lineHeight = 18.sp)
   val workspaceBody = body.copy(fontSize = 14.sp, lineHeight = 22.sp)
-  val workspaceMetadata = compactBody.copy(fontSize = 13.sp, lineHeight = 20.sp)
-  val workspaceHeading = workspaceBody.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+  val workspaceMetadata =
+      compactBody.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp)
+  val workspaceHeading =
+      workspaceBody.copy(
+          fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
   val toolbarIdentity =
       compactBody.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, lineHeight = 18.sp)
   val resultHeading = body.copy(fontWeight = FontWeight.SemiBold)
-  val resultLabel = compactBody.copy(fontWeight = FontWeight.SemiBold)
-  val resultCode = compactBody.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+  val resultLabel =
+      compactBody.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+  val resultCode = compactBody.copy(fontFamily = FontFamily.Monospace)
   val section =
-      androidx.compose.ui.text.TextStyle(
-          fontWeight = FontWeight.SemiBold, fontSize = 12.sp, lineHeight = 18.sp)
+      TextStyle(
+          fontFamily = FontFamily.SansSerif,
+          fontWeight = FontWeight.SemiBold,
+          fontSize = 12.sp,
+          lineHeight = 18.sp)
   val action =
-      androidx.compose.ui.text.TextStyle(
+      TextStyle(
+          fontFamily = FontFamily.SansSerif,
           fontWeight = FontWeight.Medium,
           fontSize = 12.sp,
           lineHeight = 16.sp,

@@ -29,7 +29,7 @@ class AnalysisWorkspaceStateTest {
             fixture.assertTextFits("Start analysis")
             fixture.assertTextFits("Analyze stale & failed")
             assertFalse(fixture.hasText("Run limits"))
-            fixture.assertTextFits("Ready to analyze")
+            fixture.assertTextFits("Ready to analyze", maxLines = if (width == 800) 2 else 1)
             assertFalse(fixture.hasText("Last run · None"))
             assertTrue(starts.isEmpty())
             fixture.clickText("Analyze stale & failed")

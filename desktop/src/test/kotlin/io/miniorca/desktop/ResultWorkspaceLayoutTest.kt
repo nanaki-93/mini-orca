@@ -7,6 +7,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -73,6 +74,9 @@ class ResultWorkspaceLayoutTest {
           fixture.assertTextFits("Critical 1")
           fixture.assertTextFits("Unknown 1")
           fixture.assertTextFits("High 1")
+          listOf("All 3", "Critical 1", "Unknown 1", "High 1").forEach {
+            fixture.assertTextFontFamily(it, FontFamily.SansSerif)
+          }
           fixture.assertTextFits("Unknown")
           assertEquals(1, fixture.textCount("Unknown"))
           fixture.clickDescription("Filter results")
@@ -81,6 +85,7 @@ class ResultWorkspaceLayoutTest {
           fixture.assertTextFits("No matching results.")
           fixture.assertTextFits("Clear filters to view loaded results.")
           fixture.assertTextFits("Clear filters")
+          fixture.assertTextFontFamily("Clear filters", FontFamily.SansSerif)
           assertEquals(1, fixture.textCount("Clear filters"))
           fixture.clickDescription("Clear filters")
           fixture.render("results-filters-cleared-800-150")

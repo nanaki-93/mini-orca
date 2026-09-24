@@ -427,7 +427,7 @@ private fun ResultAnalysisAction(openAnalysis: () -> Unit) {
         modifier = Modifier.clearAndSetSemantics {},
         iconSize = 16.dp)
     androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
-    Text("View analysis", style = IdeTypography.workspaceMetadata)
+    Text("View analysis", style = IdeTypography.action)
   }
 }
 
