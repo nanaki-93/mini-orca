@@ -1,7 +1,7 @@
 # Mini-Orca UI guidelines
 
-Visual design is open to change. The retained
-[Tokyo Midnight concept](../.mockups/screens/visual-refresh/option-3a-tokyo-midnight.html)
+Visual design is open to change. The current
+[Calibrated mockup](../.mockups/flows/tokyo-midnight/01-summary.html)
 is an optional reference, not a required target for palette, typography,
 component shapes, spacing, shell, navigation, pane arrangement or responsive
 behavior. The current implementation is not a design requirement.
