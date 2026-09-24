@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.test.Test
@@ -29,6 +30,19 @@ class DesktopThemeTest {
   }
 
   @Test
+  fun calibratedSurfacesFollowCanvasRailPanelRaisedAndSelectedHierarchy() {
+    assertEquals(Color(0xFF1A1B26), EditorCanvas)
+    assertEquals(Color(0xFF171821), ActivityRail)
+    assertEquals(Color(0xFF202130), Panel)
+    assertEquals(Color(0xFF292B3C), OverlaySurface)
+    assertEquals(OverlaySurface, StrongSurface)
+    assertEquals(Color(0xFF242A41), SelectionSurface)
+    assertNotEquals(PaneSeparator, ControlBorder)
+    assertTrue(contrastRatio(OverlaySurface, Panel) > 1.0)
+    assertTrue(contrastRatio(ControlHover, StrongSurface) > 1.0)
+  }
+
+  @Test
   fun paneBoundariesAndControlOutlinesRemainVisibleOnTheirActualSurfaces() {
     listOf(ActivityRail, ToolWindowSurface, EditorCanvas, OverlaySurface).forEach { surface ->
       assertTrue(contrastRatio(PaneSeparator, surface) >= 1.4, "Pane boundary on $surface")
@@ -36,7 +50,26 @@ class DesktopThemeTest {
     }
     assertTrue(contrastRatio(ControlBorder, StrongSurface) >= 3.0)
     assertTrue(contrastRatio(ControlBorder, ControlHover) >= 3.0)
+    // Disabled buttons use the same essential outline, not the decorative pane separator.
+    assertTrue(
+        contrastRatio(ControlBorder, actionToneStyle(ActionTone.Primary).disabledBackground) >= 3.0)
     assertTrue(contrastRatio(HeaderSurface, EditorCanvas) >= 1.3)
+    // A header needs more separation than the literal raised token provides on the canvas.
+    assertTrue(contrastRatio(OverlaySurface, EditorCanvas) < 1.3)
+    listOf(PrimaryText, SecondaryText, FaintText).forEach { text ->
+      listOf(
+              ActivityRail,
+              Panel,
+              EditorCanvas,
+              OverlaySurface,
+              HeaderSurface,
+              StrongSurface,
+              ControlHover,
+              SelectionSurface)
+          .forEach { surface ->
+            assertTrue(contrastRatio(text, surface) >= 4.5, "$text on $surface")
+          }
+    }
     assertTrue(contrastRatio(SelectionAccent, SelectionSurface) >= 3.0)
   }
 
