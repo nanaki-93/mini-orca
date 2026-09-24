@@ -266,7 +266,10 @@ fun editorProgressUiState(state: DesktopState): EditorProgressUiState {
   }
 
   val identity = currentEditIdentity(state)
-  if (identity == null || !identity.matches(state.selectedFile, state.selectedSymbol)) {
+  if (identity == null ||
+      !(identity.mode == ChatEditMode.CreateSymbol &&
+          identity.targetPath == state.selectedFile?.path) &&
+          !identity.matches(state.selectedFile, state.selectedSymbol)) {
     return EditorProgressUiState(
         EditorProgress.Inspect, "Select a declaration to inspect it.", identity)
   }

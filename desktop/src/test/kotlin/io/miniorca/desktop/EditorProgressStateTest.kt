@@ -38,6 +38,33 @@ class EditorProgressStateTest {
   }
 
   @Test
+  fun validatedNewDeclarationOpensReviewWithoutAnExistingSymbol() {
+    val ready = stateWithDraft()
+    val creation = ready.review.draft!!.copy(mode = "create_symbol", targetSymbol = "Build")
+    val state =
+        ready.copy(
+            selection = ready.selection.copy(selectedSymbol = null),
+            chat =
+                ready.chat.copy(
+                    session =
+                        ready.chat.session!!.copy(mode = "create_symbol", targetSymbol = "Build")),
+            review =
+                ready.review.copy(
+                    draft = creation, editor = editableDraft(creation), checks = null))
+
+    assertEquals(EditorProgress.Review, editorProgressUiState(state).progress)
+    assertEquals(
+        EditorProgress.Inspect,
+        editorProgressUiState(state.copy(selection = state.selection.copy(selectedFile = null)))
+            .progress)
+    assertEquals(
+        EditorProgress.Review,
+        editorProgressUiState(
+                state.copy(selection = state.selection.copy(selectedSymbol = symbol())))
+            .progress)
+  }
+
+  @Test
   fun contextualShortcutsRequireTheSameCurrentActionsAsTheEditor() {
     val ready = stateWithDraft()
     val localFunction = ScopedModel(scope = "function", profile = "function", model = "local")
