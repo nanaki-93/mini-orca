@@ -99,10 +99,10 @@ internal object MiniOrcaSpacing {
 }
 
 internal object MiniOrcaShapes {
-  val control = RoundedCornerShape(10.dp)
-  val interactiveCard = RoundedCornerShape(14.dp)
-  val workspace = RoundedCornerShape(18.dp)
-  val overlay = RoundedCornerShape(18.dp)
+  val control = RoundedCornerShape(2.dp)
+  val interactiveCard = RoundedCornerShape(2.dp)
+  val workspace = RoundedCornerShape(2.dp)
+  val overlay = RoundedCornerShape(2.dp)
   val indicator = RoundedCornerShape(4.dp)
   val pill = RoundedCornerShape(50)
 }
@@ -243,9 +243,13 @@ internal data class ButtonDensityStyle(
 internal fun buttonDensityStyle(density: ButtonDensity): ButtonDensityStyle =
     when (density) {
       ButtonDensity.Standard ->
-          ButtonDensityStyle(32.dp, PaddingValues(horizontal = 10.dp, vertical = 4.dp))
+          ButtonDensityStyle(
+              32.dp, PaddingValues(horizontal = 10.dp, vertical = MiniOrcaSpacing.compact))
       ButtonDensity.Toolbar ->
-          ButtonDensityStyle(32.dp, PaddingValues(horizontal = 8.dp, vertical = 4.dp))
+          ButtonDensityStyle(
+              32.dp,
+              PaddingValues(
+                  horizontal = MiniOrcaSpacing.standard, vertical = MiniOrcaSpacing.compact))
     }
 
 @Composable
@@ -288,7 +292,7 @@ internal fun CompactSingleLineField(
                 .semantics { contentDescription = label },
         decorationBox = { input ->
           Box(
-              Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+              Modifier.padding(horizontal = 10.dp, vertical = MiniOrcaSpacing.standard),
               contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty())
                     Text(
@@ -343,7 +347,7 @@ internal fun CompactMultilineField(
                     MiniOrcaShapes.control)
                 .semantics { contentDescription = label },
         decorationBox = { input ->
-          Box(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+          Box(Modifier.padding(horizontal = 10.dp, vertical = MiniOrcaSpacing.standard)) {
             if (value.text.isEmpty() && placeholder.isNotBlank())
                 Text(placeholder, color = FaintText, style = textStyle)
             input()
@@ -649,8 +653,8 @@ internal fun WorkspaceSection(
           .clip(MiniOrcaShapes.interactiveCard)
           .background(Panel)
           .border(1.dp, PaneSeparator, MiniOrcaShapes.interactiveCard)
-          .padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          .padding(MiniOrcaSpacing.section),
+      verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.roomy)) {
         title?.let {
           Text(
               it,
