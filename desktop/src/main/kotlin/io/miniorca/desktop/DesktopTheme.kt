@@ -55,19 +55,21 @@ import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 /** Every desktop color is derived from this single dark semantic palette. */
 internal object MiniOrcaPalette {
   val activityRail = Color(0xFF171821)
-  val toolWindow = Color(0xFF1D1E2B)
+  val toolWindow = Color(0xFF202130)
   val editorCanvas = Color(0xFF1A1B26)
-  val overlay = Color(0xFF232436)
-  val header = Color(0xFF303145)
-  val control = Color(0xFF303145)
+  val overlay = Color(0xFF292B3C)
+  // The mock's raised surface is too close to the canvas for the maintained header boundary.
+  val header = Color(0xFF2E3044)
+  val control = Color(0xFF292B3C)
   val controlHover = Color(0xFF34364B)
-  val paneSeparator = Color(0xFF9299BE)
+  // Decorative boundaries need less contrast than essential field and control outlines.
+  val paneSeparator = Color(0xFF404158)
   val controlBorder = Color(0xFF9299BE)
   val primaryText = Color(0xFFC0CAF5)
   val secondaryText = Color(0xFFA9B1D6)
   val faintText = Color(0xFFA9B1D6)
   val selectionAccent = Color(0xFF7DCFFF)
-  val selectionSurface = Color(0xFF292E45)
+  val selectionSurface = Color(0xFF242A41)
   val selectionText = Color(0xFFC0CAF5)
   val actionFill = Color(0xFF7AA2F7)
   val actionHover = Color(0xFF9AB8FF)
@@ -76,7 +78,8 @@ internal object MiniOrcaPalette {
   val focusAccent = Color(0xFFD7DEFF)
   val information = Color(0xFF7DCFFF)
   val success = Color(0xFF9ECE6A)
-  val warning = Color(0xFFE0AF68)
+  // Brighter than the reference amber so warning labels survive selected translucent fills.
+  val warning = Color(0xFFE6B66F)
   val error = Color(0xFFFF8FA3)
   val identityAccent = Color(0xFFBB9AF7)
   val diffAddedBackground = Color(0xFF26382F)
@@ -361,7 +364,7 @@ internal fun MiniOrcaButton(
               content = style.content,
               selectedContent = style.content,
               disabledContent = style.disabledContent,
-              border = if (enabled) style.border else Border),
+              border = if (enabled) style.border else ControlBorder),
       modifier = modifier,
       enabled = enabled,
       selected = selected,
