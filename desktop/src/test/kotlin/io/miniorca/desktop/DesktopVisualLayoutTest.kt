@@ -278,36 +278,36 @@ class DesktopVisualLayoutTest {
 
   @Test
   fun candidateComparisonFillsTheEditorAcrossWindowAndTextSizes() {
-    listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
-        (width, height) ->
-      listOf(1f, 1.25f, 1.5f).forEach { scale ->
-        ComposeVisualFixture(width, height, scale) {
-              EditorVisualFixture(width.toFloat(), comparison = true)
-            }
-            .use { fixture ->
-              fixture.render("comparison-frame-$width-$height-$scale")
-              if (width >= 1440) {
-                listOf("Candidate diff", "Read-only", "New function", "Side-by-side", "Unified")
-                    .forEach(fixture::assertTextFits)
-              }
-              assertTrue(fixture.hasText("Candidate diff"))
-              assertTrue(fixture.hasText("Read-only"))
-              assertTrue(fixture.hasText("New function"))
-              assertFalse(fixture.hasEditableText("Read-only composed diff"))
-              assertTrue(fixture.hasDescription("Read-only composed diff"))
-              val wide = fixture.hasText("Current")
-              val column = fixture.taggedBounds("diff-Current-column")
-              assertTrue(
-                  column.height > if (width >= 999) 180f else -1f,
-                  "Comparison must render its canvas at $width/$height/$scale: $column")
-              if (wide) {
-                val candidate = fixture.taggedBounds("diff-Candidate-column")
-                assertEquals(column.bottom, candidate.bottom, 1f)
-                assertEquals(column.height, candidate.height, 1f)
-              }
-            }
-      }
-    }
+    listOf(1600 to 1000, 1440 to 900, 1024 to 768, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600)
+        .forEach { (width, height) ->
+          listOf(1f, 1.25f, 1.5f).forEach { scale ->
+            ComposeVisualFixture(width, height, scale) {
+                  EditorVisualFixture(width.toFloat(), comparison = true)
+                }
+                .use { fixture ->
+                  fixture.render("comparison-frame-$width-$height-$scale")
+                  if (width >= 1440) {
+                    listOf("Candidate diff", "Read-only", "New function", "Side-by-side", "Unified")
+                        .forEach(fixture::assertTextFits)
+                  }
+                  assertTrue(fixture.hasText("Candidate diff"))
+                  assertTrue(fixture.hasText("Read-only"))
+                  assertTrue(fixture.hasText("New function"))
+                  assertFalse(fixture.hasEditableText("Read-only composed diff"))
+                  assertTrue(fixture.hasDescription("Read-only composed diff"))
+                  val wide = fixture.hasText("Current")
+                  val column = fixture.taggedBounds("diff-Current-column")
+                  assertTrue(
+                      column.height > if (width >= 999) 180f else -1f,
+                      "Comparison must render its canvas at $width/$height/$scale: $column")
+                  if (wide) {
+                    val candidate = fixture.taggedBounds("diff-Candidate-column")
+                    assertEquals(column.bottom, candidate.bottom, 1f)
+                    assertEquals(column.height, candidate.height, 1f)
+                  }
+                }
+          }
+        }
   }
 
   @Test
@@ -3394,8 +3394,8 @@ class DesktopVisualLayoutTest {
 
   @Test
   fun summaryDashboardAdaptsToNarrowShortAndLargeTextViews() {
-    listOf(1440 to 900, 1000 to 650, 999 to 650, 800 to 650, 1280 to 600).forEach { (width, height)
-      ->
+    listOf(1440 to 900, 1024 to 768, 1000 to 650, 999 to 650, 800 to 650, 1280 to 600).forEach {
+        (width, height) ->
       listOf(1f, 1.25f, 1.5f).forEach { scale ->
         ComposeVisualFixture(width, height, scale) {
               ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
