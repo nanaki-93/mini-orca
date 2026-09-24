@@ -97,6 +97,40 @@ class ChromeControlsTest {
   }
 
   @Test
+  fun sharedActionsDispatchOncePerPointerEnterAndSpaceGesture() {
+    var chromeClicks = 0
+    var primaryClicks = 0
+    ComposeVisualFixture(440, 180, 1.5f) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+            ChromeButton(
+                onClick = { chromeClicks++ }, accessibleName = "Open actions", tooltip = null) {
+                  Text("Open actions")
+                }
+            MiniOrcaButton(onClick = { primaryClicks++ }, tone = ActionTone.Primary) {
+              Text("Review candidate")
+            }
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickVisibleDescription("Open actions")
+          assertEquals(1, chromeClicks)
+          assertTrue(fixture.requestDescriptionFocus("Open actions"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(2, chromeClicks)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(3, chromeClicks)
+          assertTrue(fixture.tryClick("Review candidate"))
+          assertEquals(1, primaryClicks)
+          assertTrue(fixture.requestFocus("Review candidate"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(2, primaryClicks)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(3, primaryClicks)
+        }
+  }
+
+  @Test
   fun disabledButtonsAndMenuItemsRetainNamesAndCannotActivate() {
     var activations = 0
     ComposeVisualFixture(440, 220, 1.5f) {
