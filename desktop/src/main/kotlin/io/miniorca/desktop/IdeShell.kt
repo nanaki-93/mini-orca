@@ -69,7 +69,7 @@ internal fun WorkspaceFrame(
   Row(
       modifier
           .fillMaxWidth()
-          .background(ActivityRail)
+          .background(MiniOrcaPalette.editorCanvas)
           .padding(
               top = WORKSPACE_FRAME_INSET.dp,
               end = WORKSPACE_FRAME_INSET.dp,
@@ -165,7 +165,7 @@ private fun WorkspaceNavigationEntry(
               leftToolWindowIcon(toolWindow),
               label,
               iconSize = 20.dp,
-              tint = if (selected) SelectionText else SecondaryText)
+              tint = if (selected) MiniOrcaPalette.identityAccent else SecondaryText)
         }
   }
 }

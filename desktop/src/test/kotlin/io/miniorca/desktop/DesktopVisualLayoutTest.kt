@@ -4239,13 +4239,15 @@ internal class ComposeVisualFixture(
       listOf(pane.left + 1, pane.right - 2).forEach { x ->
         listOf(pane.top + 1, pane.bottom - 2).forEach { y ->
           assertEquals(
-              ActivityRail.toArgb(),
+              MiniOrcaPalette.editorCanvas.toArgb(),
               rendered.getRGB(x.toInt(), y.toInt()),
               "Filled children must be clipped to the rounded pane at $x,$y")
         }
       }
-      assertFalse(
-          ActivityRail.toArgb() == rendered.getRGB(pane.center.x.toInt(), (pane.top + 2).toInt()),
+      val paneFill = if (pane == editor) EditorCanvas else ToolWindowSurface
+      assertEquals(
+          paneFill.toArgb(),
+          rendered.getRGB(pane.center.x.toInt(), (pane.top + 2).toInt()),
           "The top edge must show the actual filled pane")
     }
   }
