@@ -2587,7 +2587,7 @@ class DesktopVisualLayoutTest {
           assertFalse(fixture.hasText("Review boundary validation."))
           assertTrue(
               fixture.hasDescription(
-                  projectSummaryPresentation(overview, visualFixtureProject).analysisMessage))
+                  "Outdated · ${projectSummaryPresentation(overview, visualFixtureProject).analysisMessage}"))
           fixture.assertTextAbove("Mechanism", "Why it matters here")
           assertFalse(fixture.hasText("Trade-off or failure mode"))
           assertFalse(fixture.hasText("Transferable lesson"))
@@ -2706,9 +2706,11 @@ class DesktopVisualLayoutTest {
                   fixture.assertColorVisible(tint)
                   fixture.assertTextContrast(label, Panel)
                 }
-            assertFalse(fixture.hasText("Failed"))
-            assertFalse(fixture.hasText("Running"))
-            assertTrue(fixture.hasText("Outdated"))
+            // Coverage remains stale regardless of the independent project-description status.
+            assertFalse(fixture.hasText("File counts unavailable"))
+            assertTrue(
+                fixture.hasDescription(
+                    "Analysis coverage: 16 up to date · 4 outdated · 3 not analyzed"))
             if (status != "fresh")
                 fixture.assertTextFits(
                     projectSummaryPresentation(overview, null).interpretationMessage, maxLines = 3)
@@ -2729,6 +2731,8 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render()
           assertFalse(fixture.hasText("0 up to date"))
+          assertTrue(fixture.hasText("File counts unavailable"))
+          fixture.assertSummaryStatusPlacement("Coverage unavailable")
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
           assertTrue(fixture.hasText(visualFixtureProject.name))
@@ -2741,6 +2745,30 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("Analysis coverage"))
           assertTrue(fixture.hasText("File counts unavailable"))
           assertTrue(fixture.hasText("—"))
+        }
+  }
+
+  @Test
+  fun summaryCoverageWithNoSelectedFilesIsNotUnknownOrUpToDate() {
+    val overview = visualFixtureOverview.copy(analysisCoverage = AnalysisCoverage(total = 0))
+    val selection =
+        AnalysisFileSelection(
+            projectId = overview.projectId,
+            projectRevision = overview.projectRevision,
+            selectionId = "none",
+            excludedPaths = emptyList(),
+            files = emptyList(),
+            editable = true)
+    ComposeVisualFixture(1440, 1100) {
+          ProjectSummaryPane(overview, visualFixtureProject, {}, fileSelection = selection)
+        }
+        .use { fixture ->
+          fixture.render("summary-no-selection-1440")
+          fixture.assertSummaryStatusPlacement("No files selected")
+          assertTrue(fixture.hasText("0 selected files"))
+          assertTrue(fixture.hasDescription("Analysis coverage: No files selected"))
+          assertFalse(fixture.hasText("0 up to date"))
+          assertFalse(fixture.hasText("File counts unavailable"))
         }
   }
 
@@ -2760,10 +2788,15 @@ class DesktopVisualLayoutTest {
                         "stale" -> AnalysisCoverage(total = 23, stale = 23)
                         else -> AnalysisCoverage(total = 23, failed = 23)
                       })
-          ComposeVisualFixture(1280, 600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
+          ComposeVisualFixture(1280, 1100) {
+                ProjectSummaryPane(overview, visualFixtureProject, {})
+              }
               .use { fixture ->
                 fixture.render("summary-panel-$status")
                 fixture.assertSummaryStatusPlacement(label)
+                assertTrue(
+                    fixture.hasDescription(
+                        "$label · ${projectSummaryPresentation(overview, visualFixtureProject).analysisMessage}"))
                 fixture.assertTextContrast(label, Panel)
                 fixture.assertColorVisible(tint)
                 fixture.assertColorVisible(Panel)
