@@ -139,11 +139,15 @@ class DesktopThemeTest {
   @Test
   fun positivePrimaryActionUsesOpaqueFillAndReadableTextInEveryState() {
     val style = actionToneStyle(ActionTone.PositivePrimary)
-    listOf(style.background, style.pressedBackground, style.selectedBackground).forEach { fill ->
+    listOf(style.background, style.pressedBackground).forEach { fill ->
       assertEquals(1f, fill.alpha)
       assertTrue(contrastRatio(style.content, fill) >= 4.5)
       assertTrue(contrastRatio(ActivityRail, fill) >= 3.0)
     }
+    assertEquals(1f, style.selectedBackground.alpha)
+    assertTrue(contrastRatio(style.selectedContent, style.selectedBackground) >= 4.5)
+    assertTrue(contrastRatio(SelectionAccent, style.selectedBackground) >= 3.0)
+    assertTrue(contrastRatio(FocusAccent, style.selectedBackground) >= 3.0)
     assertTrue(contrastRatio(FocusAccent, ActivityRail) >= 3.0)
     assertEquals(Success, actionToneStyle(ActionTone.Positive).content)
   }

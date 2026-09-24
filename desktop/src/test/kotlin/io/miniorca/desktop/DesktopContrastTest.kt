@@ -55,15 +55,48 @@ class DesktopContrastTest {
     ActionTone.entries.forEach { tone ->
       val style = actionToneStyle(tone)
       hosts.forEach { host ->
-        listOf(style.background, style.pressedBackground, style.selectedBackground).forEach { fill
-          ->
+        listOf(style.background, style.pressedBackground).forEach { fill ->
           assertTrue(
               contrastRatio(style.content, blendOver(fill, host)) >= 4.5,
               "$tone label must remain readable on $fill over $host")
         }
+        val selected = blendOver(style.selectedBackground, host)
         assertTrue(
-            contrastRatio(style.disabledContent, blendOver(style.disabledBackground, host)) >= 4.5)
+            contrastRatio(style.selectedContent, selected) >= 4.5, "$tone selected label on $host")
+        assertTrue(
+            contrastRatio(style.disabledContent, blendOver(style.disabledBackground, host)) >= 4.5,
+            "$tone disabled label on $host")
       }
+    }
+  }
+
+  @Test
+  fun badgesResolveTheirTintAndOutlineOnEachActionHost() {
+    val hosts = listOf(ActivityRail, Panel, EditorCanvas, OverlaySurface, SelectionSurface)
+    val tints = listOf(SelectionAccent, Information, Success, Warning, Error, SecondaryText)
+    hosts.forEach { host ->
+      tints.forEach { tint ->
+        // IdeLabelBadge paints an opaque panel-resolved tint before the translucent outline.
+        val fill = blendOver(labelBadgeBackground(tint), host)
+        val outline = blendOver(tint.copy(alpha = 0.75f), fill)
+        assertTrue(contrastRatio(tint, fill) >= 4.5, "Badge $tint on $host")
+        assertTrue(contrastRatio(outline, fill) >= 3.0, "Badge outline $tint on $host")
+      }
+    }
+  }
+
+  @Test
+  fun selectionAndFocusIndicatorsRemainVisibleOnSelectedActions() {
+    val hosts = listOf(ActivityRail, Panel, EditorCanvas, OverlaySurface, SelectionSurface)
+    hosts.forEach { host ->
+      ActionTone.entries.forEach { tone ->
+        val selected = blendOver(actionToneStyle(tone).selectedBackground, host)
+        assertTrue(contrastRatio(SelectionAccent, selected) >= 3.0, "$tone selection on $host")
+        assertTrue(contrastRatio(FocusAccent, selected) >= 3.0, "$tone focus on $host")
+      }
+      // Focus uses an adjacent dark keyline, not a replacement for the selection underline.
+      assertTrue(contrastRatio(FocusAccent, ActivityRail) >= 3.0, "Focus keyline")
+      assertTrue(contrastRatio(SelectionAccent, ActivityRail) >= 3.0, "Selection underline")
     }
   }
 
@@ -200,6 +233,29 @@ class DesktopContrastTest {
           fixture.assertColorVisible(SelectionAccent)
           fixture.assertTextContrast("Focused tab", SelectionSurface)
         }
+  }
+
+  @Test
+  fun selectedBrightActionsRenderReadableTextAndSeparateSelectionAndFocusIndicators() {
+    listOf(ActionTone.Primary, ActionTone.PositivePrimary).forEach { tone ->
+      listOf(false, true).forEach { focused ->
+        ComposeVisualFixture(300, 120) {
+              Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+                MiniOrcaButton(
+                    onClick = {}, tone = tone, selected = true, focusHighlight = focused) {
+                      Text("Selected $tone")
+                    }
+              }
+            }
+            .use { fixture ->
+              fixture.render("selected-$tone-focus-$focused")
+              fixture.assertTextFits("Selected $tone")
+              fixture.assertTextContrast("Selected $tone", actionToneStyle(tone).selectedBackground)
+              fixture.assertColorVisible(if (focused) FocusAccent else SelectionAccent)
+              if (focused) fixture.assertColorVisible(ActivityRail)
+            }
+      }
+    }
   }
 
   @Test
